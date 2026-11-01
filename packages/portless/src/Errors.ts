@@ -263,3 +263,34 @@ export class OriginPortRequired extends Data.TaggedError("OriginPortRequired")<{
     return `Portless.Origin("${this.id}") needs a \`port\` when PORTLESS=0, because the origin is then http://localhost:<port>.`;
   }
 }
+
+/** The host can't serve `.local` names to other machines. */
+export class LanUnavailable extends Data.TaggedError("LanUnavailable")<{
+  readonly platform: string;
+  /** The mDNS tool Portless publishes names with, when it isn't installed. */
+  readonly mdnsTool: string | undefined;
+  /** Whether no network address other machines can reach was found. */
+  readonly noAddress: boolean;
+}> {
+  override get message() {
+    const missing = [
+      ...(this.mdnsTool === undefined
+        ? []
+        : [
+            this.platform === "linux"
+              ? `\`${this.mdnsTool}\` isn't installed. Portless publishes .local names with it. Debian and Ubuntu: sudo apt install avahi-utils; other distributions: the package that provides ${this.mdnsTool}.`
+              : `\`${this.mdnsTool}\` isn't installed. Portless publishes .local names with it, and it ships with ${this.platform === "darwin" ? "macOS" : "the system"}.`,
+          ]),
+      ...(this.noAddress
+        ? [
+            "This machine has no network address other machines can reach, only loopback and virtual bridges. Connect to a network, or pin the address with PORTLESS_LAN_IP.",
+          ]
+        : []),
+    ];
+    return [
+      "Portless.providers({ lan: true }) needs what this machine lacks:",
+      ...missing.map((line) => `  - ${line}`),
+      "Leave out `lan` to serve .localhost names to this machine only.",
+    ].join("\n");
+  }
+}

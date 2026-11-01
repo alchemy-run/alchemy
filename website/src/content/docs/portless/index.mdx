@@ -103,8 +103,9 @@ and worktree on the machine.
   (`portless trust`: a Keychain prompt on macOS, sudo on Linux). Alchemy checks
   first and prompts only when the CA isn't trusted, then checks again. On
   Linux the CA is also added to Chromium's NSS database, which needs `certutil`.
-- A running proxy is reused when it serves HTTPS on the same port, `.localhost`
-  only, outside LAN mode and with Portless's own CA, however it was started.
+- A running proxy is reused when it serves HTTPS on the same port, in the same
+  mode (`.localhost` for this machine, `.local` in LAN mode) and with Portless's
+  own CA, however it was started.
   Otherwise the run fails and says what differs. When port 443 belongs to
   something that isn't Portless, the error names it, including Floci's
   container from an earlier session and how to free the port.
@@ -136,6 +137,49 @@ The name is the one `Origin` gives the same id, or the `name` you pass
 address everything inside the dev session dials. The route belongs to the dev
 sidecar and goes with the resource. With `PORTLESS=0` nothing is routed and the
 resource keeps its own address.
+
+## Containers and other machines
+
+The proxy answers this machine only. `Portless.providers({ lan: true })` starts
+it in Portless's LAN mode instead, for a container or another machine:
+
+```typescript
+providers: Layer.mergeAll(Cloudflare.providers(), Portless.providers({ lan: true })),
+```
+
+Names end in `.local` (`https://dev-alice.api.myapp.local`), are published over
+mDNS, and `Dev`, `Alias` and `Origin` follow. The host needs a network address
+and Portless's mDNS tool: `dns-sd`, which ships with macOS, or
+`avahi-publish-address` on Linux (`sudo apt install avahi-utils`). The error
+names what is missing, and `PORTLESS_LAN_IP` pins the address. Any machine that
+can reach the host reaches the routes, so use it on a network you trust. A
+running proxy of the other kind is rejected, not restarted.
+
+A container reaches a service by mapping its name to the host, where the proxy
+listens, and trusting the Portless CA. On Linux, `host-gateway` is the Docker
+bridge address, so a default-deny firewall has to let the bridge subnet reach
+the host (see Host Access in `Docker.Container`):
+
+```typescript
+const api = yield* Portless.Dev("Api", { proxy, command: "node --watch server.ts" });
+
+const worker = yield* Docker.Container("worker", {
+  image: "ghcr.io/acme/worker:latest",
+  extraHosts: [`${api.hostname}:host-gateway`],
+  volumes: [
+    {
+      hostPath: proxy.certificateAuthority,
+      containerPath: "/etc/portless/ca.pem",
+      readOnly: true,
+    },
+  ],
+  environment: {
+    NODE_EXTRA_CA_CERTS: "/etc/portless/ca.pem",
+    API_URL: api.origin,
+  },
+  start: true,
+});
+```
 
 ## Routes
 

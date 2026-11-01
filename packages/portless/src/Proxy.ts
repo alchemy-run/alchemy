@@ -26,6 +26,11 @@ export interface ProxyAttributes {
   /** The domain the proxy's services are named under. */
   domain: string;
   /**
+   * The top-level domain its names end in: `localhost`, or `local` in LAN mode
+   * (`Portless.providers({ lan: true })`).
+   */
+  tld: string;
+  /**
    * The port the proxy listens on: `PORTLESS_PORT`, or 443. Origins leave it
    * out when it is 443.
    */
@@ -64,10 +69,11 @@ export interface Proxy extends Resource<"Portless.Proxy", ProxyProps, ProxyAttri
  * is also added to Chromium's NSS database, which needs `certutil`.
  *
  * A proxy that is already running is reused when it serves HTTPS on the same
- * port, `.localhost` only, outside LAN mode and with Portless's own CA, however
- * it was started: one that wasn't started with `--unprivileged` serves the same
- * routes. Otherwise the run fails and says what differs; Alchemy never restarts
- * a shared proxy for you. A run with `PORTLESS=0` skips the proxy altogether.
+ * port, in the same mode (`.localhost` names for this machine, or `.local` names
+ * in LAN mode) and with Portless's own CA, however it was started: one that
+ * wasn't started with `--unprivileged` serves the same routes. Otherwise the run
+ * fails and says what differs; Alchemy never restarts a shared proxy for you.
+ * A run with `PORTLESS=0` skips the proxy altogether.
  *
  * A plain `alchemy deploy` never starts a proxy: the resource is a no-op
  * outside `alchemy dev`.
@@ -107,16 +113,25 @@ export const Proxy = Resource<Proxy>("Portless.Proxy");
 /** What `alchemy deploy` and `PORTLESS=0` see: a proxy that isn't there. */
 const unmanaged = (domain: string): ProxyAttributes => ({
   domain,
+  tld: "localhost",
   port: State.DEFAULT_PORT,
   stateDirectory: "",
   certificateAuthority: "",
 });
 
-export const ProxyProvider = () =>
+export const ProxyProvider = (options: ProxyProviderOptions = {}) =>
   ProviderLayer.dual(Proxy, {
     live: ProxyProviderLive,
-    local: ProxyProviderLocal,
+    local: () => ProxyProviderLocal(options),
   });
+
+export interface ProxyProviderOptions {
+  /**
+   * Serve `.local` names to other machines instead of `.localhost` names to this one.
+   * @default false
+   */
+  readonly lan?: boolean;
+}
 
 export const ProxyProviderLive = () =>
   Provider.succeed(Proxy, {
@@ -131,14 +146,19 @@ export const ProxyProviderLive = () =>
  * resource is evaluated. A failed first attempt is not fatal here: the
  * resource's own reconcile tries again and reports the failure on the resource.
  */
-export const ProxyProviderLocal = () =>
+export const ProxyProviderLocal = (options: ProxyProviderOptions = {}) =>
   Layer.unwrap(
     Effect.gen(function* () {
       const services = yield* Effect.context<
         FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
       >();
       const disabled = yield* Mode.disabled;
-      const settings = yield* State.settings;
+      const lan = options.lan === true;
+      const settings = {
+        ...(yield* State.settings),
+        lan,
+        lanAddress: lan ? yield* State.pinnedLanAddress : undefined,
+      };
       const attempt = acquire(settings).pipe(Effect.provideContext(services));
       const acquired = yield* Ref.make<Acquired | undefined>(undefined);
       if (!disabled) {
@@ -156,6 +176,7 @@ export const ProxyProviderLocal = () =>
           const current = yield* Ref.get(acquired);
           return current !== undefined &&
             output?.domain === news.domain &&
+            output.tld === current.tld &&
             output.port === current.port &&
             output.stateDirectory === current.stateDirectory &&
             output.certificateAuthority === current.certificateAuthority

@@ -64,7 +64,8 @@ export interface Dev extends Resource<
   {
     /**
      * The name the proxy serves the command under, such as
-     * `dev-alice.api.myapp.localhost`: `<stage>.<id>.<domain>.localhost`.
+     * `dev-alice.api.myapp.localhost`: `<stage>.<id>.<domain>.localhost`
+     * (`.local` in LAN mode).
      */
     hostname: string;
     /**
@@ -208,7 +209,7 @@ export const DevProviderLocal = () =>
             return yield* new DevPortInUse({ port, command });
           }
 
-          const hostname = yield* hostnameOf(routedName(id, stage, proxy.domain));
+          const hostname = yield* hostnameOf(routedName(id, stage, proxy.domain), proxy.tld);
           const origin = disabled ? Mode.localOrigin(port) : originOf(hostname, proxy.port);
           // Registered before the command starts, so the proxy answers 502 while it boots.
           const release = disabled

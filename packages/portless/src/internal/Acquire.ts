@@ -17,6 +17,7 @@ import {
 import * as Cli from "./Cli.ts";
 import { FLOCI_CONTAINER, dockerContainerPublishing, processListening } from "./Holder.ts";
 import * as Host from "./Host.ts";
+import { Lan } from "./Lan.ts";
 import { isListening, isPortlessProxy } from "./Probe.ts";
 import { outputOf, run } from "./Run.ts";
 import {
@@ -28,25 +29,35 @@ import {
 } from "./State.ts";
 import { Trust } from "./Trust.ts";
 
+/** What the proxy this stack needs is like, beyond where it keeps its state and which port it takes. */
+export interface AcquireSettings extends ProxySettings {
+  /** Serve `.local` names to other machines (`--lan`) instead of `.localhost` names to this one. */
+  readonly lan: boolean;
+  /** The address `PORTLESS_LAN_IP` pins for LAN mode, if it does. */
+  readonly lanAddress: string | undefined;
+}
+
 /** A proxy that serves this stack, and where it keeps its state. */
 export interface Acquired extends ProxySettings {
   /** The CA the proxy signs its certificates with. */
   readonly certificateAuthority: string;
+  /** The top-level domain its names end in. */
+  readonly tld: "localhost" | "local";
 }
 
 /** Ports below this need root to listen on, unless the platform grants them (Portless's own boundary). */
 const PRIVILEGED_PORT_THRESHOLD = 1024;
 
 /**
- * The flags Alchemy starts the proxy with: HTTPS on `.localhost`, never a root
- * daemon, and no trust step of its own, because trusting the CA is checked
- * first and prompted for separately, never as a side effect of starting.
+ * The flags Alchemy starts the proxy with: HTTPS on `.localhost`, or `--lan` for
+ * `.local` names other machines reach, never a root daemon, and no trust step
+ * of its own, because trusting the CA is checked first and prompted for
+ * separately, never as a side effect of starting.
  */
-const startFlags = (port: number) => [
+const startFlags = ({ port, lan }: AcquireSettings) => [
   "--unprivileged",
   "--https",
-  "--tld",
-  "localhost",
+  ...(lan ? ["--lan"] : ["--tld", "localhost"]),
   "--port",
   String(port),
   "--skip-trust",
@@ -58,12 +69,13 @@ const startFlags = (port: number) => [
  * `.local`, `PORTLESS_HTTPS=0` would drop TLS, and `PORTLESS_SYNC_HOSTS=1`
  * would ask for the root that unprivileged mode never has.
  */
-const startEnvironment = ({ stateDirectory, port }: ProxySettings) => ({
+const startEnvironment = ({ stateDirectory, port, lan, lanAddress }: AcquireSettings) => ({
   PORTLESS_STATE_DIR: stateDirectory,
   PORTLESS_PORT: String(port),
   PORTLESS_HTTPS: "1",
-  PORTLESS_TLD: "localhost",
-  PORTLESS_LAN: "0",
+  ...(lan
+    ? { PORTLESS_LAN: "1", ...(lanAddress === undefined ? {} : { PORTLESS_LAN_IP: lanAddress }) }
+    : { PORTLESS_TLD: "localhost", PORTLESS_LAN: "0" }),
   PORTLESS_UNPRIVILEGED: "1",
   PORTLESS_SYNC_HOSTS: "0",
 });
@@ -111,7 +123,7 @@ const failPortHeld = Effect.fn(function* (settings: ProxySettings, state: ProxyS
  * its CA. A proxy that already runs is never stopped, restarted or
  * reconfigured: one that can't serve this stack is rejected with what differs.
  */
-export const acquire = Effect.fn("Portless.acquire")(function* (settings: ProxySettings) {
+export const acquire = Effect.fn("Portless.acquire")(function* (settings: AcquireSettings) {
   if (Host.platform !== "darwin" && Host.platform !== "linux") {
     return yield* new ProxyUnsupportedPlatform({ platform: Host.platform });
   }
@@ -119,6 +131,8 @@ export const acquire = Effect.fn("Portless.acquire")(function* (settings: ProxyS
   const path = yield* Path.Path;
   const trust = yield* Trust;
   yield* trust.preflight;
+  // A LAN proxy is no use without an address to reach it on or a tool to publish its names with.
+  if (settings.lan) yield* (yield* Lan).check(settings.lanAddress);
   const node = yield* Cli.node;
   const cli = yield* Cli.portless;
 
@@ -129,7 +143,7 @@ export const acquire = Effect.fn("Portless.acquire")(function* (settings: ProxyS
   // The proxy that answers must be the one this state directory records, and able to serve this stack.
   const assertReusable = Effect.fn(function* (state: ProxyState) {
     if (state.port !== port) return yield* new ProxyElsewhere({ port, stateDirectory });
-    const found = mismatches(state, port);
+    const found = mismatches(state, port, settings.lan);
     if (found.length > 0) {
       return yield* new ProxyIncompatible({ stateDirectory, port, mismatches: found });
     }
@@ -142,11 +156,11 @@ export const acquire = Effect.fn("Portless.acquire")(function* (settings: ProxyS
     return yield* failPortHeld(settings, before.state);
   } else {
     yield* assertPortAllowed(port);
-    const command = `portless proxy start ${startFlags(port).join(" ")}`;
+    const command = `portless proxy start ${startFlags(settings).join(" ")}`;
     const failed = (exitCode: number, output: string) =>
       new ProxyStartFailed({ command, exitCode, output, stateDirectory });
     const result = yield* run(
-      ChildProcess.make(node, [cli, "proxy", "start", ...startFlags(port)], {
+      ChildProcess.make(node, [cli, "proxy", "start", ...startFlags(settings)], {
         env: startEnvironment(settings),
         extendEnv: true,
         stdin: "ignore",
@@ -168,5 +182,10 @@ export const acquire = Effect.fn("Portless.acquire")(function* (settings: ProxyS
 
   const certificateAuthority = path.join(stateDirectory, "ca.pem");
   yield* trust.ensure({ node, cli, stateDirectory, certificateAuthority });
-  return { stateDirectory, port, certificateAuthority } satisfies Acquired;
+  return {
+    stateDirectory,
+    port,
+    certificateAuthority,
+    tld: settings.lan ? "local" : "localhost",
+  } satisfies Acquired;
 });

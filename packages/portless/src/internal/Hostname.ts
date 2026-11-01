@@ -21,13 +21,13 @@ export const routedName = (id: string, stage: string, domain: string) =>
   `${stageLabel(stage)}.${kebabCase(id)}.${domain}`;
 
 /**
- * Validates a name with Portless's own grammar and appends `.localhost`. Throws
- * {@link HostnameInvalid}: for the places that can only throw, such as the
- * function an Output maps with.
+ * Validates a name with Portless's own grammar and appends the TLD (`.localhost`,
+ * or `.local` in LAN mode). Throws {@link HostnameInvalid}: for the places that
+ * can only throw, such as the function an Output maps with.
  */
-export const hostnameOrThrow = (name: string) => {
+export const hostnameOrThrow = (name: string, tld = "localhost") => {
   try {
-    return parseHostname(name);
+    return parseHostname(name, tld);
   } catch (cause) {
     throw new HostnameInvalid({
       hostname: name,
@@ -37,9 +37,9 @@ export const hostnameOrThrow = (name: string) => {
 };
 
 /** {@link hostnameOrThrow} as an Effect that fails with {@link HostnameInvalid}. */
-export const hostnameOf = (name: string) =>
+export const hostnameOf = (name: string, tld = "localhost") =>
   Effect.try({
-    try: () => hostnameOrThrow(name),
+    try: () => hostnameOrThrow(name, tld),
     catch: (error) =>
       error instanceof HostnameInvalid
         ? error

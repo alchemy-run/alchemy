@@ -32,8 +32,8 @@ export interface AliasProps {
   name?: string;
   /**
    * The exact hostname to register, in place of the stage-qualified one, for
-   * callers that own their naming: `status.localhost`. `.localhost` is added
-   * when missing.
+   * callers that own their naming: `status.localhost`. The proxy's TLD
+   * (`.localhost`, or `.local` in LAN mode) is added when missing.
    */
   hostname?: string;
 }
@@ -142,6 +142,7 @@ export const AliasProviderLocal = () =>
         const port = yield* portOf(props.url);
         const hostname = yield* hostnameOf(
           props.hostname ?? routedName(props.name ?? id, stage, props.proxy.domain),
+          props.proxy.tld,
         );
         const disabled = yield* Mode.disabled;
         return {

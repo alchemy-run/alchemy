@@ -61,6 +61,8 @@ const worker = yield* Cloudflare.Worker("Builder", {
 worker.url; // "https://dev-alice.builder.myapp.localhost"
 ```
 
+`Portless.providers({ lan: true })` serves `.local` names to containers and other machines instead of `.localhost` names to this one. It needs a network address and mDNS tooling (`dns-sd` on macOS, `avahi-publish-address` on Linux), and the error says what is missing.
+
 ## Learn more
 
 - [Portless on alchemy.run](https://alchemy.run/portless)
