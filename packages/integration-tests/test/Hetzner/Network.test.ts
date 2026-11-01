@@ -248,7 +248,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const deployed = yield* stack.deploy(network);
 
       const live = yield* networks.getNetwork({ id: deployed.networkId });
-      expect(live.network.subnets).toEqual([
+      expect(live.network?.subnets).toEqual([
         expect.objectContaining({
           type: "cloud",
           ip_range: "10.30.0.0/24",
@@ -265,7 +265,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       // A reconcile keeps the one subnet rather than adding another.
       yield* stack.deploy(network);
       const after = yield* networks.getNetwork({ id: deployed.networkId });
-      expect(after.network.subnets).toHaveLength(1);
+      expect(after.network?.subnets).toHaveLength(1);
 
       yield* stack.destroy();
 
