@@ -842,10 +842,10 @@ Read through the established test cases before continuing so that you understand
 - [Subnet Test Cases](./packages/integration-tests/test/AWS/EC2/Subnet.test.ts)
 
 :::warning
-Never use `Date.now()` when constructing the physical name of a resource. You should either:
+Never use `Date.now()`, UUIDs or other random values when constructing the physical name of a resource. Every run must be deterministic and leave no orphaned resources. You should either:
 
-1. Do not proide a name and rely on the resource provider to generate a unique name for you from the app, stage and logical ID.
-2. Construct a deterministic one unique to each test case. But it should be the same on each subsequent run of the test case.
+1. Not provide a name, and rely on the resource provider to generate one from the app, stage and logical ID. This is the default for every test.
+2. Only when the test is about explicitly provided names, construct a deterministic one unique to each test case and to the user running it: derive it from `stack.stage` (`test_$USER` by default). It must be the same on each subsequent run of the test case.
    :::
 
 3. Consider implementing an aggregate Smoke test that brings together multiple resources that are often used together.

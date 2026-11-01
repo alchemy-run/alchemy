@@ -60,15 +60,12 @@ describe.sequential(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const queue = yield* Cloudflare.Queues.Queue("SubQueue", {
-                name: "alchemy-test-sub-queue",
-              });
+              const queue = yield* Cloudflare.Queues.Queue("SubQueue");
               // Compose with an R2 bucket — the subscription delivers
               // account-level R2 events (e.g. this bucket's lifecycle)
               // into the queue.
               const bucket = yield* Cloudflare.R2.Bucket("SubBucket", {
                 forceDestroy: true,
-                name: "alchemy-test-sub-bucket",
               });
               const subscription = yield* Cloudflare.Queues.Subscription("R2Events", {
                 source: { type: "r2" },
@@ -111,14 +108,10 @@ describe.sequential(
 
           const initial = yield* stack.deploy(
             Effect.gen(function* () {
-              const queueA = yield* Cloudflare.Queues.Queue("SubQueueA", {
-                name: "alchemy-test-sub-queue-a",
-              });
-              const queueB = yield* Cloudflare.Queues.Queue("SubQueueB", {
-                name: "alchemy-test-sub-queue-b",
-              });
+              const queueA = yield* Cloudflare.Queues.Queue("SubQueueA");
+              const queueB = yield* Cloudflare.Queues.Queue("SubQueueB");
               const subscription = yield* Cloudflare.Queues.Subscription("UpdateSub", {
-                name: "alchemy-sub-update",
+                name: `alchemy-sub-update-${stack.stage}`,
                 source: { type: "r2" },
                 events: ["bucket.created"],
                 queueId: queueA.queueId,
@@ -127,7 +120,7 @@ describe.sequential(
             }),
           );
 
-          expect(initial.subscription.name).toEqual("alchemy-sub-update");
+          expect(initial.subscription.name).toEqual(`alchemy-sub-update-${stack.stage}`);
           expect(initial.subscription.enabled).toBe(true);
           expect(initial.subscription.queueId).toEqual(initial.queueA.queueId);
 
@@ -135,14 +128,10 @@ describe.sequential(
           // destination queue.
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              const queueA = yield* Cloudflare.Queues.Queue("SubQueueA", {
-                name: "alchemy-test-sub-queue-a",
-              });
-              const queueB = yield* Cloudflare.Queues.Queue("SubQueueB", {
-                name: "alchemy-test-sub-queue-b",
-              });
+              const queueA = yield* Cloudflare.Queues.Queue("SubQueueA");
+              const queueB = yield* Cloudflare.Queues.Queue("SubQueueB");
               const subscription = yield* Cloudflare.Queues.Subscription("UpdateSub", {
-                name: "alchemy-sub-update-v2",
+                name: `alchemy-sub-update-v2-${stack.stage}`,
                 source: { type: "r2" },
                 events: ["bucket.created", "bucket.deleted"],
                 queueId: queueB.queueId,
@@ -154,7 +143,7 @@ describe.sequential(
 
           // Same subscription mutated in place — not a replacement.
           expect(updated.subscription.subscriptionId).toEqual(initial.subscription.subscriptionId);
-          expect(updated.subscription.name).toEqual("alchemy-sub-update-v2");
+          expect(updated.subscription.name).toEqual(`alchemy-sub-update-v2-${stack.stage}`);
           expect(updated.subscription.enabled).toBe(false);
           expect(updated.subscription.queueId).toEqual(updated.queueB.queueId);
           expect([...updated.subscription.events].sort()).toEqual([
@@ -163,7 +152,7 @@ describe.sequential(
           ]);
 
           const live = yield* getSubscription(accountId, updated.subscription.subscriptionId);
-          expect(live.name).toEqual("alchemy-sub-update-v2");
+          expect(live.name).toEqual(`alchemy-sub-update-v2-${stack.stage}`);
           expect(live.enabled).toBe(false);
           expect(live.destination.queueId).toEqual(updated.queueB.queueId);
           expect([...live.events].sort()).toEqual(["bucket.created", "bucket.deleted"]);
@@ -185,9 +174,7 @@ describe.sequential(
 
           const initial = yield* stack.deploy(
             Effect.gen(function* () {
-              const queue = yield* Cloudflare.Queues.Queue("SubQueueR", {
-                name: "alchemy-test-sub-queue-r",
-              });
+              const queue = yield* Cloudflare.Queues.Queue("SubQueueR");
               const subscription = yield* Cloudflare.Queues.Subscription("ReplaceSub", {
                 source: { type: "kv" },
                 events: ["namespace.created"],
@@ -201,9 +188,7 @@ describe.sequential(
 
           const replaced = yield* stack.deploy(
             Effect.gen(function* () {
-              const queue = yield* Cloudflare.Queues.Queue("SubQueueR", {
-                name: "alchemy-test-sub-queue-r",
-              });
+              const queue = yield* Cloudflare.Queues.Queue("SubQueueR");
               const subscription = yield* Cloudflare.Queues.Subscription("ReplaceSub", {
                 source: { type: "r2" },
                 events: ["bucket.created"],
@@ -245,9 +230,7 @@ describe.sequential(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const queue = yield* Cloudflare.Queues.Queue("ListSubQueue", {
-                name: "alchemy-test-list-sub-queue",
-              });
+              const queue = yield* Cloudflare.Queues.Queue("ListSubQueue");
               const subscription = yield* Cloudflare.Queues.Subscription("ListR2Events", {
                 source: { type: "r2" },
                 events: ["bucket.created"],
@@ -281,15 +264,13 @@ describe.sequential(
           if (!zone) {
             return yield* Effect.die(new Error(`zone "${zoneName}" not found`));
           }
-          const domain = `alchemy-sub-mail.${zoneName}`;
+          const domain = `alchemy-sub-mail-${stack.stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.${zoneName}`;
 
           yield* stack.destroy();
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const queue = yield* Cloudflare.Queues.Queue("MailQueue", {
-                name: "alchemy-test-sub-mail-queue",
-              });
+              const queue = yield* Cloudflare.Queues.Queue("MailQueue");
               const sending = yield* Cloudflare.Email.SendingSubdomain("MailSending", {
                 zoneId: zone.id,
                 name: domain,
