@@ -846,6 +846,7 @@ Never use `Date.now()`, UUIDs or other random values when constructing the physi
 
 1. Not provide a name, and rely on the resource provider to generate one from the app, stage and logical ID. This is the default for every test.
 2. Only when the test is about explicitly provided names, construct a deterministic one unique to each test case and to the user running it: derive it from `stack.stage` (`test_$USER` by default). It must be the same on each subsequent run of the test case.
+3. Only for a resource the API can never delete (RealtimeKit apps, Intel indicator feeds), use one shared constant name that every run adopts, so the suite owns a single standing instance instead of leaking one per user.
    :::
 
 3. Consider implementing an aggregate Smoke test that brings together multiple resources that are often used together.

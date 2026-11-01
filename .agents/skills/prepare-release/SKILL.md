@@ -209,8 +209,9 @@ contract — include every item:
    name. Only a test about explicitly provided names passes one, and it is
    derived from `stack.stage` so it is isolated to the user running the test.
    Never `Date.now()`, UUIDs or random values in a name: every run is
-   deterministic and leaves no orphans. Fix any hard-coded name you find in
-   the suites you touch.
+   deterministic and leaves no orphans. A resource the API can never delete
+   keeps one shared constant name that every run adopts. Fix any hard-coded
+   name you find in the suites you touch.
 10. Done means: its **full** tag passes, and distilled list/describe calls show
     zero orphans from its service.
 11. Structured result: `{ service, tag, testsPassed, testCommand, rootCause,
