@@ -341,7 +341,8 @@ export interface FunctionCommonProps extends PlatformProps {
    * configured as `timeout + timeoutMargin`, rounded up to whole seconds;
    * the margin is billed only when an invocation actually runs past its
    * timeout. `timeout + timeoutMargin` must fit in Lambda's 900-second
-   * maximum.
+   * maximum, and a queue an SQS event source reads needs a
+   * `visibilityTimeout` of at least that sum (SQS's default is 30 seconds).
    *
    * If cleanup is still running 500 ms before Lambda's own timeout, the
    * runtime ends the invocation's root span, logs a warning and drains the
