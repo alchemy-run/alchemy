@@ -2384,11 +2384,13 @@ export const syncBucketEncryption = Effect.fn(function* (
     Bucket: bucket,
     ServerSideEncryptionConfiguration: { Rules: [desired] },
   });
+  // Encryption reads stay stale for well over 8s after a write, notably on a
+  // re-created bucket name or right after a bucket-policy change.
   const observed = yield* readBucketEncryption(bucket).pipe(
     Effect.repeat({
       until: matches,
-      schedule: Schedule.spaced("1 second"),
-      times: 8,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
     }),
   );
   if (!matches(observed)) {
