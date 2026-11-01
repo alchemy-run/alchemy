@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import * as NodeHttps from "node:https";
 import * as Portless from "@alchemy.run/portless";
 import * as Cli from "@alchemy.run/portless/internal/Cli";
@@ -13,6 +14,15 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as ChildProcess from "effect/process/ChildProcess";
 import { eventually } from "./Processes.ts";
+
+/** Portless publishes `.local` names with a tool of the platform; without it LAN mode never starts. */
+const mdnsTool = { darwin: ["dns-sd", "-h"], linux: ["avahi-publish-address", "--help"] }[
+  process.platform as "darwin" | "linux"
+];
+export const hasMdnsTool =
+  mdnsTool !== undefined &&
+  (spawnSync(mdnsTool[0]!, mdnsTool.slice(1)).error as NodeJS.ErrnoException | undefined)?.code !==
+    "ENOENT";
 
 /**
  * A proxy of the test's own: a temporary state directory and a free high port,
