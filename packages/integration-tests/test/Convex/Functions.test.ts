@@ -78,6 +78,33 @@ test.provider(
 );
 
 test.provider(
+  "deleting a variable the auth config reads fails with its typed tag",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* testName("functions-auth");
+      const rootDir = yield* scratchApp("functions-auth");
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* fs.writeFileString(
+        path.join(rootDir, "convex/auth.config.ts"),
+        `export default { providers: [{ domain: process.env.AUTH_DOMAIN, applicationID: "convex" }] };\n`,
+      );
+      yield* stack.deploy(app(name, rootDir, { AUTH_DOMAIN: "https://accounts.google.com" }));
+
+      const refused = yield* stack.deploy(app(name, rootDir)).pipe(Effect.result);
+      expect(Result.isFailure(refused)).toBe(true);
+      if (Result.isFailure(refused)) {
+        expect((refused.failure as { _tag: string })._tag).toBe(
+          "AuthConfigMissingEnvironmentVariable",
+        );
+      }
+      yield* stack.destroy();
+    }),
+  options,
+);
+
+test.provider(
   "unchanged folder does not redeploy",
   (stack) =>
     Effect.gen(function* () {

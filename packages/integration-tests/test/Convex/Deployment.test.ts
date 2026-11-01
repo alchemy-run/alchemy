@@ -170,17 +170,19 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const name = yield* testName("deployment-vanished-prod");
-      const { deployment } = yield* stack.deploy(app(name, { type: "prod" }));
+      const props = { type: "prod", deletionProtection: false } as const;
+      const { deployment } = yield* stack.deploy(app(name, props));
       yield* convex.deleteDeployment({ deployment_name: deployment.deploymentName });
 
       const redeploy = yield* stack
-        .deploy(app(name, { type: "prod", deletionProtection: false }))
+        .deploy(app(name, { ...props, isDefault: true }))
         .pipe(Effect.result);
       expect(Result.isFailure(redeploy)).toBe(true);
       expect(yield* convex.listDeployments({ project_id: deployment.projectId })).toEqual([]);
 
-      yield* convex.deleteProject({ project_id: deployment.projectId });
-    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore))),
+      yield* stack.destroy();
+      expect(yield* projectsNamed(name)).toEqual([]);
+    }),
   options,
 );
 
