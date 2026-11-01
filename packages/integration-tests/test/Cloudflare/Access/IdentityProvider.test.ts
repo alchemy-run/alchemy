@@ -603,6 +603,10 @@ test.provider(
   },
 );
 
+// The lookup Worker finds its IdP by display name, which it reads from
+// `IDP_LOOKUP_NAME` at deploy time (see fixtures/idp-lookup-worker.ts).
+const IDP_LOOKUP_NAME = (process.env.IDP_LOOKUP_NAME = testName("alchemy-zt-idp-worker-lookup"));
+
 class LookupNotServing extends Data.TaggedError("LookupNotServing")<{ message: string }> {}
 
 test.provider(
@@ -614,6 +618,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const idp = yield* Cloudflare.Access.IdentityProvider("WorkerLookupOidc", {
+            name: IDP_LOOKUP_NAME,
             type: "oidc",
             config: oidcConfig,
           });

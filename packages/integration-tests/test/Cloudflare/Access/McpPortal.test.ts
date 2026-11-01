@@ -19,9 +19,9 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // a hostname is a per-account unique constraint, so a shared hostname makes the
 // two deploys race on "This hostname is already in use in a different MCP
 // Portal".
-const PORTAL_ID = testName("alchemy-test-mcp-portal");
+const PORTAL_ID = testName("alc-mcp-portal");
 const HOSTNAME = `${testName("alchemy-test-mcp")}.alchemy-test-2.us`;
-const LIST_PORTAL_ID = testName("alchemy-test-mcp-portal-list");
+const LIST_PORTAL_ID = testName("alc-mcp-portal-list");
 const LIST_HOSTNAME = `${testName("alchemy-test-mcp-list")}.alchemy-test-2.us`;
 
 // Read a portal out-of-band, mapping "gone" to undefined.

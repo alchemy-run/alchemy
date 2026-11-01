@@ -23,13 +23,13 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // Deterministic identifiers — the server id is the API identity, so reruns
 // converge on the same server instead of leaking. The cases run concurrently,
 // so each MUST use a distinct server id.
-const SERVER_ID = testName("alchemy-test-mcp-server");
-const RECREATE_SERVER_ID = testName("alchemy-test-mcp-server-recreate");
-const REPLACE_SERVER_ID = testName("alchemy-test-mcp-server-replace");
-const REPLACE_SERVER_ID_V2 = testName("alchemy-test-mcp-replaced");
-const SYNC_SERVER_ID = testName("alchemy-test-mcp-server-sync");
-const DEFERRED_SYNC_SERVER_ID = testName("alchemy-test-mcp-deferred-sync");
-const TOKEN_SERVER_ID = testName("alchemy-test-mcp-service-token");
+const SERVER_ID = testName("alc-mcp-server");
+const RECREATE_SERVER_ID = testName("alc-mcp-recreate");
+const REPLACE_SERVER_ID = testName("alc-mcp-replace");
+const REPLACE_SERVER_ID_V2 = testName("alc-mcp-replaced");
+const SYNC_SERVER_ID = testName("alc-mcp-sync");
+const DEFERRED_SYNC_SERVER_ID = testName("alc-mcp-deferred-sync");
+const TOKEN_SERVER_ID = testName("alc-mcp-service-token");
 
 // Placeholder upstreams on the standing test zone. These cases opt out of
 // Alchemy's explicit capability sync; Cloudflare may still discover in the background.

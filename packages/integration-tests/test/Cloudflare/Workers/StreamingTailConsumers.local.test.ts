@@ -7,13 +7,12 @@ import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
-import { testName } from "../../names.ts";
 
 // Mirrors the marker logged by `fixtures/tail/streaming-tail-producer.ts` on
 // every request. Duplicated (not imported) because the fixture's default
 // export must be its only export — extra named exports become workerd
 // top-level exports and fail startup validation.
-const STREAM_TAIL_MARKER = testName("alchemy-local-streaming-tail-marker");
+const STREAM_TAIL_MARKER = "alchemy-local-streaming-tail-marker";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.

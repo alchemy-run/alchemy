@@ -18,10 +18,10 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test label names (Cloudflare caps them at 24 chars).
-const NAME_DEFAULT = testName("alch-apishield-default");
-const NAME_RENAME_A = testName("alch-apishield-ren-a");
-const NAME_RENAME_B = testName("alch-apishield-ren-b");
-const NAME_LIST = testName("alch-apishield-list");
+const NAME_DEFAULT = testName("alch-as-default");
+const NAME_RENAME_A = testName("alch-as-ren-a");
+const NAME_RENAME_B = testName("alch-as-ren-b");
+const NAME_LIST = testName("alch-as-list");
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
