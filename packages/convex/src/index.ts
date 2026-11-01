@@ -12,5 +12,7 @@ export {
   TeamTokenRequired,
 } from "./Credentials.ts";
 export * from "./Deployment.ts";
+export * from "./DeployKey.ts";
+export * from "./PreviewDeployKey.ts";
 export * from "./Project.ts";
 export * from "./Providers.ts";

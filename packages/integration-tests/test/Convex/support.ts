@@ -1,3 +1,5 @@
+import * as NodeChildProcess from "node:child_process";
+import * as NodePath from "node:path";
 import { Credentials, fromDeployment, team } from "@alchemy.run/convex/Credentials";
 import * as convex from "@distilled.cloud/convex/convex";
 import { Stage } from "alchemy/Stage";
@@ -25,4 +27,19 @@ export const onDeployment = <A, E, R>(url: string, effect: Effect.Effect<A, E, R
   Effect.gen(function* () {
     const { token } = yield* yield* Credentials;
     return yield* effect.pipe(Effect.provide(fromDeployment({ url, token })));
+  });
+
+/** The fixture Convex app. */
+export const FIXTURE_DIR = NodePath.join(import.meta.dirname, "fixtures/backend");
+
+/** Run the Convex CLI in the fixture app. The key goes through the environment, never argv. */
+export const convexCli = (args: ReadonlyArray<string>, env: Record<string, string>) =>
+  Effect.sync(() => {
+    const cli = NodePath.join(import.meta.dirname, "../../node_modules/.bin/convex");
+    const result = NodeChildProcess.spawnSync(cli, [...args], {
+      cwd: FIXTURE_DIR,
+      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env },
+      encoding: "utf8",
+    });
+    return { code: result.status, output: `${result.stdout}${result.stderr}` };
   });
