@@ -128,7 +128,16 @@ Note the `Full log: .alchemy/log/test/…` path at the end. Failures print
 inline with their error as soon as they happen, so start triage at the first
 failure rather than waiting for the run to finish. If nothing finishes for 10s
 the runner lists running tests — a test stuck far past its timeout is a hang
-to fix, not something to wait out.
+to fix, not something to wait out. Check the "queued for an exclusive lock"
+entries in that list before calling it a hang: those tests haven't started.
+
+Test time is the release's biggest cost, so one slow or exclusive test must
+never hold up the rest of a run. If it does, fix the runner or narrow the
+lock; don't lower concurrency and don't wait it out. Tests that only contend
+for a shared cloud resource take a label (`{ exclusive: "aws:ses-account" }`)
+instead of `exclusive: true`, which only process-global state needs. On
+2026-10-31 a writer-preferring `exclusive: true` gate froze the AWS suite
+twice behind a 25-minute ElastiCache test.
 
 ## 4. Triage
 
