@@ -358,6 +358,24 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
 });
 
 /**
+ * The service account {@link Bind} creates for the current host, for a service that
+ * lists who may use a resource by address instead of through a role (Pub/Sub's
+ * publishers and subscribers). Yield it while the layer is built, then run the inner
+ * Effect behind the `__ALCHEMY_RUNTIME__` guard. `undefined` when there is no host, or
+ * the host runs as an account of its own, and in a host bundle.
+ */
+export const HostServiceAccount: Effect.Effect<Effect.Effect<ServiceAccount | undefined>> =
+  Effect.gen(function* () {
+    if (globalThis.__ALCHEMY_RUNTIME__) return Effect.succeed(undefined);
+    const StackitServiceAccount = yield* ServiceAccount;
+    return Effect.gen(function* () {
+      const host = yield* Binding.Host;
+      if (host === undefined || runsAsServiceAccount(host)) return undefined;
+      return yield* StackitServiceAccount(`${host.LogicalId}ServiceAccount`, {});
+    });
+  });
+
+/**
  * The `Credentials` service for a bound key file. Its token cache lives in the
  * returned value. A malformed key fails each operation with `ConfigError`, the
  * same way a failed token exchange does, rather than killing the host at init.

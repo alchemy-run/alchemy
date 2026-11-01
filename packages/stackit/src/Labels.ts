@@ -158,6 +158,21 @@ export const withoutSystemLabels = (labels: unknown): Record<string, string> =>
     Object.entries(labelRecord(labels)).filter(([key]) => !key.startsWith(SYSTEM_LABEL_PREFIX)),
   );
 
+/** Reserved by the Logs and Telemetry APIs: `stackit.cloud/` with its subdomains, and `stackit-`. */
+const RESERVED_LABEL = /^(?:stackit-|(?:[^/]*\.)?stackit\.cloud\/)/;
+
+/** The labels STACKIT itself manages, on the APIs that reserve `stackit.cloud/` too. */
+export const reservedLabels = (labels: unknown): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(labelRecord(labels)).filter(([key]) => RESERVED_LABEL.test(key)),
+  );
+
+/** Everything but {@link reservedLabels}: the labels Alchemy compares on those APIs. */
+export const managedLabels = (labels: unknown): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(labelRecord(labels)).filter(([key]) => !RESERVED_LABEL.test(key)),
+  );
+
 /** Drop Alchemy's ownership labels, leaving the user's. */
 export const stripInternalLabels = (labels: unknown): Record<string, string> =>
   Object.fromEntries(

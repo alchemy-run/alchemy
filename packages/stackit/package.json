@@ -33,27 +33,35 @@
     "./Certificates": "./src/Certificates/index.ts",
     "./ContainerRegistry": "./src/ContainerRegistry/index.ts",
     "./DNS": "./src/DNS/index.ts",
+    "./Dremio": "./src/Dremio/index.ts",
+    "./FileStorage": "./src/FileStorage/index.ts",
     "./Functions": "./src/Functions/index.ts",
     "./IaaS": "./src/IaaS/index.ts",
     "./IAM": "./src/IAM/index.ts",
+    "./Intake": "./src/Intake/index.ts",
     "./IPLists": "./src/IPLists/index.ts",
     "./KMS": "./src/KMS/index.ts",
     "./LoadBalancer": "./src/LoadBalancer/index.ts",
     "./LogMe": "./src/LogMe/index.ts",
+    "./Logs": "./src/Logs/index.ts",
     "./MariaDB": "./src/MariaDB/index.ts",
     "./MongoDBFlex": "./src/MongoDBFlex/index.ts",
     "./ObjectStorage": "./src/ObjectStorage/index.ts",
+    "./Observability": "./src/Observability/index.ts",
     "./OpenSearch": "./src/OpenSearch/index.ts",
     "./PostgresFlex": "./src/PostgresFlex/index.ts",
+    "./PubSub": "./src/PubSub/index.ts",
     "./RabbitMQ": "./src/RabbitMQ/index.ts",
     "./ResourceManager": "./src/ResourceManager/index.ts",
     "./SecretsManager": "./src/SecretsManager/index.ts",
     "./ServiceEnablement": "./src/ServiceEnablement/index.ts",
     "./SKE": "./src/SKE/index.ts",
     "./SQLServerFlex": "./src/SQLServerFlex/index.ts",
+    "./Telemetry": "./src/Telemetry/index.ts",
     "./Valkey": "./src/Valkey/index.ts",
     "./WAF": "./src/WAF/index.ts",
     "./Website": "./src/Website/index.ts",
+    "./Workflows": "./src/Workflows/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -100,6 +108,18 @@
         "worker": "./src/DNS/index.ts",
         "default": "./lib/DNS/index.js"
       },
+      "./Dremio": {
+        "types": "./lib/Dremio/index.d.ts",
+        "bun": "./src/Dremio/index.ts",
+        "worker": "./src/Dremio/index.ts",
+        "default": "./lib/Dremio/index.js"
+      },
+      "./FileStorage": {
+        "types": "./lib/FileStorage/index.d.ts",
+        "bun": "./src/FileStorage/index.ts",
+        "worker": "./src/FileStorage/index.ts",
+        "default": "./lib/FileStorage/index.js"
+      },
       "./Functions": {
         "types": "./lib/Functions/index.d.ts",
         "bun": "./src/Functions/index.ts",
@@ -117,6 +137,12 @@
         "bun": "./src/IAM/index.ts",
         "worker": "./src/IAM/index.ts",
         "default": "./lib/IAM/index.js"
+      },
+      "./Intake": {
+        "types": "./lib/Intake/index.d.ts",
+        "bun": "./src/Intake/index.ts",
+        "worker": "./src/Intake/index.ts",
+        "default": "./lib/Intake/index.js"
       },
       "./IPLists": {
         "types": "./lib/IPLists/index.d.ts",
@@ -142,6 +168,12 @@
         "worker": "./src/LogMe/index.ts",
         "default": "./lib/LogMe/index.js"
       },
+      "./Logs": {
+        "types": "./lib/Logs/index.d.ts",
+        "bun": "./src/Logs/index.ts",
+        "worker": "./src/Logs/index.ts",
+        "default": "./lib/Logs/index.js"
+      },
       "./MariaDB": {
         "types": "./lib/MariaDB/index.d.ts",
         "bun": "./src/MariaDB/index.ts",
@@ -160,6 +192,12 @@
         "worker": "./src/ObjectStorage/index.ts",
         "default": "./lib/ObjectStorage/index.js"
       },
+      "./Observability": {
+        "types": "./lib/Observability/index.d.ts",
+        "bun": "./src/Observability/index.ts",
+        "worker": "./src/Observability/index.ts",
+        "default": "./lib/Observability/index.js"
+      },
       "./OpenSearch": {
         "types": "./lib/OpenSearch/index.d.ts",
         "bun": "./src/OpenSearch/index.ts",
@@ -171,6 +209,12 @@
         "bun": "./src/PostgresFlex/index.ts",
         "worker": "./src/PostgresFlex/index.ts",
         "default": "./lib/PostgresFlex/index.js"
+      },
+      "./PubSub": {
+        "types": "./lib/PubSub/index.d.ts",
+        "bun": "./src/PubSub/index.ts",
+        "worker": "./src/PubSub/index.ts",
+        "default": "./lib/PubSub/index.js"
       },
       "./RabbitMQ": {
         "types": "./lib/RabbitMQ/index.d.ts",
@@ -208,6 +252,12 @@
         "worker": "./src/SQLServerFlex/index.ts",
         "default": "./lib/SQLServerFlex/index.js"
       },
+      "./Telemetry": {
+        "types": "./lib/Telemetry/index.d.ts",
+        "bun": "./src/Telemetry/index.ts",
+        "worker": "./src/Telemetry/index.ts",
+        "default": "./lib/Telemetry/index.js"
+      },
       "./Valkey": {
         "types": "./lib/Valkey/index.d.ts",
         "bun": "./src/Valkey/index.ts",
@@ -226,7 +276,14 @@
         "worker": "./src/Website/index.ts",
         "default": "./lib/Website/index.js"
       },
+      "./Workflows": {
+        "types": "./lib/Workflows/index.d.ts",
+        "bun": "./src/Workflows/index.ts",
+        "worker": "./src/Workflows/index.ts",
+        "default": "./lib/Workflows/index.js"
+      },
       "./IAM/internal/*": null,
+      "./Observability/internal/*": null,
       "./internal/*": null,
       "./*/internal": null,
       "./*": {
@@ -262,6 +319,7 @@
     "alchemy": "workspace:*",
     "amqplib": "^2.2.0",
     "effect": "catalog:",
+    "kafkajs": "^2.2.4",
     "typescript": "catalog:"
   },
   "peerDependencies": {
@@ -270,7 +328,8 @@
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "amqplib": "^2.2.0",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "kafkajs": "^2.2.4"
   },
   "peerDependenciesMeta": {
     "@alchemy.run/frontend-frameworks": {
@@ -283,6 +342,9 @@
       "optional": true
     },
     "amqplib": {
+      "optional": true
+    },
+    "kafkajs": {
       "optional": true
     }
   },

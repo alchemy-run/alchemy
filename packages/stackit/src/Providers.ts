@@ -34,7 +34,22 @@ import * as Credentials from "./Credentials.ts";
 // ── DNS imports ──
 import { RecordSet, RecordSetProvider } from "./DNS/RecordSet.ts";
 import { Zone, ZoneProvider } from "./DNS/Zone.ts";
+// ── Dremio imports ──
+import {
+  Instance as DremioInstance,
+  InstanceProvider as DremioInstanceProvider,
+} from "./Dremio/Instance.ts";
+import { User as DremioUser, UserProvider as DremioUserProvider } from "./Dremio/User.ts";
 import { environmentFromAuthProvider } from "./Environment.ts";
+// ── FileStorage imports ──
+import { ProjectLock, ProjectLockProvider } from "./FileStorage/ProjectLock.ts";
+import { ResourcePool, ResourcePoolProvider } from "./FileStorage/ResourcePool.ts";
+import {
+  ResourcePoolSnapshot,
+  ResourcePoolSnapshotProvider,
+} from "./FileStorage/ResourcePoolSnapshot.ts";
+import { Share, ShareProvider } from "./FileStorage/Share.ts";
+import { ShareExportPolicy, ShareExportPolicyProvider } from "./FileStorage/ShareExportPolicy.ts";
 // ── Functions imports ──
 import { Function as FunctionsFunction, FunctionProvider } from "./Functions/Function.ts";
 import { PullCredential, PullCredentialProvider } from "./Functions/PullCredential.ts";
@@ -79,6 +94,10 @@ import {
 import { Membership, MembershipProvider } from "./IAM/Membership.ts";
 import { ServiceAccount, ServiceAccountProvider } from "./IAM/ServiceAccount.ts";
 import { ServiceAccountKey, ServiceAccountKeyProvider } from "./IAM/ServiceAccountKey.ts";
+// ── Intake imports ──
+import { Intake as IntakeIntake, IntakeProvider as IntakeIntakeProvider } from "./Intake/Intake.ts";
+import { Runner as IntakeRunner, RunnerProvider as IntakeRunnerProvider } from "./Intake/Runner.ts";
+import { User as IntakeUser, UserProvider as IntakeUserProvider } from "./Intake/User.ts";
 // ── IPLists imports ──
 import { IPList, IPListProvider } from "./IPLists/IPList.ts";
 // ── KMS imports ──
@@ -103,6 +122,19 @@ import {
   Instance as LogMeInstance,
   InstanceProvider as LogMeInstanceProvider,
 } from "./LogMe/Instance.ts";
+// ── Logs imports ──
+import {
+  AccessPolicy as LogsAccessPolicy,
+  AccessPolicyProvider as LogsAccessPolicyProvider,
+} from "./Logs/AccessPolicy.ts";
+import {
+  AccessToken as LogsAccessToken,
+  AccessTokenProvider as LogsAccessTokenProvider,
+} from "./Logs/AccessToken.ts";
+import {
+  Instance as LogsInstance,
+  InstanceProvider as LogsInstanceProvider,
+} from "./Logs/Instance.ts";
 // ── MariaDB imports ──
 import {
   Credential as MariaDBCredential,
@@ -130,6 +162,75 @@ import {
   Project as ObjectStorageProject,
   ProjectProvider as ObjectStorageProjectProvider,
 } from "./ObjectStorage/Project.ts";
+// ── Observability imports ──
+import {
+  AlertConfig as ObservabilityAlertConfig,
+  AlertConfigProvider as ObservabilityAlertConfigProvider,
+} from "./Observability/AlertConfig.ts";
+import {
+  AlertGroup as ObservabilityAlertGroup,
+  AlertGroupProvider as ObservabilityAlertGroupProvider,
+} from "./Observability/AlertGroup.ts";
+import {
+  AlertWebhook as ObservabilityAlertWebhook,
+  AlertWebhookProvider as ObservabilityAlertWebhookProvider,
+} from "./Observability/AlertWebhook.ts";
+import {
+  CertCheck as ObservabilityCertCheck,
+  CertCheckProvider as ObservabilityCertCheckProvider,
+} from "./Observability/CertCheck.ts";
+import {
+  Credential as ObservabilityCredential,
+  CredentialProvider as ObservabilityCredentialProvider,
+} from "./Observability/Credential.ts";
+import {
+  ElasticsearchCheck as ObservabilityElasticsearchCheck,
+  ElasticsearchCheckProvider as ObservabilityElasticsearchCheckProvider,
+} from "./Observability/ElasticsearchCheck.ts";
+import {
+  HttpCheck as ObservabilityHttpCheck,
+  HttpCheckProvider as ObservabilityHttpCheckProvider,
+} from "./Observability/HttpCheck.ts";
+import {
+  Instance as ObservabilityInstance,
+  InstanceProvider as ObservabilityInstanceProvider,
+} from "./Observability/Instance.ts";
+import {
+  LogsAlertGroup as ObservabilityLogsAlertGroup,
+  LogsAlertGroupProvider as ObservabilityLogsAlertGroupProvider,
+} from "./Observability/LogsAlertGroup.ts";
+import {
+  MongoDBCheck as ObservabilityMongoDBCheck,
+  MongoDBCheckProvider as ObservabilityMongoDBCheckProvider,
+} from "./Observability/MongoDBCheck.ts";
+import {
+  MySQLCheck as ObservabilityMySQLCheck,
+  MySQLCheckProvider as ObservabilityMySQLCheckProvider,
+} from "./Observability/MySQLCheck.ts";
+import {
+  NetworkCheck as ObservabilityNetworkCheck,
+  NetworkCheckProvider as ObservabilityNetworkCheckProvider,
+} from "./Observability/NetworkCheck.ts";
+import {
+  PingCheck as ObservabilityPingCheck,
+  PingCheckProvider as ObservabilityPingCheckProvider,
+} from "./Observability/PingCheck.ts";
+import {
+  PostgreSQLCheck as ObservabilityPostgreSQLCheck,
+  PostgreSQLCheckProvider as ObservabilityPostgreSQLCheckProvider,
+} from "./Observability/PostgreSQLCheck.ts";
+import {
+  RabbitMQCheck as ObservabilityRabbitMQCheck,
+  RabbitMQCheckProvider as ObservabilityRabbitMQCheckProvider,
+} from "./Observability/RabbitMQCheck.ts";
+import {
+  RedisCheck as ObservabilityRedisCheck,
+  RedisCheckProvider as ObservabilityRedisCheckProvider,
+} from "./Observability/RedisCheck.ts";
+import {
+  ScrapeConfig as ObservabilityScrapeConfig,
+  ScrapeConfigProvider as ObservabilityScrapeConfigProvider,
+} from "./Observability/ScrapeConfig.ts";
 // ── OpenSearch imports ──
 import {
   Credential as OpenSearchCredential,
@@ -152,6 +253,20 @@ import {
   User as PostgresFlexUser,
   UserProvider as PostgresFlexUserProvider,
 } from "./PostgresFlex/User.ts";
+// ── PubSub imports ──
+import {
+  Subscription as PubSubSubscription,
+  SubscriptionProvider as PubSubSubscriptionProvider,
+} from "./PubSub/Subscription.ts";
+import {
+  SubscriptionSubscriberAccess as PubSubSubscriptionSubscriberAccess,
+  SubscriptionSubscriberAccessProvider as PubSubSubscriptionSubscriberAccessProvider,
+} from "./PubSub/SubscriptionSubscriberAccess.ts";
+import { Topic as PubSubTopic, TopicProvider as PubSubTopicProvider } from "./PubSub/Topic.ts";
+import {
+  TopicPublisherAccess as PubSubTopicPublisherAccess,
+  TopicPublisherAccessProvider as PubSubTopicPublisherAccessProvider,
+} from "./PubSub/TopicPublisherAccess.ts";
 // ── RabbitMQ imports ──
 import {
   Credential as RabbitMQCredential,
@@ -205,6 +320,20 @@ import {
   User as SqlServerFlexUser,
   UserProvider as SqlServerFlexUserProvider,
 } from "./SQLServerFlex/User.ts";
+// ── Telemetry Router imports ──
+import {
+  AccessToken as TelemetryAccessToken,
+  AccessTokenProvider as TelemetryAccessTokenProvider,
+} from "./Telemetry/AccessToken.ts";
+import {
+  Destination as TelemetryDestination,
+  DestinationProvider as TelemetryDestinationProvider,
+} from "./Telemetry/Destination.ts";
+import { Link as TelemetryLink, LinkProvider as TelemetryLinkProvider } from "./Telemetry/Link.ts";
+import {
+  Router as TelemetryRouter,
+  RouterProvider as TelemetryRouterProvider,
+} from "./Telemetry/Router.ts";
 // ── Valkey imports ──
 import {
   Credential as ValkeyCredential,
@@ -231,6 +360,11 @@ import {
 import { AssetDeployment, AssetDeploymentProvider } from "./Website/AssetDeployment.ts";
 import { CachePurge, CachePurgeProvider } from "./Website/CachePurge.ts";
 import { ServerImage, ServerImageProvider } from "./Website/ServerImage.ts";
+// ── Workflows imports ──
+import {
+  Instance as WorkflowsInstance,
+  InstanceProvider as WorkflowsInstanceProvider,
+} from "./Workflows/Instance.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("Stackit") {}
 
@@ -432,9 +566,82 @@ const cdnProviders = () =>
 const certificatesResources = [Certificate];
 const certificatesProviders = () => Layer.mergeAll(Layer.empty, CertificateProvider());
 
+const pubsubResources = [
+  PubSubTopic,
+  PubSubSubscription,
+  PubSubTopicPublisherAccess,
+  PubSubSubscriptionSubscriberAccess,
+];
+const pubsubProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    PubSubTopicProvider(),
+    PubSubSubscriptionProvider(),
+    PubSubTopicPublisherAccessProvider(),
+    PubSubSubscriptionSubscriberAccessProvider(),
+  );
+
+const observabilityResources = [
+  ObservabilityAlertConfig,
+  ObservabilityAlertGroup,
+  ObservabilityAlertWebhook,
+  ObservabilityCertCheck,
+  ObservabilityCredential,
+  ObservabilityElasticsearchCheck,
+  ObservabilityHttpCheck,
+  ObservabilityInstance,
+  ObservabilityLogsAlertGroup,
+  ObservabilityMongoDBCheck,
+  ObservabilityMySQLCheck,
+  ObservabilityNetworkCheck,
+  ObservabilityPingCheck,
+  ObservabilityPostgreSQLCheck,
+  ObservabilityRabbitMQCheck,
+  ObservabilityRedisCheck,
+  ObservabilityScrapeConfig,
+];
+const observabilityProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    ObservabilityAlertConfigProvider(),
+    ObservabilityAlertGroupProvider(),
+    ObservabilityAlertWebhookProvider(),
+    ObservabilityCertCheckProvider(),
+    ObservabilityCredentialProvider(),
+    ObservabilityElasticsearchCheckProvider(),
+    ObservabilityHttpCheckProvider(),
+    ObservabilityInstanceProvider(),
+    ObservabilityLogsAlertGroupProvider(),
+    ObservabilityMongoDBCheckProvider(),
+    ObservabilityMySQLCheckProvider(),
+    ObservabilityNetworkCheckProvider(),
+    ObservabilityPingCheckProvider(),
+    ObservabilityPostgreSQLCheckProvider(),
+    ObservabilityRabbitMQCheckProvider(),
+    ObservabilityRedisCheckProvider(),
+    ObservabilityScrapeConfigProvider(),
+  );
+
 const rabbitmqResources = [RabbitMQCredential, RabbitMQInstance];
 const rabbitmqProviders = () =>
   Layer.mergeAll(Layer.empty, RabbitMQCredentialProvider(), RabbitMQInstanceProvider());
+
+const intakeResources = [IntakeRunner, IntakeIntake, IntakeUser];
+const intakeProviders = () =>
+  Layer.mergeAll(Layer.empty, IntakeRunnerProvider(), IntakeIntakeProvider(), IntakeUserProvider());
+
+const telemetryRouterResources = [TelemetryRouter, TelemetryDestination, TelemetryAccessToken];
+const telemetryRouterProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    TelemetryRouterProvider(),
+    TelemetryDestinationProvider(),
+    TelemetryAccessTokenProvider(),
+  );
+
+const dremioResources = [DremioInstance, DremioUser];
+const dremioProviders = () =>
+  Layer.mergeAll(Layer.empty, DremioInstanceProvider(), DremioUserProvider());
 
 const openSearchResources = [OpenSearchInstance, OpenSearchCredential];
 const openSearchProviders = () =>
@@ -443,6 +650,21 @@ const openSearchProviders = () =>
 const logMeResources = [LogMeInstance, LogMeCredential];
 const logMeProviders = () =>
   Layer.mergeAll(Layer.empty, LogMeInstanceProvider(), LogMeCredentialProvider());
+
+const logsResources = [LogsAccessPolicy, LogsAccessToken, LogsInstance];
+const logsProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    LogsAccessPolicyProvider(),
+    LogsAccessTokenProvider(),
+    LogsInstanceProvider(),
+  );
+
+const workflowsResources = [WorkflowsInstance];
+const workflowsProviders = () => Layer.mergeAll(Layer.empty, WorkflowsInstanceProvider());
+
+const telemetryLinkResources = [TelemetryLink];
+const telemetryLinkProviders = () => Layer.mergeAll(Layer.empty, TelemetryLinkProvider());
 
 const websiteResources = [AssetDeployment, CachePurge, ServerImage, WebsiteServer];
 const websiteProviders = () =>
@@ -454,13 +676,38 @@ const websiteProviders = () =>
     WebsiteServerProvider(),
   );
 
+const fileStorageResources = [
+  ProjectLock,
+  ResourcePool,
+  ResourcePoolSnapshot,
+  Share,
+  ShareExportPolicy,
+];
+const fileStorageProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    ProjectLockProvider(),
+    ResourcePoolProvider(),
+    ResourcePoolSnapshotProvider(),
+    ShareProvider(),
+    ShareExportPolicyProvider(),
+  );
+
 const makeProviders = () =>
   Layer.effect(
     Providers,
     Provider.collection([
       ...websiteResources,
+      ...fileStorageResources,
+      ...intakeResources,
+      ...telemetryRouterResources,
+      ...dremioResources,
+      ...workflowsResources,
       ...openSearchResources,
       ...logMeResources,
+      ...observabilityResources,
+      ...logsResources,
+      ...telemetryLinkResources,
       ...cdnResources,
       ...certificatesResources,
       ...kmsResources,
@@ -479,6 +726,7 @@ const makeProviders = () =>
       ...mariaDBResources,
       ...valkeyResources,
       ...rabbitmqResources,
+      ...pubsubResources,
       ...mongoDBFlexResources,
       ...loadBalancerResources,
       ...albResources,
@@ -489,8 +737,16 @@ const makeProviders = () =>
     Layer.provide(
       Layer.mergeAll(
         websiteProviders(),
+        fileStorageProviders(),
+        intakeProviders(),
+        telemetryRouterProviders(),
+        dremioProviders(),
+        workflowsProviders(),
         openSearchProviders(),
         logMeProviders(),
+        observabilityProviders(),
+        logsProviders(),
+        telemetryLinkProviders(),
         cdnProviders(),
         certificatesProviders(),
         kmsProviders(),
@@ -509,6 +765,7 @@ const makeProviders = () =>
         mariaDBProviders(),
         valkeyProviders(),
         rabbitmqProviders(),
+        pubsubProviders(),
         mongoDBFlexProviders(),
         loadBalancerProviders(),
         albProviders(),

@@ -147,6 +147,22 @@ export const waitUntilGone = <A, E, R>(options: {
   }).pipe(Effect.asVoid);
 
 /**
+ * Wait up to two minutes for a parent's children to go, and return those still there. A child
+ * in the stack is deleted and awaited before its parent, so what is left is someone else's,
+ * and only the caller knows how to refuse.
+ */
+export const childrenLeftAfterSettling = <A, E, R>(
+  list: Effect.Effect<ReadonlyArray<A>, E, R>,
+): Effect.Effect<ReadonlyArray<A>, E, R> =>
+  list.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (children) => children.length === 0,
+      times: 24,
+    }),
+  );
+
+/**
  * Retry a delete STACKIT refuses with a 400 while something still references the
  * object, for about a minute: a load balancer that was just deleted can take a
  * moment to let go. Use it only on an operation whose spec documents that 400 as
