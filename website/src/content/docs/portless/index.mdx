@@ -114,7 +114,8 @@ and worktree on the machine.
 During `alchemy deploy` these resources do nothing, and a plain deploy never
 starts a proxy. `PORTLESS=0 alchemy dev` skips the proxy: `Dev` serves
 `http://localhost:<port>`, `Alias` returns its `url`, and `Origin` returns
-`http://localhost:<port>`.
+`http://localhost:<port>`. A stack that builds addresses of its own reads
+`Portless.disabled` to know whether it has names or ports.
 
 ## Routes
 
