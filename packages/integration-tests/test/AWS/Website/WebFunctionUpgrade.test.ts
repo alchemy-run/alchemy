@@ -34,13 +34,14 @@ const workspaceCli = pathe.join(repoRoot, "packages/alchemy/bin/alchemy.js");
 const fixtures = pathe.resolve(import.meta.dirname, "fixtures");
 
 /**
- * The Effect release line the published alchemy was built against. Its peers
- * accept `^4.0.0`, but Effect 4.1 removed modules it imports (`effect/Crypto`),
- * so the old app installs the last 4.0 release, with matching platform peers:
- * a platform package from another release calls Effect APIs (e.g.
- * `Path.make`) that the other `effect` does not export.
+ * The Effect release that was current when the published alchemy came out
+ * (2026-10-05). Its peers accept `^4.0.0`, but later releases break it: 4.0.7
+ * rejects a schema it builds (`Schema.optional` on an index signature) and 4.1
+ * removed `effect/Crypto`, which it imports. Platform peers match: a platform
+ * package from another release calls Effect APIs (e.g. `Path.make`) that the
+ * other `effect` does not export.
  */
-const PUBLISHED_EFFECT = "4.0.7";
+const PUBLISHED_EFFECT = "4.0.1";
 const publishedPeers = {
   effect: PUBLISHED_EFFECT,
   "@effect/platform-node": PUBLISHED_EFFECT,
