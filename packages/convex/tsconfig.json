@@ -20,6 +20,9 @@
       "path": "../../submodules/distilled/packages/core/tsconfig.json"
     },
     {
+      "path": "../../submodules/distilled/packages/aws/tsconfig.json"
+    },
+    {
       "path": "../alchemy/tsconfig.json"
     },
     { "path": "../aws/tsconfig.json" }

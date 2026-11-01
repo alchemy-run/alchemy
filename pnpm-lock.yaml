@@ -9052,6 +9052,9 @@ importers:
       '@alchemy.run/aws':
         specifier: workspace:*
         version: link:../aws
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
