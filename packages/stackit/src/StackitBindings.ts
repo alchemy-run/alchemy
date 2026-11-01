@@ -52,7 +52,7 @@ import { ServiceAccountKey } from "./IAM/ServiceAccountKey.ts";
  *     const zoneId = yield* zone.zoneId;
  *     if (!globalThis.__ALCHEMY_RUNTIME__) {
  *       yield* bind`Stackit.DNS.GetZone(${zone})`({
- *         grants: [StackitBindings.grantOn(zone, { role: "dns.reader" })],
+ *         grants: [StackitBindings.grantOn(zone, { permissions: ["dns.zone.list"] })],
  *       });
  *     }
  *     return () =>
@@ -112,11 +112,11 @@ export interface GrantScope {
  */
 export type Access =
   | {
-      /** Predefined role, e.g. `dns.reader`. */
+      /** Predefined role, e.g. `postgres-flex.reader`. */
       readonly role: string;
     }
   | {
-      /** Permissions of a custom role, e.g. `resource-manager.project.get`. */
+      /** Permissions of a custom role, e.g. `dns.zone.list`. */
       readonly permissions: readonly string[];
     };
 
@@ -220,7 +220,7 @@ const shortHash = (text: string): string => {
   return (hash >>> 0).toString(16).padStart(8, "0");
 };
 
-/** `dns.reader` -> `DnsReader`, for readable logical ids. */
+/** `postgres-flex.reader` -> `PostgresFlexReader`, for readable logical ids. */
 const pascalCase = (text: string): string =>
   text
     .split(/[^a-zA-Z0-9]+/)
@@ -285,7 +285,7 @@ export type BindHost = (
  *   return Effect.fn(function* (zone: Zone) {
  *     if (!globalThis.__ALCHEMY_RUNTIME__) {
  *       yield* bind`Stackit.DNS.GetZone(${zone})`({
- *         grants: [StackitBindings.grantOn(zone, { role: "dns.reader" })],
+ *         grants: [StackitBindings.grantOn(zone, { permissions: ["dns.zone.list"] })],
  *       });
  *     }
  *   });
@@ -360,6 +360,9 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
           projectId: account.projectId,
         });
         yield* runtime.set(KEY_ENV.keyJson, key.keyJson);
+        // `Output.fromEffect` takes no typed error and asks for a die here. With no profile
+        // this can run before the Membership fails with the typed error, and either way the
+        // deploy stops at plan with that same error, before it changes anything.
         yield* runtime.set(
           KEY_ENV.region,
           Output.fromEffect(

@@ -13,6 +13,19 @@ export const Team = Stackit.ResourceManager.Folder("RmBindingsFolder", {
 });
 
 /**
+ * The project the bindings read. STACKIT requires a user among a new project's members,
+ * and the test profile authenticates as a service account, so the suite is gated on this
+ * variable. The prop only matters at deploy; the running Worker never reads it.
+ */
+export const Child = Effect.gen(function* () {
+  const team = yield* Team;
+  return yield* Stackit.ResourceManager.Project("RmBindingsChildProject", {
+    parentId: team.containerId,
+    owner: process.env.STACKIT_TEST_PROJECT_OWNER,
+  });
+});
+
+/**
  * A Cloudflare Worker using the Resource Manager bindings. STACKIT has no native
  * host yet, so the bindings grant on the service account Alchemy creates for the
  * Worker. One route per binding; each answers `{ ok, result | error }` so a
@@ -24,6 +37,7 @@ export default class RmBindingsWorker extends Cloudflare.Worker<RmBindingsWorker
   Effect.gen(function* () {
     const team = yield* Team;
     const getFolder = yield* Stackit.ResourceManager.GetFolderDetails(team);
+    const getProject = yield* Stackit.ResourceManager.GetProject(yield* Child);
     const listFolders = yield* Stackit.ResourceManager.ListFolders(team);
     const listProjects = yield* Stackit.ResourceManager.ListProjects(team);
     const listOrganizationFolders = yield* Stackit.ResourceManager.ListFolders(team.parentId);
@@ -47,6 +61,8 @@ export default class RmBindingsWorker extends Cloudflare.Worker<RmBindingsWorker
             return yield* respond(getFolder());
           case "/folders":
             return yield* respond(listFolders());
+          case "/project":
+            return yield* respond(getProject({}));
           case "/projects":
             return yield* respond(listProjects());
           case "/organization-folders":
@@ -64,6 +80,7 @@ export default class RmBindingsWorker extends Cloudflare.Worker<RmBindingsWorker
     Effect.provide(
       Layer.mergeAll(
         Stackit.ResourceManager.GetFolderDetailsHttp,
+        Stackit.ResourceManager.GetProjectHttp,
         Stackit.ResourceManager.ListFoldersHttp,
         Stackit.ResourceManager.ListProjectsHttp,
         Stackit.ResourceManager.GetOrganizationHttp,

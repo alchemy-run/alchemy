@@ -113,6 +113,13 @@ export type Token = Resource<
  * The token itself costs nothing: inference is billed per million tokens of text. The first deploy
  * enables the service (`cloud.stackit.model-serving`) for the project.
  *
+ * See [STACKIT's AI Model Serving docs](https://docs.stackit.cloud/products/data-and-ai/ai-model-serving/).
+ *
+ * :::caution[Changing `ttlDuration`, `rotateWhenChanged`, `projectId` or `region` replaces the Token]
+ * So does a deploy after it expired. A host holding the old value only sees the new
+ * one when it redeploys. With an explicit `name` the old token is deleted first.
+ * :::
+ *
  * ### Creating a Token
  * **Example:** A token that never expires
  * ```typescript

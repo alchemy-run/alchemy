@@ -1,0 +1,363 @@
+---
+title: Load balancers
+description: Put a STACKIT Network or Application Load Balancer in front of private IP targets, terminate TLS, add a web application firewall, and change targets from a host.
+---
+
+STACKIT has two load balancers, and both send traffic to private IPs in one network:
+
+| | `Stackit.LoadBalancer.LoadBalancer` | `Stackit.ALB.LoadBalancer` |
+| --- | --- | --- |
+| Layer | 4: TCP, UDP, TCP proxy, TLS passthrough | 7: HTTP, HTTPS, WebSockets |
+| Routes by | port | host, path, header, and query parameter |
+| TLS | passed through | terminated, with `Stackit.Certificates.Certificate` |
+| Firewall | none | `Stackit.WAF.Configuration` on a listener |
+| Deploy waits up to | 45 minutes | 90 minutes |
+
+An ALB can't route to a bucket or a function. For those, use a
+[CDN](/stackit/networking/cdn-custom-domains).
+
+:::caution[Cost]
+STACKIT deploys two VMs in your project for each load balancer and bills per started hour by
+plan, on price list v1.0.44: `p10` from about EUR 0.013 an hour for the Network Load Balancer
+and EUR 0.026 for the ALB, plus about EUR 0.004 for a public IP. STACKIT's API says the VMs are
+subject to a fee, and the price list doesn't say whether the plan price includes it. Check the
+current list.
+:::
+
+## Create a network load balancer
+
+Declare the network and the public IP, and name the targets:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const App = Stackit.IaaS.Network("App", {
+  ipv4: { prefix: "10.0.1.0/24" },
+});
+
+export const Address = Stackit.IaaS.PublicIp("Address", {});
+
+export const Balancer = Effect.gen(function* () {
+  const network = yield* App;
+  const address = yield* Address;
+  return yield* Stackit.LoadBalancer.LoadBalancer("Web", {
+    planId: "p10",
+    networks: [{ networkId: network.networkId }],
+    externalAddress: address.ip,
+    listeners: [{ displayName: "http", port: 80, protocol: "PROTOCOL_TCP", targetPool: "web" }],
+    targetPools: [
+      {
+        name: "web",
+        targetPort: 8080,
+        targets: [{ displayName: "web-1", ip: "10.0.1.10" }],
+      },
+    ],
+  });
+});
+```
+
+The first deploy enables the service for the project. A deploy waits for `STATUS_READY`, and
+fails with the errors STACKIT reports on `STATUS_ERROR`.
+
+:::caution
+Changing `name`, `networks`, `externalAddress`, `disableTargetSecurityGroupAssignment`, `projectId`,
+or `region` replaces the load balancer. The old one is deleted, and the new one can take as long as a first deploy.
+Listeners, target pools, plan, and access control update in place.
+:::
+
+## Let STACKIT pick the address
+
+Drop `externalAddress` and set `ephemeralAddress`. `balancer.externalAddress` is what STACKIT
+assigned:
+
+```typescript
+options: { ephemeralAddress: true },
+```
+
+## Keep it inside the network
+
+`privateNetworkOnly` gives it a private IP only. `balancer.privateAddress` can change at
+any time:
+
+```typescript
+options: { privateNetworkOnly: true },
+```
+
+## Check target health
+
+A target pool takes a health check and session persistence:
+
+```typescript
+targetPools: [
+  {
+    name: "web",
+    targetPort: 8080,
+    targets: [
+      { displayName: "web-1", ip: "10.0.1.10" },
+      { displayName: "web-2", ip: "10.0.1.11" },
+    ],
+    activeHealthCheck: {
+      interval: "10s",
+      timeout: "3s",
+      healthyThreshold: 2,
+      unhealthyThreshold: 3,
+      httpHealthChecks: { path: "/healthz", okStatuses: ["200"] },
+    },
+    sessionPersistence: { useSourceIpAddress: true },
+  },
+],
+```
+
+## Restrict access
+
+Allow only some source ranges:
+
+```typescript
+options: {
+  ephemeralAddress: true,
+  accessControl: { allowedSourceRanges: ["203.0.113.0/24"] },
+},
+```
+
+## Create an application load balancer
+
+An ALB routes each host on a listener to a pool:
+
+```typescript
+// src/alb.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { App } from "./resources.ts";
+
+export const Web = App.pipe(
+  Effect.flatMap((network) =>
+    Stackit.ALB.LoadBalancer("Alb", {
+      networks: [{ networkId: network.networkId }],
+      options: { ephemeralAddress: true },
+      listeners: [
+        {
+          name: "http",
+          port: 80,
+          protocol: "PROTOCOL_HTTP",
+          http: { hosts: [{ host: "app.example.com", rules: [{ targetPool: "web" }] }] },
+        },
+      ],
+      targetPools: [{ name: "web", targetPort: 8080, targets: [{ ip: "10.0.1.10" }] }],
+    }),
+  ),
+);
+```
+
+## Store a certificate
+
+STACKIT doesn't issue certificates for an ALB. Bring a PEM pair from your CA or ACME client:
+
+```typescript
+// src/tls.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export const Tls = Effect.gen(function* () {
+  const publicKey = Config.String("TLS_CERTIFICATE_PEM");
+  const privateKey = Config.Redacted("TLS_PRIVATE_KEY_PEM");
+  return yield* Stackit.Certificates.Certificate("Tls", { publicKey, privateKey });
+});
+```
+
+The API has no update, so changing either replaces the certificate: the new one is created
+first, then the old one is deleted. The private key is in your [state
+store](/stackit/security/secrets-kms#protect-the-state-store). Certificates have no SKU on price
+list v1.0.44.
+
+## Terminate TLS
+
+An HTTPS listener references the certificate by id:
+
+```diff lang="typescript"
+// src/alb.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { App } from "./resources.ts";
++import { Tls } from "./tls.ts";
+
+-export const Web = App.pipe(
+-  Effect.flatMap((network) =>
+-    Stackit.ALB.LoadBalancer("Alb", {
+-      networks: [{ networkId: network.networkId }],
+-      options: { ephemeralAddress: true },
+-      listeners: [
+-        {
+-          name: "http",
+-          port: 80,
+-          protocol: "PROTOCOL_HTTP",
+-          http: { hosts: [{ host: "app.example.com", rules: [{ targetPool: "web" }] }] },
+-        },
+-      ],
+-      targetPools: [{ name: "web", targetPort: 8080, targets: [{ ip: "10.0.1.10" }] }],
+-    }),
+-  ),
+-);
++export const Web = Effect.gen(function* () {
++  const network = yield* App;
++  const tls = yield* Tls;
++  return yield* Stackit.ALB.LoadBalancer("Alb", {
++    networks: [{ networkId: network.networkId }],
++    options: { ephemeralAddress: true },
++    listeners: [
++      {
++        name: "https",
++        port: 443,
++        protocol: "PROTOCOL_HTTPS",
++        http: { hosts: [{ host: "app.example.com", rules: [{ targetPool: "web" }] }] },
++        https: { certificateConfig: { certificateIds: [tls.certificateId] } },
++      },
++    ],
++    targetPools: [{ name: "web", targetPort: 8080, targets: [{ ip: "10.0.1.10" }] }],
++  });
++});
+```
+
+## Add a web application firewall
+
+A WAF configuration pairs a managed rule set with your own rules. A listener turns it on with
+`wafConfigName`:
+
+```typescript
+// src/waf.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Owasp = Stackit.WAF.ManagedRuleSet("Owasp", {});
+
+export const Bots = Stackit.WAF.CustomRuleGroup("Bots", {
+  rules: [
+    {
+      description: "Known scraper",
+      behavior: { action: "ACTION_DENY", log: true, logMsg: "scraper" },
+      conditions: [
+        {
+          variable: { type: "VARIABLE_REQUEST_HEADERS", value: "User-Agent" },
+          operator: { type: "OPERATOR_CONTAINS", value: "badbot" },
+        },
+      ],
+    },
+  ],
+});
+
+export const Firewall = Effect.gen(function* () {
+  const rules = yield* Owasp;
+  const group = yield* Bots;
+  return yield* Stackit.WAF.Configuration("Firewall", {
+    managedRuleSetName: rules.ruleSetName,
+    customRuleGroupName: group.ruleGroupName,
+  });
+});
+```
+
+Then pass `wafConfigName: firewall.configurationName` on the listener. The configuration
+has no hourly fee: a load balancer using one bills at its WAF price, about EUR 0.029 an hour for
+`p10`. STACKIT refuses to delete a rule set or configuration still in use. A delete retries for
+about a minute, then fails with the API's `BadRequest`.
+
+## Block a list of addresses
+
+An IP list holds IPv4 ranges to deny, and has no hourly fee. An ALB references it by name:
+
+```typescript
+// src/blocked.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Blocked = Stackit.IPLists.IPList("Blocked", {
+  cidrs: ["198.51.100.0/24", "203.0.113.7/32"],
+});
+```
+
+Pass `options.accessControl.ipBlockListName: blocked.listName`. STACKIT's API for this is an
+alpha, with a default quota of 3 lists per project, and it limits uploads to one a minute, so a
+deploy right after the last change waits for its turn.
+
+## Ship logs and metrics
+
+Store the login, then point `options.observability` at a remote write endpoint:
+
+```typescript
+const password = Config.Redacted("METRICS_PASSWORD");
+const credential = yield* Stackit.LoadBalancer.ObservabilityCredential("Metrics", {
+  username: "metrics-writer",
+  password,
+});
+
+// on the load balancer:
+options: {
+  ephemeralAddress: true,
+  observability: {
+    metrics: {
+      credentialsRef: credential.credentialsRef,
+      pushUrl: "https://metrics.example.com/api/v1/receive",
+    },
+  },
+},
+```
+
+`Stackit.ALB.ObservabilityCredential` does the same on an ALB.
+
+## Change targets from a host
+
+`UpdateTargetPool` replaces a pool's targets at runtime:
+
+```typescript
+// src/Registrar.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Balancer } from "./resources.ts";
+
+export default class Registrar extends Stackit.Functions.Function<Registrar>()(
+  "Registrar",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/registrar" },
+  },
+  Effect.gen(function* () {
+    const updateTargetPool = yield* Stackit.LoadBalancer.UpdateTargetPool(yield* Balancer);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* updateTargetPool({
+          targetPoolName: "web",
+          targetPort: 8080,
+          targets: [{ ip: "10.0.1.10" }, { ip: "10.0.1.11" }],
+        });
+        return HttpServerResponse.text("registered");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.LoadBalancer.UpdateTargetPoolHttp)),
+) {}
+```
+
+It grants a custom role holding `nlb.targetpool.replace` on the project, so it reaches every load
+balancer in that project. The ALB's grants `alb.targetpool.replace`. `targetPools` on the resource
+is the full set, so a deploy that changes pools overwrites targets you added at runtime.
+
+## Read a load balancer
+
+`GetLoadBalancer` reads its status. It grants a custom role holding `nlb.loadbalancer.get` on the
+project, so it reads every load balancer in that project. Provide
+`Stackit.LoadBalancer.GetLoadBalancerHttp`.
+
+## Check on your first deploy
+
+- A target with no running server, such as a bare interface, may report `TYPE_TARGET_NOT_ACTIVE`.
+- Whether a deploy on a load balancer in `STATUS_ERROR` repairs it.
+- Whether `p10` is the API's default plan. When you omit `planId`, Alchemy leaves it to the API.
+
+## Where next
+
+- [Networks](/stackit/networking/networks) — the network and the targets' interfaces.
+- [DNS](/stackit/networking/dns) — point a domain at the public IP.
+- [LoadBalancer reference](/providers/stackit/loadbalancer#loadbalancer),
+  [ALB reference](/providers/stackit/alb#loadbalancer), and
+  [WAF reference](/providers/stackit/waf#configuration) — every prop and attribute.

@@ -175,13 +175,20 @@ export type Intake = Resource<
  * Ownership is tracked with labels. An intake of the same name without them is reported
  * as unowned, and only taken over with `--adopt`.
  *
+ * See [STACKIT's Intake docs](https://docs.stackit.cloud/products/data-and-ai/intake/).
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Intake]
+ * A new intake is created at the new place and the old one is deleted. `runnerId` and
+ * everything else update in place.
+ * :::
+ *
  * ### Creating an Intake
  * **Example:** Write to a table through a Dremio catalog
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const token = yield* Config.redacted("DREMIO_TOKEN");
+ * const token = Config.Redacted("DREMIO_TOKEN");
  * const runner = yield* Stackit.Intake.Runner("Ingest", {
  *   maxMessageSizeKiB: 1024,
  *   maxMessagesPerHour: 1024,

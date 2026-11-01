@@ -188,11 +188,6 @@ export type Instance = Resource<
  * A STACKIT Dremio instance: a managed Dremio lakehouse engine that queries data where it
  * lies, with Iceberg tables and other sources.
  *
- * :::caution[STACKIT Dremio is a beta API]
- * STACKIT serves this API as `v1beta`, and its Terraform resource is marked experimental, so
- * it may change. Terraform documents it as available in `eu01` only.
- * :::
- *
  * Display name, description, `acl` and `authentication` update in place, but changing
  * `authentication` restarts Dremio, with downtime. Moving the instance to another project or
  * region replaces it, and **replacing an instance loses what lives on it** (spaces, views,
@@ -203,6 +198,18 @@ export type Instance = Resource<
  * only taken over with `--adopt`. `alchemy unsafe nuke` deletes every instance whose display
  * name has the shape of a generated one: choose another shape for an instance that must
  * survive a nuke.
+ *
+ * See [STACKIT's Dremio docs](https://docs.stackit.cloud/products/data-and-ai/dremio/).
+ *
+ * :::caution[STACKIT Dremio is a beta API]
+ * STACKIT serves this API as `v1beta`, and its Terraform resource is marked experimental, so
+ * it may change. Terraform documents it as available in `eu01` only.
+ * :::
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Instance]
+ * Replacing an instance loses what lives on it: spaces, views, users and job history.
+ * Data in your own sources stays.
+ * :::
  *
  * ### Creating an Instance
  * **Example:** An instance with local users
@@ -238,7 +245,7 @@ export type Instance = Resource<
  *     oauth: {
  *       authorityUrl: "https://login.example.com/realms/acme",
  *       clientId: "dremio",
- *       clientSecret: yield* Config.redacted("DREMIO_OIDC_CLIENT_SECRET"),
+ *       clientSecret: Config.Redacted("DREMIO_OIDC_CLIENT_SECRET"),
  *       jwtClaims: { userName: "email" },
  *       scope: "openid profile email",
  *     },
@@ -258,7 +265,7 @@ export type Instance = Resource<
  *     azuread: {
  *       authorityUrl: "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000",
  *       clientId: "11111111-1111-1111-1111-111111111111",
- *       clientSecret: yield* Config.redacted("DREMIO_ENTRA_CLIENT_SECRET"),
+ *       clientSecret: Config.Redacted("DREMIO_ENTRA_CLIENT_SECRET"),
  *     },
  *   },
  * });

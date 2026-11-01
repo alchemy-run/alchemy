@@ -95,6 +95,23 @@ export class EnablementNotEmpty extends Data.TaggedError(
  * service and saving state; destroying an adopted enablement disables the service for
  * whoever else relied on it. Declare one enablement per server.
  *
+ * See [STACKIT's Server Backup Management docs](https://docs.stackit.cloud/products/compute-engine/server-backup-management/).
+ *
+ * :::caution[Changing `serverId`, `backupPolicyId`, `projectId` or `region` replaces the Enablement]
+ * Changing `backupPolicyId`, or replacing the server when its new id isn't known at
+ * plan, deletes the old enablement first, before any schedule or backup of this stack
+ * is deleted. So while the server has any, the plan fails with
+ * `Stackit.ServerBackup.EnablementNotEmpty` and nothing changes. Take them out of the
+ * stack in a deploy of its own, or deploy `forceDestroy` on its own to delete them
+ * with the enablement, and then make the change.
+ *
+ * Changing `serverId`, `projectId` or `region` to a known value enables the service at
+ * the new place, then deletes the old enablement as above. Something the stack doesn't
+ * hold stops that delete with both enablements running and billed, and `forceDestroy`
+ * set by then doesn't reach it, because an old enablement keeps the props it was
+ * deployed with. Every later deploy stops there until what's left is deleted by hand.
+ * :::
+ *
  * ### Enabling Backups
  * **Example:** Enable backups for a server
  * ```typescript
@@ -164,19 +181,6 @@ export class EnablementNotEmpty extends Data.TaggedError(
  * With `forceDestroy`, or under `alchemy unsafe nuke`, a delete first deletes every schedule
  * and every backup on the server, including those made in the portal, by a policy, by
  * another stack or at runtime, and then disables the service. Those backups are gone.
- *
- * ### Replacement Cautions <!-- api-prose -->
- * Changing `backupPolicyId`, or replacing the server when its new id isn't known at plan,
- * deletes the old enablement first, before any schedule or backup of this stack is deleted. So
- * while the server has any, the plan fails with `Stackit.ServerBackup.EnablementNotEmpty` and
- * nothing changes. Take them out of the stack in a deploy of its own, or deploy `forceDestroy` on
- * its own to delete them with the enablement, and then make the change.
- *
- * Changing `serverId`, `projectId` or `region` to a known value enables the service at the new
- * place, then deletes the old enablement as above. Something the stack doesn't hold stops that
- * delete with both enablements running and billed, and `forceDestroy` set by then doesn't reach
- * it, because an old enablement keeps the props it was deployed with. Every later deploy stops
- * there until what's left is deleted by hand.
  *
  * @resource
  * @product STACKIT Server Backup Management

@@ -58,6 +58,14 @@ export type KeyPair = Resource<
  * every project the account can reach. Only labels can be updated in
  * place.
  *
+ * See [STACKIT's Server docs](https://docs.stackit.cloud/products/compute-engine/server/).
+ *
+ * :::caution[Changing `name` or `publicKey` replaces the Key Pair]
+ * Servers only read the key at creation, so existing servers keep the old key. A new
+ * key under the same explicit `name` deletes the old key pair first, since names are
+ * unique per user.
+ * :::
+ *
  * ### Registering a key
  * **Example:** An SSH key pair from a public key
  * ```typescript
@@ -87,12 +95,6 @@ export type KeyPair = Resource<
  *   keypairName: key.name,
  * });
  * ```
- *
- * ### Replacement
- * Changing `name` or `publicKey` replaces the key pair. Servers only read
- * the key at creation, so existing servers keep the old key. A new key
- * under the same explicit `name` deletes the old key pair first, since
- * names are unique per user.
  *
  * @resource
  * @product STACKIT Compute Engine

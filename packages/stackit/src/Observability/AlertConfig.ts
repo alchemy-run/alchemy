@@ -239,6 +239,13 @@ export type AlertConfig = Resource<
  * their receivers and routes are carried along. Secrets stay out of the attributes
  * that describe the live configuration, and stay `Redacted` in the kept one.
  *
+ * See [STACKIT's Observability docs](https://docs.stackit.cloud/products/logging-and-monitoring/observability/).
+ *
+ * :::caution[Changing `instanceId` or `projectId` replaces the Configuration]
+ * The kept configuration is written back to the old instance, and the new instance's
+ * current configuration is kept instead.
+ * :::
+ *
  * ### Routing Alerts
  * **Example:** Mail the team, and page on critical alerts
  * ```typescript
@@ -246,7 +253,7 @@ export type AlertConfig = Resource<
  * import * as Config from "effect/Config";
  *
  * const instance = yield* Stackit.Observability.Instance("Metrics", {});
- * const opsgenieKey = yield* Config.redacted("OPSGENIE_KEY");
+ * const opsgenieKey = Config.Redacted("OPSGENIE_KEY");
  * const alerts = yield* Stackit.Observability.AlertConfig("Alerts", {
  *   instanceId: instance.instanceId,
  *   receivers: [
@@ -268,7 +275,7 @@ export type AlertConfig = Resource<
  * import * as Config from "effect/Config";
  *
  * const instance = yield* Stackit.Observability.Instance("Metrics", {});
- * const url = yield* Config.redacted("CHAT_WEBHOOK_URL");
+ * const url = Config.Redacted("CHAT_WEBHOOK_URL");
  * const alerts = yield* Stackit.Observability.AlertConfig("Alerts", {
  *   instanceId: instance.instanceId,
  *   receivers: [{ name: "chat", webHookConfigs: [{ url, googleChat: true }] }],
@@ -283,7 +290,7 @@ export type AlertConfig = Resource<
  * import * as Config from "effect/Config";
  *
  * const instance = yield* Stackit.Observability.Instance("Metrics", {});
- * const smtpAuthPassword = yield* Config.redacted("SMTP_PASSWORD");
+ * const smtpAuthPassword = Config.Redacted("SMTP_PASSWORD");
  * const alerts = yield* Stackit.Observability.AlertConfig("Alerts", {
  *   instanceId: instance.instanceId,
  *   global: {

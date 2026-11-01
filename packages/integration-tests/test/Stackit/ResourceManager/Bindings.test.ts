@@ -9,7 +9,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { stackitTags } from "../helpers.ts";
-import RmBindingsWorker, { Team } from "./fixtures/worker.ts";
+import RmBindingsWorker, { Child, Team } from "./fixtures/worker.ts";
 
 const providers = Layer.mergeAll(Stackit.providers(), Cloudflare.providers());
 
@@ -31,15 +31,13 @@ const Stack = Alchemy.Stack(
     const childFolder = yield* Stackit.ResourceManager.Folder("RmBindingsChildFolder", {
       parentId: team.containerId,
     });
-    const childProject = yield* Stackit.ResourceManager.Project("RmBindingsChildProject", {
-      parentId: team.containerId,
-      owner,
-    });
+    const childProject = yield* Child;
     return {
       url: worker.url.as<string>(),
       folderContainerId: team.containerId,
       organizationId: team.parentId,
       childFolderContainerId: childFolder.containerId,
+      childProjectId: childProject.projectId,
       childProjectContainerId: childProject.containerId,
     };
   }),
@@ -85,6 +83,21 @@ describe.skipIf(!owner)(
             expectOk(body);
             expect(body.result.containerId).toBe(folderContainerId);
             expect(body.result.labels.purpose).toBe("bindings-test");
+          }),
+        { timeout: 240_000 },
+      );
+    });
+
+    describe("GetProject", () => {
+      test.provider(
+        "reads the bound project",
+        (_stack) =>
+          Effect.gen(function* () {
+            const { childProjectId, childProjectContainerId } = yield* stack;
+            const body = yield* call("/project");
+            expectOk(body);
+            expect(body.result.projectId).toBe(childProjectId);
+            expect(body.result.containerId).toBe(childProjectContainerId);
           }),
         { timeout: 240_000 },
       );

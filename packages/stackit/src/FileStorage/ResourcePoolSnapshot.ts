@@ -104,6 +104,13 @@ export type ResourcePoolSnapshot = Resource<
  *
  * A snapshot uses its pool's space and has no charge of its own.
  *
+ * See [STACKIT's File Storage docs](https://docs.stackit.cloud/products/storage/file-storage/).
+ *
+ * :::caution[Changing `resourcePoolId`, `snaplockRetentionHours`, `projectId` or `region` replaces the Snapshot]
+ * A replacement takes a new snapshot of the pool as it is now and deletes the old one,
+ * so what it captured is lost.
+ * :::
+ *
  * ### Taking a Snapshot
  * **Example:** A snapshot with a comment
  * ```typescript

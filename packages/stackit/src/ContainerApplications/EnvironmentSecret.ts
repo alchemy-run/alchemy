@@ -91,6 +91,10 @@ export type EnvironmentSecret = Resource<
  * or decorate the resource with `Alchemy.RemovalPolicy.retain()` to leave it.
  * :::
  *
+ * :::caution[Changing `environmentId`, `key`, `projectId` or `region` replaces the Secret]
+ * The secret is written at its new place and removed from the old one.
+ * :::
+ *
  * ### Creating a Secret
  * **Example:** A secret from configuration
  * ```typescript
@@ -98,7 +102,7 @@ export type EnvironmentSecret = Resource<
  * import * as Config from "effect/Config";
  *
  * const environment = yield* Stackit.ContainerApplications.Environment("Apps", {});
- * const databaseUrl = yield* Config.Redacted("DATABASE_URL");
+ * const databaseUrl = Config.Redacted("DATABASE_URL");
  * const secret = yield* Stackit.ContainerApplications.EnvironmentSecret("DatabaseUrl", {
  *   environmentId: environment.environmentId,
  *   key: "database-url",
@@ -113,7 +117,7 @@ export type EnvironmentSecret = Resource<
  * import * as Config from "effect/Config";
  *
  * const environment = yield* Stackit.ContainerApplications.Environment("Apps", {});
- * const databaseUrl = yield* Config.Redacted("DATABASE_URL");
+ * const databaseUrl = Config.Redacted("DATABASE_URL");
  * const secret = yield* Stackit.ContainerApplications.EnvironmentSecret("DatabaseUrl", {
  *   environmentId: environment.environmentId,
  *   key: "database-url",
@@ -133,7 +137,7 @@ export type EnvironmentSecret = Resource<
  * import * as Config from "effect/Config";
  *
  * const environment = yield* Stackit.ContainerApplications.Environment("Apps", {});
- * const amqpUrl = yield* Config.Redacted("AMQP_URL");
+ * const amqpUrl = Config.Redacted("AMQP_URL");
  * const secret = yield* Stackit.ContainerApplications.EnvironmentSecret("AmqpUrl", {
  *   environmentId: environment.environmentId,
  *   key: "amqp-url",
@@ -186,10 +190,6 @@ export type EnvironmentSecret = Resource<
  *   }).pipe(Effect.provide(Stackit.ContainerApplications.ListEnvironmentSecretsHttp)),
  * ) {}
  * ```
- *
- * :::caution[Changing `environmentId`, `key`, `projectId` or `region` replaces the Secret]
- * The secret is written at its new place and removed from the old one.
- * :::
  *
  * @resource
  * @product STACKIT Container Applications

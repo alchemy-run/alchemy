@@ -105,6 +105,12 @@ export type CustomDomain = Resource<
  * over with `--adopt`, which includes one left by a deploy that crashed before writing
  * its state.
  *
+ * See [STACKIT's CDN docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/cdn/).
+ *
+ * :::caution[Changing `distributionId`, `domain` or `projectId` replaces the Custom Domain]
+ * Moving the same domain to another distribution removes it from the old one first.
+ * :::
+ *
  * ### Adding a Domain
  * **Example:** A managed certificate, with the DNS record in a STACKIT zone
  * ```typescript
@@ -147,8 +153,8 @@ export type CustomDomain = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const certificate = yield* Config.string("WWW_CERTIFICATE_PEM");
- * const privateKey = yield* Config.redacted("WWW_PRIVATE_KEY_PEM");
+ * const certificate = Config.String("WWW_CERTIFICATE_PEM");
+ * const privateKey = Config.Redacted("WWW_PRIVATE_KEY_PEM");
  * const cdn = yield* Stackit.CDN.Distribution("Cdn", {
  *   backend: { type: "http", originUrl: "https://origin.example.com" },
  * });
@@ -164,8 +170,8 @@ export type CustomDomain = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const certificate = yield* Config.string("WWW_CERTIFICATE_PEM");
- * const privateKey = yield* Config.redacted("WWW_PRIVATE_KEY_PEM");
+ * const certificate = Config.String("WWW_CERTIFICATE_PEM");
+ * const privateKey = Config.Redacted("WWW_PRIVATE_KEY_PEM");
  * const cdn = yield* Stackit.CDN.Distribution("Cdn", {
  *   backend: { type: "http", originUrl: "https://origin.example.com" },
  * });

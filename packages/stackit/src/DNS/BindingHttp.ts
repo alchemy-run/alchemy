@@ -10,16 +10,20 @@ import type { Zone } from "./Zone.ts";
  * Shared HTTP scaffolding for DNS bindings.
  * NOT exported from index.ts.
  *
- * Roles bind on the project holding the zone: STACKIT has no role binding on a
- * single zone (see `StackitBindings`).
+ * Permissions bind on the project holding the zone: STACKIT has no role binding
+ * on a single zone (see `StackitBindings`). The names are the actions in each
+ * operation's `x-stackit-authorization` in the DNS spec. They grant through a
+ * custom role because no STACKIT source lists predefined DNS roles.
  *
- * The role names follow STACKIT's documented `<product>.reader` and
- * `<product>.admin` pattern, but no STACKIT source lists the DNS ones, and none
- * names DNS permissions, so a custom role isn't an option yet. Check both with
- * `listRoles` once credentials exist: a wrong name fails the deploy.
+ * There is no per-operation least privilege here: `dns.zone.list` authorizes every
+ * read, and `dns.zone.create` every zone and record set change, on every zone in
+ * the project.
  */
-export const DNS_READ_ACCESS: StackitBindings.Access = { role: "dns.reader" };
-export const DNS_WRITE_ACCESS: StackitBindings.Access = { role: "dns.admin" };
+export const DNS_READ_ACCESS: StackitBindings.Access = { permissions: ["dns.zone.list"] };
+export const DNS_WRITE_ACCESS: StackitBindings.Access = { permissions: ["dns.zone.create"] };
+export const DNS_READ_WRITE_ACCESS: StackitBindings.Access = {
+  permissions: ["dns.zone.create", "dns.zone.list"],
+};
 
 /** Build a binding over one operation on a zone: `<Op>Http.ts` is one call to it. */
 export const makeZoneHttpBinding = <

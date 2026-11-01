@@ -18,10 +18,8 @@ export interface ListRecordSetsRequest extends Omit<
  * injected into each request. A foreign host signs with a service account
  * key Alchemy creates for it.
  *
- * Access: the `dns.reader` role on the project holding the zone. The role name
- * follows STACKIT's `<product>.reader` pattern, but no STACKIT source lists it;
- * check it with `listRoles` before relying on it, because a wrong name fails the
- * deploy.
+ * Access: the `dns.zone.list` permission on the project holding the zone, so the
+ * host can read every zone in that project, not only this one.
  *
  * ### Listing Record Sets
  * **Example:** List the TXT records of a zone from a Cloudflare Worker

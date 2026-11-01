@@ -68,6 +68,14 @@ export type VolumeAttachment = Resource<
  * Alchemy tracks the attachment by the ids in state, and a deploy without
  * state takes over an existing attachment of the same pair.
  *
+ * See [STACKIT's Block Storage docs](https://docs.stackit.cloud/products/storage/block-storage/).
+ *
+ * :::caution[Changing `serverId`, `volumeId`, `projectId` or `region` replaces the Attachment]
+ * A deploy detaches the volume first and then attaches the new pair, since a volume
+ * attaches to one server at a time. Unmount the device in the guest first: a detach
+ * under I/O can lose writes.
+ * :::
+ *
  * ### Attaching a data volume
  * **Example:** Attach a volume to a server
  * ```typescript
@@ -86,17 +94,11 @@ export type VolumeAttachment = Resource<
  *   size: 100,
  *   availabilityZone: "eu01-1",
  * });
- * yield* Stackit.IaaS.VolumeAttachment("DbData", {
+ * yield* Stackit.IaaS.VolumeAttachment("DbDataAttachment", {
  *   serverId: server.serverId,
  *   volumeId: data.volumeId,
  * });
  * ```
- *
- * ### Replacement
- * Changing `serverId`, `volumeId`, `projectId` or `region` detaches the
- * volume first and then attaches the new pair, since a volume attaches to
- * one server at a time. Unmount the device in the guest first: a detach
- * under I/O can lose writes.
  *
  * @resource
  * @product STACKIT Block Storage

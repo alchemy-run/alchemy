@@ -1,0 +1,256 @@
+---
+title: Networks
+description: Create STACKIT networks, security groups, network interfaces, and public IPs, and share private routing across projects with a network area.
+---
+
+Most STACKIT services are reached over public endpoints, so a host needs no
+network setup for them. A [server](/stackit/compute/servers), a
+[load balancer](/stackit/networking/load-balancers), or a cluster sits in a
+network you declare.
+
+Networks, network areas, routing tables, routes, security groups, and unattached
+interfaces are free. A project's first network with internet access can add a
+cost for its SNAT gateway, and a public IP bills per hour while it exists, about
+EUR 0.004.
+
+## Create a network
+
+```typescript
+// src/network.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const App = Stackit.IaaS.Network("App", {
+  ipv4: { prefix: "10.0.2.0/24" },
+});
+```
+
+Pass `prefixLength: 25` instead of `prefix` to let STACKIT pick a range.
+
+:::caution
+Changing the prefix, the prefix length, `isolated`, `vpcId`, the project, or the
+region replaces the network. Servers on the old network have to move first,
+because its delete fails while its interfaces exist.
+:::
+
+## Set nameservers and the gateway
+
+```diff lang="typescript"
+// src/network.ts
+export const App = Stackit.IaaS.Network("App", {
+-  ipv4: { prefix: "10.0.2.0/24" },
++  ipv4: {
++    prefix: "10.0.2.0/24",
++    nameservers: ["1.1.1.1", "9.9.9.9"],
++  },
+});
+```
+
+`gateway: null` leaves the network with no gateway.
+
+## Cut a network off
+
+An isolated network has no route to your other networks or to the internet:
+
+```typescript
+Stackit.IaaS.Network("Sandbox", {
+  isolated: true,
+  ipv4: { prefix: "192.168.10.0/24" },
+});
+```
+
+## Create a security group
+
+A security group is a set of rules on the interfaces that reference it. STACKIT
+adds default egress rules to every new group:
+
+```diff lang="typescript"
+// src/network.ts
++export const Web = Stackit.IaaS.SecurityGroup("Web", {});
+```
+
+Changing `stateful` replaces the group, and STACKIT refuses to delete one that's
+in use.
+
+## Allow traffic in
+
+A rule is its own resource:
+
+```diff lang="typescript"
+// src/network.ts
++export const Http = Web.pipe(
++  Effect.flatMap((group) =>
++    Stackit.IaaS.SecurityGroupRule("Http", {
++      securityGroupId: group.securityGroupId,
++      direction: "ingress",
++      protocol: "tcp",
++      portRange: { min: 8080, max: 8080 },
++    }),
++  ),
++);
+```
+
+Add `ipRange` to limit the source, or `remoteSecurityGroupId` to allow only the
+members of another group. Every change replaces the rule. The new rule is created
+first, so allowed traffic keeps flowing, except when only `description` changes.
+
+## Create an interface
+
+An interface is an address in a network with its own security groups. Declare one
+to give a server a fixed address or a public IP:
+
+```diff lang="typescript"
+// src/network.ts
++export const Nic = Effect.gen(function* () {
++  const network = yield* App;
++  const group = yield* Web;
++  return yield* Stackit.IaaS.NetworkInterface("Nic", {
++    networkId: network.networkId,
++    ipv4: "10.0.2.10",
++    securityGroups: [group.securityGroupId],
++  });
++});
+```
+
+Without `securityGroups`, the project's default group applies. Changing the network
+or a fixed address replaces the interface.
+
+## Add a public IP
+
+```diff lang="typescript"
+// src/network.ts
++export const Address = Nic.pipe(
++  Effect.flatMap((nic) =>
++    Stackit.IaaS.PublicIp("Address", {
++      networkInterfaceId: nic.networkInterfaceId,
++    }),
++  ),
++);
+```
+
+`address.ip` is the address.
+
+## Attach a server
+
+Pass the interface to the server:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Address, Nic } from "./src/network.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const nic = yield* Nic;
+    const server = yield* Stackit.IaaS.Server("Box", {
+      machineType: "g1.1",
+      bootVolume: {
+        size: 10,
+        source: { type: "image", id: "<image id>" },
+        deleteOnTermination: true,
+      },
+      networking: { networkInterfaceIds: [nic.networkInterfaceId] },
+    });
+    const address = yield* Address;
+    return { serverId: server.serverId, ip: address.ip };
+  }),
+);
+```
+
+A server bills per hour by machine type. See
+[Servers](/stackit/compute/servers).
+
+## Share routing across projects
+
+A network area is an organization-level routing domain that projects join to share
+private networking. It's free, and creating one needs organization-level permissions:
+
+```typescript
+// src/area.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Corp = Stackit.IaaS.NetworkArea("Corp", {});
+```
+
+STACKIT refuses to delete an area while projects still use it.
+
+## Configure a region
+
+Member projects can create networks in a region only once it's configured:
+
+```diff lang="typescript"
+// src/area.ts
++export const CorpRegion = Corp.pipe(
++  Effect.flatMap((area) =>
++    Stackit.IaaS.NetworkAreaRegion("CorpRegion", {
++      networkAreaId: area.networkAreaId,
++      networkRanges: ["10.100.0.0/16"],
++      transferNetwork: "10.255.255.0/24",
++    }),
++  ),
++);
+```
+
+Network ranges update in place. Changing `transferNetwork` deletes the configuration
+first, which STACKIT refuses while member projects have networks in the region.
+
+## Add a static route
+
+A route sends a prefix to an appliance inside the area:
+
+```diff lang="typescript"
+// src/area.ts
++export const OnPrem = CorpRegion.pipe(
++  Effect.flatMap((regional) =>
++    Stackit.IaaS.NetworkAreaRoute("OnPrem", {
++      networkAreaId: regional.networkAreaId,
++      destination: { type: "cidrv4", value: "192.168.0.0/16" },
++      nexthop: { type: "ipv4", value: "10.100.0.10" },
++    }),
++  ),
++);
+```
+
+## Use a routing table
+
+Routing tables are a preview feature. Create the area with `routingTables: true`, which
+replaces an existing area, then point a network at a table:
+
+```typescript
+// src/tables.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Corp = Stackit.IaaS.NetworkArea("Corp", { routingTables: true });
+
+export const Isolated = Corp.pipe(
+  Effect.flatMap((area) =>
+    Stackit.IaaS.RoutingTable("Isolated", { networkAreaId: area.networkAreaId }),
+  ),
+);
+
+export const Workloads = Isolated.pipe(
+  Effect.flatMap((table) =>
+    Stackit.IaaS.Network("Workloads", {
+      ipv4: { prefixLength: 24 },
+      routingTableId: table.routingTableId,
+    }),
+  ),
+);
+```
+
+A `Stackit.IaaS.RoutingTableRoute` adds a route to the table. Networks using a table have
+to move before it can be replaced.
+
+## Where next
+
+- [Load balancers](/stackit/networking/load-balancers) — put a stable address in front of
+  interfaces.
+- [VPN](/stackit/networking/vpn) — connect a network area to your own network.
+- [Firewall](/stackit/security/firewall) — rules on products outside your stack.
+- [IaaS reference](/providers/stackit/iaas#network) — every prop and attribute.

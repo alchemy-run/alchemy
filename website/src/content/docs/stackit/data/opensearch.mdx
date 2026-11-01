@@ -1,0 +1,211 @@
+---
+title: OpenSearch
+description: Run managed OpenSearch on STACKIT, then index, search, and delete documents from a Function with typed Read, Write, and ReadWrite bindings.
+---
+
+STACKIT OpenSearch runs OpenSearch for you. Create an instance and a credential, bind the
+credential to your Function, and index and search documents over the REST API.
+
+:::caution[This creates a billed resource]
+An instance bills per started hour by plan. `OpenSearch-1.4.10-Single-EU01` is about EUR
+0.10 per hour on STACKIT's database prices. Check the current price list, and destroy the
+stack when you're done.
+:::
+
+## Create an instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Search = Stackit.OpenSearch.Instance("Search", {
+  version: "2",
+  planName: "stackit-opensearch-1.2.10-replica",
+  acl: ["203.0.113.7/32"],
+});
+
+export const App = Search.pipe(
+  Effect.flatMap((search) =>
+    Stackit.OpenSearch.Credential("App", { instanceId: search.instanceId }),
+  ),
+);
+```
+
+A deploy waits until the instance reports `active`, which takes minutes. A wrong `version`
+or `planName` fails the deploy with `SearchServicePlanNotFound`, which lists the choices.
+
+The host's egress IP has to be in `acl`, or it can't connect. A Function has no fixed
+egress address, so widen `acl` for one, or host the code somewhere with a known address.
+
+## Bind it to a Function
+
+Pick the binding that says what the host does:
+
+| Binding | Methods |
+| --- | --- |
+| `ReadIndex` | `search`, `get` |
+| `WriteIndex` | `index`, `delete`, `bulk` |
+| `ReadWriteIndex` | all of the above |
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { App } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const orders = yield* Stackit.OpenSearch.ReadWriteIndex(yield* App);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const found = yield* orders.search({
+          index: "orders",
+          query: { match: { sku: "tea" } },
+        });
+        return yield* HttpServerResponse.json({ hits: found.hits.hits.length });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.OpenSearch.ReadWriteIndexHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+The bindings grant no STACKIT role and create no service account, because calls
+authenticate with the credential's user. A STACKIT credential isn't scoped by this API, so
+the three bindings hold the same user, which can do everything on the instance: the limit
+is the client's surface, not a permission. Its password reaches the Function as a plain
+revision variable, so anyone who can call `GetRevision` can read it.
+
+## Index a document
+
+```typescript
+yield* orders.index({
+  index: "orders",
+  id: "1",
+  refresh: "true",
+  body: { sku: "tea" },
+});
+```
+
+Without `id`, OpenSearch generates one.
+
+## Read a document
+
+```typescript
+const order = yield* orders.get({ index: "orders", id: "1" });
+const source = order._source;
+```
+
+## Search
+
+`index` takes one index, a comma-separated list, or a wildcard pattern:
+
+```typescript
+const found = yield* orders.search({
+  index: "orders",
+  query: { match: { sku: "tea" } },
+  size: 10,
+});
+```
+
+## Delete a document
+
+```typescript
+yield* orders.delete({ index: "orders", id: "1", refresh: "true" });
+```
+
+## Run many actions at once
+
+```typescript
+const result = yield* orders.bulk({
+  index: "orders",
+  refresh: "true",
+  lines: [{ index: { _id: "2" } }, { sku: "coffee" }],
+});
+```
+
+A failed action doesn't fail the request, so check `errors` on the answer, and each item's
+`error`.
+
+## Use your own client
+
+`Connect` resolves a credential's settings and opens no connection:
+
+```typescript
+const connect = yield* Stackit.OpenSearch.Connect(yield* App);
+// …
+const info = yield* connect;
+```
+
+Provide `Stackit.OpenSearch.ConnectHttp`. `info` has `host`, `hosts`, `port`, `scheme`,
+`username`, and `Redacted` `password` and `url`. `Connect` grants no STACKIT role.
+
+## Rotate a credential
+
+Change `rotationKey` for a new user and password. STACKIT can't update a credential, so a
+new one is created first and the old one is deleted after:
+
+```diff lang="typescript"
+// src/resources.ts
+    Stackit.OpenSearch.Credential("App", {
+      instanceId: search.instanceId,
++      rotationKey: "2026-11",
+    }),
+```
+
+## Tune OpenSearch
+
+```diff lang="typescript"
+// src/resources.ts
+  planName: "stackit-opensearch-1.2.10-replica",
+  acl: ["203.0.113.7/32"],
++  plugins: ["analysis-phonetic"],
++  javaGarbageCollector: "UseG1GC",
++  javaHeapspace: 2048,
+```
+
+Removing one of these props leaves its live value as it is.
+
+## Start a backup
+
+Runtime operations on the instance are one binding each:
+
+```typescript
+const createBackup = yield* Stackit.OpenSearch.CreateBackup(yield* Search);
+// …
+yield* createBackup({});
+```
+
+Provide `Stackit.OpenSearch.CreateBackupHttp`. This grants a custom role with
+`opensearch.proxy.write` and a service account key for the host. The role is bound on the
+project holding the instance, so it reaches every OpenSearch instance in that project.
+`GetMetrics` takes `opensearch.proxy.read`, and `GetInstance` takes
+`opensearch.instance.get`.
+
+:::caution[Changing `name`, `projectId`, or `region` replaces the instance]
+A replacement starts empty: the indexes in the old instance are deleted with it.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- `version: "2"` and your `planName`.
+- The credential's URI has a shape the bindings accept: they take its origin and path, and
+  sign with the credential's `username` and `password`.
+- STACKIT's security plugin answers 401 and 403 as these bindings expect.
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [OpenSearch reference](/providers/stackit/opensearch#instance): every prop and attribute.

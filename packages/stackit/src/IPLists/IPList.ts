@@ -89,6 +89,14 @@ export type IPList = Resource<
  * Ownership is tracked with labels. A list with the same name that lacks them is
  * reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's Application Load Balancer docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/application-load-balancer/).
+ *
+ * :::caution[Changing `name`, `projectId` or `region` replaces the List]
+ * A new list is created, and the old one is deleted once no load balancer references
+ * it. STACKIT refuses to delete a list still in use: a delete retries for about a
+ * minute, then fails with the API's `BadRequest`.
+ * :::
+ *
  * ### Creating a List
  * **Example:** A list of ranges to deny
  * ```typescript

@@ -1,0 +1,253 @@
+---
+title: Kafka (Intake)
+description: Publish JSON over the Kafka protocol to a STACKIT Intake, flush it into an Iceberg table, and read the messages it couldn't deliver.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const kafkaDeps = `kafkajs`;
+
+STACKIT Intake takes JSON messages over the Kafka protocol and flushes
+them into one Apache Iceberg table, about five minutes after they arrive.
+It isn't a general Kafka cluster: a user can publish to the intake's topic
+or read its dead letter topic, and no user reads the main topic.
+
+:::caution[Cost]
+A runner reserves capacity, and STACKIT bills it for as long as the runner
+exists, whatever flows through it: about EUR 0.042 per GB per hour, or
+about EUR 30 a month per GB/h. The Iceberg catalog is separate. On
+[Dremio](/stackit/data/dremio) it is billed on its own.
+:::
+
+## Create a runner
+
+A runner is the reserved capacity and the Kafka endpoint:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export const Ingest = Stackit.Intake.Runner("Ingest", {
+  maxMessageSizeKiB: 1024,
+  maxMessagesPerHour: 1024,
+});
+```
+
+The two limits multiply to the capacity, so this one is about 1 GB per
+hour. The runner buffers messages for up to 24 hours and refuses new ones
+once the buffer is full.
+
+## Add an intake
+
+An intake is a pipeline on the runner, writing to one table. Point it at
+an Iceberg REST catalog:
+
+```diff lang="typescript"
+// src/resources.ts
+export const Ingest = Stackit.Intake.Runner("Ingest", {
+  maxMessageSizeKiB: 1024,
+  maxMessagesPerHour: 1024,
+});
++
++export const Events = Effect.gen(function* () {
++  const runner = yield* Ingest;
++  const token = Config.Redacted("DREMIO_TOKEN");
++  return yield* Stackit.Intake.Intake("Events", {
++    runnerId: runner.runnerId,
++    catalog: {
++      uri: "https://my-dremio.data-platform.stackit.run/iceberg",
++      warehouse: "lake",
++      namespace: "clickstream",
++      tableName: "events",
++      auth: {
++        type: "dremio",
++        personalAccessToken: token,
++        tokenEndpoint: "https://my-dremio.data-platform.stackit.run/oauth/token",
++      },
++    },
++  });
++});
+```
+
+A deploy waits until the intake is `active`, and fails with STACKIT's
+message when it reports `failed`.
+
+## Add a user
+
+A user connects over SASL. You choose the password, and STACKIT never
+returns it:
+
+```diff lang="typescript"
+// src/resources.ts
++export const Producer = Effect.gen(function* () {
++  const events = yield* Events;
++  const password = Config.Redacted("INTAKE_PASSWORD");
++  return yield* Stackit.Intake.User("Producer", {
++    intakeId: events.intakeId,
++    password,
++  });
++});
+```
+
+It takes 12 to 128 characters with a lower case letter, an upper case
+letter, a number, and another character. Change the value and deploy to
+rotate it. Hosts bound to the user get the new password on the same deploy.
+
+## Publish
+
+Install the optional peer `kafkajs`:
+
+<PackageManagers add={kafkaDeps} />
+
+`Produce` takes the intake and the user. It needs a host that can open TCP
+sockets with `node:net` and `node:tls`:
+
+```typescript
+// src/Api.ts
+import * as Docker from "@alchemy.run/docker";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Events, Producer } from "./resources.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.filename, port: 3000 },
+  Effect.gen(function* () {
+    const events = yield* Events;
+    const producer = yield* Producer;
+    const produce = yield* Stackit.Intake.Produce(events, producer);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const records = yield* produce({
+          messages: [{ key: "order-1", value: JSON.stringify({ total: 12 }) }],
+        });
+        return yield* HttpServerResponse.json({ records });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Intake.ProduceKafka)),
+) {}
+```
+
+Each call opens a connection and closes it, so send many messages in one
+call rather than one call per message. A message can't be larger than the
+runner's `maxMessageSizeKiB`. `kafkajs` isn't known to work on a Cloudflare
+Worker.
+
+`Produce` grants no STACKIT role and creates no service account. The
+intake's endpoint and topic and the user's name and password reach the
+host's environment, with the password `Redacted`.
+
+## Deploy it
+
+A `Docker.Service` needs the Docker providers next to STACKIT's:
+
+```typescript
+// alchemy.run.ts
+import * as Docker from "@alchemy.run/docker";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import { Events } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Stackit.providers(), Docker.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    yield* Api;
+    const events = yield* Events;
+    return { topic: events.topic };
+  }),
+);
+```
+
+## Read what couldn't be delivered
+
+Messages the intake can't deliver, such as non-JSON ones, go to a dead
+letter topic. Add a user of type `dead-letter`:
+
+```diff lang="typescript"
+// src/resources.ts
++export const DeadLetters = Effect.gen(function* () {
++  const events = yield* Events;
++  const password = Config.Redacted("INTAKE_DLQ_PASSWORD");
++  return yield* Stackit.Intake.User("DeadLetters", {
++    intakeId: events.intakeId,
++    type: "dead-letter",
++    password,
++  });
++});
+```
+
+Then read the topic with `ConsumeDeadLetter`. It runs until it is
+interrupted, so bound it. Provide `Stackit.Intake.ConsumeDeadLetterKafka`:
+
+```typescript
+const consume = yield* Stackit.Intake.ConsumeDeadLetter(yield* Events, yield* DeadLetters);
+
+// inside fetch:
+yield* consume({
+  groupId: "debugger",
+  handler: (message) => Effect.log(message.text, message.headers),
+}).pipe(Effect.timeoutOption("30 seconds"));
+```
+
+STACKIT calls this topic temporary storage for debugging. The binding
+grants no STACKIT role.
+
+## Watch an intake
+
+`GetIntake` reads `state` and `undeliveredMessageCount` from a host.
+Provide `Stackit.Intake.GetIntakeHttp`. It grants a custom role holding
+`intake.intake.get` on the project, which also reads the project's runners
+and users.
+
+## Change the capacity
+
+Raising either limit updates in place:
+
+```diff lang="typescript"
+// src/resources.ts
+export const Ingest = Stackit.Intake.Runner("Ingest", {
+  maxMessageSizeKiB: 1024,
+-  maxMessagesPerHour: 1024,
++  maxMessagesPerHour: 2048,
+});
+```
+
+:::caution
+A smaller product of the two limits replaces the runner, which drops what
+it holds, and producers reconnect to the new endpoint. So does changing
+`projectId` or `region`.
+:::
+
+## Delete a runner
+
+Deleting a runner that still has intakes on it fails with
+`Stackit.Intake.RunnerNotEmpty`, which names them. Only `alchemy unsafe
+nuke` goes past that.
+
+## Check on your first deploy
+
+- A `dead-letter` user can join a consumer group. STACKIT's docs don't say,
+  and `kafkajs` needs one, so `ConsumeDeadLetter` fails with `KafkaError` if
+  it can't.
+- The catalog is reachable from the intake. STACKIT's docs don't say how
+  strictly `createIntake` checks it.
+
+## Where next
+
+- [Dremio](/stackit/data/dremio) — an Iceberg catalog to query the table
+  from.
+- [IAM & bindings](/stackit/security/iam-bindings) — bindings that use a
+  credential instead of a role.
+- [Intake reference](/providers/stackit/intake#runner) — every prop and
+  attribute.

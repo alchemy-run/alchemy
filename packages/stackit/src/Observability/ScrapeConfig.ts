@@ -191,6 +191,13 @@ export type ScrapeConfig = Resource<
  *
  * Secrets (`basicAuth`, `bearerToken`, `oauth2`) stay out of the attributes.
  *
+ * See [STACKIT's Observability docs](https://docs.stackit.cloud/products/logging-and-monitoring/observability/).
+ *
+ * :::caution[Changing `instanceId`, `jobName`, `oauth2`, `httpSdConfigs` or `projectId` replaces the Job]
+ * The job name is its identity. A new job is created and the old one is deleted.
+ * Everything else updates in place.
+ * :::
+ *
  * ### Scraping Targets
  * **Example:** Scrape a service every five minutes
  * ```typescript
@@ -228,7 +235,7 @@ export type ScrapeConfig = Resource<
  * import * as Config from "effect/Config";
  *
  * const instance = yield* Stackit.Observability.Instance("Metrics", {});
- * const bearerToken = yield* Config.redacted("SCRAPE_TOKEN");
+ * const bearerToken = Config.Redacted("SCRAPE_TOKEN");
  * const job = yield* Stackit.Observability.ScrapeConfig("Api", {
  *   instanceId: instance.instanceId,
  *   bearerToken,

@@ -150,6 +150,15 @@ export type Instance = Resource<
  * Instances are billed per started hour by flavor and node count, plus storage and
  * backups.
  *
+ * The instance only accepts connections from the ranges in `acl`.
+ *
+ * See [STACKIT's MongoDB Flex docs](https://docs.stackit.cloud/products/databases/mongodb-flex/).
+ *
+ * :::caution[Changing `replicas`, `type`, `storage.class`, `projectId` or `region` replaces the Instance]
+ * A replacement starts empty: back up what you need first. With an explicit `name`,
+ * the old instance is deleted first.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** A three-node replica set
  * ```typescript
@@ -239,6 +248,114 @@ export type Instance = Resource<
  *   acl: ["203.0.113.7/32"],
  *   backupSchedule: "0 2 * * *",
  * });
+ * ```
+ *
+ * ### Network Access
+ * `acl` is what lets a client connect. Anything outside it can't open a connection,
+ * including a host using `Stackit.MongoDBFlex.Connect`.
+ *
+ * **Example:** Allow your office and your deploying machine
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const db = yield* Stackit.MongoDBFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "7.0",
+ *   replicas: 3,
+ *   type: "Replica",
+ *   storage: { class: "premium-perf2-mongodb", size: 10 },
+ *   backupSchedule: "0 2 * * *",
+ *   acl: ["203.0.113.0/24", "198.51.100.7/32"],
+ * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `Connect` passes the host, port, names, password and connection string into the host's
+ * environment, with the secrets kept `Redacted`. It grants no STACKIT role, because
+ * connections authenticate with the database user. The host's egress address has to be in
+ * `acl`.
+ *
+ * **Example:** Resolve the connection settings from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Db = Stackit.MongoDBFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "7.0",
+ *   replicas: 3,
+ *   type: "Replica",
+ *   storage: { class: "premium-perf2-mongodb", size: 10 },
+ *   backupSchedule: "0 2 * * *",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const AppUser = Db.pipe(
+ *   Effect.flatMap((db) =>
+ *     Stackit.MongoDBFlex.User("AppUser", {
+ *       instanceId: db.instanceId,
+ *       database: "app",
+ *       roles: ["readWrite"],
+ *     }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const connect = yield* Stackit.MongoDBFlex.Connect(yield* AppUser);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const info = yield* connect;
+ *         return yield* HttpServerResponse.json({ database: info.database });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.MongoDBFlex.ConnectHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * `ReadWriteInstance` reads the instance, rotates its users' passwords and restores its
+ * backups. It grants a custom role on the project holding the instance, so it reaches
+ * every MongoDB Flex instance in that project.
+ *
+ * **Example:** Read a user and rotate its password
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Db = Stackit.MongoDBFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "7.0",
+ *   replicas: 3,
+ *   type: "Replica",
+ *   storage: { class: "premium-perf2-mongodb", size: 10 },
+ *   backupSchedule: "0 2 * * *",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const client = yield* Stackit.MongoDBFlex.ReadWriteInstance(yield* Db);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const live = yield* client.getUser({ userId: "user-id" });
+ *         const { username } = yield* client.resetUser({ userId: "user-id" });
+ *         return yield* HttpServerResponse.json({ read: live.item?.username, rotated: username });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.MongoDBFlex.ReadWriteInstanceHttp)),
+ * ) {}
  * ```
  *
  * @resource

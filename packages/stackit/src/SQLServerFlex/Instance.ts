@@ -180,6 +180,13 @@ export type Instance = Resource<
  * Instances are billed per started hour by flavor, plus storage, backups and the SQL
  * Server licence, which makes them expensive to leave running.
  *
+ * See [STACKIT's SQL Server Flex docs](https://docs.stackit.cloud/products/databases/sqlserver-flex/).
+ *
+ * :::caution[Changing `accessScope`, `encryption`, `storage.class`, `projectId` or `region` replaces the Instance]
+ * A replacement starts empty: back up what you need first. With an explicit `name`,
+ * the old instance is deleted first.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** A single-node instance
  * ```typescript

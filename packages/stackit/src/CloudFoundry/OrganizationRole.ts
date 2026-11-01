@@ -56,6 +56,12 @@ export type OrganizationRole = Resource<
  * reported as unowned, and only taken over with `--adopt`. With `userName` it can't be
  * recognized in time. See the prop.
  *
+ * See [STACKIT's Cloud Foundry docs](https://docs.stackit.cloud/products/runtime/cloud-foundry/).
+ *
+ * :::caution[Changing the user or type replaces the Role]
+ * The user loses the old role before they get the new one.
+ * :::
+ *
  * ### Granting a Role
  * **Example:** Make a user an auditor of an organization
  * ```typescript
@@ -76,10 +82,6 @@ export type OrganizationRole = Resource<
  *   },
  * });
  * ```
- *
- * :::caution[Changing the user or type replaces the Role]
- * The user loses the old role before they get the new one.
- * :::
  *
  * @resource
  * @product STACKIT Cloud Foundry

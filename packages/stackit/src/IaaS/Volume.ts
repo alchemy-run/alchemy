@@ -153,6 +153,13 @@ export type Volume = Resource<
  * `size` grows the volume in place. Volumes are billed per GB-hour by
  * performance class.
  *
+ * See [STACKIT's Block Storage docs](https://docs.stackit.cloud/products/storage/block-storage/).
+ *
+ * :::caution[Changing `availabilityZone`, `performanceClass`, `source`, `encryption`, `projectId` or `region`, or shrinking `size`, replaces the Volume]
+ * A deploy creates a new volume and deletes the old one, **with its data**, including
+ * when `name` stays the same. Snapshot or back up the volume first.
+ * :::
+ *
  * ### Creating a volume
  * **Example:** An empty data volume
  * ```typescript
@@ -203,12 +210,6 @@ export type Volume = Resource<
  *   },
  * });
  * ```
- *
- * ### Replacement
- * Changing `availabilityZone`, `performanceClass`, `source`, `encryption`,
- * `projectId` or `region`, or shrinking `size`, creates a new volume and
- * deletes the old one, **with its data**, including when `name` stays the
- * same. Snapshot or back up the volume first.
  *
  * @resource
  * @product STACKIT Block Storage

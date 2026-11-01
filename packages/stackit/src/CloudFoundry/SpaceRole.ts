@@ -61,6 +61,12 @@ export type SpaceRole = Resource<
  * reported as unowned, and only taken over with `--adopt`. With `userName` it can't be
  * recognized in time. See the prop.
  *
+ * See [STACKIT's Cloud Foundry docs](https://docs.stackit.cloud/products/runtime/cloud-foundry/).
+ *
+ * :::caution[Changing the user, space or type replaces the Role]
+ * The user loses the old role before they get the new one.
+ * :::
+ *
  * ### Granting a Role
  * **Example:** Let the organization manager deploy to a space
  * ```typescript
@@ -85,10 +91,6 @@ export type SpaceRole = Resource<
  *   },
  * });
  * ```
- *
- * :::caution[Changing the user, space or type replaces the Role]
- * The user loses the old role before they get the new one.
- * :::
  *
  * Rotating the organization manager with its `rotationKey` replaces a role held by that manager:
  * the old role went with the old user, so nothing is left to delete. A role of another user that

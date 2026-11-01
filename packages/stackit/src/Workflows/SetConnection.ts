@@ -41,11 +41,11 @@ export interface SetConnectionRequest extends rest.CreateConnectionRequest {}
  *   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
  *   Effect.gen(function* () {
  *     const airflow = yield* Airflow;
- *     const password = yield* Config.redacted("REPORTS_DB_PASSWORD");
+ *     const password = yield* Config.Redacted("REPORTS_DB_PASSWORD");
  *     const setConnection = yield* Stackit.Workflows.SetConnection(airflow, {
  *       discoveryEndpoint: "https://login.example.com/realms/acme/.well-known/openid-configuration",
  *       clientId: "reports-api",
- *       clientSecret: yield* Config.redacted("AIRFLOW_CLIENT_SECRET"),
+ *       clientSecret: yield* Config.Redacted("AIRFLOW_CLIENT_SECRET"),
  *     });
  *     return {
  *       fetch: Effect.gen(function* () {

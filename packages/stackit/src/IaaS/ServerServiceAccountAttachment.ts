@@ -82,6 +82,13 @@ export class ServerServiceAccountTaken extends Data.TaggedError(
  * pair. A server that already holds another account fails the deploy with
  * `Stackit.IaaS.ServerServiceAccountTaken`, which names it.
  *
+ * See [STACKIT's Server docs](https://docs.stackit.cloud/products/compute-engine/server/).
+ *
+ * :::caution[Changing `serverId`, `serviceAccountEmail`, `projectId` or `region` replaces the Attachment]
+ * A deploy detaches the account and attaches the new pair; since a server holds one
+ * account, the old attachment is removed first.
+ * :::
+ *
  * ### Giving a server an identity
  * **Example:** Attach a service account to a server
  * ```typescript
@@ -90,22 +97,17 @@ export class ServerServiceAccountTaken extends Data.TaggedError(
  * const network = yield* Stackit.IaaS.Network("App", {
  *   ipv4: { prefix: "10.0.1.0/24" },
  * });
- * const identity = yield* Stackit.IAM.ServiceAccount("Worker", {});
+ * const identity = yield* Stackit.IAM.ServiceAccount("WorkerAccount", {});
  * const server = yield* Stackit.IaaS.Server("Worker", {
  *   machineType: "g1.1",
  *   bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
  *   networking: { networkId: network.networkId },
  * });
- * yield* Stackit.IaaS.ServerServiceAccountAttachment("Worker", {
+ * yield* Stackit.IaaS.ServerServiceAccountAttachment("WorkerAttachment", {
  *   serverId: server.serverId,
  *   serviceAccountEmail: identity.email,
  * });
  * ```
- *
- * ### Replacement
- * Changing `serverId`, `serviceAccountEmail`, `projectId` or `region`
- * detaches the account and attaches the new pair; since a server holds one
- * account, the old attachment is removed first.
  *
  * @resource
  * @product STACKIT Compute Engine

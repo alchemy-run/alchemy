@@ -100,6 +100,14 @@ export type SecurityGroup = Resource<
  * Name, description and labels are updated in place; `stateful` cannot
  * change.
  *
+ * See [STACKIT's security group docs](https://docs.stackit.cloud/products/network/core-networking/security-groups/).
+ *
+ * :::caution[Changing `stateful`, `projectId` or `region` replaces the Security Group]
+ * A deploy creates a new security group before deleting the old one. Network
+ * interfaces referencing the old group keep it until they are updated to the new id;
+ * STACKIT refuses to delete a group that is still in use.
+ * :::
+ *
  * ### Creating a security group
  * **Example:** Security group with an SSH rule
  * ```typescript
@@ -141,12 +149,6 @@ export type SecurityGroup = Resource<
  *   securityGroups: [web.securityGroupId],
  * });
  * ```
- *
- * ### Replacement
- * Changing `stateful`, `projectId` or `region` creates a new security
- * group before deleting the old one. Network interfaces referencing the
- * old group keep it until they are updated to the new id; STACKIT refuses
- * to delete a group that is still in use.
  *
  * @resource
  * @product STACKIT Security Groups

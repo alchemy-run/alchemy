@@ -95,6 +95,12 @@ export type Instance = Resource<
  * Ownership is tracked with labels. An instance with the same `name` that lacks them is reported
  * as unowned, and only taken over with `--adopt`.
  *
+ * See [STACKIT's AI Model Experiments docs](https://docs.stackit.cloud/products/data-and-ai/ai-model-experiments/).
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Instance]
+ * A replacement starts empty and loses the old instance's experiments.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** An instance with a generated name
  * ```typescript

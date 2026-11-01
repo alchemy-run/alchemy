@@ -134,6 +134,12 @@ export class ServicePlanIncomplete extends Data.TaggedError(
  * can't list instances, because it has no Cloud Foundry credentials: they go with their
  * organization.
  *
+ * See [STACKIT's Cloud Foundry docs](https://docs.stackit.cloud/products/runtime/cloud-foundry/).
+ *
+ * :::caution[Changing `spaceId`, `offering`, or the kind of instance, replaces the Instance]
+ * A managed instance's data goes with it, unless its broker keeps it.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** A managed instance from the marketplace
  * ```typescript
@@ -182,10 +188,6 @@ export class ServicePlanIncomplete extends Data.TaggedError(
  *   services: [database.serviceInstanceId],
  * });
  * ```
- *
- * :::caution[Changing `spaceId`, `offering`, or the kind of instance, replaces the Instance]
- * A managed instance's data goes with it, unless its broker keeps it.
- * :::
  *
  * @resource
  * @product STACKIT Cloud Foundry

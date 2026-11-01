@@ -54,7 +54,7 @@ export const Ping = Effect.gen(function* () {
   const stage = yield* Stage;
   const registry = yield* registryFor("ping");
   return yield* Stackit.CloudFoundry.App("StackitCloudFoundryPing", {
-    spaceId: stage.space.spaceId,
+    spaceId: stage.role.spaceId,
     credentials: stage.credentials,
     main: globalThis.__ALCHEMY_RUNTIME__
       ? "async-app.ts"

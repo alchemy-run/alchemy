@@ -1,0 +1,436 @@
+---
+title: Cloud Foundry
+description: Run an Effect program or a plain handler on STACKIT Cloud Foundry — organizations, spaces, credentials, routes, marketplace services, and consumers.
+---
+
+`Stackit.CloudFoundry.App` runs an image behind the platform's router, as many
+instances as you ask for, in a space. Run a pre-built image, or let Alchemy build
+your program into one with Docker on your machine.
+
+:::caution[Check these on your first deploy]
+- Cloud Foundry only runs images when the platform enables its `diego_docker`
+  flag. STACKIT's docs describe `cf push --docker-image`, but don't state the flag.
+  If the flag is off, an app built from `main` fails to stage.
+- An organization manager can log in with its password. Everything on the Cloud
+  Foundry API depends on that.
+- A generated host label fits the shared domain.
+:::
+
+:::note[Cost]
+A started app costs EUR 0.0000409 per MB of RAM per started hour (price list
+v1.0.44). Two apps at 256 MB come to about EUR 0.02 per hour. Organizations, spaces,
+and quotas are free. Check the current price list.
+:::
+
+## Create a place to deploy to
+
+An app needs a space, and credentials for the platform's Cloud Foundry API, which
+takes UAA tokens rather than STACKIT ones. Create an organization, a manager, a
+space, and that manager's `space_developer` role:
+
+```typescript
+// src/deployer.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Stage = Effect.gen(function* () {
+  const organization = yield* Stackit.CloudFoundry.Organization("Org", {});
+  const manager = yield* Stackit.CloudFoundry.OrganizationManager("Manager", {
+    organizationId: organization.organizationId,
+  });
+  const credentials = {
+    apiUrl: manager.apiUrl,
+    username: manager.username,
+    password: manager.password,
+  };
+  const space = yield* Stackit.CloudFoundry.Space("Dev", {
+    organizationId: organization.organizationId,
+    credentials,
+  });
+  const role = yield* Stackit.CloudFoundry.SpaceRole("Developer", {
+    organizationId: organization.organizationId,
+    spaceId: space.spaceId,
+    type: "space_developer",
+    userGuid: manager.userId,
+    credentials,
+  });
+  return { organization, space, manager, credentials, role };
+});
+```
+
+Pass `role.spaceId` to an app, not `space.spaceId`, so the app deploys after the
+manager holds the role.
+
+## Deploy an Effect program
+
+An app is a class. The props come from an Effect, so they can use the space:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Stage } from "./deployer.ts";
+
+export default class Api extends Stackit.CloudFoundry.App<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    return {
+      spaceId: stage.role.spaceId,
+      credentials: stage.credentials,
+      main: import.meta.url,
+      registry: { repository: "ghcr.io/my-org/api" },
+      memoryInMb: 256,
+      env: { GREETING: "hello" },
+    };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(Config.String("GREETING"));
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+`registry` with no `username` or `password` pushes with your machine's
+`docker login`. A deploy waits until a new image has staged and the instances run.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+`api.url` is the `https://` URL of the route Alchemy created.
+
+## Push to STACKIT Container Registry
+
+Declare a registry project and a robot account. Cloud Foundry pulls with the same
+login it was given to push with. Set `HARBOR_USERNAME` and `HARBOR_CLI_SECRET` to
+your Harbor user and CLI secret, from your user profile in the registry UI:
+
+```typescript
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+const harbor = {
+  username: Config.String("HARBOR_USERNAME"),
+  secret: Config.Redacted("HARBOR_CLI_SECRET"),
+};
+
+export const Images = Stackit.ContainerRegistry.Project("Images", {
+  forceDestroy: true,
+  harborCredentials: harbor,
+});
+
+export const Pusher = Effect.gen(function* () {
+  const images = yield* Images;
+  return yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [
+      { resource: "repository", action: "pull" },
+      { resource: "repository", action: "push" },
+    ],
+  });
+});
+
+export const registryFor = (image: string) =>
+  Effect.gen(function* () {
+    const images = yield* Images;
+    const pusher = yield* Pusher;
+    return {
+      repository: Output.interpolate`${images.imagePrefix}/${image}`,
+      username: pusher.robotName,
+      password: pusher.secret,
+    };
+  });
+```
+
+Then use it in the app's props:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Stage } from "./deployer.ts";
++import { registryFor } from "./registry.ts";
+
+export default class Api extends Stackit.CloudFoundry.App<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const stage = yield* Stage;
++    const registry = yield* registryFor("api");
+    return {
+      spaceId: stage.role.spaceId,
+      credentials: stage.credentials,
+      main: import.meta.url,
+-      registry: { repository: "ghcr.io/my-org/api" },
++      registry,
+      memoryInMb: 256,
+      env: { GREETING: "hello" },
+    };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(Config.String("GREETING"));
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+## Bind a resource
+
+An app runs as no STACKIT identity. A binding on a STACKIT API creates a service
+account with a key, and the key reaches the app as an environment variable:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Stage } from "./deployer.ts";
+
+export default class Api extends Stackit.CloudFoundry.App<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    return {
+      spaceId: stage.role.spaceId,
+      credentials: stage.credentials,
+      main: import.meta.url,
+      registry: { repository: "ghcr.io/my-org/api" },
+      memoryInMb: 256,
+    };
+  }),
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    const getSpace = yield* Stackit.CloudFoundry.GetSpace(stage.space);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const space = yield* getSpace();
+        return yield* HttpServerResponse.json({ spaceId: space.guid, name: space.name });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.CloudFoundry.GetSpaceHttp)),
+) {}
+```
+
+The binding grants the account a role on the project, because STACKIT only binds
+roles to organizations, folders, and projects. See
+[IAM & bindings](/stackit/security/iam-bindings).
+
+:::caution[Variables are readable]
+Environment variables are plain text on the platform, including the service
+account key a binding adds to the app. Anyone who can read the app's environment
+can read them.
+:::
+
+## Write a plain handler
+
+You don't have to use Effect. Point `main` at a file with a `fetch` handler:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Stage } from "./deployer.ts";
+
+export const Web = Effect.gen(function* () {
+  const stage = yield* Stage;
+  return yield* Stackit.CloudFoundry.App("Web", {
+    spaceId: stage.role.spaceId,
+    credentials: stage.credentials,
+    main: "./src/web.ts",
+    registry: { repository: "ghcr.io/my-org/web" },
+    memoryInMb: 256,
+    env: { GREETING: "hello" },
+  });
+});
+
+export type WebEnv = Stackit.InferEnv<typeof Web>;
+```
+
+```typescript
+// src/web.ts
+import type { WebEnv } from "./resources.ts";
+
+export default {
+  async fetch(_request: Request, env: WebEnv) {
+    return new Response(env.GREETING);
+  },
+};
+```
+
+## Set instances and limits
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Stage } from "./deployer.ts";
+
+export const Api = Effect.gen(function* () {
+  const stage = yield* Stage;
+  return yield* Stackit.CloudFoundry.App("Api", {
+    spaceId: stage.role.spaceId,
+    credentials: stage.credentials,
+    image: "ghcr.io/my-org/api:v1.2.3",
+    name: "orders-api",
+    instances: 2,
+    memoryInMb: 512,
+    diskInMb: 1024,
+    healthCheck: { type: "http", endpoint: "/healthz" },
+    labels: { team: "orders" },
+  });
+});
+```
+
+Once the app is started, a new image, new variables, or new limits roll out one
+instance at a time. A new `instances` value updates in place, with no restart.
+
+## Choose a route
+
+By default an app gets a generated host on the platform's first shared domain. Pick
+your own:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Stage } from "./deployer.ts";
+
+export const Api = Effect.gen(function* () {
+  const stage = yield* Stage;
+  return yield* Stackit.CloudFoundry.App("Api", {
+    spaceId: stage.role.spaceId,
+    credentials: stage.credentials,
+    image: "ghcr.io/my-org/api:v1.2.3",
+    host: "orders",
+    domain: "apps.01.cf.eu01.stackit.cloud",
+  });
+});
+```
+
+A host you choose can't be held twice, so replacing the app deletes the old one
+first, and the app is down until the new one runs. For a worker, set
+`noRoute: true` and `healthCheck: { type: "process" }`.
+
+## Bind a marketplace service
+
+`Stackit.CloudFoundry.ServiceInstance` creates a service from the marketplace, and
+its credentials reach the app through `VCAP_SERVICES`:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Stage } from "./deployer.ts";
+
+export const Api = Effect.gen(function* () {
+  const stage = yield* Stage;
+  const deployer = { spaceId: stage.role.spaceId, credentials: stage.credentials };
+  const database = yield* Stackit.CloudFoundry.ServiceInstance("Db", {
+    ...deployer,
+    offering: "postgresql",
+    plan: "small",
+  });
+  return yield* Stackit.CloudFoundry.App("Api", {
+    ...deployer,
+    image: "ghcr.io/my-org/api:v1.2.3",
+    services: [database.serviceInstanceId],
+  });
+});
+```
+
+Offerings and plans depend on your platform, and a marketplace service bills on its
+own.
+
+## Consume a queue
+
+An app keeps running, so it can hold a consumer open:
+
+```typescript
+// src/BillingWorker.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Stage } from "./deployer.ts";
+
+export const Orders = Stackit.PubSub.Topic("Orders", {});
+export const Billing = Orders.pipe(
+  Effect.flatMap((topic) => Stackit.PubSub.Subscription("Billing", { topicId: topic.topicId })),
+);
+
+export default class BillingWorker extends Stackit.CloudFoundry.App<BillingWorker>()(
+  "BillingWorker",
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    return {
+      spaceId: stage.role.spaceId,
+      credentials: stage.credentials,
+      main: import.meta.url,
+      registry: { repository: "ghcr.io/my-org/billingworker" },
+      noRoute: true,
+      healthCheck: { type: "process" as const },
+    };
+  }),
+  Effect.gen(function* () {
+    yield* Stackit.PubSub.consumeSubscriptionMessages(
+      Billing,
+      { maxMessages: 32, concurrency: 8 },
+      (message) => Effect.log(message.text),
+    );
+    return {};
+  }).pipe(Effect.provide(Stackit.PubSub.ServerSubscriptionEventSource)),
+) {}
+```
+
+:::caution[A deploy interrupts a handler]
+A rolling deploy or a scale-in stops an instance with a signal. HTTP requests get
+about six seconds to finish, and a consumer's handler is interrupted mid message,
+so that message comes back. A handler has to tolerate running twice.
+:::
+
+## Destroy
+
+`alchemy destroy` deletes the app and the route it created, and waits until the app
+is gone. Changing `spaceId` replaces the app, with a new id.
+
+## Example
+
+[`examples/stackit-cloud-foundry`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-cloud-foundry)
+is an organization, a space, an Effect program with a binding, and a plain handler.
+
+## Where next
+
+- [Choosing a runtime](/stackit/compute/choosing-a-runtime): how this compares.
+- [Container Registry](/stackit/operations/container-registry): projects and robot
+  accounts.
+- [Cloud Foundry reference](/providers/stackit/cloudfoundry#app): every prop and
+  attribute.

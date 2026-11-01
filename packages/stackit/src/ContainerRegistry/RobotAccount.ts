@@ -135,6 +135,13 @@ export type RobotAccount = Resource<
  * doesn't enumerate robots, because listing them takes a Harbor identity; they go
  * when their registry project does.
  *
+ * See [STACKIT's Container Registry docs](https://docs.stackit.cloud/products/developer-platform/container-registry/).
+ *
+ * :::caution[Changing `project`, `registryUrl` or `name` replaces the Robot Account]
+ * The new robot has a new secret, and the old robot is deleted. Anything still logging
+ * in with the old secret stops working.
+ * :::
+ *
  * ### Creating a Robot
  * **Example:** Robot that pushes and pulls
  * ```typescript

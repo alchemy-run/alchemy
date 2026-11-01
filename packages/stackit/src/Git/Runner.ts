@@ -64,6 +64,13 @@ export type Runner = Resource<
  * The API has no labels here, and runners go with their instance, so there is no `list`. A runner
  * already on an instance with no state is reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's Git docs](https://docs.stackit.cloud/products/developer-platform/git/).
+ *
+ * :::caution[Changing `instanceId`, `labels`, `familyName` or `projectId` replaces the Runner]
+ * An instance has one runner and the API has no update call, so the old runner is
+ * deleted first, then the new one is created. Jobs have no runner in between.
+ * :::
+ *
  * ### Creating a Runner
  * **Example:** A runner for jobs with `runs-on: stackit-docker`
  * ```typescript

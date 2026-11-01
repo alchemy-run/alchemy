@@ -47,6 +47,13 @@ export type ComplianceLock = Resource<
  * as unowned and only taken over with `--adopt`. Deleting the lock removes
  * it for the whole project; `alchemy unsafe nuke` skips this type.
  *
+ * See [STACKIT's Object Storage docs](https://docs.stackit.cloud/products/storage/object-storage/).
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Lock]
+ * A deploy deletes the old lock. STACKIT may refuse to remove a lock while Object Lock
+ * buckets still exist in the project; delete those buckets first.
+ * :::
+ *
  * ### Enabling Object Lock for a project
  * **Example:** Compliance lock plus an Object Lock bucket
  * ```typescript
@@ -68,11 +75,6 @@ export type ComplianceLock = Resource<
  *   projectId: "00000000-0000-0000-0000-000000000000",
  * });
  * ```
- *
- * ### Replacement cautions <!-- api-prose -->
- * Changing `projectId` or `region` deletes the old lock. STACKIT may refuse
- * to remove a lock while Object Lock buckets still exist in the project;
- * delete those buckets first.
  *
  * @resource
  * @product STACKIT Object Storage

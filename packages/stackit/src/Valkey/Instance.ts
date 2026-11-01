@@ -216,6 +216,16 @@ export type Instance = Resource<
  *
  * Instances are billed per started hour by plan.
  *
+ * Connections authenticate with a `Stackit.Valkey.Credential`, and only from the ranges in
+ * `acl`.
+ *
+ * See [STACKIT's Key Value Store docs](https://docs.stackit.cloud/products/databases/key-value-store/).
+ *
+ * :::caution[Changing `name`, `projectId` or `region` replaces the Instance]
+ * A replacement starts empty. Credentials on the old instance go with it, and each
+ * `Stackit.Valkey.Credential` is replaced with a new password.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** A replicated instance
  * ```typescript
@@ -308,6 +318,116 @@ export type Instance = Resource<
  *   planName: "stackit-keyvalue-1.2.10-replica",
  *   acl: ["203.0.113.7/32"],
  * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `ReadValkey` and `ReadWriteValkey` run commands over a credential, and `Connect` hands
+ * its settings to your own client. None of them grants a STACKIT role. STACKIT has no
+ * Valkey ACLs, so a credential can do everything on the server: the limit is the client's
+ * surface. The host's egress address has to be in `acl`.
+ *
+ * **Example:** Read a key from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Cache = Stackit.Valkey.Instance("Cache", {
+ *   version: "x",
+ *   planName: "stackit-keyvalue-1.2.10-replica",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const Login = Cache.pipe(
+ *   Effect.flatMap((cache) =>
+ *     Stackit.Valkey.Credential("Login", { instanceId: cache.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const cache = yield* Stackit.Valkey.ReadValkey(yield* Login);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const value = yield* cache.get("marker");
+ *         return yield* HttpServerResponse.json({ value });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.Valkey.ReadValkeyHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Hand the connection settings to your own client
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Cache = Stackit.Valkey.Instance("Cache", {
+ *   version: "x",
+ *   planName: "stackit-keyvalue-1.2.10-replica",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const Login = Cache.pipe(
+ *   Effect.flatMap((cache) =>
+ *     Stackit.Valkey.Credential("Login", { instanceId: cache.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const connect = yield* Stackit.Valkey.Connect(yield* Login);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const info = yield* connect;
+ *         return yield* HttpServerResponse.json({ host: info.host });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.Valkey.ConnectHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * `CreateBackup` starts an on-demand backup. It grants a custom role with
+ * `key-value-store.proxy.write` on the project holding the instance, which also allows
+ * metrics, restarts and updates on every Key Value Store instance in that project.
+ *
+ * **Example:** Start a backup from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Cache = Stackit.Valkey.Instance("Cache", {
+ *   version: "x",
+ *   planName: "stackit-keyvalue-1.2.10-replica",
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const createBackup = yield* Stackit.Valkey.CreateBackup(yield* Cache);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const backup = yield* createBackup({});
+ *         return yield* HttpServerResponse.json({ id: backup.id });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.Valkey.CreateBackupHttp)),
+ * ) {}
  * ```
  *
  * @resource

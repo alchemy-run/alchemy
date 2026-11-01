@@ -1,0 +1,259 @@
+---
+title: Effect HTTP API on a Function
+description: Build a schema-validated HTTP API with Effect's HttpApi module, deploy it to a STACKIT Function, and call it from a typed client.
+sidebar:
+  order: 2
+---
+
+`HttpApi` gives you real REST endpoints, with paths, query strings, and typed bodies,
+behind a typed client. Use it when the API's callers aren't all Effect, or aren't
+TypeScript. The concept lives at [Effect HTTP](/apis/effect-http). This page wires it
+onto a [Function](/stackit/compute/functions).
+
+:::caution[Alpha API]
+STACKIT Functions is an alpha API, available in `eu01` only, and this example has not
+run against STACKIT yet. The
+[`stackit-httpapi` README](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-httpapi)
+lists what to check on your first deploy.
+:::
+
+## Declare the API
+
+```typescript
+// src/TaskApi.ts
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
+import * as Schema from "effect/Schema";
+
+export class Task extends Schema.Class<Task>("Task")({
+  id: Schema.String,
+  title: Schema.String,
+}) {}
+
+export class TaskNotFound extends Schema.TaggedError<TaskNotFound>()(
+  "TaskNotFound",
+  { id: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
+export const getTask = HttpApiEndpoint.get("getTask", "/tasks/:id", {
+  params: { id: Schema.String },
+  success: Task,
+  error: TaskNotFound,
+});
+
+export const createTask = HttpApiEndpoint.post("createTask", "/tasks", {
+  payload: Schema.Struct({ title: Schema.String }),
+  success: Task,
+});
+
+export const TaskApi = HttpApi.make("TaskApi").add(
+  HttpApiGroup.make("Tasks").add(getTask, createTask),
+);
+```
+
+`TaskApi` is a plain value. The server and the client both import it.
+`httpApiStatus: 404` sets the status the error is sent with.
+
+## Declare the bucket
+
+The tasks live in a bucket, one object per task:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Tasks = Stackit.ObjectStorage.Bucket("Tasks", { forceDestroy: true });
+```
+
+`forceDestroy` deletes what is left in the bucket when you destroy the Stack.
+
+## Declare the registry
+
+The Function's image goes to a registry project. `src/registry.ts` is the same file as in
+[Functions](/stackit/compute/functions#push-to-stackit-container-registry). Set
+`HARBOR_USERNAME` and `HARBOR_CLI_SECRET` before you deploy.
+
+## Implement it on a Function
+
+Bind the bucket, implement the handlers, and turn the API into a `fetch` handler:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { Puller, registryFor } from "./registry.ts";
+import { Tasks } from "./resources.ts";
+import { Task, TaskApi, TaskNotFound } from "./TaskApi.ts";
+
+const decodeTask = Schema.decodeUnknownEffect(Schema.fromJsonString(Task));
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const puller = yield* Puller;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      registry,
+      pullCredential: puller.pullCredentialId,
+    };
+  }),
+  Effect.gen(function* () {
+    const tasks = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Tasks);
+
+    const group = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
+      handlers
+        .handle("getTask", ({ params }) =>
+          Effect.gen(function* () {
+            const object = yield* tasks.getObject({ Key: `tasks/${params.id}.json` }).pipe(
+              Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+              Effect.orDie,
+            );
+            if (object === undefined) {
+              return yield* new TaskNotFound({ id: params.id });
+            }
+            return yield* Stream.mkString(Stream.decodeText(object.Body!)).pipe(
+              Effect.flatMap(decodeTask),
+              Effect.orDie,
+            );
+          }),
+        )
+        .handle("createTask", ({ payload }) =>
+          Effect.gen(function* () {
+            const task = new Task({ id: crypto.randomUUID(), title: payload.title });
+            yield* tasks.putObject({
+              Key: `tasks/${task.id}.json`,
+              Body: JSON.stringify(task),
+            });
+            return task;
+          }).pipe(Effect.orDie),
+        ),
+    );
+
+    return {
+      fetch: yield* HttpRouter.toHttpEffect(
+        HttpApiBuilder.layer(TaskApi).pipe(Layer.provide(group)),
+      ),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(Stackit.ObjectStorage.ReadWriteBucketHttp, HttpPlatform.layer, Etag.layer),
+    ),
+  ),
+) {}
+```
+
+Handlers get typed input and must return the declared types. Bucket errors become 500s
+through `Effect.orDie`. `TaskNotFound` stays typed and is sent as a 404.
+
+`ReadWriteBucket` creates a credentials group and an access key for this Function and
+bucket, and adds statements to the bucket's policy limiting the group to read and write
+actions there. A bucket policy only speaks for its own bucket, so give your other buckets
+a `policy` that denies such groups.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "TaskApi",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+```sh
+HARBOR_USERNAME=... HARBOR_CLI_SECRET=... bun alchemy deploy
+```
+
+Invalid payloads get a 400 with the validation errors.
+
+## Call it over HTTP
+
+```sh
+curl -X POST "$URL/tasks" -H 'content-type: application/json' -d '{"title":"write docs"}'
+# {"id":"5f0c…","title":"write docs"}
+curl "$URL/tasks/5f0c…"
+# {"id":"5f0c…","title":"write docs"}
+```
+
+## Call it from a typed test
+
+The same `TaskApi` value builds a typed client:
+
+```typescript
+// test/api.test.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Test from "@alchemy.run/test/Bun";
+import { expect } from "bun:test";
+import * as Effect from "effect/Effect";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as Schedule from "effect/Schedule";
+import Stack from "../alchemy.run.ts";
+import { TaskApi } from "../src/TaskApi.ts";
+
+const { test, beforeAll, deploy } = Test.make({
+  providers: Stackit.providers(),
+  state: Alchemy.localState(),
+});
+
+const stack = beforeAll(deploy(Stack), { timeout: 1_200_000 });
+
+test(
+  "create and fetch a task",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = yield* HttpApiClient.make(TaskApi, { baseUrl: url });
+
+    const task = yield* client.Tasks.createTask({
+      payload: { title: "write docs" },
+    }).pipe(Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }));
+
+    const read = yield* client.Tasks.getTask({ params: { id: task.id } });
+    expect(read.title).toBe("write docs");
+
+    const missing = yield* client.Tasks.getTask({
+      params: { id: "nope" },
+    }).pipe(Effect.flip);
+    expect(missing._tag).toBe("TaskNotFound");
+  }),
+  { timeout: 300_000 },
+);
+```
+
+The first call retries while the Function, its key, and the bucket's policy settle.
+
+## Run it elsewhere
+
+The same `fetch` handler runs on any runtime that serves HTTP. Move the program to a
+[Container Application](/stackit/compute/container-applications) or a
+[Service](/stackit/compute/services) when it has to stay running.
+
+## Example
+
+[`examples/stackit-httpapi`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-httpapi)
+is this API, with its test.
+
+## Where next
+
+- [Effect HTTP](/apis/effect-http): endpoints, groups, and clients in depth.
+- [Effect RPC on a Function](/stackit/apis/effect-rpc): when every caller is Effect.
+- [Object Storage](/stackit/data/object-storage): the client used above.

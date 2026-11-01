@@ -156,6 +156,13 @@ export type Project = Resource<
  * The first deploy enables the service (`cloud.stackit.container-registry`) for
  * the STACKIT project.
  *
+ * See [STACKIT's Container Registry docs](https://docs.stackit.cloud/products/developer-platform/container-registry/).
+ *
+ * :::caution[Changing `name`, `projectId` or `region`, or adding or removing `proxy`, replaces the Project]
+ * The new project starts empty, and the old one is deleted with its images. Re-push
+ * what you need after the deploy.
+ * :::
+ *
  * ### Creating a Project
  * **Example:** Project with a generated name
  * ```typescript
@@ -248,6 +255,83 @@ export type Project = Resource<
  * const project = yield* Stackit.ContainerRegistry.Project("Images", {
  *   name: "acme-images-v2",
  * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * Image bindings take a `Stackit.ContainerRegistry.RobotAccount`, not the project. They
+ * grant nothing: the robot's `permissions` are what limit the call, and they cover the
+ * robot's whole registry project.
+ *
+ * **Example:** List a repository's artifacts from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Config from "effect/Config";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Images = Stackit.ContainerRegistry.Project("Images", {});
+ * export const Robot = Effect.gen(function* () {
+ *   const images = yield* Images;
+ *   return yield* Stackit.ContainerRegistry.RobotAccount("Robot", {
+ *     project: images.name,
+ *     registryUrl: images.url,
+ *     credentials: {
+ *       username: Config.String("HARBOR_USERNAME"),
+ *       secret: Config.Redacted("HARBOR_CLI_SECRET"),
+ *     },
+ *     permissions: [{ resource: "artifact", action: "list" }],
+ *   });
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const listArtifacts = yield* Stackit.ContainerRegistry.ListArtifacts(yield* Robot);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const artifacts = yield* listArtifacts({ repository_name: "app", with_tag: true });
+ *         return yield* HttpServerResponse.json({
+ *           digests: artifacts.map((artifact) => artifact.digest),
+ *         });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.ContainerRegistry.ListArtifactsHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * `GetProject` reads the project's state, URL and consumed quota through STACKIT's API. It
+ * grants a custom role holding `container-registry.project.get`, which reaches every
+ * registry project in the STACKIT project.
+ *
+ * **Example:** Read how much storage the project uses
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Images = Stackit.ContainerRegistry.Project("Images", {});
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const getProject = yield* Stackit.ContainerRegistry.GetProject(yield* Images);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const live = yield* getProject({});
+ *         return yield* HttpServerResponse.json({ bytes: live.consumed_quota_bytes });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.ContainerRegistry.GetProjectHttp)),
+ * ) {}
  * ```
  *
  * @resource

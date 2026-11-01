@@ -76,11 +76,18 @@ export type OrganizationManager = Resource<
  * that crashed before saving it, is reported as unowned. Take it over with `--adopt` and
  * set `rotationKey` to get a new one: nothing can hold the old password if it was yours.
  *
+ * See [STACKIT's Cloud Foundry docs](https://docs.stackit.cloud/products/runtime/cloud-foundry/).
+ *
  * :::caution[Unverified]
  * STACKIT's docs only describe logging in to the Cloud Foundry API with the service
  * accounts of the `space-scoped-service-account` offering. That an organization manager
  * can log in the same way follows from the spec saying it is "backed by a CF user", and
  * hasn't been tried.
+ * :::
+ *
+ * :::caution[Changing `organizationId`, `projectId` or `region` replaces the Manager]
+ * Everything using its password needs the new one. When the organization itself is replaced, the
+ * old manager stays until what signs in with it is gone. Otherwise it is deleted first.
  * :::
  *
  * ### Creating a Manager
@@ -131,11 +138,6 @@ export type OrganizationManager = Resource<
  *   },
  * });
  * ```
- *
- * :::caution[Changing `organizationId`, `projectId` or `region` replaces the Manager]
- * Everything using its password needs the new one. When the organization itself is replaced, the
- * old manager stays until what signs in with it is gone. Otherwise it is deleted first.
- * :::
  *
  * A manager with another id, found once this resource has one in state, is someone else's. The
  * deploy fails with `Stackit.CloudFoundry.OrganizationManagerNotOurs` and leaves it alone. Delete

@@ -1,0 +1,336 @@
+---
+title: Observability
+description: Create a STACKIT Observability instance with Grafana and Prometheus, scrape targets, alert on rules, probe your endpoints, and query metrics from a host.
+---
+
+A `Stackit.Observability.Instance` is managed Prometheus, Thanos, and Grafana
+behind one plan, with Loki and Tempo on the larger plans. Scrape jobs, alert
+groups, credentials, and checks are separate resources that take its
+`instanceId`. The API still calls the product Argus, so that name appears in
+its permissions.
+
+:::caution[Cost]
+An instance is billed per started hour by plan, for as long as it exists. On
+price list v1.0.44, `Observability-Monitoring-Starter-EU01` is about EUR 0.04 an
+hour, and `Observability-Starter-EU01`, which adds logs and traces, about
+EUR 0.10. Check the current list before you pick a larger plan.
+:::
+
+## Create an instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Metrics = Stackit.Observability.Instance("Metrics", {});
+```
+
+The default plan has metrics and Grafana. `grafanaUrl`, `metricsUrl`, and
+`pushMetricsUrl` are attributes. A deploy takes minutes.
+
+## Pick a plan with logs and traces
+
+`Observability-Monitoring-*` plans, the default among them, have no logs or traces. Pick another `Observability-*` plan to get them:
+
+```diff lang="typescript"
+// src/resources.ts
+-export const Metrics = Stackit.Observability.Instance("Metrics", {});
++export const Metrics = Stackit.Observability.Instance("Metrics", {
++  plan: "Observability-Starter-EU01",
++  logsRetentionDays: 14,
++  tracesRetentionDays: 14,
++});
+```
+
+The plan updates in place, which can change what the instance can do.
+
+## Limit who can reach it
+
+`acl` covers Grafana and the metrics, logs, and traces endpoints:
+
+```diff lang="typescript"
+// src/resources.ts
+export const Metrics = Stackit.Observability.Instance("Metrics", {
++  acl: ["203.0.113.0/24", "198.51.100.7/32"],
+});
+```
+
+## Log in to Grafana with STACKIT SSO
+
+STACKIT recommends SSO and no built-in admin:
+
+```diff lang="typescript"
+// src/resources.ts
+export const Metrics = Stackit.Observability.Instance("Metrics", {
++  grafanaAdminEnabled: false,
++  grafana: { useStackitSso: true, publicReadAccess: false },
+});
+```
+
+## Keep metrics longer
+
+```diff lang="typescript"
+// src/resources.ts
+export const Metrics = Stackit.Observability.Instance("Metrics", {
++  metricsRetentionDays: 30,
++  metricsRetentionDays5m: 90,
++  metricsRetentionDays1h: 365,
+});
+```
+
+Raw metrics go up to 780 days, and so do the two downsampled series.
+
+## Scrape a service
+
+A `ScrapeConfig` is a Prometheus scrape job:
+
+```diff lang="typescript"
+// src/resources.ts
++export const ApiJob = Metrics.pipe(
++  Effect.flatMap((metrics) =>
++    Stackit.Observability.ScrapeConfig("ApiMetrics", {
++      instanceId: metrics.instanceId,
++      staticConfigs: [{ targets: ["api.example.com:443"], labels: { env: "prod" } }],
++    }),
++  ),
++);
+```
+
+It scrapes `/metrics` over HTTPS every five minutes by default. Set `scheme`,
+`metricsPath`, and `scrapeInterval`, which can't go below 60 seconds, to change that.
+For a target that wants a login, pass one of `basicAuth`, `bearerToken`, or
+`oauth2`. Changing `jobName` or `instanceId` replaces the job.
+
+## Alert on a rule
+
+An `AlertGroup` holds PromQL rules:
+
+```diff lang="typescript"
+// src/resources.ts
++export const Availability = Metrics.pipe(
++  Effect.flatMap((metrics) =>
++    Stackit.Observability.AlertGroup("Availability", {
++      instanceId: metrics.instanceId,
++      rules: [
++        {
++          alert: "JobDown",
++          expr: "up == 0",
++          for: "5m",
++          labels: { severity: "critical" },
++          annotations: { summary: "A scrape target is down" },
++        },
++      ],
++    }),
++  ),
++);
+```
+
+`rules` is the whole group, and it updates in place. A rule with `record`
+instead of `alert` precomputes a query.
+
+## Send alerts to people
+
+`AlertConfig` is the instance's Alertmanager configuration, with its receivers
+and routes:
+
+```diff lang="typescript"
+// src/resources.ts
++export const Alerts = Metrics.pipe(
++  Effect.flatMap((metrics) =>
++    Stackit.Observability.AlertConfig("Alerts", {
++      instanceId: metrics.instanceId,
++      receivers: [{ name: "team", emailConfigs: [{ to: "team@example.com" }] }],
++      route: { receiver: "team", groupBy: ["alertname"] },
++    }),
++  ),
++);
+```
+
+:::caution
+An instance has one configuration, and this resource owns all of it, so don't
+declare two. The first deploy keeps what it finds and a delete writes that back.
+The API only writes one inhibition rule, so a configuration holding others fails
+with `Stackit.Observability.InhibitRulesWouldBeLost` rather than losing them. Set
+`replaceInhibitRules` to accept that.
+:::
+
+## Post alerts to a URL
+
+`AlertWebhook` adds one receiver and route next to whatever else the instance has,
+without taking over the configuration:
+
+```typescript
+// src/pager.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import { Metrics } from "./resources.ts";
+
+export const Pager = Effect.gen(function* () {
+  const metrics = yield* Metrics;
+  const url = Config.Redacted("PAGER_WEBHOOK_URL");
+  return yield* Stackit.Observability.AlertWebhook("Pager", {
+    instanceId: metrics.instanceId,
+    url,
+    matchers: ['severity="critical"'],
+    groupBy: ["alertname"],
+  });
+});
+```
+
+STACKIT's API has no way to sign a request, so a token in this URL is how the
+delivery proves where it came from.
+
+## React to alerts in code
+
+`consumeAlerts` creates the receiver and route for a host's URL and runs your
+Effect for every notification. It works on a host providing core's `WebhookHost`,
+which today means a Cloudflare Worker. A STACKIT Function has a public URL but
+doesn't provide it yet:
+
+```typescript
+// src/Responder.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Metrics } from "./resources.ts";
+
+export default class Responder extends Cloudflare.Worker<Responder>()(
+  "Responder",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Stackit.Observability.consumeAlerts(
+      Metrics,
+      { matchers: ['severity="critical"'], groupBy: ["alertname"] },
+      (notification) => Effect.log(notification.status, notification.groupLabels),
+    );
+    return { fetch: HttpServerResponse.text("ok") };
+  }).pipe(Effect.provide(Stackit.Observability.AlertEventSourceLive)),
+) {}
+```
+
+It grants nothing on the host: the deploy creates the receiver with your
+credentials, and deliveries come in over HTTP.
+
+## Probe an endpoint
+
+A check probes from the instance. `HttpCheck` takes a URL, `CertCheck` a
+`source` such as `example.com:443`, and `PingCheck` a domain in `url`:
+
+```diff lang="typescript"
+// src/resources.ts
++export const ApiUp = Metrics.pipe(
++  Effect.flatMap((metrics) =>
++    Stackit.Observability.HttpCheck("ApiUp", {
++      instanceId: metrics.instanceId,
++      url: "https://api.example.com/healthz",
++    }),
++  ),
++);
+```
+
+The API has no update for a check, so changing anything replaces it. There are
+checks for `NetworkCheck`, `MySQLCheck`, `PostgreSQLCheck`, `MongoDBCheck`,
+`RedisCheck`, `RabbitMQCheck`, and `ElasticsearchCheck` too.
+
+## Create a credential
+
+A credential is the basic-auth login for pushing and querying:
+
+```diff lang="typescript"
+// src/resources.ts
++export const Reader = Metrics.pipe(
++  Effect.flatMap((metrics) =>
++    Stackit.Observability.Credential("Reader", { instanceId: metrics.instanceId }),
++  ),
++);
+```
+
+STACKIT generates the username and password. Changing `description` replaces the
+credential, and the new one has a new username and password, since there is no
+way to reset one.
+
+## Query metrics from a host
+
+`QueryMetrics` takes the instance and the credential:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Metrics, Reader } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const metrics = yield* Metrics;
+    const reader = yield* Reader;
+    const queryMetrics = yield* Stackit.Observability.QueryMetrics(metrics, reader);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { data } = yield* queryMetrics.query({ query: "up" });
+        return yield* HttpServerResponse.json({ series: data.result.length });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Observability.QueryMetricsHttp)),
+) {}
+```
+
+It grants no STACKIT role: the credential's username, `Redacted` password, and the
+instance's URL reach the host's environment. STACKIT has no narrower credential, so
+it can do everything the API allows on the instance. When the instance has an
+`acl`, the host's egress address has to be in it.
+
+## Push logs from a host
+
+On a plan with logs, `PushLogs` writes Loki's JSON format, with nanosecond
+timestamps as strings. It uses the same credential. Provide
+`Stackit.Observability.PushLogsHttp`:
+
+```typescript
+const pushLogs = yield* Stackit.Observability.PushLogs(metrics, reader);
+
+// inside fetch:
+yield* pushLogs({
+  streams: [{ stream: { app: "api" }, values: [[`${Date.now()}000000`, "hello"]] }],
+});
+```
+
+## Change the configuration at runtime
+
+`ReadInstance` and `WriteInstance` call the management API. `ReadInstance` grants a
+custom role with `argus.instance.get`, and `WriteInstance` one with
+`argus.instance.update`, on the project.
+
+:::caution
+`argus.instance.update` is the only write permission the API has, so the host can
+change the whole configuration of every Observability instance in the project. A
+resource that declares what this client changes overwrites it on its next deploy.
+:::
+
+## Replacing an instance
+
+Changing `projectId` replaces the instance. The replacement starts empty: metrics,
+logs, traces, and dashboards are deleted with the old one, and every job, group,
+credential, and check on it is replaced.
+
+## Check on your first deploy
+
+- What the check targets accept. STACKIT's API only says "url to check" and "cert to
+  check", so the formats here are illustrations.
+
+## Where next
+
+- [Logs](/stackit/observability/logs) — pay-per-use Loki, with no instance to size.
+- [Telemetry](/stackit/observability/telemetry) — export STACKIT's audit logs.
+- [Observability](/testing/observability) — tracing Effect programs.
+- [Observability reference](/providers/stackit/observability#instance) — every prop
+  and attribute.

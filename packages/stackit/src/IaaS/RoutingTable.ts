@@ -108,6 +108,13 @@ export type RoutingTable = Resource<
  * Every property except the area, organization and region is updated in
  * place.
  *
+ * See [STACKIT's Network Area docs](https://docs.stackit.cloud/products/network/core-networking/network-area/).
+ *
+ * :::caution[Changing `networkAreaId`, `organizationId` or `region` replaces the Routing Table]
+ * A deploy creates a new table before deleting the old one; networks using the old
+ * table must move to the new one first.
+ * :::
+ *
  * ### Creating a routing table
  * **Example:** A routing table for isolated workloads
  * ```typescript
@@ -140,11 +147,6 @@ export type RoutingTable = Resource<
  *   routingTableId: table.routingTableId,
  * });
  * ```
- *
- * ### Replacement
- * Changing `networkAreaId`, `organizationId` or `region` creates a new
- * table before deleting the old one; networks using the old table must
- * move to the new one first.
  *
  * @resource
  * @product STACKIT Network Area

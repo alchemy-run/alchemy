@@ -338,6 +338,13 @@ export type LoadBalancer = Resource<
  * Ownership is tracked with labels. A load balancer with the same name that
  * lacks them is reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's Application Load Balancer docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/application-load-balancer/).
+ *
+ * :::caution[Changing `name`, `networks`, `externalAddress`, `disableTargetSecurityGroupAssignment`, `projectId` or `region` replaces the Load Balancer]
+ * The old load balancer is deleted and a new one takes its place. A deploy waits for
+ * the new one to be ready, which can take as long as a first deploy.
+ * :::
+ *
  * ### Creating a Load Balancer
  * **Example:** Route one hostname to a pool on an existing public IP
  * ```typescript
@@ -588,7 +595,7 @@ export type LoadBalancer = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const password = yield* Config.redacted("METRICS_PASSWORD");
+ * const password = Config.Redacted("METRICS_PASSWORD");
  * const credential = yield* Stackit.ALB.ObservabilityCredential("Metrics", {
  *   username: "metrics-writer",
  *   password,

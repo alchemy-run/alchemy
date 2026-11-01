@@ -225,6 +225,15 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  * (`cloud.stackit.functions`) for the project. Deploys wait until the new revision
  * is active and current, and destroys wait until the function is gone.
  *
+ * Ownership is tracked with labels (`alchemy.stack`, `alchemy.stage`,
+ * `alchemy.id`, `alchemy.instance`). A function with the same explicit `name` that
+ * lacks them is reported as unowned and only taken over with `--adopt`.
+ *
+ * Alchemy creates the function and its revisions, and for a binding a service account and
+ * key. It enables the Functions service for the project. It doesn't create a registry:
+ * pass `registry` to push to one you own, or pass a pre-built `image`. See [Functions on
+ * STACKIT](/stackit/compute/functions) for the full guide.
+ *
  * :::caution[Alpha API]
  * STACKIT Functions is an alpha API, available in `eu01` only. STACKIT documents
  * no container contract, so the listening port (`8080`, through `PORT`) is an
@@ -237,9 +246,17 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  * them, including the service account key a binding adds to the function.
  * :::
  *
- * Ownership is tracked with labels (`alchemy.stack`, `alchemy.stage`,
- * `alchemy.id`, `alchemy.instance`). A function with the same explicit `name` that
- * lacks them is reported as unowned and only taken over with `--adopt`.
+ * :::caution[Changing `projectId` replaces the Function]
+ * The function is created in the new project and gets a new URL. The old one is
+ * deleted.
+ * :::
+ *
+ * :::caution[Background work]
+ * A function is reached over its URL. STACKIT doesn't document whether its instances keep
+ * running between requests, so don't rely on a loop or a queue consumer staying alive in
+ * one: do the work inside the request. See [Functions on
+ * STACKIT](/stackit/compute/functions).
+ * :::
  *
  * ### Async Functions
  * You don't have to use Effect. Pass `main` pointing at a file and no
@@ -254,17 +271,22 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  * import * as Config from "effect/Config";
  * import * as Effect from "effect/Effect";
  *
- * export const Images = Stackit.ContainerRegistry.Project("Images", {});
+ * const harbor = {
+ *   username: Config.String("HARBOR_USERNAME"),
+ *   secret: Config.Redacted("HARBOR_CLI_SECRET"),
+ * };
+ *
+ * export const Images = Stackit.ContainerRegistry.Project("Images", {
+ *   forceDestroy: true,
+ *   harborCredentials: harbor,
+ * });
  *
  * export const Pusher = Effect.gen(function* () {
  *   const images = yield* Images;
  *   return yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
  *     project: images.name,
  *     registryUrl: images.url,
- *     credentials: {
- *       username: Config.String("HARBOR_USERNAME"),
- *       secret: Config.Redacted("HARBOR_CLI_SECRET"),
- *     },
+ *     credentials: harbor,
  *   });
  * });
  *
@@ -363,14 +385,18 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  * import * as Output from "alchemy/Output";
  * import * as Config from "effect/Config";
  *
- * const images = yield* Stackit.ContainerRegistry.Project("Images", {});
+ * const harbor = {
+ *   username: Config.String("HARBOR_USERNAME"),
+ *   secret: Config.Redacted("HARBOR_CLI_SECRET"),
+ * };
+ * const images = yield* Stackit.ContainerRegistry.Project("Images", {
+ *   forceDestroy: true,
+ *   harborCredentials: harbor,
+ * });
  * const pusher = yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
  *   project: images.name,
  *   registryUrl: images.url,
- *   credentials: {
- *     username: Config.String("HARBOR_USERNAME"),
- *     secret: Config.Redacted("HARBOR_CLI_SECRET"),
- *   },
+ *   credentials: harbor,
  * });
  * const puller = yield* Stackit.Functions.PullCredential("Puller", {
  *   address: images.registryHost,
@@ -505,13 +531,363 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  * ```
  *
  * ### Event sources
- * The Functions API has no trigger, schedule or subscription object: a function
- * is reached over its `url`, so anything that can call a URL can invoke it.
+ * The Functions API has no trigger, schedule or subscription object: a function is
+ * reached over its `url`, so anything that can call a URL can invoke it. To take
+ * messages from a queue, pull them inside a request, as the Pub/Sub section below
+ * shows.
  *
- * :::caution[Changing `projectId` replaces the Function]
- * The function is created in the new project and gets a new URL. The old one is
- * deleted.
- * :::
+ * ### Packaging
+ * `main` is bundled into one file on your machine, with Docker building the image around
+ * it. `build` takes the bundler's options. A package you keep out of the bundle has to be
+ * in the base image you pass as `image`.
+ *
+ * **Example:** Minify, and keep a package out of the bundle
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const api = yield* Stackit.Functions.Function("Api", {
+ *   main: "./src/api.ts",
+ *   image: "ghcr.io/my-org/bun-with-sharp:1",
+ *   registry: { repository: "ghcr.io/my-org/api" },
+ *   build: {
+ *     input: { external: ["sharp"] },
+ *     output: { minify: true },
+ *   },
+ * });
+ * ```
+ *
+ * ### Object Storage Bindings
+ * `ReadBucket`, `WriteBucket` and `ReadWriteBucket` give the function an S3 client on one
+ * bucket. Alchemy creates a credentials group and an access key for this host and bucket,
+ * and adds statements to the bucket's policy limiting the group to those actions there.
+ * Give other buckets their own `policy` to deny such groups, because a bucket policy only
+ * speaks for its own bucket.
+ *
+ * **Example:** Write an object and read it back
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import * as Stream from "effect/Stream";
+ *
+ * export const Uploads = Stackit.ObjectStorage.Bucket("Uploads", {});
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const uploads = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Uploads);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         yield* uploads.putObject({ Key: "hello.txt", Body: "hello" });
+ *         const object = yield* uploads.getObject({ Key: "hello.txt" });
+ *         const text = yield* Stream.mkString(Stream.decodeText(object.Body!));
+ *         return HttpServerResponse.text(text);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+ * ) {}
+ * ```
+ *
+ * ### PostgreSQL Flex Bindings
+ * `Connect` passes a database's host, port, names and password into the function's
+ * environment, with the password kept `Redacted`. It grants no STACKIT role, because
+ * PostgreSQL connections authenticate with the database user. The function's egress
+ * address has to be in the instance's `acl`, or connections time out.
+ *
+ * **Example:** Resolve the connection settings for your driver
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Db = Stackit.PostgresFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "17",
+ *   storage: { class: "premium-perf2-stackit", size: 5 },
+ *   backupSchedule: "0 2 * * *",
+ *   retentionDays: 32,
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const AppUser = Db.pipe(
+ *   Effect.flatMap((db) => Stackit.PostgresFlex.User("AppUser", { instanceId: db.instanceId })),
+ * );
+ * export const AppDatabase = Effect.gen(function* () {
+ *   const db = yield* Db;
+ *   const user = yield* AppUser;
+ *   return yield* Stackit.PostgresFlex.Database("AppDatabase", {
+ *     instanceId: db.instanceId,
+ *     owner: user.userName,
+ *   });
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const database = yield* AppDatabase;
+ *     const user = yield* AppUser;
+ *     const connect = yield* Stackit.PostgresFlex.Connect(database, user);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const info = yield* connect;
+ *         return yield* HttpServerResponse.json({ database: info.database });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.PostgresFlex.ConnectHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Valkey Bindings
+ * `ReadValkey` and `ReadWriteValkey` run commands over a credential. They grant no STACKIT
+ * role, and STACKIT has no Valkey ACLs, so the credential can do everything on the server:
+ * the limit is the client's surface. The function's egress address has to be in the
+ * instance's `acl`.
+ *
+ * **Example:** Set and read a key
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Cache = Stackit.Valkey.Instance("Cache", {
+ *   version: "x",
+ *   planName: "stackit-keyvalue-1.2.10-replica",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const Login = Cache.pipe(
+ *   Effect.flatMap((cache) =>
+ *     Stackit.Valkey.Credential("Login", { instanceId: cache.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const cache = yield* Stackit.Valkey.ReadWriteValkey(yield* Login);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         yield* cache.set("marker", "hello");
+ *         const value = yield* cache.get("marker");
+ *         return yield* HttpServerResponse.json({ value });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.Valkey.ReadWriteValkeyHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Pub/Sub Bindings
+ * `Publish` and `Pull` grant no role. Alchemy adds the function's service account to this
+ * topic's publishers or this subscription's subscribers, so the grant covers that one
+ * topic or subscription. The topic's `acl` has to include the function's egress address,
+ * and it allows every address by default.
+ *
+ * **Example:** Publish a message
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Orders = Stackit.PubSub.Topic("Orders", {});
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const publish = yield* Stackit.PubSub.Publish(yield* Orders);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         yield* publish({ messages: [{ data: JSON.stringify({ orderId: "1234" }) }] });
+ *         return HttpServerResponse.text("published");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.PubSub.PublishHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Pull a batch on each request, and acknowledge it
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Orders = Stackit.PubSub.Topic("Orders", {});
+ * export const Billing = Orders.pipe(
+ *   Effect.flatMap((topic) => Stackit.PubSub.Subscription("Billing", { topicId: topic.topicId })),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const billing = yield* Billing;
+ *     const pull = yield* Stackit.PubSub.Pull(billing);
+ *     const acknowledge = yield* Stackit.PubSub.Acknowledge(billing);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const { messages } = yield* pull({ maxMessages: 10, longPullDuration: 1000 });
+ *         yield* acknowledge({ ackIds: messages.map((message) => message.ackId) });
+ *         return yield* HttpServerResponse.json({ pulled: messages.length });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(
+ *     Effect.provide([Stackit.PubSub.PullHttp, Stackit.PubSub.AcknowledgeHttp]),
+ *   ),
+ * ) {}
+ * ```
+ *
+ * ### RabbitMQ Bindings
+ * `Publish` publishes one message through the broker's management API over HTTPS, as the
+ * credential's user, so it grants no STACKIT role. The function's egress address has to be
+ * in the instance's `acl`.
+ *
+ * **Example:** Publish to a queue
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Broker = Stackit.RabbitMQ.Instance("Broker", {
+ *   version: "4.1",
+ *   planName: "stackit-rabbitmq-2.4.10-single",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const Login = Broker.pipe(
+ *   Effect.flatMap((broker) =>
+ *     Stackit.RabbitMQ.Credential("Login", { instanceId: broker.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const publish = yield* Stackit.RabbitMQ.Publish(yield* Login);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const { routed } = yield* publish({
+ *           routing_key: "jobs",
+ *           payload: JSON.stringify({ id: 1 }),
+ *         });
+ *         return yield* HttpServerResponse.json({ routed });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.RabbitMQ.PublishHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Secrets Manager Bindings
+ * `ReadSecret` creates a read-only AppRole for this host and instance. It reads every
+ * secret in the instance, because STACKIT can't limit an AppRole to a path, so use one
+ * instance per trust boundary. The function's egress address has to be in the instance's
+ * `acls`.
+ *
+ * **Example:** Read a secret
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Vault = Stackit.SecretsManager.Instance("Vault", {
+ *   acls: ["203.0.113.7/32"],
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const secrets = yield* Stackit.SecretsManager.ReadSecret(yield* Vault);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const secret = yield* secrets.get({ secretPath: "payments/api" });
+ *         return yield* HttpServerResponse.json({ version: secret.data.metadata.version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.SecretsManager.ReadSecretHttp)),
+ * ) {}
+ * ```
+ *
+ * ### KMS Bindings
+ * `Encrypt`, `Decrypt`, `Sign` and `Verify` take one key. Alchemy grants `kms.keyring.get`
+ * through a custom role on the project holding the key. That one permission allows those
+ * operations on every key in the project, so the binding narrows what your code calls, not
+ * what its credential could do.
+ *
+ * **Example:** Encrypt bytes
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as Redacted from "effect/Redacted";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Ring = Stackit.KMS.KeyRing("Ring", {});
+ * export const DataKey = Ring.pipe(
+ *   Effect.flatMap((ring) =>
+ *     Stackit.KMS.Key("DataKey", {
+ *       keyRingId: ring.keyRingId,
+ *       algorithm: "aes_256_gcm",
+ *       purpose: "symmetric_encrypt_decrypt",
+ *     }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const encrypt = yield* Stackit.KMS.Encrypt(yield* DataKey);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const { ciphertext, version } = yield* encrypt({
+ *           plaintext: Redacted.make(new TextEncoder().encode("hello")),
+ *         });
+ *         return yield* HttpServerResponse.json({ ciphertext: Array.from(ciphertext), version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.KMS.EncryptHttp)),
+ * ) {}
+ * ```
  *
  * @resource
  * @product STACKIT Functions

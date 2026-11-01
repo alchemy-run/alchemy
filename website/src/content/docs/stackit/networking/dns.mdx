@@ -1,0 +1,213 @@
+---
+title: DNS
+description: Host a domain on STACKIT DNS, publish record sets next to the resources they point at, and change records from a running host.
+---
+
+A `Stackit.DNS.Zone` is an authoritative zone on STACKIT's name servers. Its
+records are `Stackit.DNS.RecordSet` resources in the same Stack.
+
+:::caution[Cost]
+STACKIT bills DNS per zone per hour, about EUR 0.003 to EUR 0.004 on price list
+v1.0.44.
+:::
+
+## Create a zone
+
+```typescript
+// src/dns.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Zone = Stackit.DNS.Zone("Zone", {
+  dnsName: "example.com",
+  contactEmail: "hostmaster@example.com",
+  defaultTTL: 3600,
+});
+```
+
+The first deploy enables the DNS service for the project. A deploy waits until the zone
+reports `CREATE_SUCCEEDED` or `UPDATE_SUCCEEDED`.
+
+## Delegate your domain
+
+`zone.primaryNameServer` is the name server to delegate to. Return it from your Stack,
+then set it at your registrar:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Www, Zone } from "./src/dns.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const zone = yield* Zone;
+    yield* Www;
+    return { nameServer: zone.primaryNameServer };
+  }),
+);
+```
+
+## Try it without a domain
+
+Omit `dnsName` and Alchemy generates one under STACKIT's own domain:
+
+```typescript
+Stackit.DNS.Zone("Zone", {});
+// dnsName becomes "<app>-zone-<stage>-<suffix>.runs.onstackit.cloud"
+```
+
+## Publish a record
+
+A record set is every record of one name and type. Two addresses for `www` are one
+record set:
+
+```diff lang="typescript"
+// src/dns.ts
++export const Www = Zone.pipe(
++  Effect.flatMap((zone) =>
++    Stackit.DNS.RecordSet("Www", {
++      zoneId: zone.zoneId,
++      name: "www",
++      type: "A",
++      records: ["192.0.2.10", "192.0.2.11"],
++      ttl: 300,
++    }),
++  ),
++);
+```
+
+`name` is relative to the zone. Use the zone's `dnsName` for a record at the apex. A
+deploy waits until the record set is published.
+
+## Point a record at another resource
+
+Records take outputs, so a record can follow the resource it points at:
+
+```typescript
+yield* Stackit.DNS.RecordSet("ApiRecord", {
+  zoneId: zone.zoneId,
+  name: "api",
+  type: "A",
+  records: [address.ip],
+});
+```
+
+`address` is a `Stackit.IaaS.PublicIp` from [Networks](/stackit/networking/networks#add-a-public-ip).
+To point at a CDN, see [CDN & custom domains](/stackit/networking/cdn-custom-domains#add-a-custom-domain).
+
+## Publish other record types
+
+Each value in `records` has the record set's type:
+
+```typescript
+yield* Stackit.DNS.RecordSet("Mail", {
+  zoneId: zone.zoneId,
+  name: zone.dnsName,
+  type: "MX",
+  records: ["10 mx1.example.com.", "20 mx2.example.com."],
+});
+yield* Stackit.DNS.RecordSet("Verify", {
+  zoneId: zone.zoneId,
+  name: "_verify",
+  type: "TXT",
+  records: ['"site-verification=abc123"'],
+});
+```
+
+A `CNAME` value ends with a dot.
+
+## Host a secondary zone
+
+A secondary zone transfers from your own primary:
+
+```typescript
+Stackit.DNS.Zone("Secondary", {
+  dnsName: "example.org",
+  type: "secondary",
+  primaries: ["192.0.2.53"],
+});
+```
+
+## Export query logs
+
+Pass an [Observability](/stackit/observability/observability) instance:
+
+```diff lang="typescript"
+// src/dns.ts
+export const Zone = Stackit.DNS.Zone("Zone", {
+  dnsName: "example.com",
++  observabilityInstanceId: "11111111-1111-4111-8111-111111111111",
+});
+```
+
+## Read a zone from a host
+
+`ReadZone` lists and reads record sets:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Zone } from "./dns.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const zone = yield* Stackit.DNS.ReadZone(yield* Zone);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { rrSets } = yield* zone.listRecordSets({ pageSize: 100 });
+        return yield* HttpServerResponse.json({ count: rrSets.length });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.DNS.ReadZoneHttp)),
+) {}
+```
+
+`ReadZone` grants the `dns.zone.list` permission on the project holding the zone, so it reads
+every zone in that project.
+
+## Change records from a host
+
+`WriteZone` fits an ACME DNS-01 challenge or a dynamic DNS update. Provide
+`Stackit.DNS.WriteZoneHttp`:
+
+```typescript
+const zone = yield* Stackit.DNS.WriteZone(yield* Zone);
+
+// inside fetch:
+const { rrset } = yield* zone.createRecordSet({
+  name: "_acme-challenge",
+  type: "TXT",
+  records: [{ content: "<token>" }],
+  ttl: 60,
+});
+```
+
+`WriteZone` grants the `dns.zone.create` permission on the project, and `ReadWriteZone` adds
+`dns.zone.list`. The host can change every zone in that project, not only this one. Keep a zone a host writes to in a
+project of its own.
+
+## Replacing a zone
+
+Changing `dnsName`, `type`, or `isReverseZone` replaces the zone. The new zone holds only the
+record sets the stack declares, and the old one is deleted. Check that your registrar
+delegates to the new `primaryNameServer`.
+
+A record set you made elsewhere is reported as unowned and only taken over with `--adopt`.
+
+## Where next
+
+- [CDN & custom domains](/stackit/networking/cdn-custom-domains) — serve your domain.
+- [Load balancers](/stackit/networking/load-balancers) — a stable address to point a record at.
+- [DNS reference](/providers/stackit/dns#zone) — every prop and attribute.

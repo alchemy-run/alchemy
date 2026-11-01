@@ -88,6 +88,13 @@ export type Credential = Resource<
  * on the instance until the instance is deleted, and `alchemy unsafe nuke` removes
  * credentials with their instance.
  *
+ * See [STACKIT's RabbitMQ docs](https://docs.stackit.cloud/products/messaging/rabbitmq/).
+ *
+ * :::caution[Changing `instanceId`, `roles`, `rotationKey`, `projectId` or `region` replaces the Credential]
+ * A credential has no update. A new one is created with new addresses and a new
+ * password, and the old one is deleted.
+ * :::
+ *
  * ### Creating a Credential
  * **Example:** A credential with the default role
  * ```typescript

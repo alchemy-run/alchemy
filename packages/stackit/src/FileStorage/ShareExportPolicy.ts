@@ -148,6 +148,13 @@ export type ShareExportPolicy = Resource<
  * Ownership is tracked with labels. A policy with the same name that lacks them is
  * reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's File Storage docs](https://docs.stackit.cloud/products/storage/file-storage/).
+ *
+ * :::caution[Changing `name`, `projectId` or `region` replaces the Policy]
+ * The policy holds no data. A share that takes the policy's `name` as an output
+ * updates to the new one, and the old policy is deleted.
+ * :::
+ *
  * ### Creating a Policy
  * **Example:** Read-write for one network
  * ```typescript

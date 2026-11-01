@@ -75,6 +75,15 @@ export type ServiceAccount = Resource<
  * an explicit `name` that already exists in the project is reported as
  * unowned and adopted only with `--adopt`.
  *
+ * See [STACKIT's service account docs](https://docs.stackit.cloud/platform/access-and-identity/service-accounts/).
+ *
+ * :::caution[Changing `name` or `projectId` replaces the Service Account]
+ * A deploy creates a new service account, with a new email, and deletes the old one.
+ * Keys, federated identity providers and role assignments bound to the old email go
+ * with it, so pass `email` to them as an output and they are recreated against the
+ * new account.
+ * :::
+ *
  * ### Creating a Service Account
  * **Example:** Generated name in the profile's project
  * ```typescript
@@ -106,13 +115,8 @@ export type ServiceAccount = Resource<
  * // key.keyJson is the key file STACKIT's CLI, SDKs and Terraform read.
  * ```
  *
- * ### Replacement
- * Changing `name` or `projectId` creates a new service account (with a new
- * email) and deletes the old one. Keys, federated identity providers and
- * role assignments bound to the old email go with it, so pass `email` to
- * them as an output and they are recreated against the new account.
- *
- * **Example:** Renaming creates a new account
+ * ### Renaming an Account
+ * **Example:** A new `name` creates a new account
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  *
@@ -120,6 +124,92 @@ export type ServiceAccount = Resource<
  * const deployer = yield* Stackit.IAM.ServiceAccount("Deployer", {
  *   name: "deployer-v2",
  * });
+ * ```
+ *
+ * ### Granting Roles
+ * A new account has no permissions. Each grant is one `Stackit.IAM.Membership`.
+ *
+ * **Example:** Make the account an editor of the profile's project
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const ci = yield* Stackit.IAM.ServiceAccount("Ci", {});
+ * yield* Stackit.IAM.Membership("CiEditor", {
+ *   subject: ci.email,
+ *   role: "editor",
+ * });
+ * ```
+ *
+ * ### Federating an Identity Provider
+ * Federation lets a workload exchange its OIDC token for the account's access token, so it
+ * stores no key.
+ *
+ * **Example:** Trust one GitHub repository's main branch
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const deployer = yield* Stackit.IAM.ServiceAccount("Deployer", {});
+ * yield* Stackit.IAM.FederatedIdentityProvider("GitHub", {
+ *   serviceAccountEmail: deployer.email,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   assertions: [
+ *     { item: "aud", value: "sts.accounts.stackit.cloud" },
+ *     { item: "sub", value: "repo:my-org/my-repo:ref:refs/heads/main" },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Attaching an Account to a Server
+ * Software on the server gets tokens for the account from the metadata service, with no
+ * key on the server.
+ *
+ * **Example:** A server that runs as the account
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const network = yield* Stackit.IaaS.Network("App", {
+ *   ipv4: { prefix: "10.0.1.0/24" },
+ * });
+ * const identity = yield* Stackit.IAM.ServiceAccount("WorkerAccount", {});
+ * const server = yield* Stackit.IaaS.Server("Worker", {
+ *   machineType: "g1.1",
+ *   bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+ *   networking: { networkId: network.networkId },
+ * });
+ * yield* Stackit.IaaS.ServerServiceAccountAttachment("WorkerAttachment", {
+ *   serverId: server.serverId,
+ *   serviceAccountEmail: identity.email,
+ * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `GetJWKS` reads the account's public key set, to verify JWTs signed with its keys. It
+ * grants no role, because STACKIT serves the key set publicly.
+ *
+ * **Example:** Read the account's public keys from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Signer = Stackit.IAM.ServiceAccount("Signer", {});
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const getJWKS = yield* Stackit.IAM.GetJWKS(yield* Signer);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { keys } = yield* getJWKS();
+ *         return yield* HttpServerResponse.json({ keys });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.IAM.GetJWKSHttp)),
+ * ) {}
  * ```
  *
  * @resource

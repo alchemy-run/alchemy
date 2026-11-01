@@ -1,0 +1,327 @@
+---
+title: Pub/Sub
+description: Publish to a STACKIT Pub/Sub topic, consume it from a host that keeps running, pull from a request, and handle messages that come back.
+---
+
+Pub/Sub moves messages between services. A producer publishes to a
+topic. A consumer reads through its own subscription, which keeps its
+place on the topic. Messages are pulled: STACKIT has no push delivery and
+no dead-letter topic. Pub/Sub is in beta on STACKIT.
+
+:::caution[Cost]
+STACKIT's price list (v1.0.44) has no SKU for Pub/Sub, so its rate is
+unknown. Check the current price list before you rely on it.
+:::
+
+## Create a topic and a subscription
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Apps = Stackit.ContainerApplications.Environment("Apps", {});
+
+export const Jobs = Stackit.PubSub.Topic("Jobs", {});
+
+export const JobsSubscription = Jobs.pipe(
+  Effect.flatMap((topic) =>
+    Stackit.PubSub.Subscription("JobsSubscription", { topicId: topic.topicId }),
+  ),
+);
+```
+
+`Apps` is the environment the producer and the consumer run in, as [Container
+Applications](/stackit/compute/container-applications).
+
+## Publish
+
+`Publish` returns a function that takes a batch of messages:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Apps, Jobs } from "./resources.ts";
+
+export default class Api extends Stackit.ContainerApplications.Application<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const apps = yield* Apps;
+    return {
+      main: import.meta.url,
+      environmentId: apps.environmentId,
+      registry: { repository: "ghcr.io/my-org/api" },
+    };
+  }),
+  Effect.gen(function* () {
+    const publish = yield* Stackit.PubSub.Publish(yield* Jobs);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const job = yield* request.json;
+        yield* publish({ messages: [{ data: JSON.stringify(job) }] });
+        return yield* HttpServerResponse.json({ status: "pending" }, { status: 202 });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.PubSub.PublishHttp)),
+) {}
+```
+
+`data` takes text or bytes. A batch over the service's size limit fails
+with the typed `MessagesTooLarge`, which you can answer by splitting it.
+
+`Publish` grants no STACKIT role. Alchemy creates a service account and a
+key for this host and adds the account to this topic's publishers, so the
+grant covers this one topic. The topic's `acl` has to include the host's
+egress address, and it allows every address by default.
+
+## Consume from a host that keeps running
+
+Nothing can invoke a host when a message arrives, so the host pulls for
+as long as it runs. Use a host that keeps running, such as an Application:
+
+```typescript
+// src/Worker.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Apps, JobsSubscription } from "./resources.ts";
+
+export default class Worker extends Stackit.ContainerApplications.Application<Worker>()(
+  "Worker",
+  Effect.gen(function* () {
+    const apps = yield* Apps;
+    return {
+      main: import.meta.url,
+      environmentId: apps.environmentId,
+      registry: { repository: "ghcr.io/my-org/worker" },
+    };
+  }),
+  Effect.gen(function* () {
+    yield* Stackit.PubSub.consumeSubscriptionMessages(
+      JobsSubscription,
+      { maxMessages: 10, concurrency: 4 },
+      (message) => Effect.log(message.text),
+    );
+
+    return { fetch: Effect.succeed(HttpServerResponse.text("consuming")) };
+  }).pipe(Effect.provide(Stackit.PubSub.ServerSubscriptionEventSource)),
+) {}
+```
+
+A handler that succeeds acknowledges its message. One that fails hands
+the message back. After a batch with a failure the host waits before it
+pulls again, from 1 second up to 30.
+
+The event source grants no STACKIT role. Alchemy adds the host's service
+account to this subscription's subscribers, so the grant covers this one
+subscription.
+
+:::caution
+STACKIT doesn't document whether a Function's instances keep running
+between requests, so don't run a consumer on a
+[Function](/stackit/compute/functions). Pull from a request instead.
+:::
+
+## Deploy them
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+import Worker from "./src/Worker.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    yield* Worker;
+    return { url: api.url };
+  }),
+);
+```
+
+The worker runs one instance for as long as the stack is deployed.
+
+## Pull from a request
+
+`Pull` takes a batch, and `Acknowledge` confirms it. A host that only runs
+during a request can drain a subscription this way:
+
+```typescript
+// src/Drain.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { JobsSubscription } from "./resources.ts";
+
+export default class Drain extends Stackit.Functions.Function<Drain>()(
+  "Drain",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/drain" },
+  },
+  Effect.gen(function* () {
+    const subscription = yield* JobsSubscription;
+    const pull = yield* Stackit.PubSub.Pull(subscription);
+    const acknowledge = yield* Stackit.PubSub.Acknowledge(subscription);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { messages } = yield* pull({ maxMessages: 10, longPullDuration: 1000 });
+        if (messages.length > 0) {
+          yield* acknowledge({ ackIds: messages.map((message) => message.ackId) });
+        }
+        return HttpServerResponse.text(`${messages.length} handled`);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide([Stackit.PubSub.PullHttp, Stackit.PubSub.AcknowledgeHttp])),
+) {}
+```
+
+A message comes back after the subscription's `ackDeadline` unless you
+acknowledge it. Both bindings add the host's service account to this
+subscription's subscribers and grant nothing else.
+
+## Hand a message back
+
+`NegativeAcknowledge` asks for another delivery without waiting for the
+deadline. Provide `Stackit.PubSub.NegativeAcknowledgeHttp`:
+
+```typescript
+const negativeAcknowledge = yield* Stackit.PubSub.NegativeAcknowledge(subscription);
+
+// inside fetch:
+yield* negativeAcknowledge({ nackIds: [message.ackId] });
+```
+
+It takes the same access as `Pull`.
+
+## Give up on a message
+
+There is no dead-letter topic, so succeeding is the only way to stop a
+message coming back. `deliveryAttempts` lets a handler give up:
+
+```typescript
+(message) =>
+  message.deliveryAttempts > 5
+    ? Effect.logWarning(`dropping ${message.ackId}`)
+    : handle(message);
+```
+
+A message that keeps failing slows the whole subscription until the
+handler gives up.
+
+## Handle repeats
+
+Delivery is at least once. A handler can see a message twice, after a
+failed acknowledgement or when it runs longer than `ackDeadline`. Write
+the result to a fixed key so a repeat does no harm.
+
+## Give a slow consumer longer
+
+Set how long a pulled message may stay unacknowledged:
+
+```diff lang="typescript"
+// src/resources.ts
+export const JobsSubscription = Jobs.pipe(
+  Effect.flatMap((topic) =>
+-    Stackit.PubSub.Subscription("JobsSubscription", { topicId: topic.topicId }),
++    Stackit.PubSub.Subscription("JobsSubscription", {
++      topicId: topic.topicId,
++      ackDeadline: "10m",
++    }),
+  ),
+);
+```
+
+The default is `2m`. It updates in place.
+
+## Keep messages for less time
+
+```diff lang="typescript"
+// src/resources.ts
+-export const Jobs = Stackit.PubSub.Topic("Jobs", {});
++export const Jobs = Stackit.PubSub.Topic("Jobs", { retention: "24h" });
+```
+
+The default, and the longest STACKIT takes, is `168h`.
+
+## Limit who can reach the topic
+
+`acl` covers the topic and its subscriptions:
+
+```diff lang="typescript"
+// src/resources.ts
+-export const Jobs = Stackit.PubSub.Topic("Jobs", {});
++export const Jobs = Stackit.PubSub.Topic("Jobs", { acl: ["203.0.113.0/24"] });
+```
+
+Every host that binds the topic needs its egress address in the list.
+
+## Clear a topic
+
+`PurgeTopic` removes what a topic holds. It adds the host's service
+account to the topic's publishers. Provide
+`Stackit.PubSub.PurgeTopicHttp`:
+
+```typescript
+const purgeTopic = yield* Stackit.PubSub.PurgeTopic(yield* Jobs);
+
+// inside fetch:
+yield* purgeTopic();
+```
+
+## Read topics and subscriptions
+
+`GetTopic`, `ListTopics`, `GetSubscription`, `ListSubscriptions`, and
+`CreateSubscription` call the management API. Each grants a custom role
+with its one permission on the project, so it reaches every topic in the
+project. See [IAM & bindings](/stackit/security/iam-bindings).
+
+## Delete a topic
+
+A destroy waits for this stack's subscriptions to go. A subscription the
+stack doesn't know about stops the delete with
+`Stackit.PubSub.TopicNotEmpty`, which names it. To delete those too, with
+their unacknowledged messages, deploy `forceDestroy`:
+
+```diff lang="typescript"
+// src/resources.ts
+-export const Jobs = Stackit.PubSub.Topic("Jobs", {});
++export const Jobs = Stackit.PubSub.Topic("Jobs", { forceDestroy: true });
+```
+
+Changing a topic's `projectId` or `region` replaces it and deletes the old
+one with its messages. Replacing a subscription deletes its unacknowledged
+messages too.
+
+## Check on your first deploy
+
+- The topic's publishers and the subscription's subscribers are enough for
+  the data plane. If a list alone gets a 401 or 403, the bindings need more.
+- The worker's first pull succeeds once its grant has propagated. It stops
+  after ten failed pulls in a row, about two minutes, for the platform to
+  restart it.
+
+## Example
+
+[`examples/stackit-pubsub`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-pubsub)
+is a job queue: an API publishes jobs, and a worker consumes them and
+writes each result to a bucket. It has not been deployed to STACKIT yet.
+
+## Where next
+
+- [Container Applications](/stackit/compute/container-applications) — the
+  host the worker runs on.
+- [RabbitMQ](/stackit/messaging/rabbitmq) — a managed broker with exchanges
+  and routing.
+- [PubSub reference](/providers/stackit/pubsub#topic) — every prop and
+  attribute.

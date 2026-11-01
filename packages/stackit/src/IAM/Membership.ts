@@ -86,6 +86,14 @@ export type Membership = Resource<
  * same reason memberships are not enumerated by `alchemy unsafe nuke`; they
  * go away with the project, folder or organization they belong to.
  *
+ * See [STACKIT's role and permission docs](https://docs.stackit.cloud/platform/access-and-identity/roles-permissions/roles-permissions/).
+ *
+ * :::caution[Changing `subject`, `role`, `resourceType` or `resourceId` replaces the Membership]
+ * Changing `role` or `subject` grants the new pair before revoking the old one.
+ * Revoking can fail when STACKIT refuses to remove the last `owner` of a resource;
+ * keep at least one other owner in place.
+ * :::
+ *
  * ### Granting a role on the project
  * **Example:** Make a service account an editor of the profile's project
  * ```typescript
@@ -139,7 +147,7 @@ export type Membership = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  *
  * const role = yield* Stackit.IAM.CustomRole("DnsOperator", {
- *   permissions: ["dns.zone.read", "dns.record.write"],
+ *   permissions: ["dns.zone.list", "dns.zone.create"],
  * });
  * yield* Stackit.IAM.Membership("Operator", {
  *   subject: "operator@example.com",
@@ -147,10 +155,74 @@ export type Membership = Resource<
  * });
  * ```
  *
- * ### Replacement cautions <!-- api-prose -->
- * Changing `role` or `subject` grants the new pair before revoking the old
- * one. Revoking can fail when STACKIT refuses to remove the last `owner`
- * of a resource; keep at least one other owner in place.
+ * ### Granting a Role to a Service Account in This Stack
+ * **Example:** Pass the account's email as an output
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const ci = yield* Stackit.IAM.ServiceAccount("Ci", {});
+ * yield* Stackit.IAM.Membership("CiEditor", {
+ *   subject: ci.email,
+ *   role: "editor",
+ * });
+ * ```
+ *
+ * ### Granting Several Roles
+ * A membership is one `subject` and one `role`. Declare one per pair.
+ *
+ * **Example:** Two roles for one member
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * for (const role of ["reader", "editor"]) {
+ *   yield* Stackit.IAM.Membership(`Operator${role}`, {
+ *     subject: "operator@example.com",
+ *     role,
+ *   });
+ * }
+ * ```
+ *
+ * ### Taking Over an Existing Membership <!-- api-prose -->
+ * Memberships have no labels. One that already exists when you first deploy is reported as
+ * unowned, and you take it over with `--adopt` or `adopt(true)`. After that, destroying
+ * the resource revokes it.
+ *
+ * ### Binding to a Runtime
+ * `ListMembers` grants a custom role on the target holding only `iam.member.get`. The role
+ * reaches the target's child resources too, because STACKIT inherits role bindings
+ * downward.
+ *
+ * **Example:** List who holds a role on a project
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Sandbox = Stackit.ResourceManager.Project("Sandbox", {
+ *   owner: "jane.doe@example.com",
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Sandbox;
+ *     const listMembers = yield* Stackit.IAM.ListMembers({
+ *       resourceType: "project",
+ *       resourceId: sandbox.projectId,
+ *     });
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { members } = yield* listMembers();
+ *         return yield* HttpServerResponse.json({ count: members.length });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.IAM.ListMembersHttp)),
+ * ) {}
+ * ```
  *
  * @resource
  * @product STACKIT Authorization

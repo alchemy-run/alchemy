@@ -67,6 +67,13 @@ export type Token = Resource<
  * A short-lived service account token for the Kubernetes API of a STACKIT Edge Cloud
  * instance, for clients that take a bearer token rather than a kubeconfig.
  *
+ * See [STACKIT's Edge Cloud docs](https://docs.stackit.cloud/products/runtime/edge-cloud/).
+ *
+ * :::caution[Changing `instanceId`, `expirationSeconds`, `projectId` or `region` replaces the Token]
+ * A deploy mints a new token. The API can't revoke one, so don't count on the old one
+ * to stop working before it expires.
+ * :::
+ *
  * ### How Expiry Works <!-- api-prose -->
  * The API mints a token on each call. It has no way to read one back, list it or
  * revoke it, so this resource holds the one it minted and replaces it when it stops

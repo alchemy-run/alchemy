@@ -86,6 +86,12 @@ export type AppRole = Resource<
  * labels, so Alchemy knows it by the role id in state or by a generated
  * description, which is why a generated `description` holds the physical name.
  *
+ * See [STACKIT's Secrets Manager docs](https://docs.stackit.cloud/products/security/secrets-manager/).
+ *
+ * :::caution[Changing `instanceId` or `projectId` replaces the AppRole]
+ * Replacing an AppRole invalidates its secret ids. Everything else updates in place.
+ * :::
+ *
  * ### Creating an AppRole
  * **Example:** Read-only AppRole for a workload
  * ```typescript

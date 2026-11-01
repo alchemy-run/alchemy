@@ -88,13 +88,21 @@ export class BGPFilterNotEmpty extends Data.TaggedError("Stackit.VPN.BGPFilterNo
  * STACKIT refuses to delete a filter a tunnel still references. A delete retries that for
  * two minutes, so the connection's own update can land, and then fails with `Conflict`.
  *
+ * See [STACKIT's VPN docs](https://docs.stackit.cloud/products/network/connectivity-hybrid-multi-cloud/vpn/).
+ *
+ * :::caution[Changing `gatewayId`, `projectId` or `region` replaces the Filter]
+ * A new filter is created and the old one is deleted. STACKIT refuses to delete a
+ * filter a tunnel still references: a delete retries for two minutes, so the
+ * connection's own update can land, then fails with `Conflict`.
+ * :::
+ *
  * ### Creating a Filter
  * **Example:** A filter with a rule, attached to a connection
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const preSharedKey = yield* Config.redacted("VPN_PRE_SHARED_KEY");
+ * const preSharedKey = Config.Redacted("VPN_PRE_SHARED_KEY");
  * const gateway = yield* Stackit.VPN.Gateway("Backbone", {
  *   planId: "p100",
  *   routingType: "BGP_ROUTE_BASED",

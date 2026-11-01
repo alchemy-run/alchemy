@@ -66,6 +66,13 @@ export type Credential = Resource<
  * until the instance is deleted. `alchemy unsafe nuke` removes credentials with their
  * instance.
  *
+ * See [STACKIT's Key Value Store docs](https://docs.stackit.cloud/products/databases/key-value-store/).
+ *
+ * :::caution[Changing any prop replaces the Credential]
+ * STACKIT can't update a credential. A new one is created first and the old one is
+ * deleted after, with a new password and URI.
+ * :::
+ *
  * ### Creating a Credential
  * **Example:** A credential for an application
  * ```typescript

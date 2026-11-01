@@ -1,0 +1,313 @@
+---
+title: RabbitMQ
+description: Create a managed RabbitMQ broker on STACKIT, publish from any host, consume from a host that keeps running, and declare queues and exchanges.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const consumerDeps = `amqplib`;
+
+A `Stackit.RabbitMQ.Instance` is a managed broker. Clients log in with a
+`Stackit.RabbitMQ.Credential`, and only from the ranges in the instance's
+`acl`. Queues and exchanges live in the broker, so you declare them from
+a runtime.
+
+:::caution[Cost]
+An instance is billed per started hour by plan, for as long as it exists.
+`RabbitMQ-2.4.10-Single-EU01` is about EUR 0.12 an hour and replicas start
+at about EUR 0.20. Check STACKIT's current prices.
+:::
+
+## Create a broker
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Broker = Stackit.RabbitMQ.Instance("Broker", {
+  version: "4.1",
+  planName: "stackit-rabbitmq-2.4.10-single",
+  acl: ["203.0.113.7/32"],
+});
+```
+
+`version` and `planName` pick the plan. A name STACKIT doesn't offer fails
+the deploy with `DataServicePlanNotFound`, which lists the choices. A
+deploy waits until the instance reports `active`, which STACKIT's SDK
+allows up to 45 minutes for.
+
+## Add a credential
+
+A credential is one user on the broker:
+
+```diff lang="typescript"
+// src/resources.ts
+export const Broker = Stackit.RabbitMQ.Instance("Broker", {
+  version: "4.1",
+  planName: "stackit-rabbitmq-2.4.10-single",
+  acl: ["203.0.113.7/32"],
+});
++
++export const Login = Broker.pipe(
++  Effect.flatMap((broker) =>
++    Stackit.RabbitMQ.Credential("Login", { instanceId: broker.instanceId }),
++  ),
++);
+```
+
+Its password and every address stay `Redacted`. Bindings take the credential,
+not the instance.
+
+## Publish
+
+`Publish` takes an HTTPS request to the broker's management API, so it
+runs on any host, including a [Function](/stackit/compute/functions):
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Login } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const publish = yield* Stackit.RabbitMQ.Publish(yield* Login);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { routed } = yield* publish({
+          routing_key: "jobs",
+          payload: JSON.stringify({ id: 1 }),
+          properties: { content_type: "application/json", delivery_mode: 2 },
+        });
+        return yield* HttpServerResponse.json({ routed });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.RabbitMQ.PublishHttp)),
+) {}
+```
+
+With the default exchange, `routing_key` is the name of the queue.
+`routed` says whether a queue took the message; one that nothing routes is
+dropped without an error.
+
+Binding it grants no STACKIT role. The host gets the credential's address,
+user, and password in its environment, with the secrets `Redacted`, and
+can do what that broker user can do. The host's egress address has to be
+in the instance's `acl`.
+
+Above thousands of messages a second, open AMQP with
+`Stackit.RabbitMQ.Connect` instead.
+
+## Declare a queue
+
+`DeclareQueue` runs from a host, through the management API. Provide
+`Stackit.RabbitMQ.DeclareQueueHttp`:
+
+```typescript
+const declareQueue = yield* Stackit.RabbitMQ.DeclareQueue(yield* Login);
+
+// inside fetch:
+yield* declareQueue({ queue: "jobs", durable: true });
+```
+
+Declaring it again with the same settings does nothing. Different settings
+fail with `InequivalentArguments`.
+
+## Route through an exchange
+
+`DeclareExchange` and `BindQueue` set up routing. Provide
+`Stackit.RabbitMQ.DeclareExchangeHttp` and `Stackit.RabbitMQ.BindQueueHttp`:
+
+```typescript
+yield* declareExchange({ exchange: "events", type: "topic" });
+yield* bindQueue({ exchange: "events", queue: "jobs", routing_key: "order.*" });
+yield* publish({ exchange: "events", routing_key: "order.created", payload: "1234" });
+```
+
+Like `Publish`, they use the credential and grant no STACKIT role.
+
+## Consume from a host that keeps running
+
+The broker can't invoke anything, so a host keeps an AMQP consumer running
+for its whole life. Install the optional peer `amqplib`:
+
+<PackageManagers add={consumerDeps} />
+
+Add an environment for the host:
+
+```diff lang="typescript"
+// src/resources.ts
++export const Apps = Stackit.ContainerApplications.Environment("Apps", {});
+```
+
+Then consume the queue from an [Application](/stackit/compute/container-applications):
+
+```typescript
+// src/Worker.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Apps, Login } from "./resources.ts";
+
+export default class Worker extends Stackit.ContainerApplications.Application<Worker>()(
+  "Worker",
+  Effect.gen(function* () {
+    const apps = yield* Apps;
+    return {
+      main: import.meta.url,
+      environmentId: apps.environmentId,
+      registry: { repository: "ghcr.io/my-org/worker" },
+    };
+  }),
+  Effect.gen(function* () {
+    yield* Stackit.RabbitMQ.consumeQueueMessages(
+      Login,
+      { queue: "jobs", prefetch: 10 },
+      (message) => Effect.log(message.text),
+    );
+    return {};
+  }).pipe(Effect.provide(Stackit.RabbitMQ.ServerQueueEventSource)),
+) {}
+```
+
+`prefetch` is how many messages the broker hands out at once, which is
+also how many handlers run at once.
+
+A handler that succeeds acknowledges its message. A failure puts it back
+on the queue, or drops it with `requeueOnFailure: false`, which dead-letters
+it when the queue has a dead-letter exchange. A message comes back when a
+handler is interrupted, so a handler has to tolerate running twice.
+
+The event source grants no STACKIT role. The credential's AMQP URI reaches
+the host's environment, `Redacted`.
+
+:::caution
+STACKIT doesn't document whether a Function's instances keep running
+between requests, so don't rely on a consumer there.
+:::
+
+## Drain a queue for a while
+
+`Stackit.RabbitMQ.Consume` runs a consumer for as long as you let it. It
+never succeeds, so bound it. Provide `Stackit.RabbitMQ.ConsumeAmqp`:
+
+```typescript
+const consume = yield* Stackit.RabbitMQ.Consume(yield* Login);
+
+// inside fetch:
+yield* consume({
+  queue: "jobs",
+  prefetch: 10,
+  handler: (message) => Effect.log(message.text),
+}).pipe(Effect.timeoutOption("30 seconds"));
+```
+
+It fails with `AmqpError` when the connection or the consumer is lost, and grants no STACKIT role.
+
+## Use your own client
+
+`Connect` opens no socket. It resolves the settings for your AMQP client, and
+grants no STACKIT role. Provide `Stackit.RabbitMQ.ConnectHttp`:
+
+```typescript
+const connect = yield* Stackit.RabbitMQ.Connect(yield* Login);
+
+// inside fetch:
+const info = yield* connect;
+yield* Effect.log(info.host);
+```
+
+## Peek at a queue
+
+`GetMessages` fetches messages over the management API. RabbitMQ documents
+that route as a diagnostics tool without reliable delivery, so don't
+process a queue with it. Like `Publish`, it uses the credential and grants no
+STACKIT role. Provide `Stackit.RabbitMQ.GetMessagesHttp`:
+
+```typescript
+const getMessages = yield* Stackit.RabbitMQ.GetMessages(yield* Login);
+
+// inside fetch:
+const messages = yield* getMessages({
+  queue: "jobs",
+  count: 1,
+  ackmode: "ack_requeue_true",
+  encoding: "auto",
+});
+```
+
+## Turn on plugins
+
+MQTT and STOMP clients need `rabbitmq_mqtt` and `rabbitmq_stomp`:
+
+```diff lang="typescript"
+// src/resources.ts
+export const Broker = Stackit.RabbitMQ.Instance("Broker", {
+  version: "4.1",
+  planName: "stackit-rabbitmq-2.4.10-single",
+  acl: ["203.0.113.7/32"],
++  plugins: ["rabbitmq_mqtt", "rabbitmq_shovel"],
++  consumerTimeout: 3_600_000,
+});
+```
+
+`consumerTimeout` is how many milliseconds a consumer may hold a delivery.
+STACKIT's minimum is 30 minutes.
+
+## Send metrics and logs elsewhere
+
+Set a monitoring instance or a Graphite endpoint, and syslog drains:
+
+```diff lang="typescript"
+// src/resources.ts
+export const Broker = Stackit.RabbitMQ.Instance("Broker", {
+  version: "4.1",
+  planName: "stackit-rabbitmq-2.4.10-single",
+  acl: ["203.0.113.7/32"],
++  graphite: "metrics.example.com:2003",
++  metricsFrequency: 30,
++  syslog: ["logs.example.com:514"],
+});
+```
+
+## Rotate a credential
+
+A credential has no update. Change `rotationKey` to get a new user and
+password. The old user stops working once the new one exists:
+
+```typescript
+Stackit.RabbitMQ.Credential("Login", {
+  instanceId: broker.instanceId,
+  rotationKey: "2026-11",
+});
+```
+
+## Replacing a broker
+
+Changing `name`, `projectId`, or `region` replaces the instance. The
+replacement starts empty: exchanges, queues, and messages are deleted with
+the old broker. The plan and the parameters update in place.
+
+## Check on your first deploy
+
+- Your plan and version exist. `4.1` and `stackit-rabbitmq-2.4.10-single`
+  come from STACKIT's Terraform provider tests.
+- The credential's default role, `policymaker`, can declare queues, publish,
+  and read through the management API. `Forbidden` or `Unauthorized` is the
+  first thing to look at.
+- The instance's `acl` also covers the management API's port.
+
+## Where next
+
+- [Pub/Sub](/stackit/messaging/pubsub) — topics with no broker to run.
+- [IAM & bindings](/stackit/security/iam-bindings) — which bindings grant a
+  role and which use a credential.
+- [RabbitMQ reference](/providers/stackit/rabbitmq#instance) — every prop
+  and attribute.

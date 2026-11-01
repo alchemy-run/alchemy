@@ -1,0 +1,132 @@
+---
+title: Foldkit
+description: Deploy a Foldkit app to a private STACKIT bucket behind the CDN with Stackit.Website.Foldkit, or to a Function for server rendering and deep links.
+sidebar:
+  order: 6
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Stackit.Website.Foldkit` deploys a [Foldkit](https://foldkit.dev) app. Browser-only
+and prerendered builds go in a private Object Storage bucket behind a CDN distribution,
+and no compute runs. `output: "server"` renders on a STACKIT Function behind the same
+CDN.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a dev
+dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Stackit.Website.Foldkit("Website");
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the CDN's URL.
+
+:::caution[`/` is unconfirmed]
+A bucket has no object for `/`, and STACKIT documents no default document for a bucket
+origin. Check `/` on your first deploy. `origin: "function"` serves it regardless.
+:::
+
+## Know the deep-link limit
+
+The CDN has no rewrite and no error pages. On a bucket, a deep link to a route with no
+file fails, and there is no 404 page. Use hash routing, or serve the build from a
+Function.
+
+## Project in a subdirectory
+
+```diff lang="typescript"
+// alchemy.run.ts
+-    const site = yield* Stackit.Website.Foldkit("Website");
++    const site = yield* Stackit.Website.Foldkit("Website", {
++      rootDir: "applications/web",
++    });
+```
+
+## Serve deep links from a Function
+
+`origin: "function"` serves the same files from a STACKIT Function, and
+`assets.notFoundHandling` answers unknown paths with `index.html`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+-    const site = yield* Stackit.Website.Foldkit("Website");
++    const site = yield* Stackit.Website.Foldkit("Website", {
++      origin: "function",
++      registry: { repository: "ghcr.io/my-org/web" },
++      assets: { notFoundHandling: "single-page-application" },
++    });
+```
+
+A Function needs Docker when you deploy and a registry for its image. This `registry`
+pushes with your machine's `docker login`. To use a STACKIT registry, see
+[Create a registry](/stackit/frontend/websites#create-a-registry).
+
+:::caution[STACKIT Functions is an alpha API]
+Functions is available in `eu01` only. STACKIT documents no container contract for it,
+so [check these assumptions](/stackit/frontend/websites#check-your-first-deploy) on your
+first deploy.
+:::
+
+## Render on the server
+
+`output` picks the build: `spa` is browser-only and the default, `static` is
+prerendered, and `server` renders on a Function:
+
+```diff lang="typescript"
+// alchemy.run.ts
+-    const site = yield* Stackit.Website.Foldkit("Website");
++    const site = yield* Stackit.Website.Foldkit("Website", {
++      output: "server",
++      registry: { repository: "ghcr.io/my-org/web" },
++    });
+```
+
+## Use a custom domain
+
+```diff lang="typescript"
+// alchemy.run.ts
+-    const site = yield* Stackit.Website.Foldkit("Website");
++    const site = yield* Stackit.Website.Foldkit("Website", {
++      domain: "www.example.com",
++    });
+```
+
+`site.url` becomes `https://www.example.com`. Create the CNAME to the distribution's
+hostname yourself, or publish it with a DNS adapter. See
+[Use a custom domain](/stackit/frontend/websites#use-a-custom-domain).
+
+## Local development
+
+`alchemy dev` runs the framework's dev server with hot reload and creates nothing in
+the cloud. Pipe the site through `Alchemy.remote()` to deploy it for real during dev.
+
+## Example
+
+[`examples/stackit-website-foldkit`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-website-foldkit)
+is a client-only app with Tailwind and a test suite. It hasn't been deployed to STACKIT
+yet.
+
+## Where next
+
+- [Websites](/stackit/frontend/websites): the settings every site shares.
+- [Website reference](/providers/stackit/website#foldkit): every prop.

@@ -123,6 +123,13 @@ export type RecordSet = Resource<
  * carry Alchemy's ownership labels, skipping the `SOA` and apex `NS`
  * records STACKIT manages.
  *
+ * See [STACKIT's DNS docs](https://docs.stackit.cloud/products/network/core-networking/dns/).
+ *
+ * :::caution[Changing `zoneId`, `name`, `type` or `projectId` replaces the Record Set]
+ * These are the record set's identity. The new one is created there and the old one is
+ * deleted, so the old name stops resolving through this record set.
+ * :::
+ *
  * ### Creating a Record Set
  * **Example:** A records for `www`
  * ```typescript

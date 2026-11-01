@@ -108,6 +108,13 @@ export type BGPFilterRule = Resource<
  * deploy can collide on a `sequence`: each update retries the collision for about 50 seconds,
  * then fails with `Conflict`, so two rules swapping places need a deploy in between.
  *
+ * See [STACKIT's VPN docs](https://docs.stackit.cloud/products/network/connectivity-hybrid-multi-cloud/vpn/).
+ *
+ * :::caution[Changing `gatewayId`, `filterId`, `projectId` or `region` replaces the Rule]
+ * A new rule is created on the new filter and the old one is deleted. Everything else
+ * updates in place.
+ * :::
+ *
  * ### Creating a Rule
  * **Example:** Permit a prefix range and prefer it
  * ```typescript

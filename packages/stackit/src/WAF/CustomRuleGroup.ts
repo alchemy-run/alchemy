@@ -110,6 +110,13 @@ export type CustomRuleGroup = Resource<
  * clears groups with the shape of a generated physical name, so choose a name
  * outside that shape for a group that must survive a nuke.
  *
+ * See [STACKIT's ALB WAF docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/application-load-balancer/basics/basic-concepts-alb-waf/).
+ *
+ * :::caution[Changing `name`, `projectId` or `region` replaces the Rule Group]
+ * STACKIT refuses to delete a group a configuration still uses: a delete retries for
+ * about a minute, then fails with the API's `BadRequest`. `rules` update in place.
+ * :::
+ *
  * ### Creating a Rule Group
  * **Example:** Deny a request by a header
  * ```typescript

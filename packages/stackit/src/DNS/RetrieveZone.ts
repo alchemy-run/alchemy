@@ -19,12 +19,9 @@ export interface RetrieveZoneRequest extends Omit<
  * injected into each request. A foreign host signs with a service account
  * key Alchemy creates for it.
  *
- * Access: the `dns.admin` role on the project holding the zone, so the host can
- * change every zone in that project, not only this one. A custom role would be
- * narrower, but STACKIT doesn't document DNS permission names. The role name
- * follows STACKIT's `<product>.admin` pattern, but no STACKIT source lists it;
- * check it with `listRoles` before relying on it, because a wrong name fails the
- * deploy.
+ * Access: the `dns.zone.create` permission on the project holding the zone, so the
+ * host can change every zone in that project, not only this one. STACKIT authorizes
+ * every DNS write with that one permission.
  *
  * ### Transferring a Secondary Zone
  * **Example:** Queue a transfer from a Cloudflare Worker

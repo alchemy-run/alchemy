@@ -1,0 +1,92 @@
+---
+title: Choosing a runtime
+description: Functions vs Container Applications vs Cloud Foundry vs Kubernetes vs Services vs Servers on STACKIT — what each one is for and what it costs to run.
+---
+
+Every Alchemy app on STACKIT needs somewhere for its code to run. All but a
+bare server take the same Effect program: you bundle it with `main`, bind
+resources to it, and Alchemy creates the credentials.
+
+- **Function** (`Stackit.Functions.Function`): an HTTP handler at its own URL.
+  **Use this by default**, if your project has access to the alpha API.
+- **Container Application** (`Stackit.ContainerApplications.Application`): a
+  managed container with autoscaling and optional scale to zero.
+- **Cloud Foundry app** (`Stackit.CloudFoundry.App`): instances behind the
+  platform's router, in a space.
+- **Kubernetes** (`Kubernetes.Deployment` on `Stackit.SKE.Cluster`): Kubernetes
+  workloads on a cluster you own.
+- **Service** (`Stackit.IaaS.Service`): a program on a server you own, as a
+  systemd unit.
+- **Server** (`Stackit.IaaS.Server`): a virtual machine running whatever you
+  start on it.
+
+## At a glance
+
+|                 | Function                    | Container Application       | Cloud Foundry app        | Kubernetes                       | Service                     | Server                 |
+| --------------- | --------------------------- | --------------------------- | ------------------------ | -------------------------------- | --------------------------- | ---------------------- |
+| Entry           | `fetch`                     | `fetch` or a consumer       | `fetch` or a consumer    | `fetch` or `run`                 | `fetch` or a consumer       | what you start         |
+| Triggered by    | Its URL                     | HTTP, consumers             | Its route, consumers     | A load balancer, Jobs on apply   | HTTP, consumers             | Nothing: always on     |
+| Cost shape      | No SKU listed; per use      | No SKU listed              | Per MB of RAM, per hour  | Cluster plus nodes, per hour     | The server, per hour        | The server, per hour   |
+| Packaging       | Image built locally         | Image built locally         | Image built locally      | Image built locally              | Bundle over Run Command     | cloud-init             |
+| Binding identity | Key in a variable          | Key in a secret             | Key in a variable        | Key in the container's env       | Tokens from the server      | None                   |
+| API status      | Alpha, `eu01`               | Beta, `eu01`                |                          |                                  |                             |                        |
+
+Prices come from STACKIT's price list v1.0.44. Check the current list before
+you leave anything deployed.
+
+## Functions: the default
+
+An image STACKIT runs and serves at its own URL. Each change rolls out a new
+revision. The API has no trigger, schedule, or subscription, so anything that
+reaches a Function calls its URL. STACKIT doesn't document whether instances
+keep running between requests, so do the work inside the request.
+
+→ [Functions](/stackit/compute/functions)
+
+## Container Applications: a managed container
+
+Choose this when a program has to stay running to consume a queue, or needs
+fixed or rule-based scaling. It lives in an environment the API can't delete, so
+destroying a stack leaves the environment behind.
+
+→ [Container Applications](/stackit/compute/container-applications)
+
+## Cloud Foundry: apps in a space
+
+Choose this if your organization already uses Cloud Foundry, or wants its
+organizations, spaces, and marketplace services. A started app costs EUR
+0.0000409 per MB of RAM per started hour.
+
+→ [Cloud Foundry](/stackit/compute/cloud-foundry)
+
+## Kubernetes: a cluster you own
+
+Reach for SKE when you need Kubernetes itself: Helm charts, long-lived pods, or
+workloads you already run elsewhere. A cluster costs EUR 0.0996 per started hour
+until you delete it, plus its nodes, and a deploy can wait up to 45 minutes for
+it.
+
+→ [Kubernetes](/stackit/compute/kubernetes)
+
+## Services: a program on a server
+
+Choose this when you want one server you pay for by the hour, with no Docker on
+your machine and no key on the server. Its bindings use the server's service
+account, and tokens from its metadata API. You own the server: a public address,
+a firewall rule, and its operating system.
+
+→ [Services](/stackit/compute/services)
+
+## Servers: a virtual machine
+
+Choose this for software that isn't an Alchemy program. cloud-init starts it on
+first boot.
+
+→ [Servers](/stackit/compute/servers)
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the runtime the rest of these docs
+  build on.
+- [IAM & bindings](/stackit/security/iam-bindings): what happens when a runtime
+  binds a resource.

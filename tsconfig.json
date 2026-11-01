@@ -533,6 +533,93 @@
       "path": "./examples/hetzner-website-tanstack-start/tsconfig.json"
     },
     {
+      "path": "./examples/stackit-static-site/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-astro/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-foldkit/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-nuxt/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-octane/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-react-router/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-solidstart/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-tanstack-start/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-vinext/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-vite/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-vocs/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-website-waku/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-function/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-function-async/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-httpapi/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-rpc/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-pubsub/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-container-app/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-cloud-foundry/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-kubernetes/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-service/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-server/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-postgres/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-valkey/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-secrets/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-ai/tsconfig.json"
+    },
+    {
+      "path": "./examples/stackit-service-to-service/tsconfig.json"
+    },
+    {
       "path": "./examples/railway-website-astro/tsconfig.json"
     },
     {

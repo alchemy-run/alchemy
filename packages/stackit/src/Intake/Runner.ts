@@ -116,6 +116,14 @@ export class RunnerNotEmpty extends Data.TaggedError("Stackit.Intake.RunnerNotEm
  * Ownership is tracked with labels. A runner of the same name without them is reported
  * as unowned, and only taken over with `--adopt`.
  *
+ * See [STACKIT's Intake docs](https://docs.stackit.cloud/products/data-and-ai/intake/).
+ *
+ * :::caution[Changing `projectId` or `region`, or lowering the capacity, replaces the Runner]
+ * Raising `maxMessageSizeKiB` or `maxMessagesPerHour` updates in place. A replacement
+ * drops what the runner holds. Deleting the old runner fails with
+ * `Stackit.Intake.RunnerNotEmpty` while intakes are still on it.
+ * :::
+ *
  * ### Creating a Runner
  * **Example:** About 1 GB per hour of capacity
  * ```typescript
@@ -147,7 +155,7 @@ export class RunnerNotEmpty extends Data.TaggedError("Stackit.Intake.RunnerNotEm
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const password = yield* Config.redacted("INTAKE_PASSWORD");
+ * const password = Config.Redacted("INTAKE_PASSWORD");
  * const runner = yield* Stackit.Intake.Runner("Ingest", {
  *   maxMessageSizeKiB: 1024,
  *   maxMessagesPerHour: 1024,

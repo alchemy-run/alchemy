@@ -150,6 +150,24 @@ export class BackupImmutable extends Data.TaggedError("Stackit.ServerBackup.Back
  * `expireAt` and that STACKIT has removed is noticed by the next plan, and that deploy takes
  * a new one of the server as it is then.
  *
+ * See [STACKIT's Server Backup Management docs](https://docs.stackit.cloud/products/compute-engine/server-backup-management/).
+ *
+ * :::caution[Changing `name`, `retentionPeriod`, `volumeIds`, `serverId`, `projectId` or `region` is refused unless you set `allowReplace`]
+ * A backup holds the server as it was when taken, and STACKIT can't change one. So a
+ * plan that changes `name`, `retentionPeriod`, `volumeIds`, `serverId`, `projectId` or
+ * `region` fails with `Stackit.ServerBackup.BackupImmutable`, naming what changed, and
+ * nothing happens. So does replacing the server, or an enablement whose `serverId` you
+ * pass here. To keep this point in time, add a second backup under a new logical ID
+ * and leave this one alone.
+ *
+ * With `allowReplace: true` the change goes ahead: it takes a new backup of the server
+ * **as it is now**, waits until it's available, and then deletes the old one and its
+ * data. With `RemovalPolicy.retain()` as well, the old one stays on the server and the
+ * stack stops tracking it. The API reaches a backup only through its server, so a
+ * deleted server's backups can't be reached any more; restore what you need before
+ * replacing it.
+ * :::
+ *
  * ### Taking a Backup
  * **Example:** Keep a snapshot for 30 days
  * ```typescript
@@ -247,19 +265,6 @@ export class BackupImmutable extends Data.TaggedError("Stackit.ServerBackup.Back
  * with it. A backup still being taken is waited for first, unless `forceDestroy` is set or
  * `alchemy unsafe nuke` is running, which pass the API's `force` flag. No other backup or
  * schedule is touched.
- *
- * ### Replacement Cautions <!-- api-prose -->
- * A backup holds the server as it was when taken, and STACKIT can't change one. So a plan that
- * changes `name`, `retentionPeriod`, `volumeIds`, `serverId`, `projectId` or `region` fails with
- * `Stackit.ServerBackup.BackupImmutable`, naming what changed, and nothing happens. So does
- * replacing the server, or an enablement whose `serverId` you pass here. To keep this point in
- * time, add a second backup under a new logical ID and leave this one alone.
- *
- * With `allowReplace: true` the change goes ahead: it takes a new backup of the server **as it
- * is now**, waits until it's available, and then deletes the old one and its data. With
- * `RemovalPolicy.retain()` as well, the old one stays on the server and the stack stops tracking
- * it. The API reaches a backup only through its server, so a deleted server's backups can't be
- * reached any more; restore what you need before replacing it.
  *
  * @resource
  * @product STACKIT Server Backup Management

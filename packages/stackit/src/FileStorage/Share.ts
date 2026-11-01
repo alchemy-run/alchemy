@@ -127,6 +127,13 @@ export type Share = Resource<
  * Ownership is tracked with labels. A share with the same name that lacks them is
  * reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's File Storage docs](https://docs.stackit.cloud/products/storage/file-storage/).
+ *
+ * :::caution[Changing `resourcePoolId`, `name`, `projectId` or `region` replaces the Share]
+ * A replacement starts empty: the share's data is lost, so copy it out first.
+ * Replacing the pool replaces its shares too.
+ * :::
+ *
  * ### Creating a Share
  * **Example:** A read-only share using all of its pool
  * ```typescript

@@ -78,6 +78,13 @@ export type Kubeconfig = Resource<
  * need one: pass the `Stackit.SKE.Cluster` itself as `cluster`, and Alchemy mints
  * a credential per connection that is never persisted.
  *
+ * See [STACKIT's Kubernetes Engine docs](https://docs.stackit.cloud/products/runtime/kubernetes-engine/).
+ *
+ * :::caution[Changing `clusterName`, `expirationSeconds`, `projectId` or `region` replaces the Kubeconfig]
+ * A deploy mints a new kubeconfig. The API can't revoke one, so don't count on the old
+ * one to stop working before it expires.
+ * :::
+ *
  * ### How Expiry Works <!-- api-prose -->
  * The API has no way to read a kubeconfig back, list it or revoke it. So this
  * resource holds the one it minted, and replaces it when it stops being useful.

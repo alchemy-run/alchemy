@@ -1118,6 +1118,120 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/stackit" },
             { label: "Setup", link: "/stackit/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "stackit/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                {
+                  label: "Choosing a runtime",
+                  link: "/stackit/compute/choosing-a-runtime",
+                },
+                { label: "Functions", link: "/stackit/compute/functions" },
+                {
+                  label: "Container Applications",
+                  link: "/stackit/compute/container-applications",
+                },
+                { label: "Cloud Foundry", link: "/stackit/compute/cloud-foundry" },
+                { label: "Kubernetes", link: "/stackit/compute/kubernetes" },
+                { label: "Services", link: "/stackit/compute/services" },
+                { label: "Servers", link: "/stackit/compute/servers" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                { label: "Overview", link: "/stackit/frontend/websites" },
+                { label: "Astro", link: "/stackit/frontend/astro" },
+                { label: "Foldkit", link: "/stackit/frontend/foldkit" },
+                { label: "Next.js", link: "/stackit/frontend/nextjs" },
+                { label: "Nuxt", link: "/stackit/frontend/nuxt" },
+                { label: "Octane", link: "/stackit/frontend/octane" },
+                { label: "React Router", link: "/stackit/frontend/react-router" },
+                { label: "SolidStart", link: "/stackit/frontend/solidstart" },
+                { label: "Static sites", link: "/stackit/frontend/static-site" },
+                { label: "SvelteKit", link: "/stackit/frontend/sveltekit" },
+                { label: "TanStack Start", link: "/stackit/frontend/tanstack-start" },
+                { label: "Vinext", link: "/stackit/frontend/vinext" },
+                { label: "Vite", link: "/stackit/frontend/vite" },
+                { label: "Vocs", link: "/stackit/frontend/vocs" },
+                { label: "Waku", link: "/stackit/frontend/waku" },
+              ]),
+            },
+            {
+              label: "APIs",
+              items: [
+                { label: "Effect HTTP", link: "/stackit/apis/effect-http-api" },
+                { label: "Effect RPC", link: "/stackit/apis/effect-rpc" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Object Storage", link: "/stackit/data/object-storage" },
+                { label: "PostgreSQL Flex", link: "/stackit/data/postgres" },
+                { label: "MongoDB Flex", link: "/stackit/data/mongodb" },
+                { label: "SQL Server Flex", link: "/stackit/data/sql-server" },
+                { label: "MariaDB", link: "/stackit/data/mariadb" },
+                { label: "Valkey", link: "/stackit/data/valkey" },
+                { label: "OpenSearch", link: "/stackit/data/opensearch" },
+                { label: "File Storage", link: "/stackit/data/file-storage" },
+                { label: "Dremio", link: "/stackit/data/dremio" },
+                { label: "Airflow", link: "/stackit/data/airflow" },
+              ],
+            },
+            {
+              label: "AI",
+              items: [
+                { label: "Model Serving", link: "/stackit/ai/model-serving" },
+                { label: "Model Experiments", link: "/stackit/ai/model-experiments" },
+              ],
+            },
+            {
+              label: "Messaging",
+              items: [
+                { label: "Pub/Sub", link: "/stackit/messaging/pubsub" },
+                { label: "RabbitMQ", link: "/stackit/messaging/rabbitmq" },
+                { label: "Kafka", link: "/stackit/messaging/kafka" },
+              ],
+            },
+            {
+              label: "Security",
+              items: [
+                { label: "IAM & bindings", link: "/stackit/security/iam-bindings" },
+                { label: "Secrets Manager & KMS", link: "/stackit/security/secrets-kms" },
+                { label: "Firewall", link: "/stackit/security/firewall" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [
+                { label: "Observability", link: "/stackit/observability/observability" },
+                { label: "Logs", link: "/stackit/observability/logs" },
+                { label: "Telemetry", link: "/stackit/observability/telemetry" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "Networks", link: "/stackit/networking/networks" },
+                { label: "DNS", link: "/stackit/networking/dns" },
+                { label: "Load balancers", link: "/stackit/networking/load-balancers" },
+                { label: "CDN & custom domains", link: "/stackit/networking/cdn-custom-domains" },
+                { label: "VPN", link: "/stackit/networking/vpn" },
+              ],
+            },
+            {
+              label: "Operations",
+              items: [
+                { label: "Container Registry", link: "/stackit/operations/container-registry" },
+                { label: "Git", link: "/stackit/operations/git" },
+                { label: "Server operations", link: "/stackit/operations/server-operations" },
+                { label: "Automation", link: "/stackit/operations/automation" },
+              ],
+            },
             providerResourcesEntry("Stackit"),
           ],
         },

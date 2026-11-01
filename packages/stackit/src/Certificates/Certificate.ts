@@ -96,14 +96,21 @@ export type Certificate = Resource<
  * Ownership is tracked with labels. A certificate with the same name that lacks them is
  * reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's Certificates docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/application-load-balancer/basics/basic-concepts-certificate-api/).
+ *
+ * :::caution[Changing any prop replaces the Certificate]
+ * The API has no update operation. The new certificate is created first so listeners
+ * can move to its id, then the old one is deleted.
+ * :::
+ *
  * ### Storing a Certificate
  * **Example:** A PEM pair from configuration
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const publicKey = yield* Config.string("TLS_CERTIFICATE_PEM");
- * const privateKey = yield* Config.redacted("TLS_PRIVATE_KEY_PEM");
+ * const publicKey = Config.String("TLS_CERTIFICATE_PEM");
+ * const privateKey = Config.Redacted("TLS_PRIVATE_KEY_PEM");
  * const certificate = yield* Stackit.Certificates.Certificate("Tls", {
  *   publicKey,
  *   privateKey,
@@ -116,8 +123,8 @@ export type Certificate = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const publicKey = yield* Config.string("TLS_CERTIFICATE_PEM");
- * const privateKey = yield* Config.redacted("TLS_PRIVATE_KEY_PEM");
+ * const publicKey = Config.String("TLS_CERTIFICATE_PEM");
+ * const privateKey = Config.Redacted("TLS_PRIVATE_KEY_PEM");
  * const certificate = yield* Stackit.Certificates.Certificate("Tls", {
  *   name: "www-example-com",
  *   publicKey,
@@ -132,8 +139,8 @@ export type Certificate = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const publicKey = yield* Config.string("TLS_CERTIFICATE_PEM");
- * const privateKey = yield* Config.redacted("TLS_PRIVATE_KEY_PEM");
+ * const publicKey = Config.String("TLS_CERTIFICATE_PEM");
+ * const privateKey = Config.Redacted("TLS_PRIVATE_KEY_PEM");
  * const certificate = yield* Stackit.Certificates.Certificate("Tls", {
  *   publicKey,
  *   privateKey,
@@ -179,8 +186,8 @@ export type Certificate = Resource<
  * // A new PEM pair creates a new certificate with a new id, then deletes the old one.
  * // STACKIT refuses to delete a certificate a load balancer still uses, so a listener
  * // that references the old id must move to `certificateId` in the same deploy.
- * const publicKey = yield* Config.string("TLS_RENEWED_CERTIFICATE_PEM");
- * const privateKey = yield* Config.redacted("TLS_RENEWED_PRIVATE_KEY_PEM");
+ * const publicKey = Config.String("TLS_RENEWED_CERTIFICATE_PEM");
+ * const privateKey = Config.Redacted("TLS_RENEWED_PRIVATE_KEY_PEM");
  * const certificate = yield* Stackit.Certificates.Certificate("Tls", {
  *   publicKey,
  *   privateKey,

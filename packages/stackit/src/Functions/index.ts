@@ -1,4 +1,5 @@
 // Resources and bindings of the STACKIT Functions namespace are re-exported here.
+export * from "./EffectApis.ts";
 export * from "./Function.ts";
 export * from "./GetFunction.ts";
 export * from "./GetFunctionHttp.ts";

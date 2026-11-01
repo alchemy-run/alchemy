@@ -1,6 +1,6 @@
 import * as Layer from "effect/Layer";
 import {
-  DNS_WRITE_ACCESS,
+  DNS_READ_WRITE_ACCESS,
   makeReadWriteZoneClient,
   makeZoneClientHttpBinding,
 } from "./BindingHttp.ts";
@@ -16,7 +16,7 @@ export const ReadWriteZoneHttp = Layer.effect(
   ReadWriteZone,
   makeZoneClientHttpBinding({
     tag: "Stackit.DNS.ReadWriteZone",
-    access: DNS_WRITE_ACCESS,
+    access: DNS_READ_WRITE_ACCESS,
     makeClient: makeReadWriteZoneClient,
   }),
 );

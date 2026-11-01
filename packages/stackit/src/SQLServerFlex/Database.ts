@@ -141,6 +141,14 @@ export type Database = Resource<
  * The API has no labels for databases, so a database found by an explicit name without
  * state is reported as unowned, and only taken over with `--adopt`.
  *
+ * See [STACKIT's SQL Server Flex docs](https://docs.stackit.cloud/products/databases/sqlserver-flex/).
+ *
+ * :::caution[Changing `instanceId`, `name`, `collation`, `compatibility`, `projectId` or `region` replaces the Database]
+ * The API has no database update. A replacement starts empty: back up what you need
+ * first. A new `owner` replaces it only with `replaceOnOwnerChange`; without that the
+ * deploy fails with `DatabaseOwnerChanged`.
+ * :::
+ *
  * ### Creating a Database
  * **Example:** A database owned by a user
  * ```typescript

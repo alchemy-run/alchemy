@@ -109,6 +109,12 @@ export type Route = Resource<
  * reported as unowned, and only taken over with `--adopt`. `alchemy unsafe nuke` can't
  * list routes, because it has no Cloud Foundry credentials: they go with their organization.
  *
+ * See [STACKIT's Cloud Foundry docs](https://docs.stackit.cloud/products/runtime/cloud-foundry/).
+ *
+ * :::caution[Changing the address replaces the Route]
+ * Traffic to the old address stops, and it can be taken by someone else.
+ * :::
+ *
  * ### Creating a Route
  * **Example:** A second address for an app
  * ```typescript
@@ -138,7 +144,7 @@ export type Route = Resource<
  *   image: "ghcr.io/my-org/docs:v1.2.3",
  *   noRoute: true,
  * });
- * const route = yield* Stackit.CloudFoundry.Route("Docs", {
+ * const route = yield* Stackit.CloudFoundry.Route("DocsRoute", {
  *   ...deployer,
  *   domain: "apps.01.cf.eu01.stackit.cloud",
  *   host: "orders",
@@ -146,10 +152,6 @@ export type Route = Resource<
  *   appIds: [docs.appId],
  * });
  * ```
- *
- * :::caution[Changing the address replaces the Route]
- * Traffic to the old address stops, and it can be taken by someone else.
- * :::
  *
  * @resource
  * @product STACKIT Cloud Foundry

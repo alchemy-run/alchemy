@@ -91,6 +91,16 @@ export type Schedule = Resource<
  * reported as unowned, and only taken over with `--adopt`. `alchemy unsafe nuke` enumerates
  * only schedules on Alchemy's servers whose name has the generated shape.
  *
+ * See [STACKIT's Server Update Management docs](https://docs.stackit.cloud/products/compute-engine/server-update-management/).
+ *
+ * :::caution[Changing `serverId`, `projectId` or `region` replaces the Schedule]
+ * A deploy creates a schedule at the new place and deletes the old one, with the old
+ * schedule going first if the new server isn't known at plan and the schedule has an
+ * explicit `name`. A schedule changed in the portal, or by
+ * `Stackit.ServerUpdate.UpdateSchedule`, keeps its live values until a deploy changes
+ * the schedule's props.
+ * :::
+ *
  * ### Scheduling Updates
  * **Example:** Patch weekly in a two-hour window
  * ```typescript
@@ -187,13 +197,6 @@ export type Schedule = Resource<
  * A delete makes one call, to delete this one schedule by its id. Updates it already
  * installed stay installed: nothing here touches the server's software. A schedule that's
  * already gone counts as deleted.
- *
- * ### Replacement Cautions <!-- api-prose -->
- * Changing `serverId`, `projectId` or `region` creates a schedule at the new place and
- * deletes the old one, with the old schedule going first if the new server isn't known at
- * plan and the schedule has an explicit `name`. A schedule changed in the portal, or by
- * `Stackit.ServerUpdate.UpdateSchedule`, keeps its live values until a deploy changes the
- * schedule's props.
  *
  * @resource
  * @product STACKIT Server Update Management

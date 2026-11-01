@@ -1,0 +1,146 @@
+---
+title: Vite
+description: Deploy a client-only Vite app to a private STACKIT bucket behind the CDN with Stackit.Website.Vite, or to a Function when you need deep links.
+sidebar:
+  order: 2
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Stackit.Website.Vite` deploys a client-only [Vite](https://vite.dev) app: a React,
+Vue, or Solid SPA, or a multi-page `index.html` site. Alchemy runs `vite build` with
+your own `vite.config.*` and uploads the output to a private Object Storage bucket
+behind a CDN distribution. No compute runs.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a dev
+dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Stackit.Website.Vite("Website");
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the CDN's URL, and `site.bucket` holds the files.
+Files with a content hash in their name are cached for good, and HTML isn't cached.
+
+:::caution[`/` is unconfirmed]
+A bucket has no object for `/`, and STACKIT documents no default document for a bucket
+origin. Check `/` on your first deploy. If it fails, serve the site
+[from a Function](#serve-deep-links-from-a-function).
+:::
+
+## Configure Vite
+
+Your `vite.config.*` loads as-is, plugins included:
+
+```typescript
+// vite.config.ts
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+});
+```
+
+The `vite` prop overrides `outDir` and `base` per deploy. Uploads go under `base`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+-    const site = yield* Stackit.Website.Vite("Website");
++    const site = yield* Stackit.Website.Vite("Website", {
++      vite: { outDir: "build", base: "/docs/" },
++    });
+```
+
+## Project in a subdirectory
+
+```diff lang="typescript"
+// alchemy.run.ts
+-    const site = yield* Stackit.Website.Vite("Website");
++    const site = yield* Stackit.Website.Vite("Website", {
++      rootDir: "./app",
++    });
+```
+
+## Know the deep-link limit
+
+The CDN has no rewrite and no error pages. On a bucket, a deep link to a route with no
+file fails, and there is no 404 page. Use hash routing, or serve the build from a
+Function.
+
+## Serve deep links from a Function
+
+`origin: "function"` serves the same files from a STACKIT Function, and
+`assets.notFoundHandling` answers unknown paths with `index.html`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+-    const site = yield* Stackit.Website.Vite("Website");
++    const site = yield* Stackit.Website.Vite("Website", {
++      origin: "function",
++      registry: { repository: "ghcr.io/my-org/app" },
++      assets: { notFoundHandling: "single-page-application" },
++    });
+```
+
+For a multi-page site, use `"404-page"` to serve your `404.html`.
+
+A Function needs Docker when you deploy and a registry for its image. This `registry`
+pushes with your machine's `docker login`. To use a STACKIT registry, see
+[Create a registry](/stackit/frontend/websites#create-a-registry).
+
+:::caution[STACKIT Functions is an alpha API]
+Functions is available in `eu01` only. STACKIT documents no container contract for it,
+so [check these assumptions](/stackit/frontend/websites#check-your-first-deploy) on your
+first deploy.
+:::
+
+## Use a custom domain
+
+```diff lang="typescript"
+// alchemy.run.ts
+-    const site = yield* Stackit.Website.Vite("Website");
++    const site = yield* Stackit.Website.Vite("Website", {
++      domain: "www.example.com",
++    });
+```
+
+`site.url` becomes `https://www.example.com`. Create the CNAME to the distribution's
+hostname yourself, or publish it with a DNS adapter. See
+[Use a custom domain](/stackit/frontend/websites#use-a-custom-domain).
+
+## Local development
+
+`alchemy dev` runs Vite's dev server with hot reload and creates nothing in the cloud.
+Pipe the site through `Alchemy.remote()` to deploy it for real during dev.
+
+## Example
+
+[`examples/stackit-website-vite`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-website-vite)
+has a React app, Tailwind, and a test suite. It hasn't been deployed to STACKIT yet.
+
+## Where next
+
+- [Websites](/stackit/frontend/websites): the settings every site shares.
+- [Website reference](/providers/stackit/website#vite): every prop.

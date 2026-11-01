@@ -72,7 +72,7 @@ export const DOCS_TABS: DocsTab[] = [
   hub("AWS", "aws", "Clouds", "lambda · ECS · S3 · DynamoDB", ["/providers/aws"]),
   hub("GCP", "gcp", "Clouds", "cloud run · storage · pub/sub", ["/providers/gcp"]),
   hub("Hetzner", "hetzner", "Clouds", "servers · networks · volumes", ["/providers/hetzner"]),
-  hub("STACKIT", "stackit", "Clouds", "projects · networks · DNS · object storage", [
+  hub("STACKIT", "stackit", "Clouds", "functions · containers · object storage · Postgres", [
     "/providers/stackit",
   ]),
   hub("Fly", "fly", "Clouds", "apps · machines · volumes", ["/providers/fly"]),

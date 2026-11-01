@@ -136,6 +136,13 @@ export class RouterNotEmpty extends Data.TaggedError("Stackit.Telemetry.RouterNo
  * Ownership is tracked with labels. A router of the same name without them is
  * reported as unowned, and only taken over with `--adopt`.
  *
+ * See [STACKIT's Telemetry Router docs](https://docs.stackit.cloud/products/logging-and-monitoring/telemetry-router/).
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Router]
+ * Destinations and access tokens on the old router go first. Deleting a router that
+ * still has others fails with `Stackit.Telemetry.RouterNotEmpty`, which names them.
+ * :::
+ *
  * ### Creating a Router
  * **Example:** A router with a generated name
  * ```typescript

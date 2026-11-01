@@ -193,6 +193,17 @@ export type Bucket = Resource<
  * only buckets whose name has the generated shape in the profile's project
  * and region, so a hand-chosen name of that shape is listed too.
  *
+ * Alchemy sets no bucket policy unless you pass `policy`. A replacement starts empty, and
+ * a bucket with objects can't be deleted until it is emptied: see `forceDestroy`.
+ *
+ * See [STACKIT's Object Storage docs](https://docs.stackit.cloud/products/storage/object-storage/).
+ *
+ * :::caution[Changing `bucketName`, `objectLockEnabled`, `projectId` or `region` replaces the Bucket]
+ * STACKIT only deletes empty buckets, so set `forceDestroy` or empty the old bucket
+ * before the replacement (or destroy) runs. `COMPLIANCE` retention keeps locked
+ * objects, and therefore the bucket, until the retention ends.
+ * :::
+ *
  * ### Creating a Bucket
  * **Example:** Bucket with a generated name
  * ```typescript
@@ -316,12 +327,100 @@ export type Bucket = Resource<
  * });
  * ```
  *
- * ### Replacement cautions <!-- api-prose -->
- * Changing `bucketName`, `objectLockEnabled`, `projectId` or `region`
- * replaces the bucket. STACKIT only deletes empty buckets, so set
- * `forceDestroy` or empty the old bucket before the replacement (or destroy)
- * runs. `COMPLIANCE` retention keeps locked objects, and therefore the bucket,
- * until the retention ends.
+ * ### Binding to a Runtime
+ * `ReadBucket`, `WriteBucket` and `ReadWriteBucket` give a host an S3 client on this
+ * bucket. Alchemy creates a credentials group and an access key for each host and bucket,
+ * binds the key into the host's env, and adds statements to the bucket's policy limiting
+ * the group to those actions there. The bucket's policy only speaks for this bucket, so
+ * give other buckets their own `policy` to deny such groups.
+ *
+ * **Example:** Read an object from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import * as Stream from "effect/Stream";
+ *
+ * export const Assets = Stackit.ObjectStorage.Bucket("Assets", {});
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const assets = yield* Stackit.ObjectStorage.ReadBucket(yield* Assets);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const object = yield* assets.getObject({ Key: "hello.txt" });
+ *         const text = yield* Stream.mkString(Stream.decodeText(object.Body!));
+ *         return HttpServerResponse.text(text);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.ObjectStorage.ReadBucketHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Write and read objects
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import * as Stream from "effect/Stream";
+ *
+ * export const Files = Stackit.ObjectStorage.Bucket("Files", {});
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const files = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Files);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* files.putObject({
+ *           Key: "hello.txt",
+ *           Body: "Hello, World!",
+ *           ContentType: "text/plain",
+ *         });
+ *         const object = yield* files.getObject({ Key: "hello.txt" });
+ *         const text = yield* Stream.mkString(Stream.decodeText(object.Body!));
+ *         return HttpServerResponse.text(text);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Hand out a presigned upload URL
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Uploads = Stackit.ObjectStorage.Bucket("Uploads", {});
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const presign = yield* Stackit.ObjectStorage.PresignPutObject(yield* Uploads);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const url = yield* presign({ key: "avatar.png", contentType: "image/png" });
+ *         return yield* HttpServerResponse.json({ url });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.ObjectStorage.PresignPutObjectHttp)),
+ * ) {}
+ * ```
  *
  * @resource
  * @product STACKIT Object Storage
@@ -672,7 +771,11 @@ export const BucketProvider = () =>
       // No labels: a bucket is ours when it is in state, carries the
       // generated (instance-id) name, or is the generation being replaced.
       const owned =
-        output !== undefined || explicitName === undefined || previous?.bucketName === bucket.name;
+        output !== undefined ||
+        explicitName === undefined ||
+        (previous?.bucketName === bucket.name &&
+          previous.projectId === projectId &&
+          previous.region === region);
       return owned ? attrs : Unowned(attrs);
     }),
 

@@ -158,6 +158,14 @@ export type Instance = Resource<
  * instance with an explicit name that lacks them, or that an earlier generation of this resource
  * left waiting for its delete, is reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's Git docs](https://docs.stackit.cloud/products/developer-platform/git/).
+ *
+ * :::caution[Changing `name`, `flavor` or `projectId` replaces the Instance]
+ * Everything on the instance goes with the old one. A plan that would replace it fails
+ * with `Stackit.Git.InstanceDeleteRefused` before anything changes, until
+ * `forceDestroy` is deployed.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** An instance with a generated name
  * ```typescript

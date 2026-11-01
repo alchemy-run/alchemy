@@ -89,6 +89,13 @@ export const ROUTING_TABLES_PREVIEW_LABEL = "preview/routingtables";
  * permissions (`iaas.network-area` admin on the organization). STACKIT
  * refuses to delete an area while projects still use it.
  *
+ * See [STACKIT's Network Area docs](https://docs.stackit.cloud/products/network/core-networking/network-area/).
+ *
+ * :::caution[Changing `organizationId` or `routingTables` replaces the Network Area]
+ * A deploy creates a new network area and deletes the old one, which fails while
+ * projects still use the old area.
+ * :::
+ *
  * ### Creating a network area
  * **Example:** Network area in the profile's organization
  * ```typescript
@@ -121,11 +128,6 @@ export const ROUTING_TABLES_PREVIEW_LABEL = "preview/routingtables";
  *   transferNetwork: "10.255.255.0/24",
  * });
  * ```
- *
- * ### Replacement
- * Changing `organizationId` or `routingTables` creates a new network area
- * and deletes the old one, which fails while projects still use the old
- * area.
  *
  * @resource
  * @product STACKIT Network Area

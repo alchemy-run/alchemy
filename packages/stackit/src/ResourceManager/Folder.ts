@@ -92,6 +92,8 @@ export type Folder = Resource<
  * Ownership is marked with `alchemy.stack` / `alchemy.stage` / `alchemy.id`
  * labels; `alchemy unsafe nuke` only deletes folders carrying them.
  *
+ * See [STACKIT's Resource Manager docs](https://docs.stackit.cloud/platform/resource-manager/).
+ *
  * ### Creating a folder
  * **Example:** Folder in the profile's organization
  * ```typescript

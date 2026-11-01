@@ -129,6 +129,13 @@ export type ServiceAccountKey = Resource<
  * `keyId` in its state, and `alchemy unsafe nuke` removes keys by deleting
  * their service account.
  *
+ * See [STACKIT's service account docs](https://docs.stackit.cloud/platform/access-and-identity/service-accounts/).
+ *
+ * :::caution[Changing `serviceAccountEmail`, `projectId`, `algorithm` or `publicKey` replaces the Key]
+ * A deploy creates a new key (new `keyId` and private key) and deletes the old one;
+ * anything holding the old key file stops authenticating.
+ * :::
+ *
  * ### Creating a Key
  * **Example:** STACKIT-generated key pair
  * ```typescript
@@ -186,11 +193,6 @@ export type ServiceAccountKey = Resource<
  * });
  * // key.keyJson is Redacted: hand it to a secret store, never log it.
  * ```
- *
- * ### Replacement
- * Changing `serviceAccountEmail`, `projectId`, `algorithm` or `publicKey`
- * creates a new key (new `keyId` and private key) and deletes the old one;
- * anything holding the old key file stops authenticating.
  *
  * @resource
  * @product STACKIT Service Account

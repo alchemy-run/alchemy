@@ -129,6 +129,14 @@ export type Key = Resource<"Stackit.KMS.Key", KeyProps, KeyAttributes, never, Pr
  * one for a new deployment. Alchemy destroys no key material itself; that only
  * happens through the `Stackit.KMS.DestroyVersion` binding.
  *
+ * See [STACKIT's KMS docs](https://docs.stackit.cloud/products/security/kms/).
+ *
+ * :::caution[Changing any prop replaces the Key]
+ * STACKIT has no update operation for keys. The replacement is new key material, and
+ * the old key is scheduled for deletion, so what it encrypted can't be decrypted with
+ * the new one. Re-encrypt your data before the old key's deletion date.
+ * :::
+ *
  * ### Creating a Key
  * **Example:** Symmetric data encryption key
  * ```typescript
@@ -256,6 +264,103 @@ export type Key = Resource<"Stackit.KMS.Key", KeyProps, KeyAttributes, never, Pr
  *   purpose: "symmetric_encrypt_decrypt",
  *   description: "Changing this text replaces the key",
  * });
+ * ```
+ *
+ * ### Protection and Network Scope
+ * Both props replace the key when they change.
+ *
+ * **Example:** A key in an HSM, reachable only from the network area
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const ring = yield* Stackit.KMS.KeyRing("Ring", {});
+ * const key = yield* Stackit.KMS.Key("DataKey", {
+ *   keyRingId: ring.keyRingId,
+ *   algorithm: "aes_256_gcm",
+ *   purpose: "symmetric_encrypt_decrypt",
+ *   protection: "hsm",
+ *   accessScope: "SNA",
+ * });
+ * ```
+ *
+ * ### Signing from a Runtime
+ * All key bindings grant the same permission: `kms.keyring.get` through a custom role on
+ * the project holding the key, which allows every operation on every key in that project.
+ *
+ * **Example:** Sign bytes from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Ring = Stackit.KMS.KeyRing("Ring", {});
+ * export const SigningKey = Ring.pipe(
+ *   Effect.flatMap((ring) =>
+ *     Stackit.KMS.Key("SigningKey", {
+ *       keyRingId: ring.keyRingId,
+ *       algorithm: "ecdsa_p256_sha256",
+ *       purpose: "asymmetric_sign_verify",
+ *     }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const sign = yield* Stackit.KMS.Sign(yield* SigningKey);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { signature, version } = yield* sign({
+ *           data: new TextEncoder().encode("release-1.2.3"),
+ *         });
+ *         return yield* HttpServerResponse.json({ signature: Array.from(signature), version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.KMS.SignHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Rotating a Key
+ * STACKIT has no rotation policy to declare. `RotateKey` creates a new version, for
+ * rotation on your own schedule, and new `"latest"` calls use it.
+ *
+ * **Example:** Rotate a key from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Ring = Stackit.KMS.KeyRing("Ring", {});
+ * export const DataKey = Ring.pipe(
+ *   Effect.flatMap((ring) =>
+ *     Stackit.KMS.Key("DataKey", {
+ *       keyRingId: ring.keyRingId,
+ *       algorithm: "aes_256_gcm",
+ *       purpose: "symmetric_encrypt_decrypt",
+ *     }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const rotate = yield* Stackit.KMS.RotateKey(yield* DataKey);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const version = yield* rotate();
+ *         return yield* HttpServerResponse.json({ version: version.number });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.KMS.RotateKeyHttp)),
+ * ) {}
  * ```
  *
  * @resource

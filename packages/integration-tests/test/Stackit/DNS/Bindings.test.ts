@@ -386,22 +386,36 @@ describe.sequential(
     });
 
     test.provider(
-      "the created account holds only the DNS roles",
+      "the created account holds only the DNS permissions",
       (_stack) =>
         Effect.gen(function* () {
           const { projectId } = yield* stack;
-          const { members } = yield* authorization.listMembers({
-            resourceType: "project",
-            resourceId: projectId!,
-          });
-          const reader = members.find((member) => member.role === "dns.reader")?.subject;
-          expect(reader).toMatch(/@sa\.stackit\.cloud$/);
-          expect(
-            members
-              .filter((member) => member.subject === reader)
-              .map((member) => member.role)
-              .sort(),
-          ).toEqual(["dns.admin", "dns.reader"]);
+          const scope = { resourceType: "project", resourceId: projectId! };
+          const { roles } = yield* authorization.listRoles(scope);
+          const permissionsOf = (role: authorization.Role) =>
+            role.permissions
+              .map((permission) => permission.name)
+              .sort()
+              .join();
+          const read = roles.find(
+            (role) => role.id !== undefined && permissionsOf(role) === "dns.zone.list",
+          );
+          expect(read?.name).toBeTruthy();
+
+          const { members } = yield* authorization.listMembers(scope);
+          const self = members.find((member) => member.role === read!.name)?.subject;
+          expect(self).toMatch(/@sa\.stackit\.cloud$/);
+
+          const held = members
+            .filter((member) => member.subject === self)
+            .map((member) => roles.find((role) => role.name === member.role))
+            .map((role) => (role === undefined ? "unknown" : permissionsOf(role)))
+            .sort();
+          expect(held).toEqual([
+            "dns.zone.create",
+            "dns.zone.create,dns.zone.list",
+            "dns.zone.list",
+          ]);
         }),
       { timeout: 120_000 },
     );

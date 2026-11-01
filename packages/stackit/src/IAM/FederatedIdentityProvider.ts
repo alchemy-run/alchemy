@@ -94,6 +94,13 @@ export type FederatedIdentityProvider = Resource<
  * explicit `name` is reported as unowned and adopted only with `--adopt`.
  * `alchemy unsafe nuke` removes providers by deleting their service account.
  *
+ * See [STACKIT's service account docs](https://docs.stackit.cloud/platform/access-and-identity/service-accounts/).
+ *
+ * :::caution[Changing `serviceAccountEmail` or `projectId` replaces the Provider]
+ * A deploy creates the provider on the other service account and deletes the old one.
+ * `name`, `issuer` and `assertions` update in place.
+ * :::
+ *
  * ### Federating GitHub Actions
  * **Example:** Trust one repository's main branch
  * ```typescript
@@ -126,11 +133,6 @@ export type FederatedIdentityProvider = Resource<
  *   ],
  * });
  * ```
- *
- * ### Replacement
- * Changing `serviceAccountEmail` or `projectId` creates the provider on the
- * other service account and deletes the old one. `name`, `issuer` and
- * `assertions` update in place.
  *
  * @resource
  * @product STACKIT Service Account

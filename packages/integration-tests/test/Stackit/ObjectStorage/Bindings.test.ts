@@ -38,6 +38,24 @@ const Stack = Alchemy.Stack(
   }),
 );
 
+/**
+ * The stack again with a changed prop on the bucket, so the second deploy runs its
+ * reconcile, which rewrites the policy from the bindings. The Worker yields the bucket
+ * by the same id and gets this declaration.
+ */
+const UpdatedStack = Alchemy.Stack(
+  "StackitObjectStorageBindingsStack",
+  { providers, state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const data = yield* Stackit.ObjectStorage.Bucket("ObjectStorageBindingsData", {
+      forceDestroy: true,
+      cors: [{ AllowedMethods: ["GET"], AllowedOrigins: ["https://example.com"] }],
+    });
+    const worker = yield* ObjectStorageBindingsWorker;
+    return { url: worker.url.as<string>(), bucketName: data.bucketName };
+  }),
+);
+
 type Body = { ok: boolean; result?: any; error?: string };
 
 const expectOk = (body: Body) => expect({ ok: body.ok, error: body.error }).toEqual({ ok: true });
@@ -287,6 +305,45 @@ describe(
             expect(yield* observe("presign/put.txt")).toBe("uploaded");
           }),
         { timeout: 240_000 },
+      );
+    });
+
+    describe("a deploy that updates the bucket", () => {
+      test.provider(
+        "keeps the grants the bindings wrote into its policy",
+        (_stack) =>
+          Effect.gen(function* () {
+            yield* seed("redeploy/hello.txt", "hello");
+            expectOk(yield* call("/read/get", { key: "redeploy/hello.txt" }));
+
+            yield* deploy(UpdatedStack);
+
+            const { bucketName, ...location } = yield* target;
+            const policy = yield* withOutOfBandS3(
+              location,
+              s3.getBucketPolicy({ Bucket: bucketName }).pipe(
+                Effect.retry({
+                  while: (error) => error._tag === "InvalidAccessKeyId",
+                  ...s3Propagation,
+                }),
+              ),
+            );
+            const { Statement: statements } = JSON.parse(policy.Policy!) as {
+              Statement: readonly Statement[];
+            };
+            expect(
+              statements.some(
+                (statement) =>
+                  statement.Effect === "Deny" &&
+                  JSON.stringify(statement.NotAction) === JSON.stringify(READ_ACTIONS),
+              ),
+            ).toBe(true);
+
+            const again = yield* call("/read/get", { key: "redeploy/hello.txt" });
+            expectOk(again);
+            expect(again.result).toBe("hello");
+          }),
+        { timeout: 480_000 },
       );
     });
   },

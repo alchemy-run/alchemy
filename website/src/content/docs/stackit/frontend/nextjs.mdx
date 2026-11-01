@@ -1,0 +1,200 @@
+---
+title: Next.js
+description: Deploy a Next.js app to a STACKIT Function behind the CDN with Stackit.Website.Nextjs, using Next's own production server with no OpenNext.
+sidebar:
+  order: 12
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Stackit.Website.Nextjs` deploys a [Next.js](https://nextjs.org) app to a
+STACKIT Function behind a CDN distribution. Alchemy runs `next build` and
+serves the app with Next's own production server, not OpenNext.
+
+:::caution[STACKIT Functions is an alpha API]
+Functions is available in `eu01` only, so your profile's region has to be
+`eu01`. STACKIT documents no container contract for it, so
+[check these assumptions](/stackit/frontend/websites#check-your-first-deploy)
+on your first deploy.
+:::
+
+## Install
+
+The build integration ships separately. It only runs at deploy time,
+so a dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+Docker has to be running when you deploy. The image is built on your
+machine.
+
+## Create a registry
+
+A Function runs an OCI image, so the site needs somewhere to push it.
+Create a Container Registry project with one robot account that pushes
+and one that pulls:
+
+```typescript
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+const harbor = {
+  username: Config.String("HARBOR_USERNAME"),
+  secret: Config.Redacted("HARBOR_CLI_SECRET"),
+};
+
+export const Registry = Effect.gen(function* () {
+  const images = yield* Stackit.ContainerRegistry.Project("Images", {
+    // Harbor refuses to delete a project that still holds images.
+    forceDestroy: true,
+    harborCredentials: harbor,
+  });
+  const pusher = yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [
+      { resource: "repository", action: "pull" },
+      { resource: "repository", action: "push" },
+    ],
+  });
+  const puller = yield* Stackit.ContainerRegistry.RobotAccount("Puller", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [{ resource: "repository", action: "pull" }],
+  });
+  const pullCredential = yield* Stackit.Functions.PullCredential("PullCredential", {
+    address: images.registryHost,
+    username: puller.robotName,
+    password: puller.secret,
+  });
+  return {
+    registry: {
+      repository: Output.interpolate`${images.imagePrefix}/web`,
+      username: pusher.robotName,
+      password: pusher.secret,
+    },
+    pullCredential: pullCredential.pullCredentialId,
+  };
+});
+```
+
+`HARBOR_USERNAME` and `HARBOR_CLI_SECRET` are your Harbor user and CLI
+secret, from your user profile in the registry's web UI. STACKIT
+credentials don't provide them. To push somewhere else, see
+[Use another registry](/stackit/frontend/websites#use-another-registry).
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Registry } from "./src/registry.ts";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    // `alchemy dev` runs the framework's own dev server, which needs no image.
+    const { dev } = yield* Alchemy.AlchemyContext;
+    const hosting = dev ? {} : yield* Registry;
+
+    const site = yield* Stackit.Website.Nextjs("Website", {
+      ...hosting,
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the CDN's URL, and `site.serverUrl`
+is the Function's.
+
+## Pass environment variables
+
+```diff lang="typescript"
+// alchemy.run.ts
+    const site = yield* Stackit.Website.Nextjs("Website", {
+      ...hosting,
++      env: {
++        GREETING: "Hello from Next.js on STACKIT!",
++      },
+    });
+```
+
+Dynamic pages and route handlers read it from `process.env`:
+
+```jsx
+// app/page.jsx
+export const dynamic = "force-dynamic";
+
+export default function Home() {
+  return <h1>{process.env.GREETING ?? "Hello!"}</h1>;
+}
+```
+
+## Configure Next.js
+
+Your `next.config.*` is used as-is. `.next`, `public`, and the config
+ship in the image, and `next`, `react`, and `react-dom` are installed
+there. Next.js serves its own assets with its own cache headers.
+
+## Caching
+
+Next.js keeps its cache on the instance that rendered the page, and
+STACKIT doesn't document whether instances keep running between requests.
+Don't rely on a revalidated page staying cached.
+
+## Tune the Function
+
+```diff lang="typescript"
+// alchemy.run.ts
+    const site = yield* Stackit.Website.Nextjs("Website", {
+      ...hosting,
++      function: { concurrency: 50, maxScale: 10 },
+    });
+```
+
+`concurrency` caps the requests each instance handles at once, and
+`maxScale` caps the instances. See
+[Websites](/stackit/frontend/websites#tune-the-function) for the other
+settings.
+
+## Use a custom domain
+
+```diff lang="typescript"
+// alchemy.run.ts
+    const site = yield* Stackit.Website.Nextjs("Website", {
+      ...hosting,
++      domain: "www.example.com",
+    });
+```
+
+`site.url` becomes `https://www.example.com`. Create the CNAME to the
+distribution's hostname yourself, or publish it with a DNS adapter. See
+[Use a custom domain](/stackit/frontend/websites#use-a-custom-domain).
+
+## Local development
+
+`alchemy dev` runs the framework's dev server with hot reload and
+creates nothing in the cloud. To deploy the site for real during dev,
+remove the `dev` check, because the site needs its registry, and pipe the
+site through `Alchemy.remote()`.
+
+## Example
+
+[`examples/stackit-website-nextjs`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-website-nextjs)
+has a dynamic page, a route handler, Tailwind, and a test suite. It hasn't been deployed to STACKIT yet.
+
+## Where next
+
+- [Websites](/stackit/frontend/websites): the settings every site shares.
+- [Website reference](/providers/stackit/website#nextjs): every prop.

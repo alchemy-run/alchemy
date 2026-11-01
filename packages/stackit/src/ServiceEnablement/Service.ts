@@ -81,6 +81,11 @@ export type Service = Resource<
  * STACKIT enabled alongside the service are never disabled. For the same
  * reason the resource is skipped by `alchemy unsafe nuke`.
  *
+ * :::caution[Changing `serviceId`, `projectId` or `region` replaces the Service]
+ * The service is enabled at the new place. The old place loses it only if this
+ * resource enabled it and `disableOnDelete` is not `false`.
+ * :::
+ *
  * ### Enabling a service
  * **Example:** Enable Kubernetes Engine (SKE) in the profile's project
  * ```typescript

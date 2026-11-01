@@ -61,6 +61,12 @@ export type ServerSecurityGroupAttachment = Resource<
  * state, and a deploy without state takes over an existing attachment of
  * the same pair.
  *
+ * See [STACKIT's Server docs](https://docs.stackit.cloud/products/compute-engine/server/).
+ *
+ * :::caution[Changing `serverId`, `securityGroupId`, `projectId` or `region` replaces the Attachment]
+ * A deploy removes the group from the old server and applies the new pair.
+ * :::
+ *
  * ### Opening a server to web traffic
  * **Example:** Apply an HTTPS security group to a server
  * ```typescript
@@ -86,10 +92,6 @@ export type ServerSecurityGroupAttachment = Resource<
  *   securityGroupId: https.securityGroupId,
  * });
  * ```
- *
- * ### Replacement
- * Changing `serverId`, `securityGroupId`, `projectId` or `region` removes
- * the group from the old server and applies the new pair.
  *
  * @resource
  * @product STACKIT Compute Engine

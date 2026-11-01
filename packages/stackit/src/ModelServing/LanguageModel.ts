@@ -156,6 +156,7 @@ export const withModelParameters =
  * **Example:** Call Tools with a Toolkit
  * ```typescript
  * import { LanguageModel, Tool, Toolkit } from "effect/ai";
+ * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
  *
  * const GetWeather = Tool.make("get_weather", {

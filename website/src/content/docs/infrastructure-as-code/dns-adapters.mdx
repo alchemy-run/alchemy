@@ -58,6 +58,7 @@ Hetzner can't, so an apex hostname on those hosts needs an AWS alias target
 | `Neon.Website.*` | You publish the records | A `CNAME` to the custom domain's target |
 | `Prisma.Website.*` | You publish the records | A `CNAME` to the app's regional switchboard, published before the domain is registered |
 | `Hetzner.Website.*` | An `A` record in `zone` | An `A` record at the server |
+| `Stackit.Website.*` | You publish the records | A `CNAME` to the CDN distribution |
 
 A plain string `domain` keeps each platform's default. Setting `dns` never
 changes how the platform serves the hostname, only where its records live.
@@ -160,7 +161,7 @@ or apex hostnames, and the Worker's `url` stays its `workers.dev` URL.
 With `dns` omitted, or set to `Cloudflare.DNS.Adapter()`, the Worker attaches
 native custom domains exactly as before.
 
-### Fly, Railway, Neon, Prisma, and Hetzner websites
+### Fly, Railway, Neon, Prisma, Hetzner, and STACKIT websites
 
 These platforms host no DNS, so without `dns` you publish the records their
 custom-domain resources list. Use the object form of `domain` to publish

@@ -112,6 +112,14 @@ export type WrappingKey = Resource<
  * the id in its state or a generated name. A wrapping key with the same explicit
  * `displayName` is reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's KMS docs](https://docs.stackit.cloud/products/security/kms/).
+ *
+ * :::caution[Changing any prop replaces the Wrapping Key]
+ * STACKIT has no update operation for wrapping keys. The first deploy after
+ * `expiresAt` replaces it too, which changes `wrappingKeyId` and `publicKey` and
+ * updates whatever references them.
+ * :::
+ *
  * ### Creating a Wrapping Key
  * **Example:** Wrapping key for symmetric material
  * ```typescript

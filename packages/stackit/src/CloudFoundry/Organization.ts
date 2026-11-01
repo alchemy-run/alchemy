@@ -123,6 +123,13 @@ export class OrganizationNotEmpty extends Data.TaggedError(
  * unowned, and only taken over with `--adopt`. `alchemy unsafe nuke` only enumerates
  * generated names.
  *
+ * See [STACKIT's Cloud Foundry docs](https://docs.stackit.cloud/products/runtime/cloud-foundry/).
+ *
+ * :::caution[Changing `platformId`, `projectId` or `region` replaces the Organization]
+ * The new organization starts empty. Its spaces, apps and services are recreated by
+ * whatever declares them, and their data is gone.
+ * :::
+ *
  * ### Creating an Organization
  * **Example:** An organization with a generated name
  * ```typescript
@@ -200,11 +207,6 @@ export class OrganizationNotEmpty extends Data.TaggedError(
  * first, which an explicit `name` can mean, fails at plan while it has spaces, and nothing
  * changes. Any other replacement that a foreign space stops stays stopped until that space is
  * deleted by hand.
- *
- * :::caution[Changing `platformId`, `projectId` or `region` replaces the Organization]
- * The new organization starts empty. Its spaces, apps and services are recreated by
- * whatever declares them, and their data is gone.
- * :::
  *
  * @resource
  * @product STACKIT Cloud Foundry

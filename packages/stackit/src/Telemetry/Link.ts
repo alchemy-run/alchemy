@@ -135,6 +135,13 @@ export class LinkAccessTokenMissing extends Data.TaggedError(
  * configuration it had before is not restored. A link someone else made after this one was
  * deleted out of band is never updated without `--adopt`, and never deleted.
  *
+ * See [STACKIT's Telemetry Router docs](https://docs.stackit.cloud/products/logging-and-monitoring/telemetry-router/).
+ *
+ * :::caution[Changing `scope` or `region` replaces the Link]
+ * A scope has one link per region, so these are its identity. The old link is deleted
+ * and audit logs stop going through it.
+ * :::
+ *
  * ### Sending Audit Logs
  * **Example:** Route a project's audit logs
  * ```typescript

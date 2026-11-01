@@ -82,6 +82,13 @@ export type ImageShare = Resource<
  * follows the image, so a share on an image Alchemy doesn't own is reported as
  * unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's operating system image docs](https://docs.stackit.cloud/products/compute-engine/server/basics/operating-system-images/).
+ *
+ * :::caution[Changing `imageId`, `projectId` or `region` replaces the Share]
+ * A deploy shares the new image and removes the old share. A new image has a new id,
+ * so consumers using the old id keep only what they already built from it.
+ * :::
+ *
  * ### Sharing with projects
  * **Example:** Share an image with two projects
  * ```typescript
@@ -114,11 +121,6 @@ export type ImageShare = Resource<
  *   parentOrganization: true,
  * });
  * ```
- *
- * ### Replacement <!-- api-prose -->
- * Changing `imageId`, `projectId` or `region` shares the new image and removes
- * the old share. A new image has a new id, so consumers using the old id keep
- * only what they already built from it.
  *
  * @resource
  * @product STACKIT Compute Engine

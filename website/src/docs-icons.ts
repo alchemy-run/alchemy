@@ -116,6 +116,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Security: l("shield-check"),
   "Consistency patterns": l("git-merge"),
   Hosting: l("server"),
+  Operations: l("wrench"),
   Testing: l("flask-conical"),
   Domain: l("blocks"),
   // Reference tab: provider groups get their official brand marks.

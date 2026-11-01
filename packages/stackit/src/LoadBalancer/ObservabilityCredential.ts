@@ -76,13 +76,20 @@ export type ObservabilityCredential = Resource<
  * the shape of a generated physical name, so choose a name outside that shape
  * for a credential that must survive a nuke.
  *
+ * See [STACKIT's Network Load Balancer docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/network-load-balancer/).
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Credential]
+ * The new credential has a new `credentialsRef`, so a load balancer that takes it as
+ * an output updates too. The old one is deleted.
+ * :::
+ *
  * ### Creating a Credential
  * **Example:** A credential from a redacted config value
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const password = yield* Config.redacted("METRICS_PASSWORD");
+ * const password = Config.Redacted("METRICS_PASSWORD");
  * const credential = yield* Stackit.LoadBalancer.ObservabilityCredential("Metrics", {
  *   username: "metrics-writer",
  *   password,
@@ -94,7 +101,7 @@ export type ObservabilityCredential = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const password = yield* Config.redacted("LOGS_PASSWORD");
+ * const password = Config.Redacted("LOGS_PASSWORD");
  * const credential = yield* Stackit.LoadBalancer.ObservabilityCredential("Logs", {
  *   displayName: "loki-writer",
  *   username: "loki-writer",
@@ -108,7 +115,7 @@ export type ObservabilityCredential = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const password = yield* Config.redacted("METRICS_PASSWORD");
+ * const password = Config.Redacted("METRICS_PASSWORD");
  * const credential = yield* Stackit.LoadBalancer.ObservabilityCredential("Metrics", {
  *   username: "metrics-writer",
  *   password,
@@ -142,7 +149,7 @@ export type ObservabilityCredential = Resource<
  *
  * // A new credential is created in the other project, and the old one is
  * // deleted. Load balancers in the old project must stop using it first.
- * const password = yield* Config.redacted("METRICS_PASSWORD");
+ * const password = Config.Redacted("METRICS_PASSWORD");
  * const credential = yield* Stackit.LoadBalancer.ObservabilityCredential("Metrics", {
  *   projectId: "22222222-2222-4222-8222-222222222222",
  *   username: "metrics-writer",

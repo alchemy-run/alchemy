@@ -73,6 +73,14 @@ export type CredentialsGroup = Resource<
  * lists only groups whose name has the generated shape in the profile's
  * project and region, so a hand-chosen name of that shape is listed too.
  *
+ * See [STACKIT's Object Storage docs](https://docs.stackit.cloud/products/storage/object-storage/).
+ *
+ * :::caution[Changing `displayName`, `projectId` or `region` replaces the Group]
+ * Every access key created in the group goes with it, and their ids change.
+ * STACKIT only deletes a group with no valid access keys left; Alchemy deletes the
+ * group's `AccessKey` resources first.
+ * :::
+ *
  * ### Creating a Credentials Group
  * **Example:** Group with a generated name
  * ```typescript
@@ -100,12 +108,6 @@ export type CredentialsGroup = Resource<
  *   credentialsGroupId: writers.credentialsGroupId,
  * });
  * ```
- *
- * ### Replacement cautions <!-- api-prose -->
- * Changing `displayName`, `projectId` or `region` replaces the group, and
- * with it every access key created in it (their ids change). STACKIT only
- * deletes a group with no valid access keys left; Alchemy deletes the
- * group's `AccessKey` resources first.
  *
  * @resource
  * @product STACKIT Object Storage

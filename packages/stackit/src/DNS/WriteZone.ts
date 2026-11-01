@@ -45,12 +45,9 @@ export interface WriteZoneClient {
  * Bind it in the init phase and provide {@link WriteZoneHttp}. A foreign host
  * signs with a service account key Alchemy creates for it.
  *
- * Access: the `dns.admin` role on the project holding the zone, so the host can
- * change every zone in that project, not only this one. A custom role would be
- * narrower, but STACKIT doesn't document DNS permission names. The role name
- * follows STACKIT's `<product>.admin` pattern, but no STACKIT source lists it;
- * check it with `listRoles` before relying on it, because a wrong name fails the
- * deploy.
+ * Access: the `dns.zone.create` permission on the project holding the zone, so the
+ * host can change every zone in that project, not only this one. STACKIT authorizes
+ * every DNS write with that one permission.
  *
  * ### Writing to a Zone
  * **Example:** Publish a DNS-01 challenge from a Cloudflare Worker

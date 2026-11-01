@@ -96,6 +96,16 @@ export type Space = Resource<
  * generated, so one found by an explicit name without state is reported as unowned,
  * and only taken over with `--adopt`.
  *
+ * See [STACKIT's Cloud Foundry docs](https://docs.stackit.cloud/products/runtime/cloud-foundry/).
+ *
+ * :::caution[Changing `organizationId`, `projectId` or `region` replaces the Space]
+ * The new space starts empty. What declares its apps and services recreates them. Without
+ * `forceDestroy` deployed first, a plan that replaces a space with no `credentials`, or that
+ * deletes the old space before the new one while it holds anything, fails and changes nothing.
+ * Anything else left in the old space stops its delete, and only deleting that by hand finishes
+ * the replacement: an old space keeps the props it was deployed with.
+ * :::
+ *
  * ### What Deleting Does <!-- api-prose -->
  * STACKIT doesn't document what `DeleteSpace` does to apps in the space, so Alchemy never finds
  * out with your data. With `credentials`, a delete lists the space's apps and service instances
@@ -214,14 +224,6 @@ export type Space = Resource<
  *   }).pipe(Effect.provide(Stackit.CloudFoundry.GetSpaceHttp)),
  * ) {}
  * ```
- *
- * :::caution[Changing `organizationId`, `projectId` or `region` replaces the Space]
- * The new space starts empty. What declares its apps and services recreates them. Without
- * `forceDestroy` deployed first, a plan that replaces a space with no `credentials`, or that
- * deletes the old space before the new one while it holds anything, fails and changes nothing.
- * Anything else left in the old space stops its delete, and only deleting that by hand finishes
- * the replacement: an old space keeps the props it was deployed with.
- * :::
  *
  * @resource
  * @product STACKIT Cloud Foundry

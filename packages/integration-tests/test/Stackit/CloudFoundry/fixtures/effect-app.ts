@@ -17,7 +17,7 @@ export default class EffectApp extends Stackit.CloudFoundry.App<EffectApp>()(
     const stage = yield* Stage;
     const registry = yield* registryFor("effect");
     return {
-      spaceId: stage.space.spaceId,
+      spaceId: stage.role.spaceId,
       credentials: stage.credentials,
       main: import.meta.url,
       registry,

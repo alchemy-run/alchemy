@@ -159,6 +159,18 @@ export class TopicNotEmpty extends Data.TaggedError("Stackit.PubSub.TopicNotEmpt
  *
  * Pub/Sub is in beta on STACKIT.
  *
+ * :::caution[Changing `projectId` or `region` replaces the Topic]
+ * A deploy creates a new, empty topic and deletes the old one with its messages.
+ *
+ * Deleting a topic that still has subscriptions the stack doesn't know about fails
+ * with `Stackit.PubSub.TopicNotEmpty`, which names them, rather than deleting them.
+ * Set `forceDestroy` to delete them, or delete them first. Only `alchemy unsafe nuke`
+ * goes past that without the prop. An explicit `displayName` with a `projectId` or
+ * `region` that isn't known at plan time has to delete the old topic first, before
+ * anything has moved its subscriptions away, so that deploy fails the same way until
+ * you take them out of the stack.
+ * :::
+ *
  * ### Creating a Topic
  * **Example:** A topic with a generated name
  * ```typescript
@@ -260,14 +272,43 @@ export class TopicNotEmpty extends Data.TaggedError("Stackit.PubSub.TopicNotEmpt
  * });
  * ```
  *
- * ### Replacement Cautions <!-- api-prose -->
- * Changing `projectId` or `region` creates a new, empty topic and deletes the old one with
- * its messages. Deleting a topic that still has subscriptions the stack doesn't know about
- * fails with `Stackit.PubSub.TopicNotEmpty`, which names them, rather than deleting them.
- * Set `forceDestroy` to delete them, or delete them first. Only `alchemy unsafe nuke` goes
- * past that without the prop. An explicit `displayName` with a `projectId` or `region` that
- * isn't known at plan time has to delete the old topic first, before anything has moved its
- * subscriptions away, so that deploy fails the same way until you take them out of the stack.
+ * ### Event Sources
+ * Pub/Sub has no push delivery, so a host keeps pulling for its whole life. Use a host
+ * that keeps running, such as a `Stackit.ContainerApplications.Application`, a
+ * `Stackit.IaaS.Service` or a `Kubernetes.Deployment`. Delivery is at least once, so a
+ * handler has to tolerate running twice.
+ *
+ * **Example:** Consume a subscription from an Application
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ *
+ * export const Apps = Stackit.ContainerApplications.Environment("Apps", {});
+ * export const Orders = Stackit.PubSub.Topic("Orders", {});
+ * export const Billing = Orders.pipe(
+ *   Effect.flatMap((topic) => Stackit.PubSub.Subscription("Billing", { topicId: topic.topicId })),
+ * );
+ *
+ * export default class BillingWorker extends Stackit.ContainerApplications.Application<BillingWorker>()(
+ *   "BillingWorker",
+ *   Effect.gen(function* () {
+ *     const apps = yield* Apps;
+ *     return {
+ *       main: import.meta.url,
+ *       environmentId: apps.environmentId,
+ *       registry: { repository: "ghcr.io/my-org/billingworker" },
+ *     };
+ *   }),
+ *   Effect.gen(function* () {
+ *     yield* Stackit.PubSub.consumeSubscriptionMessages(
+ *       Billing,
+ *       { maxMessages: 32, concurrency: 8 },
+ *       (message) => Effect.log(message.text),
+ *     );
+ *     return {};
+ *   }).pipe(Effect.provide(Stackit.PubSub.ServerSubscriptionEventSource)),
+ * ) {}
+ * ```
  *
  * @resource
  * @product STACKIT Pub/Sub

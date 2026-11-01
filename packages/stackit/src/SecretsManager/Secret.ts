@@ -93,6 +93,13 @@ export type Secret = Resource<
  * Deleting the resource permanently removes every version, and STACKIT can't
  * restore a secret. Secrets go with their instance, so there is no `list`.
  *
+ * See [STACKIT's Secrets Manager docs](https://docs.stackit.cloud/products/security/secrets-manager/).
+ *
+ * :::caution[Changing `instanceId`, `path` or `projectId` replaces the Secret]
+ * The secret is written at the new place, and the old one is removed with every
+ * version. STACKIT can't restore a deleted secret.
+ * :::
+ *
  * ### Creating a Secret
  * **Example:** A secret with a generated path
  * ```typescript
@@ -102,7 +109,7 @@ export type Secret = Resource<
  * const vault = yield* Stackit.SecretsManager.Instance("Vault", {
  *   acls: ["203.0.113.7/32"],
  * });
- * const apiKey = yield* Config.redacted("PAYMENTS_API_KEY");
+ * const apiKey = Config.Redacted("PAYMENTS_API_KEY");
  * const secret = yield* Stackit.SecretsManager.Secret("PaymentsApi", {
  *   instanceId: vault.instanceId,
  *   data: { apiKey },
@@ -174,6 +181,63 @@ export type Secret = Resource<
  *   path: "payments/database-v2",
  *   data: { password: Redacted.make("not-a-real-password") },
  * });
+ * ```
+ *
+ * ### Rotating a Value
+ * A change to `data` writes a new version. `maxVersions` caps how many versions the secret
+ * keeps.
+ *
+ * **Example:** Keep the last five versions
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Config from "effect/Config";
+ *
+ * const vault = yield* Stackit.SecretsManager.Instance("Vault", {
+ *   acls: ["203.0.113.7/32"],
+ * });
+ * const apiKey = Config.Redacted("PAYMENTS_API_KEY");
+ * const secret = yield* Stackit.SecretsManager.Secret("PaymentsApi", {
+ *   instanceId: vault.instanceId,
+ *   path: "payments/api",
+ *   data: { apiKey },
+ *   maxVersions: 5,
+ * });
+ * ```
+ *
+ * ### Writing It at Runtime
+ * `WriteSecret` creates an AppRole with write access for the host and instance. STACKIT
+ * has no write-only access, so that login can also read every secret in the instance.
+ *
+ * **Example:** Write a secret from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as Redacted from "effect/Redacted";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Vault = Stackit.SecretsManager.Instance("Vault", {
+ *   acls: ["203.0.113.7/32"],
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const secrets = yield* Stackit.SecretsManager.WriteSecret(yield* Vault);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const written = yield* secrets.put({
+ *           secretPath: "payments/api",
+ *           data: { apiKey: Redacted.make("not-a-real-key") },
+ *         });
+ *         return yield* HttpServerResponse.json({ version: written.data.version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.SecretsManager.WriteSecretHttp)),
+ * ) {}
  * ```
  *
  * @resource

@@ -350,6 +350,13 @@ export type Distribution = Resource<
  * tracked with labels, and a distribution with an id in state that has lost them is
  * reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's CDN docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/cdn/).
+ *
+ * :::caution[Changing `projectId` replaces the Distribution]
+ * The new distribution gets a new `hostname`, so DNS records and custom domains have
+ * to point at it. The old one is deleted.
+ * :::
+ *
  * ### Creating a Distribution
  * **Example:** In front of any HTTP origin
  * ```typescript
@@ -390,14 +397,18 @@ export type Distribution = Resource<
  * import * as Output from "alchemy/Output";
  * import * as Config from "effect/Config";
  *
- * const images = yield* Stackit.ContainerRegistry.Project("Images", {});
+ * const harbor = {
+ *   username: Config.String("HARBOR_USERNAME"),
+ *   secret: Config.Redacted("HARBOR_CLI_SECRET"),
+ * };
+ * const images = yield* Stackit.ContainerRegistry.Project("Images", {
+ *   forceDestroy: true,
+ *   harborCredentials: harbor,
+ * });
  * const pusher = yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
  *   project: images.name,
  *   registryUrl: images.url,
- *   credentials: {
- *     username: Config.String("HARBOR_USERNAME"),
- *     secret: Config.Redacted("HARBOR_CLI_SECRET"),
- *   },
+ *   credentials: harbor,
  * });
  * const puller = yield* Stackit.Functions.PullCredential("Puller", {
  *   address: images.registryHost,
@@ -512,7 +523,7 @@ export type Distribution = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const password = yield* Config.redacted("LOKI_PASSWORD");
+ * const password = Config.Redacted("LOKI_PASSWORD");
  * const cdn = yield* Stackit.CDN.Distribution("Cdn", {
  *   backend: { type: "http", originUrl: "https://origin.example.com" },
  *   logSink: {
@@ -561,6 +572,63 @@ export type Distribution = Resource<
  *   projectId: "11111111-1111-4111-8111-111111111111",
  *   backend: { type: "http", originUrl: "https://origin.example.com" },
  * });
+ * ```
+ *
+ * ### Custom Domains
+ * The domain's DNS record has to point at the distribution's `hostname` first. See
+ * `Stackit.CDN.CustomDomain` for bringing your own certificate.
+ *
+ * **Example:** A managed certificate, with the record in a STACKIT zone
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Output from "alchemy/Output";
+ *
+ * const zone = yield* Stackit.DNS.Zone("Zone", { dnsName: "example.com" });
+ * const cdn = yield* Stackit.CDN.Distribution("Cdn", {
+ *   backend: { type: "http", originUrl: "https://origin.example.com" },
+ * });
+ * const record = yield* Stackit.DNS.RecordSet("Www", {
+ *   zoneId: zone.zoneId,
+ *   name: "www",
+ *   type: "CNAME",
+ *   records: [Output.interpolate`${cdn.hostname}.`],
+ * });
+ * const www = yield* Stackit.CDN.CustomDomain("WwwDomain", {
+ *   distributionId: cdn.distributionId,
+ *   domain: record.fqdn,
+ * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `GetDistribution` grants a custom role holding only `cdn.distribution.get` on the
+ * project holding the distribution, so it reaches every distribution in that project.
+ *
+ * **Example:** Read a distribution's status from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Cdn = Stackit.CDN.Distribution("Cdn", {
+ *   backend: { type: "http", originUrl: "https://origin.example.com" },
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const getDistribution = yield* Stackit.CDN.GetDistribution(yield* Cdn);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { distribution } = yield* getDistribution();
+ *         return yield* HttpServerResponse.json({ status: distribution.status });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.CDN.GetDistributionHttp)),
+ * ) {}
  * ```
  *
  * @resource

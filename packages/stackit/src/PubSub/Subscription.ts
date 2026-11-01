@@ -118,6 +118,11 @@ export type Subscription = Resource<
  * with the same explicit `displayName` that lacks them is reported as unowned, and only
  * taken over with `--adopt`.
  *
+ * :::caution[Changing `topicId`, `projectId` or `region` replaces the Subscription]
+ * Moving a subscription to another topic, project or region creates a new one and
+ * deletes the old one with its unacknowledged messages. So does replacing its topic.
+ * :::
+ *
  * ### Creating a Subscription
  * **Example:** A subscription with a generated name
  * ```typescript
@@ -209,10 +214,6 @@ export type Subscription = Resource<
  *   }).pipe(Effect.provide(Stackit.PubSub.ServerSubscriptionEventSource)),
  * ) {}
  * ```
- *
- * ### Replacement Cautions <!-- api-prose -->
- * Moving a subscription to another topic, project or region creates a new one and deletes
- * the old one with its unacknowledged messages. So does replacing its topic.
  *
  * @resource
  * @product STACKIT Pub/Sub

@@ -63,6 +63,13 @@ export type ServerNetworkInterfaceAttachment = Resource<
  * attachment of the same pair. The server's initial interface (from
  * `Server.networking`) is not managed by this resource.
  *
+ * See [STACKIT's Server docs](https://docs.stackit.cloud/products/compute-engine/server/).
+ *
+ * :::caution[Changing `serverId`, `networkInterfaceId`, `projectId` or `region` replaces the Attachment]
+ * A deploy detaches the interface first and then attaches the new pair, since an
+ * interface attaches to one server at a time.
+ * :::
+ *
  * ### Adding a second network
  * **Example:** Attach an interface in a backend network
  * ```typescript
@@ -83,16 +90,11 @@ export type ServerNetworkInterfaceAttachment = Resource<
  *   networkId: backend.networkId,
  *   ipv4: "10.0.2.10",
  * });
- * yield* Stackit.IaaS.ServerNetworkInterfaceAttachment("AppBackend", {
+ * yield* Stackit.IaaS.ServerNetworkInterfaceAttachment("AppBackendAttachment", {
  *   serverId: server.serverId,
  *   networkInterfaceId: nic.networkInterfaceId,
  * });
  * ```
- *
- * ### Replacement
- * Changing `serverId`, `networkInterfaceId`, `projectId` or `region`
- * detaches the interface first and then attaches the new pair, since an
- * interface attaches to one server at a time.
  *
  * @resource
  * @product STACKIT Compute Engine

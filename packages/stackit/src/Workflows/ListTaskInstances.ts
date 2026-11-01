@@ -44,7 +44,7 @@ export interface ListTaskInstancesRequest extends rest.ListTaskInstancesRequest 
  *     const listTaskInstances = yield* Stackit.Workflows.ListTaskInstances(airflow, {
  *       discoveryEndpoint: "https://login.example.com/realms/acme/.well-known/openid-configuration",
  *       clientId: "reports-api",
- *       clientSecret: yield* Config.redacted("AIRFLOW_CLIENT_SECRET"),
+ *       clientSecret: yield* Config.Redacted("AIRFLOW_CLIENT_SECRET"),
  *     });
  *     return {
  *       fetch: Effect.gen(function* () {

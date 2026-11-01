@@ -79,6 +79,13 @@ export type Project = Resource<
  * resource records whether *it* enabled the service (`enabledByAlchemy`). For
  * the same reason `alchemy unsafe nuke` skips this type.
  *
+ * See [STACKIT's Object Storage docs](https://docs.stackit.cloud/products/storage/object-storage/).
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Tenant]
+ * The service is enabled at the new place. The old place keeps Object Storage unless
+ * this resource enabled it and is set to disable it on delete.
+ * :::
+ *
  * ### Enabling Object Storage
  * **Example:** Enable Object Storage in the profile's project
  * ```typescript

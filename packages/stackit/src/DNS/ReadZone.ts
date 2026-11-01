@@ -34,10 +34,8 @@ export interface ReadZoneClient {
  * Bind it in the init phase and provide {@link ReadZoneHttp}. A foreign host
  * signs with a service account key Alchemy creates for it.
  *
- * Access: the `dns.reader` role on the project holding the zone. The role name
- * follows STACKIT's `<product>.reader` pattern, but no STACKIT source lists it;
- * check it with `listRoles` before relying on it, because a wrong name fails the
- * deploy.
+ * Access: the `dns.zone.list` permission on the project holding the zone, so the
+ * host can read every zone in that project, not only this one.
  *
  * ### Reading a Zone
  * **Example:** List a zone's record sets from a Cloudflare Worker

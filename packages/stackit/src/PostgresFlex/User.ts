@@ -111,6 +111,13 @@ export type User = Resource<
  * The API has no labels for users, so a user found by an explicit name without
  * state is reported as unowned, and only taken over with `--adopt`.
  *
+ * See [STACKIT's PostgreSQL Flex docs](https://docs.stackit.cloud/products/databases/postgresql-flex/).
+ *
+ * :::caution[Changing `instanceId`, `projectId` or `region` replaces the User]
+ * The user is created on the new instance with a new password, and the old one is
+ * deleted. `name` and `roles` update in place.
+ * :::
+ *
  * ### Creating a User
  * **Example:** A user with a generated name
  * ```typescript

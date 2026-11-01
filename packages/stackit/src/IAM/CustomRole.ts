@@ -34,7 +34,7 @@ export type CustomRoleProps = {
   description?: string;
   /**
    * Names of the predefined permissions the role grants, e.g.
-   * `dns.zone.read`. List the available permissions with the Membership
+   * `vpn.connection.get`. List the available permissions with the Membership
    * API's `GET /v2/permissions`. Updated in place.
    */
   permissions: string[];
@@ -93,13 +93,21 @@ export type CustomRole = Resource<
  * custom roles are not enumerated by `alchemy unsafe nuke`; they go away
  * with the resource they are defined on.
  *
+ * See [STACKIT's custom role docs](https://docs.stackit.cloud/platform/access-and-identity/roles-permissions/custom-roles/).
+ *
+ * :::caution[Changing `resourceType` or `resourceId` replaces the Role]
+ * A deploy creates a new role (with a new `roleId`) on the new resource before the old
+ * one is deleted. Deleting a role that members still hold may be refused; memberships
+ * that reference `role.name` are replaced or removed first.
+ * :::
+ *
  * ### Creating a custom role
  * **Example:** A project role with a generated name
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  *
  * const role = yield* Stackit.IAM.CustomRole("DnsReader", {
- *   permissions: ["dns.zone.read"],
+ *   permissions: ["vpn.connection.get"],
  * });
  * ```
  *
@@ -110,7 +118,7 @@ export type CustomRole = Resource<
  * yield* Stackit.IAM.CustomRole("DnsOperator", {
  *   name: "dns-operator",
  *   description: "Reads zones and writes records",
- *   permissions: ["dns.zone.read", "dns.record.write"],
+ *   permissions: ["dns.zone.list", "dns.zone.create"],
  * });
  * ```
  *
@@ -120,7 +128,7 @@ export type CustomRole = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  *
  * const role = yield* Stackit.IAM.CustomRole("DnsOperator", {
- *   permissions: ["dns.zone.read", "dns.record.write"],
+ *   permissions: ["vpn.connection.get", "vpn.connection.status.get"],
  * });
  * yield* Stackit.IAM.Membership("CiDnsOperator", {
  *   subject: "ci-abc123@sa.stackit.cloud",
@@ -138,12 +146,6 @@ export type CustomRole = Resource<
  *   permissions: ["resource-manager.project.read"],
  * });
  * ```
- *
- * ### Replacement cautions <!-- api-prose -->
- * Changing `resourceType` or `resourceId` creates a new role (with a new
- * `roleId`) on the new resource before the old one is deleted. Deleting a
- * role that members still hold may be refused; memberships that reference
- * `role.name` are replaced or removed first.
  *
  * @resource
  * @product STACKIT Authorization

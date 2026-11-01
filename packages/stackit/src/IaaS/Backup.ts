@@ -106,6 +106,13 @@ export type Backup = Resource<
  * place. Creating a backup copies the whole volume and can take several
  * minutes for large volumes. Backups are billed per GB-hour.
  *
+ * See [STACKIT's Block Storage docs](https://docs.stackit.cloud/products/storage/block-storage/).
+ *
+ * :::caution[Changing `source`, `projectId` or `region` replaces the Backup]
+ * A deploy takes a new backup and deletes the old one. Content is never refreshed in
+ * place: to take a fresh backup, change the logical id.
+ * :::
+ *
  * ### Backing up a volume
  * **Example:** Back up a data volume
  * ```typescript
@@ -129,11 +136,6 @@ export type Backup = Resource<
  *   source: { type: "snapshot", id: snapshot.snapshotId },
  * });
  * ```
- *
- * ### Replacement
- * Changing `source`, `projectId` or `region` takes a new backup and deletes
- * the old one. Content is never refreshed in place: to take a fresh backup,
- * change the logical id.
  *
  * @resource
  * @product STACKIT Block Storage

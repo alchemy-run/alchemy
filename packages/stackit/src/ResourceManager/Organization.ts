@@ -82,6 +82,13 @@ export type Organization = Resource<
  * organization policies can enforce them. Manage an organization from one stack
  * only, since each stack would overwrite the other's ownership labels.
  *
+ * See [STACKIT's Resource Manager docs](https://docs.stackit.cloud/platform/resource-manager/).
+ *
+ * :::caution[Changing `organizationId` replaces the Organization]
+ * Alchemy takes over the other organization's settings and removes the labels it set
+ * on the old one. The old organization, its contents and its current name stay.
+ * :::
+ *
  * ### Adopting an organization
  * **Example:** Label the profile's organization
  * ```typescript

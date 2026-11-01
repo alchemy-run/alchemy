@@ -76,6 +76,13 @@ export type AccessKey = Resource<
  * credentials groups Alchemy owns (generated names) and deletes them before
  * those groups; keys in the `default` group are never enumerated.
  *
+ * See [STACKIT's Object Storage docs](https://docs.stackit.cloud/products/storage/object-storage/).
+ *
+ * :::caution[Changing `credentialsGroupId`, `expires`, `projectId` or `region` replaces the Key]
+ * A deploy creates a new key with a new secret; update every consumer of the old
+ * secret.
+ * :::
+ *
  * ### Creating an Access Key
  * **Example:** Key in a dedicated credentials group
  * ```typescript
@@ -109,10 +116,6 @@ export type AccessKey = Resource<
  * // key.accessKeyId and key.secretAccessKey (Redacted) are the S3
  * // credentials; bucket.urlVirtualHostedStyle is the bucket's endpoint.
  * ```
- *
- * ### Replacement cautions <!-- api-prose -->
- * Changing `credentialsGroupId`, `expires`, `projectId` or `region` creates
- * a new key with a new secret; update every consumer of the old secret.
  *
  * @resource
  * @product STACKIT Object Storage

@@ -88,6 +88,13 @@ export type AuthenticationSource = Resource<
  * only taken over with `--adopt`. Adopting a source sets its client secret to the one you give.
  * Sources go with their instance, so there is no `list`.
  *
+ * See [STACKIT's Git docs](https://docs.stackit.cloud/products/developer-platform/git/).
+ *
+ * :::caution[Changing `instanceId`, `name` or `projectId` replaces the Source]
+ * The name is the source's identity on the instance. The new source is created and the
+ * old one is deleted.
+ * :::
+ *
  * ### Creating a Source
  * **Example:** Sign in with your identity provider
  * ```typescript
@@ -95,7 +102,7 @@ export type AuthenticationSource = Resource<
  * import * as Config from "effect/Config";
  *
  * const forge = yield* Stackit.Git.Instance("Forge", {});
- * const clientSecret = yield* Config.redacted("FORGE_OIDC_CLIENT_SECRET");
+ * const clientSecret = Config.Redacted("FORGE_OIDC_CLIENT_SECRET");
  * const sso = yield* Stackit.Git.AuthenticationSource("Sso", {
  *   instanceId: forge.instanceId,
  *   name: "company-sso",
@@ -112,7 +119,7 @@ export type AuthenticationSource = Resource<
  * import * as Config from "effect/Config";
  *
  * const forge = yield* Stackit.Git.Instance("Forge", {});
- * const clientSecret = yield* Config.redacted("FORGE_OIDC_CLIENT_SECRET");
+ * const clientSecret = Config.Redacted("FORGE_OIDC_CLIENT_SECRET");
  * const sso = yield* Stackit.Git.AuthenticationSource("Sso", {
  *   instanceId: forge.instanceId,
  *   name: "company-sso",

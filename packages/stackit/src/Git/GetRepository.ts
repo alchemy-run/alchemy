@@ -35,7 +35,7 @@ export interface GetRepositoryRequest extends Omit<
  * export const Forge = Stackit.Git.Instance("Forge", { acl: ["0.0.0.0/0"] });
  * export const App = Effect.gen(function* () {
  *   const forge = yield* Forge;
- *   const token = yield* Config.redacted("FORGE_READ_TOKEN");
+ *   const token = Config.Redacted("FORGE_READ_TOKEN");
  *   return yield* Stackit.Git.Repository("App", { instanceUrl: forge.url, token });
  * });
  *

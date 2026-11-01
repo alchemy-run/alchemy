@@ -1,0 +1,272 @@
+---
+title: Airflow
+description: Run managed Apache Airflow on STACKIT Workflows, load DAGs from Git or a bucket, and trigger and read DAG runs from a Function.
+---
+
+STACKIT Workflows is managed Apache Airflow. It runs Python DAGs that it loads from Git or S3,
+each task in a Kubernetes pod. It isn't `alchemy/Workflows`, and it doesn't run Effect workflows.
+A Function can trigger and read DAG runs through the bindings here.
+
+:::caution[STACKIT Workflows is an alpha API]
+STACKIT serves this API as `v1alpha`, so it may change.
+:::
+
+:::caution[This creates a billed resource]
+STACKIT charges for an instance, and for each task's pod by its CPU, memory, and duration. It
+publishes no rate: the portal's order flow shows it. Check it before you deploy.
+:::
+
+## Create an instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Airflow = Stackit.Workflows.Instance("Airflow", {
+  displayName: "reports",
+  version: "workflows-3.0-airflow-3.1",
+  dagBundles: [
+    {
+      type: "git",
+      name: "reports",
+      url: "https://github.com/acme/reports-dags",
+      branch: "main",
+      subdir: "dags",
+      auth: { type: "none" },
+    },
+  ],
+});
+```
+
+`airflow.url` is the UI.
+
+## Load DAGs from a private repository
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+
+export const Airflow = Stackit.Workflows.Instance("Airflow", {
+  dagBundles: [
+    {
+      type: "git",
+      name: "reports",
+      url: "https://github.com/acme/reports-dags",
+      branch: "main",
+      auth: {
+        type: "basic",
+        username: "airflow",
+        password: Config.Redacted("DAGS_REPOSITORY_TOKEN"),
+      },
+    },
+  ],
+});
+```
+
+## Load DAGs from a bucket
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+
+export const Airflow = Stackit.Workflows.Instance("Airflow", {
+  dagBundles: [
+    {
+      type: "s3",
+      name: "reports",
+      bucketName: "acme-reports-dags",
+      prefix: "dags/",
+      s3Auth: {
+        type: "accessKey",
+        accessKeyId: Config.Redacted("DAGS_ACCESS_KEY_ID"),
+        secretAccessKey: Config.Redacted("DAGS_SECRET_ACCESS_KEY"),
+      },
+    },
+  ],
+});
+```
+
+To change a bundle between Git and S3, keep another bundle on the instance or give it a new name.
+The API can't change a bundle's type, and an instance keeps at least one.
+
+## Turn on the REST API
+
+The runtime bindings call Airflow's REST API, which takes an OAuth2 identity provider with
+`apiAudience` set:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+
+export const Airflow = Stackit.Workflows.Instance("Airflow", {
+  identityProvider: {
+    type: "oauth2",
+    name: "keycloak",
+    clientId: "workflows",
+    clientSecret: Config.Redacted("WORKFLOWS_OIDC_CLIENT_SECRET"),
+    discoveryEndpoint: "https://login.example.com/realms/acme/.well-known/openid-configuration",
+    scope: "openid email",
+    rolesClaim: "resource_access.workflows.roles",
+    apiAudience: ["workflows-api"],
+  },
+});
+```
+
+Register `airflow.redirectUrl` with the identity provider.
+
+## Trigger a DAG from a Function
+
+Each runtime binding takes the instance and an OAuth2 client of that identity provider:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Airflow } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const trigger = yield* Stackit.Workflows.TriggerDagRun(yield* Airflow, {
+      discoveryEndpoint: "https://login.example.com/realms/acme/.well-known/openid-configuration",
+      clientId: "reports-api",
+      clientSecret: yield* Config.Redacted("AIRFLOW_CLIENT_SECRET"),
+    });
+
+    return {
+      fetch: Effect.gen(function* () {
+        const run = yield* trigger({ dag_id: "reports", conf: { day: "2026-11-01" } });
+        return yield* HttpServerResponse.json({ runId: run.dag_run_id, state: run.state });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Workflows.TriggerDagRunHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+These bindings grant no STACKIT role and create no service account: calls sign in as the OAuth2
+client. The client's token has to carry the instance's `apiAudience`, and the provider's roles
+claim decides what Airflow lets it do: `User` can trigger, `Viewer` only reads, and changing a
+variable or a connection takes `Op` or `Admin`. They need Airflow 3. On an Airflow 2 instance each
+call fails with `ConfigError`.
+
+Pass `dag_run_id` to make a trigger idempotent: a second run with that id fails with `Conflict`.
+
+## Unpause a DAG
+
+A paused DAG takes a run but doesn't start it, and new DAGs start paused unless your Airflow says
+otherwise:
+
+```typescript
+yield* patchDag({ dag_id: "reports", is_paused: false });
+```
+
+`PatchDag` takes the same client. Provide `Stackit.Workflows.PatchDagHttp`.
+
+## Read a run
+
+`success` and `failed` are final. `queued` and `running` mean it's still going:
+
+```typescript
+const run = yield* getDagRun({ dag_id: "reports", dag_run_id: runId });
+```
+
+## List runs
+
+```typescript
+const { dag_runs } = yield* listDagRuns({
+  dag_id: "reports",
+  limit: 10,
+  order_by: ["-run_after"],
+});
+```
+
+## List a run's failed tasks
+
+```typescript
+const { task_instances } = yield* listTaskInstances({
+  dag_id: "reports",
+  dag_run_id: runId,
+  state: ["failed"],
+});
+```
+
+## Set a variable
+
+DAGs read variables. `SetVariable` creates one if it doesn't exist:
+
+```typescript
+yield* setVariable({
+  key: "report_day",
+  value: Redacted.make("2026-11-01"),
+  description: "The day to report on",
+});
+```
+
+## Set a connection
+
+```typescript
+yield* setConnection({
+  connection_id: "warehouse",
+  conn_type: "http",
+  host: "warehouse.example.com",
+  password: Redacted.make("a-secret"),
+});
+```
+
+A field you leave out of an update stays as it is. Airflow answers `password` as `***`.
+
+## Manage DAG bundles from a Function
+
+`ListDagBundles`, `GetDagBundle`, and `UpdateDagBundle` use STACKIT's API, with no OAuth2 client:
+
+```typescript
+yield* updateDagBundle({
+  bundleName: "reports",
+  body: { type: "git", refreshInterval: 120 },
+});
+```
+
+| Binding | Permission |
+| --- | --- |
+| `GetInstance` | `workflows.instance.get` |
+| `ListInstances` | `workflows.instance.list` |
+| `ListDagBundles` | `workflows.dag-bundles.list` |
+| `GetDagBundle` | `workflows.dag-bundles.get` |
+| `UpdateDagBundle` | `workflows.dag-bundles.update` |
+
+Each binding grants a custom role with that permission and a service account key for the host.
+The role is bound on the project holding the instance, so it reaches every Workflows instance in
+that project. A bundle changed this way is one `dagBundles` doesn't know of: the next deploy that
+changes the props sets it back.
+
+:::caution[Changing the Airflow major version, `network`, `projectId`, or `region` replaces the instance]
+Replacing an instance loses what lives in it: DAG run history, XComs, variables, and connections.
+Your DAG files stay in their source.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- `airflow.url` serves Airflow's REST API at its root, and the session it exchanges the client's
+  token for works on Airflow 3.
+- `auth: { type: "none" }` on a Git bundle. The how-to says only Basic Authentication is supported.
+- The version name. The default picks the newest supported one, and the API's
+  `getProviderOptions` lists them.
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [Workflows reference](/providers/stackit/workflows#instance): every prop and attribute.

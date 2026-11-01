@@ -67,6 +67,13 @@ export type Kubeconfig = Resource<
  * A short-lived kubeconfig for a STACKIT Edge Cloud instance, for managing its hosts
  * and cluster configuration through the Kubernetes API.
  *
+ * See [STACKIT's Edge Cloud docs](https://docs.stackit.cloud/products/runtime/edge-cloud/).
+ *
+ * :::caution[Changing `instanceId`, `expirationSeconds`, `projectId` or `region` replaces the Kubeconfig]
+ * A deploy mints a new kubeconfig. The API can't revoke one, so don't count on the old
+ * one to stop working before it expires.
+ * :::
+ *
  * ### How Expiry Works <!-- api-prose -->
  * The API mints a kubeconfig on each call. It has no way to read one back, list it
  * or revoke it, so this resource holds the one it minted and replaces it when it

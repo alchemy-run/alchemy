@@ -1,0 +1,227 @@
+---
+title: Telemetry
+description: Export the audit logs of a STACKIT project, folder, or organization to an OpenTelemetry endpoint or a bucket with a Telemetry Router.
+---
+
+STACKIT's Telemetry Router forwards audit logs. A `Link` sends a project's, folder's, or
+organization's logs to a `Router`, and the router forwards them to every `Destination` on it.
+STACKIT's docs say the service only handles audit logs, so it isn't an ingest path for your own
+logs, metrics, or traces. Use [Logs](/stackit/observability/logs) for those.
+
+:::caution[Cost]
+STACKIT's price list (v1.0.44) has router traffic at EUR 0.00184 per MB in `eu01` and
+EUR 0.001932 in `eu02`. The link itself is free.
+:::
+
+## Create a router
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export const Audit = Stackit.Telemetry.Router("Audit", {});
+```
+
+A deploy waits until the router reports `active`.
+
+## Send it somewhere
+
+A destination is an OTLP endpoint or S3-compatible storage. A router forwards to all its
+destinations in parallel:
+
+```diff lang="typescript"
+// src/resources.ts
+export const Audit = Stackit.Telemetry.Router("Audit", {});
++
++export const Siem = Effect.gen(function* () {
++  const router = yield* Audit;
++  const token = Config.Redacted("SIEM_TOKEN");
++  return yield* Stackit.Telemetry.Destination("Siem", {
++    routerId: router.routerId,
++    config: {
++      type: "OpenTelemetry",
++      uri: "https://siem.example.com/otlp/v1/logs",
++      bearerToken: token,
++    },
++  });
++});
+```
+
+Use `basicAuth: { username, password }` for an endpoint with basic auth. Alchemy keeps
+the secret out of the attributes, and re-sends it when it differs from the last deploy, so a
+secret rotated elsewhere isn't noticed.
+
+## Archive to a bucket
+
+```diff lang="typescript"
+// src/resources.ts
++export const Archive = Effect.gen(function* () {
++  const router = yield* Audit;
++  const secret = Config.Redacted("AUDIT_BUCKET_SECRET");
++  return yield* Stackit.Telemetry.Destination("Archive", {
++    routerId: router.routerId,
++    config: {
++      type: "S3",
++      endpoint: "https://object.storage.eu01.onstackit.cloud",
++      bucket: "audit-archive",
++      accessKey: { id: "AKIAEXAMPLE", secret },
++    },
++  });
++});
+```
+
+A destination can switch between the two types in place.
+
+## Create an access token
+
+A link needs a token of its router. STACKIT only returns the value on create, and Alchemy
+keeps it `Redacted`:
+
+```diff lang="typescript"
+// src/resources.ts
++export const AuditToken = Audit.pipe(
++  Effect.flatMap((router) =>
++    Stackit.Telemetry.AccessToken("AuditToken", {
++      routerId: router.routerId,
++    }),
++  ),
++);
+```
+
+## Link a project
+
+A link sends the audit logs of the profile's project to the router:
+
+```diff lang="typescript"
+// src/resources.ts
++export const ProjectAudit = Effect.gen(function* () {
++  const router = yield* Audit;
++  const token = yield* AuditToken;
++  return yield* Stackit.Telemetry.Link("ProjectAudit", {
++    routerId: router.routerId,
++    accessToken: token.accessToken,
++  });
++});
+```
+
+The link has to be in the same region as the router. A scope has one link per region, so `scope`
+and `region` are its identity, and changing either replaces it and stops the old link's logs. One
+already at the scope without Alchemy's labels is reported as unowned and only taken over with
+`--adopt`.
+
+## Link a folder or an organization
+
+Pass `scope`. Both need elevated rights:
+
+```typescript
+Stackit.Telemetry.Link("OrganizationAudit", {
+  scope: { organizationId: "00000000-0000-0000-0000-000000000000" },
+  routerId: router.routerId,
+  accessToken: token.accessToken,
+});
+```
+
+`scope: { folderId }` does the same for a folder.
+
+## Filter what gets through
+
+Set `filter` on a router or a destination:
+
+```diff lang="typescript"
+// src/resources.ts
+-export const Audit = Stackit.Telemetry.Router("Audit", {});
++export const Audit = Stackit.Telemetry.Router("Audit", {
++  filter: {
++    attributes: [
++      { key: "service.name", level: "resource", matcher: "=", values: ["iam"] },
++    ],
++  },
++});
+```
+
+Removing the prop leaves the live filter alone. STACKIT doesn't document the audit log's attribute
+names, so `service.name` is an illustration. Check it against your own records.
+
+## Pause a link
+
+```typescript
+Stackit.Telemetry.Link("ProjectAudit", {
+  routerId: router.routerId,
+  accessToken: token.accessToken,
+  enabled: false,
+});
+```
+
+## Rotate a token
+
+`ttlDays` sets an expiry, and a new `rotationKey` gets a new token. Both replace the token:
+
+```diff lang="typescript"
+// src/resources.ts
+export const AuditToken = Audit.pipe(
+  Effect.flatMap((router) =>
+    Stackit.Telemetry.AccessToken("AuditToken", {
+      routerId: router.routerId,
++      rotationKey: "2026-11",
+    }),
+  ),
+);
+```
+
+:::caution
+A deploy after `expirationTime` replaces an expired token, but nothing renews it between
+deploys. A link using it stops until the next deploy.
+:::
+
+## Read from a host
+
+`GetRouter`, `ListRouters`, `GetDestination`, `ListDestinations`, `GetAccessToken`,
+`ListAccessTokens`, and the link and backflush bindings call the management API. Each grants a custom
+role with its one permission on the project, so it reaches that whole project. Provide the
+binding's `Http` layer:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Audit } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const getRouter = yield* Stackit.Telemetry.GetRouter(yield* Audit);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const router = yield* getRouter({});
+        return yield* HttpServerResponse.json({ status: router.status });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Telemetry.GetRouterHttp)),
+) {}
+```
+
+## Delete a router
+
+Destinations and tokens go first. Deleting a router that still has others fails with
+`Stackit.Telemetry.RouterNotEmpty`, which names them. Only `alchemy unsafe nuke` goes past that.
+
+## Check on your first deploy
+
+- Whether the API checks a destination's `uri` or S3 credentials when you create it.
+- Whether a token has to belong to `routerId`, and when a link stops after its token expires.
+- That a disabled link reports `inactive`.
+- A folder or organization link's permissions.
+
+## Where next
+
+- [Logs](/stackit/observability/logs) — store your own logs.
+- [IAM & bindings](/stackit/security/iam-bindings) — what the bindings grant.
+- [Telemetry reference](/providers/stackit/telemetry#router) — every prop and attribute.

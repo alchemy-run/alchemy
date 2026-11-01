@@ -116,6 +116,13 @@ export type Token = Resource<
  * A host holding the old value only sees the new one when it redeploys. With an explicit `name`
  * the old token is deleted first. A host that doesn't redeploy for 6 months loses access.
  *
+ * See [STACKIT's AI Model Experiments docs](https://docs.stackit.cloud/products/data-and-ai/ai-model-experiments/).
+ *
+ * :::caution[Changing `instanceId`, `ttlDuration`, `rotateWhenChanged`, `projectId` or `region` replaces the Token]
+ * So does a deploy after it expired. A host holding the old value only sees the new
+ * one when it redeploys. With an explicit `name` the old token is deleted first.
+ * :::
+ *
  * ### Creating a Token
  * **Example:** A token with the default lifetime
  * ```typescript

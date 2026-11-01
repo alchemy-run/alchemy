@@ -74,6 +74,13 @@ export type User = Resource<"Stackit.Git.User", UserProps, UserAttributes, never
  * with their instance, and nothing tells a user this stack made from a person's account, so there
  * is no `list`.
  *
+ * See [STACKIT's Git docs](https://docs.stackit.cloud/products/developer-platform/git/).
+ *
+ * :::caution[Changing `instanceId`, `username` or `projectId` replaces the User]
+ * The username is the user's identity. The new user is created and the old one is
+ * deleted, so sign-ins with the old username stop working.
+ * :::
+ *
  * ### Creating a User
  * **Example:** A technical user, with its password from config
  * ```typescript
@@ -83,7 +90,7 @@ export type User = Resource<"Stackit.Git.User", UserProps, UserAttributes, never
  * const forge = yield* Stackit.Git.Instance("Forge", {
  *   featureToggle: { enableLocalLogin: true },
  * });
- * const password = yield* Config.redacted("FORGE_CI_PASSWORD");
+ * const password = Config.Redacted("FORGE_CI_PASSWORD");
  * const user = yield* Stackit.Git.User("Ci", {
  *   instanceId: forge.instanceId,
  *   username: "ci-bot",
@@ -100,7 +107,7 @@ export type User = Resource<"Stackit.Git.User", UserProps, UserAttributes, never
  * import * as Config from "effect/Config";
  *
  * const forge = yield* Stackit.Git.Instance("Forge", {});
- * const password = yield* Config.redacted("FORGE_CI_PASSWORD_NEXT");
+ * const password = Config.Redacted("FORGE_CI_PASSWORD_NEXT");
  * const user = yield* Stackit.Git.User("Ci", {
  *   instanceId: forge.instanceId,
  *   username: "ci-bot",

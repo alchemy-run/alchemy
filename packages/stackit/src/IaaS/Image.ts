@@ -246,6 +246,14 @@ export type Image = Resource<"Stackit.IaaS.Image", ImageProps, ImageAttributes, 
  * different volume replaces the image, while the name, labels, minimum
  * requirements, `protected`, `config` and `agent` update in place.
  *
+ * See [STACKIT's operating system image docs](https://docs.stackit.cloud/products/compute-engine/server/basics/operating-system-images/).
+ *
+ * :::caution[Changing `source`, `diskFormat`, `projectId` or `region` replaces the Image]
+ * New file content, a different volume or source kind, `diskFormat`, `projectId` and
+ * `region` all create a new image and delete the old one. Servers already booted from
+ * the old image keep running.
+ * :::
+ *
  * ### Uploading a local file
  * **Example:** A qcow2 image from a file
  * ```typescript
@@ -276,7 +284,7 @@ export type Image = Resource<"Stackit.IaaS.Image", ImageProps, ImageAttributes, 
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  *
- * const golden = yield* Stackit.IaaS.Volume("Golden", { size: 20 });
+ * const golden = yield* Stackit.IaaS.Volume("GoldenVolume", { size: 20 });
  * const image = yield* Stackit.IaaS.Image("Golden", {
  *   source: { type: "volume", volumeId: golden.volumeId },
  *   diskFormat: "qcow2",
@@ -340,11 +348,6 @@ export type Image = Resource<"Stackit.IaaS.Image", ImageProps, ImageAttributes, 
  * STACKIT refuses to delete a protected image, and Alchemy does not lift the
  * protection for you, so `destroy` and any replacement fail until you deploy
  * with `protected: false`.
- *
- * ### Replacement <!-- api-prose -->
- * New file content, a different volume or source kind, `diskFormat`,
- * `projectId` and `region` all create a new image and delete the old one.
- * Servers already booted from the old image keep running.
  *
  * @resource
  * @product STACKIT Compute Engine

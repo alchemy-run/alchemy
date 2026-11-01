@@ -137,6 +137,14 @@ export type NetworkInterface = Resource<
  * Name, description, allowed addresses, security settings and labels are
  * updated in place; the network and fixed addresses cannot change.
  *
+ * See [STACKIT's network interface docs](https://docs.stackit.cloud/products/network/core-networking/network-interfaces/).
+ *
+ * :::caution[Changing `networkId`, `ipv4`, `ipv6`, `projectId` or `region` replaces the Interface]
+ * A deploy creates a new interface and deletes the old one. A server attached to the
+ * old interface loses it, and an associated public IP must be associated with the new
+ * interface.
+ * :::
+ *
  * ### Creating a network interface
  * **Example:** Interface with a fixed address
  * ```typescript
@@ -145,7 +153,7 @@ export type NetworkInterface = Resource<
  * const network = yield* Stackit.IaaS.Network("App", {
  *   ipv4: { prefix: "10.0.1.0/24" },
  * });
- * const nic = yield* Stackit.IaaS.NetworkInterface("Web", {
+ * const nic = yield* Stackit.IaaS.NetworkInterface("WebNic", {
  *   networkId: network.networkId,
  *   ipv4: "10.0.1.10",
  * });
@@ -159,8 +167,8 @@ export type NetworkInterface = Resource<
  * const network = yield* Stackit.IaaS.Network("App", {
  *   ipv4: { prefix: "10.0.1.0/24" },
  * });
- * const web = yield* Stackit.IaaS.SecurityGroup("Web", {});
- * const nic = yield* Stackit.IaaS.NetworkInterface("Web", {
+ * const web = yield* Stackit.IaaS.SecurityGroup("WebGroup", {});
+ * const nic = yield* Stackit.IaaS.NetworkInterface("WebNic", {
  *   networkId: network.networkId,
  *   securityGroups: [web.securityGroupId],
  * });
@@ -179,12 +187,6 @@ export type NetworkInterface = Resource<
  *   allowedAddresses: ["0.0.0.0/0"],
  * });
  * ```
- *
- * ### Replacement
- * Changing `networkId`, `ipv4`, `ipv6`, `projectId` or `region` creates a
- * new interface and deletes the old one. A server attached to the old
- * interface loses it, and an associated public IP must be associated with
- * the new interface.
  *
  * @resource
  * @product STACKIT Network

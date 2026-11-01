@@ -1,0 +1,154 @@
+---
+title: Firewall
+description: Write access rules through STACKIT's Unified Firewall, without managing the same access twice, and add or remove rules from running code.
+---
+
+Unified Firewall is one API over the access rules of other products: ACLs
+on managed services, public IPs, and security group rules. Use it when the
+instance isn't in your stack, or when one call has to cover several products.
+
+Rules have no fee of their own, on STACKIT's price list v1.0.44. The product
+a rule targets bills as usual.
+
+## Don't manage the same access twice
+
+:::caution
+A rule on a product that also declares its own access list
+(`allowedSourceRanges`, `acl`, a `Stackit.IaaS.SecurityGroupRule`) is managed
+by two resources, and the other resource's next reconcile may revert it. When
+the instance is in your stack, use the product's own prop.
+:::
+
+For a server or a network interface in your stack, use
+[security groups](/stackit/networking/networks#allow-traffic-in). For a load
+balancer, use its [access control](/stackit/networking/load-balancers#restrict-access).
+
+## Find a product
+
+`ListProviderOptions` lists the products of a region and the rule types each
+one takes. It grants no role, because STACKIT turns authorization off for it. The
+host still gets a service account and key:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Web = Stackit.IaaS.SecurityGroup("Web", {});
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const listProviderOptions = yield* Stackit.UnifiedFirewall.ListProviderOptions(yield* Web);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { products } = yield* listProviderOptions();
+        return yield* HttpServerResponse.json({ products });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.UnifiedFirewall.ListProviderOptionsHttp)),
+) {}
+```
+
+The binding takes any resource in that region.
+
+## Create a rule
+
+A rule allows one range on one instance:
+
+```typescript
+// src/rules.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Office = Stackit.UnifiedFirewall.Rule("Office", {
+  product: "edge-cloud",
+  instanceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  type: "ACL",
+  sourceIP: "192.0.2.0/24",
+  description: "Office network",
+});
+```
+
+A deploy waits until the rule is `Active`, and a destroy until it is gone. A
+rule is one object with its own id, so a deploy never writes the rest of the
+instance's rules, and rules someone else added stay where they are.
+
+## Replace a rule safely
+
+Changing `product`, `instanceId`, `type`, `projectId`, or `region` creates the new
+rule first. Changing `remoteSecurityGroupId`, `description`, `stateful`, or `offset`,
+which the API can't update, deletes the old rule first.
+
+:::caution
+When the old rule goes first, the access it described isn't in place until the
+new rule is `Active`.
+:::
+
+`sourceIP`, `portRange`, `protocol`, `direction`, `etherType`, and
+`securityGroupId` update in place.
+
+## Own a rule
+
+Rules have no labels or names, so Alchemy knows its own by the id in state. A
+deploy with no state that finds exactly one rule with the same target and traffic
+reports it as unowned, and only takes it over with `--adopt`. `alchemy unsafe nuke`
+can't find rules: they go with their stack's `destroy`.
+
+## Add a rule at runtime
+
+`WriteRules` adds, changes, and deletes rules from a host, for example during an
+incident. Provide `Stackit.UnifiedFirewall.WriteRulesHttp`:
+
+```typescript
+const rules = yield* Stackit.UnifiedFirewall.WriteRules(yield* Web);
+
+// inside fetch:
+const { refId } = yield* rules.createRule({
+  product: "edge-cloud",
+  instanceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  type: "ACL",
+  sourceIP: "192.0.2.0/24",
+});
+```
+
+It grants a custom role holding `ufw.instance.create`, `ufw.instance.update`, and
+`ufw.instance.delete` on the project, so it reaches every rule in that project.
+
+## Audit rules
+
+`ReadRules` reads them. Provide `Stackit.UnifiedFirewall.ReadRulesHttp`:
+
+```typescript
+const firewall = yield* Stackit.UnifiedFirewall.ReadRules(yield* Web);
+
+// inside fetch:
+const { rules } = yield* firewall.listRules();
+const failed = rules.filter((rule) => rule.status === "Error").length;
+```
+
+It grants a custom role holding `ufw.instance.get` and `ufw.instance.list` on the
+project, so it reads every rule in that project.
+
+## Check on your first deploy
+
+- The `product` for a security group, and whether `instanceId` is the group's id
+  for it. Take the product from `ListProviderOptions`.
+- Whether a value you pass comes back normalized. A rewrite such as `10.0.0.1` to
+  `10.0.0.1/32` makes the wait after an update time out after 5 minutes.
+- Whether the project needs Unified Firewall switched on. See
+  [Projects, regions, and services](/stackit#projects-regions-and-services).
+
+## Where next
+
+- [Networks](/stackit/networking/networks) — security groups on your own
+  interfaces.
+- [Load balancers](/stackit/networking/load-balancers) — a web application
+  firewall and IP block lists on a listener.
+- [UnifiedFirewall reference](/providers/stackit/unifiedfirewall#rule) — every
+  prop and attribute.

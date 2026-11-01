@@ -94,6 +94,13 @@ export type Configuration = Resource<
  * retries for about a minute, in case the load balancer is just going away, then
  * fails with the API's `BadRequest`.
  *
+ * See [STACKIT's ALB WAF docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/application-load-balancer/basics/basic-concepts-alb-waf/).
+ *
+ * :::caution[Changing `name`, `projectId` or `region` replaces the Configuration]
+ * A load balancer listener that takes the name as an output moves to the new one. The
+ * old configuration is deleted.
+ * :::
+ *
  * ### Creating a Configuration
  * **Example:** The OWASP Core Rule Set
  * ```typescript

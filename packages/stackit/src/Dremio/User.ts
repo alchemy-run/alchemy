@@ -107,6 +107,14 @@ export type User = Resource<"Stackit.Dremio.User", UserProps, UserAttributes, ne
  * state is reported as unowned, and only taken over with `--adopt`. Adopting a user whose
  * email or names differ from the props replaces it.
  *
+ * See [STACKIT's Dremio docs](https://docs.stackit.cloud/products/data-and-ai/dremio/).
+ *
+ * :::caution[Changing any prop replaces the User]
+ * STACKIT has no update operation for users. With an explicit name the old user is
+ * deleted first. A generated name carries the generation, so the new user comes up
+ * first.
+ * :::
+ *
  * ### Creating a User
  * **Example:** A user with a generated name
  * ```typescript
@@ -119,7 +127,7 @@ export type User = Resource<"Stackit.Dremio.User", UserProps, UserAttributes, ne
  *   email: "analyst@example.com",
  *   firstName: "Ada",
  *   lastName: "Analyst",
- *   password: yield* Config.redacted("DREMIO_ANALYST_PASSWORD"),
+ *   password: Config.Redacted("DREMIO_ANALYST_PASSWORD"),
  * });
  * ```
  *
@@ -136,7 +144,7 @@ export type User = Resource<"Stackit.Dremio.User", UserProps, UserAttributes, ne
  *   firstName: "Grace",
  *   lastName: "Admin",
  *   description: "Owns the sales spaces",
- *   password: yield* Config.redacted("DREMIO_ADMIN_PASSWORD"),
+ *   password: Config.Redacted("DREMIO_ADMIN_PASSWORD"),
  * });
  * ```
  *

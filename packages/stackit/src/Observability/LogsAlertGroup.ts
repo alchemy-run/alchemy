@@ -65,6 +65,13 @@ export type LogsAlertGroup = Resource<
  * a name you chose, without state, is reported as unowned and only taken over with
  * `--adopt`.
  *
+ * See [STACKIT's Observability docs](https://docs.stackit.cloud/products/logging-and-monitoring/observability/).
+ *
+ * :::caution[Changing `instanceId`, `name` or `projectId` replaces the Group]
+ * The name is the group's identity. The new group is created and the old one is
+ * deleted. `rules` and `interval` update in place.
+ * :::
+ *
  * ### Alerting on Logs
  * **Example:** Fire on a burst of errors
  * ```typescript

@@ -1,0 +1,206 @@
+---
+title: Dremio
+description: Run a managed Dremio lakehouse on STACKIT, add admin users, and submit SQL jobs and read their rows from a Function.
+---
+
+STACKIT Dremio is a managed lakehouse engine that queries data where it lies, with Iceberg
+tables and other sources. Declare an instance and a user, then submit SQL from your Function.
+
+:::caution[STACKIT Dremio is a beta API]
+STACKIT serves this API as `v1beta`, and its Terraform resource is marked experimental, so it
+may change. Terraform documents it as available in `eu01` only.
+:::
+
+:::caution[What it costs]
+Price list v1.0.44 has no Dremio row, and the product page says you can try it for free. Its
+service certificate describes fees per instance and allocated memory per hour, plus CPU and
+RAM per hour for tasks. Check the portal before you deploy.
+:::
+
+## Create an instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export const Lakehouse = Stackit.Dremio.Instance("Lakehouse", {
+  displayName: "Analytics",
+  description: "Sales lakehouse",
+});
+
+export const Analyst = Effect.gen(function* () {
+  const lakehouse = yield* Lakehouse;
+  return yield* Stackit.Dremio.User("Analyst", {
+    instanceId: lakehouse.instanceId,
+    email: "analyst@example.com",
+    firstName: "Ada",
+    lastName: "Analyst",
+    password: Config.Redacted("DREMIO_ANALYST_PASSWORD"),
+  });
+});
+```
+
+`lakehouse.endpoints.ui` is the console. STACKIT creates every user this API manages as an
+admin of the instance, and has no update operation, so any change replaces the user. The
+password stays `Redacted`.
+
+## Restrict access
+
+```diff lang="typescript"
+// src/resources.ts
+  displayName: "Analytics",
+  description: "Sales lakehouse",
++  acl: ["203.0.113.0/24", "2001:db8::/32"],
+```
+
+With an empty `acl`, any address can connect. A host's egress IP has to be in the list when
+it isn't empty.
+
+## Sign in with an identity provider
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+
+export const Lakehouse = Stackit.Dremio.Instance("Lakehouse", {
+  authentication: {
+    type: "oauth",
+    oauth: {
+      authorityUrl: "https://login.example.com/realms/acme",
+      clientId: "dremio",
+      clientSecret: Config.Redacted("DREMIO_OIDC_CLIENT_SECRET"),
+      jwtClaims: { userName: "email" },
+      scope: "openid profile email",
+    },
+  },
+});
+```
+
+Register `lakehouse.redirectUrl` with the identity provider. `type: "azuread"` takes Microsoft
+Entra ID. Changing `authentication` restarts Dremio, with downtime.
+
+## Run SQL from a Function
+
+`ExecuteSql` submits a statement and answers with a job id:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Analyst } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const executeSql = yield* Stackit.Dremio.ExecuteSql(yield* Analyst);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const job = yield* executeSql({ sql: "SELECT 1 AS answer" });
+        return yield* HttpServerResponse.json({ jobId: job.id });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Dremio.ExecuteSqlHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+The job bindings grant no STACKIT role and create no service account, because calls log in to
+Dremio as the bound user. The user is an admin, so the limit is the client's surface, not a
+permission. Its name and password reach the Function as plain revision variables, so anyone
+who can call `GetRevision` can read them.
+
+## Wait for a job
+
+A statement that doesn't parse, or names a missing table, still gets a job. `GetJob` reports
+`FAILED` and why:
+
+```typescript
+const getJob = yield* Stackit.Dremio.GetJob(yield* Analyst);
+// …
+const job = yield* getJob({ id: jobId });
+```
+
+`COMPLETED`, `CANCELED`, and `FAILED` are final. Every other state means it's still running.
+Provide `Stackit.Dremio.GetJobHttp`.
+
+## Read the rows
+
+`GetJobResults` reads a page of a `COMPLETED` job's rows, as objects keyed by column, up to 500
+at a time:
+
+```typescript
+const results = yield* getJobResults({ id: jobId, limit: 100 });
+const rows = results.rows;
+```
+
+Page with `offset` and `limit`. `rowCount` is the total. A job in any other state fails with
+`JobResultsNotReady`.
+
+## Cancel a job
+
+```typescript
+yield* cancelJob({ id: jobId });
+```
+
+The job stays readable, with `jobState` `CANCELED`. A job that has already finished fails with
+`JobNotFound`.
+
+## Use your own client
+
+`Connect` resolves a user's endpoints and login for a client such as an Arrow Flight driver, and
+opens no connection:
+
+```typescript
+const connect = yield* Stackit.Dremio.Connect(yield* Analyst);
+// …
+const info = yield* connect;
+```
+
+`info` has `uiUrl`, `catalogUrl`, `arrowFlightUrl`, `username`, and `Redacted` `password` and
+`token`. Getting `token` logs in to Dremio's REST API, so a failed login fails the call with
+`ConfigError`. `Connect` grants no STACKIT role.
+
+## Read the instance from a Function
+
+`GetInstance`, `GetUser`, and `ListUsers` use STACKIT's API:
+
+| Binding | Permission |
+| --- | --- |
+| `GetInstance` | `dremio.instance.get` |
+| `GetUser` | `dremio.user.get` |
+| `ListUsers` | `dremio.user.list` |
+
+Each binding grants a custom role with that permission and a service account key for the host.
+The role is bound on the project holding the instance, so it reaches every Dremio instance in
+that project.
+
+:::caution[Changing `projectId` or `region` replaces the instance]
+Replacing an instance loses what lives on it: spaces, views, users, and job history. Data in
+your own sources stays. STACKIT leaves backups to you.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check these in order:
+
+- `endpoints.ui` serves Dremio's REST API, and a `Stackit.Dremio.User` can log in through it.
+  If not, `Connect`'s token and the job bindings all fail with `ConfigError`.
+- A local user can log in on an instance with `azuread` or `oauth` authentication.
+- A fresh project doesn't need Dremio enabled first. If it does, the create fails with the
+  API's error.
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [Dremio reference](/providers/stackit/dremio#instance): every prop and attribute.

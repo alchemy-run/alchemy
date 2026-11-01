@@ -78,6 +78,13 @@ export type PublicIp = Resource<
  * never changes, so only a project or region change allocates a new one.
  * Public IPs are billed per hour while allocated.
  *
+ * See [STACKIT's public IP address docs](https://docs.stackit.cloud/products/network/core-networking/public-ip-address/).
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Address]
+ * A deploy allocates a new address and releases the old one. Every other change keeps
+ * the address.
+ * :::
+ *
  * ### Allocating an address
  * **Example:** A reserved public IP
  * ```typescript
@@ -96,17 +103,13 @@ export type PublicIp = Resource<
  * const network = yield* Stackit.IaaS.Network("App", {
  *   ipv4: { prefix: "10.0.1.0/24" },
  * });
- * const nic = yield* Stackit.IaaS.NetworkInterface("Web", {
+ * const nic = yield* Stackit.IaaS.NetworkInterface("WebNic", {
  *   networkId: network.networkId,
  * });
- * const ip = yield* Stackit.IaaS.PublicIp("Web", {
+ * const ip = yield* Stackit.IaaS.PublicIp("WebIp", {
  *   networkInterfaceId: nic.networkInterfaceId,
  * });
  * ```
- *
- * ### Replacement
- * Changing `projectId` or `region` allocates a new address and releases
- * the old one. Every other change keeps the address.
  *
  * @resource
  * @product STACKIT Public IP

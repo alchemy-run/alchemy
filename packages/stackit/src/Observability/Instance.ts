@@ -233,6 +233,17 @@ export type Instance = Resource<
  * Instances take minutes to create and are billed per started hour by plan, about
  * EUR 0.04 an hour on the default plan. Everything but `projectId` updates in place.
  *
+ * Use `acl` to limit who can reach Grafana and the metrics, logs and traces endpoints. A
+ * replacement starts empty.
+ *
+ * See [STACKIT's Observability docs](https://docs.stackit.cloud/products/logging-and-monitoring/observability/).
+ *
+ * :::caution[Changing `projectId` replaces the Instance]
+ * A replacement starts empty: metrics, logs, traces and dashboards stay with the old
+ * instance and are deleted with it. Scrape jobs, alert groups, credentials and checks
+ * that take its `instanceId` are replaced too.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** The default plan, with metrics and Grafana
  * ```typescript
@@ -297,6 +308,88 @@ export type Instance = Resource<
  * const instance = yield* Stackit.Observability.Instance("Metrics", {
  *   projectId: "22222222-2222-4222-8222-222222222222",
  * });
+ * ```
+ *
+ * ### Scrape Jobs and Credentials
+ * **Example:** Scrape a service, and a credential to push and query with
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const instance = yield* Stackit.Observability.Instance("Metrics", {});
+ * const job = yield* Stackit.Observability.ScrapeConfig("Api", {
+ *   instanceId: instance.instanceId,
+ *   staticConfigs: [{ targets: ["api.example.com:443"], labels: { env: "prod" } }],
+ * });
+ * const writer = yield* Stackit.Observability.Credential("Writer", {
+ *   instanceId: instance.instanceId,
+ * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `QueryMetrics` and `PushLogs` authenticate with a credential's HTTP Basic, so they grant
+ * no STACKIT role. STACKIT has no narrower credential, so it can do everything the API
+ * allows on the instance. When the instance has an `acl`, the host's egress address has to
+ * be in it.
+ *
+ * **Example:** Run an instant query from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Metrics = Stackit.Observability.Instance("Metrics", {});
+ * export const Reader = Metrics.pipe(
+ *   Effect.flatMap((metrics) =>
+ *     Stackit.Observability.Credential("Reader", { instanceId: metrics.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const metrics = yield* Metrics;
+ *     const reader = yield* Reader;
+ *     const queryMetrics = yield* Stackit.Observability.QueryMetrics(metrics, reader);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { data } = yield* queryMetrics.query({ query: "up" });
+ *         return yield* HttpServerResponse.json({ series: data.result.length });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.Observability.QueryMetricsHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Event Sources
+ * `consumeAlerts` adds a webhook receiver and a route to the instance's Alertmanager,
+ * delivering to the host's URL. It works on any host providing core's `WebhookHost`, which
+ * today means a Cloudflare Worker.
+ *
+ * **Example:** Handle critical alerts in a Cloudflare Worker
+ * ```typescript
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Metrics = Stackit.Observability.Instance("Metrics", {});
+ *
+ * export default class Alerts extends Cloudflare.Worker<Alerts>()(
+ *   "Alerts",
+ *   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+ *   Effect.gen(function* () {
+ *     yield* Stackit.Observability.consumeAlerts(
+ *       Metrics,
+ *       { matchers: ['severity="critical"'], groupBy: ["alertname"] },
+ *       (notification) => Effect.log(notification.status, notification.groupLabels),
+ *     );
+ *     return { fetch: HttpServerResponse.text("ok") };
+ *   }).pipe(Effect.provide(Stackit.Observability.AlertEventSourceLive)),
+ * ) {}
  * ```
  *
  * @resource

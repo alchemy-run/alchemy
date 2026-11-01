@@ -96,6 +96,13 @@ export type Snapshot = Resource<
  * update in place. A volume with snapshots cannot be deleted, so the
  * snapshot is deleted before its volume.
  *
+ * See [STACKIT's Block Storage docs](https://docs.stackit.cloud/products/storage/block-storage/).
+ *
+ * :::caution[Changing `volumeId`, `projectId` or `region` replaces the Snapshot]
+ * A deploy takes a new snapshot and deletes the old one. Content is never refreshed in
+ * place: to take a new snapshot of the same volume, change the logical id.
+ * :::
+ *
  * ### Taking a snapshot
  * **Example:** Snapshot a data volume
  * ```typescript
@@ -107,11 +114,6 @@ export type Snapshot = Resource<
  *   description: "state before the v2 migration",
  * });
  * ```
- *
- * ### Replacement
- * Changing `volumeId`, `projectId` or `region` takes a new snapshot and
- * deletes the old one. Content is never refreshed in place: to take a new
- * snapshot of the same volume, change the logical id.
  *
  * @resource
  * @product STACKIT Block Storage

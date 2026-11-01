@@ -1,0 +1,229 @@
+---
+title: MongoDB Flex
+description: Run a managed MongoDB replica set on STACKIT MongoDB Flex, add database users, and hand their connection settings to your driver from a Function.
+---
+
+MongoDB Flex runs MongoDB for you. Instances and users are separate resources. Only the
+addresses in the instance's `acl` can connect, and there is no data API, so a host talks
+to MongoDB with your own driver. `Connect` gives the host the settings.
+
+:::caution[This creates a billed resource]
+An instance bills per started hour by flavor and node count, plus storage and backups.
+STACKIT's product page lists `MongoDB-Flex-1.2-Replica-EU01`, three nodes, at EUR 0.343
+per hour. Check the current price list, and destroy the stack when you're done.
+:::
+
+## Create the instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Db = Stackit.MongoDBFlex.Instance("Db", {
+  flavorId: "2.4",
+  version: "7.0",
+  replicas: 3,
+  type: "Replica",
+  storage: { class: "premium-perf2-mongodb", size: 10 },
+  backupSchedule: "0 2 * * *",
+  acl: ["203.0.113.7/32"],
+});
+
+export const AppUser = Db.pipe(
+  Effect.flatMap((db) =>
+    Stackit.MongoDBFlex.User("AppUser", {
+      instanceId: db.instanceId,
+      database: "app",
+      roles: ["readWrite"],
+    }),
+  ),
+);
+```
+
+A deploy waits until the instance reports `READY`, which takes minutes. STACKIT generates
+the user's password. Alchemy keeps it, and the connection string holding it, `Redacted`
+in the `password` and `uri` attributes.
+
+## Set the ACL
+
+Put your hosts' public IPs in `acl` as `/32`. Anything else can't open a connection,
+including a host using `Connect`:
+
+```diff lang="typescript"
+// src/resources.ts
+-  acl: ["203.0.113.7/32"],
++  acl: ["203.0.113.0/24", "198.51.100.7/32"],
+```
+
+## Connect from a Function
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { AppUser } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const connect = yield* Stackit.MongoDBFlex.Connect(yield* AppUser);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const info = yield* connect;
+        return yield* HttpServerResponse.json({ database: info.database });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.MongoDBFlex.ConnectHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+`Connect` grants no STACKIT role and creates no service account, because connections
+authenticate with the database user. The secrets reach the Function as plain revision
+variables, so anyone who can call `GetRevision` can read them.
+
+## Hand the settings to your driver
+
+`Connect` opens no socket. `yield* connect` gives you `host`, `port`, `database`,
+`username`, and `Redacted` `password` and `uri`. Unwrap the connection string when you
+pass it to your driver:
+
+```typescript
+const uri = Redacted.value((yield* connect).uri);
+```
+
+## Add a user that reads every database
+
+```diff lang="typescript"
+// src/resources.ts
+export const AppUser = Db.pipe(
+  Effect.flatMap((db) =>
+    Stackit.MongoDBFlex.User("AppUser", {
+      instanceId: db.instanceId,
+      database: "app",
+      roles: ["readWrite"],
+    }),
+  ),
+);
++
++export const Reporting = Db.pipe(
++  Effect.flatMap((db) =>
++    Stackit.MongoDBFlex.User("Reporting", {
++      instanceId: db.instanceId,
++      userName: "reporting",
++      database: "admin",
++      roles: ["readAnyDatabase"],
++    }),
++  ),
++);
+```
+
+Roles update in place. Changing `userName`, `database`, or `instanceId` replaces the
+user with a new password, so clients holding the old connection string stop working.
+
+## Rotate a password
+
+Change `rotationKey` on the user, then deploy:
+
+```diff lang="typescript"
+// src/resources.ts
+      database: "app",
+      roles: ["readWrite"],
++      rotationKey: "2026-11",
+```
+
+## Read and operate the instance
+
+| Binding | Methods |
+| --- | --- |
+| `ReadInstance` | `getInstance`, `listUsers`, `getUser`, `listBackups`, `getBackup`, `listRestoreJobs`, `listMetrics`, `listAdvisorSlowQueries`, `listSuggestedIndexes` |
+| `WriteInstance` | `resetUser`, `cloneInstance`, `restoreInstance` |
+| `ReadWriteInstance` | all of the above |
+
+```typescript
+// src/Admin.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Db } from "./resources.ts";
+
+export default class Admin extends Stackit.Functions.Function<Admin>()(
+  "Admin",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/admin" },
+  },
+  Effect.gen(function* () {
+    const client = yield* Stackit.MongoDBFlex.ReadWriteInstance(yield* Db);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const live = yield* client.getUser({ userId: "user-id" });
+        const { username } = yield* client.resetUser({ userId: "user-id" });
+        return yield* HttpServerResponse.json({ read: live.item?.username, rotated: username });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.MongoDBFlex.ReadWriteInstanceHttp)),
+) {}
+```
+
+These bindings grant a custom role with the permissions of their methods and a service
+account key for the host. The role is bound on the project holding the instance, because
+STACKIT binds roles on projects at the narrowest, so it reaches every MongoDB Flex
+instance in that project.
+
+## Restore a backup
+
+`restoreInstance` restores one of the bound instance's backups onto another instance:
+
+```typescript
+yield* client.restoreInstance({ backupId, targetInstanceId });
+```
+
+`cloneInstance` applies its backups at a point in time:
+
+```typescript
+yield* client.cloneInstance({ targetInstanceId, timestamp: "2026-11-01T02:30:00Z" });
+```
+
+## Keep snapshots longer
+
+```diff lang="typescript"
+// src/resources.ts
+  backupSchedule: "0 2 * * *",
++  snapshotRetentionDays: 4,
++  dailySnapshotRetentionDays: 3,
++  pointInTimeWindowHours: 30,
+  acl: ["203.0.113.7/32"],
+```
+
+Omit any of them to leave the live value alone.
+
+:::caution[Changing `replicas`, `type`, `storage.class`, `projectId`, or `region` replaces the instance]
+A replacement starts empty, so move your data out first. With an explicit `name`, the old
+instance is deleted first.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- Flavor `2.4`, version `7.0`, and storage class `premium-perf2-mongodb` are orderable on
+  your project. The API's `listFlavors` and `listStorages` list what you can use.
+- A storage size change applies in place.
+- `Connect` has a `uri` after a rotation. If it doesn't, it fails with `PasswordMissing`.
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [MongoDBFlex reference](/providers/stackit/mongodbflex#instance): every prop and
+  attribute.

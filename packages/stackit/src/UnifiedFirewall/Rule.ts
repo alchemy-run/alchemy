@@ -153,6 +153,17 @@ export type Rule = Resource<
  *
  * Writes on one instance run one at a time within a deploy.
  *
+ * See [STACKIT's Unified Firewall docs](https://docs.stackit.cloud/products/network/network-security/unified-firewall/).
+ *
+ * :::caution[Changing `product`, `instanceId`, `type`, `remoteSecurityGroupId`, `description`, `stateful`, `offset`, `projectId` or `region` replaces the Rule]
+ * Changing `product`, `instanceId`, `type`, `projectId` or `region` creates the new
+ * rule first, then deletes the old one. Changing `remoteSecurityGroupId`,
+ * `description`, `stateful` or `offset`, which the API can't update, or a target that
+ * isn't known at plan, deletes the old rule first, because the new one would match the
+ * same traffic. Until the new rule is `Active`, the access that rule described is not
+ * in place.
+ * :::
+ *
  * ### Creating a Rule
  * **Example:** Allow one range on an instance
  * ```typescript
@@ -219,13 +230,6 @@ export type Rule = Resource<
  * ### What Deleting Does <!-- api-prose -->
  * A delete acts on this one rule by its id, and waits until it is gone. A rule that's already
  * gone counts as deleted.
- *
- * ### Replacement Cautions <!-- api-prose -->
- * Changing `product`, `instanceId`, `type`, `projectId` or `region` creates the new rule first,
- * then deletes the old one. Changing `remoteSecurityGroupId`, `description`, `stateful` or
- * `offset`, which the API can't update, or a target that isn't known at plan, deletes the old
- * rule first, because the new one would match the same traffic. Until the new rule is `Active`,
- * the access that rule described is not in place.
  *
  * @resource
  * @product STACKIT Unified Firewall

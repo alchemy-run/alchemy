@@ -104,5 +104,31 @@ describe.skipIf(!owner)(
         }),
       { timeout: 120_000 },
     );
+
+    test.provider(
+      "a second deploy keeps the created key and membership",
+      (_stack) =>
+        Effect.gen(function* () {
+          expectOk(yield* call("/project"));
+
+          const { projectId } = yield* deploy(Stack);
+
+          const body = yield* call("/project");
+          expectOk(body);
+          expect(body.result.projectId).toBe(projectId);
+
+          const scope = { resourceType: "project", resourceId: projectId! };
+          const { roles } = yield* authorization.listRoles(scope);
+          const custom = roles.find(
+            (role) =>
+              role.id !== undefined &&
+              role.permissions.length === 1 &&
+              role.permissions[0]!.name === PERMISSION,
+          );
+          const { members } = yield* authorization.listMembers(scope);
+          expect(members.map((member) => member.role)).toContain(custom?.name);
+        }),
+      { timeout: 480_000 },
+    );
   },
 );

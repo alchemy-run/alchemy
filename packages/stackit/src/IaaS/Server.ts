@@ -241,6 +241,33 @@ export type Server = Resource<
  * public address with `PublicIp`. Servers are billed per hour by machine
  * type while they exist (`deallocated` stops the compute charge).
  *
+ * Alchemy adds no public address and no security group rule unless you declare them.
+ * Replacing it loses what is on its boot volume unless `bootVolume.deleteOnTermination` is
+ * `false`, so keep data on a separate `Stackit.IaaS.Volume`.
+ *
+ * Power actions that are not a state (reboot, rescue, console access) are runtime
+ * operations on the server, not props. To run your own program on a server, deploy a
+ * `Stackit.IaaS.Service` on it.
+ *
+ * See [STACKIT's Server docs](https://docs.stackit.cloud/products/compute-engine/server/).
+ *
+ * :::caution[Changing `imageId`, `bootVolume`, `networking`, `availabilityZone`, `affinityGroup`, `keypairName`, `userData`, `agent`, `configDrive`, `projectId` or `region` replaces the Server]
+ * A deploy creates a new server and deletes the old one, including when `name` stays
+ * the same. A replacement that keeps a `networkInterfaceIds` entry or a `volume` boot
+ * source deletes the old server first, since those attach to one server at a time. The
+ * old boot volume is deleted with it unless `bootVolume.deleteOnTermination` is
+ * `false`; keep data on a separate `Volume` attached with `VolumeAttachment`.
+ * :::
+ *
+ * :::caution[A server with backups stops a delete]
+ * STACKIT Server Backup only reaches a backup through its server, so a delete of a
+ * server that still has backups or backup schedules stops with
+ * `Stackit.IaaS.ServerHasBackups`. A destroy deletes the stack's own first, so only
+ * what the stack doesn't hold can stop it. A replacement that deletes the old server
+ * first would lose them all, so its plan fails before anything changes. To go ahead,
+ * deploy `forceDestroy: true` on its own, then make the change.
+ * :::
+ *
  * ### Creating a server
  * **Example:** An Ubuntu server booting from a network volume
  * ```typescript
@@ -291,7 +318,7 @@ export type Server = Resource<
  * const network = yield* Stackit.IaaS.Network("App", {
  *   ipv4: { prefix: "10.0.1.0/24" },
  * });
- * const nic = yield* Stackit.IaaS.NetworkInterface("Web", {
+ * const nic = yield* Stackit.IaaS.NetworkInterface("WebNic", {
  *   networkId: network.networkId,
  * });
  * const server = yield* Stackit.IaaS.Server("Web", {
@@ -299,7 +326,7 @@ export type Server = Resource<
  *   bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
  *   networking: { networkInterfaceIds: [nic.networkInterfaceId] },
  * });
- * const ip = yield* Stackit.IaaS.PublicIp("Web", {
+ * const ip = yield* Stackit.IaaS.PublicIp("WebIp", {
  *   networkInterfaceId: nic.networkInterfaceId,
  * });
  * ```
@@ -320,28 +347,121 @@ export type Server = Resource<
  * });
  * ```
  *
- * ### Replacement
- * Changing `imageId`, `bootVolume`, `networking`, `availabilityZone`,
- * `affinityGroup`, `keypairName`, `userData`, `agent`, `configDrive`,
- * `projectId` or `region` creates a new server and deletes the old one,
- * including when `name` stays the same. A replacement that keeps a
- * `networkInterfaceIds` entry or a `volume` boot source deletes the old
- * server first, since those attach to one server at a time. The old boot
- * volume is deleted with it unless `bootVolume.deleteOnTermination` is
- * `false`; keep data on a separate `Volume` attached with `VolumeAttachment`.
+ * ### Data Volumes
+ * A volume outlives the server it is attached to, so keep data there.
  *
- * STACKIT Server Backup only reaches a backup through its server, so a delete of
- * a server that still has backups or backup schedules stops with
- * `Stackit.IaaS.ServerHasBackups`. A destroy deletes the stack's own first, so
- * only what the stack doesn't hold can stop it. A replacement that deletes the
- * old server first would lose them all, so its plan fails before anything
- * changes. To go ahead, deploy `forceDestroy: true` on its own, then make the
- * change.
+ * **Example:** Attach a volume in the server's zone
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
  *
- * Power actions that are not a state (reboot, rescue, console access) are
- * not resource properties; they are runtime operations on the server.
+ * const network = yield* Stackit.IaaS.Network("App", {
+ *   ipv4: { prefix: "10.0.1.0/24" },
+ * });
+ * const server = yield* Stackit.IaaS.Server("Db", {
+ *   machineType: "g1.2",
+ *   availabilityZone: "eu01-1",
+ *   bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+ *   networking: { networkId: network.networkId },
+ * });
+ * const data = yield* Stackit.IaaS.Volume("DbData", {
+ *   size: 100,
+ *   availabilityZone: "eu01-1",
+ * });
+ * yield* Stackit.IaaS.VolumeAttachment("DbDataAttachment", {
+ *   serverId: server.serverId,
+ *   volumeId: data.volumeId,
+ * });
+ * ```
  *
- * To run your own program on a server, deploy a `Stackit.IaaS.Service` on it.
+ * ### Placement
+ * `availabilityZone` and `affinityGroup` replace the server when they change.
+ *
+ * **Example:** Keep replicas on different hosts
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const group = yield* Stackit.IaaS.AffinityGroup("Replicas", {
+ *   policy: "soft-anti-affinity",
+ * });
+ * const network = yield* Stackit.IaaS.Network("App", {
+ *   ipv4: { prefix: "10.0.1.0/24" },
+ * });
+ * for (const replica of ["A", "B"]) {
+ *   yield* Stackit.IaaS.Server(`Replica${replica}`, {
+ *     machineType: "g1.1",
+ *     bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+ *     networking: { networkId: network.networkId },
+ *     affinityGroup: group.affinityGroupId,
+ *   });
+ * }
+ * ```
+ *
+ * ### Hosting a Program
+ * `Stackit.IaaS.Service` installs a program on the server as a systemd unit. An image that
+ * doesn't install the Server Agent needs `agent: { provisioned: true }`. Changing `agent`
+ * replaces the server.
+ *
+ * **Example:** A Server and a Service on it
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const network = yield* Stackit.IaaS.Network("App", {
+ *   ipv4: { prefix: "10.0.1.0/24" },
+ * });
+ * const server = yield* Stackit.IaaS.Server("Box", {
+ *   machineType: "g1.1",
+ *   bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+ *   networking: { networkId: network.networkId },
+ *   agent: { provisioned: true },
+ * });
+ * const api = yield* Stackit.IaaS.Service("Api", {
+ *   server,
+ *   main: "./src/api.ts",
+ *   port: 3000,
+ * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `RebootServer` and the other server bindings grant a custom role on the project holding
+ * the server, holding only that one action. STACKIT binds roles on projects at the
+ * narrowest, so it reaches every server in that project.
+ *
+ * **Example:** Reboot a server from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Network = Stackit.IaaS.Network("App", {
+ *   ipv4: { prefix: "10.0.1.0/24" },
+ * });
+ * export const Web = Network.pipe(
+ *   Effect.flatMap((network) =>
+ *     Stackit.IaaS.Server("Web", {
+ *       machineType: "g1.1",
+ *       bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+ *       networking: { networkId: network.networkId },
+ *     }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const reboot = yield* Stackit.IaaS.RebootServer(yield* Web);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* reboot({ action: "soft" });
+ *         return yield* HttpServerResponse.json({ rebooting: true });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.IaaS.RebootServerHttp)),
+ * ) {}
+ * ```
  *
  * @resource
  * @product STACKIT Compute Engine

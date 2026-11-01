@@ -156,6 +156,13 @@ export type Destination = Resource<
  * Alchemy's, and an explicit name found on the router is reported as unowned, and only
  * taken over with `--adopt`.
  *
+ * See [STACKIT's Telemetry Router docs](https://docs.stackit.cloud/products/logging-and-monitoring/telemetry-router/).
+ *
+ * :::caution[Changing `routerId`, `projectId` or `region` replaces the Destination]
+ * A new destination is created on the new router and the old one is deleted.
+ * Everything else updates in place, including a switch between the two types.
+ * :::
+ *
  * ### Exporting to OpenTelemetry
  * **Example:** An endpoint with a bearer token
  * ```typescript
@@ -163,7 +170,7 @@ export type Destination = Resource<
  * import * as Config from "effect/Config";
  *
  * const router = yield* Stackit.Telemetry.Router("AuditLogs", {});
- * const token = yield* Config.redacted("SIEM_TOKEN");
+ * const token = Config.Redacted("SIEM_TOKEN");
  * yield* Stackit.Telemetry.Destination("Siem", {
  *   routerId: router.routerId,
  *   config: {
@@ -180,7 +187,7 @@ export type Destination = Resource<
  * import * as Config from "effect/Config";
  *
  * const router = yield* Stackit.Telemetry.Router("AuditLogs", {});
- * const password = yield* Config.redacted("SIEM_PASSWORD");
+ * const password = Config.Redacted("SIEM_PASSWORD");
  * yield* Stackit.Telemetry.Destination("Siem", {
  *   routerId: router.routerId,
  *   config: {
@@ -198,7 +205,7 @@ export type Destination = Resource<
  * import * as Config from "effect/Config";
  *
  * const router = yield* Stackit.Telemetry.Router("AuditLogs", {});
- * const secret = yield* Config.redacted("AUDIT_BUCKET_SECRET");
+ * const secret = Config.Redacted("AUDIT_BUCKET_SECRET");
  * yield* Stackit.Telemetry.Destination("Archive", {
  *   routerId: router.routerId,
  *   config: {
@@ -217,7 +224,7 @@ export type Destination = Resource<
  * import * as Config from "effect/Config";
  *
  * const router = yield* Stackit.Telemetry.Router("AuditLogs", {});
- * const token = yield* Config.redacted("SIEM_TOKEN");
+ * const token = Config.Redacted("SIEM_TOKEN");
  * yield* Stackit.Telemetry.Destination("IamEvents", {
  *   routerId: router.routerId,
  *   config: {

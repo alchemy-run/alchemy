@@ -130,6 +130,14 @@ export type SecurityGroupRule = Resource<
  * since STACKIT rejects such a rule as a duplicate. `alchemy unsafe nuke` does not list
  * rules: they are deleted with their security group.
  *
+ * See [STACKIT's security group docs](https://docs.stackit.cloud/products/network/core-networking/security-groups/).
+ *
+ * :::caution[Changing any prop replaces the Rule]
+ * Every property change replaces the rule. The new rule is created first, so allowed
+ * traffic keeps flowing, except when only `description` changes: STACKIT would reject
+ * the new rule as a duplicate, so the old rule is deleted first.
+ * :::
+ *
  * ### Allowing ingress traffic
  * **Example:** HTTPS from anywhere
  * ```typescript
@@ -174,12 +182,6 @@ export type SecurityGroupRule = Resource<
  *   ipRange: "0.0.0.0/0",
  * });
  * ```
- *
- * ### Replacement
- * Every property change replaces the rule. The new rule is created first,
- * so allowed traffic keeps flowing, except when only `description`
- * changes: STACKIT would reject the new rule as a duplicate, so the old
- * rule is deleted first.
  *
  * @resource
  * @product STACKIT Security Groups

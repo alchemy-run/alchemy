@@ -289,6 +289,13 @@ export type Cluster = Resource<
  * `alchemy.id`). A cluster of the same name without them is reported as unowned
  * and only taken over with `--adopt`.
  *
+ * See [STACKIT's Kubernetes Engine docs](https://docs.stackit.cloud/products/runtime/kubernetes-engine/).
+ *
+ * :::caution[Changing `name`, `projectId`, `region`, `network.id`, `network.accessScope`, `network.podAddressRanges` or `network.serviceAddressRanges` replaces the Cluster]
+ * The workloads on the old cluster are deleted with it. A new cluster starts with none
+ * of them, and a deploy waits until it reports `STATE_HEALTHY` or `STATE_HIBERNATED`.
+ * :::
+ *
  * ### Creating a Cluster
  * **Example:** One small pool, on the latest supported version
  * ```typescript

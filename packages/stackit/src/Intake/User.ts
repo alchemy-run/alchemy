@@ -118,13 +118,20 @@ export type User = Resource<"Stackit.Intake.User", UserProps, UserAttributes, ne
  * with labels. A user of the same name without them is reported as unowned, and only
  * taken over with `--adopt`.
  *
+ * See [STACKIT's Intake docs](https://docs.stackit.cloud/products/data-and-ai/intake/).
+ *
+ * :::caution[Changing `intakeId`, `projectId` or `region` replaces the User]
+ * A new user is created at the new place with the password you chose, and the old one
+ * is deleted.
+ * :::
+ *
  * ### Creating a User
  * **Example:** A user that publishes
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const password = yield* Config.redacted("INTAKE_PASSWORD");
+ * const password = Config.Redacted("INTAKE_PASSWORD");
  * const runner = yield* Stackit.Intake.Runner("Ingest", {
  *   maxMessageSizeKiB: 1024,
  *   maxMessagesPerHour: 1024,
@@ -144,7 +151,7 @@ export type User = Resource<"Stackit.Intake.User", UserProps, UserAttributes, ne
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const password = yield* Config.redacted("INTAKE_DLQ_PASSWORD");
+ * const password = Config.Redacted("INTAKE_DLQ_PASSWORD");
  * const runner = yield* Stackit.Intake.Runner("Ingest", {
  *   maxMessageSizeKiB: 1024,
  *   maxMessagesPerHour: 1024,
@@ -168,7 +175,7 @@ export type User = Resource<"Stackit.Intake.User", UserProps, UserAttributes, ne
  * import * as Config from "effect/Config";
  *
  * // Hosts bound to this user get the new password on the same deploy.
- * const password = yield* Config.redacted("INTAKE_PASSWORD_2026_11");
+ * const password = Config.Redacted("INTAKE_PASSWORD_2026_11");
  * const runner = yield* Stackit.Intake.Runner("Ingest", {
  *   maxMessageSizeKiB: 1024,
  *   maxMessagesPerHour: 1024,

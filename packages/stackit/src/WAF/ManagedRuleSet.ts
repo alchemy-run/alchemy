@@ -99,6 +99,14 @@ export type ManagedRuleSet = Resource<
  * clears rule sets with the shape of a generated physical name, so choose a name
  * outside that shape for a rule set that must survive a nuke.
  *
+ * See [STACKIT's ALB WAF docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/application-load-balancer/basics/basic-concepts-alb-waf/).
+ *
+ * :::caution[Changing `name`, `type`, `projectId` or `region` replaces the Rule Set]
+ * STACKIT refuses to delete a rule set a configuration still uses: a delete retries
+ * for about a minute, then fails with the API's `BadRequest`. Rule modes update in
+ * place.
+ * :::
+ *
  * ### Creating a Rule Set
  * **Example:** The OWASP Core Rule Set with its default modes
  * ```typescript

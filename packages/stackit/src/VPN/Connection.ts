@@ -218,13 +218,20 @@ export type Connection = Resource<
  * found by its explicit `displayName` on the gateway without them is reported as unowned and
  * only taken over with `--adopt`.
  *
+ * See [STACKIT's VPN docs](https://docs.stackit.cloud/products/network/connectivity-hybrid-multi-cloud/vpn/).
+ *
+ * :::caution[Changing `gatewayId`, `projectId` or `region` replaces the Connection]
+ * The connection is created on the new gateway and the old one is deleted. Point the
+ * remote peer at the new gateway's public IPs.
+ * :::
+ *
  * ### Creating a Connection
  * **Example:** A policy-based connection
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const preSharedKey = yield* Config.redacted("VPN_PRE_SHARED_KEY");
+ * const preSharedKey = Config.Redacted("VPN_PRE_SHARED_KEY");
  * const gateway = yield* Stackit.VPN.Gateway("Office", {
  *   planId: "p100",
  *   routingType: "POLICY_BASED",
@@ -259,7 +266,7 @@ export type Connection = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const preSharedKey = yield* Config.redacted("VPN_PRE_SHARED_KEY");
+ * const preSharedKey = Config.Redacted("VPN_PRE_SHARED_KEY");
  * const gateway = yield* Stackit.VPN.Gateway("Office", {
  *   planId: "p100",
  *   routingType: "ROUTE_BASED",
@@ -295,7 +302,7 @@ export type Connection = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const preSharedKey = yield* Config.redacted("VPN_PRE_SHARED_KEY");
+ * const preSharedKey = Config.Redacted("VPN_PRE_SHARED_KEY");
  * const gateway = yield* Stackit.VPN.Gateway("Backbone", {
  *   planId: "p100",
  *   routingType: "BGP_ROUTE_BASED",
@@ -389,7 +396,7 @@ export type Connection = Resource<
  *
  * // A new gateway id replaces the connection, and so does anything replacing the gateway.
  * // With a generated name the new connection comes up first.
- * const preSharedKey = yield* Config.redacted("VPN_PRE_SHARED_KEY");
+ * const preSharedKey = Config.Redacted("VPN_PRE_SHARED_KEY");
  * const gateway = yield* Stackit.VPN.Gateway("OfficeB", {
  *   planId: "p100",
  *   routingType: "POLICY_BASED",

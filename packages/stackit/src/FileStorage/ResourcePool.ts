@@ -182,6 +182,13 @@ export type ResourcePool = Resource<
  * Ownership is tracked with labels. A pool with the same name that lacks them is
  * reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's File Storage docs](https://docs.stackit.cloud/products/storage/file-storage/).
+ *
+ * :::caution[Changing `name`, `availabilityZone`, `projectId` or `region` replaces the Pool]
+ * A replacement starts empty: every share in it and all their data are lost, so copy
+ * data out first. Downstream shares are replaced with it.
+ * :::
+ *
  * ### Creating a Resource Pool
  * **Example:** The smallest pool
  * ```typescript

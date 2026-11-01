@@ -118,6 +118,15 @@ export type NetworkAreaRegion = Resource<
  * is treated as Alchemy's when its network area carries Alchemy ownership
  * labels; a configuration of a foreign area requires `--adopt`.
  *
+ * See [STACKIT's Network Area docs](https://docs.stackit.cloud/products/network/core-networking/network-area/).
+ *
+ * :::caution[Changing `networkAreaId`, `organizationId`, `region` or `transferNetwork` replaces the Configuration]
+ * Changing `transferNetwork` deletes the configuration before creating it again (one
+ * configuration per region), which STACKIT refuses while member projects have networks
+ * in the region. Changing `networkAreaId`, `organizationId` or `region` configures the
+ * new target first.
+ * :::
+ *
  * ### Configuring a region
  * **Example:** Address plan for the profile's region
  * ```typescript
@@ -147,12 +156,6 @@ export type NetworkAreaRegion = Resource<
  *   maxPrefixLength: 28,
  * });
  * ```
- *
- * ### Replacement
- * Changing `transferNetwork` deletes the configuration before creating it
- * again (one configuration per region), which STACKIT refuses while member
- * projects have networks in the region. Changing `networkAreaId`,
- * `organizationId` or `region` configures the new target first.
  *
  * @resource
  * @product STACKIT Network Area

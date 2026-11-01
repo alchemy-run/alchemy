@@ -112,6 +112,13 @@ export type Instance = Resource<
  * and only taken over with `--adopt`, which includes one a crash left behind
  * between the create call and the state write.
  *
+ * See [STACKIT's Edge Cloud docs](https://docs.stackit.cloud/products/runtime/edge-cloud/).
+ *
+ * :::caution[Changing `displayName`, `projectId` or `region` replaces the Instance]
+ * The replacement is a new control plane with a new id. Alchemy carries nothing over
+ * from the old one.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** An instance on a chosen plan
  * ```typescript

@@ -95,6 +95,14 @@ export type AffinityGroup = Resource<
  * unsafe nuke` enumerates only groups whose name has the generated shape,
  * so a group with a hand-chosen name of that shape is deleted too.
  *
+ * See [STACKIT's Server docs](https://docs.stackit.cloud/products/compute-engine/server/).
+ *
+ * :::caution[Changing `name`, `policy`, `projectId` or `region` replaces the Group]
+ * Any change (name, policy, project, region) creates a new group and deletes the old
+ * one. Servers keep their placement until they are recreated, and a server still in
+ * the old group can block its deletion; replace the servers together with the group.
+ * :::
+ *
  * ### Spreading servers over hosts
  * **Example:** Anti-affinity for a replicated service
  * ```typescript
@@ -115,12 +123,6 @@ export type AffinityGroup = Resource<
  *   });
  * }
  * ```
- *
- * ### Replacement
- * Any change (name, policy, project, region) creates a new group and
- * deletes the old one. Servers keep their placement until they are
- * recreated, and a server still in the old group can block its deletion;
- * replace the servers together with the group.
  *
  * @resource
  * @product STACKIT Compute Engine

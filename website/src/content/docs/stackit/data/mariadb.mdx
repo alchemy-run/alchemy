@@ -1,0 +1,206 @@
+---
+title: MariaDB
+description: Run managed MariaDB on STACKIT, apply migrations at deploy time, and hand a credential's connection settings to your driver from a Function.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = "mysql2";
+
+STACKIT MariaDB runs MariaDB for you. The API has no operations for databases or users:
+connection details, including the database's name, come from a `Credential`.
+
+<PackageManagers add={pkgs} />
+
+You only need `mysql2` for migrations, or as your own driver.
+
+:::caution[This creates a billed resource]
+An instance bills per started hour by plan. `MariaDB-1.4.10-Single-EU01` is about EUR
+0.10 per hour on STACKIT's database prices. Check the current price list, and destroy the
+stack when you're done.
+:::
+
+## Create the instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Db = Stackit.MariaDB.Instance("Db", {
+  version: "10.11",
+  planName: "stackit-mariadb-1.2.10-replica",
+  acl: ["203.0.113.7/32"],
+});
+
+export const App = Db.pipe(
+  Effect.flatMap((db) => Stackit.MariaDB.Credential("App", { instanceId: db.instanceId })),
+);
+```
+
+A deploy waits until the instance reports `active`, which takes minutes. A wrong
+`version` or `planName` fails the deploy with `DataServicePlanNotFound`, which lists the
+choices.
+
+`acl` is what lets a client connect. Leave it unset to keep STACKIT's default ranges.
+
+## Apply migrations
+
+```diff lang="typescript"
+// src/resources.ts
+  planName: "stackit-mariadb-1.2.10-replica",
+  acl: ["203.0.113.7/32"],
++  migrations: "./migrations",
+```
+
+Each deploy creates a credential, runs the pending files over a direct connection from
+your machine, and deletes the credential. Your machine's public IP has to be in `acl`,
+which Alchemy doesn't open for you. Editing or removing an applied file fails the deploy.
+
+Define views and stored routines with `SQL SECURITY INVOKER`: the credential that ran the
+migration is gone afterwards, so a `DEFINER` naming its user may no longer resolve.
+
+## Connect from a Function
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { App } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const connect = yield* Stackit.MariaDB.Connect(yield* App);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const info = yield* connect;
+        return yield* HttpServerResponse.json({ host: info.host });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.MariaDB.ConnectHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+`Connect` grants no STACKIT role and creates no service account, because connections
+authenticate with the database user. The password and URL reach the Function as plain
+revision variables, so anyone who can call `GetRevision` can read them. The host's egress
+IP has to be in `acl`, or it can't connect.
+
+## Hand the settings to your driver
+
+`Connect` opens no socket. `yield* connect` gives you `host`, `port`, `database`,
+`username`, and `Redacted` `password` and `url`:
+
+```typescript
+const url = Redacted.value((yield* connect).url);
+```
+
+## Rotate a credential
+
+Change `rotationKey` for a new user and password. STACKIT can't update a credential, so a
+new one is created first and the old one is deleted after:
+
+```diff lang="typescript"
+// src/resources.ts
+-  Effect.flatMap((db) => Stackit.MariaDB.Credential("App", { instanceId: db.instanceId })),
++  Effect.flatMap((db) =>
++    Stackit.MariaDB.Credential("App", { instanceId: db.instanceId, rotationKey: "2026-11" }),
++  ),
+```
+
+## Start a backup
+
+Runtime operations are one binding each:
+
+```typescript
+// src/Admin.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Db } from "./resources.ts";
+
+export default class Admin extends Stackit.Functions.Function<Admin>()(
+  "Admin",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/admin" },
+  },
+  Effect.gen(function* () {
+    const createBackup = yield* Stackit.MariaDB.CreateBackup(yield* Db);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const backup = yield* createBackup({});
+        return yield* HttpServerResponse.json({ id: backup.id });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.MariaDB.CreateBackupHttp)),
+) {}
+```
+
+This grants a custom role with `mariadb.proxy.write` and a service account key for the
+host. The role is bound on the project holding the instance, because STACKIT binds roles
+on projects at the narrowest, so it reaches every MariaDB instance in that project.
+
+## See the other operations
+
+| Binding | Permission |
+| --- | --- |
+| `GetInstance` | `mariadb.instance.get` |
+| `ListCredentials` | `mariadb.credential.list` |
+| `GetCredential` | `mariadb.credential.get` |
+| `GetMetrics`, `ListBackups`, `DownloadBackup`, `ListRestores`, `GetUpdates` | `mariadb.proxy.read` |
+| `CreateBackup`, `TriggerRestore`, `TriggerRestart`, `TriggerRecreate`, `TriggerUpdate` | `mariadb.proxy.write` |
+
+STACKIT gates backups, metrics, restarts, and updates behind `mariadb.proxy.read` and
+`mariadb.proxy.write`, so `mariadb.proxy.write` allows all of those changes.
+
+`DownloadBackup` reads the whole archive into memory, so check it on a large backup.
+
+## Tune the instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Redacted from "effect/Redacted";
+
+export const Db = Stackit.MariaDB.Instance("Db", {
+  name: "orders-production",
+  version: "10.11",
+  planName: "stackit-mariadb-1.2.10-replica",
+  acl: ["203.0.113.0/24"],
+  automaticUpdates: true,
+  backupEncryptionKey: Redacted.make("a-key-you-manage"),
+  enableMonitoring: true,
+  metricsFrequency: 60,
+  syslog: ["logs.example.com:54321"],
+});
+```
+
+Removing one of these props leaves its live value as it is.
+
+:::caution[Changing `name`, `projectId`, or `region` replaces the instance]
+A replacement starts empty, so back up what you need first.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- A credential's user can run DDL. Migrations depend on it.
+- The credential's URL has a scheme and TLS settings `mysql2` accepts.
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [MariaDB reference](/providers/stackit/mariadb#instance): every prop and attribute.

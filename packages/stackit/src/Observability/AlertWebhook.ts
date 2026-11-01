@@ -79,6 +79,12 @@ export type AlertWebhook = Resource<
  * `AlertConfig` on the same instance, which writes the whole configuration, knows to
  * carry it along, so don't give a receiver of your own that prefix.
  *
+ * See [STACKIT's Observability docs](https://docs.stackit.cloud/products/logging-and-monitoring/observability/).
+ *
+ * :::caution[Changing `instanceId` or `projectId` replaces the Webhook]
+ * The receiver and route are created on the new instance and removed from the old one.
+ * :::
+ *
  * ### Sending Alerts to a URL
  * **Example:** Post critical alerts to a URL from a redacted config value
  * ```typescript
@@ -86,7 +92,7 @@ export type AlertWebhook = Resource<
  * import * as Config from "effect/Config";
  *
  * const instance = yield* Stackit.Observability.Instance("Metrics", {});
- * const url = yield* Config.redacted("PAGER_WEBHOOK_URL");
+ * const url = Config.Redacted("PAGER_WEBHOOK_URL");
  * const webhook = yield* Stackit.Observability.AlertWebhook("Pager", {
  *   instanceId: instance.instanceId,
  *   url,
@@ -104,7 +110,7 @@ export type AlertWebhook = Resource<
  * // A new receiver and route are created on the other instance, and the old ones are
  * // deleted. Alerts of the old instance stop reaching the URL.
  * const instance = yield* Stackit.Observability.Instance("OtherMetrics", {});
- * const url = yield* Config.redacted("PAGER_WEBHOOK_URL");
+ * const url = Config.Redacted("PAGER_WEBHOOK_URL");
  * const webhook = yield* Stackit.Observability.AlertWebhook("Pager", {
  *   instanceId: instance.instanceId,
  *   url,

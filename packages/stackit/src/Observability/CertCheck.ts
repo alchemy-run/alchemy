@@ -42,6 +42,13 @@ export type CertCheck = Resource<
  * over with `--adopt`. `alchemy unsafe nuke` lists every check on an instance
  * it would delete anyway, because deleting the instance takes them with it.
  *
+ * See [STACKIT's Observability docs](https://docs.stackit.cloud/products/logging-and-monitoring/observability/).
+ *
+ * :::caution[Changing any prop replaces the Check]
+ * The API has no update for a check. A new check is created and the old one is
+ * deleted.
+ * :::
+ *
  * ### Watching a Certificate
  * **Example:** Check the certificate of a host
  * ```typescript

@@ -112,6 +112,15 @@ export type Instance = Resource<
  * taken over with `--adopt`. `alchemy unsafe nuke` enumerates instances whose
  * name has the generated shape.
  *
+ * Reaching the instance's Vault API takes an address in `acls`. A replacement starts empty.
+ *
+ * See [STACKIT's Secrets Manager docs](https://docs.stackit.cloud/products/security/secrets-manager/).
+ *
+ * :::caution[Changing `projectId` replaces the Instance]
+ * A replacement starts empty, and the secrets in the old instance are deleted with it.
+ * Secrets the stack declares are written again to the new one.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** Basic instance
  * ```typescript
@@ -193,6 +202,45 @@ export type Instance = Resource<
  * const vault = yield* Stackit.SecretsManager.Instance("Vault", {
  *   projectId: "00000000-0000-0000-0000-000000000003",
  * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `ReadSecret`, `WriteSecret` and `ReadWriteSecret` each create an AppRole for the host
+ * and instance. A login reads every secret in the instance, because STACKIT can't limit
+ * one to a path, and it has no write-only access. The host's egress address has to be in
+ * `acls`.
+ *
+ * **Example:** Read and update a secret from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Vault = Stackit.SecretsManager.Instance("Vault", {
+ *   acls: ["203.0.113.7/32"],
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const secrets = yield* Stackit.SecretsManager.ReadWriteSecret(yield* Vault);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const secret = yield* secrets.get({ secretPath: "payments/counter" });
+ *         const written = yield* secrets.put({
+ *           secretPath: "payments/counter",
+ *           data: secret.data.data,
+ *           options: { cas: secret.data.metadata.version },
+ *         });
+ *         return yield* HttpServerResponse.json({ version: written.data.version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.SecretsManager.ReadWriteSecretHttp)),
+ * ) {}
  * ```
  *
  * @resource

@@ -13,12 +13,9 @@ export interface ReadWriteZoneClient extends ReadZoneClient, WriteZoneClient {}
  * Bind it in the init phase and provide {@link ReadWriteZoneHttp}. A foreign
  * host signs with a service account key Alchemy creates for it.
  *
- * Access: the `dns.admin` role on the project holding the zone, so the host can
- * read and change every zone in that project, not only this one. A custom role
- * would be narrower, but STACKIT doesn't document DNS permission names. The role
- * name follows STACKIT's `<product>.admin` pattern, but no STACKIT source lists
- * it; check it with `listRoles` before relying on it, because a wrong name fails
- * the deploy.
+ * Access: the `dns.zone.list` and `dns.zone.create` permissions on the project
+ * holding the zone, so the host can read and change every zone in that project, not
+ * only this one.
  *
  * ### Reading and Writing a Zone
  * **Example:** Replace a TXT record from a Cloudflare Worker

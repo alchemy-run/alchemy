@@ -94,6 +94,14 @@ export type KeyRing = Resource<
  * same explicit `displayName` is reported as unowned and only taken over with
  * `--adopt`.
  *
+ * See [STACKIT's KMS docs](https://docs.stackit.cloud/products/security/kms/).
+ *
+ * :::caution[Changing any prop replaces the Key Ring]
+ * STACKIT has no update operation for key rings, and replacing a ring replaces the
+ * keys in it. Data encrypted with those keys can't be decrypted with the new ones, so
+ * decrypt or re-encrypt it first.
+ * :::
+ *
  * ### Creating a Key Ring
  * **Example:** Key ring with a generated name
  * ```typescript

@@ -196,6 +196,13 @@ export type Zone = Resource<"Stackit.DNS.Zone", ZoneProps, ZoneAttributes, never
  * `alchemy.stage`, `alchemy.id`). A zone with the same `dnsName` that lacks
  * them is reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's DNS docs](https://docs.stackit.cloud/products/network/core-networking/dns/).
+ *
+ * :::caution[Changing `dnsName`, `type`, `isReverseZone` or `projectId` replaces the Zone]
+ * The new zone holds only the record sets the stack declares, and the old one is
+ * deleted. Check that your registrar delegates to the new `primaryNameServer`.
+ * :::
+ *
  * ### Creating a Zone
  * **Example:** Primary zone for a domain you own
  * ```typescript
@@ -279,6 +286,69 @@ export type Zone = Resource<"Stackit.DNS.Zone", ZoneProps, ZoneAttributes, never
  * // repoints dependent record sets, then deletes the old zone and every
  * // record in it. Re-delegate the domain to the new name servers.
  * const zone = yield* Stackit.DNS.Zone("Zone", { dnsName: "example.net" });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `ReadZone` grants the `dns.zone.list` permission on the project holding the zone, and
+ * the write bindings `dns.zone.create`, so the host can change every zone in that project.
+ * `ReadWriteZone` grants both.
+ *
+ * **Example:** List a zone's record sets from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Domain = Stackit.DNS.Zone("Domain", { dnsName: "example.com" });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const zone = yield* Stackit.DNS.ReadZone(yield* Domain);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { rrSets } = yield* zone.listRecordSets({ pageSize: 100 });
+ *         return yield* HttpServerResponse.json({ count: rrSets.length });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.DNS.ReadZoneHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Create an ACME challenge record from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Domain = Stackit.DNS.Zone("Domain", { dnsName: "example.com" });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const createRecordSet = yield* Stackit.DNS.CreateRecordSet(yield* Domain);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { rrset } = yield* createRecordSet({
+ *           name: "_acme-challenge",
+ *           type: "TXT",
+ *           records: [{ content: "<token>" }],
+ *           ttl: 60,
+ *         });
+ *         return yield* HttpServerResponse.json({ id: rrset.id });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.DNS.CreateRecordSetHttp)),
+ * ) {}
  * ```
  *
  * @resource

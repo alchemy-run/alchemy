@@ -1,0 +1,165 @@
+---
+title: Static sites
+description: Build Hugo, Zola, or any static site with a shell command and serve it from a private STACKIT bucket behind the CDN with Stackit.Website.StaticSite.
+sidebar:
+  order: 30
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Stackit.Website.StaticSite` runs any build command that writes a directory,
+uploads the output to a private Object Storage bucket, and serves it through a CDN
+distribution. No compute runs, so there's no Docker, no registry, and no Function.
+
+## Install
+
+The local server under `alchemy dev` comes from the build integration:
+
+<PackageManagers dev={devDeps} />
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyBlog",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Stackit.Website.StaticSite("Blog", {
+      command: "hugo --minify",
+      outdir: "public",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the CDN's URL. An unchanged site skips the build.
+
+## Upload plain files
+
+If there's nothing to build, copy the files to the output directory. `shell` runs the
+command in a shell:
+
+```typescript
+const site = yield* Stackit.Website.StaticSite("MarketingSite", {
+  command: "rm -rf dist && cp -R site dist",
+  shell: true,
+  outdir: "dist",
+  memo: { include: ["site/**"] },
+});
+```
+
+## Build in a subdirectory
+
+```typescript
+const site = yield* Stackit.Website.StaticSite("Web", {
+  cwd: "apps/web",
+  command: "npm run build",
+  outdir: "dist",
+});
+```
+
+## Serve pages without `.html`
+
+`about/index.html` is always stored at `/about` and `/about/`.
+`drop-trailing-slash` also stores `about.html` at `/about`:
+
+```typescript
+const site = yield* Stackit.Website.StaticSite("Web", {
+  command: "npm run build",
+  outdir: "dist",
+  htmlHandling: "drop-trailing-slash",
+});
+```
+
+## Serve under a base path
+
+Uploads go under `basePath`:
+
+```typescript
+const site = yield* Stackit.Website.StaticSite("Docs", {
+  command: "npm run build",
+  outdir: "dist",
+  basePath: "/docs",
+});
+```
+
+## Know the limits
+
+The CDN has no rewrite and no error pages, so a path with no file fails. There is no
+client-side routing fallback and no 404 page. For those, deploy
+[`Stackit.Website.Vite`](/stackit/frontend/vite#serve-deep-links-from-a-function) with
+`origin: "function"`.
+
+:::caution[`/` is unconfirmed]
+A bucket has no object for `/`, and STACKIT documents no default document for a bucket
+origin. Check `/` on your first deploy.
+:::
+
+## Use a custom domain
+
+```typescript
+const site = yield* Stackit.Website.StaticSite("Web", {
+  command: "npm run build",
+  outdir: "dist",
+  domain: "www.example.com",
+});
+```
+
+Create the CNAME to the distribution's hostname yourself, or publish it with a DNS
+adapter. See
+[Use a custom domain](/stackit/frontend/websites#use-a-custom-domain).
+
+## Purge everything on deploy
+
+Files with a content hash in their name are cached for good, and HTML isn't cached. A
+deploy purges the unhashed files that changed. To purge the whole distribution on each
+new build:
+
+```typescript
+const site = yield* Stackit.Website.StaticSite("Web", {
+  command: "npm run build",
+  outdir: "dist",
+  invalidation: { paths: "all" },
+});
+```
+
+## Use your dev server
+
+Under `alchemy dev`, run your own dev command instead of the build:
+
+```typescript
+const site = yield* Stackit.Website.StaticSite("Web", {
+  cwd: "apps/web",
+  command: "npm run build",
+  outdir: "dist",
+  dev: { command: "npm run dev" },
+});
+```
+
+Without `dev`, a local server serves the build. Neither creates anything in the cloud.
+
+## What it costs
+
+Object Storage bills what you store and your traffic out. The CDN has no request fee
+and no per-distribution fee, and price list v1.0.44 has its traffic at EUR 0.00005 per MB
+in the EU. Check the current price list.
+
+## Example
+
+[`examples/stackit-static-site`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-static-site)
+uploads a directory of plain files and has a test suite. It hasn't been deployed to
+STACKIT yet.
+
+## Where next
+
+- [Websites](/stackit/frontend/websites): the settings every site shares.
+- [Object Storage](/stackit/data/object-storage): buckets and their bindings.
+- [Website reference](/providers/stackit/website#staticsite): every prop.

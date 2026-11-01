@@ -119,6 +119,16 @@ export type Project = Resource<
  * labels; `alchemy unsafe nuke` only deletes projects carrying them and
  * never deletes the profile's own project.
  *
+ * Alchemy grants access on a new project only to `owner` and `members`. Nothing else in
+ * the stack gets a role on it unless you grant one.
+ *
+ * See [STACKIT's Resource Manager docs](https://docs.stackit.cloud/platform/resource-manager/).
+ *
+ * :::caution[Changing `networkAreaId` replaces the Project]
+ * The `networkArea` label is immutable. A replacement deletes the old project and
+ * everything in it, so move what you need first.
+ * :::
+ *
  * ### Creating a project
  * **Example:** Project owned by a user, in the profile's organization
  * ```typescript
@@ -181,6 +191,60 @@ export type Project = Resource<
  *
  * The `networkArea` label is immutable: changing `networkAreaId` replaces
  * the project and deletes everything in it.
+ *
+ * ### Granting Access
+ * `owner` and `members` only apply when the project is created. Manage access afterwards
+ * with `Stackit.IAM.Membership`.
+ *
+ * **Example:** Initial members, and a role granted later
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const project = yield* Stackit.ResourceManager.Project("App", {
+ *   owner: "jane.doe@example.com",
+ *   members: [{ subject: "auditor@example.com", role: "reader" }],
+ * });
+ * const ci = yield* Stackit.IAM.ServiceAccount("Ci", {
+ *   projectId: project.projectId,
+ * });
+ * yield* Stackit.IAM.Membership("CiEditor", {
+ *   subject: ci.email,
+ *   role: "editor",
+ *   resourceId: project.projectId,
+ * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `GetProject` grants a custom role on the project holding only
+ * `resource-manager.project.get`, and it only covers the bound project.
+ *
+ * **Example:** Read a project's state from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Sandbox = Stackit.ResourceManager.Project("Sandbox", {
+ *   owner: "jane.doe@example.com",
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const getProject = yield* Stackit.ResourceManager.GetProject(yield* Sandbox);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const project = yield* getProject({});
+ *         return yield* HttpServerResponse.json({ state: project.lifecycleState });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.ResourceManager.GetProjectHttp)),
+ * ) {}
+ * ```
  *
  * @resource
  * @product STACKIT Resource Manager

@@ -80,6 +80,12 @@ export type AccessPolicy = Resource<
  * for the same email that lacks Alchemy's labels is reported as unowned and only taken
  * over with `--adopt`.
  *
+ * See [STACKIT's Logs docs](https://docs.stackit.cloud/products/logging-and-monitoring/logs/).
+ *
+ * :::caution[Changing `instanceId`, `email`, `projectId` or `region` replaces the Policy]
+ * A new policy is created and the old one is deleted, so the old subject loses access.
+ * :::
+ *
  * ### Granting Access
  * **Example:** Let a group read an instance's logs
  * ```typescript

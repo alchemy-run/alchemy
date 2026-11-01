@@ -83,6 +83,13 @@ export type Credential = Resource<
  * instance until you delete it. `alchemy unsafe nuke` only clears credentials with a
  * generated `description`.
  *
+ * See [STACKIT's Observability docs](https://docs.stackit.cloud/products/logging-and-monitoring/observability/).
+ *
+ * :::caution[Changing `instanceId`, `description` or `projectId` replaces the Credential]
+ * There is no way to reset a password. The new credential has a new username and
+ * password, and the old one stops working when it is deleted.
+ * :::
+ *
  * ### Creating a Credential
  * **Example:** A credential for remote write
  * ```typescript

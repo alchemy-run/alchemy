@@ -157,6 +157,14 @@ export type Repository = Resource<
  * does. Repositories go with their instance,
  * and listing them takes a login no `alchemy unsafe nuke` has, so there is no `list`.
  *
+ * See [STACKIT's Git docs](https://docs.stackit.cloud/products/developer-platform/git/).
+ *
+ * :::caution[Changing `instanceUrl` or `owner` replaces the Repository]
+ * The new repository starts empty. A plan that would replace a repository with commits
+ * fails with `Stackit.Git.RepositoryDeleteRefused` before anything changes, until
+ * `forceDestroy` is deployed.
+ * :::
+ *
  * ### Creating a Repository
  * **Example:** A private repository, managed with a technical user
  * ```typescript
@@ -167,7 +175,7 @@ export type Repository = Resource<
  *   acl: ["203.0.113.7/32"],
  *   featureToggle: { enableLocalLogin: true },
  * });
- * const password = yield* Config.redacted("FORGE_CI_PASSWORD");
+ * const password = Config.Redacted("FORGE_CI_PASSWORD");
  * const user = yield* Stackit.Git.User("Ci", {
  *   instanceId: forge.instanceId,
  *   username: "ci-bot",
@@ -189,7 +197,7 @@ export type Repository = Resource<
  * import * as Config from "effect/Config";
  *
  * const forge = yield* Stackit.Git.Instance("Forge", {});
- * const token = yield* Config.redacted("FORGE_TOKEN");
+ * const token = Config.Redacted("FORGE_TOKEN");
  * const repository = yield* Stackit.Git.Repository("App", {
  *   instanceUrl: forge.url,
  *   token,
@@ -207,7 +215,7 @@ export type Repository = Resource<
  * import * as Config from "effect/Config";
  *
  * const forge = yield* Stackit.Git.Instance("Forge", {});
- * const token = yield* Config.redacted("FORGE_TOKEN");
+ * const token = Config.Redacted("FORGE_TOKEN");
  * const repository = yield* Stackit.Git.Repository("Docs", {
  *   instanceUrl: forge.url,
  *   token,
@@ -233,7 +241,7 @@ export type Repository = Resource<
  * export const Forge = Stackit.Git.Instance("Forge", { acl: ["0.0.0.0/0"] });
  * export const App = Effect.gen(function* () {
  *   const forge = yield* Forge;
- *   const token = yield* Config.redacted("FORGE_READ_TOKEN");
+ *   const token = Config.Redacted("FORGE_READ_TOKEN");
  *   return yield* Stackit.Git.Repository("App", { instanceUrl: forge.url, token });
  * });
  *
@@ -259,7 +267,7 @@ export type Repository = Resource<
  * import * as Config from "effect/Config";
  *
  * const forge = yield* Stackit.Git.Instance("Forge", {});
- * const token = yield* Config.redacted("FORGE_TOKEN");
+ * const token = Config.Redacted("FORGE_TOKEN");
  * // Deploy this first, then remove the resource or destroy the stack.
  * const repository = yield* Stackit.Git.Repository("App", {
  *   instanceUrl: forge.url,
@@ -275,7 +283,7 @@ export type Repository = Resource<
  * import * as Config from "effect/Config";
  *
  * const forge = yield* Stackit.Git.Instance("Forge", {});
- * const token = yield* Config.redacted("FORGE_TOKEN");
+ * const token = Config.Redacted("FORGE_TOKEN");
  * // If the old one has commits, this plan fails and nothing changes. Move the history first,
  * // deploy forceDestroy: true on its own, and then make this change.
  * const repository = yield* Stackit.Git.Repository("App", {

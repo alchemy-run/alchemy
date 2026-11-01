@@ -322,10 +322,6 @@ export type Instance = Resource<
  * engine for them. A Worker or Function can trigger and read DAG runs through the bindings in this
  * namespace.
  *
- * :::caution[STACKIT Workflows is an alpha API]
- * STACKIT serves this API as `v1alpha`, so it may change.
- * :::
- *
  * Display name, description, a version within one Airflow major version, the identity provider, DAG
  * sources, Observability and the example flags update in place. Changing the Airflow major version,
  * the network, the project or the region replaces the instance, and **replacing an instance loses
@@ -340,6 +336,17 @@ export type Instance = Resource<
  * so an instance found by an explicit name without state is reported as unowned, and only taken
  * over with `--adopt`. `alchemy unsafe nuke` deletes every instance whose display name has the shape
  * of a generated one: choose another shape for an instance that must survive a nuke.
+ *
+ * See [STACKIT's Workflows docs](https://docs.stackit.cloud/products/data-and-ai/workflows/).
+ *
+ * :::caution[STACKIT Workflows is an alpha API]
+ * STACKIT serves this API as `v1alpha`, so it may change.
+ * :::
+ *
+ * :::caution[Changing the Airflow major version of `version`, `network`, `projectId` or `region` replaces the Instance]
+ * Replacing an instance loses what lives in it: DAG run history, XComs, variables and
+ * connections. Your DAG files stay in their source.
+ * :::
  *
  * ### Creating an Instance
  * **Example:** Load DAGs from a public Git repository
@@ -379,7 +386,7 @@ export type Instance = Resource<
  *       auth: {
  *         type: "basic",
  *         username: "airflow",
- *         password: yield* Config.redacted("DAGS_REPOSITORY_TOKEN"),
+ *         password: Config.Redacted("DAGS_REPOSITORY_TOKEN"),
  *       },
  *     },
  *   ],
@@ -400,8 +407,8 @@ export type Instance = Resource<
  *       prefix: "dags/",
  *       s3Auth: {
  *         type: "accessKey",
- *         accessKeyId: yield* Config.redacted("DAGS_ACCESS_KEY_ID"),
- *         secretAccessKey: yield* Config.redacted("DAGS_SECRET_ACCESS_KEY"),
+ *         accessKeyId: Config.Redacted("DAGS_ACCESS_KEY_ID"),
+ *         secretAccessKey: Config.Redacted("DAGS_SECRET_ACCESS_KEY"),
  *       },
  *     },
  *   ],
@@ -419,7 +426,7 @@ export type Instance = Resource<
  *     type: "oauth2",
  *     name: "keycloak",
  *     clientId: "workflows",
- *     clientSecret: yield* Config.redacted("WORKFLOWS_OIDC_CLIENT_SECRET"),
+ *     clientSecret: Config.Redacted("WORKFLOWS_OIDC_CLIENT_SECRET"),
  *     discoveryEndpoint: "https://login.example.com/realms/acme/.well-known/openid-configuration",
  *     scope: "openid email",
  *     rolesClaim: "resource_access.workflows.roles",
@@ -448,7 +455,7 @@ export type Instance = Resource<
  *     const trigger = yield* Stackit.Workflows.TriggerDagRun(airflow, {
  *       discoveryEndpoint: "https://login.example.com/realms/acme/.well-known/openid-configuration",
  *       clientId: "reports-api",
- *       clientSecret: yield* Config.redacted("AIRFLOW_CLIENT_SECRET"),
+ *       clientSecret: yield* Config.Redacted("AIRFLOW_CLIENT_SECRET"),
  *     });
  *     return {
  *       fetch: Effect.gen(function* () {

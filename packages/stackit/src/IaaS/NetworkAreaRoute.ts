@@ -88,6 +88,12 @@ export type NetworkAreaRoute = Resource<
  * Only labels are mutable; changing the destination or the next hop
  * replaces the route.
  *
+ * See [STACKIT's Network Area docs](https://docs.stackit.cloud/products/network/core-networking/network-area/).
+ *
+ * :::caution[Changing `destination`, `nexthop`, `networkAreaId`, `organizationId` or `region` replaces the Route]
+ * A deploy creates the new route before deleting the old one.
+ * :::
+ *
  * ### Creating a route
  * **Example:** Route a prefix to an appliance
  * ```typescript
@@ -118,10 +124,6 @@ export type NetworkAreaRoute = Resource<
  *   nexthop: { type: "blackhole" },
  * });
  * ```
- *
- * ### Replacement
- * Changing `destination`, `nexthop`, `networkAreaId`, `organizationId` or
- * `region` creates the new route before deleting the old one.
  *
  * @resource
  * @product STACKIT Network Area

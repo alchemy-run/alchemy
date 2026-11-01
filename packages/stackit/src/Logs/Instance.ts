@@ -124,6 +124,12 @@ export type Instance = Resource<
  * Ownership is tracked with STACKIT labels. An instance with the same `displayName`
  * that lacks them is reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's Logs docs](https://docs.stackit.cloud/products/logging-and-monitoring/logs/).
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Instance]
+ * The logs the old instance holds are not carried over.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** An instance with a 30 day retention
  * ```typescript

@@ -180,6 +180,12 @@ export type Instance = Resource<
  *
  * Instances are billed per started hour by plan.
  *
+ * See [STACKIT's LogMe docs](https://docs.stackit.cloud/products/logging-and-monitoring/logme/).
+ *
+ * :::caution[Changing `name`, `projectId` or `region` replaces the Instance]
+ * A replacement starts empty: the logs in the old instance are deleted with it.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** A replicated instance
  * ```typescript

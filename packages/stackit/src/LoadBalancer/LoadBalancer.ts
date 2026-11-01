@@ -306,6 +306,13 @@ export type LoadBalancer = Resource<
  * Ownership is tracked with labels. A load balancer with the same name that
  * lacks them is reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's Network Load Balancer docs](https://docs.stackit.cloud/products/network/load-balancing-and-content-delivery/network-load-balancer/).
+ *
+ * :::caution[Changing `name`, `networks`, `externalAddress`, `disableTargetSecurityGroupAssignment`, `projectId` or `region` replaces the Load Balancer]
+ * The old load balancer is deleted and a new one takes its place. A deploy waits for
+ * the new one to be ready, which can take as long as a first deploy.
+ * :::
+ *
  * ### Creating a Load Balancer
  * **Example:** A public TCP load balancer on an existing public IP
  * ```typescript
@@ -432,7 +439,7 @@ export type LoadBalancer = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const password = yield* Config.redacted("METRICS_PASSWORD");
+ * const password = Config.Redacted("METRICS_PASSWORD");
  * const credential = yield* Stackit.LoadBalancer.ObservabilityCredential("Metrics", {
  *   username: "metrics-writer",
  *   password,
@@ -515,6 +522,44 @@ export type LoadBalancer = Resource<
  *     { name: "web", targetPort: 8080, targets: [{ ip: "10.0.2.10" }] },
  *   ],
  * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `GetLoadBalancer` grants a custom role holding only `nlb.loadbalancer.get` on the
+ * project holding the load balancer, so it reaches every load balancer in that project.
+ *
+ * **Example:** Read a load balancer's status from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Balancer = Stackit.LoadBalancer.LoadBalancer("Web", {
+ *   networks: [{ networkId: "11111111-1111-4111-8111-111111111111" }],
+ *   options: { ephemeralAddress: true },
+ *   listeners: [{ port: 80, protocol: "PROTOCOL_TCP", targetPool: "web" }],
+ *   targetPools: [{ name: "web", targetPort: 8080, targets: [{ ip: "10.0.1.10" }] }],
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const getLoadBalancer = yield* Stackit.LoadBalancer.GetLoadBalancer(yield* Balancer);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const live = yield* getLoadBalancer();
+ *         return yield* HttpServerResponse.json({
+ *           status: live.status,
+ *           address: live.externalAddress,
+ *         });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.LoadBalancer.GetLoadBalancerHttp)),
+ * ) {}
  * ```
  *
  * @resource

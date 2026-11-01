@@ -68,6 +68,11 @@ export type Environment = Resource<
  * A STACKIT Container Applications environment: an isolated scope in a project that
  * holds applications, secrets and registry logins.
  *
+ * The API has no labels, so Alchemy can't mark an environment as its own. One with a
+ * generated name is taken as this resource's. One with your `displayName`, found with no
+ * state, is reported as unowned and only used with `--adopt`, and so is the project's
+ * default environment.
+ *
  * :::caution[An environment can't be deleted]
  * The API has create, get and list for environments, and nothing else. So destroying this
  * resource only drops it from state: the environment stays in the project, and
@@ -80,10 +85,10 @@ export type Environment = Resource<
  * Container Applications is a beta API, available in `eu01` only.
  * :::
  *
- * The API has no labels, so Alchemy can't mark an environment as its own. One with a
- * generated name is taken as this resource's. One with your `displayName`, found with no
- * state, is reported as unowned and only used with `--adopt`, and so is the project's
- * default environment.
+ * :::caution[Changing `displayName`, `projectId` or `region` replaces the Environment]
+ * A new environment is created, and its applications, secrets and registries are replaced
+ * in it. The old environment stays behind, because the API can't delete it.
+ * :::
  *
  * ### Creating an Environment
  * **Example:** An environment with a generated name
@@ -139,11 +144,6 @@ export type Environment = Resource<
  *   }).pipe(Effect.provide(Stackit.ContainerApplications.GetEnvironmentHttp)),
  * ) {}
  * ```
- *
- * :::caution[Changing `displayName`, `projectId` or `region` replaces the Environment]
- * A new environment is created, and its applications, secrets and registries are replaced
- * in it. The old environment stays behind, because the API can't delete it.
- * :::
  *
  * @resource
  * @product STACKIT Container Applications

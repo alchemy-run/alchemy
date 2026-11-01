@@ -1,0 +1,456 @@
+---
+title: "Part 5: CI/CD"
+description: Deploy from GitHub Actions with a STACKIT service account — production on main, a preview stage per pull request, and state CI can reach.
+sidebar:
+  order: 5
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const cloudflare = "@alchemy.run/cloudflare";
+export const github = "@alchemy.run/github";
+
+In [Part 4](/stackit/tutorial/part-4) you deployed stages by hand. Now GitHub
+Actions does it: pushes to `main` deploy `prod`, pull requests get a preview
+stage, and merged pull requests clean up after themselves.
+
+:::caution[This uses a long-lived key]
+Alchemy signs in to STACKIT with a service-account key only. It can't exchange
+GitHub's OIDC token for a STACKIT token yet, so the workflow holds a key as a
+GitHub secret, and you rotate it by hand.
+`Stackit.IAM.FederatedIdentityProvider` creates the trust on STACKIT's side,
+for code of your own that does the exchange. A deploy can't use it.
+:::
+
+:::note[Cost]
+Every pull request deploys its own Bucket, registry project, and Function until
+the cleanup job destroys them. Check the current price list for what those bill
+while they run.
+:::
+
+## Move state off your machine
+
+CI can't read `.alchemy/` on your laptop, so every run would start from nothing.
+STACKIT has no state store, so keep state in Cloudflare's.
+
+State doesn't move by itself. Anything still deployed when you switch stores stays
+in your project, and billing, with no record of it in the new store. So list every
+stage you deployed with local state:
+
+```sh
+bun alchemy state list
+```
+
+Then destroy each one, including your own stage, your test stage, and any others
+from Part 4:
+
+```sh
+bun alchemy destroy
+bun alchemy destroy --stage test_$USER
+bun alchemy destroy --stage staging
+```
+
+Run `bun alchemy state list` again. It should list nothing.
+
+Install the Cloudflare package and add it to your profile:
+
+<PackageManagers add={cloudflare} />
+
+```sh
+bun alchemy profile edit --add Cloudflare
+```
+
+:::note[Other state stores]
+`AWS.state()` works the same way with an AWS account. `postgresState()` keeps
+state in a Postgres database you run, with no second cloud. See
+[State store](/state-store).
+:::
+
+## Point the Stack at the store
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
++import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+import { Files } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Stackit.providers(),
+-    state: Alchemy.localState(),
++    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const bucket = yield* Files;
+    const api = yield* Api;
+
+    return {
+      bucketName: bucket.bucketName,
+      url: api.url,
+    };
+  }),
+);
+```
+
+Make the same change in `test/integ.test.ts`.
+
+## Bootstrap the state store
+
+In CI, a missing store fails the run instead of being created, so create it now:
+
+```sh
+bun alchemy state bootstrap --backend cloudflare
+```
+
+## Set up an `admin` profile
+
+The next stack creates a service account, a key, and repository secrets. A
+service account can't create a key for itself, so this stack can't run as the
+account CI uses. Create a separate profile with the key from
+[Setup](/stackit/setup):
+
+```sh
+bun alchemy profile create admin
+bun alchemy profile edit --profile admin --add Stackit
+bun alchemy profile edit --profile admin --add Cloudflare
+```
+
+Add a GitHub credential when prompted: `gh-cli` if you have the GitHub CLI,
+otherwise a token with the `repo` scope.
+
+:::danger[Heads up]
+The `admin` profile's service account is an owner of the project. Use it only
+for `stacks/github.ts`, never for everyday deploys.
+:::
+
+## Scaffold the GitHub stack
+
+Install the GitHub provider:
+
+<PackageManagers add={github} />
+
+Create `stacks/github.ts`:
+
+```typescript
+// stacks/github.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+const repo = { owner: "your-org", repository: "your-repo" };
+
+export default Alchemy.Stack(
+  "github",
+  {
+    providers: Layer.mergeAll(Stackit.providers(), GitHub.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    // deployer account, role, key, and secrets go here
+  }),
+);
+```
+
+Replace `your-org` and `your-repo` with your repository.
+
+## Create the deployer account
+
+```diff lang="typescript"
+// stacks/github.ts
+Effect.gen(function* () {
++  const deployer = yield* Stackit.IAM.ServiceAccount("Deployer", {});
+}),
+```
+
+CI deploys as this account. A new service account has no permissions.
+
+## Grant it the project
+
+A deploy creates and deletes resources and enables services, which needs owner
+permissions on the project:
+
+```diff lang="typescript"
+// stacks/github.ts
+Effect.gen(function* () {
+  const deployer = yield* Stackit.IAM.ServiceAccount("Deployer", {});
++
++  yield* Stackit.IAM.Membership("DeployerOwner", {
++    subject: deployer.email,
++    role: "owner",
++  });
+}),
+```
+
+## Create its key
+
+```diff lang="typescript"
+// stacks/github.ts
+Effect.gen(function* () {
+  const deployer = yield* Stackit.IAM.ServiceAccount("Deployer", {});
+
+  yield* Stackit.IAM.Membership("DeployerOwner", {
+    subject: deployer.email,
+    role: "owner",
+  });
++
++  const key = yield* Stackit.IAM.ServiceAccountKey("DeployerKey", {
++    serviceAccountEmail: deployer.email,
++    validUntil: "2027-01-01T00:00:00Z",
++  });
+}),
+```
+
+`validUntil` makes the key expire. Move the date and redeploy this stack before
+then. STACKIT returns a generated private key once, so Alchemy keeps it in state,
+redacted.
+
+## Publish the key
+
+Store the key file and the project ID in the repository:
+
+```diff lang="typescript"
+// stacks/github.ts
+  const key = yield* Stackit.IAM.ServiceAccountKey("DeployerKey", {
+    serviceAccountEmail: deployer.email,
+    validUntil: "2027-01-01T00:00:00Z",
+  });
++
++  yield* GitHub.Secret("StackitKey", {
++    ...repo,
++    name: "STACKIT_SERVICE_ACCOUNT_KEY",
++    value: key.keyJson,
++  });
++
++  yield* GitHub.Variable("StackitProject", {
++    ...repo,
++    name: "STACKIT_PROJECT_ID",
++    value: deployer.projectId,
++  });
+```
+
+## Publish the registry login
+
+The deploy creates robot accounts with your Harbor login, so CI needs it too:
+
+```diff lang="typescript"
+// stacks/github.ts
++  yield* GitHub.Variable("HarborUsername", {
++    ...repo,
++    name: "HARBOR_USERNAME",
++    value: yield* Config.String("HARBOR_USERNAME"),
++  });
++
++  yield* GitHub.Secret("HarborSecret", {
++    ...repo,
++    name: "HARBOR_CLI_SECRET",
++    value: yield* Config.Redacted("HARBOR_CLI_SECRET"),
++  });
+```
+
+## Publish the state store login
+
+CI reaches the state store with a Cloudflare API token. Create one in the
+[Cloudflare dashboard](https://dash.cloudflare.com/profile/api-tokens), then pass
+it and your account ID to the stack:
+
+```diff lang="typescript"
+// stacks/github.ts
++  yield* GitHub.Secret("CloudflareToken", {
++    ...repo,
++    name: "CLOUDFLARE_API_TOKEN",
++    value: yield* Config.Redacted("CI_CLOUDFLARE_API_TOKEN"),
++  });
++
++  yield* GitHub.Variable("CloudflareAccount", {
++    ...repo,
++    name: "CLOUDFLARE_ACCOUNT_ID",
++    value: yield* Config.String("CI_CLOUDFLARE_ACCOUNT_ID"),
++  });
+```
+
+The token needs at least the **Workers Scripts Write** and **Secrets Store
+Write** permissions.
+
+## Deploy the GitHub stack
+
+Run it once from your laptop:
+
+```sh
+HARBOR_USERNAME=... HARBOR_CLI_SECRET=... \
+CI_CLOUDFLARE_API_TOKEN=... CI_CLOUDFLARE_ACCOUNT_ID=... \
+bun alchemy deploy --config stacks/github.ts --profile admin
+```
+
+The secrets appear under **Settings → Secrets and variables → Actions → Secrets**,
+and the variables next to them under **Variables**.
+
+## Create the workflow
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  STAGE: >-
+    ${{ github.event_name == 'pull_request'
+      && format('pr-{0}', github.event.number)
+      || (github.ref == 'refs/heads/main' && 'prod' || github.ref_name) }}
+  STACKIT_SERVICE_ACCOUNT_KEY: ${{ secrets.STACKIT_SERVICE_ACCOUNT_KEY }}
+  STACKIT_PROJECT_ID: ${{ vars.STACKIT_PROJECT_ID }}
+  HARBOR_USERNAME: ${{ vars.HARBOR_USERNAME }}
+  HARBOR_CLI_SECRET: ${{ secrets.HARBOR_CLI_SECRET }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  deploy:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Deploy
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
+        env:
+          PULL_REQUEST: ${{ github.event.number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Safety check
+        run: |
+          if [ "${{ env.STAGE }}" = "prod" ]; then
+            echo "ERROR: refusing to destroy prod"
+            exit 1
+          fi
+      - name: Destroy preview
+        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
+        env:
+          PULL_REQUEST: ${{ github.event.number }}
+```
+
+With `CI=true`, Alchemy reads `STACKIT_SERVICE_ACCOUNT_KEY` and
+`STACKIT_PROJECT_ID` from the environment instead of a profile.
+
+GitHub's runners have Docker, so the Function's image builds there the same way
+it does on your machine.
+
+:::note[How STAGE is computed]
+Pull requests deploy to `pr-<number>`, pushes to `main` deploy to `prod`, and
+other branches deploy to the branch name. The cleanup job refuses to destroy
+`prod`.
+:::
+
+## Comment the preview URL
+
+Post the preview URL on each pull request:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as GitHub from "@alchemy.run/github";
+import * as Stackit from "@alchemy.run/stackit";
++import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import Api from "./src/api.ts";
+import { Files } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+-    providers: Stackit.providers(),
++    providers: Layer.mergeAll(Stackit.providers(), GitHub.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const bucket = yield* Files;
+    const api = yield* Api;
+
++    if (process.env.PULL_REQUEST) {
++      yield* GitHub.Comment("preview-comment", {
++        owner: "your-org",
++        repository: "your-repo",
++        issueNumber: Number(process.env.PULL_REQUEST),
++        body: Output.interpolate`
++          ## Preview deployed
++
++          **URL:** ${api.url}
++
++          Built from ${process.env.GITHUB_SHA?.slice(0, 7)}
++        `,
++      });
++    }
+
+    return {
+      bucketName: bucket.bucketName,
+      url: api.url,
+    };
+  }),
+);
+```
+
+The logical id `preview-comment` stays the same across pushes, so Alchemy edits
+the comment instead of adding a new one.
+
+## The full picture
+
+1. You deployed `stacks/github.ts` once with `--profile admin`. It created the
+   deployer account, its role and key, and the repository secrets.
+2. A pull request opens. Actions runs `alchemy deploy --stage pr-42` as the
+   deployer.
+3. Alchemy deploys a separate Bucket and Function for `pr-42` and comments the
+   URL.
+4. The pull request merges. The cleanup job destroys `pr-42`.
+5. The push to `main` deploys `prod`.
+
+## Recap
+
+You've finished the tutorial. You can now:
+
+- **Part 1**: create a Stack and deploy a resource
+- **Part 2**: run an Effect on a Function with bindings
+- **Part 3**: test a deployed Stack
+- **Part 4**: deploy separate stages with `--stage`
+- **Part 5**: deploy from GitHub Actions with shared state
+
+## What's next
+
+- Store data in [PostgreSQL Flex](/stackit/data/postgres) or
+  [Object Storage](/stackit/data/object-storage)
+- Queue work with [Pub/Sub](/stackit/messaging/pubsub)
+- Deploy a frontend with [Websites](/stackit/frontend/websites)
+- See what [bindings create and grant](/stackit/security/iam-bindings)
+- Read [CI](/environments/ci) for more workflow patterns

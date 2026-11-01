@@ -81,6 +81,13 @@ export type AppRoleSecretId = Resource<
  * out of band, the next deploy creates a new one, so `secretId` changes and
  * everything depending on it redeploys.
  *
+ * See [STACKIT's Secrets Manager docs](https://docs.stackit.cloud/products/security/secrets-manager/).
+ *
+ * :::caution[Changing `instanceId`, `roleId`, `projectId` or `rotationKey` replaces the Secret Id]
+ * A new secret id is created first, then the old one is deleted. Everything depending
+ * on `secretId` redeploys.
+ * :::
+ *
  * ### Creating a Secret Id
  * **Example:** A secret id for a workload's AppRole
  * ```typescript

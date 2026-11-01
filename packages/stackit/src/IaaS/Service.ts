@@ -161,6 +161,11 @@ export type ServiceRuntimeContext = HostRuntimeContext;
  * watch it afterwards: a unit that stops, or a server
  * rebuilt outside Alchemy, is only corrected by the next change that reinstalls it.
  *
+ * Alchemy creates the systemd unit, the server's service account and, unless you pass
+ * `artifacts`, one bucket per server for the upload. It doesn't create the server, its
+ * network or a public address: declare a `Stackit.IaaS.Server` and pass it. See [Services
+ * on STACKIT servers](/stackit/compute/services) for the full guide.
+ *
  * :::caution[What the server needs]
  * Linux with systemd, the Server Agent (set `agent: { provisioned: true }` on the
  * Server for an image that doesn't install it), and outbound HTTPS to `bun.sh` and to
@@ -174,6 +179,11 @@ export type ServiceRuntimeContext = HostRuntimeContext;
  * `run-command.command.get`. Those scripts hold the presigned URL, which stops working
  * with the deploy, and no env values. If the program fails to start, its journal is
  * printed there too, so a program that logs a secret at startup exposes it that way.
+ * :::
+ *
+ * :::caution[Changing `server` replaces the Service]
+ * The program is installed on the new server, and then removed from the old one.
+ * Everything else updates in place and restarts the unit.
  * :::
  *
  * ### Effect-native Services
@@ -278,14 +288,14 @@ export type ServiceRuntimeContext = HostRuntimeContext;
  *   const network = yield* Stackit.IaaS.Network("App", {
  *     ipv4: { prefix: "10.0.1.0/24" },
  *   });
- *   const group = yield* Stackit.IaaS.SecurityGroup("Web", {});
+ *   const group = yield* Stackit.IaaS.SecurityGroup("WebGroup", {});
  *   yield* Stackit.IaaS.SecurityGroupRule("Http", {
  *     securityGroupId: group.securityGroupId,
  *     direction: "ingress",
  *     protocol: "tcp",
  *     portRange: { min: 3000, max: 3000 },
  *   });
- *   const nic = yield* Stackit.IaaS.NetworkInterface("Web", {
+ *   const nic = yield* Stackit.IaaS.NetworkInterface("WebNic", {
  *     networkId: network.networkId,
  *     securityGroups: [group.securityGroupId],
  *   });
@@ -294,7 +304,7 @@ export type ServiceRuntimeContext = HostRuntimeContext;
  *     bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
  *     networking: { networkInterfaceIds: [nic.networkInterfaceId] },
  *   });
- *   const address = yield* Stackit.IaaS.PublicIp("Web", {
+ *   const address = yield* Stackit.IaaS.PublicIp("WebIp", {
  *     networkInterfaceId: nic.networkInterfaceId,
  *   });
  *   return yield* Stackit.IaaS.Service("Site", {
@@ -443,6 +453,31 @@ export type ServiceRuntimeContext = HostRuntimeContext;
  * ) {}
  * ```
  *
+ * **Example:** Consume a Pub/Sub subscription
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import { Box } from "./server.ts";
+ *
+ * export const Orders = Stackit.PubSub.Topic("Orders", {});
+ * export const Billing = Orders.pipe(
+ *   Effect.flatMap((topic) => Stackit.PubSub.Subscription("Billing", { topicId: topic.topicId })),
+ * );
+ *
+ * export default class BillingWorker extends Stackit.IaaS.Service<BillingWorker>()(
+ *   "BillingWorker",
+ *   { server: Box, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     yield* Stackit.PubSub.consumeSubscriptionMessages(
+ *       Billing,
+ *       { maxMessages: 32, concurrency: 8 },
+ *       (message) => Effect.log(message.text),
+ *     );
+ *     return {};
+ *   }).pipe(Effect.provide(Stackit.PubSub.ServerSubscriptionEventSource)),
+ * ) {}
+ * ```
+ *
  * ### Keeping files between deploys
  * Each deploy replaces the program in `/opt/<unitName>/current`. The unit's working directory
  * is `/var/lib/<unitName>`, which stays, so a program can write to a relative path such as
@@ -451,10 +486,322 @@ export type ServiceRuntimeContext = HostRuntimeContext;
  * it behind, with nothing copied to the new server, so keep data a server replacement has to
  * survive on a `Stackit.IaaS.Volume`.
  *
- * :::caution[Changing `server` replaces the Service]
- * The program is installed on the new server, and then removed from the old one.
- * Everything else updates in place and restarts the unit.
- * :::
+ * ### Object Storage Bindings
+ * `ReadBucket`, `WriteBucket` and `ReadWriteBucket` give the Service an S3 client on one
+ * bucket. Alchemy creates a credentials group and an access key for this host and bucket,
+ * and adds statements to the bucket's policy limiting the group to those actions there.
+ * Give other buckets their own `policy` to deny such groups, because a bucket policy only
+ * speaks for its own bucket.
+ *
+ * **Example:** Write an object and read it back
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import * as Stream from "effect/Stream";
+ * import { Box } from "./server.ts";
+ *
+ * export const Uploads = Stackit.ObjectStorage.Bucket("Uploads", {});
+ *
+ * export default class Api extends Stackit.IaaS.Service<Api>()(
+ *   "Api",
+ *   { server: Box, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const uploads = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Uploads);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         yield* uploads.putObject({ Key: "hello.txt", Body: "hello" });
+ *         const object = yield* uploads.getObject({ Key: "hello.txt" });
+ *         const text = yield* Stream.mkString(Stream.decodeText(object.Body!));
+ *         return HttpServerResponse.text(text);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+ * ) {}
+ * ```
+ *
+ * ### PostgreSQL Flex Bindings
+ * `Connect` passes a database's host, port, names and password into the Service's
+ * environment, with the password kept `Redacted`. It grants no STACKIT role, because
+ * PostgreSQL connections authenticate with the database user. The Service's egress address
+ * has to be in the instance's `acl`, or connections time out.
+ *
+ * **Example:** Resolve the connection settings for your driver
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Box } from "./server.ts";
+ *
+ * export const Db = Stackit.PostgresFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "17",
+ *   storage: { class: "premium-perf2-stackit", size: 5 },
+ *   backupSchedule: "0 2 * * *",
+ *   retentionDays: 32,
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const AppUser = Db.pipe(
+ *   Effect.flatMap((db) => Stackit.PostgresFlex.User("AppUser", { instanceId: db.instanceId })),
+ * );
+ * export const AppDatabase = Effect.gen(function* () {
+ *   const db = yield* Db;
+ *   const user = yield* AppUser;
+ *   return yield* Stackit.PostgresFlex.Database("AppDatabase", {
+ *     instanceId: db.instanceId,
+ *     owner: user.userName,
+ *   });
+ * });
+ *
+ * export default class Api extends Stackit.IaaS.Service<Api>()(
+ *   "Api",
+ *   { server: Box, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const database = yield* AppDatabase;
+ *     const user = yield* AppUser;
+ *     const connect = yield* Stackit.PostgresFlex.Connect(database, user);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const info = yield* connect;
+ *         return yield* HttpServerResponse.json({ database: info.database });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.PostgresFlex.ConnectHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Valkey Bindings
+ * `ReadValkey` and `ReadWriteValkey` run commands over a credential. They grant no STACKIT
+ * role, and STACKIT has no Valkey ACLs, so the credential can do everything on the server:
+ * the limit is the client's surface. The Service's egress address has to be in the
+ * instance's `acl`.
+ *
+ * **Example:** Set and read a key
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Box } from "./server.ts";
+ *
+ * export const Cache = Stackit.Valkey.Instance("Cache", {
+ *   version: "x",
+ *   planName: "stackit-keyvalue-1.2.10-replica",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const Login = Cache.pipe(
+ *   Effect.flatMap((cache) =>
+ *     Stackit.Valkey.Credential("Login", { instanceId: cache.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.IaaS.Service<Api>()(
+ *   "Api",
+ *   { server: Box, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const cache = yield* Stackit.Valkey.ReadWriteValkey(yield* Login);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         yield* cache.set("marker", "hello");
+ *         const value = yield* cache.get("marker");
+ *         return yield* HttpServerResponse.json({ value });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.Valkey.ReadWriteValkeyHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Pub/Sub Bindings
+ * `Publish` and `Pull` grant no role. Alchemy adds the Service's service account to this
+ * topic's publishers or this subscription's subscribers, so the grant covers that one
+ * topic or subscription. The topic's `acl` has to include the Service's egress address,
+ * and it allows every address by default.
+ *
+ * **Example:** Publish a message
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Box } from "./server.ts";
+ *
+ * export const Orders = Stackit.PubSub.Topic("Orders", {});
+ *
+ * export default class Api extends Stackit.IaaS.Service<Api>()(
+ *   "Api",
+ *   { server: Box, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const publish = yield* Stackit.PubSub.Publish(yield* Orders);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         yield* publish({ messages: [{ data: JSON.stringify({ orderId: "1234" }) }] });
+ *         return HttpServerResponse.text("published");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.PubSub.PublishHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Pull a batch on each request, and acknowledge it
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Box } from "./server.ts";
+ *
+ * export const Orders = Stackit.PubSub.Topic("Orders", {});
+ * export const Billing = Orders.pipe(
+ *   Effect.flatMap((topic) => Stackit.PubSub.Subscription("Billing", { topicId: topic.topicId })),
+ * );
+ *
+ * export default class Api extends Stackit.IaaS.Service<Api>()(
+ *   "Api",
+ *   { server: Box, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const billing = yield* Billing;
+ *     const pull = yield* Stackit.PubSub.Pull(billing);
+ *     const acknowledge = yield* Stackit.PubSub.Acknowledge(billing);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const { messages } = yield* pull({ maxMessages: 10, longPullDuration: 1000 });
+ *         yield* acknowledge({ ackIds: messages.map((message) => message.ackId) });
+ *         return yield* HttpServerResponse.json({ pulled: messages.length });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(
+ *     Effect.provide([Stackit.PubSub.PullHttp, Stackit.PubSub.AcknowledgeHttp]),
+ *   ),
+ * ) {}
+ * ```
+ *
+ * ### RabbitMQ Bindings
+ * `Publish` publishes one message through the broker's management API over HTTPS, as the
+ * credential's user, so it grants no STACKIT role. The Service's egress address has to be
+ * in the instance's `acl`.
+ *
+ * **Example:** Publish to a queue
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Box } from "./server.ts";
+ *
+ * export const Broker = Stackit.RabbitMQ.Instance("Broker", {
+ *   version: "4.1",
+ *   planName: "stackit-rabbitmq-2.4.10-single",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const Login = Broker.pipe(
+ *   Effect.flatMap((broker) =>
+ *     Stackit.RabbitMQ.Credential("Login", { instanceId: broker.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.IaaS.Service<Api>()(
+ *   "Api",
+ *   { server: Box, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const publish = yield* Stackit.RabbitMQ.Publish(yield* Login);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const { routed } = yield* publish({
+ *           routing_key: "jobs",
+ *           payload: JSON.stringify({ id: 1 }),
+ *         });
+ *         return yield* HttpServerResponse.json({ routed });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.RabbitMQ.PublishHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Secrets Manager Bindings
+ * `ReadSecret` creates a read-only AppRole for this host and instance. It reads every
+ * secret in the instance, because STACKIT can't limit an AppRole to a path, so use one
+ * instance per trust boundary. The Service's egress address has to be in the instance's
+ * `acls`.
+ *
+ * **Example:** Read a secret
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Box } from "./server.ts";
+ *
+ * export const Vault = Stackit.SecretsManager.Instance("Vault", {
+ *   acls: ["203.0.113.7/32"],
+ * });
+ *
+ * export default class Api extends Stackit.IaaS.Service<Api>()(
+ *   "Api",
+ *   { server: Box, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const secrets = yield* Stackit.SecretsManager.ReadSecret(yield* Vault);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const secret = yield* secrets.get({ secretPath: "payments/api" });
+ *         return yield* HttpServerResponse.json({ version: secret.data.metadata.version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.SecretsManager.ReadSecretHttp)),
+ * ) {}
+ * ```
+ *
+ * ### KMS Bindings
+ * `Encrypt`, `Decrypt`, `Sign` and `Verify` take one key. Alchemy grants `kms.keyring.get`
+ * through a custom role on the project holding the key. That one permission allows those
+ * operations on every key in the project, so the binding narrows what your code calls, not
+ * what its credential could do.
+ *
+ * **Example:** Encrypt bytes
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as Redacted from "effect/Redacted";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Box } from "./server.ts";
+ *
+ * export const Ring = Stackit.KMS.KeyRing("Ring", {});
+ * export const DataKey = Ring.pipe(
+ *   Effect.flatMap((ring) =>
+ *     Stackit.KMS.Key("DataKey", {
+ *       keyRingId: ring.keyRingId,
+ *       algorithm: "aes_256_gcm",
+ *       purpose: "symmetric_encrypt_decrypt",
+ *     }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.IaaS.Service<Api>()(
+ *   "Api",
+ *   { server: Box, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     // init
+ *     const encrypt = yield* Stackit.KMS.Encrypt(yield* DataKey);
+ *     return {
+ *       // runtime
+ *       fetch: Effect.gen(function* () {
+ *         const { ciphertext, version } = yield* encrypt({
+ *           plaintext: Redacted.make(new TextEncoder().encode("hello")),
+ *         });
+ *         return yield* HttpServerResponse.json({ ciphertext: Array.from(ciphertext), version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.KMS.EncryptHttp)),
+ * ) {}
+ * ```
  *
  * @see https://docs.stackit.cloud/products/compute-engine/run-command/
  * @see https://docs.stackit.cloud/products/compute-engine/server/how-tos/attaching-service-account-to-servers/

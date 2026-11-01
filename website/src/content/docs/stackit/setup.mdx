@@ -13,7 +13,7 @@ profile.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 22+
+- [Bun](https://bun.sh) or Node.js 24.11.1+
 - A STACKIT customer account. Register at the
   [STACKIT Portal](https://portal.stackit.cloud); a customer account
   belongs to an **organization**.
@@ -97,6 +97,26 @@ The organization ID is only needed for organization-level resources such as
 projects and folders. Find it in the Portal under your organization's
 settings.
 
+## Get ready to deploy a runtime
+
+You only need this section once you deploy code. A stack with only
+resources, such as the first part of the tutorial, needs none of it.
+
+- **Docker running on your machine.** A Function, Container Application,
+  Cloud Foundry app, or Kubernetes Deployment with a `main` builds an image
+  locally. A [Service](/stackit/compute/services) doesn't use Docker.
+- **A registry login.** A `Stackit.ContainerRegistry.RobotAccount` is
+  created with a Harbor user's login. Set `HARBOR_USERNAME` and
+  `HARBOR_CLI_SECRET` to your user and CLI secret, from your user profile
+  in the registry UI. STACKIT's docs don't confirm how a user name looks or
+  that these secrets work against its API, so check that on your first
+  deploy.
+- **Access to the APIs you use.** Functions is an alpha API and Container
+  Applications a beta API, both in `eu01` only.
+
+[Container Registry](/stackit/operations/container-registry) covers the
+registry resources.
+
 ## CI
 
 In CI (`CI=true`) Alchemy reads the environment instead of a profile:
@@ -110,6 +130,12 @@ In CI (`CI=true`) Alchemy reads the environment instead of a profile:
 | `STACKIT_REGION` | no | the region, `eu01` by default |
 | `STACKIT_PRIVATE_KEY` / `STACKIT_PRIVATE_KEY_PATH` | no | only for keys created from your own key pair |
 
+[Part 5 of the tutorial](/stackit/tutorial/part-5) builds a whole GitHub
+Actions pipeline from these.
+
+Alchemy signs in with a service-account key only. It can't exchange an OIDC
+token for a STACKIT token yet, so a CI system holds the key as a secret.
+
 ## State storage
 
 STACKIT has no state backend of its own yet, so pick one of:
@@ -118,10 +144,14 @@ STACKIT has no state backend of its own yet, so pick one of:
   your code. Right for solo projects.
 - **A cloud state store**: if you also use Cloudflare or AWS, pass
   `Cloudflare.state()` or `AWS.state()` to share state with your team and
-  CI. See [State Store](/state-store).
+  CI. `postgresState()` keeps it in a Postgres database you run. See
+  [State Store](/state-store).
 
 ## Next steps
 
+- [Tutorial](/stackit/tutorial/part-1): deploy your first Stack.
+- [Choosing a runtime](/stackit/compute/choosing-a-runtime): where your
+  code can run.
 - [STACKIT overview](/stackit): projects, regions, and how services are
   enabled.
 - [API reference](/providers/stackit): every STACKIT resource.

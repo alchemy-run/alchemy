@@ -1,0 +1,217 @@
+---
+title: SQL Server Flex
+description: Run managed Microsoft SQL Server on STACKIT SQL Server Flex, apply migrations at deploy time, and hand connection settings to your driver from a Function.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = "mssql";
+
+SQL Server Flex runs Microsoft SQL Server for you. Instances, users, and databases are
+separate resources. Only the addresses in the instance's `acl` can connect, and there is
+no data API, so your machine and your hosts both need a route.
+
+<PackageManagers add={pkgs} />
+
+You only need `mssql` for migrations, or as your own driver.
+
+:::caution[This creates an expensive resource]
+An instance bills per started hour by flavor, plus storage, backups, and the SQL Server
+licence. The cheapest SKU on STACKIT's product page,
+`SQLServer-Flex-8.64-HA-Enterprise-EU01`, is EUR 7.08 per hour. Read the price of your
+flavor before you deploy, and destroy the stack when you're done.
+:::
+
+## Create the instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Db = Stackit.SQLServerFlex.Instance("Db", {
+  flavorId: "4.16-Single",
+  version: "2022",
+  storage: { class: "premium-perf2-stackit", size: 5 },
+  backupSchedule: "0 2 * * *",
+  retentionDays: 32,
+  // The machine running `alchemy deploy` has to be in here.
+  acl: ["203.0.113.7/32"],
+});
+
+export const AppUser = Db.pipe(
+  Effect.flatMap((db) =>
+    Stackit.SQLServerFlex.User("AppUser", {
+      instanceId: db.instanceId,
+      userName: "app_owner",
+      roles: ["##STACKIT_LoginManager##", "##STACKIT_DatabaseManager##"],
+    }),
+  ),
+);
+
+export const AppDatabase = Effect.gen(function* () {
+  const db = yield* Db;
+  const user = yield* AppUser;
+  return yield* Stackit.SQLServerFlex.Database("AppDatabase", {
+    instanceId: db.instanceId,
+    owner: user.userName,
+    migrations: "./migrations",
+    migrationsUser: user.userName,
+    migrationsPassword: user.password,
+  });
+});
+```
+
+A deploy waits until the instance reports `READY`, which takes minutes. The instance has
+no host or port attribute: read them from the user.
+
+## Give the owner a fixed name
+
+The API has no user update, so changing a user's roles replaces it, and a database's
+`owner` can't change. With an explicit `userName`, replacing the user keeps the owner's
+name and the database.
+
+Under a generated name, the new name fails the database's deploy with
+`DatabaseOwnerChanged`, unless the database sets `replaceOnOwnerChange`, which replaces it
+with a new, empty one.
+
+## Apply migrations
+
+Put `.sql` files in `./migrations`. Each deploy applies the pending ones over a direct `mssql` connection
+from your machine. The connection is encrypted and checks the server's certificate. Your
+machine's public IP has to be in `acl`, which Alchemy doesn't open for you.
+
+Editing or removing an applied file fails the deploy. An instance with
+`accessScope: "SNA"` can't be reached from outside, so migrations fail on it.
+
+## Connect from a Function
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { AppDatabase, AppUser } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const connect = yield* Stackit.SQLServerFlex.Connect(yield* AppDatabase, yield* AppUser);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const info = yield* connect;
+        return yield* HttpServerResponse.json({ database: info.database });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.SQLServerFlex.ConnectHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+`Connect` grants no STACKIT role and creates no service account, because connections
+authenticate with the database user. The password reaches the Function as a plain
+revision variable, so anyone who can call `GetRevision` can read it. The host's egress IP
+has to be in `acl`, or connections time out.
+
+## Hand the settings to your driver
+
+`Connect` opens no socket. `yield* connect` gives you `host`, `port`, `database`,
+`username`, `encrypt`, and `Redacted` `password` and `connectionString`:
+
+```typescript
+const info = yield* connect;
+const password = Redacted.value(info.password);
+```
+
+## Back up and restore at runtime
+
+| Binding | Methods |
+| --- | --- |
+| `ReadInstance` | `getInstance`, `listDatabases`, `getDatabase`, `listUsers`, `getUser`, `listBackups`, `getBackup`, `listRestoreJobs` |
+| `WriteInstance` | `resetUser`, `triggerBackup`, `triggerRestore`, `restoreDatabaseFromBackup` |
+| `ReadWriteInstance` | all of the above |
+
+```typescript
+// src/Admin.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Db } from "./resources.ts";
+
+export default class Admin extends Stackit.Functions.Function<Admin>()(
+  "Admin",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/admin" },
+  },
+  Effect.gen(function* () {
+    const client = yield* Stackit.SQLServerFlex.ReadWriteInstance(yield* Db);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* client.triggerBackup({ databaseName: "orders" });
+        return HttpServerResponse.text("started");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.SQLServerFlex.ReadWriteInstanceHttp)),
+) {}
+```
+
+These bindings grant a custom role with the permissions of their methods and a service
+account key for the host. The role is bound on the project holding the instance, because
+STACKIT binds roles on projects at the narrowest, so it reaches every SQL Server Flex
+instance in that project.
+
+## Rotate a password
+
+Change `rotationKey` on the user, then deploy:
+
+```diff lang="typescript"
+// src/resources.ts
+      userName: "app_owner",
+      roles: ["##STACKIT_LoginManager##", "##STACKIT_DatabaseManager##"],
++      rotationKey: "2026-11",
+```
+
+## Protect an instance
+
+```diff lang="typescript"
+// src/resources.ts
+  retentionDays: 32,
+  // The machine running `alchemy deploy` has to be in here.
+  acl: ["203.0.113.7/32"],
++  deletionProtection: true,
+```
+
+While it's on, STACKIT refuses a destroy. Turn it off with a deploy first.
+
+:::caution[What replaces what]
+Changing `accessScope`, `encryption`, `storage.class`, `projectId`, or `region` replaces
+the instance. Changing a database's `name`, `collation`, or `compatibility` replaces the
+database, because the API has no database update. A replacement starts empty, so back up
+what you need first.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- Flavor `4.16-Single` and class `premium-perf2-stackit` are orderable on your project,
+  and what the flavor costs. They come from the Terraform provider's example.
+- `##STACKIT_LoginManager##` and `##STACKIT_DatabaseManager##` let a database's owner log
+  in to it and create tables.
+- The instance's certificate chains to a public root. Migrations verify it.
+- A storage size change applies in place.
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [SQLServerFlex reference](/providers/stackit/sqlserverflex#instance): every prop and
+  attribute.

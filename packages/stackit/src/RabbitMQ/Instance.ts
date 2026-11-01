@@ -176,6 +176,15 @@ export type Instance = Resource<
  *
  * Instances are billed per started hour by plan.
  *
+ * Clients authenticate with a `Stackit.RabbitMQ.Credential`, and only from the ranges in `acl`.
+ *
+ * See [STACKIT's RabbitMQ docs](https://docs.stackit.cloud/products/messaging/rabbitmq/).
+ *
+ * :::caution[Changing `name`, `projectId` or `region` replaces the Instance]
+ * A replacement starts empty: exchanges, queues and messages stay with the old broker
+ * and are deleted with it.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** A single-node broker
  * ```typescript
@@ -271,6 +280,132 @@ export type Instance = Resource<
  *   version: "4.1",
  *   planName: "stackit-rabbitmq-2.4.10-single",
  * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `Publish` takes an HTTPS request to the broker's management API, as the credential's
+ * user, so it runs on any host and grants no STACKIT role. The host's egress address has
+ * to be in `acl`. Above thousands of messages a second, open AMQP with
+ * `Stackit.RabbitMQ.Connect`.
+ *
+ * **Example:** Publish a message from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Broker = Stackit.RabbitMQ.Instance("Broker", {
+ *   version: "4.1",
+ *   planName: "stackit-rabbitmq-2.4.10-single",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const Login = Broker.pipe(
+ *   Effect.flatMap((broker) =>
+ *     Stackit.RabbitMQ.Credential("Login", { instanceId: broker.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const publish = yield* Stackit.RabbitMQ.Publish(yield* Login);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { routed } = yield* publish({
+ *           routing_key: "jobs",
+ *           payload: JSON.stringify({ id: 1 }),
+ *           properties: { content_type: "application/json", delivery_mode: 2 },
+ *         });
+ *         return yield* HttpServerResponse.json({ routed });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.RabbitMQ.PublishHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Declare a queue
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Broker = Stackit.RabbitMQ.Instance("Broker", {
+ *   version: "4.1",
+ *   planName: "stackit-rabbitmq-2.4.10-single",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const Login = Broker.pipe(
+ *   Effect.flatMap((broker) =>
+ *     Stackit.RabbitMQ.Credential("Login", { instanceId: broker.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const declareQueue = yield* Stackit.RabbitMQ.DeclareQueue(yield* Login);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* declareQueue({ queue: "jobs", durable: true });
+ *         return yield* HttpServerResponse.json({ declared: true });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.RabbitMQ.DeclareQueueHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Event Sources
+ * The broker can't invoke anything, so a host keeps an AMQP consumer running for its whole
+ * life. Use a host that keeps running, such as a
+ * `Stackit.ContainerApplications.Application`, a `Stackit.IaaS.Service` or a
+ * `Kubernetes.Deployment`. A message comes back when a handler is interrupted, so a
+ * handler has to tolerate running twice.
+ *
+ * **Example:** Consume a queue from an Application
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ *
+ * export const Apps = Stackit.ContainerApplications.Environment("Apps", {});
+ * export const Broker = Stackit.RabbitMQ.Instance("Broker", {
+ *   version: "4.1",
+ *   planName: "stackit-rabbitmq-2.4.10-single",
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const Login = Broker.pipe(
+ *   Effect.flatMap((broker) =>
+ *     Stackit.RabbitMQ.Credential("Login", { instanceId: broker.instanceId }),
+ *   ),
+ * );
+ *
+ * export default class JobWorker extends Stackit.ContainerApplications.Application<JobWorker>()(
+ *   "JobWorker",
+ *   Effect.gen(function* () {
+ *     const apps = yield* Apps;
+ *     return {
+ *       main: import.meta.url,
+ *       environmentId: apps.environmentId,
+ *       registry: { repository: "ghcr.io/my-org/jobworker" },
+ *     };
+ *   }),
+ *   Effect.gen(function* () {
+ *     yield* Stackit.RabbitMQ.consumeQueueMessages(
+ *       Login,
+ *       { queue: "jobs", prefetch: 10 },
+ *       (message) => Effect.log(message.text),
+ *     );
+ *     return {};
+ *   }).pipe(Effect.provide(Stackit.RabbitMQ.ServerQueueEventSource)),
+ * ) {}
  * ```
  *
  * @resource

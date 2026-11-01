@@ -55,6 +55,13 @@ export type ProjectLock = Resource<
  * Destroying it disables the lock, which STACKIT requires before the project can be
  * deleted. A lock costs nothing.
  *
+ * See [STACKIT's File Storage docs](https://docs.stackit.cloud/products/storage/file-storage/).
+ *
+ * :::caution[Changing `projectId` or `region` replaces the Lock]
+ * The lock is enabled at the new place and disabled at the old one, which takes the
+ * protection away from the old project and region.
+ * :::
+ *
  * ### Locking a Project
  * **Example:** The profile's project and region
  * ```typescript

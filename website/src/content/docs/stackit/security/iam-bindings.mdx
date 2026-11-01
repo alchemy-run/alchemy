@@ -1,0 +1,284 @@
+---
+title: IAM & bindings
+description: What a STACKIT binding creates and grants, why a grant reaches more than the bound resource, and how to keep those grants apart.
+---
+
+Yielding a binding gives your code a client and gives its host the access
+to use it:
+
+```typescript
+const getZone = yield* Stackit.DNS.ReadZone(yield* Domain);
+```
+
+Alchemy creates what the host needs at deploy, and removes it when the
+binding goes. What it creates depends on the service.
+
+## A grant reaches more than the bound resource
+
+STACKIT binds roles on three things only: an organization, a folder, or a
+project. It has no role binding on a single zone, key, or server, and a
+role on a parent is inherited by its children.
+
+:::caution
+A STACKIT role grant is never limited to the resource you bound. `ReadZone`
+on one zone reads every zone in that project. `KMS.Encrypt` on one key lets
+the host's credential encrypt, decrypt, sign, verify, and read with every
+key in the project.
+
+The binding narrows what your code can call, not what its credential can
+do. If a host's code is compromised, assume the attacker holds everything
+the role allows in that project.
+:::
+
+## Keep sensitive resources in their own project
+
+A project is the narrowest boundary a role can have. Put what needs to stay
+apart in a project of its own, and pass `projectId` on the resource:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const PaymentKeys = Stackit.KMS.KeyRing("PaymentKeys", {
+  projectId: "00000000-0000-0000-0000-000000000000",
+});
+```
+
+A host that binds this ring gets its grant on that project, not on yours.
+Your deployer needs rights on both.
+
+## What a binding creates
+
+| Access | Bindings | What the host gets | What it reaches |
+| --- | --- | --- | --- |
+| Custom role on the project | Most management and control-plane bindings: `DNS.*`, `KMS.*`, `CDN.*`, `VPN.*`, `LoadBalancer.*`, `ALB.*`, `RunCommand.*`, `ServerBackup.*`, `ServerUpdate.*`, `Automation.*`, `UnifiedFirewall.*`, `Observability.ReadInstance` | A service account and key, and a membership on a role with the exact permissions | Every object of that kind in the project |
+| The resource's own access list | `PubSub.Publish`, `PubSub.Pull`, `PubSub.Acknowledge`, `PubSub.PurgeTopic` | A service account and key, added to the topic's publishers or the subscription's subscribers | That one topic or subscription |
+| Bucket policy | `ObjectStorage.ReadBucket`, `WriteBucket`, `ReadWriteBucket` | A credentials group and an access key, limited by statements on the bucket's policy | That one bucket |
+| An AppRole | `SecretsManager.ReadSecret`, `WriteSecret`, `ReadWriteSecret` | A role id and secret id | Every secret in the instance |
+| The resource's own login | `RabbitMQ.Publish`, `RabbitMQ.Consume`, `Intake.Produce`, `Observability.QueryMetrics`, `Logs.ReadInstance`, `ContainerRegistry.ListArtifacts`, `Git.GetRepository` | No STACKIT role and no service account. The credential, token, robot, or login you bound | What that login can do |
+
+Each binding's entry in the [reference](/providers/stackit) names its exact
+grant.
+
+## The host's service account
+
+A host that needs a STACKIT identity gets one service account, named after
+the host. Alchemy creates a key for it and gives the account one membership
+per grant:
+
+```
+<host>ServiceAccount  +  <host>ServiceAccountKey  +  <host>Grant…
+```
+
+Grants are deduplicated by account, role, and scope, so two bindings
+sharing a role share a membership, and removing one can't revoke the
+other's access. Custom roles are deduplicated by scope and permissions
+across the stack.
+
+The key reaches the host's environment as a `Redacted` value, on any host:
+a [Function](/stackit/compute/functions), an
+[Application](/stackit/compute/container-applications), a Cloudflare Worker,
+or a Lambda.
+
+:::caution
+A Function stores its environment as plain revision variables, including
+`Redacted` ones, so anyone who can call `GetRevision` can read the service
+account key and any AppRole login. Limit who holds that permission. See
+[Secrets Manager & KMS](/stackit/security/secrets-kms#know-where-a-host-keeps-its-values).
+:::
+
+## Hosts on a server
+
+A [`Stackit.IaaS.Service`](/stackit/compute/services) runs as a service
+account attached to its server. It gets no key: calls use the tokens the
+server's metadata API hands out.
+
+A server holds one account, so every Service on it shares the account and
+each other's grants. Put hosts that need different access on different
+servers.
+
+## What your deployer needs
+
+Your deploy creates all of this, so it needs:
+
+- `iam.member.add` on the scope, for every grant. STACKIT flags it as
+  high-privilege.
+- `iam.role.add` on the scope, for every custom role.
+
+The [Setup](/stackit/setup) page gives the deploying service account the
+**Owner** role on the project, which has both.
+
+## Add and remove
+
+The bindings you yield are the access you want. Delete a `yield*` and the
+next deploy removes what only that binding needed. Destroying the host
+removes its service account, key, and memberships.
+
+## Provide the implementation
+
+Yielding a binding gives you the interface. Provide the layer at the end of
+the host's Effect:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Domain = Stackit.DNS.Zone("Domain", { dnsName: "example.com" });
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const zone = yield* Stackit.DNS.ReadZone(yield* Domain);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { rrSets } = yield* zone.listRecordSets({ pageSize: 100 });
+        return yield* HttpServerResponse.json({ count: rrSets.length });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.DNS.ReadZoneHttp)),
+) {}
+```
+
+The convention is the binding name plus `Http`: `ReadZone` → `ReadZoneHttp`,
+`Publish` → `PublishHttp`. A binding that speaks another protocol is named
+for it: `RabbitMQ.ConsumeAmqp`, `Intake.ProduceKafka`.
+
+## Event sources
+
+Bindings are calls your code makes. Event sources run your code. STACKIT
+has no push delivery from its queues, so a consumer pulls for as long as its
+host runs:
+
+| Consume with | Provide | Host |
+| --- | --- | --- |
+| `PubSub.consumeSubscriptionMessages` | `PubSub.ServerSubscriptionEventSource` | One that keeps running, such as an Application |
+| `RabbitMQ.consumeQueueMessages` | `RabbitMQ.ServerQueueEventSource` | One that keeps running, such as an Application |
+| `Observability.consumeAlerts` | `Observability.AlertEventSourceLive` | One providing `WebhookHost`, today a Cloudflare Worker |
+
+## Grant a role yourself
+
+For an identity that isn't a binding's host, such as a CI job, declare it.
+A new service account has no permissions:
+
+```typescript
+// src/ci.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Ci = Stackit.IAM.ServiceAccount("Ci", {});
+
+export const CiEditor = Ci.pipe(
+  Effect.flatMap((ci) =>
+    Stackit.IAM.Membership("CiEditor", { subject: ci.email, role: "editor" }),
+  ),
+);
+```
+
+`resourceType` and `resourceId` move the grant to a folder or an
+organization. A membership that already exists is reported as unowned and
+only taken over with `--adopt`, because destroying the resource revokes it.
+Changing `role` or `subject` grants the new pair before revoking the old
+one, and STACKIT refuses to remove the last `owner` of a resource.
+
+## Define a role
+
+A custom role is a named set of permissions:
+
+```diff lang="typescript"
+// src/ci.ts
++export const VpnReader = Stackit.IAM.CustomRole("VpnReader", {
++  permissions: ["vpn.connection.get", "vpn.connection.status.get"],
++});
++
++export const CiVpn = Effect.gen(function* () {
++  const ci = yield* Ci;
++  const role = yield* VpnReader;
++  return yield* Stackit.IAM.Membership("CiVpn", {
++    subject: ci.email,
++    role: role.name,
++  });
++});
+```
+
+Name, description, and permissions update in place. Take permission names
+from STACKIT's docs, because a wrong name fails the deploy.
+
+## Give an account a key
+
+Code outside STACKIT signs with a key:
+
+```diff lang="typescript"
+// src/ci.ts
++export const CiKey = Ci.pipe(
++  Effect.flatMap((ci) =>
++    Stackit.IAM.ServiceAccountKey("CiKey", { serviceAccountEmail: ci.email }),
++  ),
++);
+```
+
+`key.keyJson` is the key file. A service account holds at most 10 keys.
+Alchemy keeps the private key in state, `Redacted`, so read
+[Protect the state store](/stackit/security/secrets-kms#protect-the-state-store).
+
+## Skip the key for CI
+
+A workload that holds an OIDC token from a trusted issuer exchanges it for a
+token of the service account, with no long-lived key:
+
+```diff lang="typescript"
+// src/ci.ts
++export const GitHub = Ci.pipe(
++  Effect.flatMap((ci) =>
++    Stackit.IAM.FederatedIdentityProvider("GitHub", {
++      serviceAccountEmail: ci.email,
++      issuer: "https://token.actions.githubusercontent.com",
++      assertions: [
++        { item: "aud", value: "sts.accounts.stackit.cloud" },
++        { item: "sub", value: "repo:my-org/my-repo:ref:refs/heads/main" },
++      ],
++    }),
++  ),
++);
+```
+
+Always narrow `sub`: an issuer such as GitHub signs tokens for every
+repository. See the [CI/CD tutorial](/stackit/tutorial/part-5).
+
+## Audit access
+
+`ListMembers` reads who holds which role on a project, folder, or
+organization. It grants a custom role holding `iam.member.get` on the
+target. Provide `Stackit.IAM.ListMembersHttp`:
+
+```typescript
+const worker = yield* Worker;
+const listMembers = yield* Stackit.IAM.ListMembers({
+  resourceType: "project",
+  resourceId: worker.projectId,
+});
+```
+
+Membership reads like this reach the scope's child resources too.
+
+## Check on your first deploy
+
+- The role and permission names exist. A wrong one fails the deploy. Binding
+  permissions come from STACKIT's spec. Check them with `Stackit.IAM.ListRoles`.
+- A fresh grant works at once. If the first calls get a 401 or 403, wait for
+  it to propagate and try again.
+
+## Where next
+
+- [Secrets Manager & KMS](/stackit/security/secrets-kms) — where secrets live, and
+  what the state store holds.
+- [Firewall](/stackit/security/firewall) — network access, which is separate
+  from IAM.
+- [IAM reference](/providers/stackit/iam#membership) — every prop and
+  attribute.

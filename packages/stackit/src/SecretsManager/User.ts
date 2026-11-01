@@ -79,6 +79,13 @@ export type User = Resource<
  * has no labels, so Alchemy knows it by the id in state or by a generated
  * description. Users are never adopted, and they go with their instance.
  *
+ * See [STACKIT's Secrets Manager docs](https://docs.stackit.cloud/products/security/secrets-manager/).
+ *
+ * :::caution[Changing `instanceId`, `projectId` or `rotationKey` replaces the User]
+ * The replacement has a new username and password, and the old login stops working
+ * when it is deleted.
+ * :::
+ *
  * ### Creating a User
  * **Example:** Read-only user
  * ```typescript

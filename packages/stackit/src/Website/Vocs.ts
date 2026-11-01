@@ -27,14 +27,18 @@ export type VocsProps = FrameworkSiteProps & {
  * import * as Output from "alchemy/Output";
  * import * as Config from "effect/Config";
  *
- * const images = yield* Stackit.ContainerRegistry.Project("Images", {});
+ * const harbor = {
+ *   username: Config.String("HARBOR_USERNAME"),
+ *   secret: Config.Redacted("HARBOR_CLI_SECRET"),
+ * };
+ * const images = yield* Stackit.ContainerRegistry.Project("Images", {
+ *   forceDestroy: true,
+ *   harborCredentials: harbor,
+ * });
  * const pusher = yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
  *   project: images.name,
  *   registryUrl: images.url,
- *   credentials: {
- *     username: Config.String("HARBOR_USERNAME"),
- *     secret: Config.Redacted("HARBOR_CLI_SECRET"),
- *   },
+ *   credentials: harbor,
  * });
  * const puller = yield* Stackit.Functions.PullCredential("Puller", {
  *   address: images.registryHost,

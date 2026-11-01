@@ -121,6 +121,13 @@ export type User = Resource<
  * has a new password. The API has no labels for users, so a user found by an explicit name
  * without state is reported as unowned, and only taken over with `--adopt`.
  *
+ * See [STACKIT's MongoDB Flex docs](https://docs.stackit.cloud/products/databases/mongodb-flex/).
+ *
+ * :::caution[Changing `instanceId`, `userName`, `database`, `projectId` or `region` replaces the User]
+ * The replacement has a new password, and the old user is deleted, so clients holding
+ * the old connection string stop working.
+ * :::
+ *
  * ### Creating a User
  * **Example:** A user on one database, with a generated name
  * ```typescript

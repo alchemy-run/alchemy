@@ -100,6 +100,13 @@ export type Database = Resource<
  * it. The API has no labels for databases, so a database found by an explicit name
  * without state is reported as unowned, and only taken over with `--adopt`.
  *
+ * See [STACKIT's PostgreSQL Flex docs](https://docs.stackit.cloud/products/databases/postgresql-flex/).
+ *
+ * :::caution[Changing `instanceId`, `projectId` or `region` replaces the Database]
+ * The database is created empty on the new instance and deleted on the old one, so
+ * back up what you need first. `name` and `owner` update in place.
+ * :::
+ *
  * ### Creating a Database
  * **Example:** A database owned by a user
  * ```typescript
@@ -200,6 +207,71 @@ export type Database = Resource<
  * // Inside a Worker or Function's init phase:
  * const connect = yield* Stackit.PostgresFlex.Connect(database, user);
  * ```
+ *
+ * ### Keeping Migration History in Another Table
+ * Migration history lives in `__alchemy_migrations` unless you name a table.
+ *
+ * **Example:** A directory and a table
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const db = yield* Stackit.PostgresFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "17",
+ *   storage: { class: "premium-perf2-stackit", size: 5 },
+ *   backupSchedule: "0 2 * * *",
+ *   retentionDays: 32,
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * const owner = yield* Stackit.PostgresFlex.User("Owner", { instanceId: db.instanceId });
+ * const database = yield* Stackit.PostgresFlex.Database("App", {
+ *   instanceId: db.instanceId,
+ *   owner: owner.userName,
+ *   migrations: { dir: "./migrations", table: "schema_history" },
+ * });
+ * ```
+ *
+ * ### Reading Databases at Runtime
+ * `GetDatabase` takes the instance. It grants a custom role with
+ * `postgres-flex.database.get` on the project holding the instance, so it reaches every
+ * PostgreSQL Flex instance in that project.
+ *
+ * **Example:** Read a database's owner from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Db = Stackit.PostgresFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "17",
+ *   storage: { class: "premium-perf2-stackit", size: 5 },
+ *   backupSchedule: "0 2 * * *",
+ *   retentionDays: 32,
+ *   acl: ["203.0.113.7/32"],
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const getDatabase = yield* Stackit.PostgresFlex.GetDatabase(yield* Db);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const live = yield* getDatabase({ databaseId: 16999 });
+ *         return yield* HttpServerResponse.json({ owner: live.owner });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.PostgresFlex.GetDatabaseHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Taking Over a Database <!-- api-prose -->
+ * Databases have no labels. One found by an explicit `name` with no state is reported as
+ * unowned, and you take it over with `--adopt`.
  *
  * @resource
  * @product STACKIT PostgreSQL Flex

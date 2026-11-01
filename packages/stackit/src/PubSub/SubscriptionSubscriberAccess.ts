@@ -66,6 +66,11 @@ export type SubscriptionSubscriberAccess = Resource<
  * The list has no ownership marker, so the state is the proof: an address already on the
  * list without state is reported as unowned, and only taken over with `--adopt`.
  *
+ * :::caution[Changing `topicId`, `subscriptionId`, `emailAddress`, `projectId` or `region` replaces the Grant]
+ * The new address is added and the old one is removed, so the old address loses
+ * access.
+ * :::
+ *
  * ### Granting Access
  * **Example:** Let a service account pull
  * ```typescript

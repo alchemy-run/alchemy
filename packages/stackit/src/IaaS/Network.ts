@@ -181,6 +181,14 @@ export type Network = Resource<
  * Creating the first network of a project with internet access may incur
  * cost for the SNAT gateway.
  *
+ * See [STACKIT's virtual network docs](https://docs.stackit.cloud/products/network/core-networking/virtual-network/).
+ *
+ * :::caution[Changing `ipv4.prefix`, `ipv4.prefixLength`, their IPv6 equivalents, `vpcId`, `isolated`, `projectId` or `region` replaces the Network]
+ * A deploy creates a new network and deletes the old one. Servers attached to the old
+ * network must move first, or the old network's delete fails while its interfaces
+ * exist.
+ * :::
+ *
  * ### Creating a network
  * **Example:** Network with a fixed IPv4 prefix
  * ```typescript
@@ -227,19 +235,54 @@ export type Network = Resource<
  * });
  * ```
  *
- * ### Replacement
- * Changing `ipv4.prefix`, `ipv4.prefixLength`, the IPv6 equivalents,
- * `vpcId`, `isolated`, `projectId` or `region` creates a new network and
- * deletes the old one. Servers attached to the old network must move first,
- * or the old network's delete fails while its interfaces exist.
- *
- * **Example:** Moving to a new prefix
+ * ### Moving to a New Prefix
+ * **Example:** A new prefix creates a new network
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  *
  * // Was `10.0.1.0/24`: deploys a new network, then deletes the old one.
  * const network = yield* Stackit.IaaS.Network("App", {
  *   ipv4: { prefix: "10.0.8.0/24" },
+ * });
+ * ```
+ *
+ * ### IPv6
+ * **Example:** A network with IPv4 and IPv6 prefixes
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const network = yield* Stackit.IaaS.Network("App", {
+ *   ipv4: { prefix: "10.0.1.0/24" },
+ *   ipv6: { prefix: "2001:db8::/64" },
+ * });
+ * ```
+ *
+ * ### Routing Tables
+ * `routingTableId` picks a table of the project's network area. That is a preview feature:
+ * the area needs `routingTables: true`. It updates in place.
+ *
+ * **Example:** Use a routing table from the network area
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const network = yield* Stackit.IaaS.Network("App", {
+ *   ipv4: { prefix: "10.0.1.0/24" },
+ *   routingTableId: "00000000-0000-0000-0000-000000000000",
+ * });
+ * ```
+ *
+ * ### Attaching a Server
+ * **Example:** A server on the network
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const network = yield* Stackit.IaaS.Network("App", {
+ *   ipv4: { prefix: "10.0.1.0/24" },
+ * });
+ * const server = yield* Stackit.IaaS.Server("Web", {
+ *   machineType: "g1.1",
+ *   bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+ *   networking: { networkId: network.networkId },
  * });
  * ```
  *

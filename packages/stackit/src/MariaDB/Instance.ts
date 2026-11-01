@@ -159,6 +159,12 @@ export type Instance = Resource<
  *
  * Instances are billed per started hour by plan.
  *
+ * See [STACKIT's MariaDB docs](https://docs.stackit.cloud/products/databases/mariadb/).
+ *
+ * :::caution[Changing `name`, `projectId` or `region` replaces the Instance]
+ * A replacement starts empty: back up what you need first.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** A single instance
  * ```typescript

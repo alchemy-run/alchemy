@@ -421,10 +421,54 @@ const SECTIONS: Section[] = [
   {
     heading: "STACKIT — start here",
     intro:
-      "The STACKIT hub: overview (projects, networks, DNS, object storage) and setup (customer account, project, service-account key, profile).",
+      "The STACKIT hub: overview (runtimes, bindings, projects) and setup (customer account, project, service-account key, profile, Docker and registry login).",
     pages: {
       slugs: ["stackit/index", "stackit/setup"],
     },
+  },
+  {
+    heading: "STACKIT — Tutorial",
+    pages: { directory: "stackit/tutorial" },
+  },
+  {
+    heading: "STACKIT — Compute",
+    pages: { directory: "stackit/compute" },
+  },
+  {
+    heading: "STACKIT — Frontend",
+    pages: { directory: "stackit/frontend" },
+  },
+  {
+    heading: "STACKIT — APIs",
+    pages: { directory: "stackit/apis" },
+  },
+  {
+    heading: "STACKIT — Data",
+    pages: { directory: "stackit/data" },
+  },
+  {
+    heading: "STACKIT — AI",
+    pages: { directory: "stackit/ai" },
+  },
+  {
+    heading: "STACKIT — Messaging",
+    pages: { directory: "stackit/messaging" },
+  },
+  {
+    heading: "STACKIT — Security",
+    pages: { directory: "stackit/security" },
+  },
+  {
+    heading: "STACKIT — Observability",
+    pages: { directory: "stackit/observability" },
+  },
+  {
+    heading: "STACKIT — Networking",
+    pages: { directory: "stackit/networking" },
+  },
+  {
+    heading: "STACKIT — Operations",
+    pages: { directory: "stackit/operations" },
   },
   {
     heading: "Railway — start here",

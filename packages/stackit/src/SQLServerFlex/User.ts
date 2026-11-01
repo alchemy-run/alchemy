@@ -127,6 +127,14 @@ export type User = Resource<
  * The API has no labels for users, so a user found by an explicit name without state
  * is reported as unowned, and only taken over with `--adopt`.
  *
+ * See [STACKIT's SQL Server Flex docs](https://docs.stackit.cloud/products/databases/sqlserver-flex/).
+ *
+ * :::caution[Changing `instanceId`, `userName`, `roles`, `defaultDatabase`, `projectId` or `region` replaces the User]
+ * The API has no user update. A database's `owner` can't change either, so give a user
+ * that owns a database an explicit `userName`: replacing it then keeps the owner's
+ * name and the database.
+ * :::
+ *
  * ### Creating a User
  * **Example:** A user with a generated name
  * ```typescript

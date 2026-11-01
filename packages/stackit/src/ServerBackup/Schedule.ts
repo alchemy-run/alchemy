@@ -98,6 +98,16 @@ export type Schedule = Resource<
  * reported as unowned, and only taken over with `--adopt`. `alchemy unsafe nuke` enumerates
  * only schedules on Alchemy's servers whose name has the generated shape.
  *
+ * See [STACKIT's Server Backup Management docs](https://docs.stackit.cloud/products/compute-engine/server-backup-management/).
+ *
+ * :::caution[Changing `serverId`, `projectId` or `region` replaces the Schedule]
+ * A deploy creates a schedule at the new place and deletes the old one, with the old
+ * schedule going first if the new server isn't known at plan and the schedule has an
+ * explicit `name`. A schedule changed in the portal, or by
+ * `Stackit.ServerBackup.UpdateSchedule`, keeps its live values until a deploy changes
+ * the schedule's props.
+ * :::
+ *
  * ### Scheduling Backups
  * **Example:** A nightly backup kept for 14 days
  * ```typescript
@@ -199,13 +209,6 @@ export type Schedule = Resource<
  * A delete makes one call, to delete this one schedule by its id. It asks STACKIT to delete
  * no backups: a backup the schedule took is a separate object with its own retention. A
  * schedule that's already gone counts as deleted.
- *
- * ### Replacement Cautions <!-- api-prose -->
- * Changing `serverId`, `projectId` or `region` creates a schedule at the new place and
- * deletes the old one, with the old schedule going first if the new server isn't known at
- * plan and the schedule has an explicit `name`. A schedule changed in the portal, or by
- * `Stackit.ServerBackup.UpdateSchedule`, keeps its live values until a deploy changes the
- * schedule's props.
  *
  * @resource
  * @product STACKIT Server Backup Management

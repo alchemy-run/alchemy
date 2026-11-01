@@ -136,6 +136,15 @@ export type VolumeAutomation = Resource<
  * reported as unowned, and only taken over with `--adopt`. `alchemy unsafe nuke` enumerates
  * only automations whose name has the generated shape.
  *
+ * See [STACKIT's Automation docs](https://docs.stackit.cloud/products/integration/automation-service/).
+ *
+ * :::caution[Changing `templateId`, `projectId` or `region` replaces the Automation]
+ * A deploy creates a new automation and deletes the old one. With an explicit `name`
+ * that stays the same in the same project and region, the old automation goes first.
+ * An automation changed in the portal keeps its live values until a deploy changes its
+ * props.
+ * :::
+ *
  * ### Creating an Automation
  * **Example:** Daily recovery points, keeping the last seven
  * ```typescript
@@ -208,12 +217,6 @@ export type VolumeAutomation = Resource<
  * A delete makes one call, to delete this one automation by its id. It makes no call against
  * the recovery points the automation created, so delete those you don't want through
  * `Stackit.IaaS` or the portal. An automation that's already gone counts as deleted.
- *
- * ### Replacement Cautions <!-- api-prose -->
- * Changing `templateId`, `projectId` or `region` creates a new automation and deletes the old
- * one. With an explicit `name` that stays the same in the same project and region, the old
- * automation goes first. An automation changed in the portal keeps its live values until a
- * deploy changes its props.
  *
  * @resource
  * @product STACKIT Automation

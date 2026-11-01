@@ -88,6 +88,10 @@ export type EnvironmentRegistry = Resource<
  * portal, or decorate the resource with `Alchemy.RemovalPolicy.retain()` to leave it.
  * :::
  *
+ * :::caution[Changing `environmentId`, `server`, `projectId` or `region` replaces the Login]
+ * The login is written at its new place and removed from the old one.
+ * :::
+ *
  * ### Creating a Registry Login
  * **Example:** A token for GitHub Container Registry
  * ```typescript
@@ -95,7 +99,7 @@ export type EnvironmentRegistry = Resource<
  * import * as Config from "effect/Config";
  *
  * const environment = yield* Stackit.ContainerApplications.Environment("Apps", {});
- * const token = yield* Config.Redacted("GHCR_TOKEN");
+ * const token = Config.Redacted("GHCR_TOKEN");
  * const ghcr = yield* Stackit.ContainerApplications.EnvironmentRegistry("Ghcr", {
  *   environmentId: environment.environmentId,
  *   server: "ghcr.io",
@@ -110,17 +114,21 @@ export type EnvironmentRegistry = Resource<
  * import * as Config from "effect/Config";
  *
  * const environment = yield* Stackit.ContainerApplications.Environment("Apps", {});
- * const images = yield* Stackit.ContainerRegistry.Project("Images", {});
+ * const harbor = {
+ *   username: Config.String("HARBOR_USERNAME"),
+ *   secret: Config.Redacted("HARBOR_CLI_SECRET"),
+ * };
+ * const images = yield* Stackit.ContainerRegistry.Project("Images", {
+ *   forceDestroy: true,
+ *   harborCredentials: harbor,
+ * });
  * const puller = yield* Stackit.ContainerRegistry.RobotAccount("Puller", {
  *   project: images.name,
  *   registryUrl: images.url,
- *   credentials: {
- *     username: Config.String("HARBOR_USERNAME"),
- *     secret: Config.Redacted("HARBOR_CLI_SECRET"),
- *   },
+ *   credentials: harbor,
  *   permissions: [{ resource: "repository", action: "pull" }],
  * });
- * const login = yield* Stackit.ContainerApplications.EnvironmentRegistry("Images", {
+ * const login = yield* Stackit.ContainerApplications.EnvironmentRegistry("ImagesRegistry", {
  *   environmentId: environment.environmentId,
  *   server: images.registryHost,
  *   username: puller.robotName,
@@ -135,7 +143,7 @@ export type EnvironmentRegistry = Resource<
  * import * as Config from "effect/Config";
  *
  * const environment = yield* Stackit.ContainerApplications.Environment("Apps", {});
- * const token = yield* Config.Redacted("GHCR_TOKEN");
+ * const token = Config.Redacted("GHCR_TOKEN");
  * const ghcr = yield* Stackit.ContainerApplications.EnvironmentRegistry("Ghcr", {
  *   environmentId: environment.environmentId,
  *   server: "ghcr.io",
@@ -148,10 +156,6 @@ export type EnvironmentRegistry = Resource<
  *   image: "ghcr.io/my-org/api:v1.0.0",
  * });
  * ```
- *
- * :::caution[Changing `environmentId`, `server`, `projectId` or `region` replaces the Login]
- * The login is written at its new place and removed from the old one.
- * :::
  *
  * @resource
  * @product STACKIT Container Applications

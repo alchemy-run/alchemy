@@ -135,6 +135,14 @@ export class AccessTokenValueMissing extends Data.TaggedError(
  * token, and so does a deploy after it expired, which a host holding the old value only
  * sees once it redeploys. With an explicit `displayName` the old token is deleted first.
  *
+ * See [STACKIT's Logs docs](https://docs.stackit.cloud/products/logging-and-monitoring/logs/).
+ *
+ * :::caution[Changing `instanceId`, `permissions`, `lifetime`, `projectId` or `region` replaces the Token]
+ * So does a deploy after it expired. A host holding the old value only sees the new
+ * one when it redeploys. With an explicit `displayName` the old token is deleted
+ * first.
+ * :::
+ *
  * ### Creating a Token
  * **Example:** A token that reads and writes
  * ```typescript

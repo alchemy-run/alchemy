@@ -204,6 +204,16 @@ export type Instance = Resource<
  *
  * Instances are billed per started hour by flavor, plus storage and backups.
  *
+ * The instance only accepts TLS connections, and only from the ranges in `acl`.
+ *
+ * See [STACKIT's PostgreSQL Flex docs](https://docs.stackit.cloud/products/databases/postgresql-flex/).
+ *
+ * :::caution[Changing `accessScope`, `encryption`, `cloneFrom`, `storage.class`, `projectId` or `region` replaces the Instance]
+ * A replacement starts empty: back up what you need first. With an explicit `name`,
+ * the old instance is deleted first, so the database is down until the new one is
+ * `READY`. Removing `cloneFrom` keeps the instance.
+ * :::
+ *
  * ### Creating an Instance
  * **Example:** A single-node instance
  * ```typescript
@@ -317,6 +327,137 @@ export type Instance = Resource<
  *   retentionDays: 32,
  *   acl: ["203.0.113.7/32"],
  * });
+ * ```
+ *
+ * ### Backups and Network Access
+ * `acl` is what lets a client connect. Anything outside it times out, including a host
+ * using `Stackit.PostgresFlex.Connect`.
+ *
+ * **Example:** A nightly backup kept for two weeks, reachable from one range
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const db = yield* Stackit.PostgresFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "17",
+ *   storage: { class: "premium-perf2-stackit", size: 5 },
+ *   backupSchedule: "0 2 * * *",
+ *   retentionDays: 14,
+ *   acl: ["203.0.113.0/24"],
+ * });
+ * ```
+ *
+ * ### Encrypting with Your Own Key
+ * STACKIT only accepts `encryption` for enabled accounts. Changing it replaces the instance.
+ *
+ * **Example:** Encrypt the volume and backups with a KMS key
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const db = yield* Stackit.PostgresFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "17",
+ *   storage: { class: "premium-perf2-stackit", size: 5 },
+ *   backupSchedule: "0 2 * * *",
+ *   retentionDays: 32,
+ *   acl: ["203.0.113.7/32"],
+ *   encryption: {
+ *     kekKeyId: "00000000-0000-0000-0000-000000000001",
+ *     kekKeyRingId: "00000000-0000-0000-0000-000000000002",
+ *     kekKeyVersion: "1",
+ *     serviceAccount: "kms-user@sa.stackit.cloud",
+ *   },
+ * });
+ * ```
+ *
+ * ### Binding to a Runtime
+ * `Connect` passes the host, port, names and password into the host's environment, with
+ * the password kept `Redacted`. It grants no STACKIT role, because connections
+ * authenticate with the database user. The host's egress address has to be in `acl`.
+ *
+ * **Example:** Resolve the connection URL from a Function
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Db = Stackit.PostgresFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "17",
+ *   storage: { class: "premium-perf2-stackit", size: 5 },
+ *   backupSchedule: "0 2 * * *",
+ *   retentionDays: 32,
+ *   acl: ["203.0.113.7/32"],
+ * });
+ * export const AppUser = Db.pipe(
+ *   Effect.flatMap((db) => Stackit.PostgresFlex.User("AppUser", { instanceId: db.instanceId })),
+ * );
+ * export const AppDatabase = Effect.gen(function* () {
+ *   const db = yield* Db;
+ *   const user = yield* AppUser;
+ *   return yield* Stackit.PostgresFlex.Database("AppDatabase", {
+ *     instanceId: db.instanceId,
+ *     owner: user.userName,
+ *   });
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const database = yield* AppDatabase;
+ *     const user = yield* AppUser;
+ *     const connect = yield* Stackit.PostgresFlex.Connect(database, user);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const info = yield* connect;
+ *         return yield* HttpServerResponse.json({ host: info.host, database: info.database });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.PostgresFlex.ConnectHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * `ReadWriteInstance` grants a custom role on the project holding the instance, with the
+ * read permissions and `postgres-flex.user.reset`. STACKIT binds roles on projects at the
+ * narrowest, so it reaches every PostgreSQL Flex instance in that project.
+ *
+ * **Example:** List users and rotate a password
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ *
+ * export const Db = Stackit.PostgresFlex.Instance("Db", {
+ *   flavorId: "2.4",
+ *   version: "17",
+ *   storage: { class: "premium-perf2-stackit", size: 5 },
+ *   backupSchedule: "0 2 * * *",
+ *   retentionDays: 32,
+ *   acl: ["203.0.113.7/32"],
+ * });
+ *
+ * export default class Api extends Stackit.Functions.Function<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     registry: { repository: "ghcr.io/my-org/api" },
+ *   },
+ *   Effect.gen(function* () {
+ *     const client = yield* Stackit.PostgresFlex.ReadWriteInstance(yield* Db);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { users } = yield* client.listUsers();
+ *         const { name } = yield* client.resetUserPassword({ userId: users[0]!.id });
+ *         return yield* HttpServerResponse.json({ rotated: name });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Stackit.PostgresFlex.ReadWriteInstanceHttp)),
+ * ) {}
  * ```
  *
  * @resource

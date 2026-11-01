@@ -186,6 +186,16 @@ export class GatewayNotEmpty extends Data.TaggedError("Stackit.VPN.GatewayNotEmp
  * Ownership is tracked with labels. A gateway found by its explicit `displayName` without
  * them is reported as unowned and only taken over with `--adopt`.
  *
+ * See [STACKIT's VPN docs](https://docs.stackit.cloud/products/network/connectivity-hybrid-multi-cloud/vpn/).
+ *
+ * :::caution[Changing `routingType`, `predefinedNetworkPrefix`, `projectId` or `region` replaces the Gateway]
+ * The replacement has new public IPs, and every connection on it moves to the new one,
+ * so the remote peers have to be reconfigured. With an explicit `displayName` or a
+ * kept prefix the old one goes first, and while connections are attached the plan
+ * fails with `Stackit.VPN.GatewayNotEmpty` until `forceDestroy` is deployed on its
+ * own.
+ * :::
+ *
  * ### Creating a Gateway
  * **Example:** A policy-based gateway
  * ```typescript

@@ -116,6 +116,13 @@ export type AccessToken = Resource<
  * and an explicit name found on the router is reported as unowned, and only taken over
  * with `--adopt`, which leaves `accessToken` empty until `rotationKey` is set.
  *
+ * See [STACKIT's Telemetry Router docs](https://docs.stackit.cloud/products/logging-and-monitoring/telemetry-router/).
+ *
+ * :::caution[Changing `routerId`, `ttlDays`, `rotationKey`, `projectId` or `region` replaces the Token]
+ * So does a deploy after `expirationTime`. Between deploys nothing renews an expired
+ * token, so a link using it stops until the next deploy.
+ * :::
+ *
  * ### Creating a Token
  * **Example:** A token that doesn't expire
  * ```typescript

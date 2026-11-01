@@ -49,6 +49,13 @@ export type ElasticsearchCheck = Resource<
  * over with `--adopt`. The API hands the password back in plain on every list, so Alchemy never keeps it in the attributes. `alchemy unsafe nuke` lists every check on an instance
  * it would delete anyway, because deleting the instance takes them with it.
  *
+ * See [STACKIT's Observability docs](https://docs.stackit.cloud/products/logging-and-monitoring/observability/).
+ *
+ * :::caution[Changing any prop replaces the Check]
+ * The API has no update for a check. A new check is created and the old one is
+ * deleted.
+ * :::
+ *
  * ### Watching Elasticsearch
  * **Example:** Check an Elasticsearch server
  * ```typescript
@@ -67,7 +74,7 @@ export type ElasticsearchCheck = Resource<
  * import * as Config from "effect/Config";
  *
  * const instance = yield* Stackit.Observability.Instance("Metrics", {});
- * const password = yield* Config.redacted("CHECK_PASSWORD");
+ * const password = Config.Redacted("CHECK_PASSWORD");
  * const check = yield* Stackit.Observability.ElasticsearchCheck("Check", {
  *   instanceId: instance.instanceId,
  *   server: "https://search.example.com:9200",

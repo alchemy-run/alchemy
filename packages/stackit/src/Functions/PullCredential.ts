@@ -93,13 +93,18 @@ export type PullCredential = Resource<
  * `alchemy.id`, `alchemy.instance`). A credential with the same explicit `name`
  * that lacks them is reported as unowned and only taken over with `--adopt`.
  *
+ * :::caution[Changing `projectId` replaces the Credential]
+ * A new credential is created in the new project and the old one is deleted, so a
+ * function that takes its id as an output updates too.
+ * :::
+ *
  * ### Creating a Pull Credential
  * **Example:** A token for a private GitHub Container Registry image
  * ```typescript
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const token = yield* Config.Redacted("GHCR_TOKEN");
+ * const token = Config.Redacted("GHCR_TOKEN");
  * const credential = yield* Stackit.Functions.PullCredential("Ghcr", {
  *   address: "ghcr.io",
  *   username: "my-org",
@@ -112,14 +117,18 @@ export type PullCredential = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const images = yield* Stackit.ContainerRegistry.Project("Images", {});
+ * const harbor = {
+ *   username: Config.String("HARBOR_USERNAME"),
+ *   secret: Config.Redacted("HARBOR_CLI_SECRET"),
+ * };
+ * const images = yield* Stackit.ContainerRegistry.Project("Images", {
+ *   forceDestroy: true,
+ *   harborCredentials: harbor,
+ * });
  * const puller = yield* Stackit.ContainerRegistry.RobotAccount("Puller", {
  *   project: images.name,
  *   registryUrl: images.url,
- *   credentials: {
- *     username: Config.String("HARBOR_USERNAME"),
- *     secret: Config.Redacted("HARBOR_CLI_SECRET"),
- *   },
+ *   credentials: harbor,
  *   permissions: [{ resource: "repository", action: "pull" }],
  * });
  * const credential = yield* Stackit.Functions.PullCredential("Registry", {
@@ -135,7 +144,7 @@ export type PullCredential = Resource<
  * import * as Stackit from "@alchemy.run/stackit";
  * import * as Config from "effect/Config";
  *
- * const token = yield* Config.Redacted("GHCR_TOKEN");
+ * const token = Config.Redacted("GHCR_TOKEN");
  * const credential = yield* Stackit.Functions.PullCredential("Ghcr", {
  *   address: "ghcr.io",
  *   username: "my-org",

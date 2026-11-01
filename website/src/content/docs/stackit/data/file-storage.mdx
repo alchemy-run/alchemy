@@ -1,0 +1,278 @@
+---
+title: File Storage
+description: Create STACKIT File Storage resource pools and NFS shares, control access with export policies, mount a share on a server, and take snapshots.
+---
+
+File Storage is NFS. A resource pool holds capacity in one availability zone, and shares
+carve it up. Clients mount a share over NFS, so a share goes on a machine you boot, not on
+a Function.
+
+:::caution[This creates a billed resource]
+A pool bills per started hour by size and performance class, with a 500 GB minimum. The
+product page lists Standard at EUR 0.000311 per hour without printing the unit. If it's per
+GB, as partner pages say, a 500 GB pool is about EUR 0.16 per started hour. A share,
+a policy, and a lock have no charge of their own. Check the current price list, and destroy
+the stack when you're done.
+:::
+
+## Create a resource pool
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Files = Stackit.FileStorage.ResourcePool("Files", {
+  availabilityZone: "eu01-1",
+  performanceClass: "Standard",
+  sizeGigabytes: 500,
+  ipAcl: ["10.0.0.0/24"],
+});
+```
+
+`ipAcl` is the outer limit on which clients can reach the pool. Growth updates in place. A
+later shrink fails with `ResourcePoolChangeBlocked` until `sizeReducibleAt`.
+
+## Create a share
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Files } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const pool = yield* Files;
+    const share = yield* Stackit.FileStorage.Share("Assets", {
+      resourcePoolId: pool.resourcePoolId,
+      spaceHardLimitGigabytes: 0,
+    });
+    return { mountPath: share.mountPath };
+  }),
+);
+```
+
+`spaceHardLimitGigabytes: 0` lets the share use all of its pool. Without an export policy,
+the share mounts read-only for the pool's `ipAcl`.
+
+## Allow writes with an export policy
+
+Read-write access takes a `ShareExportPolicy`:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Files } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const pool = yield* Files;
+    const policy = yield* Stackit.FileStorage.ShareExportPolicy("Clients", {
+      rules: [{ order: 1, ipAcl: ["10.0.0.0/24"] }],
+    });
+    const share = yield* Stackit.FileStorage.Share("Assets", {
+      resourcePoolId: pool.resourcePoolId,
+      spaceHardLimitGigabytes: 100,
+      exportPolicyName: policy.name,
+    });
+    return { mountPath: share.mountPath };
+  }),
+);
+```
+
+A rule can only narrow the pool's `ipAcl`. A client outside it stays out, whatever the
+policy says.
+
+## Mount a share on a server
+
+`MountShare` adds CIDR ranges to the share's export policy and gives you the `userData` that
+mounts it. Call it in the stack:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Files } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const network = yield* Stackit.IaaS.Network("Network", {
+      ipv4: { prefix: "10.0.0.0/24" },
+    });
+    const pool = yield* Files;
+    const policy = yield* Stackit.FileStorage.ShareExportPolicy("Clients", {});
+    const share = yield* Stackit.FileStorage.Share("Assets", {
+      resourcePoolId: pool.resourcePoolId,
+      spaceHardLimitGigabytes: 100,
+      exportPolicyName: policy.name,
+    });
+    const mount = yield* Stackit.FileStorage.MountShare(share, {
+      policy,
+      cidrs: network.ipv4Prefixes,
+      mountPoint: "/mnt/assets",
+    });
+    const server = yield* Stackit.IaaS.Server("App", {
+      machineType: "g1.1",
+      bootVolume: {
+        size: 20,
+        source: { type: "image", id: "1d2a2c8e-3b4f-4a6d-9c7e-5f8b0a1d2e3f" },
+      },
+      networking: { networkId: network.networkId },
+      userData: mount.userData,
+    });
+    return { serverId: server.serverId };
+  }),
+);
+```
+
+Replace the image id with a Linux image in your project. The pool's `ipAcl` has to cover the
+same ranges, because a policy only narrows it. `MountShare` grants nothing at runtime. At
+deploy, updating the policy takes the deployer's
+`file-storage.share-export-policy.update`.
+
+A server's `userData` replaces it when it changes, so a new `mountPoint`, `nfsVersion`, or
+`readOnly`, or a replaced share, replaces the server. The share's data stays.
+
+A host that runs code without a machine of its own can't mount NFS, so a Function or Worker
+fails with `Stackit.FileStorage.MountShareUnsupportedHost` when it binds. Mounting on SKE
+takes STACKIT's NFS CSI setup instead.
+
+## Mount read-only with your own `userData`
+
+`mount.fstabEntry` is the `/etc/fstab` line, for an image or a `userData` you write yourself:
+
+```typescript
+const mount = yield* Stackit.FileStorage.MountShare(share, {
+  policy,
+  cidrs: network.ipv4Prefixes,
+  mountPoint: "/mnt/assets",
+  readOnly: true,
+  superUser: false,
+});
+const server = yield* Stackit.IaaS.Server("App", {
+  machineType: "g1.1",
+  bootVolume: {
+    size: 20,
+    source: { type: "image", id: "1d2a2c8e-3b4f-4a6d-9c7e-5f8b0a1d2e3f" },
+  },
+  networking: { networkId: network.networkId },
+  userData: Output.interpolate`#!/bin/sh
+apt-get update && apt-get install -y nfs-common
+mkdir -p /mnt/assets
+echo '${mount.fstabEntry}' >> /etc/fstab
+mount /mnt/assets
+`,
+});
+```
+
+`Output` comes from `alchemy/Output`.
+
+## Take a snapshot
+
+A snapshot captures every share in the pool at one moment:
+
+```typescript
+const snapshot = yield* Stackit.FileStorage.ResourcePoolSnapshot("BeforeMigration", {
+  resourcePoolId: pool.resourcePoolId,
+  comment: "before the v2 migration",
+});
+```
+
+Mounting the pool shows it in `.snapshot` when the pool's `snapshotsAreVisible` is on. A
+snapshot uses its pool's space and has no charge of its own. Changing `resourcePoolId` or
+`snaplockRetentionHours` takes a new snapshot of the pool as it is now and deletes the old
+one, so what it captured is lost.
+
+## Make a snapshot immutable
+
+`snaplockRetentionHours` needs a `ProjectLock`:
+
+```typescript
+yield* Stackit.FileStorage.ProjectLock("Lock", {});
+const snapshot = yield* Stackit.FileStorage.ResourcePoolSnapshot("Audit", {
+  resourcePoolId: pool.resourcePoolId,
+  snaplockRetentionHours: 24,
+});
+```
+
+A snapshot under retention can't be deleted until the retention ends, so destroying it
+before then fails with `Stackit.FileStorage.SnapshotLocked`, and it keeps its pool, and the
+pool's bill, until then.
+
+## Snapshot from a Function
+
+Runtime bindings read the pool and manage its snapshots from a Function:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Files } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const createSnapshot = yield* Stackit.FileStorage.CreateSnapshot(yield* Files);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* createSnapshot({ name: "before-migration" });
+        return yield* HttpServerResponse.json({ name: result.resourcePoolSnapshot?.snapshotName });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.FileStorage.CreateSnapshotHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+| Binding | Permission |
+| --- | --- |
+| `GetResourcePool` | `file-storage.resource-pool.list` |
+| `ListShares`, `GetShare` | `file-storage.share.list` |
+| `ListShareExportPolicies`, `GetShareExportPolicy` | `file-storage.share-export-policy.list` |
+| `ListSnapshots`, `GetSnapshot` | `file-storage.resource-pool.snapshot.list` |
+| `CreateSnapshot` | `file-storage.resource-pool.snapshot.create` |
+| `DeleteSnapshot` | `file-storage.resource-pool.snapshot.delete` |
+
+Each binding grants a custom role with that one permission and a service account key for the
+host. The role is bound on the project holding the resource, because STACKIT binds roles on
+projects at the narrowest, so it reaches every File Storage resource of that kind in the
+project.
+
+:::caution[Replacing a pool or a share loses its data]
+Changing a pool's `name`, `availabilityZone`, `projectId`, or `region` replaces it, and every
+share in it and all their data are lost. Changing a share's `name` or `resourcePoolId`
+replaces it and loses its data too. Copy your data out first. Deleting a pool that still
+holds shares fails with `Stackit.FileStorage.ResourcePoolNotEmpty`.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- The performance class name `Standard`. The API's `listPerformanceClasses` lists them.
+- A `Stackit.IaaS.Server` in a project network can reach the mount address.
+- The `userData` that `MountShare` renders boots and mounts the share.
+
+## Where next
+
+- [Servers](/stackit/compute/servers): the machine that mounts a share.
+- [FileStorage reference](/providers/stackit/filestorage#resourcepool): every prop and
+  attribute.
