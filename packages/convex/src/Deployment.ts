@@ -9,7 +9,8 @@ import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { Credentials, fromDeployment, team } from "./Credentials.ts";
+import { team } from "./Credentials.ts";
+import { onDeployment } from "./internal/deployment.ts";
 import { previewIdentifier, previewReference } from "./internal/references.ts";
 import { createOnce } from "./internal/retry.ts";
 import { isOwnershipTag } from "./internal/tags.ts";
@@ -224,13 +225,6 @@ const byName = (name: string) =>
     Effect.map(cloudOnly),
     Effect.catchTag("DeploymentNotFound", () => Effect.undefined),
   );
-
-/** Run a Deployment API call against one deployment with the current token. */
-const onDeployment = <A, E, R>(url: string, effect: Effect.Effect<A, E, R>) =>
-  Effect.gen(function* () {
-    const { token } = yield* yield* Credentials;
-    return yield* effect.pipe(Effect.provide(fromDeployment({ url, token })));
-  });
 
 const toAttrs = Effect.fn(function* (
   deployment: CloudDeployment,

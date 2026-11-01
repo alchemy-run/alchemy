@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { fromDeployment } from "./Credentials.ts";
+import { GONE } from "./internal/deployment.ts";
 import { envChanges, envHash } from "./internal/env.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -92,10 +93,7 @@ export const EnvironmentVariablesProvider = () =>
           on(olds.url, olds.token),
           // A deployment that has gone took its variables with it, and its URL
           // and keys with them.
-          Effect.catchTag(
-            ["NotFound", "Unauthorized", "MalformedAccessToken", "BadDeployKey", "HttpClientError"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(GONE, () => Effect.void),
           // Convex won't remove a variable the pushed auth config reads. That
           // can't block a destroy, and the deployment usually goes next.
           Effect.catchTag("AuthConfigMissingEnvironmentVariable", () =>
