@@ -53,7 +53,7 @@ it(
 );
 
 it(
-  "a waiting exclusive test runs before later tests take the lock",
+  "later tests overtake a waiting exclusive test, which then runs alone",
   async () => {
     const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-exclusive-"));
     try {
@@ -62,16 +62,22 @@ it(
         `
         import { describe, it, expect } from ${JSON.stringify(apiUrl)};
         describe.concurrent("exclusive", () => {
+          let running = 0;
           let laterStarted = false;
           it("holder", async () => {
+            running++;
             await new Promise(resolve => setTimeout(resolve, 300));
+            running--;
           });
           it("waiting exclusive", () => {
-            expect(laterStarted).toBe(false);
+            expect(laterStarted).toBe(true);
+            expect(running).toBe(0);
           }, { exclusive: true });
           it("later", async () => {
+            running++;
             laterStarted = true;
             await new Promise(resolve => setTimeout(resolve, 300));
+            running--;
           });
         });
         `,
