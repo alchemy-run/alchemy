@@ -39,6 +39,9 @@
     },
     {
       "path": "../hetzner/tsconfig.json"
+    },
+    {
+      "path": "../railway/tsconfig.json"
     }
   ]
 }

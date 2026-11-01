@@ -10864,6 +10864,9 @@ importers:
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
+      '@alchemy.run/railway':
+        specifier: workspace:*
+        version: link:../railway
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
