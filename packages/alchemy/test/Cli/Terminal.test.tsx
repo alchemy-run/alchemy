@@ -1677,6 +1677,72 @@ it.effect(
   { tags: ["unit", "local"] },
 );
 
+/** A searchable picker over more accounts than one window shows. */
+const manyAccounts = Array.from({ length: 60 }, (_, index) => ({
+  value: `id-${index + 1}`,
+  label: `Account ${String(index + 1).padStart(2, "0")}`,
+  description: `id-${index + 1}`,
+}));
+
+const selectManyAccounts = (keys: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const stdin = new InputStream();
+    const { service, stdout } = yield* makeLive({ stdin });
+    const fiber = yield* service.prompt
+      .select({ message: "Select an account", searchable: true, options: manyAccounts })
+      .pipe(Effect.forkChild);
+    yield* Effect.promise(() => stdin.ready);
+    yield* Effect.promise(() => stdout.waitFor("60 choices"));
+    for (const key of keys) {
+      yield* Effect.sync(() => stdin.write(key));
+      yield* Effect.sleep("5 millis");
+    }
+    yield* Effect.sync(() => stdin.write("\r"));
+    return { value: yield* Fiber.join(fiber), output: stripVTControlCharacters(stdout.output) };
+  });
+
+it.live(
+  "scrolls a long select to its last choice with the arrow keys",
+  () =>
+    Effect.gen(function* () {
+      const { value, output } = yield* selectManyAccounts(Array(59).fill("\x1b[B"));
+      expect(value).toBe("id-60");
+      expect(output).toContain("Account 60");
+      expect(output).toMatch(/↓ \d+ more/);
+      expect(output).toMatch(/↑ \d+ more/);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.live(
+  "pages and jumps through a long select",
+  () =>
+    Effect.gen(function* () {
+      // A 24-row terminal shows 16 choices, so each PageDown moves 16.
+      const paged = yield* selectManyAccounts(["\x1b[6~", "\x1b[6~", "\x1b[6~"]);
+      expect(paged.value).toBe("id-49");
+      // End jumps to the last choice and Home back to the first.
+      expect((yield* selectManyAccounts(["\x1b[F"])).value).toBe("id-60");
+      expect((yield* selectManyAccounts(["\x1b[F", "\x1b[H"])).value).toBe("id-1");
+      // Up from the first choice wraps to the last.
+      expect((yield* selectManyAccounts(["\x1b[A"])).value).toBe("id-60");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.live(
+  "filters a long select to a choice outside the first window",
+  () =>
+    Effect.gen(function* () {
+      const byName = yield* selectManyAccounts(["Account 47"]);
+      expect(byName.value).toBe("id-47");
+      expect(byName.output).toContain("1 of 60");
+      // Descriptions (the account id) are searchable too.
+      expect((yield* selectManyAccounts(["id-53"])).value).toBe("id-53");
+    }),
+  { tags: ["unit", "local"] },
+);
+
 it.live(
   "tab fills a text prompt's default into the empty field",
   () =>
