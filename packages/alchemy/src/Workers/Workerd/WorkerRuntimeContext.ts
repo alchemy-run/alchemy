@@ -27,7 +27,7 @@ const makeRequestHandler =
   <Req = never>(handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>) =>
   (event: any) =>
     isWorkerEvent(event) && event.type === "fetch"
-      ? makeRequestEffect(event.input, handler)
+      ? makeRequestEffect(event.input, handler, event.context)
       : undefined;
 
 export interface WorkerRuntimeContext extends FunctionContext {
