@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -39,7 +40,7 @@ const listApps = (accountId: string) =>
 // Deterministic name — RealtimeKit apps cannot be deleted, so every run of
 // this suite adopts the same app instead of leaking a new one. The Preset
 // and Webhook suites share this name and adopt the same app.
-const APP_NAME = "alchemy-rtk-test-app";
+const APP_NAME = testName("alchemy-rtk-test-app");
 
 // Adoption is deterministic: among same-named apps (duplicates can exist on
 // Cloudflare's side), the provider picks the oldest by createdAt.

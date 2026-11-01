@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -48,20 +49,20 @@ test.provider.skip(
 
       const location = yield* stack.deploy(
         Cloudflare.Gateway.Location("BasicLocation", {
-          name: "alchemy-zt-location-basic",
+          name: testName("alchemy-zt-location-basic"),
           ecsSupport: false,
         }),
       );
 
       expect(location.locationId).toBeTruthy();
       expect(location.accountId).toEqual(accountId);
-      expect(location.name).toEqual("alchemy-zt-location-basic");
+      expect(location.name).toEqual(testName("alchemy-zt-location-basic"));
       expect(location.clientDefault).toBe(false);
       // Cloudflare assigns a stable DoH subdomain to every location.
       expect(location.dohSubdomain).toBeTruthy();
 
       const live = yield* getLocation(accountId, location.locationId);
-      expect(live.name).toEqual("alchemy-zt-location-basic");
+      expect(live.name).toEqual(testName("alchemy-zt-location-basic"));
       expect(live.dohSubdomain).toEqual(location.dohSubdomain);
 
       yield* stack.destroy();
@@ -80,7 +81,7 @@ test.provider.skip(
 
       const initial = yield* stack.deploy(
         Cloudflare.Gateway.Location("UpdateLocation", {
-          name: "alchemy-zt-location-update",
+          name: testName("alchemy-zt-location-update"),
           ecsSupport: false,
         }),
       );
@@ -88,7 +89,7 @@ test.provider.skip(
 
       const updated = yield* stack.deploy(
         Cloudflare.Gateway.Location("UpdateLocation", {
-          name: "alchemy-zt-location-update-v2",
+          name: testName("alchemy-zt-location-update-v2"),
           ecsSupport: true,
         }),
       );
@@ -97,17 +98,17 @@ test.provider.skip(
       // server-assigned DoH subdomain is stable across updates.
       expect(updated.locationId).toEqual(initial.locationId);
       expect(updated.dohSubdomain).toEqual(initial.dohSubdomain);
-      expect(updated.name).toEqual("alchemy-zt-location-update-v2");
+      expect(updated.name).toEqual(testName("alchemy-zt-location-update-v2"));
       expect(updated.ecsSupport).toBe(true);
 
       const live = yield* getLocation(accountId, updated.locationId);
-      expect(live.name).toEqual("alchemy-zt-location-update-v2");
+      expect(live.name).toEqual(testName("alchemy-zt-location-update-v2"));
       expect(live.ecsSupport).toBe(true);
 
       // Redeploying identical props is a no-op (still the same location).
       const noop = yield* stack.deploy(
         Cloudflare.Gateway.Location("UpdateLocation", {
-          name: "alchemy-zt-location-update-v2",
+          name: testName("alchemy-zt-location-update-v2"),
           ecsSupport: true,
         }),
       );
@@ -129,7 +130,7 @@ test.provider.skip(
 
       const location = yield* stack.deploy(
         Cloudflare.Gateway.Location("HealLocation", {
-          name: "alchemy-zt-location-heal",
+          name: testName("alchemy-zt-location-heal"),
           ecsSupport: false,
         }),
       );
@@ -146,7 +147,7 @@ test.provider.skip(
       // missing and recreate it instead of failing on a 404.
       const healed = yield* stack.deploy(
         Cloudflare.Gateway.Location("HealLocation", {
-          name: "alchemy-zt-location-heal",
+          name: testName("alchemy-zt-location-heal"),
           ecsSupport: true,
         }),
       );
@@ -174,7 +175,7 @@ test.provider.skip(
 
       const location = yield* stack.deploy(
         Cloudflare.Gateway.Location("ListLocation", {
-          name: "alchemy-zt-location-list",
+          name: testName("alchemy-zt-location-list"),
           ecsSupport: false,
         }),
       );
@@ -185,7 +186,7 @@ test.provider.skip(
       // The deployed location appears with the exact `read` Attributes shape.
       const found = all.find((l) => l.locationId === location.locationId);
       expect(found).toBeDefined();
-      expect(found?.name).toEqual("alchemy-zt-location-list");
+      expect(found?.name).toEqual(testName("alchemy-zt-location-list"));
       expect(found?.accountId).toEqual(location.accountId);
 
       yield* stack.destroy();
