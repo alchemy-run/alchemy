@@ -22,6 +22,7 @@ import {
   makeCurrentActivity,
   payloadCodec,
 } from "../WorkflowEncoding.ts";
+import { StorageName } from "../Workflows.ts";
 import type { DurableObjectStorage } from "./Workerd/DurableObjectStorage.ts";
 
 /** What a provider supplies to host the engine's Durable Objects. */
@@ -85,7 +86,7 @@ export const makeDurableObjectEngine = <Host, State>(
             if (namespaces.has(workflow._tag)) return;
             const namespace = yield* host
               .declare(
-                `${workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+                `${workflowClassName(workflow)}Workflow`,
                 executionObject(host.state, {
                   workflow: workflow as AnyWorkflow,
                   execute,
@@ -531,3 +532,14 @@ export type ObjectImpl<State> = Effect.Effect<
   never,
   State
 >;
+
+/**
+ * The class name a workflow's runs are stored under: its `StorageName`, which
+ * may be dotted like a Domain model's `Billing.OpenAccount`, or else its name.
+ */
+const workflowClassName = (workflow: Workflow.Any) => {
+  const storageName = Context.getOrUndefined(workflow.annotations, StorageName);
+  return storageName === undefined
+    ? workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")
+    : storageName.replace(/[^A-Za-z0-9_.]/g, "_");
+};

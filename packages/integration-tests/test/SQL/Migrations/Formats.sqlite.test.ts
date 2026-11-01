@@ -2,8 +2,10 @@ import { Database } from "bun:sqlite";
 import {
   applyAlchemyFormat,
   applyMigrations,
+  MigrationError,
   readDrizzleDirRecords,
   readFlatRecords,
+  type SqlExecutor,
 } from "@alchemy.run/sql/Migrations";
 import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -25,7 +27,169 @@ const migrationRows = (db: Database, table = "__alchemy_migrations") =>
     applied_at: string | null;
   }>;
 
+// Fails `0001_users.sql` batches the way a data API can (#1889): `"lost"` runs
+// the batch and then fails the reply, `"dropped"` fails before running it.
+// `transient` is the flag the transport sets on the failure, `failures` is how
+// many sends fail, and `failLedgerRead` fails the ledger read that follows a
+// failed send.
+const flakyBatches = (
+  executor: SqlExecutor,
+  options: {
+    fault: "lost" | "dropped";
+    transient: boolean;
+    failures?: number;
+    failLedgerRead?: boolean;
+  },
+): SqlExecutor & { sends: () => number } => {
+  const { fault, transient, failures = 1, failLedgerRead = false } = options;
+  let sends = 0;
+  let failed = false;
+  return {
+    ...executor,
+    sends: () => sends,
+    query: (sql, params) =>
+      failed && failLedgerRead
+        ? Effect.fail(new MigrationError({ message: "ledger read failed", transient: true }))
+        : executor.query(sql, params),
+    batch: (statements) =>
+      Effect.gen(function* () {
+        // Only the migration's own batch, not the bookkeeping table's setup.
+        if (!statements.some((statement) => statement.includes("CREATE TABLE users"))) {
+          return yield* executor.batch(statements);
+        }
+        sends++;
+        if (sends > failures) return yield* executor.batch(statements);
+        if (fault === "lost") yield* executor.batch(statements);
+        failed = true;
+        return yield* new MigrationError({ message: "503 Service Unavailable", transient });
+      }),
+  };
+};
+
 describe("alchemy format", (it) => {
+  it.effect(
+    "does not resend a batch that landed before its reply was lost",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = flakyBatches(makeSqliteExecutor(db), { fault: "lost", transient: true });
+        const records = yield* readFlatRecords(fixture("flat"));
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: records.slice(0, 1),
+        });
+        // A resend would fail on the bare CREATE TABLE.
+        expect(executor.sends()).toBe(1);
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0001_users.sql"]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "resends a transient batch failure that did not land",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = flakyBatches(makeSqliteExecutor(db), {
+          fault: "dropped",
+          transient: true,
+        });
+        const records = yield* readFlatRecords(fixture("flat"));
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: records.slice(0, 1),
+        });
+        expect(executor.sends()).toBe(2);
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0001_users.sql"]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "fails when the resend fails too, without sending a third time",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = flakyBatches(makeSqliteExecutor(db), {
+          fault: "dropped",
+          transient: true,
+          failures: 2,
+        });
+        const records = yield* readFlatRecords(fixture("flat"));
+        const result = yield* Effect.result(
+          applyAlchemyFormat({
+            executor,
+            table: "__alchemy_migrations",
+            records: records.slice(0, 1),
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("MigrationError");
+          expect(result.failure.message).toContain("503");
+        }
+        expect(executor.sends()).toBe(2);
+        expect(migrationRows(db)).toEqual([]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "fails without resending when the ledger cannot be read after a failure",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = flakyBatches(makeSqliteExecutor(db), {
+          fault: "dropped",
+          transient: true,
+          failLedgerRead: true,
+        });
+        const records = yield* readFlatRecords(fixture("flat"));
+        const result = yield* Effect.result(
+          applyAlchemyFormat({
+            executor,
+            table: "__alchemy_migrations",
+            records: records.slice(0, 1),
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("MigrationError");
+          expect(result.failure.message).toContain("ledger read failed");
+        }
+        expect(executor.sends()).toBe(1);
+        expect(migrationRows(db)).toEqual([]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "fails a non-transient batch failure without resending it",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = flakyBatches(makeSqliteExecutor(db), {
+          fault: "dropped",
+          transient: false,
+        });
+        const records = yield* readFlatRecords(fixture("flat"));
+        const result = yield* Effect.result(
+          applyAlchemyFormat({
+            executor,
+            table: "__alchemy_migrations",
+            records: records.slice(0, 1),
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) expect(result.failure._tag).toBe("MigrationError");
+        expect(executor.sends()).toBe(1);
+        expect(migrationRows(db)).toEqual([]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
   it.effect(
     "creates the table and applies flat migrations in order",
     () =>

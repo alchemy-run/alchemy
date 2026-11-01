@@ -10,7 +10,7 @@ export const makeRequestHandler =
   <Req = never>(handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>) =>
   (event: any) =>
     isWorkerEvent(event) && event.type === "fetch"
-      ? makeRequestEffect(event.input, handler)
+      ? makeRequestEffect(event.input, handler, event.context)
       : undefined;
 
 export { makeRequestEffect };
