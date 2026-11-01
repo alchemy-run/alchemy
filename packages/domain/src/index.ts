@@ -134,6 +134,8 @@ export declare namespace View {
   export type Page<E> = ViewModule.Page<E>;
   /** What `MyView.evolve` applies. */
   export type LocalInput<Def, Key extends KeyModule.Any> = ViewModule.LocalInput<Def, Key>;
+  /** How much of the history recorded before a view or projection has reached it. */
+  export type History = ViewModule.History;
 }
 /** A read model folded from events, per key. See {@link ViewModule.make}. */
 export const View = ViewModule.make;
@@ -250,6 +252,8 @@ export const protocolInProcess = ApiModule.protocolInProcess;
 export declare namespace Model {
   /** Any Model class. */
   export type Any = ModelModule.Any;
+  /** How a model's `layer` hosts it, including each view's version. */
+  export type LayerOptions<Views extends string = string> = ModelModule.LayerOptions<Views>;
 }
 /** The aggregates, views, policies, projections and streams hosted together. See {@link ModelModule.make}. */
 export const Model = ModelModule.make;

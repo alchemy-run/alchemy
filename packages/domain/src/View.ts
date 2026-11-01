@@ -281,9 +281,25 @@ export interface WatchOptions<S> {
 }
 
 /**
+ * How much of the history recorded before a view or projection (or before its
+ * current version) has reached it. A consumer added to a model that already
+ * has events, or rebuilt by bumping its version, receives that history first.
+ */
+export interface History {
+  /** Every event recorded before it has reached it: its answers cover the whole history. */
+  readonly complete: boolean;
+}
+
+/**
  * The read API of a view, obtained with `yield* MyView`.
  */
 export interface Host<S, Key extends Key.Any, E> {
+  /**
+   * Whether the history recorded before this view, or before its current
+   * version, has reached it. Until it has, its answers cover only part of
+   * the history: a screen can say so, or hold its reads until it is complete.
+   */
+  readonly history: Effect.Effect<History>;
   /** Read the current state of a key. `none` if it does not exist. */
   readonly query: (
     key: Key.RefOf<Key>,

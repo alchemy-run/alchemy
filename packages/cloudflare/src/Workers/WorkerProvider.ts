@@ -16,6 +16,7 @@ import { cachedFunction } from "alchemy/Util/cached-function";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
@@ -29,6 +30,7 @@ import {
   assertBindingContainersOnAsyncClasses,
   mergeWorkerContainers,
 } from "../Containers/ContainerConfiguration.ts";
+import * as DomainVersion from "../Domain/Version.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
@@ -844,6 +846,39 @@ const findWorkerId = (accountId: string, scriptName: string) =>
       schedule: Schedule.max([Schedule.spaced(2000), Schedule.recurs(3)]),
     }),
   );
+
+export class WorkerCodeUpdateStrategyError extends Data.TaggedError(
+  "WorkerCodeUpdateStrategyError",
+)<{
+  message: string;
+}> {}
+
+/**
+ * Lower `codeUpdateStrategy` to its wire shape: `max_delay` is seconds with
+ * millisecond precision, between 0 and 24 hours, and only `deferred` accepts
+ * it (Cloudflare rejects `max_delay` alongside `immediate`).
+ */
+const resolveCodeUpdateStrategy = Effect.fn(function* (
+  strategy: WorkerProps["codeUpdateStrategy"],
+) {
+  if (strategy === undefined) return undefined;
+  if (strategy.mode === "immediate") {
+    return { mode: "immediate" } satisfies workers.CodeUpdateStrategy;
+  }
+  if (strategy.maxDelay === undefined) {
+    return { mode: "deferred" } satisfies workers.CodeUpdateStrategy;
+  }
+  const maxDelay = Duration.fromInput(strategy.maxDelay).pipe(
+    Option.map((d) => Math.round(Duration.toMillis(d)) / 1000),
+    Option.filter((seconds) => seconds >= 0 && seconds <= 86_400),
+  );
+  if (Option.isNone(maxDelay)) {
+    return yield* new WorkerCodeUpdateStrategyError({
+      message: `codeUpdateStrategy.maxDelay must be a duration between 0 and 24 hours, got ${JSON.stringify(strategy.maxDelay)}.`,
+    });
+  }
+  return { mode: "deferred", maxDelay: maxDelay.value } satisfies workers.CodeUpdateStrategy;
+});
 
 export const putWorkerScript = (params: {
   accountId: string;
@@ -2445,6 +2480,7 @@ export const LiveWorkerProvider = () =>
         versionId: string;
         traffic: number;
         message: string | undefined;
+        codeUpdateStrategy: workers.CodeUpdateStrategy | undefined;
       }) {
         const { accountId, scriptName, versionId, traffic } = params;
         const resolveSplit = Effect.gen(function* () {
@@ -2473,6 +2509,7 @@ export const LiveWorkerProvider = () =>
           strategy: "percentage",
           versions: split,
           annotations: params.message ? { workersMessage: params.message } : undefined,
+          codeUpdateStrategy: params.codeUpdateStrategy,
         });
         return deployment.id;
       });
@@ -2782,6 +2819,7 @@ export const LiveWorkerProvider = () =>
             versionId,
             traffic,
             message: version.message,
+            codeUpdateStrategy: yield* resolveCodeUpdateStrategy(news.codeUpdateStrategy),
           });
         }
         // Version-affinity transform rules (`version.affinity`): a canary
@@ -3373,6 +3411,38 @@ export const LiveWorkerProvider = () =>
         // `alchemy:dos:` and legacy per-DO `alchemy:do:` formats)
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
+
+        // Domain models named their classes differently in earlier Domain
+        // versions. Map each old class to the logical id of its new name, so
+        // the rename below carries its data over instead of deleting it.
+        const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
+        const deployedDomainVersion = DomainVersion.deployedVersion(oldTags);
+        yield* DomainVersion.refuseDowngrade({ scriptName: name, deployed: deployedDomainVersion });
+        if (domainClasses.length > 0) {
+          const renamed = yield* DomainVersion.migrate({
+            scriptName: name,
+            deployed: deployedDomainVersion,
+            classes: domainClasses,
+            deployedClasses: new Set([
+              ...Object.values(oldDoClassNameByLogicalId),
+              ...oldBindings.flatMap((old) =>
+                old.type === "durable_object_namespace" &&
+                "className" in old &&
+                old.className &&
+                (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
+                  ? [old.className]
+                  : [],
+              ),
+            ]),
+          });
+          for (const { from, to } of renamed) {
+            for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
+              if (className === from) delete oldDoClassNameByLogicalId[logicalId];
+            }
+            // A Domain class's logical id is its class name.
+            oldDoClassNameByLogicalId[to] = from;
+          }
+        }
         const currentDoClassNameByLogicalId = Object.fromEntries(
           currentDoBindings.map((binding) => [binding.logicalId, binding.className]),
         );
@@ -3690,7 +3760,11 @@ export const LiveWorkerProvider = () =>
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
-        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags];
+        // The Domain version goes up with every upload that can change the
+        // classes, in the same request, so the tag and the classes never disagree.
+        const domainTags =
+          domainClasses.length > 0 ? [DomainVersion.versionTag(DomainVersion.DOMAIN_VERSION)] : [];
+        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags, ...domainTags];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
 
@@ -3748,6 +3822,7 @@ export const LiveWorkerProvider = () =>
           tailConsumers,
           streamingTailConsumers,
           usageModel: undefined,
+          codeUpdateStrategy: yield* resolveCodeUpdateStrategy(news.codeUpdateStrategy),
         };
         const rolloutTraffic = getSelfRolloutTraffic(news);
         let versionId: string | undefined;
@@ -3850,6 +3925,7 @@ export const LiveWorkerProvider = () =>
               versionId,
               traffic: rolloutTraffic,
               message: news.version?.message,
+              codeUpdateStrategy: metadata.codeUpdateStrategy,
             });
           }
           worker = { id: name, logpush: existingSettings.logpush };
@@ -3876,6 +3952,7 @@ export const LiveWorkerProvider = () =>
                 ...encodeDurableObjectTags(
                   currentDoBindings.filter((binding) => !transferringIn.has(binding.className)),
                 ),
+                ...domainTags,
                 ...(news.tags ?? []),
               ]),
             );
@@ -4684,7 +4761,10 @@ export const LiveWorkerProvider = () =>
           // perpetual updates (#745).
           if (Array.isArray(newBindings)) {
             const normalizeComparedProps = (props: WorkerProps) => {
-              const { env: _env, ...rest } = props;
+              // `codeUpdateStrategy` applies to a deploy, not to stored
+              // state: changing it alone must not redeploy (and so reset)
+              // the Worker's Durable Objects.
+              const { env: _env, codeUpdateStrategy: _codeUpdateStrategy, ...rest } = props;
               return {
                 ...rest,
                 ...(props.main !== undefined ? { main: "<source>" } : undefined),
@@ -5840,7 +5920,7 @@ class AlchemyPlaceholderDurableObject extends DurableObject {
   alarm() { this.ctx.abort(alchemyResetReason); }
 }
 
-${worker}${doClasses.map((className) => `export class ${className} extends AlchemyPlaceholderDurableObject {}`).join("\n")}
+${worker}${doClasses.map((className, i) => `const Placeholder${i} = class extends AlchemyPlaceholderDurableObject {};\nexport { Placeholder${i} as ${JSON.stringify(className)} };`).join("\n")}
 `;
 };
 

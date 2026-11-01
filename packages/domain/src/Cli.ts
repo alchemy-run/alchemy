@@ -13,7 +13,12 @@ import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
 import type { Servable } from "./Api.ts";
-import { DefinitionError } from "./internal.ts";
+import {
+  DefinitionError,
+  DuplicateCommand,
+  DuplicateFlag,
+  ReservedFlag,
+} from "./DefinitionError.ts";
 import { type Operation, operationsOf } from "./ReadRpcs.ts";
 
 /**
@@ -155,10 +160,12 @@ const fieldsOf = (
     const taken = flags.get(flag);
     if (RESERVED.has(flag) || taken !== undefined) {
       problems.push(
-        new DefinitionError(
-          `${where}: field \`${name}\` would be the flag --${flag}, ` +
-            (taken === undefined ? "which the CLI reserves" : `as is field \`${taken}\``),
-        ),
+        new DefinitionError({
+          reason:
+            taken === undefined
+              ? new ReservedFlag({ call: where, field: name, flag })
+              : new DuplicateFlag({ call: where, field: name, flag, taken }),
+        }),
       );
       return [];
     }
@@ -223,6 +230,9 @@ const JsonFlag = Flag.String("json").pipe(
 );
 
 // ---------------------------------------------------------------- calls
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
 
 /** A JSON flag's value: its JSON, or the text itself when it is not JSON (a date, an id). */
 const parseValue = (text: string): unknown => {
@@ -351,12 +361,13 @@ const commandOf = <E, R>(
         try: () => JSON.parse(json.value) as unknown,
         catch: (cause) => userError(`--json is not valid JSON: ${String(cause)}`, cause),
       });
-      if (value === null || typeof value !== "object" || Array.isArray(value)) {
-        return yield* userError("--json must be a JSON object");
-      }
-      // Its fields are the flags' fields: a command's input fields go to `input`.
+      if (!isRecord(value)) return yield* userError("--json must be a JSON object");
+      // Its fields are the flags' fields: a command's input fields go to
+      // `input`, given flat or as the wire's own `input` object.
       for (const [key, field] of Object.entries(value)) {
         if (inputFields.has(key)) input[key] = field;
+        else if (key === "input" && inputFields.size > 0 && isRecord(field))
+          Object.assign(input, field);
         else wire[key] = field;
       }
     }
@@ -463,9 +474,14 @@ export const toCli = <A extends Cliable, E = never, R = never>(
     const taken = names.get(name);
     if (taken !== undefined) {
       problems.push(
-        new DefinitionError(
-          `${api.apiName}: \`${taken}\` and \`${served}\` are both the command ${name}`,
-        ),
+        new DefinitionError({
+          reason: new DuplicateCommand({
+            api: api.apiName,
+            first: taken,
+            second: served,
+            command: name,
+          }),
+        }),
       );
       continue;
     }

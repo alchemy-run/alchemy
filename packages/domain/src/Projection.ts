@@ -48,6 +48,13 @@ export interface Options {
    * time, as soon as it arrives.
    */
   readonly batch?: { readonly size: number; readonly wait?: Duration.Input };
+  /**
+   * Bump it to run the projection again over the whole history, for example
+   * after its store was lost or emptied, or once its handler writes a new
+   * shape. Clear or migrate your store first if a replayed write would not
+   * overwrite the old one. 0 when omitted.
+   */
+  readonly version?: number;
 }
 
 /** A projection's implementation, as its Layer provides it. @internal */
@@ -96,6 +103,11 @@ export type ProgressIdentifier<P extends Any> = P extends Any
  * A projection's progress, provided by the hosted model.
  */
 export interface Progress {
+  /**
+   * Whether the history recorded before this projection, or before its
+   * current version, has reached it (been accepted into its keys' logs).
+   */
+  readonly history: Effect.Effect<View.History>;
   /**
    * Wait until the projection has handled every event of a command that it
    * consumes, so a read of your store sees that write.
