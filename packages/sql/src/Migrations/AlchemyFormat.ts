@@ -8,10 +8,12 @@ import {
 import {
   describeRewrittenHistory,
   MigrationError,
+  NonLinearMigrationHistoryError,
   RewrittenMigrationHistoryError,
   type MigrationApplyError,
   type MigrationDialect,
   type MigrationHistoryConflictError,
+  type MigrationOrder,
   type MigrationRecord,
   type SqlExecutor,
 } from "./Format.ts";
@@ -305,15 +307,19 @@ const applyPending = (options: {
  * while current records key them by `<dir>`, so both keys are honored.
  * An already-applied name whose local hash changed, or a recorded name
  * with no local file, is a hard {@link RewrittenMigrationHistoryError}
- * rather than a silent skip that would persist the new hashes.
+ * rather than a silent skip that would persist the new hashes. With the
+ * default `linear` order, a pending file that sorts before an applied one
+ * is a {@link NonLinearMigrationHistoryError}: fresh databases would run
+ * the two in the opposite order.
  */
 export const applyAlchemyFormat = (options: {
   executor: SqlExecutor;
   table: string;
   records: ReadonlyArray<MigrationRecord>;
+  order?: MigrationOrder;
 }): Effect.Effect<void, MigrationApplyError> =>
   Effect.gen(function* () {
-    const { executor, table, records } = options;
+    const { executor, table, records, order = "linear" } = options;
     yield* ensureTable({ executor, table, records });
     const applied = yield* appliedHistory(executor, table);
     const localNames = new Set(records.flatMap((record) => aliasesOf(record.name)));
@@ -339,6 +345,28 @@ export const applyAlchemyFormat = (options: {
           `(${describeRewrittenHistory({ changed, removed })}). ` +
           "Add a new forward migration instead of editing or deleting already-applied files.",
       });
+    }
+    if (order === "linear") {
+      // Records are in apply order, so a pending record before the newest
+      // applied one would run out of the order a fresh database uses.
+      let newest = records.length - 1;
+      while (newest >= 0 && !lookupApplied(applied, records[newest].name)) newest--;
+      const pending = records
+        .slice(0, Math.max(newest, 0))
+        .filter((record) => !lookupApplied(applied, record.name))
+        .map((record) => record.name);
+      if (pending.length > 0) {
+        const newestApplied = records[newest].name;
+        return yield* new NonLinearMigrationHistoryError({
+          pending,
+          newestApplied,
+          message:
+            `Pending migration ${pending.join(", ")} in "${table}" sorts before the ` +
+            `already-applied ${newestApplied}, so it would run in a different order here ` +
+            "than on a fresh database. Rename it to sort after the newest applied migration, " +
+            'or set `order: "non-linear"` on `migrations`.',
+        });
+      }
     }
     yield* applyPending({ executor, table, records, applied });
   });

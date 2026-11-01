@@ -80,6 +80,26 @@ const db = yield* Cloudflare.D1.Database("app-db", {
 });
 ```
 
+## Keep history linear
+
+A new file must sort after every file the database has already
+applied. Otherwise this database runs it last while a fresh database
+runs it in its sorted place, and the two schemas can drift. Such a
+deploy fails with `NonLinearMigrationHistoryError`; rename the file so
+it sorts last. This happens when two branches each add a migration and
+the older-numbered one merges second.
+
+To apply out-of-order files anyway, set `order`:
+
+```typescript
+const db = yield* Cloudflare.D1.Database("app-db", {
+  migrations: {
+    dir: "./migrations",
+    order: "non-linear", // default: "linear"
+  },
+});
+```
+
 ## Adopting an existing database
 
 A database previously migrated with **drizzle-kit**, **Prisma**, or

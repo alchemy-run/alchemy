@@ -305,6 +305,63 @@ describe("alchemy format", (it) => {
     { tags: ["unit", "local"] },
   );
 
+  // #2912: a file that sorts before an applied one would run in a different
+  // order here than on every fresh database.
+  it.effect(
+    "fails when a pending migration sorts before an applied one",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [posts],
+        });
+        const result = yield* Effect.result(
+          applyAlchemyFormat({
+            executor,
+            table: "__alchemy_migrations",
+            records: [users, posts],
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("NonLinearMigrationHistoryError");
+          expect(result.failure.message).toContain("0001_users.sql");
+          expect(result.failure.message).toContain("0002_posts.sql");
+        }
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0002_posts.sql"]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "applies a pending migration out of order when order is non-linear",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [posts],
+        });
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [users, posts],
+          order: "non-linear",
+        });
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0002_posts.sql", "0001_users.sql"]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
   it.effect(
     "upgrades the legacy Alchemy 3-column table in place without replaying",
     () =>

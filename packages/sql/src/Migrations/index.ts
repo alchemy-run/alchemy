@@ -24,9 +24,11 @@ export {
   DrizzleV0LayoutError,
   MigrationError,
   MigrationHistoryConflictError,
+  NonLinearMigrationHistoryError,
   RewrittenMigrationHistoryError,
   type MigrationApplyError,
   type MigrationDialect,
+  type MigrationOrder,
   type MigrationRecord,
   type SqlExecutor,
 } from "./Format.ts";

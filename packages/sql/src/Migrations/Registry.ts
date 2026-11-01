@@ -8,6 +8,7 @@ import {
   MigrationError,
   type DrizzleV0LayoutError,
   type MigrationApplyError,
+  type MigrationOrder,
   type SqlExecutor,
 } from "./Format.ts";
 import { readMigrationRecords } from "./Records.ts";
@@ -33,6 +34,13 @@ export type MigrationsInput =
       dir: string;
       /** Override the applied-migrations table name. */
       table?: string;
+      /**
+       * `linear` fails a deploy whose pending file sorts before an
+       * already-applied one, since fresh databases would run the two in the
+       * opposite order. `non-linear` applies it anyway.
+       * @default "linear"
+       */
+      order?: MigrationOrder;
     }
   | {
       /** A `Drizzle.Schema`-shaped resource output. */
@@ -42,6 +50,7 @@ export type MigrationsInput =
 export interface NormalizedMigrationsInput {
   dir: string;
   table?: string;
+  order?: MigrationOrder;
 }
 
 export const normalizeMigrationsInput = (input: MigrationsInput): NormalizedMigrationsInput => {
@@ -77,6 +86,7 @@ export const stampedOf = (
 export interface ResolvedMigrations {
   dir: string;
   table: string;
+  order?: MigrationOrder;
 }
 
 /**
@@ -90,6 +100,7 @@ export const resolveMigrations = (options: {
 }): ResolvedMigrations => ({
   dir: options.input.dir,
   table: options.input.table ?? options.stamped.table ?? ALCHEMY_DEFAULT_TABLE,
+  order: options.input.order,
 });
 
 /**
@@ -113,6 +124,7 @@ export const applyMigrations = (options: {
       executor,
       table: resolved.table,
       records,
+      order: resolved.order,
     });
   });
 
