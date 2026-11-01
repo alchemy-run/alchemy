@@ -24,6 +24,13 @@ export const Nap = Workflow.make("Nap", {
   idempotencyKey: ({ id }) => id,
 });
 
+/** Sleeps several times in a row, so each wake-up is scheduled from the one before. */
+export const Naps = Workflow.make("Naps", {
+  payload: { id: Schema.String, seconds: Schema.Number, count: Schema.Number },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
 /** Waits for someone outside to approve it. */
 export const Approval = DurableDeferred.make("approval", { success: Schema.String });
 
@@ -92,6 +99,24 @@ export const NapLive = Workflows.layer(
   }),
 );
 
+export const NapsLive = Workflows.layer(
+  Naps,
+  Effect.gen(function* () {
+    const record = yield* Recorder;
+    return Effect.fn(function* ({ id, seconds, count }) {
+      for (let nap = 0; nap < count; nap++) {
+        yield* DurableClock.sleep({
+          name: `nap-${nap}`,
+          duration: `${seconds} seconds`,
+          inMemoryThreshold: 0,
+        });
+      }
+      yield* Activity.make({ name: "after", execute: record(id, "after") });
+      return "rested";
+    });
+  }),
+);
+
 export const ApproveLive = Workflows.layer(
   Approve,
   Effect.gen(function* () {
@@ -142,6 +167,7 @@ export const ParentLive = Workflows.layer(
 export const WorkflowsLive = Layer.mergeAll(
   GreetLive,
   NapLive,
+  NapsLive,
   ApproveLive,
   CheckoutLive,
   ParentLive,

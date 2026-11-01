@@ -2,6 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -135,6 +136,22 @@ describe.concurrent.each([
       const run = yield* start(url, "Nap", id, "?seconds=3");
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "rested" });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["before", "after"]);
+    }),
+    { timeout: 90_000 },
+  );
+
+  test(
+    "wakes on time after each of several sleeps",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const id = yield* freshId("naps");
+      const started = yield* Clock.currentTimeMillis;
+      const run = yield* start(url, "Naps", id, "?seconds=1&count=4");
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "rested" });
+      // Four one-second sleeps. A wake-up that inherited its predecessor's
+      // retry budget waits out a backoff that doubles on every hop.
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(20_000);
+      expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["after"]);
     }),
     { timeout: 90_000 },
   );

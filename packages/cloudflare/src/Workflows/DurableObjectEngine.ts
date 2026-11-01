@@ -384,6 +384,10 @@ CREATE TABLE IF NOT EXISTS workflow_clock (
   deferred TEXT NOT NULL,
   due INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS workflow_progress (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  seq INTEGER NOT NULL
+);
 `;
 
 interface ExecutionRow {
@@ -419,20 +423,36 @@ const executionObject = (registration: Registration) =>
         (rows) => rows[0],
       );
 
+      // A wake-up scheduled from inside a callback inherits that callback's
+      // retry budget unless it reports progress. Each new journal entry that
+      // schedules a wake-up advances this cursor, so a wake-up after a
+      // successful step runs on time instead of waiting out a backoff.
+      const advance = Effect.map(
+        query<{ seq: number }>(
+          "INSERT INTO workflow_progress (id, seq) VALUES (1, 0) ON CONFLICT (id) DO UPDATE SET seq = seq + 1 RETURNING seq",
+        ),
+        (rows) => rows[0]!.seq,
+      );
+
       // Every wake-up (a start, a completed deferred, a fired clock, an
       // interrupt) records what changed and schedules this one job. Jobs run
       // one at a time and are retried until a run succeeds.
       const runs = yield* makeCallback(RUN, () => run, { retry: { delay: "5 seconds" } });
-      const wake = runs
-        .schedule(RUN, { after: 0, payload: {} })
-        .pipe(Effect.orDie, Effect.provide(context));
+      const wake = (progress?: number) =>
+        runs
+          .schedule(RUN, { after: 0, payload: {}, progress })
+          .pipe(Effect.orDie, Effect.provide(context));
 
       const complete = (deferredName: string, exit: string) =>
-        query(
-          "INSERT OR IGNORE INTO workflow_deferred (name, exit) VALUES (?, ?)",
-          deferredName,
-          exit,
-        ).pipe(Effect.andThen(wake));
+        Effect.gen(function* () {
+          const inserted = yield* query(
+            "INSERT OR IGNORE INTO workflow_deferred (name, exit) VALUES (?, ?) RETURNING name",
+            deferredName,
+            exit,
+          );
+          // A deferred completed again isn't progress.
+          yield* wake(inserted.length > 0 ? yield* advance : undefined);
+        });
 
       const clocks = yield* makeCallback(
         "clock",
@@ -442,12 +462,17 @@ const executionObject = (registration: Registration) =>
           }),
         { retry: { delay: "5 seconds" } },
       );
+      // Replays reach the same sleep again: a clock that's done or already
+      // pending is left alone.
       const scheduleClock = (name: string, deferredName: string, due: number) =>
         Effect.gen(function* () {
           const done = yield* query("SELECT 1 FROM workflow_deferred WHERE name = ?", deferredName);
           if (done.length > 0) return;
+          const pending = yield* clocks.getStatus(name).pipe(Effect.orDie, Effect.provide(context));
+          if (pending !== undefined) return;
+          const progress = yield* advance;
           yield* clocks
-            .schedule(name, { at: due, payload: { deferred: deferredName } })
+            .schedule(name, { at: due, payload: { deferred: deferredName }, progress })
             .pipe(Effect.orDie, Effect.provide(context));
         });
 
@@ -507,7 +532,7 @@ const executionObject = (registration: Registration) =>
                   payload,
                   parent === "null" ? null : parent,
                 );
-                yield* wake;
+                yield* wake();
               }
               return yield* result;
             }),
@@ -521,12 +546,12 @@ const executionObject = (registration: Registration) =>
           ),
         deferredDone: (deferredName: string, exit: string) =>
           reportDefects(complete(deferredName, exit)),
-        resume: () => reportDefects(wake),
+        resume: () => reportDefects(wake()),
         // The next run replays with the instance marked interrupted, which
         // fails the workflow and runs its compensations.
         interrupt: () =>
           reportDefects(
-            query("UPDATE workflow_execution SET interrupted = 1").pipe(Effect.andThen(wake)),
+            query("UPDATE workflow_execution SET interrupted = 1").pipe(Effect.andThen(wake())),
           ),
         // Stop without running compensations.
         interruptUnsafe: () =>
