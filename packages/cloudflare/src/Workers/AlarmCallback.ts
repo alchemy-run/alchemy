@@ -110,6 +110,15 @@ const reportParking = (pass: AlarmPass) =>
   });
 const registries = new WeakMap<cf.DurableObjectState, CallbackRegistry>();
 
+/**
+ * @internal Run background work handed to `waitUntil` apart from the callback
+ * invocation that started it. The invocation ends first, so its schedules
+ * would be rejected; here they start a fresh budget, as external schedules
+ * do. Only for work whose schedules report their own progress.
+ */
+export const outsideAlarmPass = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.provideService(effect, CurrentAlarmPass, undefined);
+
 /** @internal */
 export const initializeAlarmCallbacks = (state: cf.DurableObjectState) => {
   const registry: CallbackRegistry = { callbacks: new Map(), open: true };

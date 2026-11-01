@@ -49,6 +49,7 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
+import { outsideAlarmPass } from "../Workers/AlarmCallback.ts";
 import {
   DurableObject as CloudflareDurableObject,
   type DurableObjectJurisdiction,
@@ -247,10 +248,12 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
           yield* state.storage.put(entries);
           yield* state.storage.put(`${name}-seq`, last);
           // The backstop: delivered even if this instance dies before `kick` runs.
-          yield* callback.schedule("drain", { after: "10 seconds", payload: {} });
+          // Its rows are progress, so a callback staging them doesn't hand it
+          // its retry budget.
+          yield* callback.schedule("drain", { after: "10 seconds", payload: {}, progress: last });
         }),
       /** Process staged rows now, in the background, keeping the instance alive until done. */
-      kick: state.waitUntil(drain.pipe(Effect.ignoreCause)),
+      kick: state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause))),
       /** Process staged rows now, and wait (unless another drain holds the lease). */
       flush: drain,
     };
@@ -1190,6 +1193,14 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
       );
       // Re-run the drain later: when a short batch has waited long enough, or after a failure.
       let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
+      // Each input's backstop advances this cursor: once an input arrives, a
+      // drain waiting for it from inside its own callback waits the batch
+      // wait, not that callback's retry backoff.
+      const advance = Effect.gen(function* () {
+        const progress = ((yield* state.storage.get<number>("drain-progress")) ?? 0) + 1;
+        yield* state.storage.put("drain-progress", progress);
+        return progress;
+      });
       // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
       const drain: Effect.Effect<void> = Effect.gen(function* () {
         if (!(yield* acquire)) return;
@@ -1273,6 +1284,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
           yield* callback.schedule("drain", {
             after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
             payload: {},
+            progress: yield* advance,
           });
           return true;
         });
@@ -1319,7 +1331,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
             runtime.provide(
               Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),
             ),
-          after: runtime.provide(state.waitUntil(drain.pipe(Effect.ignoreCause))),
+          after: runtime.provide(state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause)))),
         }));
       const keep = (key: string) => state.storage.put(ID_KEY, key);
       return {
@@ -1329,7 +1341,8 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
               yield* keep(key);
               if (!(yield* consumerFor(key).admit(target, [delivery]))) return;
               const accepted = yield* exclusively(state.storage.transaction(intake(key, delivery)));
-              if (accepted) yield* state.waitUntil(drain.pipe(Effect.ignoreCause));
+              if (accepted)
+                yield* state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause)));
             }),
           ),
         checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
