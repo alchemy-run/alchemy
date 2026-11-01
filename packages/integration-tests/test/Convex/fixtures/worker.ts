@@ -6,15 +6,14 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import { BindingDeployment } from "./resources.ts";
 
+type Failure = { readonly _tag: string; readonly message?: string };
+
 /** Answers with the tag of a typed failure, so a test can assert it. */
-const tagged = <A, E extends { _tag: string; message?: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const tagged = <A, R>(effect: Effect.Effect<A, Failure, R>) =>
   effect.pipe(
-    Effect.flatMap((value) => HttpServerResponse.json({ value })),
-    Effect.catch((error: E) =>
-      HttpServerResponse.json({ tag: error._tag, message: error.message }),
-    ),
+    Effect.map((value): { value?: A; tag?: string; message?: string } => ({ value })),
+    Effect.catch((error) => Effect.succeed({ tag: error._tag, message: error.message })),
+    Effect.flatMap((body) => HttpServerResponse.json(body)),
   );
 
 export default class ConvexBindingWorker extends Cloudflare.Worker<ConvexBindingWorker>()(
