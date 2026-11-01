@@ -264,14 +264,21 @@ const makeAlarmCallback = <Payload, E, R>(
             yield* ensureAlarmTables(raw);
             const existing = yield* readAlarm(raw, name, id);
             const source = pass?.row;
-            const progress = Math.max(existing?.progress ?? -1, source?.progress ?? -1);
+            // Another callback's cursor counts in its own units: it never hides
+            // this schedule, but a cursor that isn't past it isn't progress.
+            const progress = Math.max(
+              existing?.progress ?? -1,
+              source?.callback === name ? source.progress : -1,
+            );
             if (
               schedule.progress !== undefined &&
               (schedule.progress < progress ||
                 (source === undefined && schedule.progress === progress))
             )
               return;
-            const progressed = schedule.progress !== undefined && schedule.progress > progress;
+            const progressed =
+              schedule.progress !== undefined &&
+              schedule.progress > Math.max(progress, source?.progress ?? -1);
             const sourceProgressed =
               source?.callback === name &&
               source.id === id &&
