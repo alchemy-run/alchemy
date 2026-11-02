@@ -136,6 +136,46 @@ bun scripts/try.ts https://bank-bankworker-….workers.dev
 
 The bank now runs on Cloudflare, with one Durable Object per account.
 
+## Count every movement
+
+```diff lang="typescript"
+// src/AccountSummary.view.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Account } from "./Account.aggregate.ts";
+
+export class AccountSummary extends Domain.View("AccountSummary", {
+  from: [Account],
+  key: Account,
+-  state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
+-  initial: { owner: null, balance: 0 },
++  state: Schema.Struct({
++    owner: Schema.NullOr(Schema.String),
++    balance: Schema.Int,
++    movements: Schema.Int,
++  }),
++  initial: { owner: null, balance: 0, movements: 0 },
+  evolve: {
+    AccountOpened: (v, e) => ({ ...v, owner: e.owner }),
+-    MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
+-    MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
++    MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter, movements: v.movements + 1 }),
++    MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter, movements: v.movements + 1 }),
+  },
++  version: 1,
+}) {}
+```
+
+The summary now counts deposits and withdrawals. The accounts deployed earlier already have movements, so bump the view's `version`: every summary is computed again from its account's events.
+
+## Deploy the change
+
+```sh
+bun alchemy deploy
+```
+
+The deploy has nothing to wait for. Each summary is keyed by its account, so it's rebuilt where it is: the first time an account's summary is read after the deploy, it reads that account's events again, and the deposit and withdrawal from before count.
+
 :::note
 Next, [build the browser app](/domain/tutorial/part-6). How the model maps onto Durable Objects is in [Cloudflare Durable Objects](/domain/cloudflare).
 :::
