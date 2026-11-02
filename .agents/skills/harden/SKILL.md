@@ -52,6 +52,16 @@ prepare-release invoked you). The user merges; you never do.
    A longer timeout is the last resort, and only for work that is slow by
    nature. A test that fails because a call raced the cloud is not slow.
 
+   **Never widen a permission to make a test pass.** An IAM `Resource: ["*"]`,
+   a dropped `Condition`, a broader Cloudflare permission group or GCP role is
+   a security regression, not a fix. When a cloud's own check rejects a scoped
+   grant (Lambda checks a Kafka event source's ENI-delete permission with no
+   subnet in the request), find the scoping that passes the check and still
+   limits real calls: `ArnEqualsIfExists` / `StringEqualsIfExists` skip a key
+   the check leaves out and enforce it on every real request. Assert the
+   scoping out of band (`iam.simulatePrincipalPolicy`: allowed inside the
+   scope, denied outside it).
+
 4. **Verify each fix by rerunning the affected files, not the whole suite.**
    Rerun them several times when the failure was intermittent:
 
