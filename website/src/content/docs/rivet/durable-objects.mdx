@@ -9,10 +9,30 @@ This chapter builds the `Room` from the [tutorial](/rivet/tutorial/part-1) piece
 
 ## Name the class
 
+Here is the whole `Room` with one method. The rest of the chapter takes it apart.
+
 ```typescript title="src/room.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Default } from "./cluster.ts";
+
 export default class Room extends Rivet.DurableObject<Room>()(
   "Room",
   { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
+      return {
+        join: () =>
+          Effect.gen(function* () {
+            const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+            yield* state.storage.put("visitors", visitors);
+            return visitors;
+          }),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
 ```
 
 `"Room"` is the class's name. The control plane files every room under it, so renaming the class starts every room afresh.

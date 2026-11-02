@@ -11,11 +11,38 @@ This page introduces the ideas one at a time, with the chat rooms the [tutorial]
 
 ## A class and its instances
 
-A Durable Object starts as a class. `Room` is a class: it says what a room can do, like let someone join, or post a message.
+A Durable Object starts as a class. `Room` is a class: it says what a room can do, like let someone join.
+
+```typescript title="src/room.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Default } from "./cluster.ts";
+
+export default class Room extends Rivet.DurableObject<Room>()(
+  "Room",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
+      return {
+        join: () =>
+          Effect.gen(function* () {
+            const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+            yield* state.storage.put("visitors", visitors);
+            return visitors;
+          }),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+`"Room"` names the class, and `join` is what every room can do. [Durable Object](/rivet/durable-objects) explains each part.
 
 An **instance** is one room. The lobby is an instance, and so is the kitchen. Every instance runs the same code, and each one has its own state.
 
 ```typescript title="src/api.ts"
+const rooms = yield* Room;
 const lobby = rooms.getByName("lobby");
 const kitchen = rooms.getByName("kitchen");
 ```
