@@ -36,6 +36,15 @@ export class Before extends Domain.Model("Ledger", { aggregates: [Account] }) {}
 /** The second deploy adds one view, keyed by account: one consumer key per instance. */
 export class After extends Domain.Model("Ledger", { aggregates: [Account], views: [Deposits] }) {}
 
+/** The view at version 1: keyed by account, so rebuilt in place. */
+export class DepositsV1 extends Domain.View("Deposits", { ...Deposits.definition, version: 1 }) {}
+
+/** The second deploy with the view at version 1. */
+export class AfterV1 extends Domain.Model("Ledger", {
+  aggregates: [Account],
+  views: [DepositsV1],
+}) {}
+
 /** The second deploy of a depth run: a summary per account. */
 export class AfterSummary extends Domain.Model("Ledger", {
   aggregates: [Account],
@@ -50,7 +59,7 @@ export class AfterTotal extends Domain.Model("Ledger", {
 
 /** The view a benchmark adds in its second deploy, if any. */
 export type BenchView =
-  | { readonly kind: "deposits"; readonly view: typeof Deposits }
+  | { readonly kind: "deposits"; readonly view: typeof Deposits | typeof DepositsV1 }
   | { readonly kind: "summary"; readonly view: typeof Summary }
   | { readonly kind: "total"; readonly view: typeof BankTotal };
 

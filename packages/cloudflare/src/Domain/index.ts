@@ -911,11 +911,7 @@ const viewObject = (
                   .pipe(Effect.map((rows) => [...rows.values()])),
           ),
         );
-      const target = targetId({
-        kind: "view",
-        name: kit.name,
-        ...(kit.generation > 0 ? { generation: kit.generation } : {}),
-      });
+      const target = kit.target;
       // Pushes and sends an apply leaves for after its transaction commits.
       let after: Array<Effect.Effect<void, never, DurableObjectState | RuntimeContext>> = [];
 
@@ -1044,6 +1040,21 @@ const viewObject = (
             ),
         }));
 
+      /**
+       * A key of a view keyed by its one aggregate reads its history from that
+       * instance (if it hasn't yet) before it serves it.
+       */
+      const filled = (key: string) =>
+        Effect.suspend(() => {
+          const catchUp = kit.catchUp;
+          if (catchUp === undefined) return Effect.void;
+          return Effect.gen(function* () {
+            yield* state.storage.put(ID_KEY, key);
+            yield* consumerFor(key)
+              .start(target, { source: catchUp.source, id: key }, 20_000)
+              .pipe(Effect.repeat({ until: (started) => started === "settled", times: 5 }));
+          });
+        });
       return {
         receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
           reportDefects(
@@ -1060,13 +1071,20 @@ const viewObject = (
         // The backfill protocol, as a source, a consumer and a scanner.
         ...scannerRpc(() => scannerFor()),
         ...runRpc(relay, runFor),
+        // Read as a source, a key keyed by its aggregate has its own history
+        // first: a view or projection catching up never sees it still filling.
         bfLog: (key: string, after: number, limit: number) =>
-          reportDefects(sourceFor(key).log(after, limit)),
-        bfCursor: (key: string, target: string) => reportDefects(sourceFor(key).cursor(target)),
+          reportDefects(Effect.andThen(filled(key), sourceFor(key).log(after, limit))),
+        bfCursor: (key: string, target: string) =>
+          reportDefects(Effect.andThen(filled(key), sourceFor(key).cursor(target))),
         bfRead: (key: string, target: string, reader: string, after: number, limit: number) =>
-          reportDefects(sourceFor(key).read(target, reader, after, limit)),
+          reportDefects(
+            Effect.andThen(filled(key), sourceFor(key).read(target, reader, after, limit)),
+          ),
         bfHandoff: (key: string, target: string, consumerKey: string, through: number) =>
-          reportDefects(sourceFor(key).handoff(target, consumerKey, through)),
+          reportDefects(
+            Effect.andThen(filled(key), sourceFor(key).handoff(target, consumerKey, through)),
+          ),
         bfStart: (key: string, target: string, ref: Backfill.SourceRef, waitMillis?: number) =>
           reportDefects(
             Effect.gen(function* () {
@@ -1869,32 +1887,29 @@ const durableObjectPlatform = (
             view: (view, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const cls = consumerClass("view", view.viewName, kit.generation);
+                  // A view rebuilt in place keeps its class: see `Kernel.inPlace`.
+                  const cls = consumerClass("view", view.viewName, kit.classGeneration);
                   const namespace = yield* object(
                     cls,
                     viewObject(kit, net, current, consumerPlans),
                   );
                   sources.set(named(cls), namespace);
-                  viewGenerations.set(view.viewName, kit.generation);
+                  viewGenerations.set(view.viewName, kit.classGeneration);
                   consumers.set(named(cls), namespace);
                   consumers.set(
                     runClass(named(cls)),
                     yield* object(runClass(cls), viewObject(kit, net, current, consumerPlans)),
                   );
-                  const target = targetId({
-                    kind: "view",
-                    name: view.viewName,
-                    ...(kit.generation > 0 ? { generation: kit.generation } : {}),
-                  });
+                  const target = kit.target;
                   // A lazy view's key reads its history from its one source the first
                   // time it is read; each isolate asks a key once.
                   const caughtUp = new Set<string>();
                   const ready = (key: string): Effect.Effect<void> =>
                     Effect.suspend(() => {
-                      const lazy = kit.lazy;
-                      if (lazy === undefined || caughtUp.has(key)) return Effect.void;
+                      const catchUp = kit.catchUp;
+                      if (catchUp === undefined || caughtUp.has(key)) return Effect.void;
                       return net.consumer
-                        .start(target, key, { source: lazy.source, id: key }, 20_000)
+                        .start(target, key, { source: catchUp.source, id: key }, 20_000)
                         .pipe(
                           Effect.repeat({ until: (started) => started === "settled", times: 5 }),
                           Effect.tap((started) =>
