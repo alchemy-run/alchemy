@@ -11,12 +11,12 @@ This chapter follows a call from the Api in the [tutorial](/rivet/tutorial/part-
 
 <DAG
   nodes={[
-    { id: "api", label: "Api", type: "Worker, Lambda, container", layer: 0 },
+    { id: "api", label: "Api", type: "Worker or Lambda", layer: 0 },
     { id: "cp", label: "Control plane", tone: "accent", layer: 1 },
     { id: "lobby", label: "lobby", type: "Room", layer: 2 },
   ]}
   edges={[
-    { from: "api", to: "cp", label: "Room lobby: join()" },
+    { from: "api", to: "cp", label: "lobby.join()" },
     { from: "cp", to: "lobby" },
   ]}
   caption="Calls travel over HTTP to the control plane, so the caller never needs a route to the pool's nodes."
