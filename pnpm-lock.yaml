@@ -9174,6 +9174,9 @@ importers:
       '@alchemy.run/aws':
         specifier: workspace:*
         version: link:../aws
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker

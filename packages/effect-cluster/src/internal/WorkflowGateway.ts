@@ -24,7 +24,7 @@ import * as Option from "effect/Option";
 import { Rpc, RpcClient, type RpcClientError, RpcGroup, RpcSerialization } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import { DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
-import { GATEWAY_PATH, type GatewayTarget } from "./Gateway.ts";
+import { GATEWAY_PATH, type GatewayTarget, gatewayFetch } from "./Gateway.ts";
 
 const Run = { workflow: Schema.String, executionId: Schema.String };
 
@@ -124,6 +124,7 @@ export const makeRemoteEngine = (
       return yield* Effect.flatMap(RpcClient.make(WorkflowRpcs), use).pipe(
         Effect.scoped,
         Effect.provide(protocol),
+        Effect.provideService(FetchHttpClient.Fetch, yield* gatewayFetch(target.service)),
       );
     }).pipe(Effect.orDie);
 

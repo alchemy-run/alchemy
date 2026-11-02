@@ -30,7 +30,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { Rpc, RpcClient, RpcClientError, RpcGroup } from "effect/rpc";
 import type { Scope } from "effect/Scope";
-import { makeNamespace } from "./internal/Gateway.ts";
+import { bindRoute, makeNamespace } from "./internal/Gateway.ts";
 import { type HostedRuntimeContext, makeHostedRuntimeContext } from "./internal/HostedRuntime.ts";
 import { RunnersHost } from "./internal/RunnersHostService.ts";
 import type { Providers } from "./Providers.ts";
@@ -493,9 +493,13 @@ const clientOf = (entity: AnyEntity, declaration: Effect.Effect<Entity, never, a
     // The runners' shard group, for Effect Cluster's own client (`.entity.client`).
     yield* bind<string>("SHARD_GROUP", resource?.runners);
     const token = yield* bind<Redacted.Redacted<string> | string>("TOKEN", resource?.token);
+    // A Worker calling a gateway Worker reaches it through a service binding.
+    const service = sanitizeKey(`CLUSTER_${entity.type}_SERVICE`);
+    if (!globalThis.__ALCHEMY_RUNTIME__) yield* bindRoute(entity.type, service);
     return makeNamespace(entity, {
       url,
       token: token === undefined ? "" : Redacted.isRedacted(token) ? Redacted.value(token) : token,
+      service,
     }) as unknown as EntityNamespace<Rpc.Any>;
   });
 

@@ -171,7 +171,7 @@ A persisted message survives its runner restarting: whichever runner owns the sh
 
 ## The gateway
 
-Callers outside the cluster, like a Worker or a Lambda function, don't reach the database or the runners. They reach the **gateway**: each set of runners serves its classes over HTTP, behind a token Alchemy binds into every caller. On AWS, GCP and Hetzner a load balancer puts it on the internet; on Fly it's the runners' `fly.dev` address.
+Callers outside the cluster, like a Worker or a Lambda function, don't reach the database or the runners. They reach the **gateway**: each set of runners serves its classes over HTTP, behind a token Alchemy binds into every caller. On AWS, GCP and Hetzner a load balancer puts it on the internet; on Fly it's the runners' `fly.dev` address. On [Cloudflare](/cluster/cloudflare) the runners are one Worker and each instance is a Durable Object, so there are no shards and no database.
 
 Inside the cluster, one entity calling another skips the gateway: the call goes straight from runner to runner.
 

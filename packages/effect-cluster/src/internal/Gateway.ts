@@ -1,3 +1,4 @@
+import { WorkerEnvironment } from "alchemy/Workers/WorkerEnvironment";
 /**
  * How callers reach entities. Inside the cluster (a runner, where
  * `Sharding` is in context) calls go straight through Effect Cluster's own
@@ -56,7 +57,63 @@ export const RUNNER_PORT = 34431;
 export interface GatewayTarget {
   readonly url: string;
   readonly token: string;
+  /**
+   * The environment key of a service binding to the gateway, when the
+   * caller is a Worker and the gateway is one too: Workers can't fetch
+   * another Worker's `workers.dev` URL in the same account.
+   */
+  readonly service?: string;
 }
+
+/**
+ * Give the runtime being deployed a direct route, bound under `key`, to the
+ * gateway Worker `worker`. A host whose gateway is a Worker registers one;
+ * it binds nothing for a caller that isn't a Worker.
+ */
+export type RouteBinder = (key: string, worker: unknown) => Effect.Effect<void, never, any>;
+
+const routeBinders: Array<RouteBinder> = ((globalThis as Record<symbol, unknown>)[
+  Symbol.for("alchemy/Cluster/RouteBinders")
+] ??= []) as Array<RouteBinder>;
+
+/** The gateway Workers hosted types are served by, while deploying. */
+const routedTypes: Map<string, unknown> = ((globalThis as Record<symbol, unknown>)[
+  Symbol.for("alchemy/Cluster/RoutedTypes")
+] ??= new Map()) as Map<string, unknown>;
+
+/** Register a host's {@link RouteBinder}. @internal */
+export const registerRouteBinder = (binder: RouteBinder) => {
+  if (!routeBinders.includes(binder)) routeBinders.push(binder);
+};
+
+/** A host's gateway Worker serves `type` (an entity type, or `Workflow/${name}`). @internal */
+export const routeType = (type: string, worker: unknown) => {
+  routedTypes.set(type, worker);
+};
+
+/**
+ * While deploying, bind a route to the gateway Worker serving `type` into
+ * the runtime being deployed, under `key`. Returns the key when one exists.
+ */
+export const bindRoute = (type: string, key: string) =>
+  Effect.gen(function* () {
+    const worker = routedTypes.get(type);
+    if (worker === undefined) return undefined;
+    for (const binder of routeBinders) yield* binder(key, worker);
+    return key;
+  });
+
+/**
+ * The `fetch` of the service binding under `key`, inside a Worker that has
+ * one; otherwise the global `fetch`.
+ */
+export const gatewayFetch = (key: string | undefined) =>
+  Effect.map(Effect.serviceOption(WorkerEnvironment), (env) => {
+    const service = key === undefined ? undefined : Option.getOrUndefined(env)?.[key];
+    return typeof service?.fetch === "function"
+      ? (service.fetch.bind(service) as typeof globalThis.fetch)
+      : globalThis.fetch;
+  });
 
 type AnyEntity = Entity.Entity<string, Rpc.Any>;
 
@@ -185,11 +242,20 @@ export const makeNamespace = (entity: AnyEntity, target: GatewayTarget) => {
           });
         methods[tag] = isStream
           ? (payload: unknown, options?: CallOptions) =>
-              Stream.unwrap(send(payload, options)).pipe(Stream.scoped, Stream.provide(protocol))
+              Stream.unwrap(
+                Effect.map(gatewayFetch(target.service), (fetch) =>
+                  Stream.unwrap(send(payload, options)).pipe(
+                    Stream.scoped,
+                    Stream.provide(protocol),
+                    Stream.provideService(FetchHttpClient.Fetch, fetch),
+                  ),
+                ),
+              )
           : (payload: unknown, options?: CallOptions) =>
               Effect.flatMap(send(payload, options), (result) => result).pipe(
                 Effect.scoped,
                 Effect.provide(protocol),
+                Effect.provideServiceEffect(FetchHttpClient.Fetch, gatewayFetch(target.service)),
               );
       }
       return methods;
@@ -237,6 +303,42 @@ const handlersOf = (entity: AnyEntity) =>
     }),
   );
 
+/**
+ * What a gateway serves: one RPC group with every hosted entity's RPCs (and
+ * the workflow RPCs, when it hosts workflows), and the handlers that route
+ * each call to Effect Cluster.
+ */
+export const gatewayServer = (
+  entities: ReadonlyArray<AnyEntity>,
+  workflows: ReadonlyMap<string, Workflow.Any> = new Map(),
+) => {
+  const groups = [...entities.map(groupOf), ...(workflows.size > 0 ? [WorkflowRpcs] : [])];
+  const [first, ...rest] = groups as [RpcGroup.RpcGroup<Rpc.Any>, ...RpcGroup.RpcGroup<Rpc.Any>[]];
+  const group = rest.reduce((all, next) => all.merge(next), first ?? RpcGroup.make());
+  const handlers = Layer.mergeAll(
+    ...([
+      ...entities.map(handlersOf),
+      ...(workflows.size > 0 ? [workflowHandlers(workflows)] : []),
+    ] as unknown as [Layer.Layer<never, never, Sharding.Sharding | WorkflowEngine.WorkflowEngine>]),
+  );
+  return { group, handlers };
+};
+
+/** Serve `app` to callers with the token; `/health` answers anyone. */
+export const authorized =
+  (token: string) =>
+  <E, R>(app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      // Load balancers check the gateway without the token.
+      if (request.url === "/health" || request.url.endsWith("/health")) {
+        return HttpServerResponse.text("ok");
+      }
+      return request.headers.authorization === `Bearer ${token}`
+        ? yield* app
+        : HttpServerResponse.empty({ status: 401 });
+    });
+
 /** The gateway a runner serves: every hosted entity's RPCs, behind the token. */
 export function gatewayLayer(
   entities: ReadonlyArray<AnyEntity>,
@@ -253,32 +355,12 @@ export function gatewayLayer(
   token: string,
   workflows: ReadonlyMap<string, Workflow.Any> = new Map(),
 ): Layer.Layer<never, never, any> {
-  const groups = [...entities.map(groupOf), ...(workflows.size > 0 ? [WorkflowRpcs] : [])];
-  const [first, ...rest] = groups as [RpcGroup.RpcGroup<Rpc.Any>, ...RpcGroup.RpcGroup<Rpc.Any>[]];
-  const group = rest.reduce((all, next) => all.merge(next), first ?? RpcGroup.make());
-  const handlers = Layer.mergeAll(
-    ...([
-      ...entities.map(handlersOf),
-      ...(workflows.size > 0 ? [workflowHandlers(workflows)] : []),
-    ] as unknown as [Layer.Layer<never, never, Sharding.Sharding | WorkflowEngine.WorkflowEngine>]),
-  );
-  const expected = `Bearer ${token}`;
+  const { group, handlers } = gatewayServer(entities, workflows);
   return HttpRouter.serve(
     RpcServer.layerHttp({ group, path: GATEWAY_PATH, protocol: "http" }).pipe(
       Layer.provide(handlers),
       Layer.provide(RpcSerialization.layerJson),
     ),
-    {
-      disableListenLog: true,
-      middleware: (app) =>
-        Effect.gen(function* () {
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          // Load balancers check the gateway without the token.
-          if (request.url === "/health") return HttpServerResponse.text("ok");
-          return request.headers.authorization === expected
-            ? yield* app
-            : HttpServerResponse.empty({ status: 401 });
-        }),
-    },
+    { disableListenLog: true, middleware: authorized(token) },
   );
 }

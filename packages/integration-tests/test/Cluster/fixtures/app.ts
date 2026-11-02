@@ -3,6 +3,7 @@
  * workflows and journals through their gateways, whatever runtime serves it.
  */
 import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -14,12 +15,15 @@ import type { tallyOn } from "./legacy.ts";
 import { workflowApp } from "./workflows/app.ts";
 import { Greet } from "./workflows/workflows.ts";
 
-/** The front, given the external program's entity as its host deploys it. */
-export const frontApp = <R>(Tally: ReturnType<typeof tallyOn<R>>) =>
+/**
+ * The front, given the external program's entity as its host deploys it
+ * (none on hosts that can't run one).
+ */
+export const frontApp = <R>(Tally?: ReturnType<typeof tallyOn<R>>) =>
   Effect.gen(function* () {
     const counters = yield* Counters;
     const greeters = yield* Greeters;
-    const tallies = yield* Tally;
+    const tallies = Tally === undefined ? undefined : yield* Tally;
     const workflows = yield* workflowApp;
     return {
       fetch: Effect.gen(function* () {
@@ -54,6 +58,7 @@ export const frontApp = <R>(Tally: ReturnType<typeof tallyOn<R>>) =>
               value: yield* (yield* greeters.getByName("front")).Greet({ name: id }),
             });
           case "tally":
+            if (tallies === undefined) return HttpServerResponse.text("Not Found", { status: 404 });
             return yield* json({
               value: yield* (yield* tallies.getByName(id)).Add({ amount: Number(arg ?? 1) }),
             });
@@ -73,6 +78,12 @@ export const frontApp = <R>(Tally: ReturnType<typeof tallyOn<R>>) =>
           default:
             return HttpServerResponse.text("Not Found", { status: 404 });
         }
-      }).pipe(Effect.provide(AuthClient), Effect.orDie),
+      }).pipe(
+        Effect.provide(AuthClient),
+        // A failed call answers with its cause, which the tests print.
+        Effect.catchCause((cause) =>
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+        ),
+      ),
     };
   }).pipe(Effect.provide(Cluster.WorkflowEngine(Greet)));

@@ -30,6 +30,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./AWS": "./src/AWS/index.ts",
+    "./Cloudflare": "./src/Cloudflare/index.ts",
     "./Docker": "./src/Docker/index.ts",
     "./Fly": "./src/Fly/index.ts",
     "./GCP": "./src/GCP/index.ts",
@@ -51,6 +52,12 @@
         "bun": "./src/AWS/index.ts",
         "worker": "./src/AWS/index.ts",
         "default": "./lib/AWS/index.js"
+      },
+      "./Cloudflare": {
+        "types": "./lib/Cloudflare/index.d.ts",
+        "bun": "./src/Cloudflare/index.ts",
+        "worker": "./src/Cloudflare/index.ts",
+        "default": "./lib/Cloudflare/index.js"
       },
       "./Docker": {
         "types": "./lib/Docker/index.d.ts",
@@ -83,6 +90,7 @@
         "default": "./lib/Kubernetes/index.js"
       },
       "./AWS/internal/*": null,
+      "./Cloudflare/internal/*": null,
       "./internal/*": null,
       "./*": {
         "types": "./lib/*.d.ts",
@@ -104,6 +112,7 @@
   },
   "devDependencies": {
     "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
@@ -114,6 +123,7 @@
   },
   "peerDependencies": {
     "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
@@ -124,6 +134,9 @@
   },
   "peerDependenciesMeta": {
     "@alchemy.run/aws": {
+      "optional": true
+    },
+    "@alchemy.run/cloudflare": {
       "optional": true
     },
     "@alchemy.run/docker": {

@@ -719,7 +719,7 @@ Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, 
 
 ## Effect Cluster
 
-Effect Cluster entities, workflows, singletons and crons, on a Postgres database and runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, called by id from any runtime.
+Effect Cluster entities, workflows, singletons and crons, on a Postgres database and runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or on Cloudflare Durable Objects, called by id from any runtime.
 
 - [Effect Cluster](https://alchemy.run/cluster) — Effect Cluster entities, workflows, singletons and crons, deployed to runners on your own cloud and called by name from any runtime.
 - [What is Effect Cluster?](https://alchemy.run/cluster/what-is-effect-cluster) — The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners, the database, workflows, singletons and crons — and how @alchemy.run/effect-cluster deploys them.
@@ -743,6 +743,7 @@ Effect Cluster entities, workflows, singletons and crons, on a Postgres database
 - [Kubernetes](https://alchemy.run/cluster/kubernetes) — Run an Effect Cluster's database and runners on any Kubernetes cluster — EKS, GKE, or kind on your machine.
 - [Fly](https://alchemy.run/cluster/fly) — Run an Effect Cluster's database and runners on Fly.io, on a private network, with the gateway at the runners' fly.dev address.
 - [Hetzner](https://alchemy.run/cluster/hetzner) — Run an Effect Cluster's database and runners on Hetzner Cloud Servers, on a private Network, behind a Load Balancer.
+- [Cloudflare](https://alchemy.run/cluster/cloudflare) — Run an Effect Cluster's entities, workflows, singletons and crons on Cloudflare Durable Objects, with no database and no runners to manage.
 
 ## Better Auth
 
@@ -974,4 +975,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~212 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~213 KB) — only fetch it when you need to locate a specific resource's reference page.

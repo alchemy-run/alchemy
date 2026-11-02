@@ -58,6 +58,7 @@ export const Database = Cluster.Database.fromUrl({
 | Kubernetes | Postgres as a Deployment behind a ClusterIP Service |
 | Fly | Postgres on a Fly Machine with a volume, on a private network |
 | Hetzner | Postgres on a Server with a Volume, on a private Network |
+| Cloudflare | none: each Durable Object keeps its own messages in its SQLite |
 
 The RDS database is built for production. The others keep one Postgres on one disk, which suits development and small clusters; for more, run a managed Postgres and pass its URL to `fromUrl`.
 

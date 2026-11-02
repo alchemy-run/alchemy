@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { clusterShardGroups, Database as ClusterDatabase } from "../Database.ts";
-import { stackDnsLabel } from "../internal/RunnersHost.ts";
+import { stackDnsLabel } from "../internal/Naming.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface DatabaseProps {

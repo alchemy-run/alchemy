@@ -1915,6 +1915,7 @@ export default defineConfig({
                 { label: "Kubernetes", link: "/cluster/kubernetes" },
                 { label: "Fly", link: "/cluster/fly" },
                 { label: "Hetzner", link: "/cluster/hetzner" },
+                { label: "Cloudflare", link: "/cluster/cloudflare" },
               ],
             },
             providerApiReferenceEntry("Cluster"),

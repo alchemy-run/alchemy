@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { clusterShardGroups, Database as ClusterDatabase } from "../Database.ts";
 import { RUNNER_PORT } from "../internal/Gateway.ts";
-import { stackDnsLabel } from "../internal/RunnersHost.ts";
+import { stackDnsLabel } from "../internal/Naming.ts";
 import type { Providers } from "../Providers.ts";
 
 export const COS_IMAGE = "projects/cos-cloud/global/images/family/cos-stable";

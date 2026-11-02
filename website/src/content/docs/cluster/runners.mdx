@@ -118,6 +118,7 @@ Every set serves its classes over HTTP to callers outside the cluster, behind a 
 | Kubernetes | a Service, in the cluster (or a load balancer, with `serviceType`) |
 | Fly | `https://{name}.fly.dev` |
 | Hetzner | a Load Balancer |
+| Cloudflare | the runners' Worker, through a service binding from other Workers |
 
 Load balancers check the gateway at `/health`, which needs no token.
 

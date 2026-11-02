@@ -17,6 +17,9 @@
       "path": "../alchemy/tsconfig.json"
     },
     {
+      "path": "../cloudflare/tsconfig.json"
+    },
+    {
       "path": "../docker/tsconfig.json"
     },
     {

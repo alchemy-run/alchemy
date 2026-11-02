@@ -41,7 +41,17 @@ export const waitForReady = (baseUrl: string) =>
 
 type TestFn = (name: string, effect: Effect.Effect<void, unknown, any>, options?: object) => void;
 
-export const conformanceTests = (test: TestFn, { baseUrl }: { baseUrl: () => string }) => {
+export const conformanceTests = (
+  test: TestFn,
+  {
+    baseUrl,
+    external = true,
+  }: {
+    baseUrl: () => string;
+    /** Whether the host runs an existing Effect Cluster program (not on Workers). */
+    external?: boolean;
+  },
+) => {
   const options = { timeout: 120_000 };
 
   test(
@@ -96,7 +106,7 @@ export const conformanceTests = (test: TestFn, { baseUrl }: { baseUrl: () => str
     options,
   );
 
-  test(
+  (external ? test : () => {})(
     "an external program's entity is called like any other",
     Effect.gen(function* () {
       const a: number = (yield* get(`${baseUrl()}/tally/conf-tally/2`)).value;

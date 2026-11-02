@@ -23,19 +23,12 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { Database, type DatabaseShape } from "../Database.ts";
-import { EntityTypeId, shardGroupKey, type Entity } from "../Entity.ts";
-import type { HostedClass } from "./HostedRuntime.ts";
-
-/** The resource types runners host. */
-const HOSTED_TYPES = new Set<string>([
-  EntityTypeId,
-  "Cluster.Workflow",
-  "Cluster.Singleton",
-  "Cluster.Cron",
-]);
+import { shardGroupKey, type Entity } from "../Entity.ts";
 import type { Providers } from "../Providers.ts";
 import { Runners, type RunnersEntity } from "../Runners.ts";
 import { GATEWAY_PORT, RUNNER_PORT } from "./Gateway.ts";
+import type { HostedClass } from "./HostedRuntime.ts";
+import { HOSTED_TYPES, shortLabel, stackDnsLabel } from "./Naming.ts";
 import { RunnersHost } from "./RunnersHostService.ts";
 
 const VIRTUAL = "virtual:cluster-entities";
@@ -61,36 +54,6 @@ const entitiesPlugin = (entities: ReadonlyArray<RunnersEntity>) => {
     },
   ];
 };
-
-/**
- * `${stack}-${stage}-${id}` as a lowercase DNS label of at most `max`
- * characters. A longer one keeps its start and ends in a hash of the whole.
- */
-export const stackDnsLabel = Effect.fn(function* (id: string, max = 63) {
-  const stack = yield* Stack;
-  const full = `${stack.name}-${stack.stage}-${id}`
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  if (full.length <= max) return full;
-  const hash = yield* Effect.sync(() =>
-    createHash("sha256").update(full).digest("hex").slice(0, 8),
-  );
-  return `${full.slice(0, max - 9).replace(/-+$/, "")}-${hash}`;
-});
-
-/** `id` as a lowercase label of at most `max` characters, ending in a hash when shortened. */
-const shortLabel = Effect.fn(function* (id: string, max: number) {
-  const label = id
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  if (label.length <= max) return label;
-  const hash = yield* Effect.sync(() =>
-    createHash("sha256").update(label).digest("hex").slice(0, 8),
-  );
-  return `${label.slice(0, max - 9).replace(/-+$/, "")}-${hash}`;
-});
 
 /** The runners were given a database whose network they cannot join. */
 export class DatabaseNetworkMismatch extends Data.TaggedError("Cluster.DatabaseNetworkMismatch")<{

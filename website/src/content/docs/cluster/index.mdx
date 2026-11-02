@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 `@alchemy.run/effect-cluster` deploys [Effect Cluster](https://effect.website) programs. An **entity** is a class with one instance per id: a chat room, a shopping cart, a user's session. Each instance handles its messages one at a time, so it can keep state without locks.
 
-You run the cluster yourself. A Postgres **database** tracks which runner owns which entities. A set of **runners** runs your code. Both deploy in the same Stack as the rest of your app, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner.
+You run the cluster yourself. A Postgres **database** tracks which runner owns which entities. A set of **runners** runs your code. Both deploy in the same Stack as the rest of your app, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner. On Cloudflare there's neither: every instance is a Durable Object.
 
 <DAG
   nodes={[
@@ -108,4 +108,4 @@ Swap `ClusterDocker` for `ClusterAWS`, `ClusterFly` or any other cloud, and the 
 
 **Already have an Effect Cluster program?** It deploys unchanged. See [Existing programs](/cluster/existing-programs).
 
-**Choosing a cloud?** Each platform page shows what runs where: [Docker](/cluster/docker), [AWS](/cluster/aws), [GCP](/cluster/gcp), [Kubernetes](/cluster/kubernetes), [Fly](/cluster/fly) and [Hetzner](/cluster/hetzner). Start with [Setup](/cluster/setup).
+**Choosing a cloud?** Each platform page shows what runs where: [Docker](/cluster/docker), [AWS](/cluster/aws), [GCP](/cluster/gcp), [Kubernetes](/cluster/kubernetes), [Fly](/cluster/fly), [Hetzner](/cluster/hetzner) and [Cloudflare](/cluster/cloudflare). Start with [Setup](/cluster/setup).

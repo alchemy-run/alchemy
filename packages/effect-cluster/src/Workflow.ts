@@ -33,7 +33,7 @@ import {
   WorkflowEngine as EffectWorkflowEngine,
 } from "effect/workflow";
 import { type EntityBindingContract, PlatformDeclaration, shardGroupKey } from "./Entity.ts";
-import type { GatewayTarget } from "./internal/Gateway.ts";
+import { bindRoute, type GatewayTarget } from "./internal/Gateway.ts";
 import { type HostedRuntimeContext, makeHostedRuntimeContext } from "./internal/HostedRuntime.ts";
 import { makeRemoteEngine } from "./internal/WorkflowGateway.ts";
 import type { Providers } from "./Providers.ts";
@@ -304,9 +304,13 @@ const routeOf = (
       `CLUSTER_WORKFLOW_${name}_TOKEN`,
       resource?.token,
     );
+    // A Worker calling a gateway Worker reaches it through a service binding.
+    const service = sanitizeKey(`CLUSTER_WORKFLOW_${name}_SERVICE`);
+    if (!globalThis.__ALCHEMY_RUNTIME__) yield* bindRoute(resourceId(name), service);
     return {
       url: url ?? "",
       token: token === undefined ? "" : Redacted.isRedacted(token) ? Redacted.value(token) : token,
+      service,
     } satisfies GatewayTarget;
   });
 
