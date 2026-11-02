@@ -471,52 +471,123 @@ Docs: [Story](/domain/story) ·
 
 ### Cloud Run services and containers, redesigned
 
-A Cloud Run instance runs several containers: the first takes requests, and
-the others run beside it on `localhost`. Cloud Run in Alchemy was rebuilt
-around that, and every combination now works
+A Cloud Run service runs one or more containers in each instance. The first
+takes requests, and the rest run beside it on `localhost`. Cloud Run in
+Alchemy was rebuilt around that model. Any container can be an image or your
+own Effect program, and a container lists or binds the ones it needs
 ([#2644](https://github.com/alchemy-run/alchemy/pull/2644),
 [#2652](https://github.com/alchemy-run/alchemy/pull/2652),
-[#2657](https://github.com/alchemy-run/alchemy/pull/2657)):
+[#2654](https://github.com/alchemy-run/alchemy/pull/2654),
+[#2657](https://github.com/alchemy-run/alchemy/pull/2657)).
 
-| The service runs | Containers beside it |
-| --- | --- |
-| an image | plain container specs, or `GCP.Run.Container`s, listed in its template |
-| your Effect program | the same, plus Containers it binds with `bindContainer` or `bindPort` |
+#### One container
 
-A `GCP.Run.Container` is a resource of its own. It runs an image, or your own
-Effect program bundled into its image, and a program Container can bind
-other Containers in turn. Every container takes `startupProbe`,
-`livenessProbe` and `dependsOn`, so you control the order they start in.
-
-An image service can list Containers and order them by each other's names:
+A service starts as a single image:
 
 ```typescript
-const cache = yield* GCP.Run.Container("Cache", {
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: GCP.providers(), state: GCP.state() },
+  Effect.gen(function* () {
+    const proxy = yield* GCP.Run.Service("Proxy", {
+      template: {
+        containers: [
+          {
+            image: "us-docker.pkg.dev/cloudrun/container/hello",
+            ports: [{ containerPort: 8080 }],
+          },
+        ],
+      },
+    });
+    return { url: proxy.uri };
+  }),
+);
+```
+
+#### Add a sidecar
+
+`GCP.Run.Container` declares a container as a resource. List it after the
+first one, and `dependsOn` holds the proxy back until the cache passes its
+startup probe:
+
+```diff lang="typescript"
+Effect.gen(function* () {
++  const cache = yield* GCP.Run.Container("Cache", {
++    image: "docker.io/library/redis:7-alpine",
++    port: 6379,
++    startupProbe: { tcpSocket: {} },
++  });
+  const proxy = yield* GCP.Run.Service("Proxy", {
+    template: {
+      containers: [
+        {
+          image: "us-docker.pkg.dev/cloudrun/container/hello",
+          ports: [{ containerPort: 8080 }],
++          dependsOn: [cache.name],
+        },
++        cache,
+      ],
+    },
+  });
+  return { url: proxy.uri };
+}),
+```
+
+A plain container spec works in the list too. Every container takes
+`startupProbe`, `livenessProbe` and `dependsOn`.
+
+#### Run your own program
+
+Give the service `main` and an Effect, and Alchemy bundles your program into
+the first container. An Effect service binds its sidecars instead of listing
+them. `bindPort` adds the Cache to the revision, makes the service wait for
+it, and returns its address:
+
+```typescript
+// src/api.ts
+import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Cache = GCP.Run.Container("Cache", {
   image: "docker.io/library/redis:7-alpine",
   port: 6379,
   startupProbe: { tcpSocket: {} },
 });
 
-yield* GCP.Run.Service("Proxy", {
-  template: {
-    containers: [
-      {
-        image: proxyImage,
-        ports: [{ containerPort: 8080 }],
-        dependsOn: [cache.name],
-      },
-      cache,
-    ],
-  },
-});
+export default class Api extends GCP.Run.Service<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const cache = yield* GCP.Run.bindPort(Cache, 6379);
+    // cache.url === "http://localhost:6379"
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    };
+  }),
+) {}
 ```
 
-An Effect service binds an Effect Container and gets a typed client for its
-methods over `localhost`, streams included. Binding adds the Container to
-the revision and starts it first:
+#### Run your own program in a sidecar
+
+A Container with `main` runs your Effect program in its own image. Its
+methods become a typed client for whoever binds it, called over `localhost`,
+streams included. A program Container binds sidecars of its own:
 
 ```typescript
-export class Worker extends GCP.Run.Container<Worker>()(
+// src/worker.ts
+import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Cache } from "./api.ts";
+
+export default class Worker extends GCP.Run.Container<Worker>()(
   "Worker",
   {
     main: import.meta.url,
@@ -524,6 +595,7 @@ export class Worker extends GCP.Run.Container<Worker>()(
     startupProbe: { httpGet: { path: "/health" } },
   },
   Effect.gen(function* () {
+    const cache = yield* GCP.Run.bindPort(Cache, 6379);
     return {
       greet: (name: string) => Effect.succeed(`hello ${name}`),
       count: () => Stream.make(1, 2, 3),
@@ -531,28 +603,42 @@ export class Worker extends GCP.Run.Container<Worker>()(
     };
   }),
 ) {}
+```
+
+The service binds the Worker with `bindContainer` and calls its methods:
+
+```diff lang="typescript"
+// src/api.ts
++import Worker from "./worker.ts";
 
 export default class Api extends GCP.Run.Service<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const worker = yield* GCP.Run.bindContainer(Worker);
+-    const cache = yield* GCP.Run.bindPort(Cache, 6379);
++    const worker = yield* GCP.Run.bindContainer(Worker);
     return {
-      fetch: worker.greet("sam").pipe(Effect.map(HttpServerResponse.text)),
+-      fetch: Effect.succeed(HttpServerResponse.text("hello")),
++      fetch: worker.greet("sam").pipe(Effect.map(HttpServerResponse.text)),
     };
   }),
 ) {}
 ```
 
-Bindings chain, and the revision starts in their order:
+Bindings chain, so one revision now runs three containers and starts them in
+order:
 
 ```text
 revision
-├── start Static  → TCP :80
-├── start Worker (dependsOn Static) → GET :3000/health
+├── start Cache  → TCP :6379
+├── start Worker (dependsOn Cache)  → GET :3000/health
 ├── start Api    (dependsOn Worker) → GET :8080/health
 └── Ready → traffic to Api
 ```
+
+A service that runs an image lists its containers; a service or Container
+that runs your program binds them, which gives it a client and orders startup
+for it.
 
 Docs: [Sidecars](/gcp/compute/sidecars) · [Cloud Run](/gcp/compute/cloud-run).
 
