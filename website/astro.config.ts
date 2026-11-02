@@ -1205,48 +1205,11 @@ export default defineConfig({
           label: "Railway",
           items: [
             { label: "Overview", link: "/railway" },
+            { label: "What is Railway?", link: "/railway/what-is-railway" },
             { label: "Setup", link: "/railway/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "railway/tutorial" } }],
-            },
-            {
-              label: "Frontend",
-              items: sortFrontendItems([
-                {
-                  label: "Overview",
-                  link: "/railway/frontend/websites",
-                },
-                { label: "Astro", link: "/railway/frontend/astro" },
-                { label: "Foldkit", link: "/railway/frontend/foldkit" },
-                { label: "Next.js", link: "/railway/frontend/nextjs" },
-                { label: "Vinext", link: "/railway/frontend/vinext" },
-                { label: "Nuxt", link: "/railway/frontend/nuxt" },
-                { label: "Octane", link: "/railway/frontend/octane" },
-                {
-                  label: "React Router",
-                  link: "/railway/frontend/react-router",
-                },
-                {
-                  label: "SolidStart",
-                  link: "/railway/frontend/solidstart",
-                },
-                {
-                  label: "Static sites",
-                  link: "/railway/frontend/static-site",
-                },
-                {
-                  label: "SvelteKit",
-                  link: "/railway/frontend/sveltekit",
-                },
-                {
-                  label: "TanStack Start",
-                  link: "/railway/frontend/tanstack-start",
-                },
-                { label: "Vite", link: "/railway/frontend/vite" },
-                { label: "Vocs", link: "/railway/frontend/vocs" },
-                { label: "Waku", link: "/railway/frontend/waku" },
-              ]),
             },
             {
               label: "Compute",
@@ -1292,6 +1255,44 @@ export default defineConfig({
                   link: "/railway/networking",
                 },
               ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                {
+                  label: "Overview",
+                  link: "/railway/frontend/websites",
+                },
+                { label: "Astro", link: "/railway/frontend/astro" },
+                { label: "Foldkit", link: "/railway/frontend/foldkit" },
+                { label: "Next.js", link: "/railway/frontend/nextjs" },
+                { label: "Vinext", link: "/railway/frontend/vinext" },
+                { label: "Nuxt", link: "/railway/frontend/nuxt" },
+                { label: "Octane", link: "/railway/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/railway/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/railway/frontend/solidstart",
+                },
+                {
+                  label: "Static sites",
+                  link: "/railway/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/railway/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/railway/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/railway/frontend/vite" },
+                { label: "Vocs", link: "/railway/frontend/vocs" },
+                { label: "Waku", link: "/railway/frontend/waku" },
+              ]),
             },
             providerResourcesEntry("Railway"),
           ],

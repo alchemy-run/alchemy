@@ -436,9 +436,9 @@ const SECTIONS: Section[] = [
   {
     heading: "Railway — start here",
     intro:
-      "The Railway hub: overview (Projects, Services, databases), setup (workspace, API token, profile), and networking.",
+      "The Railway hub: overview, What is Railway? (workspaces, projects, environments, services, databases, volumes, variables, networking and how Alchemy models each), setup (workspace, API token, profile), and networking.",
     pages: {
-      slugs: ["railway/index", "railway/setup", "railway/networking"],
+      slugs: ["railway/index", "railway/what-is-railway", "railway/setup", "railway/networking"],
     },
   },
   {
