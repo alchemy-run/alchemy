@@ -408,9 +408,9 @@ const SECTIONS: Section[] = [
   {
     heading: "Hetzner — start here",
     intro:
-      "The Hetzner hub: overview (Servers and Services) and setup (project, API token, profile).",
+      "The Hetzner hub: overview, What is Hetzner? (projects, locations, Servers, Services, Volumes, networks, firewalls, load balancers, DNS and how Alchemy models each), and setup (project, API token, profile).",
     pages: {
-      slugs: ["hetzner/index", "hetzner/setup"],
+      slugs: ["hetzner/index", "hetzner/what-is-hetzner", "hetzner/setup"],
     },
   },
   {

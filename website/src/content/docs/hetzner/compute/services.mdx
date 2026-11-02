@@ -32,13 +32,7 @@ export default class Api extends Hetzner.Service<Api>()(
 ) {}
 ```
 
-- `server` — the machine to run on (a `Hetzner.Server`, yielded or
-  module-scope). Changing it **replaces** the Service.
-- `main: import.meta.url` — this file is the bundle entrypoint.
-- `port` — written to the `PORT` env var and used to build the
-  `url` attribute (`http://<server-ipv4>:<port>`). Default `3000`.
-- `fetch` — returning it from the constructor Effect boots an HTTP server
-  on that port; omit it for a [background service](#background-services).
+`server` is the machine to run on, a `Hetzner.Server`, and changing it replaces the Service. `main: import.meta.url` makes this file the bundle's entry point. `port` is written to the `PORT` environment variable and used to build the `url` attribute, `http://<server-ipv4>:<port>`, and defaults to `3000`. Returning `fetch` boots an HTTP server on that port. Leave it out for a [background service](#background-services).
 
 The resolved resource exposes `url`, `port`, `unitName`, `serverId`,
 and the bundle's `code.hash`.
