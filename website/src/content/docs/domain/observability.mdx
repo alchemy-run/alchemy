@@ -113,5 +113,5 @@ The model counts and times its work as metrics: `domain.commands` and `domain.co
 Views apply every event they fold, so they're the busiest spans. Turn them off on the Layer that hosts the model:
 
 ```typescript
-Bank.layer(BankHandlers, { telemetry: { views: false } })
+Bank.layer({ telemetry: { views: false } }, BankHandlers)
 ```

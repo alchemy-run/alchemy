@@ -207,6 +207,8 @@ interface SourceData {
     readonly seq: number;
     readonly at: number;
     readonly keys: ReadonlyArray<string>;
+    /** Committed before the consumer was deployed: history its `complete` must follow. */
+    readonly beforeDeploy: boolean;
   }>;
   /** Runs code that knows the target only from this time on. */
   staleUntil: number;
@@ -219,6 +221,13 @@ interface KeyData {
   readonly object: SimObject;
   readonly applied: Array<{ readonly delivery: Delivery; readonly backfilling: boolean }>;
   readonly checkpoints: Map<string, number>;
+  /**
+   * What its handler has run on (`stream#seq`). With `handleLag`, applied
+   * deliveries wait in `unhandled`, and each `drained` check handles one, as a
+   * projection handles what it accepted later, in batches.
+   */
+  readonly handled: Array<string>;
+  readonly unhandled: Array<string>;
   /** Runs code from before the target's generation until this time. */
   staleUntil: number;
   role: Backfill.Consumer;
@@ -536,10 +545,10 @@ export class Sim {
           () => this.busy(this.key(key)).role.ready(target, waitMillis),
           "ready",
         ),
-      start: (target, key, ref, waitMillis) =>
+      start: (target, key, ref, waitMillis, begun) =>
         this.call(
           this.key(key).object,
-          () => this.busy(this.key(key)).role.start(target, ref, waitMillis),
+          () => this.busy(this.key(key)).role.start(target, ref, waitMillis, begun),
           "start",
         ),
     },
@@ -646,11 +655,42 @@ export class Sim {
         role: Backfill.makeRun(object.storage, object.jobsApi, this.net, {
           waitMillis: 0,
           againMillis: 1_000,
+          lifecycle: (target) => ({
+            start: this.hook(target, "start"),
+            complete: this.hook(target, "complete"),
+          }),
         }),
       };
       this.runs.set(target, found);
     }
     return found;
+  }
+
+  /**
+   * Each run's lifecycle hooks as they ran, with what the target's keys had
+   * handled by then (`stream#seq`). Each fails its first `hookFailures` tries.
+   */
+  readonly hooks: Array<{
+    readonly target: string;
+    readonly hook: "start" | "complete";
+    readonly applied: ReadonlySet<string>;
+  }> = [];
+  hookFailures = 0;
+  /** Keys handle what they apply later (see `KeyData.handled`). */
+  handleLag = false;
+  private readonly hookTries = new Map<string, number>();
+  hook(target: string, hook: "start" | "complete") {
+    return Effect.suspend(() => {
+      const tries = (this.hookTries.get(`${target}:${hook}`) ?? 0) + 1;
+      this.hookTries.set(`${target}:${hook}`, tries);
+      if (tries <= this.hookFailures) return Effect.die(new Error(`${hook} unavailable`));
+      const applied = new Set<string>();
+      for (const [id, key] of this.keys)
+        if (this.targetOfKey(id) === target)
+          for (const handled of key.handled) applied.add(handled);
+      this.hooks.push({ target, hook, applied });
+      return Effect.void;
+    });
   }
 
   /** The targets whose run is complete. */
@@ -763,6 +803,8 @@ export class Sim {
         object,
         applied: [],
         checkpoints: new Map(),
+        handled: [],
+        unhandled: [],
         staleUntil: this.keyStaleUntil(key),
         role: undefined as never,
       };
@@ -787,6 +829,15 @@ export class Sim {
               })),
             ),
           apply: (deliveries) => Effect.sync(() => this.apply(keyData, deliveries, true)),
+          ...(this.handleLag
+            ? {
+                drained: Effect.sync(() => {
+                  const next = keyData.unhandled.shift();
+                  if (next !== undefined) keyData.handled.push(next);
+                  return keyData.unhandled.length === 0;
+                }),
+              }
+            : {}),
         },
         this.limits,
       );
@@ -801,6 +852,7 @@ export class Sim {
       if ((key.checkpoints.get(delivery.source) ?? 0) >= delivery.seq) continue;
       key.checkpoints.set(delivery.source, delivery.seq);
       key.applied.push({ delivery, backfilling });
+      (this.handleLag ? key.unhandled : key.handled).push(`${delivery.source}#${delivery.seq}`);
     }
   }
 
@@ -827,7 +879,7 @@ export class Sim {
           .section(
             Effect.gen({ self: this }, function* () {
               const before = source.events.length;
-              const event = { seq: before + 1, at: this.now, keys };
+              const event = { seq: before + 1, at: this.now, keys, beforeDeploy: !this.deployed };
               source.events.push(event);
               const storage = source.object.storage;
               const routed = yield* storage.get<Routed>("routed");

@@ -26,6 +26,7 @@ export class Ledger extends Domain.Projection("Ledger", {
 
 /** Writes each batch of an account's movements in one database round-trip. */
 export const LedgerLive = Ledger.toLayer(
+  { batch: { size: 100, wait: "1 second" } },
   Effect.gen(function* () {
     const store = yield* LedgerStore;
     return Effect.fn(function* (batch) {
@@ -41,5 +42,4 @@ export const LedgerLive = Ledger.toLayer(
       );
     });
   }),
-  { batch: { size: 100, wait: "1 second" } },
 );

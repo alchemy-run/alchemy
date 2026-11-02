@@ -429,6 +429,11 @@ export interface PolicyKit {
   readonly name: string;
   /** Run the policy's handler for one delivery. */
   readonly run: (delivery: Delivery) => Effect.Effect<void>;
+  /**
+   * A policy that replays catches up like a projection: host it as one, with
+   * this kit (its `kind` is `"policy"`), rather than as a policy.
+   */
+  readonly replay?: ProjectionKit;
 }
 
 /**
@@ -463,6 +468,8 @@ export interface ProjectionOptions {
  */
 export interface ProjectionKit {
   readonly name: string;
+  /** What it is to the model: a projection, or a policy that replays (see `PolicyKit.replay`). */
+  readonly kind?: "projection" | "policy";
   readonly options: ProjectionOptions;
   /**
    * This projection's generation. A key's log from an earlier one is reset;
@@ -490,6 +497,17 @@ export interface ProjectionKit {
    * the run as processed.
    */
   readonly run: (key: string, batch: ReadonlyArray<Accepted>) => Effect.Effect<void>;
+  /**
+   * The projection's lifecycle for this generation, run by its backfill's run:
+   * `start` before any key handles an input, `complete` once its history is in.
+   */
+  readonly lifecycle?: Lifecycle;
+}
+
+/** What a consumer's backfill run does around it: see `ProjectionKit.lifecycle`. */
+export interface Lifecycle {
+  readonly start?: Effect.Effect<void>;
+  readonly complete?: Effect.Effect<void>;
 }
 
 /**

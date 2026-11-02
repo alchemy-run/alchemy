@@ -16,7 +16,7 @@ export type Attributes<V> = (value: V) => Readonly<Record<string, unknown>>;
 
 /**
  * How a hosted model records telemetry. Tuning, not meaning, so it lives on
- * the Layer: `Bank.layer(handlers, { telemetry: { views: false } })`.
+ * the Layer: `Bank.layer({ telemetry: { views: false } }, handlers)`.
  */
 export interface Options {
   /**

@@ -203,7 +203,7 @@ import { Billing, BillingHandlers } from "./Billing.ts";
 
 const Platform = DomainCloudflare.layerDurableObjects();
 // Billing keeps the accounts both models wrote; Audit starts empty.
-export const BillingLive = Billing.layer(BillingHandlers, { legacyData: true }).pipe(
+export const BillingLive = Billing.layer({ legacyData: true }, BillingHandlers).pipe(
   Layer.provide(Platform),
 );
 export const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));

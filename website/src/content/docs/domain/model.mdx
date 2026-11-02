@@ -149,17 +149,19 @@ Add a view or a projection to a model that already has events, and it receives t
 
 Each key of the new consumer pulls the history from every instance that feeds it and applies those events in the order they were recorded, by timestamp. A summary per account sees its account's events in order, and a single dashboard fed by every account sees all of them in order, as if it had been there from the start. Events recorded while it catches up wait their turn, then arrive live.
 
-Policies never receive history. They act on new events only, so adding a policy never acts on the past again.
+Policies don't receive history unless they opt in. They act on new events only, so adding a policy doesn't act on the past again. A policy that should catch up on the past sets [`replay`](/domain/policy#act-on-the-history-too).
 
 ## Rebuild a view from the history
 
 A view's state is derived, so it can always be built again. When its `evolve` or routing changes what it should hold, or its state was lost, bump its version on the model's Layer:
 
 ```typescript title="src/Bank.live.ts"
-Bank.layer(BankHandlers, { versions: { AccountSummary: 1 } });
+Bank.layer({ versions: { AccountSummary: 1 } }, BankHandlers);
 ```
 
 On the next deploy the view starts over and receives the whole history again, the same way a new view does. Every view and projection that reads it is rebuilt with it.
+
+While it rebuilds, a view keyed by its aggregate answers every read with that instance's whole history: on Cloudflare, a key the rebuild hasn't reached yet reads its instance's events first, then answers. Any other view answers from what the rebuild has got to.
 
 Bump the version too when you add back a view you removed earlier. Its stored state stopped following the history while it was gone, so it's rebuilt from the start.
 
@@ -171,7 +173,7 @@ Until a new or rebuilt view has received the history, its answers cover only par
 const { complete } = yield* summaries.history;
 ```
 
-A screen can show "catching up" until `complete` is true, or hold its reads until then. A projection's `Progress` service has the same `history`.
+A screen can show "catching up" until `complete` is true, or hold its reads until then. A projection's `Progress` service has the same `history`, complete once the projection has handled the history, not just received it.
 
 On Cloudflare the deploy itself waits until the history is complete. See [History at scale](/domain/backfill) for how long that takes and what it costs.
 
@@ -189,7 +191,7 @@ A [view](/domain/view) folds events into state that the model stores and serves:
 
 A [projection](/domain/projection) writes events into a store you own, such as a database or a search index, or into a [stream](/domain/stream) the model serves. It never sends commands, so it can always be replayed.
 
-A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
+A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and replays the history only if you opt in.
 
 ## Declare the model
 

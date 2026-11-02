@@ -49,7 +49,7 @@ export class AmbiguousDomainLegacyData extends Data.TaggedError("AmbiguousDomain
     return (
       `Models ${this.models.join(", ")} on Worker '${this.scriptName}' shared the Durable Object class '${this.legacyName}' before Domain version 0, so its data belongs to both. ` +
       "Each model now has its own classes, and only one can keep that data. " +
-      `Set \`legacyData: true\` in the layer options of exactly one of them, e.g. \`${this.models[0]}.layer(handlers, { legacyData: true })\`; the others start empty.`
+      `Set \`legacyData: true\` in the layer options of exactly one of them, e.g. \`${this.models[0]}.layer({ legacyData: true }, handlers)\`; the others start empty.`
     );
   }
 }

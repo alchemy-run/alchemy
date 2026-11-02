@@ -9,6 +9,6 @@ export default class DomainCatchUpWorker extends Cloudflare.Worker<DomainCatchUp
   "DomainCatchUpWorker",
   { main: import.meta.url },
   ledgerWorker("v2-wide-bumped", Deposits, WideTimeline).pipe(
-    Effect.provide(hosted(Widened.layer(Layer.empty, { versions: { Timeline: 1 } }))),
+    Effect.provide(hosted(Widened.layer({ versions: { Timeline: 1 } }, Layer.empty))),
   ),
 ) {}

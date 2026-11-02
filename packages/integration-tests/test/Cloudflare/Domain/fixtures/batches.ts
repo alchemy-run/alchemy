@@ -43,6 +43,7 @@ export class PongWriter extends Domain.Projection("PongWriter", {
 }) {}
 
 export const PongWriterLive = PongWriter.toLayer(
+  { batch: { size: 10, wait: BATCH_WAIT } },
   Effect.gen(function* () {
     const pongs = yield* Pongs;
     return Effect.fn(function* (batch) {
@@ -52,7 +53,6 @@ export const PongWriterLive = PongWriter.toLayer(
       }
     });
   }),
-  { batch: { size: 10, wait: BATCH_WAIT } },
 );
 
 export class Batches extends Domain.Model("Batches", {

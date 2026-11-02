@@ -29,6 +29,7 @@ import {
   type ViewKit,
   type ViewSnapshot,
 } from "@alchemy.run/domain/Platform";
+import type * as Projection from "@alchemy.run/domain/Projection";
 import { makeCallback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { StorageName } from "alchemy/Workflows";
@@ -167,8 +168,9 @@ const declare = CloudflareDurableObject as unknown as (
  * rollout, and the previous generation's are left as they were (a shadow
  * rebuild).
  */
-const consumerClass = (kind: "view" | "projection", name: string, generation: number) =>
-  `${name}${kind === "view" ? "View" : "Projection"}${generation > 0 ? `V${generation}` : ""}`;
+const consumerClass = (kind: "view" | "projection" | "policy", name: string, generation: number) =>
+  // A policy that replays: apart from `${name}Policy`, the class of one that doesn't.
+  `${name}${kind === "view" ? "View" : kind === "policy" ? "ReplayPolicy" : "Projection"}${generation > 0 ? `V${generation}` : ""}`;
 
 /**
  * The class of a consumer generation's run: its root, relays and scanners. A
@@ -610,6 +612,8 @@ const scannerRpc = (scanner: () => Backfill.Scanner) => ({
  * (an alarm may run for 15 minutes): keys still reading history are called again.
  */
 const RELAY_ROOT_WAIT_MS = 5 * 60_000;
+/** How long a read of a rebuilding view's key waits for that key to catch up (see `viewObject`). */
+const READ_CATCH_UP_MS = 10_000;
 
 /** A step of the deploy's Workflow couldn't reach a consumer's class: this invocation runs older code. */
 class Unreachable extends Data.TaggedError("Unreachable")<{ readonly message: string }> {}
@@ -1047,6 +1051,36 @@ const viewObject = (
             ),
         }));
 
+      /**
+       * Keyed by its source, while its run is under way: a key whose history
+       * isn't in yet reads its source's log now, so a read answers with every
+       * event before it rather than what the run has got to. Up to
+       * `READ_CATCH_UP_MS`; past it, the read answers with what it has.
+       */
+      let runComplete = false;
+      const catchUp = (key: string | undefined) =>
+        Effect.gen(function* () {
+          if (key === undefined || !kit.singleSource || runComplete) return;
+          if (yield* consumerFor(key).settled(target)) return;
+          const phase = yield* net.run.phase(target).pipe(Effect.catchCause(() => Effect.void));
+          if (phase === "complete") {
+            runComplete = true;
+            return;
+          }
+          const plan = planOf(target);
+          const source = plan?.sources?.[0];
+          if (source === undefined) return;
+          yield* state.storage.put(ID_KEY, key);
+          // A view has no `start` hook to wait for, so it follows its source at once.
+          yield* consumerFor(key).start(
+            target,
+            Backfill.withGeneration({ source, id: key }, plan),
+            READ_CATCH_UP_MS,
+            true,
+          );
+          yield* flushAfter;
+        });
+
       return {
         receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
           reportDefects(
@@ -1058,8 +1092,9 @@ const viewObject = (
               yield* flushAfter;
             }),
           ),
-        read: () => reportDefects(read),
-        after: (after: number) => reportDefects(entriesAfter(after)),
+        read: (key?: string) => reportDefects(catchUp(key).pipe(Effect.andThen(read))),
+        after: (after: number, key?: string) =>
+          reportDefects(catchUp(key).pipe(Effect.andThen(entriesAfter(after)))),
         // The backfill protocol, as a source, a consumer and a scanner.
         ...scannerRpc(() => scannerFor()),
         ...runRpc(relay, runFor),
@@ -1070,11 +1105,17 @@ const viewObject = (
           reportDefects(sourceFor(key).read(target, reader, after, limit)),
         bfHandoff: (key: string, target: string, consumerKey: string, through: number) =>
           reportDefects(sourceFor(key).handoff(target, consumerKey, through)),
-        bfStart: (key: string, target: string, ref: Backfill.SourceRef, waitMillis?: number) =>
+        bfStart: (
+          key: string,
+          target: string,
+          ref: Backfill.SourceRef,
+          waitMillis?: number,
+          begun?: boolean,
+        ) =>
           reportDefects(
             Effect.gen(function* () {
               yield* state.storage.put(ID_KEY, key);
-              return yield* consumerFor(key).start(target, ref, waitMillis);
+              return yield* consumerFor(key).start(target, ref, waitMillis, begun);
             }),
           ),
         // The key lists itself in its merge job, before its first entry.
@@ -1095,6 +1136,7 @@ const viewObject = (
         // A live read of this key: accept its WebSocket, then push on every commit.
         fetch: accept((key, subscription) =>
           Effect.gen(function* () {
+            yield* catchUp(key);
             const snapshot = yield* read;
             const entries =
               subscription.mode === "events" ? yield* entriesAfter(subscription.cursor) : [];
@@ -1289,7 +1331,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
           return true;
         });
       const target = targetId({
-        kind: "projection",
+        kind: kit.kind ?? "projection",
         name: kit.name,
         ...(kit.generation > 0 ? { generation: kit.generation } : {}),
       });
@@ -1318,6 +1360,8 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
         (run ??= Backfill.makeRun(runtime.storage, runtime.jobs, net, {
           waitMillis: RELAY_ROOT_WAIT_MS,
           againMillis: 1_000,
+          // The run's root is of this generation's class, so it runs this code's hooks.
+          lifecycle: () => kit.lifecycle,
         }));
       const relay = Backfill.makeRelay(net);
       const consumerFor = (key: string): Backfill.Consumer =>
@@ -1332,6 +1376,18 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
               Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),
             ),
           after: runtime.provide(state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause)))),
+          // Handled what it accepted; if not, make sure a drain is on its way.
+          drained: runtime.provide(
+            readMeta.pipe(
+              Effect.map((meta) => meta.processed >= meta.accepted),
+              Effect.tap((drained) =>
+                drained
+                  ? Effect.void
+                  : state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause))),
+              ),
+              Effect.orDie,
+            ),
+          ),
         }));
       const keep = (key: string) => state.storage.put(ID_KEY, key);
       return {
@@ -1353,9 +1409,15 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
           reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).push(target, deliveries)))),
         bfConsumerReady: (key: string, target: string, waitMillis?: number) =>
           reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).ready(target, waitMillis)))),
-        bfStart: (key: string, target: string, ref: Backfill.SourceRef, waitMillis?: number) =>
+        bfStart: (
+          key: string,
+          target: string,
+          ref: Backfill.SourceRef,
+          waitMillis?: number,
+          begun?: boolean,
+        ) =>
           reportDefects(
-            keep(key).pipe(Effect.andThen(consumerFor(key).start(target, ref, waitMillis))),
+            keep(key).pipe(Effect.andThen(consumerFor(key).start(target, ref, waitMillis, begun))),
           ),
       };
     });
@@ -1651,9 +1713,9 @@ const durableObjectPlatform = (
                 Effect.flatMap(consumerOf(target, key), (stub) =>
                   callOnce(stub.bfConsumerReady(key, target, waitMillis)),
                 ),
-              start: (target, key, ref, waitMillis) =>
+              start: (target, key, ref, waitMillis, begun) =>
                 Effect.flatMap(consumerOf(target, key), (stub) =>
-                  callOnce(stub.bfStart(key, target, ref, waitMillis)),
+                  callOnce(stub.bfStart(key, target, ref, waitMillis, begun)),
                 ),
             },
             // A source instance's scanner is an object of the consumer's own class: it has its routing.
@@ -1896,10 +1958,14 @@ const durableObjectPlatform = (
                   );
                   const read = (key: string) =>
                     announce.pipe(
-                      Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
+                      Effect.andThen(
+                        unwrapDefects<ViewSnapshot>(namespace.getByName(key).read(key)),
+                      ),
                     );
                   const after = (key: string, cursor: number) =>
-                    unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
+                    unwrapDefects<ReadonlyArray<ViewEntry>>(
+                      namespace.getByName(key).after(cursor, key),
+                    );
                   return {
                     receive: (key, deliveries) =>
                       unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
@@ -1933,14 +1999,11 @@ const durableObjectPlatform = (
                   };
                 }),
               ),
-            projection: (projection, kit) =>
+            // A projection, or a policy that replays (see `PolicyKit.replay`): keys, and a run class.
+            projection: (_projection, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const cls = consumerClass(
-                    "projection",
-                    projection.projectionName,
-                    kit.generation,
-                  );
+                  const cls = consumerClass(kit.kind ?? "projection", kit.name, kit.generation);
                   const namespace = yield* object(cls, projectionObject(kit, net, consumerPlans));
                   consumers.set(named(cls), namespace);
                   consumers.set(
@@ -2038,15 +2101,20 @@ const durableObjectPlatform = (
                 ),
               ),
             policy: (policy, kit) =>
-              inInit(
-                Effect.gen(function* () {
-                  const namespace = yield* object(`${policy.policyName}Policy`, policyObject(kit));
-                  return {
-                    receive: (delivery) =>
-                      unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
-                  };
-                }),
-              ),
+              kit.replay
+                ? host.projection(policy as unknown as Projection.Any, kit.replay)
+                : inInit(
+                    Effect.gen(function* () {
+                      const namespace = yield* object(
+                        `${policy.policyName}Policy`,
+                        policyObject(kit),
+                      );
+                      return {
+                        receive: (delivery: Delivery) =>
+                          unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
+                      };
+                    }),
+                  ),
           };
           return host;
         });
