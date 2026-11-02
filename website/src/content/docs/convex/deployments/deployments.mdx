@@ -47,6 +47,8 @@ const eu = yield* Convex.Deployment("Eu", {
 
 Changing `region` replaces the deployment and starts it with no data. With `deletionProtection` on, the plan fails before anything is deleted.
 
+A change of `type` that would turn protection off fails the plan the same way. Set `deletionProtection: false` and deploy first.
+
 ## Move to another project
 
 Change `project`. The deployment keeps its data, name and URL:

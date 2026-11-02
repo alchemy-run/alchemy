@@ -1,5 +1,4 @@
 dist/
 .tanstack/
 .nitro/
-src/routeTree.gen.ts
 convex/_generated

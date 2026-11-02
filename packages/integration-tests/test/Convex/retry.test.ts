@@ -56,12 +56,16 @@ test.provider("every create runs through createOnce", () =>
     const src = path.join(import.meta.dirname, "../../../convex/src");
     const files = (yield* fs.readDirectory(src)).filter((file) => file.endsWith(".ts"));
     const raw: string[] = [];
+    let total = 0;
     for (const file of files) {
       const source = yield* fs.readFileString(path.join(src, file));
-      const calls = source.match(/\b(convex|deployment)\s*\.create\w+\(/g) ?? [];
-      const wrapped = source.match(/createOnce\(\s*(convex|deployment)\s*\.create\w+\(/g) ?? [];
+      const calls = source.match(/\b(management|deployment)\s*\.create\w+\(/g) ?? [];
+      const wrapped = source.match(/createOnce\(\s*(management|deployment)\s*\.create\w+\(/g) ?? [];
+      total += calls.length;
       if (calls.length !== wrapped.length) raw.push(`${file}: ${calls.length - wrapped.length}`);
     }
     expect(raw).toEqual([]);
+    // Project, Deployment, DeployKey, PreviewDeployKey, CustomDomain, LogStream, UsageLimit.
+    expect(total).toBe(7);
   }),
 );

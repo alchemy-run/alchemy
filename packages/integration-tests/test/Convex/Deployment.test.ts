@@ -165,6 +165,26 @@ test.provider(
 );
 
 test.provider(
+  "changing the type can't drop protection",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* testName("deployment-type");
+      const { deployment } = yield* stack.deploy(app(name, { type: "prod" }));
+
+      const refused = yield* stack.deploy(app(name, { type: "dev" })).pipe(Effect.result);
+      expect(Result.isFailure(refused)).toBe(true);
+      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(DeploymentProtected);
+      const live = yield* management.getDeployment({ deploymentName: deployment.deploymentName });
+      expect(live.deploymentType).toBe("prod");
+
+      yield* stack.deploy(app(name, { type: "prod", deletionProtection: false }));
+      yield* stack.destroy();
+    }),
+  options,
+);
+
+test.provider(
   "a vanished prod is an error, not a new empty database",
   (stack) =>
     Effect.gen(function* () {

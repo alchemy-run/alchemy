@@ -60,6 +60,7 @@ const examples = [
   // "./examples/aws-ecs",
   "./examples/aws-lambda",
   // Cloudfront is too slow
+  // "./examples/aws-convex-self-hosted", // Backend.platform.test.ts drives it
   // "./examples/aws-website-astro",
   // "./examples/aws-website-foldkit",
   // "./examples/aws-website-nextjs",

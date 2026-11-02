@@ -347,6 +347,9 @@
       "path": "./examples/cloudflare-convex-tanstack-start/tsconfig.json"
     },
     {
+      "path": "./examples/aws-convex-self-hosted/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"
     },
     {

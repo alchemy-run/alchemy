@@ -341,6 +341,18 @@ export const DeploymentProvider = () =>
             return { action: "replace", deleteFirst: true } as const;
           }
           if (!isResolved(news)) return undefined;
+          // `type` sets the default, so a changed type would turn protection
+          // off without anyone asking for that.
+          if (
+            output?.deletionProtection &&
+            news.deletionProtection === undefined &&
+            !protectionOf(news)
+          ) {
+            return yield* new DeploymentProtected({
+              deploymentName: output.deploymentName,
+              message: `Changing deployment ${output.deploymentName} to type ${news.type} would turn off its deletionProtection. Set deletionProtection to false and deploy first.`,
+            });
+          }
           // The engine only reads when it has no state, so this is where an
           // expired preview gets noticed. Prod is left alone: recreating it
           // would quietly swap real data for an empty database.
