@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 Cloudflare runs one network in more than 300 cities, and it runs your code on every machine in it. A request reaches the nearest city, and your **Worker** answers it there. Around Workers sit storage, databases, queues and stateful objects, which a Worker reaches through **bindings**.
 
-This page introduces the concepts you meet on Cloudflare, once each, and how Alchemy models them. The examples come from the app the [tutorial](/cloudflare/tutorial/part-1) builds: a Worker that stores uploads in R2, counts visits in a Durable Object, and queues jobs for a consumer.
+This page introduces the concepts you meet on Cloudflare, once each, and how Alchemy models them. The examples follow one small app: a Worker that stores uploads in R2, counts visits in a Durable Object, and queues jobs for a consumer.
 
 Here is the whole picture, which the rest of this page explains piece by piece. A request for your domain reaches the nearest city. The Worker there answers it, using its bindings to reach a Bucket, a Durable Object and a Queue.
 
