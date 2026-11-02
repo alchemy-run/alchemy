@@ -1638,13 +1638,20 @@ export const LiveWorkerProvider = () =>
         const desired = params.domain?.redirects ?? [];
         const targetName = params.domain?.name;
         // Zones to touch: every zone hosting a desired redirect, plus every
-        // zone that hosted one before (so removals converge). Hostnames
-        // whose zone we can't resolve (e.g. the domain was already
-        // detached) are skipped — their rules become unreachable dead
-        // config at worst, never a failed destroy.
+        // zone that hosted one before (so removals converge). A hostname
+        // missing from the attached-domain map — the domain list lags a
+        // fresh attach, or the domain is already detached — is looked up by
+        // name, so its rule is still removed. Hostnames whose zone can't be
+        // resolved at all are skipped: dead config at worst, never a failed
+        // destroy.
         const zoneIds = new Set<string>();
+        const zoneCache = new Map<string, string>();
         for (const hostname of [...desired, ...params.previousRedirects]) {
-          const zoneId = params.zoneIdByHostname.get(hostname);
+          const zoneId =
+            params.zoneIdByHostname.get(hostname) ??
+            (yield* inferZoneIdForHostname(hostname, zoneCache, params.domain?.zone).pipe(
+              Effect.orElseSucceed(() => undefined),
+            ));
           if (zoneId) zoneIds.add(zoneId);
         }
         if (zoneIds.size === 0) return;
