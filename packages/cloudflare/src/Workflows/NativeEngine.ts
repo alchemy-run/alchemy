@@ -16,7 +16,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import { Workflow as EffectWorkflow, WorkflowEngine } from "effect/workflow";
+import { Activity, Workflow as EffectWorkflow, WorkflowEngine } from "effect/workflow";
 import type { Worker } from "../Workers/Worker.ts";
 import { Workflow, type WorkflowHandle } from "./Workflow.ts";
 import { WorkflowStep } from "./WorkflowRuntime.ts";
@@ -368,6 +368,8 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
                     Layer.succeedContext(
                       run.context.pipe(
                         Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
+                        // The step runs on its own fiber: carry the attempt `Activity.retry` set.
+                        Context.add(Activity.CurrentAttempt, attempt),
                         Context.add(
                           CurrentActivity,
                           makeCurrentActivity(

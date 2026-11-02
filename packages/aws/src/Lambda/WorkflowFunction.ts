@@ -26,7 +26,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { Workflow, WorkflowEngine } from "effect/workflow";
+import { Activity, Workflow, WorkflowEngine } from "effect/workflow";
 import * as AWSBindings from "../AWSBindings.ts";
 import { DurableStep } from "./Durable.ts";
 import {
@@ -347,6 +347,7 @@ const makeWorkflowRunner = <ROut, E, RIn>(
                 context: runContext,
                 clocks: new Map(),
                 instance,
+                waited: new Map(),
               }),
             ),
           ),
@@ -387,8 +388,48 @@ class CurrentRun extends Context.Service<
     readonly context: Context.Context<never>;
     readonly clocks: Map<string, Duration.Duration>;
     readonly instance: WorkflowEngine.WorkflowInstance["Service"];
+    /** Waits run outside the activity that reached them, by deferred name. */
+    readonly waited: Map<string, string>;
+    /** Inside an activity's step, which can't wait: the wait it reached. */
+    readonly step?: { pending?: Pending };
   }
 >()("alchemy/AWS/Lambda/DurableWorkflows/CurrentRun") {}
+
+/** A wait an activity reached inside its step, recorded so a replay repeats it. */
+interface Pending {
+  readonly name: string;
+  readonly clockMillis?: number;
+}
+
+/** An interrupt fails the callback a run waits on: the run is interrupted there. */
+const interruptible = <A>(run: CurrentRun["Service"], wait: Effect.Effect<A>) =>
+  wait.pipe(
+    Effect.catchDefect((defect) =>
+      isInterrupt(defect)
+        ? Effect.sync(() => {
+            run.instance.interrupted = true;
+            run.instance.suspended = false;
+          }).pipe(Effect.andThen(Effect.interrupt))
+        : Effect.die(defect),
+    ),
+  );
+
+/** Wait for a deferred: a clock's sleep is a durable wait, a signal a callback. Its exit, encoded. */
+const waitFor = (run: CurrentRun["Service"], pending: Pending) =>
+  Effect.gen(function* () {
+    if (pending.clockMillis !== undefined) {
+      yield* run.durable.wait(
+        pending.name,
+        Duration.max(Duration.millis(pending.clockMillis), Duration.seconds(1)),
+      );
+      return yield* encodeExit(Exit.void);
+    }
+    const text = yield* interruptible(
+      run,
+      run.durable.waitForCallback<string>({ name: pending.name, submitter: () => Effect.void }),
+    );
+    return typeof text === "string" ? text : JSON.stringify(text);
+  });
 
 const currentRun = (operation: string) =>
   Effect.flatMap(Effect.serviceOption(CurrentRun), (run) =>
@@ -399,6 +440,15 @@ const currentRun = (operation: string) =>
 
 /** A callback failed with this type interrupts the run waiting on it. */
 const INTERRUPT = "alchemy/WorkflowInterrupted";
+
+/**
+ * What an activity's step records when the activity suspends: on a failure,
+ * or on a wait it reached inside its step, followed by that wait as JSON.
+ */
+const SUSPENDED = "alchemy-suspended:";
+
+/** The callback a run suspended on a failure waits on, which `resume` completes. */
+const isSuspension = (name: string) => name.includes("/suspended-");
 
 /** The SDK's callback error arrives wrapped, with the type in its cause chain. */
 const isInterrupt = (defect: unknown) => {
@@ -716,8 +766,20 @@ const makeEngine = (options: {
         if (arn) yield* calls.stop(arn);
       }),
 
-    // Every run continues on its own; there's nothing to resume.
-    resume: () => Effect.void,
+    // Only a run suspended on a failure waits to be resumed: complete the
+    // callback it waits on.
+    resume: (workflow, executionId) =>
+      Effect.gen(function* () {
+        const calls = yield* route(workflow._tag);
+        const arn = yield* calls.find(executionNameOf(workflow._tag, executionId));
+        if (!arn) return;
+        const suspended = pendingCallbacks(yield* calls.history(arn)).filter((callback) =>
+          isSuspension(callback.name),
+        );
+        yield* Effect.forEach(suspended, (callback) => calls.succeed(callback.callbackId, "{}"), {
+          discard: true,
+        });
+      }),
 
     activityExecute: (activity, attempt) =>
       Effect.gen(function* () {
@@ -728,60 +790,90 @@ const makeEngine = (options: {
           instance.executionId,
         );
         activityInstance.interrupted = instance.interrupted;
-        const text = yield* run.durable.step({
-          name: `${activity.name}/${attempt}`,
-          effect: activity.executeEncoded.pipe(
-            Workflow.intoResult,
-            Effect.flatMap((result) =>
-              result._tag === "Complete"
-                ? encodeExit(result.exit)
-                : Effect.die(new Error(`Activity ${activity.name} suspended inside a step`)),
-            ),
-            // The run's services, with the step's own instance.
-            Effect.provide(
-              Layer.succeedContext(
-                run.context.pipe(
-                  Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
-                  Context.add(
-                    CurrentActivity,
-                    makeCurrentActivity(
-                      instance.workflow._tag,
-                      instance.executionId,
-                      activity.name,
+        // A step can't hold a durable operation. An activity that reaches a
+        // wait inside its step suspends, and records the wait: it runs here,
+        // and the activity again under a new step name, which finds it done.
+        // An activity that suspends on a failure waits for a resume, or an
+        // interrupt, the same way.
+        for (let generation = 0; ; generation++) {
+          const step: { pending?: Pending } = {};
+          const text = yield* run.durable.step({
+            name:
+              generation === 0
+                ? `${activity.name}/${attempt}`
+                : `${activity.name}/${attempt}/resumed-${generation}`,
+            effect: activity.executeEncoded.pipe(
+              Workflow.intoResult,
+              Effect.flatMap((result) =>
+                result._tag === "Complete"
+                  ? encodeExit(result.exit)
+                  : Effect.succeed(`${SUSPENDED}${JSON.stringify(step.pending ?? null)}`),
+              ),
+              // The run's services, with the step's own instance.
+              Effect.provide(
+                Layer.succeedContext(
+                  run.context.pipe(
+                    Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
+                    // The step runs on its own fiber: carry the attempt `Activity.retry` set.
+                    Context.add(Activity.CurrentAttempt, attempt),
+                    Context.add(CurrentRun, { ...run, step }),
+                    Context.add(
+                      CurrentActivity,
+                      makeCurrentActivity(
+                        instance.workflow._tag,
+                        instance.executionId,
+                        activity.name,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ) as Effect.Effect<string>,
-        });
-        return new Workflow.Complete({ exit: yield* decodeExit(text) });
+            ) as Effect.Effect<string>,
+          });
+          if (!text.startsWith(SUSPENDED)) {
+            return new Workflow.Complete({ exit: yield* decodeExit(text) });
+          }
+          const pending = JSON.parse(text.slice(SUSPENDED.length)) as Pending | null;
+          if (pending) {
+            run.waited.set(pending.name, yield* waitFor(run, pending));
+            continue;
+          }
+          yield* interruptible(
+            run,
+            run.durable.waitForCallback<string>({
+              name: `${activity.name}/${attempt}/suspended-${generation}`,
+              submitter: () => Effect.void,
+            }),
+          );
+        }
       }),
 
     // A clock's sleep is a durable wait; a signal is a callback to wait for.
     deferredResult: (deferred) =>
       Effect.gen(function* () {
         const run = yield* currentRun("DurableDeferred reads");
-        const duration = run.clocks.get(deferred.name);
-        if (duration !== undefined) {
-          yield* run.durable.wait(deferred.name, Duration.max(duration, Duration.seconds(1)));
-          return Option.some(Exit.void);
-        }
-        const text = yield* run.durable
-          .waitForCallback<string>({ name: deferred.name, submitter: () => Effect.void })
-          .pipe(
-            Effect.catchDefect((defect) =>
-              isInterrupt(defect)
-                ? Effect.sync(() => {
-                    run.instance.interrupted = true;
-                    run.instance.suspended = false;
-                  }).pipe(Effect.andThen(Effect.interrupt))
-                : Effect.die(defect),
+        // A race asks for its recorded winner before it runs. Lambda replays
+        // operations in order, so a winner can't be looked up first.
+        if (deferred.name.startsWith("raceAll/")) {
+          return yield* Effect.die(
+            new Error(
+              "Activity.raceAll and DurableDeferred.raceAll aren't supported on Lambda durable functions: a step's result can't be looked up before the step runs.",
             ),
           );
-        return Option.some(
-          yield* decodeExit(typeof text === "string" ? text : JSON.stringify(text)),
-        );
+        }
+        const waited = run.waited.get(deferred.name);
+        if (waited !== undefined) return Option.some(yield* decodeExit(waited));
+        const duration = run.clocks.get(deferred.name);
+        const pending: Pending = {
+          name: deferred.name,
+          ...(duration === undefined ? {} : { clockMillis: Duration.toMillis(duration) }),
+        };
+        // Inside a step: the activity suspends, and the wait runs after it.
+        if (run.step) {
+          run.step.pending = pending;
+          return Option.none();
+        }
+        return Option.some(yield* decodeExit(yield* waitFor(run, pending)));
       }),
 
     deferredDone: (opts) =>

@@ -81,6 +81,7 @@ describe(
       // Lambda retries a durable step with its own policy.
       recoveryWithinMillis: undefined,
       timeout: 180_000,
+      unsupported: { raceAll: "aren't supported on Lambda durable functions" },
     });
 
     /** Start a Greet run through the caller, and wait for its result. */
