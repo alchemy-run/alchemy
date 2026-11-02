@@ -649,8 +649,11 @@ export const DockerLive = Layer.effect(
             ),
           );
         }),
+      // A user image may exist only locally (built on the machine or
+      // `docker load`ed), where `docker pull` fails, so pull only when it is
+      // missing, as `docker run` does by default.
       pull: (tag, image) =>
-        pull({ ...image, platform: "linux/amd64" }).pipe(
+        pullIfMissing(image.imageUri, "linux/amd64").pipe(
           Effect.andThen(
             run(["tag", image.imageUri, tag]).pipe(
               Effect.mapError((cause) =>
