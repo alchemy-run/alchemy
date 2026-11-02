@@ -518,6 +518,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "turso/index",
+        "turso/what-is-turso",
         "turso/setup",
         "turso/tutorial/part-1",
         "turso/tutorial/part-2",

@@ -1338,6 +1338,7 @@ export default defineConfig({
           label: "Turso",
           items: [
             { label: "Overview", link: "/turso" },
+            { label: "What is Turso?", link: "/turso/what-is-turso" },
             { label: "Setup", link: "/turso/setup" },
             {
               label: "Tutorial",

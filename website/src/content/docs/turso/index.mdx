@@ -3,9 +3,23 @@ title: Turso
 description: Create Turso SQLite databases and query them from your Workers.
 ---
 
+import DAG from "../../../components/DAG.astro";
+
 Turso hosts SQLite databases for you. Create them in the same Stack as your Workers, and query them with Effect SQL or Drizzle.
 
-New here? [Set up credentials](/turso/setup) first, then [build the tutorial](/turso/tutorial/part-1).
+<DAG
+  nodes={[
+    { id: "group", label: "Group", type: "aws-us-east-1", col: 0, row: 0 },
+    { id: "db", label: "Db", type: "database", col: 1, row: 0 },
+    { id: "tenants", label: "tenant-*", type: "a database each", col: 1, row: 1 },
+    { id: "worker", label: "Worker", type: "Connect", col: 2, row: 0 },
+  ]}
+  edges={[
+    { from: "group", to: "db" },
+    { from: "group", to: "tenants" },
+    { from: "db", to: "worker" },
+  ]}
+/>
 
 ## Create a database
 
@@ -50,9 +64,10 @@ const sql = yield* SQL.LibSQL(tenants.connect(acme.name));
 
 The [tutorial](/turso/tutorial/part-1) builds this step by step. The [Database per tenant](/turso/database-per-tenant) guide has the details.
 
-## Where next
+## Where to start
 
-- [Groups](/turso/groups) and [Databases](/turso/databases)
-- [Tokens](/turso/tokens) for apps outside your Stack
-- [Preview databases](/turso/preview-databases), one copy per pull request
-- [Team & organization](/turso/organization): invites, members, and settings
+**New to Turso?** [What is Turso?](/turso/what-is-turso) walks through organizations, groups, databases, tokens, connections and databases per tenant, once each, and shows how Alchemy models every one.
+
+**Want to build one?** The [tutorial](/turso/tutorial/part-1) builds a database per tenant, step by step. Start with [Setup](/turso/setup) to connect your organization.
+
+**Want the whole picture?** Start with the databases: [Groups](/turso/groups), [Create & configure](/turso/databases), [Migrations](/turso/migrations), [Connections](/turso/connections), [Database per tenant](/turso/database-per-tenant) and [Preview databases](/turso/preview-databases). Then who may reach them: [Tokens](/turso/tokens) and [Team & organization](/turso/organization).
