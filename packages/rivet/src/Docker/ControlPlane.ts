@@ -9,7 +9,7 @@ import { Namespace } from "../Namespace.ts";
 import type { Providers as RivetProviders } from "../Providers.ts";
 
 /** The engine release `RivetDocker.ControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0-preview.4";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
 export interface ControlPlaneProps {
   /**
@@ -19,7 +19,7 @@ export interface ControlPlaneProps {
   port?: number;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0-preview.4"
+   * @default "rivetdev/engine:3.0.0"
    */
   image?: string;
   /**

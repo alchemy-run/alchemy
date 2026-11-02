@@ -15,7 +15,7 @@ import { Namespace } from "../Namespace.ts";
 export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
 /** The engine release `RivetHetzner.ControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0-preview.4";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
 /** Hetzner's Ubuntu image with Docker preinstalled. */
 const DOCKER_IMAGE = "docker-ce";
@@ -48,7 +48,7 @@ export interface ControlPlaneProps {
   diskSize?: number;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0-preview.4"
+   * @default "rivetdev/engine:3.0.0"
    */
   image?: string;
   /**

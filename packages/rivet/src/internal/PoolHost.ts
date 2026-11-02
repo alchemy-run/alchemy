@@ -32,7 +32,7 @@ import type { Providers } from "../Providers.ts";
 import { PoolHost } from "./PoolHostService.ts";
 
 /** The RivetKit release node images install. */
-export const RIVETKIT_VERSION = "3.0.0-preview.4";
+export const RIVETKIT_VERSION = "3.0.0";
 
 /** A node image environment: bun with RivetKit installed. */
 export const NODE_DOCKERFILE = `FROM oven/bun:1

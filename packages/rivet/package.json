@@ -117,7 +117,7 @@
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/rivet": "workspace:*",
     "@effect/platform-node": "catalog:",
-    "rivetkit": "3.0.0-preview.4"
+    "rivetkit": "3.0.0"
   },
   "devDependencies": {
     "@alchemy.run/aws": "workspace:*",

@@ -20,7 +20,7 @@ import { Namespace } from "../Namespace.ts";
 export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
 /** The engine release `RivetKubernetes.ControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0-preview.4";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
 const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
@@ -88,7 +88,7 @@ export interface ControlPlaneProps {
   expose?: ControlPlaneExposure;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0-preview.4"
+   * @default "rivetdev/engine:3.0.0"
    */
   image?: string;
   /**
