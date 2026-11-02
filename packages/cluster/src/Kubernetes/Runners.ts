@@ -62,18 +62,16 @@ export const Runners = (id: string, options: RunnersOptions = {}) =>
         url: `http://${name}.${network.namespace}.svc.cluster.local:${GATEWAY_PORT}`,
       }),
     nodes: ({ network, name, program, environment }) =>
-      Effect.gen(function* () {
-        yield* Kubernetes.Deployment(`${id}Runners`, {
-          cluster: network.cluster as Kubernetes.ClusterLike,
-          name,
-          namespace: network.namespace,
-          context: program.pipe(Output.map((p) => p.dir)) as unknown as string,
-          replicas: options.replicas ?? 2,
-          port: GATEWAY_PORT,
-          serviceType: options.serviceType ?? "ClusterIP",
-          ...(options.resources === undefined ? {} : { resources: options.resources }),
-          ...(options.architecture === undefined ? {} : { architecture: options.architecture }),
-          env: environment as unknown as Record<string, string>,
-        });
-      }),
+      Kubernetes.Deployment(`${id}Runners`, {
+        cluster: network.cluster as Kubernetes.ClusterLike,
+        name,
+        namespace: network.namespace,
+        context: program.pipe(Output.map((p) => p.dir)) as unknown as string,
+        replicas: options.replicas ?? 2,
+        port: GATEWAY_PORT,
+        serviceType: options.serviceType ?? "ClusterIP",
+        ...(options.resources === undefined ? {} : { resources: options.resources }),
+        ...(options.architecture === undefined ? {} : { architecture: options.architecture }),
+        env: environment as unknown as Record<string, string>,
+      }).pipe(Effect.asVoid),
   });

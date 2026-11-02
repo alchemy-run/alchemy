@@ -50,26 +50,24 @@ export const Runners = (id: string, options: RunnersOptions = {}) =>
     // The Service's App is named after the runners.
     gateway: (name) => Effect.succeed({ url: `https://${name}.fly.dev` }),
     nodes: ({ network, name, program, environment }) =>
-      Effect.gen(function* () {
-        yield* Fly.Service(`${id}Runners`, {
-          name,
-          network: network.network as string,
-          main: program.pipe(Output.map((p) => `${p.dir}/runner.mjs`)) as unknown as string,
-          // An external program runs beside the runner, from its directory.
-          extraFiles: program.pipe(
-            Output.map((p) =>
-              p.external ? [{ source: `${p.dir}/program.mjs`, dest: "program.mjs" }] : [],
-            ),
-          ) as unknown as { source: string; dest: string }[],
-          region: options.region ?? "iad",
-          count: options.replicas ?? 2,
-          guest: options.guest ?? { cpus: 1, memoryMb: 1024 },
-          port: GATEWAY_PORT,
-          public: true,
-          env: environment.pipe(
-            // Runners listen on the private network, which is IPv6.
-            Output.map((env) => ({ ...env, CLUSTER_LISTEN_HOST: "::" })),
-          ) as unknown as Record<string, string>,
-        });
-      }),
+      Fly.Service(`${id}Runners`, {
+        name,
+        network: network.network as string,
+        main: program.pipe(Output.map((p) => `${p.dir}/runner.mjs`)) as unknown as string,
+        // An external program runs beside the runner, from its directory.
+        extraFiles: program.pipe(
+          Output.map((p) =>
+            p.external ? [{ source: `${p.dir}/program.mjs`, dest: "program.mjs" }] : [],
+          ),
+        ) as unknown as { source: string; dest: string }[],
+        region: options.region ?? "iad",
+        count: options.replicas ?? 2,
+        guest: options.guest ?? { cpus: 1, memoryMb: 1024 },
+        port: GATEWAY_PORT,
+        public: true,
+        env: environment.pipe(
+          // Runners listen on the private network, which is IPv6.
+          Output.map((env) => ({ ...env, CLUSTER_LISTEN_HOST: "::" })),
+        ) as unknown as Record<string, string>,
+      }).pipe(Effect.asVoid),
   });
