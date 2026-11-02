@@ -1,0 +1,45 @@
+---
+title: Usage limits
+description: Get warned, or pause a deployment, when it uses too much.
+---
+
+## Warn at a limit
+
+```typescript
+yield* Convex.UsageLimit("Calls", {
+  deployment,
+  metric: "functionCalls",
+  window: "month",
+  limitType: "warning",
+  limit: 1_000_000,
+});
+```
+
+`window` is `day` or `month`. A deployment has one limit per metric, window and type.
+
+## Stop at a limit
+
+```typescript
+yield* Convex.UsageLimit("Stop", {
+  deployment,
+  metric: "functionCalls",
+  window: "month",
+  limitType: "disable",
+  limit: 5_000_000,
+});
+```
+
+`disable` pauses the deployment when it reaches the limit.
+
+## Turn a limit off
+
+```typescript
+yield* Convex.UsageLimit("Calls", {
+  deployment,
+  metric: "functionCalls",
+  window: "month",
+  limitType: "warning",
+  limit: 1_000_000,
+  enabled: false,
+});
+```

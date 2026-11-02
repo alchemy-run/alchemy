@@ -1,0 +1,25 @@
+---
+title: Push functions
+description: Push your Convex functions on every deploy.
+---
+
+`Convex.Functions` pushes with your project's own `convex` CLI.
+
+## Push to a deployment
+
+```typescript
+yield* Convex.Functions("Functions", {
+  deployment,
+  rootDir: "./packages/backend",
+});
+```
+
+`rootDir` holds `convex/` and a `package.json` that lists `convex`. Alchemy creates a deploy key limited to pushing and environment variables.
+
+## See when it pushes
+
+A push runs when a file not ignored by git changes, or when a variable does. An unchanged folder doesn't push.
+
+## Handle a failed push
+
+A failed push fails the deploy and shows Convex's error. The key stays out of the output, because it reaches the CLI through the environment.

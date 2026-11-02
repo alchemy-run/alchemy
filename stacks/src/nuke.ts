@@ -1,5 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Convex from "@alchemy.run/convex";
 import * as Fly from "@alchemy.run/fly";
 import * as GCP from "@alchemy.run/gcp";
 import * as Hetzner from "@alchemy.run/hetzner";
@@ -19,6 +20,7 @@ export default Alchemy.Stack(
     providers: Layer.mergeAll(
       AWS.providers(),
       Cloudflare.providers(),
+      Convex.providers(),
       Fly.providers(),
       GCP.providers(),
       Hetzner.providers(),

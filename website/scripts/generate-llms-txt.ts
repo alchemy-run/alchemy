@@ -493,6 +493,36 @@ const SECTIONS: Section[] = [
     pages: { directory: "neon/frontend" },
   },
   {
+    heading: "Convex",
+    intro:
+      "Convex projects, deployments, keys and functions as Stack resources, with bindings that call functions from any host.",
+    pages: {
+      slugs: [
+        "convex/index",
+        "convex/setup",
+        "convex/tutorial/part-1",
+        "convex/tutorial/part-2",
+        "convex/tutorial/part-3",
+        "convex/tutorial/part-4",
+        "convex/tutorial/part-5",
+        "convex/deployments/projects",
+        "convex/deployments/deployments",
+        "convex/deployments/deploy-keys",
+        "convex/deployments/custom-domains",
+        "convex/deployments/canonical-urls",
+        "convex/deployments/usage-limits",
+        "convex/functions/functions",
+        "convex/functions/environment-variables",
+        "convex/functions/connect",
+        "convex/functions/calling-functions",
+        "convex/observability/log-streams",
+        "convex/self-hosted/backend",
+        "convex/self-hosted/platform",
+        "convex/self-hosted/two-accounts",
+      ],
+    },
+  },
+  {
     heading: "Turso",
     intro:
       "Turso SQLite databases as Stack resources: groups, databases, migrations, connections, a database per tenant, preview databases, and scoped tokens.",

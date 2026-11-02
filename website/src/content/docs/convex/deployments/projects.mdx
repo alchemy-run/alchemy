@@ -1,0 +1,38 @@
+---
+title: Projects
+description: Create a Convex project, name it, tag it, and decide what happens on destroy.
+---
+
+A project holds your deployments.
+
+## Create a project
+
+```typescript
+const project = yield* Convex.Project("App");
+```
+
+Alchemy generates a name from your stack, stage and resource. Set your own with `name`:
+
+```typescript
+const project = yield* Convex.Project("App", { name: "my-app", tags: ["web"] });
+```
+
+Alchemy adds its own tag beside yours. Changing `name` renames the project in place.
+
+## Remove a project on destroy
+
+A project stays when you run `alchemy destroy`, because deleting it deletes its deployments and data. Pipe it through `RemovalPolicy.destroy()` to remove it:
+
+```typescript
+const project = yield* Convex.Project("App").pipe(RemovalPolicy.destroy());
+```
+
+A project with a prod deployment refuses to delete until that deployment is gone.
+
+## Take over an existing project
+
+A project with the same name and no Alchemy tag fails with `OwnedBySomeoneElse`. Deploy with `--adopt` to take it over:
+
+```sh
+alchemy deploy --adopt
+```

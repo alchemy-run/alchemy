@@ -38,6 +38,7 @@ export GITHUB_ENTERPRISE_TOKEN="$GITHUB_ACCESS_TOKEN"
 
 export HCLOUD_TOKEN=alchemy-fake-local-hetzner-token
 export INFISICAL_TOKEN=alchemy-fake-local-infisical-token
+export CONVEX_ACCESS_TOKEN=alchemy-fake-local-convex-token
 export NEON_API_KEY=alchemy-fake-local-neon-key
 
 export PLANETSCALE_API_TOKEN_ID=alchemy-fake-local-planetscale-id

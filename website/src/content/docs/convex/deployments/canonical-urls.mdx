@@ -1,0 +1,16 @@
+---
+title: Canonical URLs
+description: Set the URL a Convex deployment reports as its own.
+---
+
+## Set a canonical URL
+
+```typescript
+yield* Convex.CanonicalUrl("Site", {
+  deployment,
+  requestDestination: "convexSite",
+  url: "https://site.example.com",
+});
+```
+
+Removing this resource restores the default.

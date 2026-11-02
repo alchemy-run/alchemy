@@ -1,0 +1,67 @@
+---
+title: Setup
+description: Give Alchemy a Convex team access token.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Sign up at [convex.dev](https://www.convex.dev), then create a team access token in your team's settings. A token belongs to the person who created it, so use a service account for anything shared.
+
+## Add the provider
+
+Install `@alchemy.run/convex`:
+
+<PackageManagers add="@alchemy.run/convex" />
+
+Then add `Convex.providers()` to your Stack:
+
+```typescript
+// alchemy.run.ts
+import * as Convex from "@alchemy.run/convex";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Convex.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    yield* Convex.Project("App");
+  }),
+);
+```
+
+## Store the token in a profile
+
+```sh
+alchemy profile edit --add Convex
+```
+
+Paste the token when asked. Leave the team ID blank: Alchemy reads it from the token.
+
+See [Profiles](/environments/profiles) to learn how profiles work.
+
+## Use environment variables in CI
+
+Set `CONVEX_ACCESS_TOKEN` and Alchemy uses it instead of your profile:
+
+```sh
+CONVEX_ACCESS_TOKEN=... alchemy deploy
+```
+
+`CONVEX_TEAM_ID` is optional.
+
+## Mix with another cloud
+
+Merge the providers:
+
+```typescript
+providers: Layer.mergeAll(Cloudflare.providers(), Convex.providers()),
+```
+
+## Local development
+
+Convex has no emulator in Alchemy, so `alchemy dev` creates and uses real Convex resources. Each stage gets its own.
+
+## Plans
+
+Custom domains, log streams and data sync need the Convex Professional plan. Audit logs need a plan that keeps them.

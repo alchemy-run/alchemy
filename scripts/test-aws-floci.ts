@@ -141,6 +141,9 @@ const liveOnlySuites = new Set([
   "Lambda/WebFunctionPermission.test.ts",
 ]);
 
+/** Suites outside `test/AWS` that also drive AWS through the emulator. */
+const extraSuites = ["test/Convex/aws/Backend.floci.test.ts"];
+
 /** alchemy-test flags whose next argument is their value. */
 const flagsWithValue = new Set([
   "-t",
@@ -283,7 +286,7 @@ const command = Command.make(
     const requestedRoots =
       paths.length > 0 ? paths.map((p) => path.resolve(testPackageRoot, p)) : allowedRoots;
 
-    const files: string[] = [];
+    const files: string[] = paths.length > 0 ? [] : [...extraSuites];
     for (const root of requestedRoots) {
       const info = yield* fs.stat(root).pipe(Effect.option);
       if (info._tag === "None" || info.value.type !== "Directory") {

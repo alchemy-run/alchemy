@@ -32,6 +32,8 @@ const examples = [
   "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",
   "./examples/cloudflare-worker-async",
+  "./examples/cloudflare-convex-worker",
+  "./examples/cloudflare-convex-tanstack-start",
   "./examples/cloudflare-website-tanstack-start",
   "./examples/cloudflare-tanstack-start-solid",
   "./examples/cloudflare-neon-drizzle",
@@ -58,6 +60,7 @@ const examples = [
   // "./examples/aws-ecs",
   "./examples/aws-lambda",
   // Cloudfront is too slow
+  // "./examples/aws-convex-self-hosted", // Backend.platform.test.ts drives it
   // "./examples/aws-website-astro",
   // "./examples/aws-website-foldkit",
   // "./examples/aws-website-nextjs",

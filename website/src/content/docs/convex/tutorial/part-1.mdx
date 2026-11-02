@@ -1,0 +1,100 @@
+---
+title: "Part 1: Your First Stack"
+description: Create a Convex project and a deployment, and push your first function.
+sidebar:
+  order: 1
+---
+
+Build a message board: Convex stores the messages, and a Cloudflare Worker reads and writes them.
+
+The finished code is in [`examples/cloudflare-convex-worker`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-convex-worker).
+
+## Prerequisites
+
+Finish [Convex setup](/convex/setup) and [Cloudflare setup](/cloudflare/setup). Convex's free plan is enough.
+
+## Install Convex
+
+```sh
+bun add convex
+```
+
+`Convex.Functions` pushes with your project's own `convex` CLI.
+
+## Define a table
+
+```typescript
+// convex/schema.ts
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  messages: defineTable({ body: v.string() }),
+});
+```
+
+## Write your functions
+
+```typescript
+// convex/messages.ts
+import { mutationGeneric, queryGeneric } from "convex/server";
+import { v } from "convex/values";
+
+export const list = queryGeneric({
+  args: {},
+  handler: (ctx) => ctx.db.query("messages").collect(),
+});
+
+export const add = mutationGeneric({
+  args: { body: v.string() },
+  handler: (ctx, { body }) => ctx.db.insert("messages", { body }),
+});
+```
+
+## Declare a project and a deployment
+
+```typescript
+// src/Backend.ts
+import * as Convex from "@alchemy.run/convex";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
+import * as Effect from "effect/Effect";
+
+export const Project = Convex.Project("Project").pipe(RemovalPolicy.destroy());
+
+export const Backend = Effect.gen(function* () {
+  const project = yield* Project;
+  return yield* Convex.Deployment("Backend", { project, type: "preview" });
+});
+```
+
+A project stays when you run `alchemy destroy` unless you pipe it through `RemovalPolicy.destroy()`.
+
+## Push your functions
+
+```typescript
+// alchemy.run.ts
+import * as Convex from "@alchemy.run/convex";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Backend } from "./src/Backend.ts";
+
+export default Alchemy.Stack(
+  "CloudflareConvexWorkerExample",
+  { providers: Convex.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const deployment = yield* Backend;
+    yield* Convex.Functions("Functions", { deployment, rootDir: "." });
+    return { url: deployment.url };
+  }),
+);
+```
+
+`rootDir` is the folder with `convex/` and a `package.json` that lists `convex`.
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+`url` is your deployment's address.

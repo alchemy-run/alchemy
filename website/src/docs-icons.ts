@@ -57,6 +57,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   PlanetScale: b("planetscale"),
   Neon: b("neon"),
   Turso: b("turso"),
+  Convex: b("convex"),
   Prisma: c("prisma"),
   // Brand-colored prism for marketing surfaces (see `prismaColor` above).
   PrismaColor: c("prismaColor"),
@@ -80,6 +81,8 @@ export const TAB_ICONS: Record<string, string | undefined> = {
 /** Sidebar group-heading icons, keyed by (normalized) group label. */
 const GROUP_ICONS: Record<string, string | undefined> = {
   Tutorial: l("graduation-cap"),
+  Deployments: l("server"),
+  Functions: l("square-function"),
   Deploy: l("rocket"),
   Develop: l("refresh-cw"),
   Auth: l("key-round"),
@@ -127,6 +130,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   GitHub: b("github"),
   Neon: b("neon"),
   Turso: b("turso"),
+  Convex: b("convex"),
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
   Prisma: c("prisma"),

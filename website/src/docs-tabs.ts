@@ -80,6 +80,7 @@ export const DOCS_TABS: DocsTab[] = [
   ]),
   hub("Neon", "neon", "Databases", "serverless Postgres · branches", ["/providers/neon"]),
   hub("Turso", "turso", "Databases", "libSQL · groups · tokens", ["/providers/turso"]),
+  hub("Convex", "convex", "Databases", "projects · deployments · functions", ["/providers/convex"]),
   hub("Prisma", "prisma", "Databases", "Prisma Postgres · client", ["/providers/prisma"]),
   hub("SQL", "sql", "Databases", "effect-sql · drizzle · migrations", [
     "/drizzle",

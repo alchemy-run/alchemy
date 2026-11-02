@@ -1,0 +1,79 @@
+---
+title: Convex
+description: Create Convex projects and deployments, push your functions, and call them from your Workers and Lambdas.
+---
+
+Convex is a reactive backend: your database and the functions that use it. Declare projects and deployments in your Stack, push your functions on every deploy, and call them from anywhere.
+
+New here? [Set up credentials](/convex/setup) first, then [build the tutorial](/convex/tutorial/part-1).
+
+## Deploy a backend
+
+```typescript
+// alchemy.run.ts
+import * as Convex from "@alchemy.run/convex";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Convex.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const project = yield* Convex.Project("App");
+    const deployment = yield* Convex.Deployment("Backend", { project, type: "preview" });
+    yield* Convex.Functions("Functions", { deployment, rootDir: "." });
+    return { url: deployment.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. Each stage gets its own preview deployment, and `url` is the address your clients connect to.
+
+## Call a function from a Worker
+
+`Convex.Query` runs a public query. It needs no credentials:
+
+```typescript
+const list = yield* Convex.Query(Backend);
+const messages = yield* list("messages:list");
+```
+
+See [Calling functions](/convex/functions/calling-functions).
+
+## Deployments
+
+- [Projects](/convex/deployments/projects)
+- [Deployments](/convex/deployments/deployments)
+- [Deploy keys](/convex/deployments/deploy-keys)
+- [Custom domains](/convex/deployments/custom-domains)
+- [Canonical URLs](/convex/deployments/canonical-urls)
+- [Usage limits](/convex/deployments/usage-limits)
+
+## Functions
+
+- [Push functions](/convex/functions/functions)
+- [Environment variables](/convex/functions/environment-variables)
+- [Connect](/convex/functions/connect)
+- [Calling functions](/convex/functions/calling-functions)
+
+## Observability
+
+- [Log streams](/convex/observability/log-streams)
+
+## Self-hosted
+
+- [Backend](/convex/self-hosted/backend)
+- [Platform](/convex/self-hosted/platform)
+- [Two AWS accounts](/convex/self-hosted/two-accounts)
+
+## Out of scope
+
+These Convex features have no resource:
+
+- Personal access tokens, which belong to a person.
+- Team access tokens, teams, members, invites, custom roles and the team audit log. Manage these in the Convex dashboard.
+- Local deployments. In `alchemy dev`, Convex resources use the real cloud.
+- Convex's integrations API, which duplicates log streams and answers 404 on live deployments.
+- Convex's AI gateway tokens, which only apply to local deployments.
+- Event sources and a workflow engine. Convex exposes neither to other runtimes. Its workflows are components of your app.
+- Effect runtimes for Convex functions. Convex bundles and runs them.

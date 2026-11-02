@@ -1652,7 +1652,8 @@ export const DBInstanceProvider = () =>
         return instance;
       });
 
-      // Storage optimization is online; provisioning retains its ten-minute budget.
+      // Storage optimization is online; provisioning has a fifteen-minute budget,
+      // because a new MySQL instance can spend over ten minutes on its backups.
       const waitForInstance = Effect.fn(function* (instanceId: string) {
         return yield* observeReadiness(instanceId).pipe(
           Effect.flatMap((instance) =>
@@ -1667,7 +1668,7 @@ export const DBInstanceProvider = () =>
           ),
           Effect.retry({
             while: (error) => error._tag === "DBInstancePending",
-            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(90)]),
           }),
         );
       });

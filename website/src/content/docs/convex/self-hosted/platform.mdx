@@ -1,0 +1,112 @@
+---
+title: Platform
+description: Share one network, load balancer, database server and buckets between stages.
+---
+
+Give each stage its own backend without paying for its own network. `Convex.Platform` owns the VPC, ECS cluster, load balancer with a wildcard certificate, database server and five buckets. Each `Convex.Backend` adds its own service, hosts, instance secret, admin key, database, user and bucket prefix.
+
+[`examples/aws-convex-self-hosted`](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-convex-self-hosted) is a working copy of this page.
+
+## Deploy the platform
+
+```typescript
+// stacks/platform.ts
+import * as AWS from "@alchemy.run/aws";
+import * as Convex from "@alchemy.run/convex/aws";
+import * as Alchemy from "alchemy";
+import { Stage } from "alchemy/Stage";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export class Platform extends Alchemy.Stack<Platform, { convex: Convex.PlatformHandle }>()(
+  "ConvexPlatform",
+) {}
+
+export default Platform.make(
+  { providers: Convex.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    const convex = yield* Convex.Platform("Convex", {
+      domain: yield* Config.String("CONVEX_DOMAIN"),
+      db: { engine: "postgres", instanceClass: "db.t4g.micro", storage: 20 },
+      deletionProtection: stage === "prod",
+    });
+    return { convex };
+  }),
+);
+```
+
+```sh
+CONVEX_DOMAIN=dev.example.com alchemy deploy stacks/platform.ts --stage dev
+```
+
+## Add a stage
+
+```typescript
+// alchemy.run.ts
+import * as AWS from "@alchemy.run/aws";
+import * as Convex from "@alchemy.run/convex/aws";
+import * as Alchemy from "alchemy";
+import { Stage } from "alchemy/Stage";
+import * as Effect from "effect/Effect";
+import { Platform } from "./stacks/platform.ts";
+
+export default Alchemy.Stack(
+  "ConvexApp",
+  { providers: Convex.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    const { convex } = yield* Platform.stage[stage === "prod" ? "prod" : "dev"]!;
+
+    const backend = yield* Convex.Backend("Backend", {
+      platform: convex,
+      image: "ghcr.io/convex/convex-backend:latest@sha256:<digest>",
+    });
+
+    yield* Convex.Functions("Functions", { backend, rootDir: "." });
+
+    return { url: backend.url };
+  }),
+);
+```
+
+```sh
+alchemy deploy --stage alice
+```
+
+## Find a stage's hosts
+
+| Stage | Convex API | HTTP actions |
+| --- | --- | --- |
+| `alice` | `alice-cloud.dev.example.com` | `alice-site.dev.example.com` |
+| `prod` | `cloud.example.com` | `site.example.com` |
+
+Hosts stay flat under the domain so one wildcard certificate covers them. That's why a stage name can't end in `-cloud` or `-site`.
+
+## Use another DNS host
+
+Pass the same adapter to the platform and to each stage. An adapter can't cross stacks, so a stage doesn't inherit it:
+
+```typescript
+const convex = yield* Convex.Platform("Convex", { domain, db, dns: Cloudflare.DNS.Adapter() });
+```
+
+```typescript
+const backend = yield* Convex.Backend("Backend", {
+  platform: convex,
+  image,
+  dns: Cloudflare.DNS.Adapter(),
+});
+```
+
+## Keep stages apart
+
+A stage connects to its own database as its own user. It reads and writes its own objects under `<instance>-<uuid>/` in the shared buckets, and the IAM pattern matches the UUID exactly, so stage `pr` can't reach `pr-42-<uuid>/`.
+
+Destroying a stage drops its database and user and deletes its prefix. Other stages keep running.
+
+## Remove a platform
+
+Destroy the stages first. A platform with `deletionProtection` on refuses to go until you set it to `false` and deploy.
+
+A platform runs a NAT gateway, a load balancer and a database all the time, whether or not a stage is deployed. Each stage adds one Fargate task.
