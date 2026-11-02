@@ -1,0 +1,335 @@
+---
+/**
+ * `<ModelUpgrade />` — how a deploy upgrades a Worker's deployed Domain
+ * layout. The Worker's tag says which Domain version laid it out; the deploy
+ * runs the upgrade steps from there to its own version, renames the Durable
+ * Object classes in the same upload (the instances, drawn as dots, stay put),
+ * and tags the Worker with the new version. A later step is shown as what a
+ * future release would add, and an older Alchemy is refused.
+ */
+
+const classes = [
+  { from: "AccountAggregate", to: "Bank.AccountAggregate", kind: "aggregate", n: 18 },
+  { from: "OpenAccountWorkflow", to: "Bank.OpenAccountWorkflow", kind: "saga", n: 7 },
+] as const;
+
+const steps = [
+  "The deploy reads the Domain version the Worker was laid out with.",
+  "Alchemy runs the upgrade steps from that version up to its own.",
+  "Classes are renamed in the same upload as the new code. Every instance stays.",
+  "The Worker is tagged with its new version.",
+  "A later release adds its own step. An older Alchemy is refused.",
+];
+---
+
+<figure class="mu not-content" id="mu" aria-label="A deploy upgrading a Worker's deployed Domain layout in place">
+  <div class="mu-top">
+    <span class="mu-step" id="mu-step">{steps[steps.length - 1]}</span>
+    <button type="button" id="mu-pause" aria-pressed="false">❚❚ Pause</button>
+  </div>
+
+  <div class="mu-stage">
+    <div class="mu-worker">
+      <div class="mu-head">
+        <span class="mu-title">Worker</span>
+        <span class="mu-tag">
+          <span class="mu-tag-old">no Domain version</span>
+          <span class="mu-tag-new">alchemy:domain:v0</span>
+        </span>
+      </div>
+      {
+        classes.map((c) => (
+          <div class={`mu-class mu-${c.kind}`}>
+            <span class="mu-name">
+              <span class="mu-name-old">{c.from}</span>
+              <span class="mu-name-new">{c.to}</span>
+            </span>
+            <span class="mu-dots">
+              {Array.from({ length: c.n }, () => (
+                <i />
+              ))}
+            </span>
+          </div>
+        ))
+      }
+    </div>
+
+    <ol class="mu-chain">
+      <li class="mu-v mu-v-legacy">
+        <b>before versions</b>
+        <span>classes named after the definition</span>
+      </li>
+      <li class="mu-v mu-v0">
+        <b>v0 · beta.85</b>
+        <span>rename every class after its model</span>
+      </li>
+      <li class="mu-v mu-v1">
+        <b>v1 · a later release</b>
+        <span>its own step, applied on your next deploy</span>
+      </li>
+      <li class="mu-refuse">older Alchemy → <code>DomainVersionTooNew</code>, nothing uploaded</li>
+    </ol>
+  </div>
+  <figcaption class="mu-cap">
+    The data never moves: Cloudflare renames the classes in place, so every aggregate and running saga
+    carries over.
+  </figcaption>
+</figure>
+
+<style is:global>
+  .mu {
+    margin: 2rem 0;
+    padding: 12px 14px 10px;
+    font: 14px/1.5 var(--alc-font-sans);
+    color: var(--alc-fg-1);
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 12px;
+  }
+  .mu-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-height: 3em; /* two lines, so a longer step doesn't move the figure */
+    margin-bottom: 8px;
+  }
+  .mu-step {
+    flex: 1;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .mu button {
+    all: unset;
+    flex: none;
+    cursor: pointer;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--alc-fg-1);
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline-3);
+    border-radius: 7px;
+  }
+  .mu button:focus-visible {
+    outline: 2px solid var(--alc-accent);
+  }
+  .mu-stage {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 640px) {
+    .mu-stage {
+      grid-template-columns: 1fr;
+    }
+  }
+  .mu-worker {
+    padding: 10px 12px;
+    border: 1px solid var(--alc-hairline-3);
+    border-radius: 10px;
+  }
+  .mu-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .mu-title {
+    font-weight: 700;
+  }
+  .mu-tag,
+  .mu-name {
+    display: inline-grid;
+    font: 600 12px var(--alc-font-mono);
+  }
+  .mu-tag > *,
+  .mu-name > * {
+    grid-area: 1 / 1;
+    transition: opacity 0.5s ease;
+  }
+  .mu-tag {
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--alc-hairline-3);
+    color: var(--alc-fg-3);
+    transition:
+      border-color 0.5s,
+      color 0.5s;
+  }
+  .mu-tag-new,
+  .mu-name-new {
+    opacity: 0;
+  }
+  .mu.s0 .mu-tag {
+    border-color: var(--alc-accent);
+  }
+  .mu.s3 .mu-tag {
+    color: var(--alc-accent-text);
+  }
+  .mu.s3 .mu-tag-old,
+  .mu.s2 .mu-name-old {
+    opacity: 0;
+  }
+  .mu.s3 .mu-tag-new,
+  .mu.s2 .mu-name-new {
+    opacity: 1;
+  }
+  .mu-class {
+    padding: 8px 0;
+    border-top: 1px solid var(--alc-hairline-2);
+  }
+  .mu-name {
+    color: var(--c);
+    font-size: 13px;
+  }
+  .mu.s2 .mu-name-new {
+    animation: muflash 0.9s ease;
+  }
+  @keyframes muflash {
+    0% {
+      text-shadow: 0 0 12px var(--c);
+    }
+  }
+  .mu-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .mu-dots i {
+    width: 9px;
+    height: 9px;
+    border-radius: 3px;
+    background: var(--c);
+    opacity: 0.85;
+  }
+  .mu-aggregate {
+    --c: #e3b341;
+  }
+  .mu-saga {
+    --c: #c6d84a;
+  }
+  .mu-chain {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .mu-v {
+    position: relative;
+    padding: 6px 10px;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 8px;
+    color: var(--alc-fg-3);
+    transition:
+      border-color 0.5s,
+      color 0.5s,
+      opacity 0.5s,
+      background 0.5s;
+  }
+  .mu-v b {
+    display: block;
+    font: 700 12px var(--alc-font-mono);
+  }
+  .mu-v span {
+    font-size: 12.5px;
+  }
+  .mu.s0 .mu-v-legacy,
+  .mu.s1 .mu-v0 {
+    color: var(--alc-fg-1);
+    border-color: var(--alc-accent);
+  }
+  .mu.s1 .mu-v0 {
+    background: color-mix(in srgb, var(--alc-accent) 14%, transparent);
+  }
+  .mu.s1 .mu-v-legacy {
+    color: var(--alc-fg-3);
+    border-color: var(--alc-hairline-2);
+  }
+  .mu-v1 {
+    opacity: 0;
+    border-style: dashed;
+  }
+  .mu.s4 .mu-v1 {
+    opacity: 1;
+  }
+  .mu-refuse {
+    font-size: 12.5px;
+    color: #e5735f;
+    opacity: 0;
+    transition: opacity 0.5s ease 0.6s;
+  }
+  .mu-refuse code {
+    font-size: 12px;
+  }
+  .mu.s4 .mu-refuse {
+    opacity: 1;
+  }
+  .mu.reset * {
+    transition: none !important;
+    animation: none !important;
+  }
+  .mu-cap {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--alc-fg-3);
+    text-align: center;
+  }
+</style>
+
+<script define:vars={{ steps }}>
+  const root = document.getElementById("mu");
+  if (root) {
+    const label = document.getElementById("mu-step");
+    const button = document.getElementById("mu-pause");
+    const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let paused = false;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const wait = async (ms) => {
+      await sleep(ms);
+      while (paused) await sleep(120);
+    };
+    const showAll = () => {
+      for (let i = 0; i < steps.length; i++) root.classList.add(`s${i}`);
+      label.textContent = steps[steps.length - 1];
+    };
+
+    const play = async () => {
+      if (reduced()) return showAll();
+      for (;;) {
+        root.classList.add("reset");
+        for (let i = 0; i < steps.length; i++) root.classList.remove(`s${i}`);
+        void root.getBoundingClientRect();
+        root.classList.remove("reset");
+        for (let i = 0; i < steps.length; i++) {
+          label.textContent = steps[i];
+          root.classList.add(`s${i}`);
+          await wait(2400);
+        }
+        await wait(3500);
+      }
+    };
+
+    button.onclick = () => {
+      paused = !paused;
+      button.textContent = paused ? "▶ Play" : "❚❚ Pause";
+      button.setAttribute("aria-pressed", String(paused));
+    };
+
+    showAll();
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          io.disconnect();
+          void play();
+        }
+      },
+      { threshold: 0.4 },
+    );
+    io.observe(root);
+  }
+</script>

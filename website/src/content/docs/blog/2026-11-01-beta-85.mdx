@@ -6,6 +6,7 @@ excerpt: Effect 4.1, Alchemy Domain deploys that backfill and rebuild views and 
 ---
 
 import BackfillFanout from "../../../components/blog/BackfillFanout.astro";
+import ModelUpgrade from "../../../components/blog/ModelUpgrade.astro";
 
 beta.85 is 249 pull requests from 39 contributors: 84 features and 95 bug
 fixes.
@@ -199,6 +200,8 @@ place in the same upload, so no data is copied or lost
 changes ship as new upgrade steps in Alchemy, and your deploy applies them.
 A Worker deployed by a newer Alchemy is never moved back: an older one
 refuses with `DomainVersionTooNew` before uploading anything.
+
+<ModelUpgrade />
 
 This is what DDD buys you here. Because Alchemy knows the shape of your
 model (its aggregates, views and sagas), it can own the infrastructure under
