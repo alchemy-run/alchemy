@@ -828,9 +828,8 @@ stack, as state store v8, and you choose its account, Worker name and domain
 
 ### Run more than one store
 
-Each store gets its own Worker, its own auth token and encryption key, and
-its own cached credentials, so teams or projects in one account no longer
-share a store:
+Name a store to run more than one per account. Without a name, you get the
+same default store as before:
 
 ```typescript
 state: Cloudflare.state({ name: "team-a" }), // Worker alchemy-state-store-team-a
