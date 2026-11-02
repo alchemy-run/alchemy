@@ -21,22 +21,27 @@ voice, length and structure to match.
 ```
 
 It prints the release commit (`chore(release): 2.0.0-beta.N`, so the post is
-for `beta.N+1`) and writes one JSON per PR, a `digest.txt` with each PR's
-title, author and the first 1800 characters of its body, and `authors.txt`
-with every non-maintainer author's display name.
+for `beta.N+1`) and writes one JSON per PR, a `digest.txt` with every PR's
+title, author and full body (oldest first), and `authors.txt` with every
+non-maintainer author's display name.
 
-## 2. Read every description
+## 2. Read every description in full
 
-Read all of `digest.txt`, in chunks, start to finish. Don't sample, and don't
-skim by title: a `chore` or `test` title can carry a user-facing fix, and a
-`feat` body often holds the best snippet for the post. For each PR that will
-be a headline or a breaking change, read the full body
-(`jq -r .body /tmp/release-blog-<next>/<n>.json`), since the digest truncates.
+Read all of `digest.txt`, in chunks, start to finish. It holds whole bodies,
+on purpose: a PR's later sections ("### Changes", a second snippet, a
+"Removed" list) are where secondary features and renames hide, and a post
+planned from excerpts folds them into a clause or drops them. Don't sample,
+and don't skim by title: a `chore` or `test` title can carry a user-facing
+fix, and a `feat` body often holds the best snippet for the post.
 
 Tag each PR as you go:
 
 - **breaking**: `!` in the title, or `Breaking`/`[!CAUTION]` in the body. Note
-  the migration diff the PR gives.
+  the migration diff the PR gives. Unmarked PRs break things too: look for
+  "renamed", "removed", "replaces", "is gone", "now requires", "`X` is now
+  `Y`" and "was `X`" in every body. Confirm each one shipped in the last
+  release (`git grep <old name> <release-sha> -- packages/`) before listing
+  it; a rename of something added in this same release isn't breaking.
 - **headline**: a dependency upgrade users must make (Effect, a framework
   major), a new provider or package, a new capability with a user-facing API,
   or a major bug fix (data loss, wrong resource deleted or taken over,
@@ -58,7 +63,14 @@ headline sections with the PRs each one cites, and the also-list groups.
   sidebar, so it must fit on one line.
 - **Order the headlines** by how much they change a user's day: required
   upgrades (Effect) first, then new providers and packages, then the biggest
-  new capabilities, then major fixes. Aim for about 10–18 headline sections.
+  new capabilities, then major fixes. There is no cap on the number of
+  sections; a large release gets 25–30. Its size is set by what shipped.
+- **A new user-facing API gets a snippet**, in its own section or in a
+  section about its area (a "New AWS resources and options" section collects
+  smaller ones). Never shrink one into a clause of an unrelated section: a
+  reader skimming headings must find it. A PR that adds several APIs (a store
+  that gains `accountId`, `workerName` and `domain` plus a new bootstrap
+  command) is usually its own section.
 - **Everything else** goes into `## Also in this release`, grouped by area
   (Cloudflare features, Cloudflare fixes, Local dev fixes, AWS features, AWS
   fixes, GCP, Domain, Auth, …), each group one bullet with its PR links.
@@ -97,11 +109,14 @@ backtick uses double-backtick delimiters.
 ## 5. Check it
 
 ```sh
-python3 -I .agents/skills/release-blog/scripts/check-post.py website/src/content/docs/blog/<post>.md
+python3 -I .agents/skills/release-blog/scripts/check-post.py website/src/content/docs/blog/<post>.md /tmp/release-blog-<next>
 ```
 
 It checks that every docs link and anchor resolves and that every diff block
 passes the website build's odd-indent check. Fix every problem it reports.
+It also lists every `feat`, `fix`, `perf` or `!` PR the post doesn't cite.
+Each one must be a deliberate skip (a fix-up of another PR in this release,
+test or CI only); cite the rest.
 
 Then hand the post to the user with the headline plan (sections and the PRs
 behind each), the breaking-change list, and anything you weren't sure about:

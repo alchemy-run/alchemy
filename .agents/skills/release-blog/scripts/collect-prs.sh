@@ -7,7 +7,7 @@
 #   range.txt     the release commit, its version, and the PR count
 #   nums.txt      PR numbers, newest first
 #   <n>.json      gh's number/title/author/body/labels for each PR
-#   digest.txt    every PR's title, author and first 1800 chars of its body
+#   digest.txt    every PR's title, author and full body, oldest first
 #   authors.txt   login|display name|PR numbers for every non-maintainer author
 set -euo pipefail
 
@@ -29,10 +29,10 @@ xargs -P 12 -I{} sh -c \
   < "$out/nums.txt"
 
 : > "$out/digest.txt"
-while read -r n; do
-  jq -r '"=== #\(.number) [\(.author.login)] \(.title)\n\(.body // "" | gsub("\r";"") | .[0:1800])\n"' \
+for n in $(sort -n "$out/nums.txt"); do
+  jq -r '"=== #\(.number) [\(.author.login)] \(.title)\n\(.body // "" | gsub("\r";""))\n"' \
     "$out/$n.json" >> "$out/digest.txt"
-done < "$out/nums.txt"
+done
 
 : > "$out/authors.txt"
 for login in $(jq -r '.author.login' "$out"/[0-9]*.json | sort -u | grep -v '^sam-goodwin$'); do
