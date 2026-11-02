@@ -649,11 +649,25 @@ export const DockerLive = Layer.effect(
             ),
           );
         }),
-      // A user image may exist only locally (built on the machine or
-      // `docker load`ed), where `docker pull` fails, so pull only when it is
-      // missing, as `docker run` does by default.
+      // Pull every time so a mutable tag picks up a newly pushed image and
+      // the `linux/amd64` variant replaces any native build under the tag.
+      // An image that exists only locally (built on the machine or
+      // `docker load`ed) has nothing to pull from, so when the pull fails
+      // and the image is present, use the local copy.
       pull: (tag, image) =>
-        pullIfMissing(image.imageUri, "linux/amd64").pipe(
+        pull({ ...image, platform: "linux/amd64" }).pipe(
+          Effect.catchTag("SystemError", (error) =>
+            inspect(image.imageUri, "{{.Id}}").pipe(
+              Effect.orElseSucceed(() => ""),
+              Effect.flatMap((id) =>
+                id.trim()
+                  ? Effect.logDebug(
+                      `docker: pull ${image.imageUri} failed, using the local image ${id.trim()}`,
+                    )
+                  : Effect.fail(error),
+              ),
+            ),
+          ),
           Effect.andThen(
             run(["tag", image.imageUri, tag]).pipe(
               Effect.mapError((cause) =>

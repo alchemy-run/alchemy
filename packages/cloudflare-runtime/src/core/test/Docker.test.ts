@@ -479,3 +479,95 @@ layer(
     }),
   );
 });
+
+/**
+ * Spawner for user-image pulls: `docker pull` exits with `pullExitCode` and
+ * `docker image inspect` reports `localId` (empty when the image is absent).
+ */
+const makePullStub = (pullExitCode: number, localId: string) => {
+  const spawned: Array<ReadonlyArray<string>> = [];
+  const layer = Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) =>
+      Effect.suspend(() => {
+        const args = command._tag === "StandardCommand" ? command.args : [];
+        if (command._tag === "StandardCommand") spawned.push([command.command, ...args]);
+        const isPull = args[0] === "pull";
+        const isInspect = args[0] === "image" && args[1] === "inspect";
+        const stdout = isInspect ? localId : "";
+        const exitCode = isPull ? pullExitCode : isInspect && !localId ? 1 : 0;
+        return Effect.succeed(
+          ChildProcessSpawner.makeHandle({
+            pid: ChildProcessSpawner.ProcessId(1),
+            exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(exitCode)),
+            isRunning: Effect.succeed(false),
+            kill: () => Effect.void,
+            stdin: Sink.drain,
+            stdout: stdout ? Stream.make(new TextEncoder().encode(stdout)) : Stream.empty,
+            stderr: Stream.empty,
+            all: Stream.empty,
+            getInputFd: () => Sink.drain,
+            getOutputFd: () => Stream.empty,
+            unref: Effect.succeed(Effect.void),
+          }),
+        );
+      }),
+    ),
+  );
+  return { layer, spawned };
+};
+
+const LOCAL_ONLY = "local-only/app:dev";
+
+const presentAndPullable = makePullStub(0, "sha256:deadbeef");
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, presentAndPullable.layer)))(
+  (it) => {
+    it.effect("pull refreshes an image that is already present locally", () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        yield* docker.pull("alchemy-test:latest", { imageUri: "myorg/app:latest" });
+        // A mutable tag must pick up a newly pushed image, and the amd64
+        // variant must replace a native build under the same tag.
+        expect(presentAndPullable.spawned).toContainEqual([
+          "docker",
+          "pull",
+          "myorg/app:latest",
+          "--platform",
+          "linux/amd64",
+        ]);
+      }),
+    );
+  },
+);
+
+const localOnly = makePullStub(1, "sha256:deadbeef");
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, localOnly.layer)))((it) => {
+  it.effect("pull uses the local image when the registry has none", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.pull("alchemy-test:latest", { imageUri: LOCAL_ONLY });
+      expect(localOnly.spawned).toContainEqual([
+        "docker",
+        "tag",
+        LOCAL_ONLY,
+        "alchemy-test:latest",
+      ]);
+    }),
+  );
+});
+
+const missing = makePullStub(1, "");
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, missing.layer)))((it) => {
+  it.effect("pull fails when the image is neither pullable nor local", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      const result = yield* Effect.result(
+        docker.pull("alchemy-test:latest", { imageUri: LOCAL_ONLY }),
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") return;
+      expect((result.failure as { subtag: string }).subtag).toBe("DockerPullFailed");
+      expect(missing.spawned.filter(([, verb]) => verb === "tag")).toEqual([]);
+    }),
+  );
+});
