@@ -3,6 +3,7 @@ import * as InMemory from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -95,6 +96,7 @@ class LatestOfV1 extends Domain.View("Latest", {
   },
 }) {}
 
+class Accounts extends Domain.Model("Bank", { aggregates: [Account] }) {}
 class Bank extends Domain.Model("Bank", {
   aggregates: [Account],
   views: [Summary, Totals, Latest],
@@ -119,6 +121,11 @@ const platform = () => {
   });
   return {
     settle,
+    /** Build the model and run `effect`, leaving everything it queued undelivered. */
+    deployUnsettled: <A, E, R>(
+      model: { readonly layer: (policies: any) => Layer.Layer<any, any, any> },
+      effect: Effect.Effect<A, E, R>,
+    ) => effect.pipe(Effect.provide(model.layer(Layer.empty).pipe(Layer.provide(hosted.layer)))),
     deploy: <A, E, R>(
       model: { readonly layer: (policies: any) => Layer.Layer<any, any, any> },
       effect: Effect.Effect<A, E, R>,
@@ -232,6 +239,30 @@ describe("Domain view versions", () => {
         }),
       );
       expect(fresh).toEqual({ net: 5 });
+    }),
+  );
+  it.live("a backfill that a version bump replaces stops", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      yield* bank.deploy(Accounts, Effect.all(history));
+      // The views are added, and their backfills started, but not run yet.
+      yield* bank.deployUnsettled(Bank, Effect.void);
+      const lines: Array<string> = [];
+      const logger = Logger.make((options) => {
+        lines.push([options.message].flat().map(String).join(" "));
+      });
+      const a1 = yield* bank
+        .deploy(
+          BankV1,
+          Effect.gen(function* () {
+            yield* bank.settle;
+            return Option.getOrUndefined(yield* (yield* SummaryV1).query(Account.ref("a-1")));
+          }),
+        )
+        .pipe(Effect.provide(Logger.layer([logger])));
+      expect(a1).toEqual({ net: 6 });
+      expect(lines).toContain("backfill run-superseded view:Summary");
+      expect(lines).toContain("backfill run-superseded view:Totals");
     }),
   );
 });

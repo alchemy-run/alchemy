@@ -16,6 +16,7 @@ import BenchV2Short from "./fixtures/bench/v2-short.ts";
 import BenchV2 from "./fixtures/bench/v2.ts";
 import BenchV3 from "./fixtures/bench/v3.ts";
 import LedgerV1 from "./fixtures/catch-up/v1.ts";
+import LedgerV2Deposits from "./fixtures/catch-up/v2-deposits.ts";
 import LedgerV2WideBumped from "./fixtures/catch-up/v2-wide-bumped.ts";
 import LedgerV2Wide from "./fixtures/catch-up/v2-wide.ts";
 import LedgerV2 from "./fixtures/catch-up/v2.ts";
@@ -113,6 +114,19 @@ const stillRunning = (deploy: Effect.Effect<unknown, unknown, never>) =>
     Effect.catchCause((cause) => Effect.succeed(String(cause))),
     Effect.map((failure) => /BackfillStillRunning|still running/.test(failure)),
   );
+
+/** Every instance of the Worker's backfill Workflow, by id. */
+const instancesOf = (workerName: string) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const all = yield* workflows.listWorkflows.items({ accountId }).pipe(Stream.runCollect);
+    const workflow = [...all].find((w) => w.scriptName === workerName);
+    if (workflow === undefined) return [];
+    const instances = yield* workflows.listInstances
+      .items({ accountId, workflowName: workflow.name })
+      .pipe(Stream.runCollect);
+    return [...instances].map((instance) => instance.id).sort();
+  });
 
 /** The latest completed instance of the Worker's backfill Workflow. */
 const lastWait = (workerName: string) =>
@@ -260,5 +274,32 @@ describe.sequential("a deploy and its backfill", () => {
         yield* stack.destroy();
       }),
     { timeout: 900_000 },
+  );
+  test.provider(
+    "a deploy that only removes a view fills nothing and waits for nothing",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const ledger = (worker: typeof LedgerV1) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* worker };
+            }),
+          );
+        const { worker } = yield* ledger(LedgerV1);
+        const url = worker.url!.replace(/\/+$/, "");
+        yield* serving(url, "v1");
+        yield* call(url, "POST", "/deposit/a-1/10");
+        yield* ledger(LedgerV2);
+        const before = yield* instancesOf(worker.workerName);
+
+        // The timeline goes; the deposits view kept its history last deploy.
+        yield* ledger(LedgerV2Deposits);
+        yield* serving(url, "v2-deposits");
+        expect(yield* instancesOf(worker.workerName)).toEqual(before);
+        expect(JSON.parse(yield* call(url, "GET", "/deposits/a-1"))).toEqual({ amounts: [10] });
+        yield* stack.destroy();
+      }),
+    { timeout: 600_000 },
   );
 });

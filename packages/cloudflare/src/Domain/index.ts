@@ -1014,6 +1014,7 @@ const viewObject = (
         (run ??= Backfill.makeRun(runtime.storage, runtime.jobs, net, {
           waitMillis: RELAY_ROOT_WAIT_MS,
           againMillis: 1_000,
+          superseded: (runTarget) => generationOfTarget(runTarget) < generationOfTarget(target),
         }));
       const relay = Backfill.makeRelay(net);
       const sourceFor = (key: string): Backfill.Source =>
@@ -1336,6 +1337,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
         (run ??= Backfill.makeRun(runtime.storage, runtime.jobs, net, {
           waitMillis: RELAY_ROOT_WAIT_MS,
           againMillis: 1_000,
+          superseded: (runTarget) => generationOfTarget(runTarget) < generationOfTarget(target),
         }));
       const relay = Backfill.makeRelay(net);
       const consumerFor = (key: string): Backfill.Consumer =>

@@ -330,7 +330,22 @@ export const make = (
           memoryStorage(address, lock),
           memoryJobs(address, (id) => role.run(id)),
           net,
-          { waitMillis: 0, againMillis: 0 },
+          {
+            waitMillis: 0,
+            againMillis: 0,
+            // The latest model has a newer generation of this consumer.
+            superseded: (runTarget) => {
+              const { kind, name } = Backfill.consumerOf(runTarget);
+              const current = model.find((t) => {
+                const of = Backfill.consumerOf(t);
+                return of.kind === kind && of.name === name;
+              });
+              return (
+                current !== undefined &&
+                Backfill.generationOfTarget(current) > Backfill.generationOfTarget(runTarget)
+              );
+            },
+          },
         );
         runs.set(target, (found = role));
       }
