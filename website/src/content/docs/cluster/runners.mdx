@@ -8,7 +8,7 @@ import DAG from "../../../components/DAG.astro";
 **Runners** are the processes that run your code. A set of runners is a Layer: provide it to an implementation, and that implementation runs on every runner in the set.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
@@ -48,7 +48,7 @@ Effect Cluster needs this: it gives each shard to any runner in a group, whateve
 A second set is its own program, image and service, scaled and deployed on its own:
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");

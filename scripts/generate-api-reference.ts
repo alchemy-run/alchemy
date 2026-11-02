@@ -143,9 +143,9 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/rivet/src",
   },
   {
-    srcRoot: "packages/cluster/src",
+    srcRoot: "packages/effect-cluster/src",
     providerPrefix: "Cluster",
-    sourceDisplayPrefix: "packages/cluster/src",
+    sourceDisplayPrefix: "packages/effect-cluster/src",
   },
 ];
 

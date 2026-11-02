@@ -100,7 +100,7 @@
     { "path": "../axiom/tsconfig.json" },
     { "path": "../rivet/tsconfig.json" },
     {
-      "path": "../cluster/tsconfig.json"
+      "path": "../effect-cluster/tsconfig.json"
     },
     { "path": "../turso/tsconfig.json" },
     { "path": "../planetscale/tsconfig.json" },

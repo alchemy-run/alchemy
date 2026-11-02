@@ -11,13 +11,13 @@ If Effect Cluster is new to you, read [What is Effect Cluster?](/cluster/what-is
 
 ## Prerequisites
 
-Finish [setup](/cluster/setup), including `docker swarm init`. Install `@alchemy.run/cluster`, `@alchemy.run/docker`, `alchemy` and `effect`.
+Finish [setup](/cluster/setup), including `docker swarm init`. Install `@alchemy.run/effect-cluster`, `@alchemy.run/docker`, `alchemy` and `effect`.
 
 ## Run a database
 
 ```diff lang="typescript"
 +// src/Cluster.ts
-+import * as ClusterDocker from "@alchemy.run/cluster/Docker";
++import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 +
 +export const Database = ClusterDocker.Database("Cluster");
 ```
@@ -28,7 +28,7 @@ The database is a Postgres the runners coordinate through: who owns which rooms,
 
 ```diff lang="typescript"
 // src/Cluster.ts
-import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 +import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
@@ -44,7 +44,7 @@ Runners are the processes that run your rooms. `Layer.provide(Database)` tells t
 
 ```diff lang="typescript"
 +// src/Room.ts
-+import * as Cluster from "@alchemy.run/cluster";
++import * as Cluster from "@alchemy.run/effect-cluster";
 +import { Rpc } from "effect/rpc";
 +import * as Schema from "effect/Schema";
 +
@@ -110,7 +110,7 @@ Each room keeps its members in memory. A room handles its messages one at a time
 
 ```diff lang="typescript"
 +// src/Api.ts
-+import * as Cluster from "@alchemy.run/cluster";
++import * as Cluster from "@alchemy.run/effect-cluster";
 +import * as Docker from "@alchemy.run/docker";
 +import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -151,7 +151,7 @@ The API is a container on the database's network. `yield* Room` gives it the roo
 ```diff lang="typescript"
 +// alchemy.run.ts
 +import * as Alchemy from "alchemy";
-+import * as Cluster from "@alchemy.run/cluster";
++import * as Cluster from "@alchemy.run/effect-cluster";
 +import * as Docker from "@alchemy.run/docker";
 +import * as Effect from "effect/Effect";
 +import * as Layer from "effect/Layer";

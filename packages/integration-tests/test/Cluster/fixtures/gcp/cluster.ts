@@ -1,5 +1,5 @@
 /** The GCP suite's cluster: Postgres and runners on Compute Engine. */
-import * as ClusterGCP from "@alchemy.run/cluster/GCP";
+import * as ClusterGCP from "@alchemy.run/effect-cluster/GCP";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterGCP.Database("Cluster");

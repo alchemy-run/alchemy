@@ -1,4 +1,4 @@
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Schema from "effect/Schema";
 import { DurableDeferred } from "effect/workflow";
 

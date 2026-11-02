@@ -6,7 +6,7 @@ description: Run an Effect Cluster's database and runners on Hetzner Cloud Serve
 Host your cluster on Hetzner Cloud: Postgres runs on a Server with a Volume, and each runner runs on a Server of its own, all on a private Network. A Load Balancer serves the runners' gateway, so a Hetzner Service or anything else calls the rooms by id.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterHetzner from "@alchemy.run/cluster/Hetzner";
+import * as ClusterHetzner from "@alchemy.run/effect-cluster/Hetzner";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterHetzner.Database("Cluster");
@@ -23,7 +23,7 @@ Install `@alchemy.run/hetzner` and finish [Hetzner setup](/hetzner/setup).
 `ClusterHetzner.Database` creates a private Network and runs Postgres in Docker on a Server with a Volume. Its firewall drops every connection to its public address; runners reach it over the Network.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterHetzner from "@alchemy.run/cluster/Hetzner";
+import * as ClusterHetzner from "@alchemy.run/effect-cluster/Hetzner";
 
 export const Database = ClusterHetzner.Database("Cluster", {
   location: "fsn1",

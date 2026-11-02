@@ -1,6 +1,6 @@
-/** The Docker suite's front: a Docker service on the database's network. */
-import * as Cluster from "@alchemy.run/cluster";
 import * as Docker from "@alchemy.run/docker";
+/** The Docker suite's front: a Docker service on the database's network. */
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import { frontApp } from "../app.ts";
 import { Database, FRONT_PORT } from "./cluster.ts";

@@ -6,7 +6,7 @@ description: Run an Effect Cluster's database on RDS and its runners on ECS Farg
 Host your cluster in your AWS account: Postgres runs on RDS, in a VPC of its own, and runners run on ECS Fargate in the same VPC. A load balancer serves each set of runners' gateway, so a Lambda function, a container or a Worker calls the rooms by id.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterAWS from "@alchemy.run/cluster/AWS";
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterAWS.Database("Cluster");
@@ -23,7 +23,7 @@ Install `@alchemy.run/aws` and finish [AWS setup](/aws/setup).
 `ClusterAWS.Database` creates a VPC across two Availability Zones, an RDS Postgres instance in it, and one security group every runner joins. That group reaches Postgres and the other runners; nothing else does.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterAWS from "@alchemy.run/cluster/AWS";
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
 
 export const Database = ClusterAWS.Database("Cluster", {
   instanceClass: "db.m7g.large",
@@ -39,7 +39,7 @@ A new RDS instance takes 10 to 15 minutes to create.
 `EcsRunners` runs the runners as an ECS service on Fargate, in the database's VPC:
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterAWS from "@alchemy.run/cluster/AWS";
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterAWS.Database("Cluster");

@@ -6,7 +6,7 @@ description: Run an Effect Cluster's database and runners on Fly.io, on a privat
 Host your cluster on Fly.io: Postgres runs on a Fly Machine with a volume, and the runners run as a Fly Service, all on a private network for your stack. The runners serve their gateway at `https://{name}.fly.dev`.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterFly from "@alchemy.run/cluster/Fly";
+import * as ClusterFly from "@alchemy.run/effect-cluster/Fly";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterFly.Database("Cluster");
@@ -23,7 +23,7 @@ Install `@alchemy.run/fly` and finish [Fly setup](/fly/setup).
 `ClusterFly.Database` runs Postgres on one Machine with a volume, in an App on the stack's private network. Nothing outside the network reaches it. For Fly's Managed Postgres, which Fly bills separately, pass its URL to `Cluster.Database.fromUrl`.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterFly from "@alchemy.run/cluster/Fly";
+import * as ClusterFly from "@alchemy.run/effect-cluster/Fly";
 
 export const Database = ClusterFly.Database("Cluster", {
   region: "fra",

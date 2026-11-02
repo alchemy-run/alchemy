@@ -2,7 +2,7 @@
  * The HTTP routes of every suite's front: each calls the entities,
  * workflows and journals through their gateways, whatever runtime serves it.
  */
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

@@ -10,7 +10,7 @@ A singleton is one fiber that runs on exactly one runner. When that runner stops
 A singleton is declared by name. `.make` takes an Effect that resolves bindings once per runner and returns the fiber:
 
 ```typescript title="src/Sweeper.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 
 export class Sweeper extends Cluster.Singleton<Sweeper>()("Sweeper") {}
 ```
@@ -43,7 +43,7 @@ Provide the Layer to the Stack, next to the rest of your implementations:
 
 ```typescript title="alchemy.run.ts"
 import * as Alchemy from "alchemy";
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Docker from "@alchemy.run/docker";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

@@ -10,7 +10,7 @@ A cron runs a job on a schedule, once per scheduled time across the whole cluste
 A cron is declared by name. Its schedule goes on `.make`, with the job:
 
 ```typescript title="src/Cleanup.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 
 export class Cleanup extends Cluster.Cron<Cleanup>()("Cleanup") {}
 ```

@@ -1,4 +1,4 @@
-import type * as Cluster from "@alchemy.run/cluster";
+import type * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";

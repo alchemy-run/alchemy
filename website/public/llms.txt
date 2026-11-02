@@ -722,7 +722,7 @@ Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, 
 Effect Cluster entities, workflows, singletons and crons, on a Postgres database and runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, called by id from any runtime.
 
 - [Effect Cluster](https://alchemy.run/cluster) — Effect Cluster entities, workflows, singletons and crons, deployed to runners on your own cloud and called by name from any runtime.
-- [What is Effect Cluster?](https://alchemy.run/cluster/what-is-effect-cluster) — The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners, the database, workflows, singletons and crons — and how @alchemy.run/cluster deploys them.
+- [What is Effect Cluster?](https://alchemy.run/cluster/what-is-effect-cluster) — The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners, the database, workflows, singletons and crons — and how @alchemy.run/effect-cluster deploys them.
 - [Setup](https://alchemy.run/cluster/setup) — Install the Effect Cluster provider and get Docker ready to run a cluster on your machine.
 - [Part 1: Your First Entity](https://alchemy.run/cluster/tutorial/part-1) — Run an Effect Cluster database and runners on Docker, and deploy a chat room entity that tracks who's in it.
 - [Part 2: Signed-In Members](https://alchemy.run/cluster/tutorial/part-2) — Add Effect RPC middleware so a room only lets signed-in users join, and provide it with the runners.

@@ -1,5 +1,5 @@
-import * as Cluster from "@alchemy.run/cluster";
 import * as Docker from "@alchemy.run/docker";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

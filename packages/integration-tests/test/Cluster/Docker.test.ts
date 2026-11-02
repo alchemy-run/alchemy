@@ -1,5 +1,5 @@
-import * as Cluster from "@alchemy.run/cluster";
 import * as Docker from "@alchemy.run/docker";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";

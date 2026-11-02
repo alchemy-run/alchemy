@@ -5,7 +5,7 @@ description: Effect Cluster entities, workflows, singletons and crons, deployed 
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/cluster` deploys [Effect Cluster](https://effect.website) programs. An **entity** is a class with one instance per id: a chat room, a shopping cart, a user's session. Each instance handles its messages one at a time, so it can keep state without locks.
+`@alchemy.run/effect-cluster` deploys [Effect Cluster](https://effect.website) programs. An **entity** is a class with one instance per id: a chat room, a shopping cart, a user's session. Each instance handles its messages one at a time, so it can keep state without locks.
 
 You run the cluster yourself. A Postgres **database** tracks which runner owns which entities. A set of **runners** runs your code. Both deploy in the same Stack as the rest of your app, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner.
 
@@ -27,7 +27,7 @@ You run the cluster yourself. A Postgres **database** tracks which runner owns w
 An entity declares its messages with Effect's RPC schemas:
 
 ```typescript title="src/Room.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
 
@@ -64,7 +64,7 @@ export default Room.make(
 `Default` is the runners it runs on, given the database they coordinate through:
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");

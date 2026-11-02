@@ -10,7 +10,7 @@ A workflow is a durable function. Each step, an **activity**, is persisted when 
 A workflow's declaration takes the same options as Effect's `Workflow.make`: its payload, success and error, and the key that makes two starts of the same work one run:
 
 ```typescript title="src/Invite.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Schema from "effect/Schema";
 import { DurableDeferred } from "effect/workflow";
 
@@ -180,7 +180,7 @@ Run a child on the same runners as its parent.
 Code written against Alchemy's engine-neutral `Workflows.RunWorkflow` runs a `Cluster.Workflow` with `Cluster.WorkflowEngine`:
 
 ```typescript title="src/Api.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Docker from "@alchemy.run/docker";
 import * as Workflows from "alchemy/Workflows";
 import * as Effect from "effect/Effect";

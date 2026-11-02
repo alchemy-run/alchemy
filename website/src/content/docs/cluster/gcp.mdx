@@ -6,7 +6,7 @@ description: Run an Effect Cluster's database and runners on Compute Engine, cal
 Host your cluster in your GCP project: Postgres and the runners run on Compute Engine instances in a VPC of their own. A regional load balancer on a static address serves the runners' gateway, so a Cloud Run service, a Worker or anything else calls the rooms by id.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterGCP from "@alchemy.run/cluster/GCP";
+import * as ClusterGCP from "@alchemy.run/effect-cluster/GCP";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterGCP.Database("Cluster");
@@ -23,7 +23,7 @@ Install `@alchemy.run/gcp` and finish [GCP setup](/gcp/setup).
 `ClusterGCP.Database` creates a VPC and subnetwork, and runs Postgres in a container on an instance with a persistent disk of its own. Firewall rules let only the runners reach it, by network tag, and let runners reach each other.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterGCP from "@alchemy.run/cluster/GCP";
+import * as ClusterGCP from "@alchemy.run/effect-cluster/GCP";
 
 export const Database = ClusterGCP.Database("Cluster", {
   machineType: "e2-standard-2",
@@ -36,7 +36,7 @@ export const Database = ClusterGCP.Database("Cluster", {
 `ComputeRunners` runs one instance per runner, spread across the region's zones. Each fetches the runners' program from a Cloud Storage bucket and runs it on the host network; a change to the program reaches every runner through its metadata.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterGCP from "@alchemy.run/cluster/GCP";
+import * as ClusterGCP from "@alchemy.run/effect-cluster/GCP";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterGCP.Database("Cluster");

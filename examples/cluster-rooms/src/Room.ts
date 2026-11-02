@@ -1,4 +1,4 @@
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import { Auth } from "./Auth.ts";

@@ -1,4 +1,4 @@
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 /** The shared workflow engine conformance workflows, as Cluster.Workflow declarations. */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

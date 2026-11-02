@@ -1,5 +1,5 @@
 /** The AWS suite's cluster: Postgres on RDS, runners on ECS Fargate. */
-import * as ClusterAWS from "@alchemy.run/cluster/AWS";
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterAWS.Database("Cluster");

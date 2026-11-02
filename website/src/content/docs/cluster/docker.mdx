@@ -6,7 +6,7 @@ description: Run an Effect Cluster's database and runners on a Docker swarm, on 
 Run the whole cluster on Docker: Postgres and the runners are swarm services on one overlay network. Use it on your machine, or on a server you run.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
@@ -23,7 +23,7 @@ Install `@alchemy.run/docker`, and turn swarm mode on once with `docker swarm in
 `ClusterDocker.Database` runs Postgres as a one-replica swarm service, with its data on a named volume. Publish it on a host port to look inside:
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 
 export const Database = ClusterDocker.Database("Cluster", { port: 5433 });
 ```
@@ -37,7 +37,7 @@ export const Database = ClusterDocker.Database("Cluster", { port: 5433 });
 Services on the database's network reach the gateway by the runners' name:
 
 ```typescript title="src/Api.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Docker from "@alchemy.run/docker";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

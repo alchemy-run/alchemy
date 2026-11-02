@@ -11,7 +11,7 @@ An invitation can wait hours for an answer, through deploys and restarts. In thi
 
 ```diff lang="typescript"
 // src/Room.ts
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import { Auth } from "./Auth.ts";
@@ -49,7 +49,7 @@ export class Room extends Cluster.Entity<Room>()("Room", [
 
 ```diff lang="typescript"
 +// src/Invite.ts
-+import * as Cluster from "@alchemy.run/cluster";
++import * as Cluster from "@alchemy.run/effect-cluster";
 +import * as Schema from "effect/Schema";
 +import { DurableDeferred } from "effect/workflow";
 +

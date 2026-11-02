@@ -1,4 +1,4 @@
-import type * as Cluster from "@alchemy.run/cluster";
+import type * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import { Activity, DurableDeferred } from "effect/workflow";
 import { Approval, Approve, Recorder } from "./workflows.ts";

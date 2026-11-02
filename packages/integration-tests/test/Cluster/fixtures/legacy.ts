@@ -1,6 +1,6 @@
 /** The existing program, deployed as an external entity on runners of its own. */
 import { fileURLToPath } from "node:url";
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import { Tally as TallyEntity } from "./external/tally.ts";
 

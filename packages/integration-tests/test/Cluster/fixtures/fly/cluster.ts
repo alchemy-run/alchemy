@@ -1,5 +1,5 @@
 /** The Fly suite's cluster: Postgres on a Fly Machine, runners on a Fly Service. */
-import * as ClusterFly from "@alchemy.run/cluster/Fly";
+import * as ClusterFly from "@alchemy.run/effect-cluster/Fly";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterFly.Database("Cluster");

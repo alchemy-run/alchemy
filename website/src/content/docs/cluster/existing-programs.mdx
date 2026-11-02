@@ -30,7 +30,7 @@ Each runner sets `HOST` and `PORT` to its own address, `DATABASE_URL` to the dat
 `Cluster.Entity` takes your Effect Cluster entity, the module that exports it, and the program:
 
 ```typescript title="src/Tally.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import { Legacy } from "./Cluster.ts";
 import { Tally as TallyEntity } from "./tally.ts";
@@ -48,7 +48,7 @@ export const Tally = Cluster.Entity(TallyEntity, {
 A program owns the runners it runs on, so give it a set no other class uses:
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");

@@ -1,5 +1,5 @@
-import * as Cluster from "@alchemy.run/cluster";
 import * as Docker from "@alchemy.run/docker";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

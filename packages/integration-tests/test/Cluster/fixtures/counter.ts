@@ -1,5 +1,5 @@
 /** A counter entity: volatile and persisted messages, a typed failure, a stream and middleware. */
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { ClusterSchema } from "effect/cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";

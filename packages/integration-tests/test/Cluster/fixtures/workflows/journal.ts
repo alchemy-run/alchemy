@@ -3,7 +3,7 @@
  * entry here, so a test can check an activity ran once even though its
  * workflow replayed.
  */
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
 

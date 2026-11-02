@@ -1,5 +1,5 @@
 /** Each run records the time it was scheduled for. */
-import type * as Cluster from "@alchemy.run/cluster";
+import type * as Cluster from "@alchemy.run/effect-cluster";
 import { ClusterCron } from "effect/cluster";
 import * as Effect from "effect/Effect";
 import { Journal } from "../workflows/journal.ts";

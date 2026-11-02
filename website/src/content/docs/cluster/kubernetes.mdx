@@ -6,7 +6,7 @@ description: Run an Effect Cluster's database and runners on any Kubernetes clus
 Host your cluster on any Kubernetes cluster: Postgres runs as a Deployment behind a ClusterIP Service, and the runners run as a Deployment beside it. Callers in the cluster reach the gateway at its Service.
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterKubernetes from "@alchemy.run/cluster/Kubernetes";
+import * as ClusterKubernetes from "@alchemy.run/effect-cluster/Kubernetes";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Layer from "effect/Layer";
 
@@ -30,7 +30,7 @@ Install `@alchemy.run/kubernetes`. `cluster` takes any cluster Alchemy manages, 
 `ClusterKubernetes.Runners` builds the runners' image, pushes it to the cluster's registry, and runs it as a Deployment. Pods reach each other at their own addresses. The Deployment's Service serves the gateway at `http://{name}.{namespace}.svc.cluster.local:34500`:
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterKubernetes from "@alchemy.run/cluster/Kubernetes";
+import * as ClusterKubernetes from "@alchemy.run/effect-cluster/Kubernetes";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Layer from "effect/Layer";
 

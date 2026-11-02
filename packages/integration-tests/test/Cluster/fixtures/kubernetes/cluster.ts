@@ -1,5 +1,5 @@
 /** The Kubernetes suite's cluster: Postgres and runners on a local kind cluster. */
-import * as ClusterKubernetes from "@alchemy.run/cluster/Kubernetes";
+import * as ClusterKubernetes from "@alchemy.run/effect-cluster/Kubernetes";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Layer from "effect/Layer";
 

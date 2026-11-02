@@ -1,5 +1,5 @@
 /** The greeter's implementation: it calls the counter by name, inside the cluster. */
-import type * as Cluster from "@alchemy.run/cluster";
+import type * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import { Counters } from "./counter.ts";
 import { Greeters } from "./greeter.ts";

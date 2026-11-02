@@ -1,5 +1,5 @@
 /** The Hetzner suite's cluster: Postgres on a Server, runners on Servers behind a Load Balancer. */
-import * as ClusterHetzner from "@alchemy.run/cluster/Hetzner";
+import * as ClusterHetzner from "@alchemy.run/effect-cluster/Hetzner";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterHetzner.Database("Cluster");

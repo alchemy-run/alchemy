@@ -1,5 +1,5 @@
 {
-  "name": "@alchemy.run/cluster",
+  "name": "@alchemy.run/effect-cluster",
   "version": "2.0.0-beta.84",
   "description": "Effect Cluster entities, with their database and runners on any cloud, for Alchemy.",
   "keywords": [
@@ -19,7 +19,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "packages/cluster"
+    "directory": "packages/effect-cluster"
   },
   "files": [
     "lib",

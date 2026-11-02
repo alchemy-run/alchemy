@@ -13,8 +13,8 @@ Finish [AWS setup](/aws/setup) and install `@alchemy.run/aws`.
 
 ```diff lang="typescript"
 // src/Cluster.ts
--import * as ClusterDocker from "@alchemy.run/cluster/Docker";
-+import * as ClusterAWS from "@alchemy.run/cluster/AWS";
+-import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
++import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
 import * as Layer from "effect/Layer";
 
 -export const Database = ClusterDocker.Database("Cluster");
@@ -32,7 +32,7 @@ The database is now an RDS instance in a VPC of its own, and the runners an ECS 
 
 ```diff lang="typescript"
 // src/Api.ts
--import * as Cluster from "@alchemy.run/cluster";
+-import * as Cluster from "@alchemy.run/effect-cluster";
 -import * as Docker from "@alchemy.run/docker";
 +import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Effect from "effect/Effect";
@@ -61,7 +61,7 @@ The Lambda function isn't in the VPC: it calls the rooms through the gateway's l
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 +import * as AWS from "@alchemy.run/aws";
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 -import * as Docker from "@alchemy.run/docker";
 
 -  { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) },

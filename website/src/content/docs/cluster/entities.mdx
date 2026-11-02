@@ -10,7 +10,7 @@ An entity is a class with one instance per id. Every instance runs the same code
 The declaration names the entity and lists the messages it accepts, the same arguments Effect's `Entity.make` takes:
 
 ```typescript title="src/Room.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
 
@@ -131,7 +131,7 @@ An instance also stops when its runner does, including on every deploy, and when
 Each RPC's schema shapes what callers send and get back. Effect Cluster's own annotations and helpers work unchanged:
 
 ```typescript title="src/Room.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { ClusterSchema } from "effect/cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
@@ -154,7 +154,7 @@ In a handler, `Rpc.fork` lets a message run beside the others, and `Entity.keepA
 A declaration also takes an entity made with Effect's `Entity.make`, and exposes it as `Room.entity`:
 
 ```typescript title="src/Room.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { Room as RoomEntity } from "./entities/room.ts";
 
 export class Room extends Cluster.Entity<Room>()(RoomEntity) {}

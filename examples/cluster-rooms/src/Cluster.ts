@@ -1,4 +1,4 @@
-import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");

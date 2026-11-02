@@ -1,13 +1,13 @@
 ---
 title: What is Effect Cluster?
-description: The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners, the database, workflows, singletons and crons — and how @alchemy.run/cluster deploys them.
+description: The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners, the database, workflows, singletons and crons — and how @alchemy.run/effect-cluster deploys them.
 ---
 
 import DAG from "../../../components/DAG.astro";
 
 [Effect Cluster](https://effect.website) is Effect's library for stateful services spread across many machines. Its center is the **entity**: a small, long-lived program with an id and its own state, like one chat room. Effect Cluster runs each entity on one machine at a time, delivers its messages in order, and moves it when machines come and go.
 
-`@alchemy.run/cluster` deploys everything Effect Cluster needs into your Stack, on the cloud you choose, and lets any runtime call your entities by id. This page introduces each concept once, with the chat rooms the [tutorial](/cluster/tutorial/part-1) builds as the example.
+`@alchemy.run/effect-cluster` deploys everything Effect Cluster needs into your Stack, on the cloud you choose, and lets any runtime call your entities by id. This page introduces each concept once, with the chat rooms the [tutorial](/cluster/tutorial/part-1) builds as the example.
 
 Here is the whole picture, which the rest of this page explains piece by piece. A caller names a room; the runners route the message to the runner that owns it; and the room answers from its own state.
 
@@ -38,7 +38,7 @@ Here is the whole picture, which the rest of this page explains piece by piece. 
 An entity starts as a declaration. `Room` says which messages every room accepts, as Effect RPC schemas:
 
 ```typescript title="src/Room.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
 
@@ -114,7 +114,7 @@ An instance's state lives in memory. When it sits idle (a minute, by default), w
 **Runners** are the processes that host instances. `Default` is a set of them:
 
 ```typescript title="src/Cluster.ts"
-import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
@@ -154,7 +154,7 @@ See [Databases](/cluster/databases).
 By default a message travels straight to its runner. Mark an RPC **persisted**, and the message is written to the database first, delivered at least once, and handled once per primary key:
 
 ```typescript title="src/Room.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import { ClusterSchema } from "effect/cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
@@ -182,7 +182,7 @@ See [Calling an entity](/cluster/calling).
 Effect Cluster runs three more kinds of programs on the same runners, each declared and implemented the same way as an entity:
 
 ```typescript title="src/Invite.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Schema from "effect/Schema";
 
 export class Invite extends Cluster.Workflow<Invite>()("Invite", {

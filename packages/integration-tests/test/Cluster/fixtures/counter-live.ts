@@ -1,5 +1,5 @@
 /** The counter's implementation, deployed to the default runners with its middleware. */
-import type * as Cluster from "@alchemy.run/cluster";
+import type * as Cluster from "@alchemy.run/effect-cluster";
 import { Entity } from "effect/cluster";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

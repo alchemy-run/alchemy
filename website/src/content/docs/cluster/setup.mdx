@@ -9,15 +9,15 @@ Effect Cluster needs no account of its own. You run the database and the runners
 
 ## Add the provider
 
-Install `@alchemy.run/cluster`:
+Install `@alchemy.run/effect-cluster`:
 
-<PackageManagers add="@alchemy.run/cluster" />
+<PackageManagers add="@alchemy.run/effect-cluster" />
 
 Then add `Cluster.providers()` next to your cloud's providers:
 
 ```typescript title="alchemy.run.ts"
 import * as Alchemy from "alchemy";
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Docker from "@alchemy.run/docker";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -40,12 +40,12 @@ Each cloud has its own entry point, and needs that cloud's provider package:
 
 | Import | Install |
 |---|---|
-| `@alchemy.run/cluster/Docker` | `@alchemy.run/docker` |
-| `@alchemy.run/cluster/AWS` | `@alchemy.run/aws` |
-| `@alchemy.run/cluster/GCP` | `@alchemy.run/gcp` |
-| `@alchemy.run/cluster/Kubernetes` | `@alchemy.run/kubernetes` |
-| `@alchemy.run/cluster/Fly` | `@alchemy.run/fly` |
-| `@alchemy.run/cluster/Hetzner` | `@alchemy.run/hetzner` |
+| `@alchemy.run/effect-cluster/Docker` | `@alchemy.run/docker` |
+| `@alchemy.run/effect-cluster/AWS` | `@alchemy.run/aws` |
+| `@alchemy.run/effect-cluster/GCP` | `@alchemy.run/gcp` |
+| `@alchemy.run/effect-cluster/Kubernetes` | `@alchemy.run/kubernetes` |
+| `@alchemy.run/effect-cluster/Fly` | `@alchemy.run/fly` |
+| `@alchemy.run/effect-cluster/Hetzner` | `@alchemy.run/hetzner` |
 
 Then follow that cloud's setup, for example [AWS setup](/aws/setup) or [Hetzner setup](/hetzner/setup).
 
@@ -64,7 +64,7 @@ Run `docker info --format '{{.Swarm.LocalNodeState}}'` to check. It prints `acti
 Runners only need a Postgres they can reach. To use one you run elsewhere, such as Neon or an existing RDS instance, pass its URL:
 
 ```typescript title="src/Cluster.ts"
-import * as Cluster from "@alchemy.run/cluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Config from "effect/Config";
 
 export const Database = Cluster.Database.fromUrl({

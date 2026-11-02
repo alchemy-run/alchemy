@@ -1,6 +1,6 @@
 /** Every second, the runner that owns the singleton records its hostname. */
 import { hostname } from "node:os";
-import type * as Cluster from "@alchemy.run/cluster";
+import type * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Journal } from "../workflows/journal.ts";
