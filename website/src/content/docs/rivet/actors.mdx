@@ -58,7 +58,23 @@ export const registry = setup({ use: { counter } });
 registry.start();
 ```
 
-Use it when you already have RivetKit Actors, or need a RivetKit feature Durable Objects don't offer. Alchemy runs the file as it is. See [RivetKit Actors](/rivet/rivetkit).
+Alchemy deploys that file as it is. Point a `Rivet.DurableObject` at it, and give it a pool of its own:
+
+```typescript title="src/counter.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Cluster } from "./cluster.ts";
+
+export const Counters = RivetDocker.Pool("Counters").pipe(Layer.provide(Cluster));
+
+export const Counter = Rivet.DurableObject("Counter", { main: "./src/actors.ts" }).pipe(
+  Effect.provide(Counters),
+);
+```
+
+Use it when you already have RivetKit Actors, or need a RivetKit feature Durable Objects don't offer. See [RivetKit Actors](/rivet/rivetkit).
 
 ## RivetKit Effect Actors: Rivet's Effect SDK
 
@@ -73,7 +89,23 @@ export const Add = Action.make("Add", {
 export const Counter = Actor.make("Counter", { actions: [Add] });
 ```
 
-Use it when you've built on Rivet's Effect SDK. Alchemy runs its program as it is. See [RivetKit Effect Actors](/rivet/rivetkit-effect).
+A program, `src/main.ts`, implements them and serves them with `Registry.serve`. Alchemy deploys that program as it is, the same way:
+
+```typescript title="src/counter.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Cluster } from "./cluster.ts";
+
+export const Counters = RivetDocker.Pool("Counters").pipe(Layer.provide(Cluster));
+
+export const Counter = Rivet.DurableObject("Counter", { main: "./src/main.ts" }).pipe(
+  Effect.provide(Counters),
+);
+```
+
+Use it when you've built on Rivet's Effect SDK. See [RivetKit Effect Actors](/rivet/rivetkit-effect).
 
 ## What the other two give up
 
@@ -81,16 +113,8 @@ A RivetKit program is code Alchemy doesn't look inside. It deploys the program, 
 
 A RivetKit program also runs its own process on every node of its pool, so it needs a pool to itself. A pool given a RivetKit program and anything else fails to deploy with `Rivet.PoolProgramConflict`.
 
-## One declaration for all three
+## The same control planes and pools
 
-All three are a `Rivet.DurableObject` given a pool. A Durable Object passes its implementation; a RivetKit program passes only its entry file:
-
-```typescript title="src/counter.ts"
-export const Counter = Rivet.DurableObject("Counter", { main: "./src/actors.ts" }).pipe(
-  Effect.provide(Counters),
-);
-```
-
-So all three run on any [control plane](/rivet/control-planes) and any [pool](/rivet/pools), on any cloud, and move between them the same way.
+All three are a `Rivet.DurableObject` given a pool: a Durable Object passes its implementation, and a RivetKit program passes only its entry file. So all three run on any [control plane](/rivet/control-planes) and any [pool](/rivet/pools), on any cloud, and move between them the same way.
 
 Next, [Durable Object](/rivet/durable-objects): how Alchemy's form is written.
