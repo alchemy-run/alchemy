@@ -205,6 +205,78 @@ yield* Activity.make({ name: "reserve", execute: reserve(order) }).pipe(
 
 `run.interrupt` stops a run where it waits, and its compensations run too.
 
+## Hand work to a queue
+
+A `DurableQueue` hands an item to a worker and waits for its result. The run
+suspends while the worker runs, however long that takes.
+
+```typescript
+export const Charge = DurableQueue.make({
+  name: "Charge",
+  payload: { orderId: Schema.String, amount: Schema.Number },
+  success: Schema.String,
+  idempotencyKey: ({ orderId }) => orderId,
+});
+
+const receipt = yield* DurableQueue.process(Charge, { orderId, amount: 42 });
+```
+
+`DurableQueueProducer` sends the run's items to a Cloudflare Queue, and
+`DurableQueueWorker` consumes it, running the handler for each item:
+
+```typescript
+// src/App.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DurableQueues from "alchemy/DurableQueues";
+import * as Workflows from "alchemy/Workflows";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import { Charge, Checkout, CheckoutLive } from "./Checkout.ts";
+
+export default class App extends Cloudflare.Worker<App>()(
+  "App",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const charges = yield* Cloudflare.Queues.Queue("Charges");
+    const checkout = yield* Workflows.RunWorkflow(Checkout);
+    return {
+      fetch: Effect.gen(function* () {
+        const run = yield* checkout.start({ orderId: "o-1" });
+        return yield* HttpServerResponse.json({ executionId: run.executionId });
+      }),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        CheckoutLive,
+        Cloudflare.Workflows.DurableQueueWorker(charges, [
+          DurableQueues.handler(Charge, ({ amount }) => Effect.succeed(`charged ${amount}`)),
+        ]),
+      ).pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(
+            Cloudflare.Workflows.layerDurableObjectEngine(),
+            Cloudflare.Workflows.DurableQueueProducer(charges),
+          ),
+        ),
+      ),
+    ),
+  ),
+) {}
+```
+
+The handler's success, typed failure or defect is the run's result for the
+item. A ledger in a Durable Object sends each item once, however often the
+run replays, and an item the worker already finished doesn't run again when
+the queue redelivers it. Pass `{ maxRetries, deadLetterQueue }` as the
+worker's third argument to bound retries of a batch that fails for any
+other reason; a dead-lettered item's run keeps waiting.
+
+Effect's own `DurableQueue.worker` polls a `PersistedQueue` store from a
+process that stays up, which a Worker isn't. It suits Effect's cluster engine
+on servers, with `PersistedQueue.layerStoreSql`; on Workers, use these Layers.
+
 ## Use bindings in a step
 
 Pass `Workflows.layer` an Effect that returns the handler instead of the

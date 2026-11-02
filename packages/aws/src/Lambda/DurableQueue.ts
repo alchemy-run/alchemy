@@ -124,10 +124,13 @@ export const DurableQueueProducer = (queue: Queue) =>
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const charges = yield* Charges;
- *     return yield* Layer.launch(
- *       AWS.Lambda.DurableQueueWorker(charges, [
- *         DurableQueues.handler(Charge, ({ amount }) => Effect.succeed(`charged ${amount}`)),
- *       ]).pipe(Layer.provide(AWS.Lambda.DurableFunctionEngine(CheckoutWorkflows))),
+ *     // Building the Layer registers the consumer.
+ *     yield* Effect.void.pipe(
+ *       Effect.provide(
+ *         AWS.Lambda.DurableQueueWorker(charges, [
+ *           DurableQueues.handler(Charge, ({ amount }) => Effect.succeed(`charged ${amount}`)),
+ *         ]).pipe(Layer.provide(AWS.Lambda.DurableFunctionEngine(CheckoutWorkflows))),
+ *       ),
  *     );
  *   }),
  * );
