@@ -384,9 +384,9 @@ const SECTIONS: Section[] = [
   {
     heading: "Fly — start here",
     intro:
-      "The Fly hub: overview (Apps, Machines, Services, Sprites), setup (org, API token, profile), and networking.",
+      "The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the proxy, private networking, Volumes, managed data and how Alchemy models each), setup (org, API token, profile), and networking.",
     pages: {
-      slugs: ["fly/index", "fly/setup", "fly/networking"],
+      slugs: ["fly/index", "fly/what-is-fly", "fly/setup", "fly/networking"],
     },
   },
   {

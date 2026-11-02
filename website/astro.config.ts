@@ -1118,10 +1118,46 @@ export default defineConfig({
           label: "Fly",
           items: [
             { label: "Overview", link: "/fly" },
+            { label: "What is Fly?", link: "/fly/what-is-fly" },
             { label: "Setup", link: "/fly/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "fly/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/fly/compute/apps" },
+                { label: "Machines", link: "/fly/compute/machines" },
+                { label: "Services", link: "/fly/compute/services" },
+                {
+                  label: "Blue/green deployments",
+                  link: "/fly/compute/deployments",
+                },
+                { label: "Sprites", link: "/fly/compute/sprites" },
+                { label: "Regions", link: "/fly/compute/regions" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "Connect Services", link: "/fly/compute/connecting-services" },
+                { label: "IPs & certificates", link: "/fly/networking" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Volumes", link: "/fly/data/volumes" },
+                { label: "Postgres", link: "/fly/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/fly/data/drizzle-postgres",
+                },
+                { label: "Redis", link: "/fly/data/redis" },
+                { label: "Tigris", link: "/fly/data/tigris" },
+                { label: "Secrets", link: "/fly/data/secrets" },
+              ],
             },
             {
               label: "Frontend",
@@ -1160,42 +1196,6 @@ export default defineConfig({
                 { label: "Vocs", link: "/fly/frontend/vocs" },
                 { label: "Waku", link: "/fly/frontend/waku" },
               ]),
-            },
-            {
-              label: "Compute",
-              items: [
-                { label: "Apps", link: "/fly/compute/apps" },
-                { label: "Machines", link: "/fly/compute/machines" },
-                { label: "Services", link: "/fly/compute/services" },
-                {
-                  label: "Connect Services",
-                  link: "/fly/compute/connecting-services",
-                },
-                {
-                  label: "Blue/green deployments",
-                  link: "/fly/compute/deployments",
-                },
-                { label: "Sprites", link: "/fly/compute/sprites" },
-                { label: "Regions", link: "/fly/compute/regions" },
-              ],
-            },
-            {
-              label: "Data",
-              items: [
-                { label: "Volumes", link: "/fly/data/volumes" },
-                { label: "Postgres", link: "/fly/data/postgres" },
-                {
-                  label: "Drizzle + Postgres",
-                  link: "/fly/data/drizzle-postgres",
-                },
-                { label: "Redis", link: "/fly/data/redis" },
-                { label: "Tigris", link: "/fly/data/tigris" },
-                { label: "Secrets", link: "/fly/data/secrets" },
-              ],
-            },
-            {
-              label: "Networking",
-              items: [{ label: "IPs & certificates", link: "/fly/networking" }],
             },
             providerResourcesEntry("Fly"),
           ],
