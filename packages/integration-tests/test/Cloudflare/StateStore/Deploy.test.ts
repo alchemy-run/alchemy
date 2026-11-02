@@ -55,7 +55,7 @@ const tags = ["provider:cloudflare", "provider:cloudflare:statestore", "live"];
 const stage = Test.defaultStage().replaceAll("_", "-");
 /** A store Worker name, unique per stage and short enough for previews (54). */
 const storeWorker = (name: string) => testName(`alchemy-state-store-${name}`);
-/** A store `--name`, which allows 20 characters: unique per stage. */
+/** A store name for the old release's `--name`, which allows 20 characters: unique per stage. */
 const storeName = (prefix: string) =>
   `${prefix}-${crypto.createHash("sha256").update(stage).digest("hex").slice(0, 8)}`;
 
@@ -521,7 +521,7 @@ const inCI = <A, E, R>(env: Readonly<Record<string, string>>, effect: Effect.Eff
   );
 
 test.provider(
-  "in CI, `alchemy state bootstrap` deploys the store the config names, which --backend can't address",
+  "in CI, `alchemy state bootstrap` deploys the store the config names",
   () =>
     Effect.gen(function* () {
       const environment = yield* yield* CloudflareEnvironment;
@@ -541,12 +541,16 @@ test.provider(
             }
           : {};
 
-      // A CI run of the stack can't deploy it, and names the command that can.
+      // A CI run of the stack can't deploy it, and names the command that can:
+      // `--name` is the store's full Worker name.
       const missing = yield* inCI(
         env,
         Effect.exit(Alchemist.State.store(source).pipe(Effect.provide(alchemist))),
       );
-      expectFailure(missing, `Run 'alchemy state bootstrap --profile`);
+      expectFailure(
+        missing,
+        `Run 'alchemy state bootstrap --backend cloudflare --name ${workerName} --profile`,
+      );
       expect(yield* scriptExists(accountId, workerName)).toBe(false);
 
       const { version } = yield* inCI(
@@ -651,7 +655,7 @@ test.provider(
       const workerName = `alchemy-state-store-${name}`;
       yield* teardownStateStore({ workerName });
 
-      const state = yield* open({ name });
+      const state = yield* open({ workerName });
       yield* state.set({ stack: "new", stage: "test", fqn: "a", value: record("a") });
       const secrets = yield* observeSecrets(accountId, workerName);
       const uploaded = yield* scriptModifiedOn(accountId, workerName);
@@ -713,7 +717,7 @@ test.provider(
       // Stacks opening it right away, while edge locations may still serve
       // the old version, neither fail as out of date nor redeploy it.
       for (const _ of [1, 2, 3]) {
-        const reopened = yield* open({ name });
+        const reopened = yield* open({ workerName });
         expect(yield* reopened.get({ stack: "old", stage: "test", fqn: "a" })).toEqual(record("a"));
       }
       expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(upgradedOn);
@@ -762,7 +766,7 @@ test.provider(
       yield* legacy.set({ stack: "v7", stage: "test", fqn: "a", value: record("a") });
 
       // Without `--yes` (and nobody to confirm), the deploy stops and says so.
-      const unapproved = yield* Effect.exit(open({ name }));
+      const unapproved = yield* Effect.exit(open({ workerName }));
       expectFailure(
         unapproved,
         `is out of date (expected v${STATE_STORE_VERSION}, observed v${OLD_STATE_STORE_VERSION})`,
@@ -772,7 +776,7 @@ test.provider(
 
       // With `--yes`, it upgrades the store in place.
       const context = yield* Effect.serviceOption(AlchemyContext);
-      const upgraded = yield* open({ name }).pipe(
+      const upgraded = yield* open({ workerName }).pipe(
         Effect.provideService(AlchemyContext, {
           dotAlchemy: Option.isSome(context) ? context.value.dotAlchemy : ".alchemy",
           dev: false,

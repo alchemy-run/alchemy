@@ -3,7 +3,7 @@ import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import { testName } from "../../../names.ts";
 
-/** A store only this entrypoint describes: `--backend` can't address it. */
+/** A store named by `workerName`, which `--name` also addresses. */
 export const workerName = testName("alchemy-state-store-configured");
 
 export default Alchemy.Stack(
