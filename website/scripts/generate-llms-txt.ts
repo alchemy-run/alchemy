@@ -483,7 +483,10 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "neon/index",
+        "neon/what-is-neon",
         "neon/setup",
+        "neon/functions",
+        "neon/storage",
         "neon/governance",
         "neon/guides/ai-gateway",
         "neon/guides/production-auth",

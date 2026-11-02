@@ -1368,29 +1368,8 @@ export default defineConfig({
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
+            { label: "What is Neon?", link: "/neon/what-is-neon" },
             { label: "Setup", link: "/neon/setup" },
-            { label: "Organization governance", link: "/neon/governance" },
-            {
-              label: "Frontend",
-              items: [
-                { label: "Vite", link: "/neon/frontend/vite" },
-                { label: "Astro", link: "/neon/frontend/astro" },
-                { label: "Next.js", link: "/neon/frontend/nextjs" },
-                { label: "Nuxt", link: "/neon/frontend/nuxt" },
-                { label: "SvelteKit", link: "/neon/frontend/sveltekit" },
-                { label: "React Router", link: "/neon/frontend/react-router" },
-                { label: "SolidStart", link: "/neon/frontend/solidstart" },
-                {
-                  label: "TanStack Start",
-                  link: "/neon/frontend/tanstack-start",
-                },
-                { label: "Waku", link: "/neon/frontend/waku" },
-                { label: "Octane", link: "/neon/frontend/octane" },
-                { label: "Foldkit", link: "/neon/frontend/foldkit" },
-                { label: "Vocs", link: "/neon/frontend/vocs" },
-                { label: "Static Site", link: "/neon/frontend/static-site" },
-              ],
-            },
             {
               label: "Upload tutorial",
               items: [
@@ -1402,13 +1381,24 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
+              label: "Postgres",
               items: [
                 { label: "Branching", link: "/neon/data/branching" },
                 { label: "Connections", link: "/neon/data/connections" },
                 { label: "Roles", link: "/neon/data/roles" },
                 { label: "Migrations", link: "/neon/data/migrations" },
               ],
+            },
+            {
+              label: "Applications",
+              items: [
+                { label: "Functions", link: "/neon/functions" },
+                { label: "Storage", link: "/neon/storage" },
+              ],
+            },
+            {
+              label: "Organization",
+              items: [{ label: "Governance", link: "/neon/governance" }],
             },
             {
               label: "Guides",
@@ -1435,6 +1425,27 @@ export default defineConfig({
                   link: "/neon/guides/state-recovery",
                 },
                 { label: "Drizzle ORM", link: "/neon/guides/drizzle" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: [
+                { label: "Vite", link: "/neon/frontend/vite" },
+                { label: "Astro", link: "/neon/frontend/astro" },
+                { label: "Next.js", link: "/neon/frontend/nextjs" },
+                { label: "Nuxt", link: "/neon/frontend/nuxt" },
+                { label: "SvelteKit", link: "/neon/frontend/sveltekit" },
+                { label: "React Router", link: "/neon/frontend/react-router" },
+                { label: "SolidStart", link: "/neon/frontend/solidstart" },
+                {
+                  label: "TanStack Start",
+                  link: "/neon/frontend/tanstack-start",
+                },
+                { label: "Waku", link: "/neon/frontend/waku" },
+                { label: "Octane", link: "/neon/frontend/octane" },
+                { label: "Foldkit", link: "/neon/frontend/foldkit" },
+                { label: "Vocs", link: "/neon/frontend/vocs" },
+                { label: "Static Site", link: "/neon/frontend/static-site" },
               ],
             },
             providerResourcesEntry("Neon"),
