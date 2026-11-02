@@ -303,9 +303,7 @@ describe.concurrent("live backfill benchmarks", () => {
               }
             }),
         ),
-      // Saturates the account's Workflow and Durable Object capacity, which
-      // other Domain backfill deploys share (see Key.test.ts).
-      { timeout: 7_200_000, exclusive: "cloudflare:domain-backfill" },
+      { timeout: 7_200_000 },
     );
   }
 
@@ -326,9 +324,7 @@ describe.concurrent("live backfill benchmarks", () => {
               });
             }),
         ),
-      // Saturates the account's Workflow and Durable Object capacity, which
-      // other Domain backfill deploys share (see Key.test.ts).
-      { timeout: 7_200_000, exclusive: "cloudflare:domain-backfill" },
+      { timeout: 7_200_000 },
     );
   }
 
@@ -349,9 +345,7 @@ describe.concurrent("live backfill benchmarks", () => {
               });
             }),
         ),
-      // Saturates the account's Workflow and Durable Object capacity, which
-      // other Domain backfill deploys share (see Key.test.ts).
-      { timeout: 7_200_000, exclusive: "cloudflare:domain-backfill" },
+      { timeout: 7_200_000 },
     );
   }
 });

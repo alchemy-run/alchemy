@@ -12,10 +12,11 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-// The deploy runs a backfill on the account's shared Workflow and Durable
-// Object capacity; the backfill benchmarks (CatchUp.bench.test.ts) saturate
-// it, so the two take turns.
-const stack = beforeAll(deploy(Stack), { exclusive: "cloudflare:domain-backfill" });
+// The deploy waits for a backfill on the account's shared Workflow and
+// Durable Object capacity. While the backfill benchmarks
+// (CatchUp.bench.test.ts) saturate it, the same deploy takes minutes instead
+// of seconds, as the other Domain suites' deploys do.
+const stack = beforeAll(deploy(Stack), { timeout: 420_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 /** A tours route answered with something other than 200. */
