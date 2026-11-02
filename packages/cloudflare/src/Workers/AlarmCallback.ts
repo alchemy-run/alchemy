@@ -5,6 +5,7 @@ import { DurableObjectState } from "./DurableObjectState.ts";
 export {
   dispatchAlarmCallbacks,
   initializeAlarmCallbacks,
+  outsideAlarmPass,
 } from "alchemy/Workers/Workerd/AlarmCallback";
 
 /** @internal */

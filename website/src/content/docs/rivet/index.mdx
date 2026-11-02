@@ -11,7 +11,7 @@ You run Rivet yourself. A control plane stores every instance's data and routes 
 
 <DAG
   nodes={[
-    { id: "caller", label: "Callers", type: "Worker, Lambda, container", col: 0, row: 0 },
+    { id: "caller", label: "Callers", type: "Worker or Lambda", col: 0, row: 0 },
     { id: "cp", label: "Control plane", type: "data and routing", tone: "accent", col: 1, row: 0 },
     { id: "pool", label: "Pool", type: "runs your code", col: 2, row: 0 },
   ]}
