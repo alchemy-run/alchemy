@@ -1,15 +1,15 @@
 ---
 title: Durable Object
-description: How a Rivet Durable Object is written — its name, its two phases, its methods, fetch and alarm, and how to keep its code out of its callers.
+description: What a Rivet Durable Object is — a class with one instance per name, each with its own state — and how one is written, from its two phases and methods to fetch, alarm, and keeping its code out of its callers.
 ---
 
-A Durable Object class describes what every instance of it can do. Each instance, one chat room for example, runs that code against its own state.
+A Durable Object is a way to build a stateful service out of many small, named pieces. Instead of one server that holds every chat room in memory, or a database every request goes through, each room is its own small program with its own data. You call a room by its name, and Rivet makes sure there's exactly one of it.
 
-This chapter builds the `Room` from the [tutorial](/rivet/tutorial/part-1) piece by piece: its name, the two phases its code runs in, the methods callers use, and the two handlers Rivet calls itself. It ends with how to keep a class's code out of the programs that call it.
+This chapter starts with what that means: a class and its instances, one instance per name, and state that lives with the instance. Then it builds the `Room` from the [tutorial](/rivet/tutorial/part-1) piece by piece: the two phases its code runs in, the methods callers use, and the two handlers Rivet calls itself. It ends with how to keep a class's code out of the programs that call it.
 
-## Name the class
+## A class and its instances
 
-Here is the whole `Room` with one method. The rest of the chapter takes it apart.
+A Durable Object starts as a class. `Room` says what a room can do, like let someone join:
 
 ```typescript title="src/room.ts"
 import * as Rivet from "@alchemy.run/rivet";
@@ -38,6 +38,28 @@ export default class Room extends Rivet.DurableObject<Room>()(
 `"Room"` is the class's name. The control plane files every room under it, so renaming the class starts every room afresh.
 
 `main` is the file that exports the class. The pool's nodes load it to run the class, so it's almost always `import.meta.url`.
+
+An **instance** is one room. The lobby is an instance, and so is the kitchen. Every instance runs the same code, and each one has its own state:
+
+```typescript title="src/api.ts"
+const rooms = yield* Room;
+const lobby = rooms.getByName("lobby");
+const kitchen = rooms.getByName("kitchen");
+```
+
+You never create an instance. Every name exists from the start, and the first call to a name brings its instance to life.
+
+## One instance per name
+
+However many callers ask for the lobby, from however many servers, they all reach the same instance. There's never a second lobby with a different idea of who's in it.
+
+That's what makes a Durable Object useful. The lobby can count its visitors, or keep its messages in order, without coordinating with anything else, because it's the only thing that knows about the lobby. The [control plane](/rivet/control-planes) keeps track of where each instance runs, and starts it on a node in its [pool](/rivet/pools) when it's called.
+
+## State that lives with the instance
+
+Each instance has its own storage: keys and values, a SQL database, and an alarm that calls it back later. The lobby's messages live in the lobby's database, and nobody else's.
+
+Because the data sits with the instance, a room doesn't fetch its state from somewhere else on every call. It reads its own. When an instance goes quiet, Rivet puts it to sleep; the next call wakes it, and its data is still there. See [Storage](/rivet/storage).
 
 ## Write it in two phases
 

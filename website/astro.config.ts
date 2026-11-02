@@ -1836,6 +1836,7 @@ export default defineConfig({
           label: "Rivet",
           items: [
             { label: "Overview", link: "/rivet" },
+            { label: "What is Rivet?", link: "/rivet/what-is-rivet" },
             { label: "Setup", link: "/rivet/setup" },
             {
               label: "Tutorial",
@@ -1844,7 +1845,6 @@ export default defineConfig({
             {
               label: "Concepts",
               items: [
-                { label: "What is a Durable Object?", link: "/rivet/what-is-a-durable-object" },
                 { label: "Durable Object", link: "/rivet/durable-objects" },
                 { label: "Storage", link: "/rivet/storage" },
                 { label: "Calling a Durable Object", link: "/rivet/calling" },

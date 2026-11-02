@@ -521,12 +521,12 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "rivet/index",
+        "rivet/what-is-rivet",
         "rivet/setup",
         "rivet/tutorial/part-1",
         "rivet/tutorial/part-2",
         "rivet/tutorial/part-3",
         "rivet/tutorial/part-4",
-        "rivet/what-is-a-durable-object",
         "rivet/durable-objects",
         "rivet/storage",
         "rivet/calling",
