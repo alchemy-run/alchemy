@@ -73,6 +73,12 @@ const INTERRUPT = "alchemy-interrupt";
 /** A run suspended on a failure waits for this event, which resumes it. */
 const RESUME = "alchemy-resume";
 
+/** A defect the workflow doesn't capture, failing its activity's step so Cloudflare retries it. */
+interface ActivityDefect {
+  readonly _tag: "ActivityDefect";
+  readonly message: string;
+}
+
 /** What an activity's step records when the activity suspends on a failure. */
 const SUSPENDED = "alchemy-suspended";
 
@@ -353,10 +359,13 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
                     : `${activity.name}/${attempt}/resumed-${generation}`,
                 effect: activity.executeEncoded.pipe(
                   EffectWorkflow.intoResult,
-                  Effect.catchCause((cause) =>
-                    Cause.hasInterruptsOnly(cause)
-                      ? Effect.failCause(cause)
-                      : Effect.fail({ _tag: "ActivityDefect", message: Cause.pretty(cause) }),
+                  Effect.catchCauseIf(
+                    (cause) => !Cause.hasInterruptsOnly(cause),
+                    (cause) =>
+                      Effect.fail<ActivityDefect>({
+                        _tag: "ActivityDefect",
+                        message: Cause.pretty(cause),
+                      }),
                   ),
                   Effect.flatMap((result) =>
                     result._tag === "Complete"
@@ -381,10 +390,7 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
                       ),
                     ),
                   ),
-                ) as Effect.Effect<
-                  string,
-                  { readonly _tag: "ActivityDefect"; readonly message: string }
-                >,
+                ) as Effect.Effect<string, ActivityDefect>,
               })
               .pipe(
                 Effect.catchTag("ActivityDefect", (defect) =>
