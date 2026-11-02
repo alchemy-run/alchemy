@@ -7,3 +7,5 @@ export * from "./Entity.ts";
 export * from "./Providers.ts";
 export * from "./Runners.ts";
 export * from "./Workflow.ts";
+export * from "./Singleton.ts";
+export * from "./Cron.ts";

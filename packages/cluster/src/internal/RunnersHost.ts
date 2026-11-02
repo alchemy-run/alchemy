@@ -27,7 +27,12 @@ import { EntityTypeId, shardGroupKey, type Entity } from "../Entity.ts";
 import type { HostedClass } from "./HostedRuntime.ts";
 
 /** The resource types runners host. */
-const HOSTED_TYPES = new Set<string>([EntityTypeId, "Cluster.Workflow"]);
+const HOSTED_TYPES = new Set<string>([
+  EntityTypeId,
+  "Cluster.Workflow",
+  "Cluster.Singleton",
+  "Cluster.Cron",
+]);
 import type { Providers } from "../Providers.ts";
 import { Runners, type RunnersEntity } from "../Runners.ts";
 import { GATEWAY_PORT, RUNNER_PORT } from "./Gateway.ts";

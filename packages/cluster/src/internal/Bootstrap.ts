@@ -21,10 +21,12 @@ import {
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
 import {
+  ClusterCron,
   ClusterSchema,
   ClusterWorkflowEngine,
   Entity as EffectEntity,
   RunnerAddress,
+  Singleton,
 } from "effect/cluster";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -37,7 +39,9 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { Rpc, RpcGroup } from "effect/rpc";
 import type { Workflow as EffectWorkflow } from "effect/workflow";
+import type { HostedCron } from "../Cron.ts";
 import { PlatformDeclaration, type HostedEntity } from "../Entity.ts";
+import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
 import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
 import { HasNoRunners, type HostedRuntimeContext } from "./HostedRuntime.ts";
@@ -171,14 +175,14 @@ export const bootstrap = (
   );
 
   const program = Effect.gen(function* () {
-    const hosted: Array<HostedEntity | HostedWorkflow> = [];
+    const hosted: Array<HostedEntity | HostedWorkflow | HostedSingleton | HostedCron> = [];
     for (const entrypoint of entrypoints) {
       const declaration =
         (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
         entrypoint;
       const context = yield* Layer.build(entrypointLayer(declaration));
       const runtime = Context.get(context, entrypointTag).RuntimeContext as HostedRuntimeContext<
-        HostedEntity | HostedWorkflow
+        HostedEntity | HostedWorkflow | HostedSingleton | HostedCron
       >;
       const built = runtime.hosted();
       if (built === undefined) {
@@ -234,6 +238,27 @@ export const bootstrap = (
         ...shardGroupsConfig(),
       },
     }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
+    // Singletons and crons run in these runners' shard group too, each with
+    // the services its Construction phase had.
+    const scheduled = hosted.flatMap((entry) =>
+      entry.kind === "singleton"
+        ? [
+            Singleton.make(entry.name, Effect.provide(entry.run, entry.context), {
+              shardGroup: group,
+            }),
+          ]
+        : entry.kind === "cron"
+          ? [
+              ClusterCron.make({
+                name: entry.name,
+                cron: entry.cron,
+                execute: Effect.provide(entry.run, entry.context),
+                shardGroup: group,
+                ...entry.options,
+              }),
+            ]
+          : [],
+    );
     const gateway = gatewayLayer(
       placed.map((entry) => entry.entity),
       env("CLUSTER_GATEWAY_TOKEN") ?? "",
@@ -242,13 +267,20 @@ export const bootstrap = (
 
     yield* Effect.logInfo(
       `Effect Cluster runner ${host}:${RUNNER_PORT}: ${hosted
-        .map((entry) => (entry.kind === "entity" ? entry.entity.type : entry.workflow._tag))
+        .map((entry) =>
+          entry.kind === "entity"
+            ? entry.entity.type
+            : entry.kind === "workflow"
+              ? entry.workflow._tag
+              : `${entry.kind} ${entry.name}`,
+        )
         .join(", ")}`,
     );
     return yield* Layer.launch(
       Layer.mergeAll(
         ...(entityLayers as [Layer.Layer<never>]),
         ...(workflowLayers as Layer.Layer<never, never, any>[]),
+        ...(scheduled as Layer.Layer<never, never, any>[]),
         gateway,
       ).pipe(
         // Workflows run on Effect Cluster's own engine, over the cluster.

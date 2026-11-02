@@ -114,7 +114,15 @@ export const workflowConformanceTests = (test: TestFn, { baseUrl }: { baseUrl: (
       const id = yield* freshId("approve");
       const run = yield* start("Approve", id);
       yield* awaitJournal(id);
-      expect(yield* run.status).toEqual({ _tag: "Running" });
+      // The first activity is journaled before the run suspends on the deferred.
+      const waiting = yield* run.status.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("200 millis"),
+          until: (status) => status._tag !== "NotStarted",
+          times: 25,
+        }),
+      );
+      expect(waiting).toEqual({ _tag: "Running" });
       yield* request(`${url()}/approve/Approve/${id}?executionId=${run.executionId}&by=agent`);
       expect(yield* awaitResult(run.status)).toEqual({
         _tag: "Completed",

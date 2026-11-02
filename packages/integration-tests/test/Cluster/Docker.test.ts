@@ -12,6 +12,7 @@ import CountersLive from "./fixtures/counter-live.ts";
 import Front from "./fixtures/front.ts";
 import GreetersLive from "./fixtures/greeter-live.ts";
 import { WorkflowsLive } from "./fixtures/workflows/index.ts";
+import { scheduledConformanceTests } from "./scheduled-conformance.ts";
 import { workflowConformanceTests } from "./workflow-conformance.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
@@ -47,5 +48,6 @@ describe.skipIf(!!process.env.FAST)(
 
     conformanceTests(test as never, { baseUrl: () => baseUrl });
     workflowConformanceTests(test as never, { baseUrl: () => baseUrl });
+    scheduledConformanceTests(test as never, { baseUrl: () => baseUrl });
   },
 );
