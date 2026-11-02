@@ -60,7 +60,7 @@ A run reads the sources its consumer read when the run started. If you change wh
 view:Timeline now reads Account, Journal, but its backfill was started reading Account. Bump its version to rebuild it from every source's history.
 ```
 
-To run a backfill again, bump the consumer's version. The new generation is a new class with its own run, and the same Worker upload deletes the previous generation, its data and its run. Until the deploy returns, reads of the view see the new generation fill in. To stop a backfill, remove the consumer and deploy: its classes, and the run with them, are deleted. Either way it is one upload, so a consumer never has two runs at once.
+To run a backfill again, bump the consumer's version. A view keyed by the one aggregate it reads is [rebuilt in place](/domain/model#change-a-view-bump-its-version) instead, with no backfill. For any other consumer the new generation is a new class with its own run, and the same Worker upload deletes the previous generation, its data and its run. Until the deploy returns, reads of the view see the new generation fill in. To stop a backfill, remove the consumer and deploy: its classes, and the run with them, are deleted. Either way it is one upload, so a consumer never has two runs at once.
 
 ## Width
 
@@ -86,7 +86,7 @@ A bank-wide total has the longest history of all. It's one value, like the total
 
 A backfill is billed like any Durable Object work: requests, rows written and read, and duration. Each key costs a few requests, plus a row written for each event it applies, and recording the events in the first place cost about as much. Each consumer you add or rebuild in one deploy is its own backfill: adding two views costs twice as much.
 
-Bump a version only when the view's state is really wrong: a rebuild costs a full backfill, and so does every view and projection that reads it.
+A rebuild from the history costs a full backfill, and so does every view and projection that reads the rebuilt view. A view keyed by the one aggregate it reads costs less: it's rebuilt in place, each key reading only its own account's events, and it can [fill lazily](/domain/model#fill-a-view-lazily) when it is added.
 
 ## Run a large Domain
 

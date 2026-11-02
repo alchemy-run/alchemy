@@ -46,13 +46,14 @@ export class After extends Domain.Model("Ledger", {
   views: [Deposits, Timeline],
 }) {}
 
-/** The view redefined: it now records each deposit doubled. Rebuilt by bumping its version. */
+/** The view redefined: it now records each deposit doubled, at version 1. */
 export class DoubledDeposits extends Domain.View("Deposits", {
   from: [Account],
   key: Account,
   state: Schema.Struct({ amounts: Schema.Array(Schema.Number) }),
   initial: { amounts: [] },
   evolve: { Deposited: (s, e) => ({ amounts: [...s.amounts, e.amount * 2] }) },
+  version: 1,
 }) {}
 
 /** The third deploy: the redefined view, at version 1. */
@@ -94,4 +95,16 @@ export class WideTimeline extends Domain.View("Timeline", {
 export class Widened extends Domain.Model("Ledger", {
   aggregates: [Account, Journal],
   views: [Deposits, WideTimeline],
+}) {}
+
+/** The wider timeline at version 1: rebuilt from every source's history. */
+export class WideTimelineV1 extends Domain.View("Timeline", {
+  ...WideTimeline.definition,
+  version: 1,
+}) {}
+
+/** A deploy whose timeline reads the journal too, at version 1. */
+export class WidenedV1 extends Domain.Model("Ledger", {
+  aggregates: [Account, Journal],
+  views: [Deposits, WideTimelineV1],
 }) {}

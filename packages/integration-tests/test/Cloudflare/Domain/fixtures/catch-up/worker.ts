@@ -11,6 +11,7 @@ import {
   type DoubledDeposits,
   type Timeline,
   type WideTimeline,
+  type WideTimelineV1,
 } from "./ledger.ts";
 
 /**
@@ -21,7 +22,7 @@ import {
 export const ledgerWorker = (
   version: string,
   deposits?: typeof Deposits | typeof DoubledDeposits,
-  timelineView?: typeof Timeline | typeof WideTimeline,
+  timelineView?: typeof Timeline | typeof WideTimeline | typeof WideTimelineV1,
 ) =>
   Effect.gen(function* () {
     const accounts = yield* Account;
