@@ -211,7 +211,7 @@ export const OriginCaCertificateProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ output, olds }) {
+    read: Effect.fn(function* ({ output, olds, previous }) {
       // Owned path: refresh by our persisted certificate id. A revoked
       // certificate is still returned by GET (with `revokedAt` set) but is
       // gone for all practical purposes.
@@ -233,6 +233,9 @@ export const OriginCaCertificateProvider = () =>
       if (typeof olds?.hostnames?.[0] !== "string") return undefined;
       const matches = yield* findByHostnames(olds.hostnames);
       if (matches.length !== 1) return undefined;
+      // A replacement issues a new certificate for the same hostnames: the
+      // one it is replacing is not the replacement.
+      if (matches[0].id === previous?.certificateId) return undefined;
       const observed = yield* getCertificate(matches[0].id!);
       return observed ? Unowned(toAttributes(observed, olds)) : undefined;
     }),

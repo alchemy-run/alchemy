@@ -329,15 +329,18 @@ interface RunLock {
 }
 
 /**
- * Writer-preferring wrapper over the permit semaphore. Effect's `Semaphore`
- * grants permits to whoever asks while enough are free, so a steady stream
- * of 1-permit tests starves an exclusive test indefinitely. An exclusive
- * acquirer holds the gate while it waits for every permit; everyone else
- * passes through the gate before taking theirs, so they queue behind it.
+ * Opportunistic exclusive lock. An exclusive acquirer asks for every permit
+ * and gets them only once nothing else holds one; everyone else keeps taking
+ * single permits meanwhile, because Effect's `Semaphore` grants whoever asks
+ * while enough are free. So an exclusive test never stalls the run: in a busy
+ * run it waits for a quiet moment, at worst the tail of its phase.
+ *
+ * Writer preference (holding a gate while waiting) would bound that wait, but
+ * at the cost of freezing every test started meanwhile behind the slowest one
+ * in flight: a 25-minute ElastiCache update held up the whole AWS suite.
  */
 const makeRunLock = Effect.gen(function* () {
   const permits = yield* Semaphore.make(EXCLUSIVE_PERMITS);
-  const gate = yield* Semaphore.make(1);
   const labels = new Map<string, Semaphore.Semaphore>();
   const labelLock = (label: string): Semaphore.Semaphore => {
     let lock = labels.get(label);
@@ -351,12 +354,10 @@ const makeRunLock = Effect.gen(function* () {
     withLock:
       (spec) =>
       <A, E, R>(self: Effect.Effect<A, E, R>) => {
-        if (spec.global) return gate.withPermits(1)(permits.withPermits(EXCLUSIVE_PERMITS)(self));
+        if (spec.global) return permits.withPermits(EXCLUSIVE_PERMITS)(self);
         // Take labels before the read permit: a queued label holder must not
         // sit on a read permit that a waiting global writer needs.
-        const shared = gate
-          .withPermits(1)(Effect.void)
-          .pipe(Effect.andThen(permits.withPermits(1)(self)));
+        const shared = permits.withPermits(1)(self);
         return spec.labels.reduceRight(
           (inner, label) => labelLock(label).withPermits(1)(inner),
           shared,
@@ -677,7 +678,8 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
           // Queue time behind an exclusive test is not execution time. Sum only
           // attempts (including their hooks), retaining time spent on retries.
           const start = Date.now();
-          return attempt().pipe(
+          return ctx.emit({ _tag: "TestLocked", test: meta }).pipe(
+            Effect.andThen(attempt()),
             Effect.ensuring(
               Effect.sync(() => {
                 durationMs += Date.now() - start;

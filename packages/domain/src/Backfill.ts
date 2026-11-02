@@ -568,7 +568,7 @@ const readAt = (
   );
 
 /** A target's generation: `view:Name#2` is 2. */
-const generationOf = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
+const generationOf = (target: string) => Number(/[#@](\d+)$/.exec(target)?.[1] ?? 0);
 
 /** Refused by an instance still on older code; the sender tries again later. */
 class Stale extends Data.TaggedError("Stale")<{ readonly message: string }> {}
@@ -2226,5 +2226,5 @@ export const routeRows = <Row>(
 /** A consumer's kind and name from its target id: `view:Name#2` is the view `Name`. */
 export const consumerOf = (target: string) => {
   const [kind, rest] = target.split(/:(.*)/s) as [string, string];
-  return { kind: kind as "view" | "projection", name: rest.replace(/#\d+$/, "") };
+  return { kind: kind as "view" | "projection", name: rest.replace(/[#@]\d+$/, "") };
 };

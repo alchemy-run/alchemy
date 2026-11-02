@@ -11,7 +11,12 @@ import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
-import { DefinitionError, ForeignAppend, MissingWorkflowEngine } from "./DefinitionError.ts";
+import {
+  DefinitionError,
+  ForeignAppend,
+  LazyViewNeedsOneSource,
+  MissingWorkflowEngine,
+} from "./DefinitionError.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import type * as Key from "./Key.ts";
@@ -180,13 +185,13 @@ export interface LayerOptions<Views extends string = string> {
    */
   readonly legacyData?: boolean;
   /**
-   * Each view's version, by name (0 when omitted). Bump a view's version to
-   * rebuild it from the history: after its state was lost, or once its
-   * `evolve` or routing changed what it should hold. Every view and
-   * projection that reads it is rebuilt with it. Until the rebuild is
-   * complete, the view's `history` says so.
+   * Views that fill lazily when they are added. A deploy that adds one waits
+   * for nothing: each key reads its history the first time it is read (or when
+   * its source next changes). Only for a view that reads one aggregate and is
+   * keyed by it, so each key's history is its own instance's events. (Such a
+   * view is always rebuilt this way when its `version` is bumped.)
    */
-  readonly versions?: { readonly [View in Views]?: number };
+  readonly lazy?: ReadonlyArray<Views>;
 }
 
 /** Every implementation a model's `layer` requires: its policies, projections and sagas. */
@@ -263,7 +268,7 @@ export const make = <
           members.sagas ?? [],
           Telemetry.resolve(options?.telemetry),
           options?.legacyData ?? false,
-          options?.versions ?? {},
+          options?.lazy ?? [],
         ),
       );
     }
@@ -352,7 +357,7 @@ const build = <A, E, R>(
   sagas: ReadonlyArray<Saga.Any>,
   telemetry: Telemetry.Resolved,
   legacyData: boolean,
-  versions: { readonly [view: string]: number | undefined },
+  lazy: ReadonlyArray<string>,
 ) =>
   Effect.gen(function* () {
     // The model's own storage: models sharing a definition never share its data.
@@ -363,9 +368,6 @@ const build = <A, E, R>(
       legacyData,
     });
     const kernel = yield* Kernel.make(definitions, telemetry);
-    for (const [view, version] of Object.entries(versions)) {
-      if (version) kernel.setVersion(`view:${view}`, version);
-    }
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
@@ -395,12 +397,39 @@ const build = <A, E, R>(
         ),
       );
     }
+    const viewTarget = (name: string) => kernel.targetIdOf("view", name);
+    for (const name of lazy) {
+      if (!kernel.inPlace("view", name))
+        return yield* Effect.die(
+          new DefinitionError({ reason: new LazyViewNeedsOneSource({ view: name }) }),
+        );
+    }
+    // A view keyed by the one aggregate it reads fills each key itself, from its
+    // instance's events, before the key answers: when it is lazy, and when its
+    // version was bumped (it is rebuilt in place). The deploy runs no backfill for it.
+    const selfFilled = new Set(
+      definitions.views
+        .filter(
+          (view) =>
+            kernel.inPlace("view", view.viewName) &&
+            (lazy.includes(view.viewName) || kernel.generationOf("view", view.viewName) > 0),
+        )
+        .map((view) => view.viewName),
+    );
     for (const view of definitions.views) {
+      // Only a view that fills itself reads its keys' history on first touch; any
+      // other view is filled by the deploy's backfill, and its keys apply live.
+      const source = selfFilled.has(view.viewName)
+        ? kernel.sourcesOf(viewTarget(view.viewName))?.[0]
+        : undefined;
       viewStores.set(
         view.viewName,
         yield* platform.view(
           view,
-          Object.assign(kernel.viewKit(view, deliver), { push: Watch.viewPush(kernel, view) }),
+          Object.assign(kernel.viewKit(view, deliver), {
+            push: Watch.viewPush(kernel, view),
+            ...(source === undefined ? {} : { catchUp: { source } }),
+          }),
         ),
       );
     }
@@ -432,13 +461,10 @@ const build = <A, E, R>(
         kernel,
         view,
         viewStores.get(view.viewName)!,
-        history(platform, () =>
-          CatchUp.targetId({
-            kind: "view",
-            name: view.viewName,
-            generation: kernel.generationOf("view", view.viewName),
-          }),
-        ),
+        // Such a key reads its history before it answers: every answer has it all.
+        selfFilled.has(view.viewName)
+          ? Effect.succeed({ complete: true })
+          : history(platform, () => viewTarget(view.viewName)),
       );
       viewHosts.set(view.viewName, host);
       hosts = Context.add(hosts, view, host);
@@ -541,7 +567,16 @@ const build = <A, E, R>(
       );
     }
     // Every store is built: catch up the consumers that are new to the platform.
-    if (platform.start) yield* platform.start(kernel.targets, kernel.planOf);
+    // Lazy views have no backfill: their keys catch up when read.
+    const lazyTargets = new Set([...selfFilled].map(viewTarget));
+    // Every consumer is in the model, so its sources route to it; those that fill
+    // themselves get no backfill.
+    if (platform.start)
+      yield* platform.start(
+        kernel.targets,
+        kernel.planOf,
+        kernel.targets.filter((target) => !lazyTargets.has(target)),
+      );
 
     return Context.add(hosts, Internals, {
       kernel,

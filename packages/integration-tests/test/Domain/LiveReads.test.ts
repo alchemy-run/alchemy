@@ -127,7 +127,7 @@ for (const [transport, layer] of [
   ["in process", InProcess],
   ["over the wire", Wire],
 ] as const) {
-  describe(`Domain live reads ${transport}`, () => {
+  describe(`Domain live reads ${transport}`, { tags: ["unit", "local"] }, () => {
     for (const kind of ["aggregate", "view", "stream"] as const) {
       it.live(`${kind} events mark the end of their history`, () =>
         Effect.gen(function* () {

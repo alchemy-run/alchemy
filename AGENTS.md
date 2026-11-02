@@ -720,7 +720,7 @@ Build an engine from the shared pieces, never a private copy:
 - The cloud's own primitives map onto Effect's: activities → durable steps (replayed, not re-run, once finished), `DurableClock.sleep` → the runtime's durable wait (no compute billed while waiting), `DurableDeferred` → the runtime's external-event/callback mechanism, interrupt → fail the pending wait so compensations run, child workflows → runs on the same engine.
 - Respect platform limits in the engine (instance-id length and charset, max wait, propagation after deploy) and retry only the typed transient errors.
 
-Every engine passes the same conformance cases, each driven over HTTP against a deployed fixture: runs a workflow and returns its result; starting the same execution twice runs it once; sleeps durably between activities; waits for a signal from outside; a typed failure runs compensations; a successful workflow keeps its steps; interrupting a waiting workflow finishes it; runs a child workflow. Copy the fixtures in `packages/integration-tests/test/Cloudflare/Workers/fixtures/durable-workflow/` (`workflows.ts`, `app.ts`) and the suites [WorkflowEngines.test.ts](./packages/integration-tests/test/Cloudflare/Workers/WorkflowEngines.test.ts) and [WorkflowFunction.test.ts](./packages/integration-tests/test/AWS/Lambda/WorkflowFunction.test.ts). An engine with a local provider runs the cases in dev too.
+Every engine passes one shared conformance suite, [`test/Workflows/conformance/`](./packages/integration-tests/test/Workflows/conformance/), driven over HTTP against a deployed fixture. Don't copy it. The suite owns the workflows (`workflows.ts`), the routes (`app.ts`), and the cases (`conformance.ts`), drawn from Effect's own engine tests and from bugs found here: results, idempotent starts, durable sleeps that wake on time (between and inside activities), signals (early, repeated, late), compensations (on failures and interrupts), defects (captured, caught, retried, `SuspendOnFailure` with resume), `Activity.retry`, `Activity.raceAll`, finalizers and `ensuring` across suspensions, parallel activities, interrupts (while waiting, sleeping, on the way to a wait, after finishing), and child workflows (waiting and failing). An engine supplies a fixture that serves `app` over `WorkflowsLive` with its engine and a `Journal` layer over its cloud's storage, then calls `conformance({ test, url, napsWithinMillis, recoveryWithinMillis, timeout, unsupported })` from its suite. See [WorkflowEngines.test.ts](./packages/integration-tests/test/Cloudflare/Workers/WorkflowEngines.test.ts) (a Durable Object journal) and [WorkflowFunction.test.ts](./packages/integration-tests/test/AWS/Lambda/WorkflowFunction.test.ts) (a DynamoDB journal). A case an engine fails is an engine bug, not a reason to skip it. What the platform genuinely can't do goes in `unsupported`, and the engine dies with a clear defect the case checks for, never a hang: Cloudflare Workflows and Lambda durable functions can't look a step's result up before running it, so neither supports `raceAll`. An engine with a local provider runs the cases in dev too.
 
 Each engine gets a docs page at `website/src/content/docs/{cloud}/compute/effect-workflows.mdx` with the same headings as the AWS and Cloudflare pages (define a workflow, implement its steps, run it on the engine, start and read a run, sleep durably, wait for a signal, undo a step, use bindings in a step), and an `examples/{cloud}-effect-workflows` example.
 
@@ -842,10 +842,11 @@ Read through the established test cases before continuing so that you understand
 - [Subnet Test Cases](./packages/integration-tests/test/AWS/EC2/Subnet.test.ts)
 
 :::warning
-Never use `Date.now()` when constructing the physical name of a resource. You should either:
+Never use `Date.now()`, UUIDs or other random values when constructing the physical name of a resource. Every run must be deterministic and leave no orphaned resources. You should either:
 
-1. Do not proide a name and rely on the resource provider to generate a unique name for you from the app, stage and logical ID.
-2. Construct a deterministic one unique to each test case. But it should be the same on each subsequent run of the test case.
+1. Not provide a name, and rely on the resource provider to generate one from the app, stage and logical ID. This is the default for every test.
+2. Only when the test is about explicitly provided names, construct a deterministic one unique to each test case and to the user running it: derive it from `stack.stage` (`test_$USER` by default). It must be the same on each subsequent run of the test case.
+3. Only for a resource the API can never delete (RealtimeKit apps, Intel indicator feeds), use one shared constant name that every run adopts, so the suite owns a single standing instance instead of leaking one per user.
    :::
 
 3. Consider implementing an aggregate Smoke test that brings together multiple resources that are often used together.
@@ -1198,7 +1199,7 @@ Additional flags beyond vitest:
 | ----------------- | ------- | ------------------------------------------------------------- |
 | `-t <regex>`      | —       | Test-name pattern (regex, like bun/vitest) tested against the full nested title (`file > describes > name`), so any fragment matches regardless of nesting. An invalid regex degrades to a literal substring instead of erroring. Remember to escape regex metacharacters when filtering literally: `-t "create \(default\)"` |
 | `--profile <name>` | —      | Sets `ALCHEMY_PROFILE` before any test module is imported. Use `--profile testing` for live-cloud suites instead of an `ALCHEMY_PROFILE=testing` env prefix |
-| `--stage <name>`  | —       | Sets `ALCHEMY_TEST_STAGE` before any test module is imported, replacing `Test.make`'s default `test_$USER` stage for the run (e.g. one stage per git worktree) |
+| `--stage <name>`  | —       | Sets `ALCHEMY_TEST_STAGE` before any test module is imported, replacing `Test.make`'s default stage for the run. The default is `test_$USER` in a main checkout and `test_$USER_<worktree>` in a linked git worktree, so two worktrees running the same suite never share deployments |
 | `--fast`          | off     | Sets `FAST=1` before imports — suites `skipIf(process.env.FAST)` their slow tests (long-provisioning resources, smoke tests). Replaces the `FAST=1` env prefix |
 | `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
 | `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |

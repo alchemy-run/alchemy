@@ -103,7 +103,11 @@ export const retryNamespacePropagation = <A, E extends { readonly _tag: string }
         : Effect.void,
     ),
     Effect.retry({
-      while: (error) => error._tag === "DurableObjectNamespaceNotFound",
+      // Cloudflare also refuses creates for a moment ("can't create
+      // application at this time"); the same request succeeds when retried.
+      while: (error) =>
+        error._tag === "DurableObjectNamespaceNotFound" ||
+        error._tag === "ContainerApplicationCreateUnavailable",
       schedule: Schedule.spaced("2 seconds"),
       times: 15,
     }),

@@ -666,7 +666,15 @@ const ProviderLive = () =>
             (desiredIsDefault !== undefined && desiredIsDefault !== observedIsDefault) ||
             (isResolved(news.source) && !desiredSourcesMatch(news.source, olds.source))
           ) {
-            return { action: "replace" } as const;
+            // A stable explicit name in the same project collides with the
+            // old generation, so it must go before the replacement is created.
+            const deleteFirst =
+              !concreteIdsChanged(oldProjectId, newProjectId) &&
+              (isResolved(news.name)
+                ? news.name !== undefined &&
+                  (!output || (yield* createName(id, news.name)) === output.databaseName)
+                : true);
+            return { action: "replace", deleteFirst } as const;
           }
           if (
             isResolved(news.logicalId) &&
@@ -698,7 +706,7 @@ const ProviderLive = () =>
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ id, fqn, output, olds }) {
+        read: Effect.fn(function* ({ id, fqn, output, olds, previous }) {
           const databaseId = isPrismaDevId(output?.databaseId) ? undefined : output?.databaseId;
           let generatedIdentityMatch = false;
           let database = databaseId
@@ -746,7 +754,12 @@ const ProviderLive = () =>
             password: cachedSecrets?.password,
           });
           // Only a declaration assigns a logical ID, so a match is this database.
-          return databaseId === undefined && !generatedIdentityMatch ? Unowned(attrs) : attrs;
+          // The generation a replacement is replacing is ours too.
+          return databaseId === undefined &&
+            !generatedIdentityMatch &&
+            database.id !== previous?.databaseId
+            ? Unowned(attrs)
+            : attrs;
         }),
         reconcile: Effect.fn(function* ({ id, fqn, news, olds, output }) {
           yield* validateDatabaseProps(news);

@@ -8,6 +8,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -16,11 +17,11 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // Deterministic project name (never derived from Date.now() or randomness).
 // Project names form globally-unique *.pages.dev subdomains, so it carries
 // an alchemy-e3 prefix to avoid collisions.
-const PROJECT_NAME = "alchemy-e3-pages-deployment";
+const PROJECT_NAME = testName("alchemy-e3-pages-deployment");
 
 // Separate project for the `list` suite so the two tests never contend for
 // the same deterministically-named project.
-const LIST_PROJECT_NAME = "alchemy-e3-pages-deploy-list";
+const LIST_PROJECT_NAME = testName("alchemy-e3-pages-deploy-list");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,

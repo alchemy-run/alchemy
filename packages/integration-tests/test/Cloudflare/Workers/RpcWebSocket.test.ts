@@ -172,8 +172,8 @@ const readStats = Effect.fn(function* (url: string) {
 }, Effect.timeout("15 seconds"));
 
 describe.concurrent.each([
-  { dev: true, stage: "rpc-websocket-local" },
-  { dev: false, stage: "rpc-websocket-live" },
+  { dev: true, stage: `${Test.defaultStage()}-rpc-websocket-local` },
+  { dev: false, stage: `${Test.defaultStage()}-rpc-websocket-live` },
 ])(
   "WebSocket RPC (dev: $dev)",
   ({ dev, stage }) => {

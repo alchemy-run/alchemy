@@ -7,7 +7,7 @@ import { expect, it } from "@alchemy.run/test";
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(here, "../bin/alchemy-test.ts");
 const apiUrl = pathToFileURL(resolve(here, "../src/index.ts")).href;
-const effectUrl = pathToFileURL(resolve(here, "../../../node_modules/effect/dist/Effect.js")).href;
+const effectUrl = import.meta.resolve("effect/Effect");
 
 it(
   "excludes exclusive-lock queue time from test durations",
@@ -53,7 +53,7 @@ it(
 );
 
 it(
-  "a waiting exclusive test runs before later tests take the lock",
+  "later tests overtake a waiting exclusive test, which then runs alone",
   async () => {
     const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-exclusive-"));
     try {
@@ -62,16 +62,22 @@ it(
         `
         import { describe, it, expect } from ${JSON.stringify(apiUrl)};
         describe.concurrent("exclusive", () => {
+          let running = 0;
           let laterStarted = false;
           it("holder", async () => {
+            running++;
             await new Promise(resolve => setTimeout(resolve, 300));
+            running--;
           });
           it("waiting exclusive", () => {
-            expect(laterStarted).toBe(false);
+            expect(laterStarted).toBe(true);
+            expect(running).toBe(0);
           }, { exclusive: true });
           it("later", async () => {
+            running++;
             laterStarted = true;
             await new Promise(resolve => setTimeout(resolve, 300));
+            running--;
           });
         });
         `,

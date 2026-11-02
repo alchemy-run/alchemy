@@ -80,7 +80,6 @@ describe.sequential.skipIf(!emailRoutingScoped)(
               const worker = yield* RuleTargetWorker;
               const rule = yield* Cloudflare.Email.Rule("WorkerRule", {
                 zone: { zoneId: routing.zoneId },
-                name: "alchemy worker-target test",
                 matchers: [{ type: "literal", field: "to", value: `worker-target@${zoneName}` }],
                 actions: [{ type: "worker", value: [worker.workerName] }],
               });
@@ -125,7 +124,6 @@ describe.sequential.skipIf(!emailRoutingScoped)(
               const worker = yield* RuleTargetWorker;
               const catchAll = yield* Cloudflare.Email.CatchAll("CatchAll", {
                 zone: { zoneId: routing.zoneId },
-                name: "alchemy worker-target catch-all",
                 actions: [{ type: "worker", value: [worker.workerName] }],
               });
               return { catchAll, workerName: worker.workerName };
