@@ -12,7 +12,10 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const stack = beforeAll(deploy(Stack));
+// The deploy runs a backfill on the account's shared Workflow and Durable
+// Object capacity; the backfill benchmarks (CatchUp.bench.test.ts) saturate
+// it, so the two take turns.
+const stack = beforeAll(deploy(Stack), { exclusive: "cloudflare:domain-backfill" });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 /** A tours route answered with something other than 200. */
