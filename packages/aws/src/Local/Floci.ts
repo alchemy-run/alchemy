@@ -82,7 +82,7 @@ const PORTS_LABEL = "run.alchemy.floci.requested-ports";
  * `default` for an omitted one.
  */
 const requestedPortsLabel = (config?: FlociConfig) =>
-  `elb=${config?.elbListenerPorts?.join(",") ?? "default"};edge=${config?.cloudfrontEdgePorts?.join(",") ?? "default"}`;
+  `elb=${config?.elbListenerPorts?.join(",") ?? "default"};edge=${config?.cloudfrontEdgePorts?.join(",") ?? "default"};api=loopback`;
 
 /** Default name of the managed container. */
 export const DEFAULT_CONTAINER_NAME = "alchemy-floci";
@@ -547,7 +547,11 @@ const ensureFlociUnsynchronized = (
         "--name",
         containerName,
         "-p",
-        `${port}:4566`,
+        // The gateway takes any credentials and hands out every resource's
+        // config (Lambda env vars, SSM parameters, the developer's relayed
+        // AWS credentials), so only this machine may reach it. Emulated
+        // containers reach it over the Docker network, not this port.
+        `127.0.0.1:${port}:4566`,
         // Docker Desktop injects `host.docker.internal` automatically; native
         // Linux Docker does not. The emulator needs it to reach a dev server
         // running on the developer's machine (a CloudFront origin pointed at

@@ -15,6 +15,7 @@ import {
   type LogsSubscriptionPayload,
 } from "../Logs/LogGroupEventSource.ts";
 import { SubscriptionFilter } from "../Logs/SubscriptionFilter.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -100,22 +101,24 @@ export const LogGroupEventSource = Layer.effect(
       // is registering the runtime handler below. Namespaced under the host so
       // the sub-resources' logical identity is stable per host function.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* Permission(`AWS.Logs.InvokePermission(${logGroup.LogicalId})`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedNameOf(host),
-              principal: "logs.amazonaws.com",
-              sourceArn: Output.interpolate`${logGroup.logGroupArn}:*`,
-            });
-            yield* Filter(`AWS.Logs.SubscriptionFilter(${logGroup.LogicalId})`, {
-              logGroupName: logGroup.logGroupName,
-              filterName: props.filterName,
-              filterPattern: props.filterPattern ?? "",
-              destinationArn: Lambda.qualifiedArnOf(host),
-            });
-          }),
+        yield* wireEventSource(host, logGroup, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* Permission(`AWS.Logs.InvokePermission(${logGroup.LogicalId})`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedNameOf(host),
+                principal: "logs.amazonaws.com",
+                sourceArn: Output.interpolate`${logGroup.logGroupArn}:*`,
+              });
+              yield* Filter(`AWS.Logs.SubscriptionFilter(${logGroup.LogicalId})`, {
+                logGroupName: logGroup.logGroupName,
+                filterName: props.filterName,
+                filterPattern: props.filterPattern ?? "",
+                destinationArn: Lambda.qualifiedArnOf(host),
+              });
+            }),
+          ),
         );
       }
 

@@ -14,6 +14,7 @@ import {
   type RestApiResult,
   type RestApiRouteProps,
 } from "../ApiGateway/RestApiEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -76,77 +77,79 @@ export const RestApiEventSource = Layer.effect(
       // registering the runtime dispatcher below. Namespaced under the
       // host for stable logical identity.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            const key = sanitizePathKey(path, httpMethod);
+        yield* wireEventSource(host, api, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              const key = sanitizePathKey(path, httpMethod);
 
-            // Build the Resource chain for each path segment; methods on
-            // the root path attach directly to `api.rootResourceId`.
-            let parentId: Input<string> = api.rootResourceId;
-            let prefix = "";
-            for (const segment of path.split("/").filter(Boolean)) {
-              prefix += `/${segment}`;
-              const resourceKey = prefix.replace(/[^A-Za-z0-9]+/g, "") || "root";
-              // Explicit annotation: `resource` feeds `parentId` for the next
-              // loop iteration's `Resource(...)` call, which TS 7 otherwise
-              // flags as a self-referential inference cycle (TS7022).
-              const resource: ApiGatewayResource = yield* Resource(
-                `${api.LogicalId}-${resourceKey}-Resource`,
-                {
-                  restApiId: api.restApiId,
-                  parentId,
-                  pathPart: segment,
+              // Build the Resource chain for each path segment; methods on
+              // the root path attach directly to `api.rootResourceId`.
+              let parentId: Input<string> = api.rootResourceId;
+              let prefix = "";
+              for (const segment of path.split("/").filter(Boolean)) {
+                prefix += `/${segment}`;
+                const resourceKey = prefix.replace(/[^A-Za-z0-9]+/g, "") || "root";
+                // Explicit annotation: `resource` feeds `parentId` for the next
+                // loop iteration's `Resource(...)` call, which TS 7 otherwise
+                // flags as a self-referential inference cycle (TS7022).
+                const resource: ApiGatewayResource = yield* Resource(
+                  `${api.LogicalId}-${resourceKey}-Resource`,
+                  {
+                    restApiId: api.restApiId,
+                    parentId,
+                    pathPart: segment,
+                  },
+                );
+                yield* api.bind`${resource}`({
+                  kind: "resource",
+                  resourceId: resource.resourceId,
+                  parentId: resource.parentId,
+                  pathPart: resource.pathPart,
+                });
+                parentId = resource.resourceId;
+              }
+
+              const method = yield* Method(`${api.LogicalId}-${key}-Method`, {
+                restApiId: api.restApiId,
+                resourceId: parentId,
+                httpMethod,
+                authorizationType: "NONE",
+                integration: {
+                  type: "AWS_PROXY",
+                  integrationHttpMethod: "POST",
+                  // AWS_PROXY integrations require the full Lambda invocation
+                  // URI. Region is derived from the function ARN so the
+                  // binding needs no ambient environment.
+                  uri: Output.map(
+                    Lambda.qualifiedArnOf(host),
+                    (arn: string) =>
+                      `arn:aws:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
+                  ),
                 },
-              );
-              yield* api.bind`${resource}`({
-                kind: "resource",
-                resourceId: resource.resourceId,
-                parentId: resource.parentId,
-                pathPart: resource.pathPart,
               });
-              parentId = resource.resourceId;
-            }
+              yield* api.bind`${method}`({
+                kind: "method",
+                methodId: method.LogicalId,
+                restApiId: method.restApiId,
+                resourceId: method.resourceId,
+                httpMethod: method.httpMethod,
+              });
 
-            const method = yield* Method(`${api.LogicalId}-${key}-Method`, {
-              restApiId: api.restApiId,
-              resourceId: parentId,
-              httpMethod,
-              authorizationType: "NONE",
-              integration: {
-                type: "AWS_PROXY",
-                integrationHttpMethod: "POST",
-                // AWS_PROXY integrations require the full Lambda invocation
-                // URI. Region is derived from the function ARN so the
-                // binding needs no ambient environment.
-                uri: Output.map(
-                  Lambda.qualifiedArnOf(host),
-                  (arn: string) =>
-                    `arn:aws:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
+              yield* Permission(`${api.LogicalId}-${key}-Permission`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedNameOf(host),
+                principal: "apigateway.amazonaws.com",
+                sourceArn: Output.map(
+                  Output.all(host.functionArn, api.restApiId),
+                  ([fnArn, apiId]: [string, string]) => {
+                    const [, , , region, accountId] = fnArn.split(":");
+                    return `arn:aws:execute-api:${region}:${accountId}:${apiId}/*`;
+                  },
                 ),
-              },
-            });
-            yield* api.bind`${method}`({
-              kind: "method",
-              methodId: method.LogicalId,
-              restApiId: method.restApiId,
-              resourceId: method.resourceId,
-              httpMethod: method.httpMethod,
-            });
-
-            yield* Permission(`${api.LogicalId}-${key}-Permission`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedNameOf(host),
-              principal: "apigateway.amazonaws.com",
-              sourceArn: Output.map(
-                Output.all(host.functionArn, api.restApiId),
-                ([fnArn, apiId]: [string, string]) => {
-                  const [, , , region, accountId] = fnArn.split(":");
-                  return `arn:aws:execute-api:${region}:${accountId}:${apiId}/*`;
-                },
-              ),
-            });
-          }),
+              });
+            }),
+          ),
         );
       }
 

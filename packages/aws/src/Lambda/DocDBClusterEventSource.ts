@@ -9,6 +9,7 @@ import {
   type DocumentDBRecord,
 } from "../DocDB/ClusterEventSource.ts";
 import type { DBCluster } from "../DocDB/DBCluster.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
@@ -37,37 +38,39 @@ export const DocDBClusterEventSource = Layer.effect(
       // handler below. Namespaced under the host so the mapping's logical
       // identity is stable.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.DocDB.ClusterEventSource(${cluster}))`({
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["secretsmanager:GetSecretValue"],
-                  Resource: [props.secretArn],
-                },
-              ],
-            });
+        yield* wireEventSource(host, cluster, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* host.bind`Allow(${host}, AWS.DocDB.ClusterEventSource(${cluster}))`({
+                policyStatements: [
+                  {
+                    Effect: "Allow",
+                    Action: ["secretsmanager:GetSecretValue"],
+                    Resource: [props.secretArn],
+                  },
+                ],
+              });
 
-            yield* Mapping(
-              `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${cluster.LogicalId})`,
-              {
-                functionName: Lambda.qualifiedNameOf(host),
-                eventSourceArn: cluster.dbClusterArn,
-                startingPosition: props.startingPosition ?? "LATEST",
-                batchSize: props.batchSize,
-                maximumBatchingWindow: props.maximumBatchingWindow,
-                enabled: props.enabled ?? true,
-                documentDBEventSourceConfig: {
-                  DatabaseName: props.databaseName,
-                  CollectionName: props.collectionName,
-                  FullDocument: props.fullDocument ?? "Default",
+              yield* Mapping(
+                `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${cluster.LogicalId})`,
+                {
+                  functionName: Lambda.qualifiedNameOf(host),
+                  eventSourceArn: cluster.dbClusterArn,
+                  startingPosition: props.startingPosition ?? "LATEST",
+                  batchSize: props.batchSize,
+                  maximumBatchingWindow: props.maximumBatchingWindow,
+                  enabled: props.enabled ?? true,
+                  documentDBEventSourceConfig: {
+                    DatabaseName: props.databaseName,
+                    CollectionName: props.collectionName,
+                    FullDocument: props.fullDocument ?? "Default",
+                  },
+                  sourceAccessConfigurations: [{ Type: "BASIC_AUTH", URI: props.secretArn }],
                 },
-                sourceAccessConfigurations: [{ Type: "BASIC_AUTH", URI: props.secretArn }],
-              },
-            );
-          }),
+              );
+            }),
+          ),
         );
       }
 

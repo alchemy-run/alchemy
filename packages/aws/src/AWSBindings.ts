@@ -1,14 +1,22 @@
 import { createHash } from "node:crypto";
-import { fromWebToken, type ResolvedCredentials } from "@distilled.cloud/aws/Credentials";
+import {
+  AwsCredentialProviderError,
+  fromWebToken,
+  type ResolvedCredentials,
+} from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
-import { Region, type RegionName } from "@distilled.cloud/aws/Region";
+import { MissingRegion, Region, type RegionName } from "@distilled.cloud/aws/Region";
+import * as ssm from "@distilled.cloud/aws/ssm";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Binding from "alchemy/Binding";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
+import { isEmulated } from "alchemy/Provider";
+import { UnbridgedDevEdge } from "alchemy/ProviderMode";
 import { isResourceOfType, type ResourceLike } from "alchemy/Resource";
 import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -16,6 +24,8 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { DEFAULT_LOCAL_ENDPOINT } from "./AuthProvider.ts";
 import { Credentials, makeAssumeRoleResolver } from "./Credentials.ts";
@@ -38,6 +48,10 @@ import { CurrentRegion } from "./Region.ts";
  * - any other host (a Cloudflare Worker, Cloud Run, a GKE pod): Alchemy
  *   creates an IAM User and AccessKey that may assume a Role, puts the
  *   statements on the Role, and binds the key into the host's env;
+ * - a host emulated by `alchemy dev` that binds a resource in the real cloud
+ *   (`Alchemy.remote()`): its role exists only on the emulator, so that
+ *   binding's calls sign with the developer's own credentials, which the dev
+ *   sidecar relays into the emulator (see {@link DEV_CREDENTIALS_ENV});
  * - no host (a script or deploy-time Action): nothing is bound and calls use
  *   the deployer's credentials.
  *
@@ -103,6 +117,44 @@ const KEY_ENV = {
   roleArn: "ALCHEMY_AWS_ROLE_ARN",
   region: "ALCHEMY_AWS_REGION",
 } as const;
+
+/**
+ * Env var naming the emulator SSM parameter that holds the developer's AWS
+ * credentials during `alchemy dev`. `AWSBindings.Bind` sets it on an emulated
+ * host bound to a resource in the real cloud (`Alchemy.remote()`); the dev
+ * sidecar sees it in the host's props and keeps the parameter fresh (see
+ * `Local/DevBridgeRelay.ts`); the host's binding clients read the parameter
+ * and sign their real-cloud calls with it.
+ */
+export const DEV_CREDENTIALS_ENV = "ALCHEMY_AWS_DEV_CREDENTIALS";
+
+/** The JSON the relay writes to the parameter. */
+export const DevCredentialsValue = Schema.fromJsonString(
+  Schema.Struct({
+    accessKeyId: Schema.String,
+    secretAccessKey: Schema.String,
+    sessionToken: Schema.optional(Schema.String),
+    region: Schema.String,
+    expiration: Schema.optional(Schema.Number),
+  }),
+);
+
+/**
+ * Env var marking a bound resource as living in the real cloud while its
+ * host is emulated: its binding clients sign with the developer's
+ * credentials against the real endpoint. Keyed by a hash of the resource's
+ * FQN.
+ */
+const realCloudMarker = (resource: ResourceLike) =>
+  Effect.sync(() => {
+    let marker = realCloudMarkers.get(resource.FQN);
+    if (marker === undefined) {
+      marker = `ALCHEMY_AWS_REAL_CLOUD_${createHash("sha256").update(resource.FQN).digest("hex").slice(0, 12)}`;
+      realCloudMarkers.set(resource.FQN, marker);
+    }
+    return marker;
+  });
+const realCloudMarkers = new Map<string, string>();
 
 /**
  * Env var holding the Role a Google-service-account host assumes with its
@@ -239,7 +291,46 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
       const host = yield* Binding.Host;
       if (host === undefined) return;
 
+      const realCloudTarget = yield* realCloudTargetFromEmulator(host);
+      if (realCloudTarget !== undefined) {
+        // Tags arrive literal or interpolated (`${options.tag}(${cluster})`).
+        const text = label.reduce(
+          (acc, part, i) => acc + part + (typeof args[i] === "string" ? args[i] : ""),
+          "",
+        );
+        const service = /^AWS\.(\w+)\.Connect/.exec(text)?.[1];
+        if (service !== undefined && PRIVATE_ENDPOINT_SERVICES.has(service)) {
+          return yield* Effect.die(
+            new UnbridgedDevEdge({
+              message:
+                `${host.FQN} runs on this machine under \`alchemy dev\`, but ${realCloudTarget.FQN} ` +
+                `only has a private endpoint in its VPC, which this machine cannot reach. ` +
+                "Pipe the host through Alchemy.remote() too, or emulate the resource.",
+              from: host.FQN,
+              to: realCloudTarget.FQN,
+              edge: "connect",
+            }),
+          );
+        }
+        if (!runsAsRole(host)) {
+          return yield* Effect.die(
+            new UnbridgedDevEdge({
+              message:
+                `${host.FQN} runs on this machine under \`alchemy dev\`, and calls from a local ` +
+                `${host.Type} cannot reach ${realCloudTarget.FQN} in the real cloud yet. ` +
+                "Pipe the host through Alchemy.remote() too, or emulate the resource.",
+              from: host.FQN,
+              to: realCloudTarget.FQN,
+              edge: "call",
+            }),
+          );
+        }
+      }
+
       if (runsAsRole(host)) {
+        if (realCloudTarget !== undefined) {
+          return yield* bindDevCredentials(data);
+        }
         return yield* (host as unknown as BindTarget).bind(
           labelled("Allow", label),
           host,
@@ -352,6 +443,47 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
 });
 
 /**
+ * The first resource a host emulated by `alchemy dev` binds in the real
+ * cloud (`Alchemy.remote()`, or a provider with no emulator), if every
+ * resource it binds there lives there. The host runs as an emulator
+ * identity that cannot reach them.
+ */
+const realCloudTargetFromEmulator = Effect.fn(function* (host: ResourceLike) {
+  if (!(yield* isEmulated(host))) return undefined;
+  const targets = yield* Binding.Targets;
+  for (const target of targets) {
+    if (yield* isEmulated(target)) return undefined;
+  }
+  return targets[0];
+});
+
+/**
+ * Services whose endpoints only exist inside a VPC: a connection from the
+ * developer's machine cannot reach them.
+ */
+const PRIVATE_ENDPOINT_SERVICES = new Set(["DAX", "DocDB", "ElastiCache", "MemoryDB"]);
+
+/**
+ * Bind real-cloud resources onto an emulated host: the host reads the
+ * developer's credentials from the emulator parameter the dev sidecar
+ * keeps fresh (see `DevWatchProvider.ts`), and each bound resource is marked so its client uses them.
+ * The policy statements are not attached anywhere: the developer's own
+ * permissions apply in dev.
+ */
+const bindDevCredentials = Effect.fn(function* (data: HostBinding) {
+  const runtime = (yield* CurrentRuntimeContext)!;
+  const stack = yield* Effect.serviceOption(Stack);
+  const scope = Option.isSome(stack) ? `${stack.value.name}/${stack.value.stage}` : "default";
+  yield* runtime.set(DEV_CREDENTIALS_ENV, Output.literal(`/alchemy/${scope}/dev-credentials`));
+  for (const target of yield* Binding.Targets) {
+    yield* runtime.set(yield* realCloudMarker(target), Output.literal("1"));
+  }
+  for (const [key, value] of Object.entries(data.env ?? {})) {
+    yield* runtime.set(key, toOutput(value));
+  }
+});
+
+/**
  * Attach the host to a VPC, labelled `Vpc(<host>, <label>)`. Only a host that
  * runs as an IAM role has a VPC to attach; any other host reaches AWS over
  * the internet, so this skips it. Call it behind a literal
@@ -422,7 +554,9 @@ const withWebIdentity = Effect.fn(function* <Op>(
  * Resolve a distilled operation (or several, with `Effect.all`) with the
  * host's AWS credentials, once when the binding's layer is built: by
  * assuming the Role {@link Bind} created for this host if there is one,
- * as-is otherwise (the host's own role, or the deployer).
+ * as-is otherwise (the host's own role, or the deployer). On a host emulated
+ * by `alchemy dev`, each call whose bound resources live in the real cloud
+ * signs with the developer's credentials instead (see `bindDevCredentials`).
  *
  * @param region the region a host with a created key signs in, e.g. a
  *   bucket's own. Its outer Effect may read resource attributes onto the
@@ -433,6 +567,18 @@ export const withCredentials: <Op>(
   operation: Effect.Effect<Op, never, any>,
   region?: Effect.Effect<Effect.Effect<string>, never, any>,
 ) => Effect.Effect<Op> = Effect.fn(function* <Op>(
+  operation: Effect.Effect<Op, never, any>,
+  region?: Effect.Effect<Effect.Effect<string>, never, any>,
+) {
+  const op = yield* withHostCredentials(operation, region);
+  if (!globalThis.__ALCHEMY_RUNTIME__) return op;
+  // Decided per call: a layer may resolve its operations before any
+  // resource is bound, and one operation can serve several bound resources.
+  const dev = yield* withDevCredentials(operation, region);
+  return dev === undefined ? op : routeCalls(op, dev.op, dev.applies, dev.context);
+});
+
+const withHostCredentials = Effect.fn(function* <Op>(
   operation: Effect.Effect<Op, never, any>,
   region?: Effect.Effect<Effect.Effect<string>, never, any>,
 ) {
@@ -493,3 +639,163 @@ export const withCredentials: <Op>(
     ]),
   );
 });
+
+/** Re-read the parameter at least this often, to pick up refreshes. */
+const DEV_CREDENTIALS_TTL_MS = 60_000;
+
+/**
+ * Resolve an operation for bound resources in the real cloud, on a host
+ * emulated by `alchemy dev`: sign with the developer's credentials (read
+ * from the emulator parameter named in {@link DEV_CREDENTIALS_ENV}) against
+ * the real endpoint. `applies` tells, per call, whether every resource the
+ * calling client is bound to is marked; `undefined` on any other host.
+ */
+const withDevCredentials = Effect.fn(function* <Op>(
+  operation: Effect.Effect<Op, never, any>,
+  region: Effect.Effect<Effect.Effect<string>, never, any> | undefined,
+) {
+  const runtime = yield* CurrentRuntimeContext;
+  if (runtime === undefined) return undefined;
+  const parameterName = yield* runtime.get<string>(DEV_CREDENTIALS_ENV);
+  if (parameterName === undefined) return undefined;
+  const applies = Effect.gen(function* () {
+    const targets = yield* Binding.Targets;
+    if (targets.length === 0) return false;
+    for (const target of targets) {
+      if ((yield* runtime.get<string>(yield* realCloudMarker(target))) === undefined) return false;
+    }
+    return true;
+  });
+
+  // The host's own context reaches the emulator; provided explicitly because
+  // the read runs inside a call whose context names the real cloud.
+  const [hostCredentials, hostHttp, hostRegion, hostEndpoint] = yield* Effect.all([
+    Effect.serviceOption(Credentials),
+    Effect.serviceOption(HttpClient.HttpClient),
+    Effect.serviceOption(Region),
+    Effect.serviceOption(Endpoint.Endpoint),
+  ]);
+  if (Option.isNone(hostCredentials)) return undefined;
+  const emulator = Layer.mergeAll(
+    Layer.succeed(Credentials, hostCredentials.value),
+    Option.match(hostHttp, {
+      onNone: () => FetchHttpClient.layer,
+      onSome: (client) => Layer.succeed(HttpClient.HttpClient, client),
+    }),
+    Option.match(hostRegion, {
+      onNone: () => Layer.empty,
+      onSome: (value) => Layer.succeed(Region, value),
+    }),
+    Layer.succeed(
+      Endpoint.Endpoint,
+      Option.getOrElse(hostEndpoint, () => Endpoint.fromEnvironment),
+    ),
+  );
+  let cached: { value: typeof DevCredentialsValue.Type; readAt: number } | undefined;
+  const read = Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    if (
+      cached !== undefined &&
+      now - cached.readAt < DEV_CREDENTIALS_TTL_MS &&
+      (cached.value.expiration === undefined || cached.value.expiration - now > 60_000)
+    ) {
+      return cached.value;
+    }
+    const { Parameter } = yield* ssm
+      .getParameter({ Name: parameterName, WithDecryption: true })
+      .pipe(Effect.provide(emulator));
+    const raw = Parameter?.Value;
+    const value = yield* Schema.decodeUnknownEffect(DevCredentialsValue)(
+      Redacted.isRedacted(raw) ? Redacted.value(raw) : raw,
+    );
+    cached = { value, readAt: now };
+    return value;
+  }).pipe(
+    Effect.mapError(
+      (cause) =>
+        new AwsCredentialProviderError({
+          message: `Failed to read the dev credentials from ${parameterName}: ${String(cause)}`,
+          provider: "alchemy-dev",
+        }),
+    ),
+  );
+  const credentials = Effect.map(read, (value): ResolvedCredentials => ({
+    accessKeyId: Redacted.make(value.accessKeyId),
+    secretAccessKey: Redacted.make(value.secretAccessKey),
+    sessionToken: value.sessionToken === undefined ? undefined : Redacted.make(value.sessionToken),
+    region: value.region as RegionName,
+    expiration: value.expiration,
+  }));
+  const callRegion: Effect.Effect<RegionName, MissingRegion> =
+    region !== undefined
+      ? Effect.map(
+          yield* region as Effect.Effect<Effect.Effect<string>>,
+          (value) => value as RegionName,
+        )
+      : read.pipe(
+          Effect.map((value) => value.region as RegionName),
+          Effect.mapError((error) => new MissingRegion({ message: error.message })),
+        );
+  const context = Layer.mergeAll(
+    Layer.succeed(Credentials, credentials),
+    Layer.succeed(Region, callRegion),
+    // The real endpoint, not the emulator's `AWS_ENDPOINT_URL`.
+    Layer.succeed(Endpoint.Endpoint, Effect.undefined),
+    FetchHttpClient.layer,
+  );
+  const op = yield* (operation as Effect.Effect<Op>).pipe(Effect.provide(context));
+  return { op, applies, context };
+});
+
+/**
+ * Route every call of an operation (or a tuple/record of them, or a
+ * paginated operation's `pages`/`items`) to `dev` when `useDev` holds for
+ * the calling client, to `host` otherwise. A distilled operation prefers
+ * the CALLER's context over the one it was yielded in, and an emulated
+ * host's ambient names the emulator, so `context` is provided around each
+ * dev call too.
+ */
+const routeCalls = <Op>(
+  host: Op,
+  dev: Op,
+  useDev: Effect.Effect<boolean>,
+  context: Layer.Layer<any>,
+): Op => {
+  if (typeof host === "function" && typeof dev === "function") {
+    const routed = (...args: unknown[]) => {
+      const onHost = (host as (...args: unknown[]) => unknown)(...args);
+      const onDev = (dev as (...args: unknown[]) => unknown)(...args);
+      if (Effect.isEffect(onHost) && Effect.isEffect(onDev)) {
+        return Effect.flatMap(useDev, (yes) => (yes ? Effect.provide(onDev, context) : onHost));
+      }
+      if (Stream.isStream(onHost) && Stream.isStream(onDev)) {
+        return Stream.unwrap(
+          Effect.map(useDev, (yes) => (yes ? Stream.provide(onDev, context) : onHost)),
+        );
+      }
+      return onHost;
+    };
+    for (const key of Object.keys(host)) {
+      (routed as unknown as Record<string, unknown>)[key] = routeCalls(
+        (host as Record<string, unknown>)[key],
+        (dev as Record<string, unknown>)[key],
+        useDev,
+        context,
+      );
+    }
+    return routed as Op;
+  }
+  if (typeof host === "object" && host !== null && typeof dev === "object" && dev !== null) {
+    return (
+      Array.isArray(host)
+        ? host.map((value, i) => routeCalls(value, (dev as unknown[])[i], useDev, context))
+        : Object.fromEntries(
+            Object.entries(host).map(([key, value]) => [
+              key,
+              routeCalls(value, (dev as Record<string, unknown>)[key], useDev, context),
+            ]),
+          )
+    ) as Op;
+  }
+  return host;
+};

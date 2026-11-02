@@ -10,6 +10,7 @@ import {
   type UserPoolTriggerProps,
   userPoolTriggerSourcePrefixes,
 } from "../Cognito/UserPoolTriggerEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -84,22 +85,24 @@ export const UserPoolTriggerEventSource = Layer.effect(
       // registering the runtime dispatcher below. Namespaced under the
       // host for stable logical identity.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* userPool.bind`AWS.Cognito.UserPoolTrigger(${host}, ${userPool}, ${props.trigger})`(
-              {
-                lambdaConfig: { [props.trigger]: Lambda.qualifiedArnOf(host) },
-              },
-            );
+        yield* wireEventSource(host, userPool, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* userPool.bind`AWS.Cognito.UserPoolTrigger(${host}, ${userPool}, ${props.trigger})`(
+                {
+                  lambdaConfig: { [props.trigger]: Lambda.qualifiedArnOf(host) },
+                },
+              );
 
-            yield* Permission(`${userPool.LogicalId}-${props.trigger}-Permission`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedNameOf(host),
-              principal: "cognito-idp.amazonaws.com",
-              sourceArn: userPool.userPoolArn,
-            });
-          }),
+              yield* Permission(`${userPool.LogicalId}-${props.trigger}-Permission`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedNameOf(host),
+                principal: "cognito-idp.amazonaws.com",
+                sourceArn: userPool.userPoolArn,
+              });
+            }),
+          ),
         );
       }
 

@@ -33,6 +33,7 @@
     "docs:build": "pnpm --dir website docs:build",
     "docs:check-jsdoc": "node ./scripts/fix-api-jsdocs.ts --check",
     "exports:check": "node scripts/sync-exports.ts --check",
+    "dev-bridges:check": "node scripts/check-dev-bridges.ts",
     "exports:sync": "node scripts/sync-exports.ts",
     "docs:check": "pnpm --dir website docs:check",
     "docs:fix-jsdoc": "node ./scripts/fix-api-jsdocs.ts",

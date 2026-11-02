@@ -1,6 +1,7 @@
 import * as Namespace from "alchemy/Namespace";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { wireEventSource } from "../Lambda/DevBridge.ts";
 import * as Lambda from "../Lambda/Function.ts";
 import { Permission as LambdaPermission } from "../Lambda/Permission.ts";
 import { qualifiedArnOf, qualifiedNameOf } from "../Lambda/QualifiedArn.ts";
@@ -70,20 +71,22 @@ export const LambdaCodeHookEventSource = Layer.effect(
       // the runtime dispatcher below. Namespaced under the host for stable
       // logical identity.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* alias.bind`AWS.LexV2.CodeHook(${host}, ${alias}, ${props.localeId})`({
-              codeHooks: { [props.localeId]: qualifiedArnOf(host) },
-            });
+        yield* wireEventSource(host, alias, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* alias.bind`AWS.LexV2.CodeHook(${host}, ${alias}, ${props.localeId})`({
+                codeHooks: { [props.localeId]: qualifiedArnOf(host) },
+              });
 
-            yield* LambdaPermission(`${alias.LogicalId}-${props.localeId}-CodeHookPermission`, {
-              action: "lambda:InvokeFunction",
-              functionName: qualifiedNameOf(host),
-              principal: "lexv2.amazonaws.com",
-              sourceArn: alias.botAliasArn,
-            });
-          }),
+              yield* LambdaPermission(`${alias.LogicalId}-${props.localeId}-CodeHookPermission`, {
+                action: "lambda:InvokeFunction",
+                functionName: qualifiedNameOf(host),
+                principal: "lexv2.amazonaws.com",
+                sourceArn: alias.botAliasArn,
+              });
+            }),
+          ),
         );
       }
 

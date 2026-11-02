@@ -44,8 +44,12 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import { DEV_CREDENTIALS_ENV } from "../AWSBindings.ts";
+import { DEV_BRIDGE_ENV } from "../Lambda/DevBridge.ts";
+import { relayDevBridge, writeDevCredentials } from "./DevBridgeRelay.ts";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
 
@@ -265,6 +269,88 @@ export const makeDevWatchProvider = <
       // guards a create-first replacement's old-generation delete against
       // killing the successor's watcher.
       const watches = new Map<string, WatchEntry>();
+
+      // A host bound to a resource in the real cloud reads the developer's
+      // credentials from the emulator parameter named in its env (see
+      // `AWSBindings.Bind`). Write it before the host can run, then rewrite
+      // it every 10 minutes, well inside an SSO session's lifetime, for the
+      // rest of the session. One loop per parameter.
+      const relays = new Map<string, Fiber.Fiber<unknown, unknown>>();
+      const relayDevCredentials = Effect.fn(function* (news: unknown) {
+        const parameterName = (news as { env?: Record<string, unknown> } | undefined)?.env?.[
+          DEV_CREDENTIALS_ENV
+        ];
+        if (typeof parameterName !== "string") return;
+        const running = relays.get(parameterName);
+        if (running !== undefined && running.pollUnsafe() === undefined) return;
+        // The profile chain's services come from the process hosting this
+        // provider (the sidecar's session environment).
+        const write = writeDevCredentials(parameterName).pipe(
+          Effect.provide(Layer.succeedContext(ambient)),
+        );
+        yield* write;
+        const refresh = yield* write.pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("[alchemy dev] failed to refresh the relayed AWS credentials", cause),
+          ),
+          Effect.repeat(Schedule.spaced("10 minutes")),
+          Effect.delay("10 minutes"),
+          Effect.forkDetach,
+          Scope.provide(scope),
+        );
+        relays.set(parameterName, refresh);
+      });
+
+      // A Function emulated here whose event sources live in the real cloud
+      // receives their invocations through a stub Lambda there (see
+      // `Lambda/DevBridge.ts`). Consume its bridge queue for the rest of the
+      // session. One loop per queue; the Function's name is re-read per
+      // invocation.
+      const bridges = new Map<
+        string,
+        { functionName: string; fiber: Fiber.Fiber<unknown, unknown> }
+      >();
+      const bridgeEvents = Effect.fn(function* (input: any, attrs: unknown) {
+        const env: Record<string, unknown> = {
+          ...(stripEffects(input.news) as { env?: Record<string, unknown> } | undefined)?.env,
+          ...Object.assign(
+            {},
+            ...((input.bindings ?? []) as Array<{ data?: { env?: Record<string, unknown> } }>).map(
+              (binding) => binding?.data?.env ?? {},
+            ),
+          ),
+        };
+        const queueUrl = env[DEV_BRIDGE_ENV.queueUrl];
+        const bucket = env[DEV_BRIDGE_ENV.bucket];
+        const functionName = (attrs as { functionName?: unknown } | undefined)?.functionName;
+        if (
+          typeof queueUrl !== "string" ||
+          typeof bucket !== "string" ||
+          typeof functionName !== "string"
+        ) {
+          return;
+        }
+        const running = bridges.get(queueUrl);
+        if (running !== undefined && running.fiber.pollUnsafe() === undefined) {
+          running.functionName = functionName;
+          return;
+        }
+        const entry = {
+          functionName,
+          fiber: undefined as unknown as Fiber.Fiber<unknown, unknown>,
+        };
+        entry.fiber = yield* relayDevBridge({
+          queueUrl,
+          bucket,
+          functionName: () => entry.functionName,
+          emulator: services,
+        }).pipe(
+          Effect.provide(Layer.succeedContext(ambient)),
+          Effect.forkDetach,
+          Scope.provide(scope),
+        );
+        bridges.set(queueUrl, entry);
+      });
 
       // Per-id serialization: engine reconciles, watcher re-reconciles, and
       // deletes never interleave for the same logical resource.
@@ -495,6 +581,7 @@ export const makeDevWatchProvider = <
         reconcile: Effect.fn(function* (input: any) {
           return yield* withLock(input.id)(
             Effect.gen(function* () {
+              yield* relayDevCredentials(stripEffects(input.news));
               const previous = (input.output ?? watches.get(input.id)?.attrs) as Attrs | undefined;
               const reconcileNews =
                 spec.transformReconcileNews !== undefined
@@ -510,6 +597,7 @@ export const makeDevWatchProvider = <
                 wrapped.reconcile(withSafeSession({ ...input, news: reconcileNews }) as any),
               );
               yield* ensureWatch(input, attrs);
+              yield* bridgeEvents(input, attrs);
               if (spec.onReconciled !== undefined) {
                 yield* spec
                   .onReconciled({

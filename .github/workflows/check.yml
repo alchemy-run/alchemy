@@ -86,6 +86,9 @@ jobs:
       - name: Check package exports
         run: pnpm exports:check
 
+      - name: Check alchemy dev bridges
+        run: pnpm dev-bridges:check
+
       # An internal PR carrying `deploy-website` gets a full Astro build in
       # website.yml via StaticSite. That build runs the same output validators,
       # so avoid building the site a second time here. Forks still run this

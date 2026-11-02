@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { requireSameSide } from "../Lambda/DevBridge.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import type { EventBus } from "./EventBus.ts";
 import { Rule, type RuleProps, type RuleTarget } from "./Rule.ts";
+import { originOf } from "./ToLambda.ts";
 
 interface EventDescriptor {
   id?: string;
@@ -38,6 +40,7 @@ export const toQueue = (
   props: QueueRouteTargetProps = {},
 ) =>
   Effect.gen(function* () {
+    yield* requireSameSide(originOf(descriptor), queue);
     const routeId = descriptor.id ?? createRouteId(descriptor, `${queue.LogicalId}Queue`);
 
     const rule = yield* Rule(routeId, {
