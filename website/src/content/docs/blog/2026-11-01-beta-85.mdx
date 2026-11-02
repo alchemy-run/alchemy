@@ -843,16 +843,18 @@ and ECR images hash only what `.dockerignore` keeps, so hashing a large repo
 dropped from 344 s to 8 s
 ([#2351](https://github.com/alchemy-run/alchemy/pull/2351)).
 
-### Workflows wake on time
+### One conformance suite for every workflow engine
 
-Wake-ups scheduled inside a Durable Object alarm inherited its retry
-backoff, so workflow sleeps ran later on every hop: four one-second sleeps
-took over 45 s, and now take about 4 s
-([#2916](https://github.com/alchemy-run/alchemy/pull/2916)). The fix came
-with one 28-case conformance suite that every engine now runs, on Durable
-Objects, Cloudflare Workflows and Lambda durable functions. The suite found
-12 of the 15 engine bugs fixed in this release, including:
+Every `WorkflowEngine` implementation now runs the same 28-case conformance
+suite: the Durable Object engine, Cloudflare Workflows and Lambda durable
+functions ([#2916](https://github.com/alchemy-run/alchemy/pull/2916)). The
+cases cover results, idempotent starts, durable sleeps, signals,
+compensations, defects, retries, interrupts and child workflows. The suite
+found 12 of the 15 engine bugs fixed in this release, including:
 
+- Sleeps ran later on every hop, because wake-ups inherited the Durable
+  Object alarm's retry backoff. Four one-second sleeps took over 45 s; they
+  now take about 4 s.
 - A repeated or late signal hung for three minutes, then died.
 - An interrupt sent right after start was dropped, or stopped the run without
   running its compensations.
