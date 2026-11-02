@@ -893,6 +893,9 @@ describe("Checkout", () => {
     Effect.gen(function* () {
       yield* Effect.log("POST /charges { amount: 9000 }");
       const status = yield* charge(9000);
+      if (status !== 200) {
+        yield* Effect.logError(`payment provider returned ${status}`);
+      }
       expect(status).toBe(200);
     }),
   );
