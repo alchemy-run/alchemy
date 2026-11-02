@@ -13,8 +13,8 @@ export class GreeterRpcs extends RpcGroup.make(
 export class Greeters extends Cluster.Entity<Greeters>()("Greeter", { schema: GreeterRpcs }) {}
 
 // The greeter calls the counter itself, by name.
-export const GreetersLive = Greeters.make(
-  { main: import.meta.url, handler: "GreetersLive", runners: Default },
+export default Greeters.make(
+  { main: import.meta.url, runners: Default },
   Effect.gen(function* () {
     const counters = yield* Counters;
     return Effect.gen(function* () {

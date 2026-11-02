@@ -39,14 +39,11 @@ export const EntityTypeId = "Cluster.Entity";
 export type EntityTypeId = typeof EntityTypeId;
 
 export interface EntityProps extends PlatformProps {
-  /** The module that exports this entity's class, usually `import.meta.url`. */
-  main: string;
   /**
-   * The export of {@link main} that holds the class: the class, or the
-   * Layer its `.make(...)` returned.
-   * @default "default"
+   * The module whose default export is this entity: the class, or the Layer
+   * its `.make(...)` returned. Usually `import.meta.url`.
    */
-  handler?: string;
+  main: string;
   /**
    * How long an instance may sit idle before the runner stops it. Its next
    * message starts it again.
@@ -155,14 +152,10 @@ export interface ExternalEntityProps {
   /**
    * The module that exports the entity's schema (or the Effect Cluster
    * entity itself), relative to where the deploy runs. The gateway imports
-   * it to serve the entity's RPCs.
+   * it to serve the entity's RPCs, from the export named after the
+   * entity's type.
    */
   main: string;
-  /**
-   * The export of {@link main} that holds the schema or entity.
-   * @default the entity's type
-   */
-  handler?: string;
   /**
    * Your existing Effect Cluster program, relative to where the deploy
    * runs: one that launches its entities on `NodeClusterHttp` with HTTP
@@ -361,8 +354,8 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  * ```typescript
  * export class Counter extends Cluster.Entity<Counter>()("Counter", { schema: CounterRpcs }) {}
  *
- * export const CounterLive = Counter.make(
- *   { main: import.meta.url, handler: "CounterLive", runners: Default },
+ * export default Counter.make(
+ *   { main: import.meta.url, runners: Default },
  *   Effect.gen(function* () {
  *     return Effect.gen(function* () {
  *       const count = yield* Ref.make(0);
@@ -467,14 +460,13 @@ const external = (
   const declaration = Effect.gen(function* () {
     const resource = yield* (platform as any)(entity.type, {
       main: props.main,
-      handler: props.handler,
     }) as Effect.Effect<Entity, never, Providers>;
     if (globalThis.__ALCHEMY_RUNTIME__) return resource;
     const host = yield* RunnersHost.pipe(Effect.provide(props.runners));
     yield* host.deployExternal({
       type: entity.type,
       main: yield* Effect.sync(() => nodePath.resolve(props.main)),
-      handler: props.handler ?? entity.type,
+      handler: entity.type,
       program: props.program,
       resource,
     });

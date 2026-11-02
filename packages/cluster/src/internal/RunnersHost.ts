@@ -241,7 +241,7 @@ export const makeRunnersLayer = <Network, Req>(options: {
             {
               name: entity.LogicalId,
               module: entity.Props.main,
-              handler: entity.Props.handler ?? "default",
+              handler: "default",
             },
             env,
             entity,

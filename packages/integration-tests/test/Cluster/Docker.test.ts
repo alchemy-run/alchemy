@@ -9,7 +9,7 @@ import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformanceTests, waitForReady } from "./conformance.ts";
 import { FRONT_PORT } from "./fixtures/cluster.ts";
 import Front from "./fixtures/front.ts";
-import { GreetersLive } from "./fixtures/greeter.ts";
+import GreetersLive from "./fixtures/greeter.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
