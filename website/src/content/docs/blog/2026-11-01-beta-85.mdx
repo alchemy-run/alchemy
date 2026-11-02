@@ -2,7 +2,7 @@
 title: 2.0.0-beta.85 - Effect 4.1, Domain Replay & DynamoDB State
 date: 2026-11-01T09:00:00Z
 category: release
-excerpt: Effect 4.1, Alchemy Domain deploys that backfill and rebuild views and projections, Domain models served over HTTP, MCP and the CLI, redesigned Cloud Run containers and keyless AWS↔GCP bindings, custom domains with any DNS provider, DynamoDB state, Alchemist, and 95 bug fixes.
+excerpt: Effect 4.1, Alchemy Domain deploys that backfill and rebuild views and projections, Domain models served over HTTP, MCP and the CLI, redesigned Cloud Run containers and keyless AWS↔GCP bindings, custom domains with any DNS provider, DynamoDB state, Alchemist, the @alchemy.run/test runner, and 95 bug fixes.
 ---
 
 import BackfillFanout from "../../../components/blog/BackfillFanout.astro";
@@ -16,8 +16,9 @@ every model change** by replaying history, and one Domain model can be served
 **over HTTP, MCP or the CLI**, so people and agents reach it however they
 prefer. GCP gets **redesigned Cloud Run services and containers** and **connects to AWS
 without keys**. Custom domains work with **any DNS provider**, **AWS state
-uses DynamoDB** and plans 270× faster, and **Alchemist** exposes the whole
-CLI as a programmatic API.
+uses DynamoDB** and plans 270× faster, **Alchemist** exposes the whole CLI
+as a programmatic API, and Alchemy's test runner ships as
+**`@alchemy.run/test`**.
 
 :::caution
 **Breaking changes**
@@ -869,6 +870,76 @@ child processes and sidecars included. Thanks
 
 Docs: [CLI API](/cli/api).
 
+## @alchemy.run/test: a test runner for Effect
+
+Alchemy's own test runner is now on npm as `@alchemy.run/test`
+([#2452](https://github.com/alchemy-run/alchemy/pull/2452)). It is small
+and built only for Effect: tests are Effects, and every test file runs in
+one bun process, with files and tests in flight at once.
+
+```sh
+bun add -d @alchemy.run/test effect
+bunx alchemy-test
+```
+
+```typescript
+import { describe, expect, it } from "@alchemy.run/test";
+import * as Effect from "effect/Effect";
+
+const charge = (amount: number) => Effect.succeed(amount > 5000 ? 402 : 200);
+
+describe("Checkout", () => {
+  it.live("charges the card", () =>
+    Effect.gen(function* () {
+      yield* Effect.log("POST /charges { amount: 9000 }");
+      const status = yield* charge(9000);
+      expect(status).toBe(200);
+    }),
+  );
+});
+```
+
+It prints one line per test as it finishes, with a running count, so you can
+follow a long run as it goes. Each test's stdout and stderr are buffered on
+their own. A passing test's output stays quiet; a failing test prints its
+error and its output at once, in one piece, never interleaved with tests
+running beside it. The last line links one log file holding every test's
+output, passes included:
+
+```text
+running 4 tests from 1 files
+
+[1/4 ✓1 ✗0] ✓ test/Checkout.test.ts > Checkout > adds an item to the cart (1ms)
+[2/4 ✓2 ✗0] ✓ test/Checkout.test.ts > Checkout > applies a discount (151ms)
+[3/4 ✓2 ✗1] ✗ test/Checkout.test.ts > Checkout > charges the card (0ms)
+  AssertionError: expected 402 to be 200
+      at <anonymous> (test/Checkout.test.ts:21:42)
+--- captured output ---
+POST /charges { amount: 9000 }
+payment provider returned 402
+--- end output ---
+[4/4 ✓3 ✗1] ✓ test/Checkout.test.ts > Checkout > sends a receipt (82ms)
+
+Tests: 1 failed | 3 passed (1 files, 250ms)
+
+Full log: .alchemy/log/test/2026-11-02T19-02-29-pid37920.log (2.6 KB)
+```
+
+That last line is there for agents. An agent running the suite reads the
+log to see what happened in any test, without piping output to a file or
+running the tests again. When nothing finishes for 10 s, the runner lists
+the tests still running and how long each has taken, so a hang names
+itself.
+
+`--stage <name>` gives each git worktree its own stage, so agents in
+parallel worktrees test against one cloud account without colliding
+([#2613](https://github.com/alchemy-run/alchemy/pull/2613)). `Test.make`,
+which deploys a stack for a test file, lives in the same package and
+works with `bun test` and Vitest too.
+
+Docs: [Test harness](/testing/test-harness) ·
+[Worktrees](/environments/worktrees).
+
 ## Lambda aliases, streaming and partial batch failures
 
 `alias` publishes a version on each deploy and routes every event source,
@@ -1060,7 +1131,6 @@ Thanks [Yanqi Zong](https://github.com/xiaoyu2er) and
 
 **Tooling**
 
-- `@alchemy.run/test` is on npm, with `--stage` for one stage per worktree ([#2452](https://github.com/alchemy-run/alchemy/pull/2452), [#2613](https://github.com/alchemy-run/alchemy/pull/2613)). [Docs](/testing/test-harness).
 - Docker builds take args and BuildKit secrets, and `Docker.Container` takes hardening options ([#2225](https://github.com/alchemy-run/alchemy/pull/2225), [#2623](https://github.com/alchemy-run/alchemy/pull/2623)).
 - Drizzle 1.0 rc.5 asks rename-or-create questions during plan ([#2433](https://github.com/alchemy-run/alchemy/pull/2433)).
 - `Command.Dev` takes a `port` or waits for its URL ([#2750](https://github.com/alchemy-run/alchemy/pull/2750)). [Docs](/cli/dev).
