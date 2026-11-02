@@ -1920,18 +1920,56 @@ const durableObjectPlatform = (
                           Effect.asVoid,
                         );
                     });
+                  /**
+                   * The key computed here, with this code, from its source's events.
+                   * A key's object still on the code from before a deploy (until it is
+                   * idle) can't fill itself for a version it doesn't know: until it
+                   * moves, its reads are answered this way, and nothing is stored.
+                   */
+                  const computed = (key: string) =>
+                    Effect.gen(function* () {
+                      const source = kit.catchUp!.source;
+                      const deliveries: Array<Delivery> = [];
+                      for (let after = 0; ;) {
+                        const rows = yield* net.source.log({ source, id: key }, after, 1_000);
+                        for (const row of yield* kit.history(target, source, key, rows))
+                          deliveries.push(...row.deliveries);
+                        if (rows.length < 1_000) break;
+                        after += rows.length;
+                      }
+                      return yield* kit.apply(key, emptySnapshot, deliveries);
+                    });
+                  /** Read from the key's object, or compute it here while that object can't fill itself. */
+                  const orComputed = <A>(
+                    fromObject: Effect.Effect<A>,
+                    fromHere: (result: Effect.Success<ReturnType<typeof computed>>) => A,
+                    key: string,
+                  ): Effect.Effect<A> =>
+                    ready(key).pipe(
+                      Effect.andThen(fromObject),
+                      Effect.catchCause((cause) =>
+                        kit.catchUp === undefined
+                          ? Effect.failCause(cause)
+                          : Effect.map(computed(key), fromHere),
+                      ),
+                    );
                   const read = (key: string) =>
                     announce.pipe(
-                      Effect.andThen(ready(key)),
-                      Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
-                    );
-                  const after = (key: string, cursor: number) =>
-                    ready(key).pipe(
                       Effect.andThen(
-                        unwrapDefects<ReadonlyArray<ViewEntry>>(
-                          namespace.getByName(key).after(cursor),
+                        orComputed(
+                          unwrapDefects<ViewSnapshot>(namespace.getByName(key).read()),
+                          (result) => result.snapshot,
+                          key,
                         ),
                       ),
+                    );
+                  const after = (key: string, cursor: number) =>
+                    orComputed(
+                      unwrapDefects<ReadonlyArray<ViewEntry>>(
+                        namespace.getByName(key).after(cursor),
+                      ),
+                      (result) => result.entries.filter((entry) => entry.seq > cursor),
+                      key,
                     );
                   return {
                     receive: (key, deliveries) =>

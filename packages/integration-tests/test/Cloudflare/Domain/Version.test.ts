@@ -6,6 +6,8 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -67,6 +69,28 @@ const row = (url: string, view: "summary" | "latest", account: string, net: numb
     }),
   );
 
+/** Poll a view row like `row`, but within a minute. */
+const soon = (url: string, view: "summary" | "latest", account: string, net: number) =>
+  call(url, "GET", `/${view}/${account}`).pipe(
+    Effect.map((body) => JSON.parse(body) as { net: number } | null),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (value) => value?.net === net,
+      times: 30,
+    }),
+  );
+
+/** Read `path` every 250 ms, without retrying, until interrupted: every answer, in order. */
+const watch = (url: string, path: string, answers: Array<{ status: number; body: string }>) =>
+  HttpClient.execute(
+    HttpClientRequest.get(`${url}${path}`).pipe(HttpClientRequest.setHeader("connection", "close")),
+  ).pipe(
+    Effect.flatMap((res) => Effect.map(res.text, (body) => ({ status: res.status, body }))),
+    Effect.catch((error) => Effect.succeed({ status: 0, body: String(error) })),
+    Effect.tap((answer) => Effect.sync(() => answers.push(answer))),
+    Effect.repeat(Schedule.spaced("250 millis")),
+  );
+
 /** The model's Durable Object classes on the Worker, by class name. */
 const classes = (scriptName: string) =>
   Effect.gen(function* () {
@@ -107,14 +131,26 @@ for (const dev of [true, false]) {
           expect(yield* row(url, "latest", "a-1", 10)).toEqual({ net: 10 });
           const before = dev ? {} : yield* classes(worker.workerName);
 
+          // Live, keep a-1's summary busy through the deploy, so its object stays on
+          // the code from before it (it moves once idle): every read must still answer.
+          const answers: Array<{ status: number; body: string }> = [];
+          const watcher = dev
+            ? undefined
+            : yield* Effect.forkChild(watch(url, "/summary/a-1", answers));
           yield* stack.deploy(
             Effect.gen(function* () {
               return { worker: yield* WorkerV1 };
             }),
           );
           yield* serving(url, "v1");
-          // The withdrawal, which the old rows never received, counts.
-          expect(yield* row(url, "summary", "a-1", 6)).toEqual({ net: 6 });
+          // The withdrawal, which the old rows never received, counts: at once, even
+          // while the busy object runs the old code.
+          expect(yield* soon(url, "summary", "a-1", 6)).toEqual({ net: 6 });
+          if (watcher) {
+            yield* Fiber.interrupt(watcher);
+            expect(answers.length).toBeGreaterThan(10);
+            expect(answers.filter((answer) => answer.status !== 200)).toEqual([]);
+          }
           expect(yield* row(url, "summary", "a-2", 3)).toEqual({ net: 3 });
           // The view built on it is rebuilt from the summary's new rows.
           expect(yield* row(url, "latest", "a-1", 6)).toEqual({ net: 6 });
