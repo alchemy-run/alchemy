@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-Each room has its own SQLite database. Store its messages there.
+A room's messages have an author, a text and an order, so they belong in a table. Each room has its own SQLite database, so the lobby's table only ever holds the lobby's messages.
 
 ## Create the table
 
@@ -22,7 +22,7 @@ Each room has its own SQLite database. Store its messages there.
       return {
 ```
 
-This runs once per room, before its first call. `exec` returns a cursor, and `toArray` runs the statement to the end.
+The inner Effect runs before a room's first call, so this is where the room sets up its table. `exec` returns a cursor, and `toArray` reads it to the end, which runs the statement.
 
 ## Post a message
 
@@ -46,7 +46,7 @@ This runs once per room, before its first call. `exec` returns a cursor, and `to
       };
 ```
 
-Pass values after the query. Each `?` takes the next one.
+The values follow the query, one for each `?`.
 
 ## Read the messages
 
@@ -62,7 +62,7 @@ Pass values after the query. Each `?` takes the next one.
       };
 ```
 
-The type argument describes each row.
+The type argument describes each row, so the Api gets typed messages back.
 
 ## Describe a message
 
@@ -76,7 +76,7 @@ import Room from "./room.ts";
 +const Message = Schema.Struct({ author: Schema.String, text: Schema.String });
 ```
 
-The API checks every posted message against this schema.
+The Api checks every posted message against this schema before the room sees it.
 
 ## Accept posts
 
@@ -97,7 +97,7 @@ The API checks every posted message against this schema.
         return HttpServerResponse.empty({ status: 404 });
 ```
 
-A body that doesn't match `Message` gets a 400.
+A body that doesn't match `Message` gets a 400, and never reaches the room.
 
 ## List them
 
@@ -129,4 +129,8 @@ curl localhost:3000/kitchen/messages
 
 Each room only sees its own messages.
 
-In [Part 3](/rivet/tutorial/part-3), an idle room clears its messages.
+You have rooms that keep a conversation, in a database of their own.
+
+:::note
+Next, clear rooms that go quiet in [Part 3](/rivet/tutorial/part-3). Everything a room can store is in [Storage](/rivet/storage).
+:::

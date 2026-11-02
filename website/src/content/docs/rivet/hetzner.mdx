@@ -3,9 +3,9 @@ title: Hetzner
 description: Run a Rivet control plane and pools of nodes on Hetzner Cloud Servers.
 ---
 
-Run Rivet on Hetzner Cloud. The control plane runs on Servers behind a Load Balancer. Each node is a Server of its own.
+Host your Durable Objects on Hetzner Cloud, and the control plane runs on Servers with a Volume each, behind a Load Balancer. Each node in a pool is a Server of its own. It's where [Part 4 of the tutorial](/rivet/tutorial/part-4) runs the rooms.
 
-```typescript
+```typescript title="src/cluster.ts"
 import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
 import * as Layer from "effect/Layer";
 
@@ -20,7 +20,7 @@ Install `@alchemy.run/hetzner` and finish [Hetzner setup](/hetzner/setup).
 
 You get one engine on a Server, with its data on a Volume. A Load Balancer is the endpoint. A firewall blocks every other connection to the Server.
 
-```typescript
+```typescript title="src/cluster.ts"
 export const Cluster = RivetHetzner.ControlPlane("Rivet", {
   location: "fsn1",
   serverType: "cx33",
@@ -32,7 +32,7 @@ export const Cluster = RivetHetzner.ControlPlane("Rivet", {
 
 More engines share object storage, so `objectStorage` is required. Hetzner Object Storage works:
 
-```typescript
+```typescript title="src/cluster.ts"
 export const Cluster = RivetHetzner.ControlPlane("Rivet", {
   instances: 3,
   objectStorage: {
@@ -50,7 +50,7 @@ Create the bucket and its keys in the Hetzner console first.
 
 ## The pool
 
-```typescript
+```typescript title="src/cluster.ts"
 export const Default = RivetHetzner.Pool("Default", { replicas: 2, serverType: "cx23" }).pipe(
   Layer.provide(Cluster),
 );
@@ -60,7 +60,7 @@ Each node's firewall only allows SSH, which Alchemy uses to deploy it.
 
 ## Call it from a Hetzner Service
 
-```typescript
+```typescript title="src/api.ts"
 export const ApiServer = Hetzner.Server("ApiServer", {
   serverType: "cx23",
   image: "ubuntu-24.04",
@@ -84,7 +84,4 @@ export default class Api extends Hetzner.Service<Api>()(
 
 [Part 4 of the tutorial](/rivet/tutorial/part-4) deploys this.
 
-## Reference
-
-- [Hetzner ControlPlane](/providers/rivet/hetzner#controlplane)
-- [Hetzner Pool](/providers/rivet/hetzner#pool)
+Every option, with its default, is in the reference: [Hetzner ControlPlane](/providers/rivet/hetzner#controlplane) and [Hetzner Pool](/providers/rivet/hetzner#pool).

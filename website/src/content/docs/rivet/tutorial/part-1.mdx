@@ -5,9 +5,9 @@ sidebar:
   order: 1
 ---
 
-Build chat rooms. Each room is a Durable Object: it counts its visitors, keeps its messages, and clears itself when nobody talks. You run everything on your machine first, then move it to Hetzner in [Part 4](/rivet/tutorial/part-4).
+Build chat rooms in four parts, starting with a room that counts its visitors. Each room is a Durable Object: later parts give it messages and an alarm, then move it to Hetzner. This part runs on your machine: no cloud account needed yet.
 
-The finished code is in [`examples/rivet-rooms`](https://github.com/alchemy-run/alchemy/tree/main/examples/rivet-rooms).
+If Durable Objects are new to you, read [What is a Durable Object?](/rivet/what-is-a-durable-object) first. The finished code is in [`examples/rivet-rooms`](https://github.com/alchemy-run/alchemy/tree/main/examples/rivet-rooms).
 
 ## Prerequisites
 
@@ -22,7 +22,7 @@ Finish [Rivet setup](/rivet/setup), including `docker swarm init`. Install `@alc
 +export const Cluster = RivetDocker.ControlPlane("Rivet");
 ```
 
-The control plane stores every room's data and routes calls to it. This one runs as a Docker service on `localhost:6420`.
+The control plane keeps every room's data and routes each call to the right room. This one runs on your Docker swarm, on `localhost:6420`.
 
 ## Add a pool
 
@@ -36,7 +36,7 @@ export const Cluster = RivetDocker.ControlPlane("Rivet");
 +export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
 ```
 
-A pool is the set of nodes that run your code. `Layer.provide(Cluster)` tells it which control plane to join.
+A pool is the group of nodes that run your code. `Layer.provide(Cluster)` tells it which control plane to join.
 
 ## Write the room
 
@@ -57,7 +57,7 @@ A pool is the set of nodes that run your code. `Layer.provide(Cluster)` tells it
 +) {}
 ```
 
-The outer Effect runs once per node. The inner Effect runs once per room, the first time something calls it. Providing `Default` puts the room on that pool.
+A Durable Object's code runs in two phases. The outer Effect runs once on each node; the inner Effect runs once per room, on its first call, and returns what the room can do. Providing `Default` puts the class on that pool.
 
 ## Count visitors
 
@@ -80,7 +80,7 @@ The outer Effect runs once per node. The inner Effect runs once per room, the fi
   }).pipe(Effect.provide(Default)),
 ```
 
-`state.storage` belongs to one room. Each room keeps its own `visitors` count.
+`state` is this room's own. A key that was never set reads as `undefined`, so a new room starts at zero, and every room keeps its own `visitors` count.
 
 ## Serve an API
 
@@ -113,7 +113,7 @@ The outer Effect runs once per node. The inner Effect runs once per room, the fi
 +) {}
 ```
 
-The API runs on port 3000 and joins the control plane's Docker network, so it can reach the control plane.
+The Api is a Docker service on port 3000. It joins the control plane's Docker network, which is how it reaches the control plane.
 
 ## Call the room
 
@@ -136,7 +136,7 @@ The API runs on port 3000 and joins the control plane's Docker network, so it ca
   }),
 ```
 
-`yield* Room` gives you every room. `getByName` picks one, and creates it the first time you call it.
+`yield* Room` gives the Api every room. `getByName` names one, and the first call to a name starts that room.
 
 ## Add the Stack
 
@@ -162,7 +162,7 @@ The API runs on port 3000 and joins the control plane's Docker network, so it ca
 +);
 ```
 
-The Stack only names the API. The room, the pool and the control plane come with it.
+The Stack only names the Api. The room comes with it, because the Api calls it, and the pool and the control plane come with the room.
 
 ## Deploy
 
@@ -185,4 +185,8 @@ curl -X POST localhost:3000/kitchen/join
 
 Each room counts on its own. The first request can take a few seconds while the pool starts.
 
-In [Part 2](/rivet/tutorial/part-2), each room keeps its messages in SQL.
+You have rooms that anyone can join by name, each counting its own visitors.
+
+:::note
+Next, give each room its messages in [Part 2](/rivet/tutorial/part-2). How a class is written is in [Durable Object](/rivet/durable-objects).
+:::

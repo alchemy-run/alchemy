@@ -3,9 +3,9 @@ title: Railway
 description: Run pools of Rivet nodes on Railway, on a control plane on another cloud.
 ---
 
-Run Rivet nodes on Railway. Each pool is a Railway Service with no public domain. Use a control plane from another cloud, or [Rivet Cloud](/rivet/rivet-cloud).
+Host your rooms' nodes on Railway, and each pool is a Railway Service with no public domain. Railway runs the nodes only: give the pool a control plane from another cloud, or [Rivet Cloud](/rivet/rivet-cloud).
 
-```typescript
+```typescript title="src/cluster.ts"
 import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
 import * as RivetRailway from "@alchemy.run/rivet/Railway";
 import * as Layer from "effect/Layer";
@@ -21,7 +21,7 @@ Install `@alchemy.run/railway` and finish [Railway setup](/railway/setup).
 
 The pool gets a Railway Project of its own. Put it in one you have instead:
 
-```typescript
+```typescript title="src/cluster.ts"
 export const Project = Railway.Project("Rooms");
 
 export const Default = RivetRailway.Pool("Default", {
@@ -32,7 +32,7 @@ export const Default = RivetRailway.Pool("Default", {
 
 ## Call it from a Railway Service
 
-```typescript
+```typescript title="src/api.ts"
 export default class Api extends Railway.Service<Api>()(
   "Api",
   { project: Project, main: import.meta.url },
@@ -48,6 +48,4 @@ export default class Api extends Railway.Service<Api>()(
 ) {}
 ```
 
-## Reference
-
-- [Railway Pool](/providers/rivet/railway#pool)
+Every option, with its default, is in the reference: [Railway Pool](/providers/rivet/railway#pool).

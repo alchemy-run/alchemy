@@ -526,6 +526,7 @@ const SECTIONS: Section[] = [
         "rivet/tutorial/part-2",
         "rivet/tutorial/part-3",
         "rivet/tutorial/part-4",
+        "rivet/what-is-a-durable-object",
         "rivet/durable-objects",
         "rivet/storage",
         "rivet/calling",

@@ -1844,11 +1844,12 @@ export default defineConfig({
             {
               label: "Concepts",
               items: [
-                { label: "Durable Objects", link: "/rivet/durable-objects" },
+                { label: "What is a Durable Object?", link: "/rivet/what-is-a-durable-object" },
+                { label: "Durable Object", link: "/rivet/durable-objects" },
                 { label: "Storage", link: "/rivet/storage" },
-                { label: "Calling Durable Objects", link: "/rivet/calling" },
-                { label: "Control planes", link: "/rivet/control-planes" },
-                { label: "Pools", link: "/rivet/pools" },
+                { label: "Calling a Durable Object", link: "/rivet/calling" },
+                { label: "Control Plane", link: "/rivet/control-planes" },
+                { label: "Pool", link: "/rivet/pools" },
               ],
             },
             {

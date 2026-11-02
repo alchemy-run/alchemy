@@ -1,71 +1,94 @@
 ---
 title: Storage
-description: Key-value storage, SQL and alarms for each Rivet Durable Object instance.
+description: What each Rivet Durable Object instance keeps — key-value entries, a SQL database and one alarm — and how to change it safely.
 ---
 
-Every instance has its own SQLite database. You use it three ways: as a key-value store, with SQL, and through one alarm. Get it from `Rivet.DurableObjectState`:
+Every room keeps its own data. Nothing else can read it, and it outlives the room going to sleep, the node it ran on, and every deploy.
 
-```typescript
+This chapter covers the three ways a room uses its storage: key-value entries for small values, a SQL database for anything with structure, and one alarm to wake itself later. It ends with how to keep a change correct when two calls reach a room at once.
+
+All three come from the room's state:
+
+```typescript title="src/room.ts"
 const state = yield* Rivet.DurableObjectState;
 ```
 
-## Keys and values
+## Keep small values as keys
 
-```typescript
+A room's visitor count is one number. A key holds it:
+
+```typescript title="src/room.ts"
 yield* state.storage.put("visitors", 3);
 const visitors = yield* state.storage.get<number>("visitors");
 ```
 
-`get` returns `undefined` for a key you never set. Values can be any plain data.
+`get` returns `undefined` for a key the room never set, so a new room starts from nothing without any setup. A value can be anything you'd put in a variable: numbers, strings, objects, arrays, even a `Date` or a `Map`.
 
-```typescript
+`delete` removes a key and says whether it was there:
+
+```typescript title="src/room.ts"
 const existed = yield* state.storage.delete("visitors");
 ```
 
-## List keys
+## List keys by prefix
 
-```typescript
+Keys sort as strings, so a shared prefix groups them. A room that keeps a draft per author can list them all:
+
+```typescript title="src/room.ts"
 const drafts = yield* state.storage.list<string>({ prefix: "draft:" });
-for (const [key, value] of drafts) {
+for (const [key, text] of drafts) {
   // ...
 }
 ```
 
-`list` returns a `Map` in key order. Narrow it with `start`, `end` and `limit`, or set `reverse: true`.
+`list` returns a `Map` in key order. `start` and `end` narrow it to a range, `limit` caps it, and `reverse: true` walks it backwards.
 
-```typescript
-yield* state.storage.deleteAll();
+`deleteAll` empties every key at once. The room's SQL tables stay.
+
+## Keep structured data in SQL
+
+A room's messages have an author, a text, and an order. That's a table:
+
+```typescript title="src/room.ts"
+yield* (yield* state.storage.sql.exec(
+  "CREATE TABLE IF NOT EXISTS messages (author TEXT NOT NULL, text TEXT NOT NULL)",
+)).toArray();
 ```
 
-`deleteAll` removes every key. Your SQL tables stay.
+Each room has its own SQLite database, so the lobby's `messages` table holds only the lobby's messages. There's no room column to filter by, and no other room's rows to skip.
 
-## SQL
+`exec` takes the query and then one value for each `?`:
 
-```typescript
-const rows = yield* state.storage.sql.exec<{ author: string }>(
-  "SELECT author FROM messages WHERE text LIKE ?",
-  "%hello%",
+```typescript title="src/room.ts"
+yield* (yield* state.storage.sql.exec(
+  "INSERT INTO messages (author, text) VALUES (?, ?)",
+  author,
+  text,
+)).toArray();
+```
+
+`exec` returns a cursor, and the statement runs as you read it. `toArray` reads every row, so call it even on a statement that returns none.
+
+The type argument describes each row:
+
+```typescript title="src/room.ts"
+const rows = yield* state.storage.sql.exec<{ author: string; text: string }>(
+  "SELECT author, text FROM messages",
 );
-const authors = yield* rows.toArray();
+const messages = yield* rows.toArray();
 ```
 
-`exec` returns a cursor. `toArray` returns every row, and `one` returns the only row or fails.
+`one` reads the only row instead, and fails with `SqlRowCountMismatch` when there are none or several.
 
-Run statements that return nothing through `toArray` too:
+## Create tables when the room starts
 
-```typescript
-yield* (yield* state.storage.sql.exec("DELETE FROM messages")).toArray();
-```
+The inner Effect runs before a room's first call, so it's where the room sets up its tables:
 
-## Create tables once
-
-The instance's inner Effect runs before its first call, so create tables there:
-
-```typescript
+```typescript title="src/room.ts"
 return Effect.gen(function* () {
   const state = yield* Rivet.DurableObjectState;
   yield* (yield* state.storage.sql.exec(
-    "CREATE TABLE IF NOT EXISTS messages (author TEXT, text TEXT)",
+    "CREATE TABLE IF NOT EXISTS messages (author TEXT NOT NULL, text TEXT NOT NULL)",
   )).toArray();
   return {
     // ...
@@ -73,26 +96,55 @@ return Effect.gen(function* () {
 });
 ```
 
-## Alarms
+`IF NOT EXISTS` makes it safe to run every time the room wakes. When a later version of the room needs a new column, add an `ALTER TABLE` the same way, guarded so it runs once.
 
-Each instance has one alarm. Set it to a time in milliseconds:
+## Set an alarm
 
-```typescript
+A room has one alarm: a time at which Rivet calls the room's `alarm` handler, whether or not anyone calls the room. The chat room uses it to clear its messages an hour after the last one:
+
+```typescript title="src/room.ts"
 const now = yield* Effect.sync(() => Date.now());
-yield* state.storage.setAlarm(now + 60_000);
+yield* state.storage.setAlarm(now + 60 * 60 * 1000);
 ```
 
-When it comes due, Rivet calls the instance's `alarm`:
+The time is in milliseconds since the epoch. Setting the alarm again moves it, so setting it on every post keeps pushing it back until the room has been quiet for an hour.
 
-```typescript
-return {
-  alarm: () => state.storage.deleteAll(),
-};
+When it fires, Rivet runs `alarm`:
+
+```typescript title="src/room.ts"
+alarm: () =>
+  Effect.gen(function* () {
+    yield* (yield* state.storage.sql.exec("DELETE FROM messages")).toArray();
+  }),
 ```
 
-Setting the alarm again moves it. `getAlarm` returns when it fires, or `null`. `deleteAlarm` cancels it.
+`getAlarm` returns when the alarm is due, or `null`. `deleteAlarm` cancels it. A room that needs several timers keeps them in a table and sets the alarm to the earliest.
 
-## Where next
+## Keep a change in one step
 
-- [Part 2 of the tutorial](/rivet/tutorial/part-2) stores messages in SQL
-- [Part 3](/rivet/tutorial/part-3) clears idle rooms with an alarm
+A room can run more than one call at once: while one call waits on storage, another can start. So a change written as a read and then a write can lose an update.
+
+```typescript title="src/room.ts"
+const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+yield* state.storage.put("visitors", visitors);
+```
+
+Two joins at the same moment can both read 2, and both write 3. One visitor goes uncounted.
+
+Make the change a single SQL statement, and the database applies it in one step:
+
+```typescript title="src/room.ts"
+yield* (yield* state.storage.sql.exec(
+  "CREATE TABLE IF NOT EXISTS counts (name TEXT PRIMARY KEY, n INTEGER NOT NULL)",
+)).toArray();
+
+const row = yield* (yield* state.storage.sql.exec<{ n: number }>(
+  `INSERT INTO counts (name, n) VALUES ('visitors', 1)
+   ON CONFLICT (name) DO UPDATE SET n = n + 1
+   RETURNING n`,
+)).one();
+```
+
+Each join adds one, however many arrive together, and gets back the count after its own.
+
+Next, [Calling a Durable Object](/rivet/calling): how callers reach a room.

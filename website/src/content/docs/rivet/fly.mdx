@@ -3,9 +3,9 @@ title: Fly
 description: Run a Rivet control plane on Fly Machines and pools of nodes on a Fly Service.
 ---
 
-Run Rivet on Fly.io. The control plane runs on Fly Machines. Each pool is a private Fly Service.
+Host your Durable Objects on Fly.io, and the control plane runs on Fly Machines with a volume each, behind the App's `fly.dev` address. Each pool is a private Fly Service, and any Fly Service calls the rooms by name.
 
-```typescript
+```typescript title="src/cluster.ts"
 import * as RivetFly from "@alchemy.run/rivet/Fly";
 import * as Layer from "effect/Layer";
 
@@ -20,7 +20,7 @@ Install `@alchemy.run/fly` and finish [Fly setup](/fly/setup).
 
 You get three engine Machines, each with a volume, sharing a Tigris bucket. The App's `fly.dev` address is the endpoint.
 
-```typescript
+```typescript title="src/cluster.ts"
 export const Cluster = RivetFly.ControlPlane("Rivet", {
   region: "fra",
   guest: { cpus: 4, memoryMb: 8192 },
@@ -30,7 +30,7 @@ export const Cluster = RivetFly.ControlPlane("Rivet", {
 
 ## The pool
 
-```typescript
+```typescript title="src/cluster.ts"
 export const Default = RivetFly.Pool("Default", { replicas: 2, region: "fra" }).pipe(
   Layer.provide(Cluster),
 );
@@ -40,7 +40,7 @@ The pool has no public address.
 
 ## Call it from a Fly Service
 
-```typescript
+```typescript title="src/api.ts"
 export default class Api extends Fly.Service<Api>()(
   "Api",
   { main: import.meta.url },
@@ -56,7 +56,4 @@ export default class Api extends Fly.Service<Api>()(
 ) {}
 ```
 
-## Reference
-
-- [Fly ControlPlane](/providers/rivet/fly#controlplane)
-- [Fly Pool](/providers/rivet/fly#pool)
+Every option, with its default, is in the reference: [Fly ControlPlane](/providers/rivet/fly#controlplane) and [Fly Pool](/providers/rivet/fly#pool).
