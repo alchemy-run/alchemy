@@ -209,6 +209,25 @@ for example a digest reference pushed by CI, like
 deploys the reference as-is and skips the docker pull and push
 entirely.
 
+alchemy pulls an `image` as `linux/amd64` on every deploy and every
+`alchemy dev` start, so a mutable tag like `:latest` picks up a newly
+pushed image. An image that is only in your local Docker, built on
+your machine or loaded with `docker load`, has no registry to pull
+from, so alchemy uses the local copy:
+
+```typescript
+// docker build --platform linux/amd64 -t local-only/app:dev .
+export class App extends Cloudflare.Container<App>()("App", {
+  image: "local-only/app:dev",
+}) {}
+```
+
+Build it for `linux/amd64`, the platform Cloudflare runs. When an
+image can be neither pulled nor found locally, the error names the
+image and the `docker login` or `docker build` command that fixes it.
+The tag is the image's identity, so give each build its own tag to
+redeploy it.
+
 ## Cached builds by default
 
 Dockerfile builds, inline Dockerfiles, and Effect-native `main` builds use

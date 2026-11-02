@@ -112,6 +112,15 @@ const reportParking = (pass: AlarmPass) =>
   });
 const registries = new WeakMap<cf.DurableObjectState, CallbackRegistry>();
 
+/**
+ * @internal Run background work handed to `waitUntil` apart from the callback
+ * invocation that started it. The invocation ends first, so its schedules
+ * would be rejected; here they start a fresh budget, as external schedules
+ * do. Only for work whose schedules report their own progress.
+ */
+export const outsideAlarmPass = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.provideService(effect, CurrentAlarmPass, undefined);
+
 /** @internal */
 export const initializeAlarmCallbacks = (state: cf.DurableObjectState) => {
   const registry: CallbackRegistry = { callbacks: new Map(), open: true };
@@ -277,14 +286,21 @@ const makeAlarmCallback = <Payload, E, R>(
             yield* ensureAlarmTables(raw);
             const existing = yield* readAlarm(raw, name, id);
             const source = pass?.row;
-            const progress = Math.max(existing?.progress ?? -1, source?.progress ?? -1);
+            // Another callback's cursor counts in its own units: it never hides
+            // this schedule, but a cursor that isn't past it isn't progress.
+            const progress = Math.max(
+              existing?.progress ?? -1,
+              source?.callback === name ? source.progress : -1,
+            );
             if (
               schedule.progress !== undefined &&
               (schedule.progress < progress ||
                 (source === undefined && schedule.progress === progress))
             )
               return;
-            const progressed = schedule.progress !== undefined && schedule.progress > progress;
+            const progressed =
+              schedule.progress !== undefined &&
+              schedule.progress > Math.max(progress, source?.progress ?? -1);
             const sourceProgressed =
               source?.callback === name &&
               source.id === id &&
