@@ -221,43 +221,56 @@ export const Charge = DurableQueue.make({
 const receipt = yield* DurableQueue.process(Charge, { orderId, amount: 42 });
 ```
 
-`DurableQueueProducer` sends the run's items to a Cloudflare Queue, and
+Declare the queue, and the handler that does the work, next to the workflow:
+
+```typescript
+// src/Checkout.ts
+export const Charges = Cloudflare.Queues.Queue("Charges");
+
+export const ChargeHandler = DurableQueues.handler(Charge, ({ orderId, amount }) =>
+  Effect.succeed(`charged ${orderId} ${amount}`),
+);
+```
+
+`DurableQueueProducer` sends the run's items to the queue, and
 `DurableQueueWorker` consumes it, running the handler for each item:
 
 ```typescript
 // src/App.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DurableQueues from "alchemy/DurableQueues";
 import * as Workflows from "alchemy/Workflows";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { Charge, Checkout, CheckoutLive } from "./Checkout.ts";
+import { ChargeHandler, Charges, Checkout, CheckoutLive } from "./Checkout.ts";
 
 export default class App extends Cloudflare.Worker<App>()(
   "App",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const charges = yield* Cloudflare.Queues.Queue("Charges");
     const checkout = yield* Workflows.RunWorkflow(Checkout);
     return {
       fetch: Effect.gen(function* () {
-        const run = yield* checkout.start({ orderId: "o-1" });
-        return yield* HttpServerResponse.json({ executionId: run.executionId });
+        const request = yield* HttpServerRequest;
+        const orderId = new URL(request.url, "http://app").searchParams.get("order") ?? "o-1";
+        // Starting the same order again returns the run already started.
+        const run = yield* checkout.start({ orderId });
+        return yield* HttpServerResponse.json(yield* run.status);
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         CheckoutLive,
-        Cloudflare.Workflows.DurableQueueWorker(charges, [
-          DurableQueues.handler(Charge, ({ amount }) => Effect.succeed(`charged ${amount}`)),
-        ]),
+        // Consumes Charges: runs ChargeHandler and resumes the workflow.
+        Cloudflare.Workflows.DurableQueueWorker(Charges, [ChargeHandler]),
       ).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
             Cloudflare.Workflows.layerDurableObjectEngine(),
-            Cloudflare.Workflows.DurableQueueProducer(charges),
+            // DurableQueue.process sends its items to Charges.
+            Cloudflare.Workflows.DurableQueueProducer(Charges),
           ),
         ),
       ),

@@ -263,61 +263,73 @@ export const Charge = DurableQueue.make({
 const receipt = yield* DurableQueue.process(Charge, { orderId, amount: 42 });
 ```
 
+Declare the queue next to the workflow:
+
+```typescript
+// src/Checkout.ts
+export const Charges = AWS.SQS.Queue("Charges", { visibilityTimeout: "2 minutes" });
+```
+
 Provide `DurableQueueProducer` to the workflow function, so `process` sends
-the run's items to an SQS queue:
+the run's items to the queue:
 
 ```typescript
 // src/CheckoutWorkflows.ts
 import * as AWS from "@alchemy.run/aws";
-import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Checkout, CheckoutLive } from "./Checkout.ts";
+import { Charges, Checkout, CheckoutLive } from "./Checkout.ts";
 
-export const Charges = AWS.SQS.Queue("Charges", { visibilityTimeout: "2 minutes" });
-
+/** The durable function the Checkout runs execute in. */
 export class CheckoutWorkflows extends AWS.Lambda.WorkflowFunction<CheckoutWorkflows>()(
   "CheckoutWorkflows",
   { workflows: [Checkout] },
 ) {}
 
 export default CheckoutWorkflows.make(
-  { main: import.meta.url },
-  Layer.unwrap(
-    Effect.map(Charges, (charges) =>
-      CheckoutLive.pipe(Layer.provide(AWS.Lambda.DurableQueueProducer(charges))),
-    ),
-  ),
+  { main: import.meta.url, executionTimeout: "1 day" },
+  // DurableQueue.process sends its items to Charges.
+  CheckoutLive.pipe(Layer.provide(AWS.Lambda.DurableQueueProducer(Charges))),
 );
 ```
 
 `DurableQueueWorker` consumes the queue on another function, which reaches the
-runs through `DurableFunctionEngine`:
+runs through `DurableFunctionEngine`. Here it's the function that starts them:
 
 ```typescript
-// src/ChargeWorker.ts
+// src/Api.ts
 import * as AWS from "@alchemy.run/aws";
-import * as DurableQueues from "alchemy/DurableQueues";
+import * as Workflows from "alchemy/Workflows";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { Charge } from "./Checkout.ts";
-import { Charges, CheckoutWorkflows } from "./CheckoutWorkflows.ts";
+import { ChargeHandler, Charges, Checkout } from "./Checkout.ts";
+import { CheckoutWorkflows } from "./CheckoutWorkflows.ts";
 
-export class ChargeWorker extends AWS.Lambda.Function<ChargeWorker>()("ChargeWorker") {}
-
-export default ChargeWorker.make(
-  { main: import.meta.url, timeout: "1 minute" },
+/** Starts and reads Checkout runs over HTTP, and works the charge queue. */
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, functionUrl: true, timeout: Duration.minutes(1) },
   Effect.gen(function* () {
-    const charges = yield* Charges;
-    // Building the Layer registers the consumer.
-    yield* Effect.void.pipe(
-      Effect.provide(
-        AWS.Lambda.DurableQueueWorker(charges, [
-          DurableQueues.handler(Charge, ({ amount }) => Effect.succeed(`charged ${amount}`)),
-        ]).pipe(Layer.provide(AWS.Lambda.DurableFunctionEngine(CheckoutWorkflows))),
+    const checkout = yield* Workflows.RunWorkflow(Checkout);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const orderId = new URL(request.originalUrl, "http://api").searchParams.get("order") ?? "o-1";
+        const run = yield* checkout.start({ orderId });
+        return yield* HttpServerResponse.json(yield* run.status);
+      }),
+    };
+  }).pipe(
+    Effect.provide(
+      // Consumes Charges: runs ChargeHandler and resumes the workflow.
+      AWS.Lambda.DurableQueueWorker(Charges, [ChargeHandler]).pipe(
+        Layer.provideMerge(AWS.Lambda.DurableFunctionEngine(CheckoutWorkflows)),
       ),
-    );
-  }),
-);
+    ),
+  ),
+) {}
 ```
 
 The handler's success, typed failure or defect is the run's result for the
