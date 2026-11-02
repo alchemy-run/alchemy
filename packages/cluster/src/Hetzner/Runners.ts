@@ -93,6 +93,8 @@ export const Runners = (id: string, options: RunnersOptions = {}) =>
             serverType: options.serverType ?? "cx23",
             image: "ubuntu-24.04",
             location: network.location,
+            // IPv4 installs Node and deploys over SSH; IPv6 would only spend an address.
+            enableIpv6: false,
             networks: [{ networkId: network.networkId as number }],
             firewalls: [firewall],
             labels: { [RUNNERS_LABEL]: name },

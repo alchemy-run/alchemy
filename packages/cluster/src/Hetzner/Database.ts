@@ -112,6 +112,8 @@ export const Database = (id: string, props: DatabaseProps = {}) =>
         // Hetzner's Ubuntu image with Docker preinstalled.
         image: "docker-ce",
         location,
+        // IPv4 pulls the Postgres image; IPv6 would only spend an address.
+        enableIpv6: false,
         networks: [network],
         firewalls: [firewall],
         volumes: [volume],
