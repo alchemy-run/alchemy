@@ -16,9 +16,8 @@ const LedgerLive = Ledger.toLayer(
         for (const { key, event, generation } of batch)
           yield* note(`g${generation} ${key.id}:${event.amount}`);
       }),
-      start: ({ generation, previous }) => note(`start g${generation} after ${previous ?? "none"}`),
-      complete: ({ generation, previous }) =>
-        note(`complete g${generation} after ${previous ?? "none"}`),
+      materialize: ({ generation, previous, ready }) =>
+        note(`${ready ? "ready" : "materialize"} g${generation} after ${previous ?? "none"}`),
     };
   }),
 );

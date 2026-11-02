@@ -44,10 +44,10 @@ While it waits, the deploy reports each run's phase and how far through the dire
 
 A consumer keyed by its source reads its history in one pass. Any other reads it, then applies it once every source's history is in. `refused` counts calls Cloudflare turned down for the account's load; the run sends them again, more slowly.
 
-A projection's [`start` and `complete`](/domain/projection#rebuild-into-a-new-table) run in the run: `start` before any key handles an input, and `complete` once every key has handled its history. The run counts as complete only after `complete` has run, so a deploy waits for it. A hook that fails is retried, and the deploy notes it:
+A projection's [`materialize`](/domain/projection#rebuild-into-a-new-table) runs in the run: before any key handles an input, and again, `ready`, once every key has handled its history. The run counts as complete only after that, so a deploy waits for it. A `materialize` that fails is retried, and the deploy notes it:
 
 ```sh
-[DomainBackfillRun] Backfilling projection:Ledger starting (start failed, retrying: table ledger_v1: permission denied) (12s) ...
+[DomainBackfillRun] Backfilling projection:Ledger starting (materialize failed, retrying: table ledger_v1: permission denied) (12s) ...
 ```
 
 The deploy waits 30 minutes at most. Set `backfillTimeout` to change that:

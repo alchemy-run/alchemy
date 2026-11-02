@@ -236,7 +236,7 @@ describe("Domain backfill (simulated)", () => {
   );
 
   scenario(
-    "keyed by its source, commits while the consumer's start keeps failing wait for it",
+    "keyed by its source, commits while the run's start hook keeps failing wait for it",
     (sim) =>
       Effect.gen(function* () {
         sim.singleSource = true;

@@ -204,10 +204,10 @@ const count = (n: number) => n.toLocaleString("en-US");
 /** One run's progress, as the deploy notes it. */
 export const describeProgress = (run: Progress) => {
   if (run.phase === "complete") return `${run.target} complete`;
-  // A projection's `start` or `complete` hook that failed: the run retries it.
+  // A projection's `materialize` that failed, before the history or after it: the run retries it.
   const hook = /^(start|complete): /.exec(run.lastError ?? "");
   const failed = hook
-    ? ` (${hook[1]} failed, retrying: ${run.lastError!.slice(hook[0].length, hook[0].length + 200).split("\n")[0]})`
+    ? ` (materialize failed, retrying: ${run.lastError!.slice(hook[0].length, hook[0].length + 200).split("\n")[0]})`
     : "";
   if (run.phase === "unknown") return `${run.target} starting${failed}`;
   if (failed && run.subtrees > 0 && run.done === run.subtrees)

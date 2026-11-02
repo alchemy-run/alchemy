@@ -34,31 +34,33 @@ export interface Input<Key extends Key.Any, S, E> {
   readonly generation: number;
 }
 
-/** Which generation a {@link Lifecycle} hook is for, and the one it replaces. */
+/** Where a projection's store should be, as {@link Lifecycle.materialize} receives it. */
 export interface Generation {
   readonly generation: number;
   /** The generation before it, which this one replaces; `undefined` for the first. */
   readonly previous: number | undefined;
-}
-
-/**
- * What a projection does around a rebuild, for a store a version bump must
- * prepare or clean up. Each hook runs once per generation, from the one
- * object that runs its backfill, so a deploy repeated or interrupted doesn't
- * run it again; a crash between a hook and its record does, so make each one
- * idempotent (`CREATE TABLE IF NOT EXISTS`, `DROP TABLE IF EXISTS`).
- */
-export interface Lifecycle {
-  /** Before the generation's first input reaches the handler: create its table. */
-  readonly start?: (generation: Generation) => Effect.Effect<void, never, RuntimeContext>;
   /**
-   * Once the handler has every input recorded before the generation began (its
-   * history): point readers at its table, and drop the previous one.
+   * The generation has handled every input recorded before it began (its
+   * history): readers should use its store now, and the previous one can go.
    */
-  readonly complete?: (generation: Generation) => Effect.Effect<void, never, RuntimeContext>;
+  readonly ready: boolean;
 }
 
-/** What a projection's Layer builds: its handler, with the hooks of its {@link Lifecycle}. */
+/** What a projection does to its store as a generation fills, for a store a version bump rebuilds. */
+export interface Lifecycle {
+  /**
+   * Bring the store to where this generation needs it: its table exists, and
+   * once `ready`, readers use it and the previous generation's is dropped.
+   * Called with `ready: false` before the generation's first input reaches the
+   * handler, and with `ready: true` once it has handled its history. It may be
+   * called again with the same values (after a crash, or a failure, which is
+   * retried), so converge from what the store holds: `CREATE TABLE IF NOT
+   * EXISTS`, `DROP TABLE IF EXISTS`.
+   */
+  readonly materialize?: (generation: Generation) => Effect.Effect<void, never, RuntimeContext>;
+}
+
+/** What a projection's Layer builds: its handler, with {@link Lifecycle.materialize}. */
 export interface Hosted<I> extends Lifecycle {
   readonly handle: Handler<I>;
 }
@@ -253,12 +255,12 @@ export interface Definition<
  *       handle: Effect.fn(function* (batch) {
  *         yield* store.upsert(`ledger_v${batch[0]!.generation}`, batch);
  *       }),
- *       start: ({ generation }) => store.create(`ledger_v${generation}`),
- *       complete: ({ generation, previous }) =>
- *         Effect.gen(function* () {
- *           yield* store.use(`ledger_v${generation}`);
- *           if (previous !== undefined) yield* store.drop(`ledger_v${previous}`);
- *         }),
+ *       materialize: Effect.fn(function* ({ generation, previous, ready }) {
+ *         yield* store.ensure(`ledger_v${generation}`);
+ *         if (!ready) return;
+ *         yield* store.use(`ledger_v${generation}`);
+ *         if (previous !== undefined) yield* store.drop(`ledger_v${previous}`);
+ *       }),
  *     };
  *   }),
  * );
@@ -351,7 +353,7 @@ export interface ProjectionClass<
   /**
    * Implement the projection. The construction Effect runs once, resolving
    * your store and the streams it writes, and returns the handler, or the
-   * handler with the hooks of its {@link Lifecycle}; neither requires anything.
+   * handler with {@link Lifecycle.materialize}; neither requires anything.
    */
   toLayer<E, R>(
     build: Effect.Effect<

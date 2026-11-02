@@ -337,7 +337,7 @@ describe.sequential("a deploy and its backfill", () => {
   );
 
   test.provider(
-    "a projection's start runs before its first input, and complete before the deploy returns",
+    "a projection materializes its store before its first input, and again once ready, before the deploy returns",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -359,10 +359,10 @@ describe.sequential("a deploy and its backfill", () => {
         const { notes } = JSON.parse(yield* call(url, "GET", "/hooks")) as {
           notes: Array<string>;
         };
-        expect(notes[0]).toBe("start g0 after none");
+        expect(notes[0]).toBe("materialize g0 after none");
         expect(notes.slice(1, 4).sort()).toEqual(["g0 a-1:10", "g0 a-1:20", "g0 a-2:5"]);
         expect(notes.indexOf("g0 a-1:10")).toBeLessThan(notes.indexOf("g0 a-1:20"));
-        expect(notes[4]).toBe("complete g0 after none");
+        expect(notes[4]).toBe("ready g0 after none");
         expect(notes).toHaveLength(5);
         yield* stack.destroy();
       }),

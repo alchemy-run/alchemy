@@ -523,17 +523,13 @@ const build = <A, E, R>(
     for (const projection of definitions.projections) {
       const implementation = implementationOf(projection);
       const generation = kernel.generationOf("projection", projection.projectionName);
-      const lifecycleOf = { generation, previous: generation > 0 ? generation - 1 : undefined };
-      // Platforms run hooks inside their runtime, as they run handlers.
-      const hook = (
-        run:
-          | ((generation: Projection.Generation) => Effect.Effect<void, never, unknown>)
-          | undefined,
-      ) =>
-        run === undefined
-          ? undefined
-          : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs hooks inside its runtime, which provides RuntimeContext
-            (Effect.suspend(() => run(lifecycleOf)) as Effect.Effect<void>);
+      const previous = generation > 0 ? generation - 1 : undefined;
+      // The run materializes the store before the first input, and again once the history is in.
+      // Platforms run it inside their runtime, as they run handlers.
+      const materialize = implementation.materialize;
+      const materializeAt = (ready: boolean) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs hooks inside its runtime, which provides RuntimeContext
+        Effect.suspend(() => materialize!({ generation, previous, ready })) as Effect.Effect<void>;
       const writes = (projection.definition.writes ?? []).map((stream) =>
         streamStores.get(stream.streamName)!,
       );
@@ -543,10 +539,9 @@ const build = <A, E, R>(
           name: projection.projectionName,
           options: { batch: Projection.batchMillis(implementation.options) },
           generation,
-          lifecycle: {
-            ...(implementation.start ? { start: hook(implementation.start)! } : {}),
-            ...(implementation.complete ? { complete: hook(implementation.complete)! } : {}),
-          },
+          ...(materialize === undefined
+            ? {}
+            : { lifecycle: { start: materializeAt(false), complete: materializeAt(true) } }),
           singleSource: kernel.singleSource(`projection:${projection.projectionName}`),
           history: kernel.history,
           run: (key, batch) =>

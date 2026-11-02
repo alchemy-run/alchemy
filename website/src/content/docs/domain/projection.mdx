@@ -172,7 +172,7 @@ The handler's code is the same either way: it always receives an array. Changing
 
 ## Rebuild into a new table
 
-Rather than replay over the table readers are using, a projection can build each generation into its own table and switch over once it has the whole history. Return `start` and `complete` alongside the handler:
+Rather than replay over the table readers are using, a projection can build each generation into its own table and switch over once it has the whole history. Return `materialize` alongside the handler:
 
 ```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
 export const LedgerLive = Ledger.toLayer(
@@ -183,20 +183,22 @@ export const LedgerLive = Ledger.toLayer(
       handle: Effect.fn(function* (batch) {
         yield* store.record(`ledger_v${batch[0]!.generation}`, batch.map(toRow));
       }),
-      start: ({ generation }) => store.create(`ledger_v${generation}`),
-      complete: ({ generation, previous }) =>
-        Effect.gen(function* () {
-          yield* store.use(`ledger_v${generation}`);
-          if (previous !== undefined) yield* store.drop(`ledger_v${previous}`);
-        }),
+      materialize: Effect.fn(function* ({ generation, previous, ready }) {
+        yield* store.ensure(`ledger_v${generation}`);
+        if (!ready) return;
+        yield* store.use(`ledger_v${generation}`);
+        if (previous !== undefined) yield* store.drop(`ledger_v${previous}`);
+      }),
     };
   }),
 );
 ```
 
-Every input carries the `generation` it was routed for. A generation is the projection's version plus the versions of the views it reads, so it changes whenever the projection is rebuilt. `start` runs before the generation's first input, and `complete` runs once every key has handled the history recorded before the deploy, with `previous`, the generation it replaces. Inputs that arrive live keep coming after `complete`.
+Every input carries the `generation` it was routed for. A generation is the projection's version plus the versions of the views it reads, so it changes whenever the projection is rebuilt.
 
-Each hook runs at least once. One that fails is retried, with a longer wait each time, and the deploy reports it while it waits. Write them to be safe to run again, like the handler: create the table if it doesn't exist, drop it if it exists.
+`materialize` brings the store to where the generation needs it. It's called with `ready: false` before the generation's first input, so its table exists, and with `ready: true` once every key has handled the history recorded before the deploy, so readers switch to it and `previous`, the generation it replaces, is dropped. Inputs that arrive live keep coming after that.
+
+It can be called again with the same values: after a crash, or after a failure, which is retried with a longer wait each time while the deploy reports it. Write it to converge from whatever the store holds, like the handler: create the table if it doesn't exist, drop it if it exists.
 
 Removing a projection deletes its code with it, so nothing runs to clean up after it. Drop its store yourself.
 
