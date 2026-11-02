@@ -20,6 +20,25 @@ uses DynamoDB** and plans 270× faster, **Alchemist** exposes the whole CLI
 as a programmatic API, and Alchemy's test runner ships as
 **`@alchemy.run/test`**.
 
+:::danger
+**Upgrade the Cloudflare state store to v8, and don't go back**
+
+beta.85 deploys the Cloudflare state store with direct API calls instead of a
+stack, as state store v8. Your next `alchemy deploy` asks to upgrade the
+store; in CI, pass `--yes`, or upgrade it first with:
+
+```sh
+alchemy state bootstrap
+```
+
+The upgrade keeps the store's auth token, encryption key and state. It also
+deletes the `CloudflareStateStore` stack that beta.84 and earlier use to manage
+the store. Don't run an older Alchemy against the store after upgrading: it
+can no longer manage it, and you risk losing the encryption key, which nothing
+can recover. Upgrade every machine and CI job that uses the store to beta.85
+together.
+:::
+
 :::caution
 **Breaking changes**
 
