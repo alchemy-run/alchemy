@@ -227,11 +227,14 @@ const BackfillLive = () =>
     read: Effect.fn(function* ({ output }) {
       return output;
     }),
-    reconcile: Effect.fn(function* ({ instanceId: resource, news, output, session }) {
+    reconcile: Effect.fn(function* ({ instanceId: resource, news, olds, output, session }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // A target the last deploy saw complete has its history: this deploy fills the others.
+      // A target the last deploy saw complete, with the same plan, has its history: this
+      // deploy fills the others. One whose plan changed is checked again by its run.
       const done = new Set(output?.status === "complete" ? output.targets : []);
-      const filling = news.targets.filter((target) => !done.has(target));
+      const samePlan = (target: string) =>
+        JSON.stringify(olds?.plans?.[target]) === JSON.stringify(news.plans?.[target]);
+      const filling = news.targets.filter((target) => !done.has(target) || !samePlan(target));
       const label = filling.join(", ");
       const started = yield* Clock.currentTimeMillis;
       const timeout = (news.timeoutSeconds ?? 1800) * 1000;
