@@ -945,10 +945,19 @@ export default defineConfig({
           label: "GCP",
           items: [
             { label: "Overview", link: "/gcp" },
+            { label: "What is GCP?", link: "/gcp/what-is-gcp" },
             { label: "Setup", link: "/gcp/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "gcp/tutorial" } }],
+            },
+            {
+              label: "Access & security",
+              items: [
+                { label: "IAM & bindings", link: "/gcp/security/iam" },
+                { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
+                { label: "Federated identity", link: "/gcp/security/federated-identity" },
+              ],
             },
             {
               label: "Compute",
@@ -964,6 +973,36 @@ export default defineConfig({
                 { label: "Cloud Functions", link: "/gcp/compute/cloud-functions" },
                 { label: "GKE", link: "/gcp/compute/gke" },
               ],
+            },
+            {
+              label: "Storage & databases",
+              items: [
+                { label: "Firestore", link: "/gcp/data/firestore" },
+                { label: "Cloud Storage", link: "/gcp/data/storage" },
+                { label: "Cloud SQL", link: "/gcp/data/cloud-sql" },
+                { label: "BigQuery", link: "/gcp/data/bigquery" },
+                { label: "Memorystore", link: "/gcp/data/memorystore" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Pub/Sub", link: "/gcp/messaging/pubsub" },
+                { label: "Cloud Scheduler", link: "/gcp/messaging/scheduler" },
+                { label: "Storage events", link: "/gcp/messaging/storage-events" },
+                { label: "Eventarc", link: "/gcp/messaging/eventarc" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "VPC & private networking", link: "/gcp/networking/vpc" },
+                { label: "Private services", link: "/gcp/networking/private-services" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Logging & Monitoring", link: "/gcp/observability/monitoring" }],
             },
             {
               label: "Frontend",
@@ -995,46 +1034,8 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
-              items: [
-                { label: "Firestore", link: "/gcp/data/firestore" },
-                { label: "Cloud Storage", link: "/gcp/data/storage" },
-                { label: "Cloud SQL", link: "/gcp/data/cloud-sql" },
-                { label: "BigQuery", link: "/gcp/data/bigquery" },
-                { label: "Memorystore", link: "/gcp/data/memorystore" },
-              ],
-            },
-            {
               label: "AI",
               items: [{ label: "Vertex AI", link: "/gcp/ai/vertex-ai" }],
-            },
-            {
-              label: "Messaging & events",
-              items: [
-                { label: "Pub/Sub", link: "/gcp/messaging/pubsub" },
-                { label: "Cloud Scheduler", link: "/gcp/messaging/scheduler" },
-                { label: "Storage events", link: "/gcp/messaging/storage-events" },
-                { label: "Eventarc", link: "/gcp/messaging/eventarc" },
-              ],
-            },
-            {
-              label: "Security & secrets",
-              items: [
-                { label: "IAM & bindings", link: "/gcp/security/iam" },
-                { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
-                { label: "Federated identity", link: "/gcp/security/federated-identity" },
-              ],
-            },
-            {
-              label: "Observability",
-              items: [{ label: "Logging & Monitoring", link: "/gcp/observability/monitoring" }],
-            },
-            {
-              label: "Networking",
-              items: [
-                { label: "VPC & private networking", link: "/gcp/networking/vpc" },
-                { label: "Private services", link: "/gcp/networking/private-services" },
-              ],
             },
             providerResourcesEntry("GCP"),
           ],

@@ -104,6 +104,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   AI: l("sparkles"),
   "Security & secrets": l("lock"),
   "Accounts & access": l("key-round"),
+  "Access & security": l("key-round"),
   "Storage & databases": l("database"),
   "Networking & edge": l("globe"),
   Workers: l("zap"),

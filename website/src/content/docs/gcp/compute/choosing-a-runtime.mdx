@@ -1,78 +1,82 @@
 ---
 title: Choosing a runtime
-description: Cloud Run services vs jobs vs worker pools vs Cloud Functions vs GKE — what each one is for and what it costs to run.
+description: How Cloud Run services, jobs and worker pools, Cloud Functions and GKE differ in what triggers them, how they scale and what they cost, and how to choose one for each part of an app.
 ---
 
-Every Alchemy app on GCP needs somewhere for its code to run. Each
-runtime takes the same Effect program: you bundle it with `main`, bind
-resources to it, and Alchemy grants the IAM.
+import DAG from "../../../../components/DAG.astro";
 
-- **Cloud Run service** (`GCP.Function`) — an HTTP server that scales
-  to zero. **Use this by default.**
-- **Cloud Run job** (`GCP.Run.Job`) — a batch task that runs to
-  completion and exits.
-- **Cloud Run worker pool** (`GCP.Run.WorkerPool`) — always-on
-  containers with no URL, for queue consumers.
-- **Cloud Function** (`GCP.CloudFunctions.Function`) — an HTTP
-  function built in the cloud, with no local Docker.
-- **GKE** (`Kubernetes.Deployment` on `GCP.Container.Cluster`) —
-  Kubernetes workloads on a cluster you own.
+Google Cloud gives you several places to run code. Most of them are Cloud Run underneath: containers that Google starts, scales and stops for you. They differ in what starts them and how long they live. Every one runs the same kind of Alchemy program, takes the same bindings, and runs as a service account of its own.
 
-## At a glance
+This chapter walks through each runtime, says what it's good at, and ends with how to mix them in one app.
 
-|                 | Service                  | Job                         | Worker pool                  | Cloud Function                 | GKE                                    |
-| --------------- | ------------------------ | --------------------------- | ---------------------------- | ------------------------------ | -------------------------------------- |
-| Entry           | `fetch`                  | `run`                       | `run` or a pull event source | `fetch`                        | `fetch` or `run`                       |
-| Triggered by    | HTTP, push event sources | `RunJob`, Cloud Scheduler   | Nothing: always running      | HTTP, push event sources       | HTTP via a load balancer, Jobs on apply |
-| Cost shape      | Per request; zero idle   | Per execution; zero idle    | Per running instance         | Per request; zero idle         | Cluster plus pods                      |
-| Packaging       | Image built locally      | Image built locally         | Image built locally          | Source built by Google         | Image built locally                    |
-| Deploy time     | About a minute           | About a minute              | About a minute               | A few minutes                  | Cluster: ~10 min. Pods: seconds        |
+## The same program on every runtime
 
-## Cloud Run service — the default
+Whichever you pick, you declare it with an id, its configuration and an Effect. Construction binds what it uses. A runtime that answers HTTP returns `fetch`, and one that runs to completion returns `run`:
 
-An HTTP container that scales with traffic and down to zero. It serves
-many requests per instance, streams responses, and runs your `fetch`
-handler as-is. Pub/Sub, Cloud Storage, Cloud Scheduler, and Eventarc
-can all push to it.
+```typescript title="src/reindex.ts"
+export default class Reindex extends GCP.Run.Job<Reindex>()(
+  "Reindex",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const db = yield* GCP.Firestore.ReadDatabase(Links);
+    return {
+      run: Effect.gen(function* () {
+        const { documents } = yield* db.list("links");
+        yield* Effect.log(`reindexing ${documents.length} links`);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(GCP.Firestore.ReadDatabaseHttp)),
+) {}
+```
 
-→ [Cloud Run](/gcp/compute/cloud-run)
+So moving part of an app from one runtime to another changes its declaration, not its bindings. Choose by how the work behaves.
 
-## Cloud Run job — batch work
+## Cloud Run services: answer HTTP
 
-A container with a `run` entry. It starts, does the work, and exits.
-Nothing is billed between executions. Start it from a service with the
-`RunJob` binding, or on a timer with Cloud Scheduler.
+A [Cloud Run service](/gcp/compute/cloud-run) runs your `fetch` handler in containers that start as requests arrive, serve many requests each, and stop when traffic does. An idle service costs nothing. Pub/Sub, Cloud Storage, Cloud Scheduler and Eventarc can all push to it, so it handles events as well as requests.
 
-→ [Cloud Run jobs](/gcp/compute/jobs)
+It's an easy and cheap place to start, and it fits APIs, websites and event handlers.
 
-## Cloud Run worker pool — background consumers
+## Cloud Run jobs: run to completion
 
-A pool of containers with no URL. It suits a worker that pulls from
-Pub/Sub around the clock and should keep running whether or not
-anyone sends HTTP traffic.
+A [job](/gcp/compute/jobs) starts, does its work and exits. Nothing runs, or is billed, between executions. Start one from another runtime with the `RunJob` binding, or on a schedule with Cloud Scheduler.
 
-→ [Worker pools](/gcp/compute/worker-pools)
+It fits batch work: reindexing, exports, migrations, nightly reports.
 
-## Cloud Functions — no Docker needed
+## Worker pools: always running, no URL
 
-A 2nd-gen Cloud Function runs on Cloud Run underneath. The difference
-is the build: Alchemy uploads your bundled program and Google builds
-it, so you can deploy from a machine without Docker.
+A [worker pool](/gcp/compute/worker-pools) keeps containers running whether or not anyone calls them, and has no URL at all. You pay for them while they run.
 
-→ [Cloud Functions](/gcp/compute/cloud-functions)
+It fits workers that pull from Pub/Sub around the clock, or hold a connection open.
 
-## GKE — Kubernetes
+## Cloud Functions: built by Google
 
-Reach for GKE when you need Kubernetes itself: Helm charts, long-lived
-pods, custom networking, or workloads you already run elsewhere.
-Bindings work the same way. They grant roles to the pod's identity
-through Workload Identity.
+A [Cloud Function](/gcp/compute/cloud-functions) is a Cloud Run service whose image Google builds from your bundled code, instead of your local Docker. Deploys take a few minutes longer, and need no Docker on the machine running them.
 
-→ [GKE](/gcp/compute/gke)
+It fits deploying from somewhere Docker isn't available.
 
-## Where next
+## GKE: Kubernetes
 
-- [Cloud Run](/gcp/compute/cloud-run) — the runtime the rest of these
-  docs build on.
-- [How bindings grant IAM](/gcp/security/iam) — what happens when a
-  runtime binds a resource.
+[GKE](/gcp/compute/gke) runs a Kubernetes cluster, in Autopilot mode with Google managing the nodes. You deploy Deployments and Jobs from the same Stack, and bindings grant roles to each pod's identity through Workload Identity.
+
+A cluster takes about ten minutes to create and costs money while it exists. Choose it when you want Kubernetes itself: Helm charts, long-lived pods, or workloads you already run on it.
+
+## Mix runtimes in one app
+
+An app rarely needs just one. A common shape is a service for the API, a topic it publishes to, a worker pool that consumes it, and a job that runs nightly:
+
+<DAG
+  nodes={[
+    { id: "api", label: "Api", type: "Cloud Run service", layer: 0 },
+    { id: "topic", label: "Events", type: "Pub/Sub topic", layer: 1 },
+    { id: "worker", label: "Worker", type: "worker pool", layer: 2 },
+    { id: "job", label: "Reindex", type: "Cloud Run job", layer: 1 },
+  ]}
+  edges={[
+    { from: "api", to: "topic" },
+    { from: "topic", to: "worker", dashed: true },
+    { from: "api", to: "job", label: "RunJob" },
+  ]}
+/>
+
+Each runtime runs as its own service account, granted only the roles its own bindings ask for.
