@@ -1,0 +1,252 @@
+---
+/**
+ * `<BackfillFanout />` — how a Domain backfill reaches every instance. A
+ * top-down tree draws itself level by level: the deploy's run, the relays it
+ * hands subtrees to, the relays they fan out to six ways at a time, the
+ * aggregate instances at the bottom, and the view keys each instance's
+ * history reaches. The tree is a small slice of the real one; the counts in
+ * the captions are the real numbers.
+ */
+
+const W = 820;
+const LEFT = 104;
+const RIGHT = W - 16;
+const FAN = 6;
+const RELAYS = 4;
+
+const rows = { run: 34, relays: 112, fan: 192, instances: 268, keys: 324 } as const;
+
+// Leaves first, evenly spaced; every parent sits over the middle of its children.
+const leafCount = RELAYS * FAN * FAN;
+const step = (RIGHT - LEFT) / (leafCount - 1);
+const instances = Array.from({ length: leafCount }, (_, i) => LEFT + i * step);
+const fan = Array.from({ length: RELAYS * FAN }, (_, i) => {
+  const kids = instances.slice(i * FAN, i * FAN + FAN);
+  return kids.reduce((a, b) => a + b, 0) / kids.length;
+});
+const relays = Array.from({ length: RELAYS }, (_, i) => {
+  const kids = fan.slice(i * FAN, i * FAN + FAN);
+  return kids.reduce((a, b) => a + b, 0) / kids.length;
+});
+const run = (LEFT + RIGHT) / 2;
+
+const curve = (x1: number, y1: number, x2: number, y2: number) => {
+  const my = (y1 + y2) / 2;
+  return `M${x1.toFixed(1)} ${y1}C${x1.toFixed(1)} ${my} ${x2.toFixed(1)} ${my} ${x2.toFixed(1)} ${y2}`;
+};
+// A delay that sweeps left to right across a level.
+const sweep = (x: number) => Math.round(((x - LEFT) / (RIGHT - LEFT)) * 700);
+
+const steps = [
+  "The deploy starts one backfill run for the view.",
+  "The run splits the directory into a few hundred subtrees, one per relay.",
+  "Each relay fans out six ways: the most calls one Durable Object makes at once.",
+  "Six ways per level reaches a million instances in about eight levels.",
+  "Each instance hands its stored events to the keys it feeds.",
+];
+---
+
+<figure class="bf not-content" id="bf" aria-label="A backfill fanning out from one run to every instance and view key">
+  <div class="bf-top">
+    <span class="bf-step" id="bf-step">{steps[steps.length - 1]}</span>
+    <button type="button" id="bf-pause" aria-pressed="false">❚❚ Pause</button>
+  </div>
+  <svg viewBox={`0 0 ${W} 350`} role="img" aria-hidden="true">
+    <g class="bf-labels">
+      <text x="8" y={rows.run + 4}>run</text>
+      <text x="8" y={rows.relays + 4}>relays</text>
+      <text x="8" y={rows.fan + 4}>relays ×6</text>
+      <text x="8" y={rows.instances + 4}>instances</text>
+      <text x="8" y={rows.keys + 4}>view keys</text>
+    </g>
+
+    {relays.map((x) => <path class="bf-edge lv1" d={curve(run, rows.run + 14, x, rows.relays - 12)} pathLength="1" style={`--d:${sweep(x)}`} />)}
+    {fan.map((x, i) => <path class="bf-edge lv2" d={curve(relays[Math.floor(i / FAN)]!, rows.relays + 12, x, rows.fan - 6)} pathLength="1" style={`--d:${sweep(x)}`} />)}
+    {instances.map((x, i) => <path class="bf-edge lv3" d={curve(fan[Math.floor(i / FAN)]!, rows.fan + 6, x, rows.instances - 3)} pathLength="1" style={`--d:${sweep(x)}`} />)}
+    {instances.map((x) => <path class="bf-edge lv4" d={`M${x.toFixed(1)} ${rows.instances + 3}L${x.toFixed(1)} ${rows.keys - 3}`} pathLength="1" style={`--d:${sweep(x)}`} />)}
+
+    <g class="bf-node lv0">
+      <rect x={run - 62} y={rows.run - 14} width="124" height="28" rx="7" />
+      <text x={run} y={rows.run + 4}>Backfill run</text>
+    </g>
+    {
+      relays.map((x) => (
+        <g class="bf-node lv1" style={`--d:${sweep(x)}`}>
+          <rect x={x - 30} y={rows.relays - 12} width="60" height="24" rx="6" />
+          <text x={x} y={rows.relays + 4}>Relay</text>
+        </g>
+      ))
+    }
+    {fan.map((x) => <circle class="bf-node bf-relay lv2" cx={x} cy={rows.fan} r="6" style={`--d:${sweep(x)}`} />)}
+    {instances.map((x) => <circle class="bf-node bf-instance lv3" cx={x} cy={rows.instances} r="2.8" style={`--d:${sweep(x)}`} />)}
+    {instances.map((x) => <circle class="bf-node bf-key lv4" cx={x} cy={rows.keys} r="2.8" style={`--d:${sweep(x)}`} />)}
+  </svg>
+  <figcaption class="bf-cap">
+    A slice of the tree. Measured on Cloudflare, a million accounts and ten million events took 8 minutes, at
+    about 2,000 keys a second.
+  </figcaption>
+</figure>
+
+<style is:global>
+  .bf {
+    margin: 2rem 0;
+    padding: 12px 14px 10px;
+    font: 14px/1.5 var(--alc-font-sans);
+    color: var(--alc-fg-1);
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 12px;
+  }
+  .bf-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-height: 3em; /* two lines, so a longer step doesn't move the tree */
+    margin-bottom: 6px;
+  }
+  .bf-step {
+    flex: 1;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .bf button {
+    all: unset;
+    flex: none;
+    cursor: pointer;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--alc-fg-1);
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline-3);
+    border-radius: 7px;
+  }
+  .bf button:focus-visible {
+    outline: 2px solid var(--alc-accent);
+  }
+  .bf svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .bf-labels text {
+    font: 600 11px var(--alc-font-mono);
+    fill: var(--alc-fg-3);
+  }
+  .bf-edge {
+    fill: none;
+    stroke: var(--alc-accent);
+    stroke-width: 1.2;
+    stroke-opacity: 0.55;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 0.6s ease calc(var(--d, 0) * 1ms);
+  }
+  .bf-edge.lv3,
+  .bf-edge.lv4 {
+    stroke-width: 0.6;
+  }
+  .bf-node {
+    opacity: 0;
+    transition: opacity 0.35s ease calc(var(--d, 0) * 1ms + 350ms);
+  }
+  .bf-node rect {
+    fill: var(--alc-bg-elev-1);
+    stroke: var(--alc-accent);
+    stroke-width: 1.2;
+  }
+  .bf-node.lv0 rect {
+    fill: color-mix(in srgb, var(--alc-accent) 22%, transparent);
+  }
+  .bf-node text {
+    font: 700 12px var(--alc-font-mono);
+    fill: var(--alc-fg-1);
+    text-anchor: middle;
+  }
+  .bf-relay {
+    fill: var(--alc-bg-elev-1);
+    stroke: var(--alc-accent);
+    stroke-width: 1.2;
+  }
+  .bf-instance {
+    fill: #e3b341; /* aggregate */
+  }
+  .bf-key {
+    fill: #7fb069; /* view */
+  }
+  .bf.s0 .bf-node.lv0,
+  .bf.s1 .bf-node.lv1,
+  .bf.s2 .bf-node.lv2,
+  .bf.s3 .bf-node.lv3,
+  .bf.s4 .bf-node.lv4 {
+    opacity: 1;
+  }
+  .bf.s1 .bf-edge.lv1,
+  .bf.s2 .bf-edge.lv2,
+  .bf.s3 .bf-edge.lv3,
+  .bf.s4 .bf-edge.lv4 {
+    stroke-dashoffset: 0;
+  }
+  .bf.reset * {
+    transition: none !important;
+  }
+  .bf-cap {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--alc-fg-3);
+    text-align: center;
+  }
+</style>
+
+<script define:vars={{ steps }}>
+  const root = document.getElementById("bf");
+  if (root) {
+    const label = document.getElementById("bf-step");
+    const button = document.getElementById("bf-pause");
+    const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let paused = false;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const wait = async (ms) => {
+      await sleep(ms);
+      while (paused) await sleep(120);
+    };
+    const showAll = () => {
+      for (let i = 0; i < steps.length; i++) root.classList.add(`s${i}`);
+      label.textContent = steps[steps.length - 1];
+    };
+
+    const play = async () => {
+      if (reduced()) return showAll();
+      for (;;) {
+        root.classList.add("reset");
+        for (let i = 0; i < steps.length; i++) root.classList.remove(`s${i}`);
+        void root.getBoundingClientRect();
+        root.classList.remove("reset");
+        for (let i = 0; i < steps.length; i++) {
+          label.textContent = steps[i];
+          root.classList.add(`s${i}`);
+          await wait(i === 0 ? 1200 : 2200);
+        }
+        await wait(3500);
+      }
+    };
+
+    button.onclick = () => {
+      paused = !paused;
+      button.textContent = paused ? "▶ Play" : "❚❚ Pause";
+      button.setAttribute("aria-pressed", String(paused));
+    };
+
+    showAll();
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          io.disconnect();
+          void play();
+        }
+      },
+      { threshold: 0.4 },
+    );
+    io.observe(root);
+  }
+</script>

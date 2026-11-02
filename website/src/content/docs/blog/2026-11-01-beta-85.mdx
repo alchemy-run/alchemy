@@ -5,7 +5,7 @@ category: release
 excerpt: Effect 4.1, Alchemy Domain deploys that backfill and rebuild views and projections, Domain models served over HTTP, MCP and the CLI, redesigned Cloud Run containers and keyless AWS↔GCP bindings, custom domains with any DNS provider, DynamoDB state, Alchemist, and 95 bug fixes.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import BackfillFanout from "../../../components/blog/BackfillFanout.astro";
 
 beta.85 is 249 pull requests from 39 contributors: 84 features and 95 bug
 fixes.
@@ -155,32 +155,7 @@ hundred subtrees and hands them to relays, and each relay fans out six ways,
 the most calls one Durable Object makes at once. A million instances are
 reached in about eight levels of calls.
 
-<DAG
-  nodes={[
-    { id: "deploy", label: "alchemy deploy", type: "starts it, waits" },
-    { id: "dir", label: "Directory", type: "16-way tree" },
-    { id: "run", label: "Backfill run", type: "per view version", tone: "accent" },
-    { id: "relayA", label: "Relay", type: "6 calls at once" },
-    { id: "relayB", label: "Relay", type: "6 calls at once" },
-    { id: "a1", label: "Account a-1", type: "stored events", kind: "aggregate" },
-    { id: "a2", label: "Account a-2", type: "stored events", kind: "aggregate" },
-    { id: "summary", label: "Summary a-1", type: "own events", kind: "view" },
-    { id: "scanner", label: "Scanner", type: "per instance" },
-    { id: "timeline", label: "Timeline", type: "recorded order", kind: "view" },
-  ]}
-  edges={[
-    { from: "deploy", to: "run" },
-    { from: "dir", to: "run", dashed: true },
-    { from: "run", to: "relayA" },
-    { from: "run", to: "relayB" },
-    { from: "relayA", to: "a1" },
-    { from: "relayA", to: "a2" },
-    { from: "a1", to: "summary" },
-    { from: "a2", to: "scanner" },
-    { from: "scanner", to: "timeline" },
-  ]}
-  caption="The run splits the directory across relays, each relay fans out six ways, and each instance's history reaches the keys it feeds."
-/>
+<BackfillFanout />
 
 At the bottom, a view keyed by its aggregate reads its own instance's events
 and applies them. A view that many instances feed, like a timeline, gets a
