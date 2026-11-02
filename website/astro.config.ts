@@ -1456,17 +1456,11 @@ export default defineConfig({
           label: "Prisma",
           items: [
             { label: "Overview", link: "/prisma" },
+            { label: "What is Prisma?", link: "/prisma/what-is-prisma" },
             { label: "Setup", link: "/prisma/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "prisma/tutorial" } }],
-            },
-            {
-              label: "Compute",
-              items: [
-                { label: "Apps", link: "/prisma/compute/apps" },
-                { label: "Deployments", link: "/prisma/compute/deployments" },
-              ],
             },
             {
               label: "Data",
@@ -1479,6 +1473,22 @@ export default defineConfig({
                 { label: "Branches", link: "/prisma/data/branches" },
                 { label: "Connections", link: "/prisma/data/connections" },
                 { label: "Buckets", link: "/prisma/data/buckets" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/prisma/compute/apps" },
+                { label: "Deployments", link: "/prisma/compute/deployments" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Connect from Workers",
+                  link: "/prisma/guides/cloudflare-workers",
+                },
               ],
             },
             {
@@ -1506,15 +1516,6 @@ export default defineConfig({
                 { label: "Vocs", link: "/prisma/frontend/vocs" },
                 { label: "Waku", link: "/prisma/frontend/waku" },
               ]),
-            },
-            {
-              label: "Guides",
-              items: [
-                {
-                  label: "Connect from Workers",
-                  link: "/prisma/guides/cloudflare-workers",
-                },
-              ],
             },
             providerApiReferenceEntry("Prisma"),
           ],

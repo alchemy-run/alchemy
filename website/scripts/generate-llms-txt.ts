@@ -239,7 +239,7 @@ const SECTIONS: Section[] = [
   },
   {
     heading: "Prisma — start here",
-    pages: { slugs: ["prisma/index", "prisma/setup"] },
+    pages: { slugs: ["prisma/index", "prisma/what-is-prisma", "prisma/setup"] },
   },
   {
     heading: "Prisma — tutorial",
