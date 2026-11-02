@@ -1,5 +1,5 @@
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
-import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";

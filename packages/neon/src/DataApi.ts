@@ -1,5 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
-import { OwnedBySomeoneElse, Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";

@@ -1,6 +1,6 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";

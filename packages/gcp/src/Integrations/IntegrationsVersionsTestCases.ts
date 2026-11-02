@@ -1,5 +1,5 @@
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
-import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";

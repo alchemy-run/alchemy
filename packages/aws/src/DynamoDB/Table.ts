@@ -2,7 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import type { TimeToLiveSpecification } from "@distilled.cloud/aws/dynamodb";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
-import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { havePropsChanged, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";

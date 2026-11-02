@@ -1,5 +1,5 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";

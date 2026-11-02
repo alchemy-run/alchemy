@@ -1,7 +1,7 @@
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
-import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";

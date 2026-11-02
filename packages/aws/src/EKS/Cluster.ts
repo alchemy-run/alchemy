@@ -1079,8 +1079,10 @@ export const ClusterProvider = () =>
           );
           for (const updateId of updateIds) {
             yield* waitForUpdate(output.clusterName, updateId).pipe(
-              Effect.catchTag("EKSClusterOperationFailed", () => Effect.void),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.catchTag(
+                ["EKSClusterOperationFailed", "ResourceNotFoundException"],
+                () => Effect.void,
+              ),
             );
           }
 

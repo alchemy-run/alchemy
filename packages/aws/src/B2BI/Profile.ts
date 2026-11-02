@@ -1,6 +1,6 @@
 import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
