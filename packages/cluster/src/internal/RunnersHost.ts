@@ -40,7 +40,9 @@ const entitiesPlugin = (entities: ReadonlyArray<RunnersEntity>) => {
           entity.module.startsWith("file:") ? fileURLToPath(entity.module) : entity.module,
         )};`,
     ),
-    `export default [${entities.map((_, i) => `e${i}`).join(", ")}];`,
+    `export default [${entities
+      .map((entity, i) => `{ name: ${JSON.stringify(entity.name)}, value: e${i} }`)
+      .join(", ")}];`,
   ].join("\n");
   return [
     {

@@ -20,7 +20,7 @@ import {
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
-import { ClusterSchema, RunnerAddress } from "effect/cluster";
+import { ClusterSchema, Entity as EffectEntity, RunnerAddress } from "effect/cluster";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -30,6 +30,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import type { Rpc, RpcGroup } from "effect/rpc";
 import {
   EntityHasNoRunners,
   PlatformDeclaration,
@@ -74,7 +75,9 @@ const runnerHost = Effect.gen(function* () {
  * `DATABASE_URL`. The gateway joins the cluster as a client and routes
  * callers to the program's entities.
  */
-export const runExternal = (definitions: ReadonlyArray<unknown>): Promise<void> =>
+export const runExternal = (
+  definitions: ReadonlyArray<{ readonly name: string; readonly value: unknown }>,
+): Promise<void> =>
   runProcess(
     "Effect Cluster runner",
     Effect.gen(function* () {
@@ -101,7 +104,13 @@ export const runExternal = (definitions: ReadonlyArray<unknown>): Promise<void> 
         child.once("exit", (code) => resume(Effect.fail(new ExternalProgramExited({ code }))));
       });
 
-      const entities = definitions.map((definition) => definition as HostedEntity["entity"]);
+      // Each definition is the entity's schema (an `RpcGroup`) or an Effect
+      // Cluster entity, as the external declaration's `main` exports it.
+      const entities = definitions.map(({ name, value }) =>
+        EffectEntity.isEntity(value)
+          ? (value as HostedEntity["entity"])
+          : EffectEntity.fromRpcGroup(name, value as RpcGroup.RpcGroup<Rpc.Any>),
+      );
       const cluster = NodeClusterHttp.layer({
         transport: "http",
         storage: "sql",
@@ -140,7 +149,10 @@ const shardGroupsConfig = () => {
 };
 
 /** Build each class's Construction phase, then run the runner until it is stopped. */
-export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> => {
+export const bootstrap = (
+  definitions: ReadonlyArray<{ readonly name: string; readonly value: unknown }>,
+): Promise<void> => {
+  const entrypoints = definitions.map((definition) => definition.value);
   const platform = Layer.mergeAll(
     NodeServices.layer,
     FetchHttpClient.layer,
