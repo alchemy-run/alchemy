@@ -121,12 +121,14 @@ export const KafkaEventSource = Layer.effect(
                   ),
                 },
                 {
-                  // On `*`, like AWSLambdaMSKExecutionRole. Creating the mapping
-                  // makes Lambda check this permission without an ENI of ours
-                  // in the request, so a subnet condition or a
-                  // `network-interface/*` resource fails it ("Cannot delete ENIs
-                  // on the subnets and security groups associated with the
-                  // event source"). Scoped to the cluster's region instead.
+                  // ENIs may only be deleted in the cluster's subnets. Creating
+                  // the mapping makes Lambda check this permission with no ENI
+                  // and no subnet in the request, which fails a
+                  // `network-interface/*` resource or a plain `ec2:Subnet`
+                  // condition ("Cannot delete ENIs on the subnets and security
+                  // groups associated with the event source"). `IfExists`
+                  // passes that check while every real delete, which always
+                  // carries the ENI's subnet, stays in the cluster's subnets.
                   Effect: "Allow",
                   Action: ["ec2:DeleteNetworkInterface"],
                   Resource: ["*"],
@@ -134,6 +136,13 @@ export const KafkaEventSource = Layer.effect(
                     StringEquals: {
                       "aws:RequestedRegion": cluster.clusterArn.pipe(
                         Output.map((arn) => arn.split(":")[3]!),
+                      ),
+                    },
+                    ArnEqualsIfExists: {
+                      "ec2:Subnet": Output.all(cluster.clusterArn, cluster.subnetIds).pipe(
+                        Output.map(([clusterArn, subnetIds]) =>
+                          subnetIds.map((id) => `${ec2ArnPrefix(clusterArn)}subnet/${id}`),
+                        ),
                       ),
                     },
                   },
