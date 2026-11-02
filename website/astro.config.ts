@@ -1301,15 +1301,21 @@ export default defineConfig({
           label: "PlanetScale",
           items: [
             { label: "Overview", link: "/planetscale" },
+            { label: "What is PlanetScale?", link: "/planetscale/what-is-planetscale" },
             { label: "Setup", link: "/planetscale/setup" },
             {
-              label: "Data",
+              label: "Engines",
               items: [
                 { label: "Postgres", link: "/planetscale/data/postgres" },
                 { label: "MySQL", link: "/planetscale/data/mysql" },
-                { label: "Migrations", link: "/planetscale/data/migrations" },
+              ],
+            },
+            {
+              label: "Databases",
+              items: [
                 { label: "Credentials", link: "/planetscale/data/credentials" },
-                { label: "Backups", link: "/planetscale/data/backups" },
+                { label: "Migrations", link: "/planetscale/data/migrations" },
+                { label: "Backups & restores", link: "/planetscale/data/backups" },
               ],
             },
             {

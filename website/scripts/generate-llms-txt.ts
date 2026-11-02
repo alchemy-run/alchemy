@@ -464,6 +464,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "planetscale/index",
+        "planetscale/what-is-planetscale",
         "planetscale/setup",
         "planetscale/data/postgres",
         "planetscale/data/mysql",

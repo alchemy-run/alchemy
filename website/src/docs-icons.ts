@@ -108,6 +108,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   "Storage & databases": l("database"),
   "Networking & edge": l("globe"),
   Workers: l("zap"),
+  Engines: l("cpu"),
   "Durable Objects": l("box"),
   Workflows: l("workflow"),
   Containers: l("container"),
