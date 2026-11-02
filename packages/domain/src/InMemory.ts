@@ -710,6 +710,8 @@ export const make = (
           // As a consumer: buffers and merges history while a backfill runs.
           const consumer = memo((key: string) => {
             const address = `consumer:${target}/${key}`;
+            // Its apply failed: nothing here runs it again, and the failure is reported.
+            let failed = false;
             const role: Backfill.Consumer = Backfill.makeConsumer(
               memoryStorage(address, lock),
               memoryJobs(address, (id) => role.merge(id.slice("bf-merge:".length))),
@@ -720,7 +722,15 @@ export const make = (
                 singleSource: () => kit.singleSource,
                 sources: () => planOf(target)?.sources ?? [],
                 history: (ref, rows) => kit.history(target, ref.source, ref.id, rows),
-                apply: (deliveries) => apply(key, deliveries),
+                apply: (deliveries) =>
+                  apply(key, deliveries).pipe(
+                    Effect.onError(() =>
+                      Effect.sync(() => {
+                        failed = true;
+                      }),
+                    ),
+                  ),
+                failed: Effect.sync(() => failed),
               },
               limits,
             );

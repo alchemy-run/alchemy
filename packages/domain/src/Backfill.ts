@@ -1062,6 +1062,12 @@ export interface ConsumerHost {
    * waits for it before the consumer's `complete`.
    */
   readonly drained?: Effect.Effect<boolean>;
+  /**
+   * Whether its `apply` failed on a host that won't run it again (in memory),
+   * having reported the failure: its run counts it as having its history, so a
+   * consumer that can never apply its history doesn't hold the run forever.
+   */
+  readonly failed?: Effect.Effect<boolean>;
 }
 
 /**
@@ -1342,11 +1348,18 @@ export const makeConsumer = (
       }),
     );
 
-  /** Keyed by its source: it has its history (read to the end of its log and applied, or done). */
+  /**
+   * Keyed by its source: it has its history, read to the end of its log and
+   * applied (history read behind a buffered delivery waits in the buffer until
+   * the next merge applies it), or done.
+   */
   const settled = (target: string) =>
     Effect.gen(function* () {
       if ((yield* storage.get(doneKey(target))) !== undefined) return true;
-      return (yield* storage.get(caughtKey(target))) !== undefined;
+      if ((yield* storage.get(caughtKey(target))) === undefined) return false;
+      if ((yield* storage.list({ prefix: bufferPrefix(target), limit: 1 })).length === 0)
+        return true;
+      return host.failed !== undefined && (yield* host.failed);
     });
 
   /**
