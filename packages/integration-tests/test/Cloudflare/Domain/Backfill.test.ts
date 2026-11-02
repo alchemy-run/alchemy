@@ -68,6 +68,19 @@ const serving = (url: string, version: string) =>
     Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 90 }),
   );
 
+/**
+ * A route of the view's code: while a deploy rolls out, an isolate still on the
+ * code without the view answers `null`, so ask again.
+ */
+const viewRoute = (url: string, path: string) =>
+  call(url, "GET", path).pipe(
+    Effect.filterOrFail(
+      (body) => body !== "null",
+      (body) => new NotYet({ status: 200, body }),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+  );
+
 /** Deploy accounts only, and give each of them its deposits. */
 const seeded = (stack: Test.ScratchStack) =>
   Effect.gen(function* () {
@@ -176,13 +189,13 @@ describe.sequential("a deploy and its backfill", () => {
         expect(yield* stillRunning(deployOf(stack, BenchV2Short))).toBe(true);
         yield* serving(url, "v2");
         // The run is still going, but a key read before it gets there catches itself up.
-        const history = JSON.parse(yield* call(url, "GET", "/history")) as { complete: boolean };
+        const history = JSON.parse(yield* viewRoute(url, "/history")) as { complete: boolean };
         expect(history.complete).toBe(false);
         const expected = Array.from({ length: EVENTS }, (_, n) => n + 1);
         yield* Effect.forEach(
           Array.from({ length: 20 }, (_, n) => Math.floor((n * ACCOUNTS) / 20) + 7),
           (i) =>
-            call(url, "GET", `/view/b${i}`).pipe(
+            viewRoute(url, `/view/b${i}`).pipe(
               Effect.map((body) => {
                 const view = JSON.parse(body) as { amounts: Array<number> } | null;
                 expect(view?.amounts).toEqual(expected);
