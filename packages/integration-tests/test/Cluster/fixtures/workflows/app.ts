@@ -8,12 +8,14 @@ import { Approval, Approve, Checkout, Greet, Nap, Parent } from "./workflows.ts"
 export const workflowApp = Effect.gen(function* () {
   const journals = yield* Journal;
   const workflows = {
-    Greet: yield* Workflows.RunWorkflow(Greet),
-    Nap: yield* Workflows.RunWorkflow(Nap),
-    Approve: yield* Workflows.RunWorkflow(Approve),
-    Checkout: yield* Workflows.RunWorkflow(Checkout),
-    Parent: yield* Workflows.RunWorkflow(Parent),
+    Greet: yield* Greet,
+    Nap: yield* Nap,
+    Approve: yield* Approve,
+    Checkout: yield* Checkout,
+    Parent: yield* Parent,
   };
+  // The same workflow through Alchemy's engine-neutral API, on Cluster.WorkflowEngine.
+  const portable = yield* Workflows.RunWorkflow(Greet.workflow);
   // `/wf/<operation>/<workflow>/<id>`, or `/wf/journal/<id>`.
   return (url: URL) =>
     Effect.gen(function* () {
@@ -22,7 +24,9 @@ export const workflowApp = Effect.gen(function* () {
         const journal = yield* journals.getByName(name);
         return yield* HttpServerResponse.json(yield* journal.List());
       }
-      const workflow = workflows[name as keyof typeof workflows] as typeof workflows.Checkout;
+      const workflow = (
+        operation === "portable" ? portable : workflows[name as keyof typeof workflows]
+      ) as typeof workflows.Checkout;
       if (!workflow || !id) return HttpServerResponse.text("Not Found", { status: 404 });
       const payload = {
         id,
@@ -33,6 +37,7 @@ export const workflowApp = Effect.gen(function* () {
       const run = () => workflow.get(url.searchParams.get("executionId") ?? "");
       switch (operation) {
         // Start it and wait for the result.
+        case "portable":
         case "run": {
           const started = yield* workflow.start(payload);
           yield* Effect.exit(started.result);

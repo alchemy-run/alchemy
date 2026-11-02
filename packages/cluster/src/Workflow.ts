@@ -1,22 +1,35 @@
 import type { InputProps } from "alchemy/Input";
+import type { Named } from "alchemy/Named";
 import * as Output from "alchemy/Output";
-import { Platform, type PlatformProps, type PlatformServices } from "alchemy/Platform";
+import {
+  Platform,
+  type PlatformIdentity,
+  type PlatformProps,
+  type PlatformServices,
+} from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import { RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
 import type { Self } from "alchemy/Self";
-import { type Execute, type Implemented, implemented } from "alchemy/Workflows";
+import {
+  type Execute,
+  type Implemented,
+  implemented,
+  makeRun,
+  type WorkflowClient,
+} from "alchemy/Workflows";
 import { ClusterSchema } from "effect/cluster";
 import type * as ConfigError from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type * as Schema from "effect/Schema";
 import {
-  type Workflow as EffectWorkflow,
+  Workflow as EffectWorkflow,
   WorkflowEngine as EffectWorkflowEngine,
 } from "effect/workflow";
 import { type EntityBindingContract, PlatformDeclaration, shardGroupKey } from "./Entity.ts";
@@ -93,100 +106,243 @@ export const WorkflowResource = platform;
 /** The resource id of a workflow: kept apart from an entity of the same name. */
 const resourceId = (name: string) => `${name}Workflow`;
 
+type AnyWorkflow = EffectWorkflow.Workflow<string, any, any, any>;
+
+type PayloadOf<W> = W extends EffectWorkflow.Workflow<any, infer P, any, any> ? P : never;
+type SuccessOf<W> = W extends EffectWorkflow.Workflow<any, any, infer S, any> ? S : never;
+type ErrorOf<W> = W extends EffectWorkflow.Workflow<any, any, any, infer E> ? E : never;
+
+/** A workflow's handler, typed by its declaration. */
+export type WorkflowHandler<W> = Execute<
+  PayloadOf<W> & EffectWorkflow.AnyStructSchema,
+  SuccessOf<W> & Schema.Top,
+  ErrorOf<W> & Schema.Top,
+  any
+>;
+
+/**
+ * A declared workflow: the tag callers `yield*` for its client, carrying
+ * Effect's workflow surface (`.workflow`, `.execute`, `.withCompensation`),
+ * implemented by `.make(props, impl)`.
+ */
+export type WorkflowTag<Self, W extends AnyWorkflow> = Effect.Effect<
+  WorkflowClient<W>,
+  never,
+  Providers
+> &
+  Named<W["_tag"]> &
+  PlatformIdentity<W["_tag"]> & {
+    /** The Effect workflow behind the class, for Effect's own APIs. */
+    readonly workflow: W;
+    /** Run it as a child of the current workflow, as Effect's `Workflow.execute`. */
+    readonly execute: W["execute"];
+    /** Undo a step when the workflow fails later, as Effect's `withCompensation`. */
+    readonly withCompensation: W["withCompensation"];
+    /** Type the workflow's handler against its payload, success and error. */
+    of<Handler extends WorkflowHandler<W>>(handler: Handler): Handler;
+    /**
+     * The workflow's implementation, as a Layer: an Effect that resolves
+     * bindings once per runner and returns the handler. Provide a runners
+     * Layer to `impl` to deploy it; provide the returned Layer to the Stack.
+     */
+    make<InitReq = never>(
+      props: InputProps<WorkflowProps>,
+      impl: Effect.Effect<WorkflowHandler<W>, ConfigError.ConfigError, InitReq>,
+    ): Layer.Layer<
+      Self | Implemented<W["_tag"]>,
+      never,
+      Providers | Exclude<InitReq, WorkflowServices | PlatformServices>
+    >;
+    new (_: never): WorkflowClient<W>;
+  };
+
+/** The class surface of {@link Workflow}. */
+export interface WorkflowClass {
+  // `Self` names the class (`extends Cluster.Workflow<PlaceOrder>()`).
+  <Self>(): <
+    const Name extends string,
+    Payload extends Schema.Struct.Fields | EffectWorkflow.AnyStructSchema,
+    Success extends Schema.Top = Schema.Void,
+    Error extends Schema.Top = Schema.Never,
+  >(
+    name: Name,
+    options: Parameters<typeof EffectWorkflow.make<Name, Payload, Success, Error>>[1],
+  ) => WorkflowTag<
+    Self,
+    EffectWorkflow.Workflow<
+      Name,
+      Payload extends Schema.Struct.Fields ? Schema.Struct<Payload> : Payload,
+      Success,
+      Error
+    >
+  >;
+}
+
 /**
  * A durable **Workflow** on an Effect Cluster: each run is a workflow
  * entity, so its activities are persisted, `DurableClock.sleep` is a
  * delayed message, and a run continues on another runner if its runner
  * dies.
  *
- * Declare the workflow with Effect's `Workflow.make`, then implement it here
- * as `Workflows.layer` does: an Effect that resolves bindings once per
- * runner and returns the handler. Provide a runners Layer to the result to
- * deploy it, and the result to the Stack.
+ * Declare it like Effect's `Workflow.make`, from a name and its schemas. The
+ * declaration is the tag callers import; `.make(props, impl)` is its
+ * implementation, as a Layer: an Effect that resolves bindings once per
+ * runner and returns the handler, typed by `.of`. Providing a runners Layer
+ * to the implementation is what deploys it.
  *
- * Start and read runs from any runtime with `Workflows.RunWorkflow`, with
- * {@link WorkflowEngine | Cluster.WorkflowEngine} provided for the
- * workflows it runs.
+ * `yield* PlaceOrder` from any runtime returns its client: `start` a run,
+ * then read, signal or interrupt it.
  *
- * ### Implementing a workflow
- * **Example:** One workflow per file
+ * ### Declaring a workflow
+ * **Example:** The declaration callers import
  * ```typescript
  * // src/PlaceOrder.ts
- * export const PlaceOrder = Workflow.make("PlaceOrder", {
+ * export class PlaceOrder extends Cluster.Workflow<PlaceOrder>()("PlaceOrder", {
  *   payload: { orderId: Schema.String },
  *   success: Schema.String,
  *   idempotencyKey: ({ orderId }) => orderId,
- * });
+ * }) {}
+ * ```
  *
+ * ### Implementing a workflow
+ * **Example:** Its implementation, deployed to runners
+ * ```typescript
  * // src/PlaceOrderLive.ts
- * export default Cluster.Workflow(
- *   PlaceOrder,
+ * export default PlaceOrder.make(
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const counters = yield* Counter;
- *     return Effect.fn(function* ({ orderId }) {
- *       const n = yield* Activity.make({
- *         name: "count",
- *         success: Schema.Int,
- *         execute: Effect.flatMap(counters.getByName("orders"), (counter) =>
- *           counter.Increment({ amount: 1 }),
- *         ),
- *       });
- *       return `order ${orderId} is #${n}`;
- *     });
- *   }),
- * ).pipe(Layer.provide(Default));
+ *     return PlaceOrder.of(
+ *       Effect.fn(function* ({ orderId }) {
+ *         const n = yield* Activity.make({
+ *           name: "count",
+ *           success: Schema.Int,
+ *           execute: Effect.flatMap(counters.getByName("orders"), (counter) =>
+ *             counter.Increment({ amount: 1 }),
+ *           ),
+ *         });
+ *         return `order ${orderId} is #${n}`;
+ *       }),
+ *     );
+ *   }).pipe(Effect.provide(Default)),
+ * );
  * ```
  *
  * ### Running a workflow
  * **Example:** Start a run from any runtime
  * ```typescript
- * Effect.gen(function* () {
- *   const placeOrder = yield* Workflows.RunWorkflow(PlaceOrder);
- *   return {
- *     fetch: Effect.gen(function* () {
- *       const run = yield* placeOrder.start({ orderId: "o-1" });
- *       return HttpServerResponse.text(run.executionId);
- *     }),
- *   };
- * }).pipe(Effect.provide(Cluster.WorkflowEngine(PlaceOrder)));
+ * const placeOrder = yield* PlaceOrder;
+ * const run = yield* placeOrder.start({ orderId: "o-1" });
+ * const status = yield* run.status;
+ * ```
+ *
+ * **Example:** A child workflow, inside another workflow
+ * ```typescript
+ * const receipt = yield* PlaceOrder.execute({ orderId: "o-1" });
  * ```
  *
  * @resource
  */
-export const Workflow = <
-  Name extends string,
-  Payload extends EffectWorkflow.AnyStructSchema,
-  Success extends Schema.Top,
-  Error extends Schema.Top,
-  R,
-  InitReq = never,
->(
-  workflow: EffectWorkflow.Workflow<Name, Payload, Success, Error>,
-  props: InputProps<WorkflowProps>,
-  impl: Effect.Effect<Execute<Payload, Success, Error, R>, ConfigError.ConfigError, InitReq>,
-): Layer.Layer<
-  Implemented<Name>,
-  never,
-  Providers | Exclude<InitReq, WorkflowServices | PlatformServices>
-> => {
-  const id = resourceId(workflow._tag);
-  placeInRunnersGroup(workflow, id);
-  workflows.set(id, workflow);
-  const tag = (platform as any)()(id);
-  declarations.set(workflow._tag, tag);
-  const live = tag.make(props, impl) as Layer.Layer<never, never, any>;
-  // A runner builds the Platform declaration; the Stack, both.
-  return Object.assign(Layer.merge(live, implemented([workflow._tag])), {
-    [PlatformDeclaration]: live,
+export const Workflow: WorkflowClass = (() =>
+  (name: string, options: Parameters<typeof EffectWorkflow.make>[1]) => {
+    const workflow = EffectWorkflow.make(name, options) as AnyWorkflow;
+    const id = resourceId(name);
+    placeInRunnersGroup(workflow, id);
+    workflows.set(id, workflow);
+    const tag = (platform as any)()(id);
+    declarations.set(name, tag);
+    return Object.assign(
+      class {},
+      {
+        LogicalId: name,
+        workflow,
+        execute: workflow.execute.bind(workflow),
+        withCompensation: workflow.withCompensation,
+        of: (handler: unknown) => handler,
+        make: (props: InputProps<WorkflowProps>, impl: unknown) => {
+          const live = tag.make(props, impl) as Layer.Layer<never, never, any>;
+          // A runner builds the Platform declaration; the Stack, both.
+          return Object.assign(Layer.merge(live, implemented([name])), {
+            [PlatformDeclaration]: live,
+          });
+        },
+      },
+      Effectable.Prototype({
+        label: `${WorkflowTypeId}<${name}>`,
+        evaluate: () => clientOf(workflow, tag),
+      }),
+    );
+  }) as unknown as WorkflowClass;
+
+/**
+ * Bind the gateway of the runners that host `name` into the current
+ * runtime: from its resource while deploying, from the environment at
+ * runtime. Undefined outside any runtime.
+ */
+const routeOf = (
+  name: string,
+  declaration: Effect.Effect<ClusterWorkflow, never, any> | undefined,
+) =>
+  Effect.gen(function* () {
+    const ctx = Option.getOrUndefined(yield* Effect.serviceOption(RuntimeContext));
+    if (ctx === undefined) return undefined;
+    if (!globalThis.__ALCHEMY_RUNTIME__ && declaration === undefined) {
+      return yield* Effect.die(new WorkflowNotHosted({ workflow: name }));
+    }
+    // Built on a memo map of its own, as an entity's client is.
+    const resource = globalThis.__ALCHEMY_RUNTIME__
+      ? undefined
+      : yield* declaration!.pipe(
+          Effect.provideServiceEffect(Layer.CurrentMemoMap, Layer.makeMemoMap),
+        );
+    const bind = <T>(key: string, value: unknown) =>
+      ctx
+        .set(sanitizeKey(key), Output.isOutput(value) ? value : Output.literal(value))
+        .pipe(Effect.flatMap((bound) => ctx.get<T>(bound)));
+    const url = yield* bind<string>(`CLUSTER_WORKFLOW_${name}_GATEWAY`, resource?.gateway);
+    const token = yield* bind<Redacted.Redacted<string> | string>(
+      `CLUSTER_WORKFLOW_${name}_TOKEN`,
+      resource?.token,
+    );
+    return {
+      url: url ?? "",
+      token: token === undefined ? "" : Redacted.isRedacted(token) ? Redacted.value(token) : token,
+    } satisfies GatewayTarget;
   });
-};
+
+const unrouted = (name: string, inRuntime: boolean) =>
+  Effect.die(
+    inRuntime
+      ? new WorkflowNotHosted({ workflow: name })
+      : new WorkflowEngineOutsideRuntime({
+          message: `Cluster.Workflow '${name}' can only be started inside a runtime.`,
+        }),
+  );
+
+/** `yield* PlaceOrder`: its client, over the gateway of the runners that host it. */
+const clientOf = (workflow: AnyWorkflow, declaration: Effect.Effect<ClusterWorkflow, never, any>) =>
+  Effect.gen(function* () {
+    const target = yield* routeOf(workflow._tag, declaration);
+    const engine = makeRemoteEngine(() =>
+      target === undefined ? unrouted(workflow._tag, false) : Effect.succeed(target),
+    );
+    const run = (executionId: string) => makeRun(engine, workflow, executionId);
+    return {
+      start: (payload) =>
+        workflow
+          .execute(payload, { discard: true })
+          .pipe(
+            Effect.provideService(EffectWorkflowEngine.WorkflowEngine, engine),
+            Effect.map(run),
+          ),
+      get: run,
+    } as WorkflowClient<AnyWorkflow>;
+  });
 
 /**
  * Place a workflow in its runners' shard group, read when a run is routed:
  * the runners that host it have the group in their environment, so a child
- * run started on any of them, with the workflow as the code imports it,
- * reaches them.
+ * run started on any of them reaches them.
  */
 const placeInRunnersGroup = (workflow: EffectWorkflow.Any, id: string) => {
   const key = shardGroupKey(id);
@@ -214,20 +370,16 @@ export class WorkflowNotHosted extends Data.TaggedError("Cluster.WorkflowNotHost
 }> {}
 
 /**
- * Start and read runs of workflows `Cluster.Workflow` hosts, from any
- * runtime: a `WorkflowEngine` that reaches each workflow through the
- * gateway of the runners that host it.
+ * Run `Cluster.Workflow`s through Alchemy's engine-neutral
+ * `Workflows.RunWorkflow`: a `WorkflowEngine` that reaches each workflow
+ * through the gateway of the runners that host it. Use it for code that
+ * runs the same workflow on any engine; otherwise `yield*` the workflow.
  *
- * Pass the workflows the runtime runs. While deploying, it binds each one's
- * gateway into the runtime, wherever its `Cluster.Workflow` placed it, so it
- * takes no list of hosts. A workflow no `Cluster.Workflow` in the Stack
- * hosts fails the deploy.
- *
- * ### Running workflows
- * **Example:** From a Worker, a Lambda function or a container
+ * ### Running workflows on any engine
+ * **Example:** `Workflows.RunWorkflow` on the cluster
  * ```typescript
  * Effect.gen(function* () {
- *   const placeOrder = yield* Workflows.RunWorkflow(PlaceOrder);
+ *   const placeOrder = yield* Workflows.RunWorkflow(PlaceOrder.workflow);
  *   return {
  *     fetch: Effect.gen(function* () {
  *       const run = yield* placeOrder.start({ orderId: "o-1" });
@@ -240,10 +392,12 @@ export class WorkflowNotHosted extends Data.TaggedError("Cluster.WorkflowNotHost
  * @layer
  * @provides WorkflowEngine
  */
-export const WorkflowEngine = <const Workflows extends ReadonlyArray<EffectWorkflow.Any>>(
+export const WorkflowEngine = <
+  const Workflows extends ReadonlyArray<{ readonly workflow: EffectWorkflow.Any }>,
+>(
   ...runs: Workflows
 ): Layer.Layer<
-  EffectWorkflowEngine.WorkflowEngine | Implemented<Workflows[number]["_tag"]>,
+  EffectWorkflowEngine.WorkflowEngine | Implemented<Workflows[number]["workflow"]["_tag"]>,
   never,
   Providers
 > =>
@@ -251,56 +405,21 @@ export const WorkflowEngine = <const Workflows extends ReadonlyArray<EffectWorkf
     Layer.effect(
       EffectWorkflowEngine.WorkflowEngine,
       Effect.gen(function* () {
-        const ctx = Option.getOrUndefined(yield* Effect.serviceOption(RuntimeContext));
+        const inRuntime = Option.isSome(yield* Effect.serviceOption(RuntimeContext));
         const routes = new Map<string, GatewayTarget>();
-        if (ctx !== undefined) {
-          const bind = <T>(key: string, value: unknown) =>
-            ctx
-              .set(sanitizeKey(key), Output.isOutput(value) ? value : Output.literal(value))
-              .pipe(Effect.flatMap((bound) => ctx.get<T>(bound)));
-          for (const { _tag: name } of runs) {
-            const declaration = declarations.get(name);
-            if (!globalThis.__ALCHEMY_RUNTIME__ && declaration === undefined) {
-              return yield* Effect.die(new WorkflowNotHosted({ workflow: name }));
-            }
-            // Built on a memo map of its own, as an entity's client is.
-            const resource = globalThis.__ALCHEMY_RUNTIME__
-              ? undefined
-              : yield* declaration!.pipe(
-                  Effect.provideServiceEffect(Layer.CurrentMemoMap, Layer.makeMemoMap),
-                );
-            const url = yield* bind<string>(`CLUSTER_WORKFLOW_${name}_GATEWAY`, resource?.gateway);
-            const token = yield* bind<Redacted.Redacted<string> | string>(
-              `CLUSTER_WORKFLOW_${name}_TOKEN`,
-              resource?.token,
-            );
-            routes.set(name, {
-              url: url ?? "",
-              token:
-                token === undefined
-                  ? ""
-                  : Redacted.isRedacted(token)
-                    ? Redacted.value(token)
-                    : token,
-            });
-          }
+        for (const { workflow } of runs) {
+          const target = yield* routeOf(workflow._tag, declarations.get(workflow._tag));
+          if (target !== undefined) routes.set(workflow._tag, target);
         }
         return makeRemoteEngine((name) => {
           const target = routes.get(name);
-          if (target !== undefined) return Effect.succeed(target);
-          return Effect.die(
-            ctx === undefined
-              ? new WorkflowEngineOutsideRuntime({
-                  message: `Cluster.WorkflowEngine can only start '${name}' inside a runtime.`,
-                })
-              : new WorkflowNotHosted({ workflow: name }),
-          );
+          return target === undefined ? unrouted(name, inRuntime) : Effect.succeed(target);
         });
       }),
     ),
-    implemented(runs.map((workflow) => workflow._tag)),
+    implemented(runs.map(({ workflow }) => workflow._tag)),
   ) as Layer.Layer<
-    EffectWorkflowEngine.WorkflowEngine | Implemented<Workflows[number]["_tag"]>,
+    EffectWorkflowEngine.WorkflowEngine | Implemented<Workflows[number]["workflow"]["_tag"]>,
     never,
     Providers
   >;

@@ -165,6 +165,19 @@ export const workflowConformanceTests = (test: TestFn, { baseUrl }: { baseUrl: (
   );
 
   test(
+    "runs through Workflows.RunWorkflow on Cluster.WorkflowEngine",
+    Effect.gen(function* () {
+      const id = yield* freshId("portable");
+      expect(yield* request<RunStatus>(`${url()}/portable/Greet/${id}?name=sam`)).toEqual({
+        _tag: "Completed",
+        result: "hello sam",
+      });
+      expect(yield* journal(id)).toEqual(["greet", "log"]);
+    }),
+    options,
+  );
+
+  test(
     "runs a child workflow",
     Effect.gen(function* () {
       const id = yield* freshId("parent");

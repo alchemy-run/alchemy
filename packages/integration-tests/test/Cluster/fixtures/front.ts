@@ -11,7 +11,7 @@ import { Counters } from "./counter.ts";
 import { Greeters } from "./greeter.ts";
 import { Tally } from "./legacy.ts";
 import { workflowApp } from "./workflows/app.ts";
-import { Approve, Checkout, Greet, Nap, Parent } from "./workflows/workflows.ts";
+import { Greet } from "./workflows/workflows.ts";
 
 export default class Front extends Docker.Service<Front>()(
   "ClusterFront",
@@ -83,5 +83,5 @@ export default class Front extends Docker.Service<Front>()(
         }
       }).pipe(Effect.provide(AuthClient), Effect.orDie),
     };
-  }).pipe(Effect.provide(Cluster.WorkflowEngine(Greet, Nap, Approve, Checkout, Parent))),
+  }).pipe(Effect.provide(Cluster.WorkflowEngine(Greet))),
 ) {}
