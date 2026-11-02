@@ -22,6 +22,7 @@ const BOOTSTRAPS = [
   ["@alchemy.run/hetzner", "@alchemy.run/hetzner/Bootstrap"],
   ["@alchemy.run/prisma", "@alchemy.run/prisma/Bootstrap"],
   ["@alchemy.run/railway", "@alchemy.run/railway/Bootstrap"],
+  ["@alchemy.run/stackit", "@alchemy.run/stackit/Bootstrap"],
 ] as const;
 
 layer(NodeServices.layer)("provider package bootstraps", (it) => {

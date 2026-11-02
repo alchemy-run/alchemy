@@ -1,0 +1,345 @@
+---
+title: Object Storage
+description: Create S3-compatible STACKIT buckets, read and write objects from a Function with Read, Write, and ReadWrite bindings, and hand out presigned URLs.
+---
+
+Object Storage holds files behind an S3-compatible API. Declare a bucket, bind it to
+your Function, and get, put, list, and delete objects.
+
+## Create a bucket
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Files = Stackit.ObjectStorage.Bucket("Files", {});
+```
+
+Alchemy generates a unique name, in your profile's project and region, and enables
+Object Storage for the project on the first deploy.
+
+## Bind it to a Function
+
+Ask for the least access you need:
+
+| Binding | Methods | Actions on the bucket |
+| --- | --- | --- |
+| `ReadBucket` | `getObject`, `headObject`, `listObjects` | `s3:GetObject`, `s3:GetObjectVersion`, `s3:ListBucket` |
+| `WriteBucket` | `putObject`, `deleteObject`, `deleteObjects`, multipart uploads | `s3:PutObject`, `s3:PutOverwriteObject`, `s3:DeleteObject`, `s3:DeleteObjectVersion`, `s3:AbortMultipartUpload`, `s3:ListMultipartUploadParts` |
+| `ReadWriteBucket` | all of the above | all of the above |
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+import { Files } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const files = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Files);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const key = new URL(request.url, "http://function").pathname.slice(1);
+
+        if (request.method === "PUT") {
+          yield* files.putObject({ Key: key, Body: yield* request.text });
+          return HttpServerResponse.empty({ status: 204 });
+        }
+
+        return yield* files.getObject({ Key: key }).pipe(
+          Effect.flatMap((object) => Stream.mkString(Stream.decodeText(object.Body!))),
+          Effect.map((text) => HttpServerResponse.text(text)),
+          Effect.catchTag("NoSuchKey", () =>
+            Effect.succeed(HttpServerResponse.text("no such file", { status: 404 })),
+          ),
+        );
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+The bindings grant no STACKIT role. Alchemy creates a credentials group and an access
+key for each host and bucket, binds the key into the host's environment, and adds
+statements to the bucket's policy limiting the group to the actions above.
+
+:::caution[What the key can reach]
+A bucket policy only speaks for its own bucket, and STACKIT's examples show a
+credentials group reaching a bucket unless that bucket's policy denies it. Give your
+other buckets a [`policy`](#set-a-bucket-policy) that denies the group if it shouldn't
+reach them. On a Function, the key is a plain revision variable, so anyone who can call
+`GetRevision` can read it.
+:::
+
+## Read an object
+
+`getObject` returns the body as a stream. A missing key fails with `NoSuchKey`:
+
+```typescript
+const object = yield* files.getObject({ Key: "reports/2026.json" });
+const text = yield* Stream.mkString(Stream.decodeText(object.Body!));
+```
+
+`headObject` returns only the metadata. A missing key fails with `NotFound`.
+
+## Write an object
+
+```typescript
+yield* files.putObject({
+  Key: "hello.txt",
+  Body: "Hello, World!",
+  ContentType: "text/plain",
+});
+```
+
+## List objects
+
+`listObjects` returns one page:
+
+```typescript
+const listed = yield* files.listObjects({ Prefix: "reports/" });
+const keys = (listed.Contents ?? []).map((object) => object.Key);
+```
+
+## Delete objects
+
+```typescript
+yield* files.deleteObject({ Key: "hello.txt" });
+yield* files.deleteObjects({ Delete: { Objects: [{ Key: "a.txt" }, { Key: "b.txt" }] } });
+```
+
+## Upload in parts
+
+```typescript
+const upload = yield* files.createMultipartUpload({ Key: "video.mp4" });
+const part = yield* files.uploadPart({
+  Key: "video.mp4",
+  UploadId: upload.UploadId!,
+  PartNumber: 1,
+  Body: chunk,
+});
+```
+
+Finish with `completeMultipartUpload`, or give up with `abortMultipartUpload`.
+
+## Hand out a download URL
+
+`PresignGetObject` gives a browser a link to a private object:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Files } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const presign = yield* Stackit.ObjectStorage.PresignGetObject(yield* Files);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const url = yield* presign({ key: "2026.pdf", expiresIn: 300 });
+        return yield* HttpServerResponse.json({ url });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.ObjectStorage.PresignGetObjectHttp)),
+) {}
+```
+
+`expiresIn` is in seconds and defaults to 900. Signing makes no API call. The URL
+carries the access of the key that signed it, so this binding holds the same key and
+policy statements as `ReadBucket`.
+
+## Hand out an upload URL
+
+```typescript
+const presign = yield* Stackit.ObjectStorage.PresignPutObject(yield* Files);
+// …
+const url = yield* presign({ key: "avatar.png", contentType: "image/png" });
+```
+
+Provide `Stackit.ObjectStorage.PresignPutObjectHttp`. The uploader has to send exactly
+the `Content-Type` you signed, or the upload fails with a signature mismatch. This
+binding holds the same key and policy statements as `WriteBucket`.
+
+## Connect with an S3 client
+
+For a client outside a binding, create the group and the key yourself:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const bucket = yield* Stackit.ObjectStorage.Bucket("Assets", {});
+    const group = yield* Stackit.ObjectStorage.CredentialsGroup("AssetsWriters", {});
+    const key = yield* Stackit.ObjectStorage.AccessKey("AssetsKey", {
+      credentialsGroupId: group.credentialsGroupId,
+    });
+    return {
+      endpoint: bucket.urlPathStyle,
+      accessKeyId: key.accessKeyId,
+      secretAccessKey: key.secretAccessKey,
+    };
+  }),
+);
+```
+
+`secretAccessKey` is `Redacted`. The S3 endpoint is `urlPathStyle` without the bucket
+name.
+
+## Set a bucket policy
+
+Alchemy sets no policy unless you pass one or a binding adds statements. A statement
+with no `Resource` applies to this bucket and its objects:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const group = yield* Stackit.ObjectStorage.CredentialsGroup("Analysts", {});
+    const bucket = yield* Stackit.ObjectStorage.Bucket("Payroll", {
+      policy: {
+        Statement: [
+          {
+            Effect: "Deny",
+            Principal: { AWS: group.urn },
+            Action: "s3:*",
+          },
+        ],
+      },
+    });
+    return { bucketName: bucket.bucketName };
+  }),
+);
+```
+
+`Principal` takes a credentials group's `urn`. These settings live on the S3 API, which
+only takes Object Storage keys, so a deploy that changes them creates a short-lived key
+in the project's `default` credentials group, uses it, and deletes it.
+
+## Allow browser uploads and expire objects
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Uploads = Stackit.ObjectStorage.Bucket("Uploads", {
+  cors: [
+    {
+      AllowedMethods: ["GET", "PUT"],
+      AllowedOrigins: ["https://app.example.com"],
+      ExposeHeaders: ["ETag"],
+    },
+  ],
+  lifecycleRules: [
+    {
+      ID: "ExpireTemporary",
+      Status: "Enabled",
+      Filter: { Prefix: "tmp/" },
+      Expiration: { Days: 7 },
+    },
+  ],
+});
+```
+
+Omit `cors` or `lifecycleRules` to leave the bucket's rules as they are. An empty list
+removes them.
+
+## Lock objects
+
+Object Lock needs a project-level `ComplianceLock`, which caps the retention a bucket can
+use:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const lock = yield* Stackit.ObjectStorage.ComplianceLock("Lock", {});
+    const archive = yield* Stackit.ObjectStorage.Bucket("Archive", {
+      // Referencing the lock orders the bucket after it.
+      projectId: lock.projectId,
+      objectLockEnabled: true,
+      defaultRetention: { mode: "GOVERNANCE", days: 30 },
+    });
+    return { bucketName: archive.bucketName };
+  }),
+);
+```
+
+`COMPLIANCE` retention keeps locked objects, and so the bucket, until the retention ends.
+Deleting the lock removes it for the whole project.
+
+## Destroying a bucket with objects
+
+STACKIT only deletes empty buckets. Set `forceDestroy` on buckets whose contents you can
+lose:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Cache = Stackit.ObjectStorage.Bucket("Cache", { forceDestroy: true });
+```
+
+:::caution[Changing `bucketName`, `objectLockEnabled`, `projectId`, or `region` replaces the bucket]
+A replacement starts empty, and the old bucket has to be empty to be deleted. Set
+`forceDestroy`, or empty it first.
+:::
+
+## What it costs
+
+Object Storage bills what you store and your traffic out. An empty bucket is free. Check
+the current price list.
+
+## Serve a website
+
+To serve a directory from a bucket behind the CDN, use
+[Static sites](/stackit/frontend/static-site).
+
+## Example
+
+[`examples/stackit-function`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-function)
+is a file store on a Function, with a test suite. It hasn't been deployed to STACKIT yet.
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [Object Storage reference](/providers/stackit/objectstorage#bucket): every prop and
+  attribute.

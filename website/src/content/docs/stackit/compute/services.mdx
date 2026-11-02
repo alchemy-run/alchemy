@@ -1,0 +1,370 @@
+---
+title: Services
+description: Run an Effect program on a STACKIT server as a systemd unit, driven through Run Command — no SSH, no Docker, and no key on the server.
+---
+
+`Stackit.IaaS.Service` runs a program on a `Stackit.IaaS.Server` as a systemd unit running
+bun. Nothing logs in to the server. Alchemy bundles your program on your machine, hands it
+to the server through a bucket and Run Command, and restarts the unit, so it needs no SSH
+path, no public address, and no Docker.
+
+:::note[Cost]
+About **EUR 0.05 per hour** for the setup on this page (price list v1.0.44): `g1.1` at EUR
+0.038, a 10 GB boot volume at about EUR 0.01, and a public IP at about EUR 0.004. A
+project's first network with internet access also adds a small SNAT gateway charge. Check
+the current price list.
+:::
+
+:::caution[Check these on your first deploy]
+- The Server Agent answers after the server turns `ACTIVE`. The server below sets
+  `agent: { provisioned: true }`.
+- The server reaches `bun.sh` and Object Storage over outbound HTTPS.
+- The metadata API returns a token the program can sign with.
+- Your deployer holds `iam.service-account.act-as` on the account Alchemy creates. If
+  creating the account doesn't grant it, give the deployer `iam.service-account-user`.
+:::
+
+## Create a server
+
+A Service opens nothing itself, so give the server a public address and a rule for the
+port:
+
+```typescript
+// src/server.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as iaas from "@distilled.cloud/stackit/iaas";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+
+export const PORT = 3000;
+
+const ubuntuImage = Output.fromEffect(
+  Effect.gen(function* () {
+    const { projectId, region } = yield* Stackit.StackitEnvironment.current;
+    const { items } = yield* iaas.listImages({ projectId, region, all: true });
+    return items
+      .filter((image) => image.scope === "public" && /ubuntu/i.test(image.name) && image.id)
+      .sort((a, b) => b.name.localeCompare(a.name))[0]!.id!;
+  }).pipe(Effect.orDie),
+);
+
+export const Box = Effect.gen(function* () {
+  const network = yield* Stackit.IaaS.Network("App", {
+    ipv4: { prefix: "10.0.1.0/24" },
+  });
+  const group = yield* Stackit.IaaS.SecurityGroup("WebGroup", {});
+  yield* Stackit.IaaS.SecurityGroupRule("Http", {
+    securityGroupId: group.securityGroupId,
+    direction: "ingress",
+    protocol: "tcp",
+    portRange: { min: PORT, max: PORT },
+  });
+  yield* Stackit.IaaS.SecurityGroupRule("Egress", {
+    securityGroupId: group.securityGroupId,
+    direction: "egress",
+  });
+  const nic = yield* Stackit.IaaS.NetworkInterface("WebNic", {
+    networkId: network.networkId,
+    securityGroups: [group.securityGroupId],
+  });
+  const server = yield* Stackit.IaaS.Server("Box", {
+    machineType: "g1.1",
+    bootVolume: {
+      size: 10,
+      source: { type: "image", id: ubuntuImage },
+      deleteOnTermination: true,
+    },
+    networking: { networkInterfaceIds: [nic.networkInterfaceId] },
+    agent: { provisioned: true },
+  });
+  const address = yield* Stackit.IaaS.PublicIp("Address", {
+    networkInterfaceId: nic.networkInterfaceId,
+  });
+  return { server, address };
+});
+```
+
+The server needs Linux with systemd, the Server Agent, and outbound HTTPS to `bun.sh` and
+to Object Storage. It must be `ACTIVE` for a deploy.
+
+## Deploy an Effect program
+
+A Service is a class. `main: import.meta.url` makes the file the bundle entry:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Box, PORT } from "./server.ts";
+
+export default class Api extends Stackit.IaaS.Service<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const { server, address } = yield* Box;
+    return {
+      server,
+      main: import.meta.url,
+      port: PORT,
+      publicIp: address.ip,
+      env: { GREETING: "hello from a server" },
+    };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(Config.String("GREETING"));
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+Each deploy waits until the unit has stayed active for about 16 seconds, and with `port`,
+answers there too. It doesn't watch the unit afterwards. A unit that stops is only
+corrected by the next change that reinstalls it.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+`api.url` is built from the address you pass as `publicIp`.
+
+## Bind a resource
+
+Alchemy creates one service account per server and attaches it to the server. A running
+Service gets short-lived tokens from the server's metadata API, so no key sits on the
+server:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Box, PORT } from "./server.ts";
+
+export default class Api extends Stackit.IaaS.Service<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const { server, address } = yield* Box;
+    return { server, main: import.meta.url, port: PORT, publicIp: address.ip };
+  }),
+  Effect.gen(function* () {
+    const { server } = yield* Box;
+    const listCommands = yield* Stackit.RunCommand.ListCommands(server);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const commands = yield* listCommands();
+        return yield* HttpServerResponse.json(commands);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.RunCommand.ListCommandsHttp)),
+) {}
+```
+
+The binding grants the server's account a role on the project, because STACKIT only binds
+roles to organizations, folders, and projects. Services on one server share that account
+and each other's grants. You can't also attach your own account to the server: a server
+holding another one fails the deploy with `ServerServiceAccountTaken`. See
+[IAM & bindings](/stackit/security/iam-bindings).
+
+## Write a plain handler
+
+You don't have to use Effect. Point `main` at a file with a `fetch` handler:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Box } from "./server.ts";
+
+export const Ping = Effect.gen(function* () {
+  const { server } = yield* Box;
+  return yield* Stackit.IaaS.Service("Ping", {
+    server,
+    main: "./src/ping.ts",
+    port: 3000,
+    env: { GREETING: "hello" },
+  });
+});
+
+export type PingEnv = Stackit.InferEnv<typeof Ping>;
+```
+
+```typescript
+// src/ping.ts
+import type { PingEnv } from "./resources.ts";
+
+export default {
+  async fetch(_request: Request, env: PingEnv) {
+    return new Response(env.GREETING);
+  },
+};
+```
+
+## Pass secrets
+
+`env` values reach the server encrypted to a key that never leaves it. They appear neither
+in Run Command's history nor in the bucket:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import { Box } from "./server.ts";
+
+export const Api = Effect.gen(function* () {
+  const { server } = yield* Box;
+  return yield* Stackit.IaaS.Service("Api", {
+    server,
+    main: "./src/api.ts",
+    port: 8080,
+    env: {
+      LOG_LEVEL: "info",
+      API_TOKEN: Config.Redacted("API_TOKEN"),
+    },
+  });
+});
+```
+
+:::caution[Run Command keeps its history]
+Every step's script stays in the server's command history, readable by whoever holds
+`run-command.command.get`. If the program fails to start, its journal is printed there
+too, so a program that logs a secret at startup exposes it that way.
+:::
+
+## Run two on one server
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Box } from "./server.ts";
+
+export const Sites = Effect.gen(function* () {
+  const { server } = yield* Box;
+  const web = yield* Stackit.IaaS.Service("Web", {
+    server,
+    main: "./src/web.ts",
+    port: 3000,
+  });
+  const admin = yield* Stackit.IaaS.Service("Admin", {
+    server,
+    main: "./src/admin.ts",
+    port: 3001,
+  });
+  return { web, admin };
+});
+```
+
+Give each one its own port, and a rule for any you want open.
+
+## Run a background loop
+
+A program on a server keeps running, so it can run with no HTTP handler at all:
+
+```typescript
+// src/Worker.ts
+import * as Stackit from "@alchemy.run/stackit";
+import { ServerHost } from "alchemy/Runtime/Process";
+import * as Effect from "effect/Effect";
+import { Box } from "./server.ts";
+
+export default class Worker extends Stackit.IaaS.Service<Worker>()(
+  "Worker",
+  Effect.gen(function* () {
+    const { server } = yield* Box;
+    return { server, main: import.meta.url };
+  }),
+  Effect.gen(function* () {
+    const { run } = yield* ServerHost;
+    yield* run(
+      Effect.logInfo("tick").pipe(
+        Effect.andThen(Effect.sleep("1 minute")),
+        Effect.forever,
+      ),
+    );
+  }),
+) {}
+```
+
+## Consume a queue
+
+```typescript
+// src/BillingWorker.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Box } from "./server.ts";
+
+export const Orders = Stackit.PubSub.Topic("Orders", {});
+export const Billing = Orders.pipe(
+  Effect.flatMap((topic) => Stackit.PubSub.Subscription("Billing", { topicId: topic.topicId })),
+);
+
+export default class BillingWorker extends Stackit.IaaS.Service<BillingWorker>()(
+  "BillingWorker",
+  Effect.gen(function* () {
+    const { server } = yield* Box;
+    return { server, main: import.meta.url, port: 3000 };
+  }),
+  Effect.gen(function* () {
+    yield* Stackit.PubSub.consumeSubscriptionMessages(
+      Billing,
+      { maxMessages: 32, concurrency: 8 },
+      (message) => Effect.log(message.text),
+    );
+    return {};
+  }).pipe(Effect.provide(Stackit.PubSub.ServerSubscriptionEventSource)),
+) {}
+```
+
+:::caution[A deploy interrupts a handler]
+A deploy stops the running process with a signal. HTTP requests get about six seconds to
+finish, and a consumer's handler is interrupted mid message, so that message comes back. A
+handler has to tolerate running twice.
+:::
+
+## Keep files between deploys
+
+Each deploy replaces the program in `/opt/<unitName>/current`. The unit's working directory
+is `/var/lib/<unitName>`, which stays, so a program can write to a relative path such as
+`./data.sqlite`. A file bundled with the program isn't there: read it relative to
+`import.meta.dir`.
+
+Deleting the Service deletes that directory. Keep data a server replacement has to survive
+on a `Stackit.IaaS.Volume`. See [Servers](/stackit/compute/servers#keep-data-on-a-volume).
+
+## Destroy
+
+`alchemy destroy` removes the unit and its working directory. Changing `server` installs
+the program on the new server, then removes it from the old one, and copies no files.
+
+## Example
+
+[`examples/stackit-service`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-service)
+is an Effect program on one server, with a binding.
+
+## Where next
+
+- [Servers](/stackit/compute/servers): the machine underneath.
+- [Server operations](/stackit/operations/server-operations): Run Command, backups, and
+  updates.
+- [Service reference](/providers/stackit/iaas#service): every prop and attribute.

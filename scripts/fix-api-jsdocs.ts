@@ -28,6 +28,7 @@ const packages = [
   "neon",
   "prisma",
   "hetzner",
+  "stackit",
   "railway",
   "fly",
   "github",

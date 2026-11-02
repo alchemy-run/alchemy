@@ -1,0 +1,25 @@
+// Resources and bindings of the STACKIT CDN namespace are re-exported here.
+export * from "./CustomDomain.ts";
+export * from "./Distribution.ts";
+export * from "./BindingScope.ts";
+export type { CdnError } from "./internal.ts";
+export * from "./GetDistribution.ts";
+export * from "./GetDistributionHttp.ts";
+export * from "./ListDistributions.ts";
+export * from "./ListDistributionsHttp.ts";
+export * from "./GetCustomDomain.ts";
+export * from "./GetCustomDomainHttp.ts";
+export * from "./PurgeCache.ts";
+export * from "./PurgeCacheHttp.ts";
+export * from "./GetCacheInfo.ts";
+export * from "./GetCacheInfoHttp.ts";
+export * from "./FindCachePaths.ts";
+export * from "./FindCachePathsHttp.ts";
+export * from "./GetLogs.ts";
+export * from "./GetLogsHttp.ts";
+export * from "./GetLogsSearchFilters.ts";
+export * from "./GetLogsSearchFiltersHttp.ts";
+export * from "./GetStatistics.ts";
+export * from "./GetStatisticsHttp.ts";
+export * from "./ListWafCollections.ts";
+export * from "./ListWafCollectionsHttp.ts";

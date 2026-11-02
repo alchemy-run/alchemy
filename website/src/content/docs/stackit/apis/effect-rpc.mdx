@@ -1,0 +1,219 @@
+---
+title: Effect RPC on a Function
+description: Build a typed RPC API with Effect's Rpc module, deploy it to a STACKIT Function, and call its procedures from a typed client.
+sidebar:
+  order: 3
+---
+
+Effect RPC gives you procedures instead of URLs, and a typed client with no codegen.
+Every request is checked against a schema, so use it where a web app or another service
+calls into yours. The concept lives at [Effect RPC](/apis/effect-rpc). This page wires it
+onto a [Function](/stackit/compute/functions).
+
+:::caution[Alpha API]
+STACKIT Functions is an alpha API, available in `eu01` only, and this example has not run
+against STACKIT yet. The
+[`stackit-rpc` README](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-rpc)
+lists what to check on your first deploy.
+:::
+
+## Declare the procedures
+
+```typescript
+// src/TaskRpcs.ts
+import { Rpc, RpcGroup } from "effect/rpc";
+import * as Schema from "effect/Schema";
+
+export class Task extends Schema.Class<Task>("Task")({
+  id: Schema.String,
+  title: Schema.String,
+}) {}
+
+export class TaskNotFound extends Schema.TaggedClass<TaskNotFound>()("TaskNotFound", {
+  id: Schema.String,
+}) {}
+
+const getTask = Rpc.make("getTask", {
+  payload: { id: Schema.String },
+  success: Task,
+  error: TaskNotFound,
+});
+
+const createTask = Rpc.make("createTask", {
+  payload: { title: Schema.String },
+  success: Task,
+});
+
+export class TaskRpcs extends RpcGroup.make(getTask, createTask) {}
+```
+
+The client receives `TaskNotFound` as a typed value it can `catchTag`.
+
+## Declare the bucket
+
+The tasks live in a bucket, one object per task:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Tasks = Stackit.ObjectStorage.Bucket("Tasks", { forceDestroy: true });
+```
+
+## Declare the registry
+
+The Function's image goes to a registry project. `src/registry.ts` is the same file as in
+[Functions](/stackit/compute/functions#push-to-stackit-container-registry). Set
+`HARBOR_USERNAME` and `HARBOR_CLI_SECRET` before you deploy.
+
+## Implement it on a Function
+
+`Stackit.Functions.ServeRpc` turns the group into a `fetch` handler. It speaks NDJSON, so
+streaming procedures work:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { Puller, registryFor } from "./registry.ts";
+import { Tasks } from "./resources.ts";
+import { Task, TaskNotFound, TaskRpcs } from "./TaskRpcs.ts";
+
+const decodeTask = Schema.decodeUnknownEffect(Schema.fromJsonString(Task));
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const puller = yield* Puller;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      registry,
+      pullCredential: puller.pullCredentialId,
+    };
+  }),
+  Effect.gen(function* () {
+    const tasks = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Tasks);
+
+    const handlers = TaskRpcs.toLayer({
+      getTask: ({ id }) =>
+        Effect.gen(function* () {
+          const object = yield* tasks.getObject({ Key: `tasks/${id}.json` }).pipe(
+            Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+            Effect.orDie,
+          );
+          if (object === undefined) {
+            return yield* Effect.fail(new TaskNotFound({ id }));
+          }
+          return yield* Stream.mkString(Stream.decodeText(object.Body!)).pipe(
+            Effect.flatMap(decodeTask),
+            Effect.orDie,
+          );
+        }),
+      createTask: ({ title }) =>
+        Effect.gen(function* () {
+          const task = new Task({ id: crypto.randomUUID(), title });
+          yield* tasks.putObject({
+            Key: `tasks/${task.id}.json`,
+            Body: JSON.stringify(task),
+          });
+          return task;
+        }).pipe(Effect.orDie),
+    });
+
+    return { fetch: Stackit.Functions.ServeRpc(TaskRpcs, handlers) };
+  }).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+) {}
+```
+
+Bucket failures become 500s through `Effect.orDie`, and `TaskNotFound` stays typed for the
+client.
+
+`ReadWriteBucket` creates a credentials group and an access key for this Function and
+bucket, and adds statements to the bucket's policy limiting the group to read and write
+actions there. A bucket policy only speaks for its own bucket, so give your other buckets
+a `policy` that denies such groups.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "TaskRpc",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+```sh
+HARBOR_USERNAME=... HARBOR_CLI_SECRET=... bun alchemy deploy
+```
+
+## Call it from a typed client
+
+```typescript
+// scripts/client.ts
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import { RpcClient, RpcSerialization } from "effect/rpc";
+import { TaskRpcs } from "../src/TaskRpcs.ts";
+
+const program = Effect.gen(function* () {
+  const client = yield* RpcClient.make(TaskRpcs);
+
+  const task = yield* client.createTask({ title: "write docs" });
+  const read = yield* client.getTask({ id: task.id });
+  yield* Effect.log(read.title);
+});
+
+const Protocol = Layer.unwrap(
+  Effect.gen(function* () {
+    const url = yield* Config.String("TASK_RPC_URL");
+    return RpcClient.layerProtocolHttp({ url });
+  }),
+).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(RpcSerialization.layerNdjson));
+
+Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(Protocol)));
+```
+
+```sh
+TASK_RPC_URL="$URL" bun scripts/client.ts
+```
+
+The client speaks NDJSON, the serialization the server uses.
+
+## Keep it from the public
+
+A Function has one URL, and the API has no private network and no invoke permission to set,
+so anything can call your procedures. Check a shared secret in the handler, or move the
+program to a [Container Application](/stackit/compute/container-applications#limit-who-can-reach-it),
+which can stay inside its environment.
+
+## Choosing an API style
+
+Use Effect RPC when every caller is Effect. Use
+[Effect HTTP](/stackit/apis/effect-http-api) when callers want plain REST. The
+[RPC overview](/apis) has the full decision.
+
+## Example
+
+[`examples/stackit-rpc`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-rpc)
+is this API, with its test.
+
+## Where next
+
+- [Effect RPC](/apis/effect-rpc): procedures, streaming, and clients in depth.
+- [Functions](/stackit/compute/functions): the runtime underneath.
+- [Object Storage](/stackit/data/object-storage): the client used above.

@@ -1,0 +1,157 @@
+---
+title: Setup
+description: Install Alchemy and connect it to STACKIT — create a customer account and project, create a service account with a key, and store the key in a profile.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+export const pkgs = `alchemy@latest @alchemy.run/stackit@latest effect @effect/platform-bun @effect/platform-node`;
+
+Everything you need before deploying to STACKIT: a customer account, a
+project, a service account with a key, and that key stored in an Alchemy
+profile.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) or Node.js 24.11.1+
+- A STACKIT customer account. Register at the
+  [STACKIT Portal](https://portal.stackit.cloud); a customer account
+  belongs to an **organization**.
+
+## Create a project
+
+Everything you deploy lives in a **project**. In the
+[STACKIT Portal](https://portal.stackit.cloud):
+
+1. Open your organization and click **Create project**.
+2. Give it a name (e.g. `my-app`) and finish the wizard.
+3. Copy the **project ID** (a UUID) from the project's dashboard.
+
+One project per app or per environment keeps them isolated: a service
+account's permissions are granted per project.
+
+## Create a service account
+
+Inside the project:
+
+1. Go to **IAM and management** → **Service accounts** and click
+   **Create service account**. Name it `alchemy`.
+2. Go to **IAM and management** → **Access**, click **Grant access**, pick
+   the `alchemy` service account, and give it the **Owner** role. Alchemy
+   creates and deletes resources and enables services, which needs owner
+   permissions on the project.
+
+## Create a service-account key
+
+1. Open the `alchemy` service account and go to **Service account keys**.
+2. Click **Create key**, and let STACKIT generate the key pair.
+3. Download the key JSON file and store it somewhere private, e.g.
+   `~/.stackit/alchemy-key.json`. STACKIT shows the private key **only
+   once**.
+
+Alchemy exchanges this key for short-lived access tokens on every deploy;
+the key itself never leaves your machine.
+
+## Create a project directory
+
+<PackageManagers init dir="my-app" />
+
+## Install
+
+<PackageManagers add={pkgs} />
+
+## Connect Alchemy to STACKIT
+
+Add STACKIT to your profile. Alchemy asks for the key file path, the
+project ID, and, optionally, your organization ID and region (`eu01` by
+default):
+
+```sh
+alchemy profile edit --add Stackit
+```
+
+The values are saved under `~/.alchemy/credentials/<profile>/` in the
+selected [profile](/environments/profiles). If you skip this step, the first
+`alchemy deploy` on a stack that uses `Stackit.providers()` asks for them.
+
+To script it, or to set up a separate `prod` profile:
+
+```sh
+# Non-interactive (scripts, agents)
+alchemy profile edit --add Stackit --method stored \
+  --set serviceAccountKeyPath=$HOME/.stackit/alchemy-key.json \
+  --set projectId=00000000-0000-0000-0000-000000000000
+
+# A separate `prod` profile
+alchemy profile create prod
+alchemy profile edit --profile prod --add Stackit
+```
+
+Inspect what's stored (secrets are redacted):
+
+```sh
+alchemy profile show
+```
+
+The organization ID is only needed for organization-level resources such as
+projects and folders. Find it in the Portal under your organization's
+settings.
+
+## Get ready to deploy a runtime
+
+You only need this section once you deploy code. A stack with only
+resources, such as the first part of the tutorial, needs none of it.
+
+- **Docker running on your machine.** A Function, Container Application,
+  Cloud Foundry app, or Kubernetes Deployment with a `main` builds an image
+  locally. A [Service](/stackit/compute/services) doesn't use Docker.
+- **A registry login.** A `Stackit.ContainerRegistry.RobotAccount` is
+  created with a Harbor user's login. Set `HARBOR_USERNAME` and
+  `HARBOR_CLI_SECRET` to your user and CLI secret, from your user profile
+  in the registry UI. STACKIT's docs don't confirm how a user name looks or
+  that these secrets work against its API, so check that on your first
+  deploy.
+- **Access to the APIs you use.** Functions is an alpha API and Container
+  Applications a beta API, both in `eu01` only.
+
+[Container Registry](/stackit/operations/container-registry) covers the
+registry resources.
+
+## CI
+
+In CI (`CI=true`) Alchemy reads the environment instead of a profile:
+
+| Variable | Required | Value |
+| --- | --- | --- |
+| `STACKIT_SERVICE_ACCOUNT_KEY` | one of the two | the key JSON |
+| `STACKIT_SERVICE_ACCOUNT_KEY_PATH` | one of the two | a path to the key file |
+| `STACKIT_PROJECT_ID` | yes | the project ID |
+| `STACKIT_ORGANIZATION_ID` | no | the organization ID |
+| `STACKIT_REGION` | no | the region, `eu01` by default |
+| `STACKIT_PRIVATE_KEY` / `STACKIT_PRIVATE_KEY_PATH` | no | only for keys created from your own key pair |
+
+[Part 5 of the tutorial](/stackit/tutorial/part-5) builds a whole GitHub
+Actions pipeline from these.
+
+Alchemy signs in with a service-account key only. It can't exchange an OIDC
+token for a STACKIT token yet, so a CI system holds the key as a secret.
+
+## State storage
+
+STACKIT has no state backend of its own yet, so pick one of:
+
+- **`Alchemy.localState()`** keeps state on disk under `.alchemy/` next to
+  your code. Right for solo projects.
+- **A cloud state store**: if you also use Cloudflare or AWS, pass
+  `Cloudflare.state()` or `AWS.state()` to share state with your team and
+  CI. `postgresState()` keeps it in a Postgres database you run. See
+  [State Store](/state-store).
+
+## Next steps
+
+- [Tutorial](/stackit/tutorial/part-1): deploy your first Stack.
+- [Choosing a runtime](/stackit/compute/choosing-a-runtime): where your
+  code can run.
+- [STACKIT overview](/stackit): projects, regions, and how services are
+  enabled.
+- [API reference](/providers/stackit): every STACKIT resource.

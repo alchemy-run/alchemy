@@ -1,0 +1,440 @@
+{
+  "name": "@alchemy.run/stackit",
+  "version": "2.0.0-beta.84",
+  "description": "STACKIT (Schwarz Group's German cloud) projects, networks, DNS and object storage for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "effect",
+    "infrastructure-as-code",
+    "stackit"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/stackit"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Bootstrap": "./src/Bootstrap.ts",
+    "./ALB": "./src/ALB/index.ts",
+    "./Automation": "./src/Automation/index.ts",
+    "./CDN": "./src/CDN/index.ts",
+    "./Certificates": "./src/Certificates/index.ts",
+    "./CloudFoundry": "./src/CloudFoundry/index.ts",
+    "./ContainerApplications": "./src/ContainerApplications/index.ts",
+    "./ContainerRegistry": "./src/ContainerRegistry/index.ts",
+    "./DNS": "./src/DNS/index.ts",
+    "./Dremio": "./src/Dremio/index.ts",
+    "./EdgeCloud": "./src/EdgeCloud/index.ts",
+    "./FileStorage": "./src/FileStorage/index.ts",
+    "./Functions": "./src/Functions/index.ts",
+    "./Git": "./src/Git/index.ts",
+    "./IaaS": "./src/IaaS/index.ts",
+    "./IAM": "./src/IAM/index.ts",
+    "./Intake": "./src/Intake/index.ts",
+    "./IPLists": "./src/IPLists/index.ts",
+    "./KMS": "./src/KMS/index.ts",
+    "./LoadBalancer": "./src/LoadBalancer/index.ts",
+    "./LogMe": "./src/LogMe/index.ts",
+    "./Logs": "./src/Logs/index.ts",
+    "./MariaDB": "./src/MariaDB/index.ts",
+    "./ModelExperiments": "./src/ModelExperiments/index.ts",
+    "./ModelServing": "./src/ModelServing/index.ts",
+    "./MongoDBFlex": "./src/MongoDBFlex/index.ts",
+    "./ObjectStorage": "./src/ObjectStorage/index.ts",
+    "./Observability": "./src/Observability/index.ts",
+    "./OpenSearch": "./src/OpenSearch/index.ts",
+    "./PostgresFlex": "./src/PostgresFlex/index.ts",
+    "./PubSub": "./src/PubSub/index.ts",
+    "./RabbitMQ": "./src/RabbitMQ/index.ts",
+    "./ResourceManager": "./src/ResourceManager/index.ts",
+    "./RunCommand": "./src/RunCommand/index.ts",
+    "./SecretsManager": "./src/SecretsManager/index.ts",
+    "./ServerBackup": "./src/ServerBackup/index.ts",
+    "./ServerUpdate": "./src/ServerUpdate/index.ts",
+    "./ServiceEnablement": "./src/ServiceEnablement/index.ts",
+    "./SKE": "./src/SKE/index.ts",
+    "./SQLServerFlex": "./src/SQLServerFlex/index.ts",
+    "./Telemetry": "./src/Telemetry/index.ts",
+    "./UnifiedFirewall": "./src/UnifiedFirewall/index.ts",
+    "./Valkey": "./src/Valkey/index.ts",
+    "./VPN": "./src/VPN/index.ts",
+    "./WAF": "./src/WAF/index.ts",
+    "./Website": "./src/Website/index.ts",
+    "./Workflows": "./src/Workflows/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Bootstrap": {
+        "types": "./src/Bootstrap.ts",
+        "bun": "./src/Bootstrap.ts",
+        "default": "./src/Bootstrap.ts"
+      },
+      "./ALB": {
+        "types": "./lib/ALB/index.d.ts",
+        "bun": "./src/ALB/index.ts",
+        "worker": "./src/ALB/index.ts",
+        "default": "./lib/ALB/index.js"
+      },
+      "./Automation": {
+        "types": "./lib/Automation/index.d.ts",
+        "bun": "./src/Automation/index.ts",
+        "worker": "./src/Automation/index.ts",
+        "default": "./lib/Automation/index.js"
+      },
+      "./CDN": {
+        "types": "./lib/CDN/index.d.ts",
+        "bun": "./src/CDN/index.ts",
+        "worker": "./src/CDN/index.ts",
+        "default": "./lib/CDN/index.js"
+      },
+      "./Certificates": {
+        "types": "./lib/Certificates/index.d.ts",
+        "bun": "./src/Certificates/index.ts",
+        "worker": "./src/Certificates/index.ts",
+        "default": "./lib/Certificates/index.js"
+      },
+      "./CloudFoundry": {
+        "types": "./lib/CloudFoundry/index.d.ts",
+        "bun": "./src/CloudFoundry/index.ts",
+        "worker": "./src/CloudFoundry/index.ts",
+        "default": "./lib/CloudFoundry/index.js"
+      },
+      "./ContainerApplications": {
+        "types": "./lib/ContainerApplications/index.d.ts",
+        "bun": "./src/ContainerApplications/index.ts",
+        "worker": "./src/ContainerApplications/index.ts",
+        "default": "./lib/ContainerApplications/index.js"
+      },
+      "./ContainerRegistry": {
+        "types": "./lib/ContainerRegistry/index.d.ts",
+        "bun": "./src/ContainerRegistry/index.ts",
+        "worker": "./src/ContainerRegistry/index.ts",
+        "default": "./lib/ContainerRegistry/index.js"
+      },
+      "./DNS": {
+        "types": "./lib/DNS/index.d.ts",
+        "bun": "./src/DNS/index.ts",
+        "worker": "./src/DNS/index.ts",
+        "default": "./lib/DNS/index.js"
+      },
+      "./Dremio": {
+        "types": "./lib/Dremio/index.d.ts",
+        "bun": "./src/Dremio/index.ts",
+        "worker": "./src/Dremio/index.ts",
+        "default": "./lib/Dremio/index.js"
+      },
+      "./EdgeCloud": {
+        "types": "./lib/EdgeCloud/index.d.ts",
+        "bun": "./src/EdgeCloud/index.ts",
+        "worker": "./src/EdgeCloud/index.ts",
+        "default": "./lib/EdgeCloud/index.js"
+      },
+      "./FileStorage": {
+        "types": "./lib/FileStorage/index.d.ts",
+        "bun": "./src/FileStorage/index.ts",
+        "worker": "./src/FileStorage/index.ts",
+        "default": "./lib/FileStorage/index.js"
+      },
+      "./Functions": {
+        "types": "./lib/Functions/index.d.ts",
+        "bun": "./src/Functions/index.ts",
+        "worker": "./src/Functions/index.ts",
+        "default": "./lib/Functions/index.js"
+      },
+      "./Git": {
+        "types": "./lib/Git/index.d.ts",
+        "bun": "./src/Git/index.ts",
+        "worker": "./src/Git/index.ts",
+        "default": "./lib/Git/index.js"
+      },
+      "./IaaS": {
+        "types": "./lib/IaaS/index.d.ts",
+        "bun": "./src/IaaS/index.ts",
+        "worker": "./src/IaaS/index.ts",
+        "default": "./lib/IaaS/index.js"
+      },
+      "./IAM": {
+        "types": "./lib/IAM/index.d.ts",
+        "bun": "./src/IAM/index.ts",
+        "worker": "./src/IAM/index.ts",
+        "default": "./lib/IAM/index.js"
+      },
+      "./Intake": {
+        "types": "./lib/Intake/index.d.ts",
+        "bun": "./src/Intake/index.ts",
+        "worker": "./src/Intake/index.ts",
+        "default": "./lib/Intake/index.js"
+      },
+      "./IPLists": {
+        "types": "./lib/IPLists/index.d.ts",
+        "bun": "./src/IPLists/index.ts",
+        "worker": "./src/IPLists/index.ts",
+        "default": "./lib/IPLists/index.js"
+      },
+      "./KMS": {
+        "types": "./lib/KMS/index.d.ts",
+        "bun": "./src/KMS/index.ts",
+        "worker": "./src/KMS/index.ts",
+        "default": "./lib/KMS/index.js"
+      },
+      "./LoadBalancer": {
+        "types": "./lib/LoadBalancer/index.d.ts",
+        "bun": "./src/LoadBalancer/index.ts",
+        "worker": "./src/LoadBalancer/index.ts",
+        "default": "./lib/LoadBalancer/index.js"
+      },
+      "./LogMe": {
+        "types": "./lib/LogMe/index.d.ts",
+        "bun": "./src/LogMe/index.ts",
+        "worker": "./src/LogMe/index.ts",
+        "default": "./lib/LogMe/index.js"
+      },
+      "./Logs": {
+        "types": "./lib/Logs/index.d.ts",
+        "bun": "./src/Logs/index.ts",
+        "worker": "./src/Logs/index.ts",
+        "default": "./lib/Logs/index.js"
+      },
+      "./MariaDB": {
+        "types": "./lib/MariaDB/index.d.ts",
+        "bun": "./src/MariaDB/index.ts",
+        "worker": "./src/MariaDB/index.ts",
+        "default": "./lib/MariaDB/index.js"
+      },
+      "./ModelExperiments": {
+        "types": "./lib/ModelExperiments/index.d.ts",
+        "bun": "./src/ModelExperiments/index.ts",
+        "worker": "./src/ModelExperiments/index.ts",
+        "default": "./lib/ModelExperiments/index.js"
+      },
+      "./ModelServing": {
+        "types": "./lib/ModelServing/index.d.ts",
+        "bun": "./src/ModelServing/index.ts",
+        "worker": "./src/ModelServing/index.ts",
+        "default": "./lib/ModelServing/index.js"
+      },
+      "./MongoDBFlex": {
+        "types": "./lib/MongoDBFlex/index.d.ts",
+        "bun": "./src/MongoDBFlex/index.ts",
+        "worker": "./src/MongoDBFlex/index.ts",
+        "default": "./lib/MongoDBFlex/index.js"
+      },
+      "./ObjectStorage": {
+        "types": "./lib/ObjectStorage/index.d.ts",
+        "bun": "./src/ObjectStorage/index.ts",
+        "worker": "./src/ObjectStorage/index.ts",
+        "default": "./lib/ObjectStorage/index.js"
+      },
+      "./Observability": {
+        "types": "./lib/Observability/index.d.ts",
+        "bun": "./src/Observability/index.ts",
+        "worker": "./src/Observability/index.ts",
+        "default": "./lib/Observability/index.js"
+      },
+      "./OpenSearch": {
+        "types": "./lib/OpenSearch/index.d.ts",
+        "bun": "./src/OpenSearch/index.ts",
+        "worker": "./src/OpenSearch/index.ts",
+        "default": "./lib/OpenSearch/index.js"
+      },
+      "./PostgresFlex": {
+        "types": "./lib/PostgresFlex/index.d.ts",
+        "bun": "./src/PostgresFlex/index.ts",
+        "worker": "./src/PostgresFlex/index.ts",
+        "default": "./lib/PostgresFlex/index.js"
+      },
+      "./PubSub": {
+        "types": "./lib/PubSub/index.d.ts",
+        "bun": "./src/PubSub/index.ts",
+        "worker": "./src/PubSub/index.ts",
+        "default": "./lib/PubSub/index.js"
+      },
+      "./RabbitMQ": {
+        "types": "./lib/RabbitMQ/index.d.ts",
+        "bun": "./src/RabbitMQ/index.ts",
+        "worker": "./src/RabbitMQ/index.ts",
+        "default": "./lib/RabbitMQ/index.js"
+      },
+      "./ResourceManager": {
+        "types": "./lib/ResourceManager/index.d.ts",
+        "bun": "./src/ResourceManager/index.ts",
+        "worker": "./src/ResourceManager/index.ts",
+        "default": "./lib/ResourceManager/index.js"
+      },
+      "./RunCommand": {
+        "types": "./lib/RunCommand/index.d.ts",
+        "bun": "./src/RunCommand/index.ts",
+        "worker": "./src/RunCommand/index.ts",
+        "default": "./lib/RunCommand/index.js"
+      },
+      "./SecretsManager": {
+        "types": "./lib/SecretsManager/index.d.ts",
+        "bun": "./src/SecretsManager/index.ts",
+        "worker": "./src/SecretsManager/index.ts",
+        "default": "./lib/SecretsManager/index.js"
+      },
+      "./ServerBackup": {
+        "types": "./lib/ServerBackup/index.d.ts",
+        "bun": "./src/ServerBackup/index.ts",
+        "worker": "./src/ServerBackup/index.ts",
+        "default": "./lib/ServerBackup/index.js"
+      },
+      "./ServerUpdate": {
+        "types": "./lib/ServerUpdate/index.d.ts",
+        "bun": "./src/ServerUpdate/index.ts",
+        "worker": "./src/ServerUpdate/index.ts",
+        "default": "./lib/ServerUpdate/index.js"
+      },
+      "./ServiceEnablement": {
+        "types": "./lib/ServiceEnablement/index.d.ts",
+        "bun": "./src/ServiceEnablement/index.ts",
+        "worker": "./src/ServiceEnablement/index.ts",
+        "default": "./lib/ServiceEnablement/index.js"
+      },
+      "./SKE": {
+        "types": "./lib/SKE/index.d.ts",
+        "bun": "./src/SKE/index.ts",
+        "worker": "./src/SKE/index.ts",
+        "default": "./lib/SKE/index.js"
+      },
+      "./SQLServerFlex": {
+        "types": "./lib/SQLServerFlex/index.d.ts",
+        "bun": "./src/SQLServerFlex/index.ts",
+        "worker": "./src/SQLServerFlex/index.ts",
+        "default": "./lib/SQLServerFlex/index.js"
+      },
+      "./Telemetry": {
+        "types": "./lib/Telemetry/index.d.ts",
+        "bun": "./src/Telemetry/index.ts",
+        "worker": "./src/Telemetry/index.ts",
+        "default": "./lib/Telemetry/index.js"
+      },
+      "./UnifiedFirewall": {
+        "types": "./lib/UnifiedFirewall/index.d.ts",
+        "bun": "./src/UnifiedFirewall/index.ts",
+        "worker": "./src/UnifiedFirewall/index.ts",
+        "default": "./lib/UnifiedFirewall/index.js"
+      },
+      "./Valkey": {
+        "types": "./lib/Valkey/index.d.ts",
+        "bun": "./src/Valkey/index.ts",
+        "worker": "./src/Valkey/index.ts",
+        "default": "./lib/Valkey/index.js"
+      },
+      "./VPN": {
+        "types": "./lib/VPN/index.d.ts",
+        "bun": "./src/VPN/index.ts",
+        "worker": "./src/VPN/index.ts",
+        "default": "./lib/VPN/index.js"
+      },
+      "./WAF": {
+        "types": "./lib/WAF/index.d.ts",
+        "bun": "./src/WAF/index.ts",
+        "worker": "./src/WAF/index.ts",
+        "default": "./lib/WAF/index.js"
+      },
+      "./Website": {
+        "types": "./lib/Website/index.d.ts",
+        "bun": "./src/Website/index.ts",
+        "worker": "./src/Website/index.ts",
+        "default": "./lib/Website/index.js"
+      },
+      "./Workflows": {
+        "types": "./lib/Workflows/index.d.ts",
+        "bun": "./src/Workflows/index.ts",
+        "worker": "./src/Workflows/index.ts",
+        "default": "./lib/Workflows/index.js"
+      },
+      "./IAM/internal/*": null,
+      "./Observability/internal/*": null,
+      "./internal/*": null,
+      "./*/internal": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/kubernetes": "workspace:*",
+    "@alchemy.run/redis": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/stackit": "workspace:*",
+    "rolldown": "catalog:",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@types/bun": "catalog:",
+    "alchemy": "workspace:*",
+    "amqplib": "^2.2.0",
+    "effect": "catalog:",
+    "kafkajs": "^2.2.4",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "amqplib": "^2.2.0",
+    "effect": "catalog:",
+    "kafkajs": "^2.2.4"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/frontend-frameworks": {
+      "optional": true
+    },
+    "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    },
+    "amqplib": {
+      "optional": true
+    },
+    "kafkajs": {
+      "optional": true
+    }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/stackit/Contributions"
+    ]
+  }
+}

@@ -1,0 +1,287 @@
+---
+title: Container Registry
+description: Keep images in STACKIT's Harbor registry, log in with robot accounts, push from Alchemy, and pull from Functions and Container Applications.
+---
+
+A `Stackit.ContainerRegistry.Project` is a namespace of images on STACKIT's Harbor registry.
+Images go to `<registry host>/<name>/<image>:<tag>`, and pushing and pulling take a
+`Stackit.ContainerRegistry.RobotAccount`. STACKIT's docs describe the service as free of
+charge during its beta. Recheck that when the beta ends.
+
+## Create a project
+
+```typescript
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export const Images = Stackit.ContainerRegistry.Project("Images", {});
+```
+
+`imagePrefix` is the prefix of your image paths. The first deploy enables the service for your
+STACKIT project.
+
+## Give Alchemy a Harbor login
+
+Robots live on Harbor's own API, which takes HTTP Basic, not STACKIT credentials. Set your
+Harbor user and CLI secret, from your user profile in the registry UI, as `HARBOR_USERNAME` and
+`HARBOR_CLI_SECRET`, and pass them to the resources that need them:
+
+```diff lang="typescript"
+// src/registry.ts
++const harbor = {
++  username: Config.String("HARBOR_USERNAME"),
++  secret: Config.Redacted("HARBOR_CLI_SECRET"),
++};
+```
+
+## Create a robot that pushes
+
+A robot's `permissions` are what it may do in the project:
+
+```diff lang="typescript"
+// src/registry.ts
++export const Pusher = Effect.gen(function* () {
++  const images = yield* Images;
++  return yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
++    project: images.name,
++    registryUrl: images.url,
++    credentials: harbor,
++    permissions: [
++      { resource: "repository", action: "pull" },
++      { resource: "repository", action: "push" },
++    ],
++  });
++});
+```
+
+`robotName` and `secret` are the login. Harbor returns the secret once, and Alchemy keeps it
+`Redacted` in state. When Alchemy finds a robot it has no secret for, it asks Harbor for a new
+one, so anything using the old one stops working.
+
+## Create a robot that pulls
+
+A Function fetches its image with a `PullCredential`:
+
+```diff lang="typescript"
+// src/registry.ts
++export const Puller = Effect.gen(function* () {
++  const images = yield* Images;
++  const robot = yield* Stackit.ContainerRegistry.RobotAccount("Puller", {
++    project: images.name,
++    registryUrl: images.url,
++    credentials: harbor,
++    permissions: [{ resource: "repository", action: "pull" }],
++  });
++  return yield* Stackit.Functions.PullCredential("PullCredential", {
++    address: images.registryHost,
++    username: robot.robotName,
++    password: robot.secret,
++  });
++});
+```
+
+Use `Stackit.ContainerApplications.EnvironmentRegistry` for a [Container
+Application](/stackit/compute/container-applications) instead.
+
+## Say where an image goes
+
+One helper keeps each host's repository in one place:
+
+```diff lang="typescript"
+// src/registry.ts
++export const registryFor = (image: string) =>
++  Effect.gen(function* () {
++    const images = yield* Images;
++    const pusher = yield* Pusher;
++    return {
++      repository: Output.interpolate`${images.imagePrefix}/${image}`,
++      username: pusher.robotName,
++      password: pusher.secret,
++    };
++  });
+```
+
+## Use it from a Function
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Puller, registryFor } from "./registry.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const puller = yield* Puller;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      registry,
+      pullCredential: puller.pullCredentialId,
+    };
+  }),
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }),
+) {}
+```
+
+Alchemy builds the image on your machine and pushes it with `Pusher`, so Docker has to be
+running. The same `registry` prop works on an Application.
+
+:::caution
+A project has no public option, and `SKE.Cluster`'s `registry` only says where images are pushed.
+A `main` workload on a cluster can't pull from a private project without an image pull secret you
+set up by hand. See [Kubernetes](/stackit/compute/kubernetes).
+:::
+
+## Push an image yourself
+
+`Docker.Image` from `@alchemy.run/docker` builds and pushes:
+
+```typescript
+// src/image.ts
+import * as Docker from "@alchemy.run/docker";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import { Images, Pusher } from "./registry.ts";
+
+export const App = Effect.gen(function* () {
+  const images = yield* Images;
+  const pusher = yield* Pusher;
+  return yield* Docker.Image("App", {
+    name: Output.interpolate`${images.imagePrefix}/app`,
+    tag: "1.0.0",
+    registry: {
+      server: images.registryHost,
+      username: pusher.robotName,
+      password: pusher.secret,
+    },
+    build: { context: "./app" },
+  });
+});
+```
+
+## Expire a robot
+
+```typescript
+Stackit.ContainerRegistry.RobotAccount("Puller", {
+  project: images.name,
+  registryUrl: images.url,
+  credentials: harbor,
+  permissions: [{ resource: "repository", action: "pull" }],
+  durationDays: 90,
+});
+```
+
+The secret stops working that many days after the robot was created. `disabled: true` stops a
+robot logging in, without deleting it.
+
+## Cache another registry
+
+A project can be a pull-through cache:
+
+```typescript
+Stackit.ContainerRegistry.Project("DockerHubCache", {
+  name: "docker-hub-cache",
+  proxy: {
+    registryType: "docker-hub",
+    url: "https://hub.docker.com",
+    credentials: {
+      accessKey: "acme",
+      accessSecret: Redacted.make("dckr_pat_..."),
+    },
+  },
+});
+```
+
+Adding or removing `proxy` replaces the project.
+
+## List images from a host
+
+Image bindings take a robot. They grant nothing: the robot's `permissions` limit the call, and
+they cover its whole registry project. `ListArtifacts` needs `artifact` `list`. Provide
+`Stackit.ContainerRegistry.ListArtifactsHttp`:
+
+```typescript
+const listArtifacts = yield* Stackit.ContainerRegistry.ListArtifacts(yield* Robot);
+
+// inside fetch:
+const artifacts = yield* listArtifacts({ repository_name: "app", with_tag: true });
+```
+
+The robot's login reaches the host's environment.
+
+## Scan an image
+
+`ScanArtifact` starts a scan, with `scan` `create`, and `GetScanReport` reads the result, with
+`artifact-addition` `read`:
+
+```typescript
+yield* scanArtifact({ repository_name: "app", reference: "1.0.0" });
+const report = yield* getScanReport({ repository_name: "app", reference: "1.0.0" });
+```
+
+## Promote a build
+
+`CreateTag` adds a tag, with `tag` `create`:
+
+```typescript
+yield* createTag({ repository_name: "app", reference: "1.0.0", name: "stable" });
+```
+
+## Read a project from a host
+
+`GetProject` takes the project, on the management API. It grants a custom role holding
+`container-registry.project.get` on the STACKIT project, so it reaches every registry project
+there. Provide `Stackit.ContainerRegistry.GetProjectHttp`:
+
+```typescript
+const getProject = yield* Stackit.ContainerRegistry.GetProject(yield* Images);
+
+// inside fetch:
+const live = yield* getProject({});
+```
+
+## Delete a project with images
+
+Harbor refuses to delete a project that holds images. `forceDestroy` empties it first, and takes
+your Harbor login to do that:
+
+```diff lang="typescript"
+// src/registry.ts
+-export const Images = Stackit.ContainerRegistry.Project("Images", {});
++export const Images = Stackit.ContainerRegistry.Project("Images", {
++  forceDestroy: true,
++  harborCredentials: harbor,
++});
+```
+
+Declare `harbor` above `Images`.
+
+:::caution
+Changing `name`, `projectId`, or `region`, or adding or removing `proxy`, replaces the project. The
+new one starts empty, and the old one is deleted with its images. Re-push what you need.
+:::
+
+## Check on your first deploy
+
+- `https://registry.onstackit.cloud/api/v2.0` serves Harbor's API. It's Harbor's standard path, and
+  STACKIT doesn't state it.
+- Whether your Harbor username is an e-mail or an OIDC subject, and whether a CLI secret works for
+  the API as it does on stock Harbor.
+- Whether a STACKIT service account can act as a robot. A release note from July 2026 says they map
+  to robot accounts, with no how-to.
+
+## Where next
+
+- [Functions](/stackit/compute/functions) and
+  [Container Applications](/stackit/compute/container-applications) — what runs the images.
+- [Secrets Manager & KMS](/stackit/security/secrets-kms#protect-the-state-store) — robot secrets are in
+  your state store.
+- [ContainerRegistry reference](/providers/stackit/containerregistry#project) — every prop and
+  attribute.

@@ -118,6 +118,44 @@ const examples = [
   // "./examples/railway-website-vinext",
   // "./examples/railway-website-waku",
   // "./examples/railway-website-vocs",
+  // STACKIT Website composites (same apps as the Hetzner, AWS and Neon
+  // *-website-* examples). Commented because they need credentials the
+  // default run doesn't have: a STACKIT profile, and for the server-rendered
+  // ones access to the Functions alpha API plus a Harbor login. Run them from
+  // the example directory with `bun test`; each suite skips without them.
+  // "./examples/stackit-static-site",
+  // "./examples/stackit-website-astro",
+  // "./examples/stackit-website-foldkit",
+  // "./examples/stackit-website-nextjs",
+  // "./examples/stackit-website-nuxt",
+  // "./examples/stackit-website-octane",
+  // "./examples/stackit-website-react-router",
+  // "./examples/stackit-website-solidstart",
+  // "./examples/stackit-website-sveltekit",
+  // "./examples/stackit-website-tanstack-start",
+  // "./examples/stackit-website-vinext",
+  // "./examples/stackit-website-vite",
+  // "./examples/stackit-website-vocs",
+  // "./examples/stackit-website-waku",
+  // STACKIT workload examples. Commented for the same reason: they need a
+  // STACKIT profile, most need a Harbor login and Docker, and several bill by
+  // the hour while they run. Run them from the example directory with
+  // `bun test`; each README states its cost and prerequisites.
+  // "./examples/stackit-function",
+  // "./examples/stackit-function-async",
+  // "./examples/stackit-httpapi",
+  // "./examples/stackit-rpc",
+  // "./examples/stackit-pubsub",
+  // "./examples/stackit-container-app",
+  // "./examples/stackit-cloud-foundry",
+  // "./examples/stackit-kubernetes",
+  // "./examples/stackit-service",
+  // "./examples/stackit-server",
+  // "./examples/stackit-postgres",
+  // "./examples/stackit-valkey",
+  // "./examples/stackit-secrets",
+  // "./examples/stackit-ai",
+  // "./examples/stackit-service-to-service",
   "./examples/fly-sprite",
   "./examples/fly-redis",
   "./examples/fly-bucket",

@@ -153,3 +153,67 @@ describe("pinNodeServeModule", () => {
     ]);
   });
 });
+
+describe("makeNodeServeEntrySource behind a CDN", () => {
+  const client = `fileURLToPath(new URL("../client/", import.meta.url))`;
+
+  it("leaves the entry unchanged when not behind a CDN", () => {
+    const source = makeNodeServeEntrySource({ clientDirExpression: client });
+    expect(source).not.toContain("isHashedAsset");
+    expect(source).not.toContain("x-forwarded-host");
+    expect(source).not.toContain("ALCHEMY_SITE_HOST");
+  });
+
+  it("is valid JavaScript with the hash rule and the request rewrites", () => {
+    const source = makeNodeServeEntrySource({
+      clientDirExpression: JSON.stringify("/srv/client"),
+      behindCdn: { forwardedHostSuffix: ".cdn.onstackit.cloud" },
+    });
+    expect(source).toContain("public,max-age=31536000,immutable");
+    expect(source).toContain('".cdn.onstackit.cloud"');
+    expect(source).toContain('req.headers["x-forwarded-proto"] ??= "https"');
+    // Only compiled, never called: the generated source must parse.
+    expect(() => new Function(source.replaceAll(/^import .*$/gm, ""))).not.toThrow();
+  });
+
+  it("marks only hash-shaped names in build-asset directories immutable", () => {
+    const source = makeNodeServeEntrySource({
+      clientDirExpression: client,
+      behindCdn: {},
+    });
+    const rule = /const isHashedAsset = [\s\S]*?\n};\n/.exec(source)![0];
+    const isHashedAsset = new Function(`${rule}\nreturn isHashedAsset;`)() as (
+      file: string,
+    ) => boolean;
+    for (const hashed of [
+      "assets/index-DiwrgTda.js",
+      "assets/entry.a1b2c3d4.css",
+      "_astro/client.BxY12_-a.js",
+      "assets/index-B_xY-12a.js",
+      "_nuxt/BxY12_-a.js",
+      "_build/assets/index-Abcd1234.js",
+      "_app/immutable/chunks/x.js",
+      "_next/static/chunks/main.js",
+    ]) {
+      expect(isHashedAsset(hashed)).toBe(true);
+    }
+    for (const plain of [
+      "index.html",
+      "sw.js",
+      "manifest.webmanifest",
+      "apple-touch-icon-180x180.png",
+      "assets/logo.png",
+      "assets/my-component.js",
+      "_app/version.json",
+      "_nuxt/builds/latest.json",
+      "assets/TeamPhoto.png",
+      "assets/site-main-2.css",
+      "assets/hero-image-12.png",
+      "assets/photo-20240115.jpg",
+      "public/assets/Homepage.css",
+      "assets/hero-Homepage.png",
+    ]) {
+      expect(isHashedAsset(plain)).toBe(false);
+    }
+  });
+});

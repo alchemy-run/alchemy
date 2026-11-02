@@ -158,6 +158,8 @@ Skip this section when the provider can't host websites; then `src/<P>/Website` 
 | Check | Command | Expect |
 | --- | --- | --- |
 | Undeclared names in examples | `rg -n 'existing\.' src/<P>` and read every `**Example:**` | every identifier is declared in the example |
+| Logical ids | `node scripts/check-logical-ids.ts <p>` | exits 0: no example project, hub block, or JSDoc example declares one id as two resource types, because `Resource()` dies with `DuplicateLogicalIdError` before any API call and the type check can't see it; read any cross-block warnings |
+| Secrets in declarations | `rg -n 'yield\* Config\.' website/src/content/docs/<p> src/<P> examples/<p>-*` | only inside a host's own program, for a value the host means to hold; a resource takes the `Config` as its prop value, because a host records every `Config` read while its program is set up as its own env |
 | Binding examples | count `@binding` blocks vs those showing the host and `Effect.provide(...)` | all of them |
 | Resource examples | every `@resource` has at least one example | yes |
 | Runtime JSDoc | `rg -c '\*\*Example:\*\*' <runtime file>` and its `###` headings next to `packages/aws/src/Lambda/Function.ts` | ten or more examples; intro, cautions, each form, configuration, packaging, a bindings section per service, event sources |

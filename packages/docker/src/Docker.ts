@@ -197,10 +197,13 @@ export class Docker extends Context.Service<
        * local cache would otherwise reach the registry. Engines whose store
        * doesn't support the flag fall back to a plain push (their local tag
        * is already narrowed by `pull --platform`).
+       *
+       * Without `credentials` the push uses the machine's own Docker config, so a
+       * registry login the machine already holds applies.
        */
       readonly push: (
         ref: string,
-        credentials: RegistryCredentials,
+        credentials: RegistryCredentials | undefined,
         platform?: string,
         context?: string,
         session?: Pick<ScopedPlanStatusSession, "note">,
@@ -787,11 +790,13 @@ const makeDocker = (options: DockerOptions) =>
         // that context's metadata and TLS material in.
         const selected =
           context ??
-          (yield* run(["context", "show"]).pipe(
-            Effect.map((result) => result.stdout),
-            Effect.orElseSucceed(() => "default"),
-          ));
-        if (selected && selected !== "default") {
+          (credentials === undefined
+            ? undefined
+            : yield* run(["context", "show"]).pipe(
+                Effect.map((result) => result.stdout),
+                Effect.orElseSucceed(() => "default"),
+              ));
+        if (credentials !== undefined && selected && selected !== "default") {
           const inspected = yield* runInspect<{
             Storage: { MetadataPath: string; TLSPath: string };
           }>(["context", "inspect", selected]);
@@ -806,21 +811,24 @@ const makeDocker = (options: DockerOptions) =>
           }
         }
         const pushContext = selected && selected !== "default" ? selected : context;
-        const config = yield* Effect.sync(() => {
-          const password = Redacted.isRedacted(credentials.password)
-            ? Redacted.value(credentials.password)
-            : credentials.password;
-          const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
-          return JSON.stringify({ auths: { [credentials.server]: { auth } } });
-        });
-        yield* fs.writeFileString(path.join(dir, "config.json"), config);
+        if (credentials !== undefined) {
+          const config = yield* Effect.sync(() => {
+            const password = Redacted.isRedacted(credentials.password)
+              ? Redacted.value(credentials.password)
+              : credentials.password;
+            const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
+            return JSON.stringify({ auths: { [credentials.server]: { auth } } });
+          });
+          yield* fs.writeFileString(path.join(dir, "config.json"), config);
+        }
+        const pushEnv = credentials === undefined ? undefined : { DOCKER_CONFIG: dir };
         const digestFile = path.join(dir, "digest");
         const digestArgs = (yield* isPodman) ? ["--digestfile", digestFile] : [];
         const result =
           platform === undefined
             ? yield* run(
                 [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
-                { DOCKER_CONFIG: dir },
+                pushEnv,
                 outputTap(session),
               )
             : yield* run(
@@ -832,7 +840,7 @@ const makeDocker = (options: DockerOptions) =>
                   ...digestArgs,
                   ref,
                 ],
-                { DOCKER_CONFIG: dir },
+                pushEnv,
                 outputTap(session),
               ).pipe(
                 // Engines without the containerd image store reject `--platform`
@@ -843,7 +851,7 @@ const makeDocker = (options: DockerOptions) =>
                   () =>
                     run(
                       [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
-                      { DOCKER_CONFIG: dir },
+                      pushEnv,
                       outputTap(session),
                     ),
                 ),

@@ -1,0 +1,416 @@
+---
+title: Websites
+description: Deploy Vite, Astro, Next.js, Nuxt, SvelteKit, TanStack Start, React Router, SolidStart, Waku, vinext, Octane, Vocs, Foldkit, or any static build to STACKIT with Stackit.Website, from a bucket or a Function behind the CDN.
+sidebar:
+  label: Overview
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Stackit.Website` deploys a frontend to STACKIT behind a CDN distribution.
+There is no adapter to install, and your framework's own config file loads
+as-is. A build of plain files goes in a private Object Storage bucket and runs
+no compute. A server-rendered build runs on a STACKIT Function.
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Stackit.Website.Vite("Website");
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the CDN's URL.
+
+:::caution[STACKIT Functions is an alpha API]
+Every server-rendered site, and every site with `origin: "function"`, runs on
+STACKIT Functions, an alpha API available in `eu01` only. STACKIT documents no
+container contract for it. [Check these assumptions](#check-your-first-deploy) on
+your first deploy.
+:::
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a dev
+dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+Docker has to be running when you deploy a site on a Function. The image is built
+on your machine. A site on a bucket needs no Docker.
+
+## Pick your framework
+
+| Framework | Resource | Origin | Guide |
+| --- | --- | --- | --- |
+| Any Vite app | `Vite` | bucket, or Function | [Vite](/stackit/frontend/vite) |
+| Foldkit | `Foldkit` | bucket, or Function | [Foldkit](/stackit/frontend/foldkit) |
+| Astro | `Astro` | Function, or bucket for `output: "static"` | [Astro](/stackit/frontend/astro) |
+| Next.js | `Nextjs` | Function | [Next.js](/stackit/frontend/nextjs) |
+| vinext | `Vinext` | Function | [vinext](/stackit/frontend/vinext) |
+| Nuxt | `Nuxt` | Function | [Nuxt](/stackit/frontend/nuxt) |
+| SvelteKit | `SvelteKit` | Function | [SvelteKit](/stackit/frontend/sveltekit) |
+| TanStack Start | `TanStackStart` | Function | [TanStack Start](/stackit/frontend/tanstack-start) |
+| React Router | `ReactRouter` | Function | [React Router](/stackit/frontend/react-router) |
+| SolidStart | `SolidStart` | Function | [SolidStart](/stackit/frontend/solidstart) |
+| Waku | `Waku` | Function | [Waku](/stackit/frontend/waku) |
+| Octane | `Octane` | Function | [Octane](/stackit/frontend/octane) |
+| Vocs | `Vocs` | Function | [Vocs](/stackit/frontend/vocs) |
+| Hugo, Zola, any static generator | `StaticSite` | bucket | [Static sites](/stackit/frontend/static-site) |
+
+## Choose a bucket or a Function
+
+A distribution has exactly one origin, and nothing routes by path. You can't send
+`/assets/*` to a bucket and everything else to a Function on one hostname, so each
+site picks one:
+
+| | Bucket | Function |
+| --- | --- | --- |
+| What runs | nothing: files in a private bucket | your server, in a Node image |
+| Hashed assets | files in the bucket | served by the Function, behind the CDN |
+| Needs | a STACKIT profile | Docker, a registry, `eu01`, access to the alpha API |
+| Deep links and 404 pages | no | yes, with `assets.notFoundHandling` |
+| Server-side code | no | yes |
+
+`Vite`, `Foldkit`, and Astro with `output: "static"` default to a bucket. Set
+`origin: "function"` to serve the same files from a Function.
+
+## Know the deep-link limit on a bucket
+
+The CDN has no rewrite and no error pages. On a bucket, a request for a path with
+no file fails, so a deep link into a client-side route like `/settings` fails, and
+there is no 404 page. Use hash routing, or serve the build from a Function:
+
+```typescript
+const site = yield* Stackit.Website.Vite("App", {
+  ...hosting,
+  origin: "function",
+  assets: { notFoundHandling: "single-page-application" },
+});
+```
+
+`hosting` is the registry from [Create a registry](#create-a-registry). Setting
+`assets.notFoundHandling` on a bucket fails the deploy with
+`WebsiteFallbackRequiresFunction`. `StaticSite` has no `origin`, so use `Vite` when
+you need this.
+
+:::caution[`/` on a bucket is unconfirmed]
+A bucket has no object for `/`, and STACKIT documents no default document for a
+bucket origin. Check `/` on your first deploy. If it fails, set
+`origin: "function"`.
+:::
+
+Pages under a path are stored at their own URLs: `about/index.html` is also stored
+at `about` and `about/`. Check those on your first deploy too.
+
+## Create a registry
+
+A Function runs an OCI image, so a site on a Function needs somewhere to push it.
+Create a Container Registry project with one robot account that pushes and one
+that pulls:
+
+```typescript
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+const harbor = {
+  username: Config.String("HARBOR_USERNAME"),
+  secret: Config.Redacted("HARBOR_CLI_SECRET"),
+};
+
+export const Registry = Effect.gen(function* () {
+  const images = yield* Stackit.ContainerRegistry.Project("Images", {
+    // Harbor refuses to delete a project that still holds images.
+    forceDestroy: true,
+    harborCredentials: harbor,
+  });
+  const pusher = yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [
+      { resource: "repository", action: "pull" },
+      { resource: "repository", action: "push" },
+    ],
+  });
+  const puller = yield* Stackit.ContainerRegistry.RobotAccount("Puller", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [{ resource: "repository", action: "pull" }],
+  });
+  const pullCredential = yield* Stackit.Functions.PullCredential("PullCredential", {
+    address: images.registryHost,
+    username: puller.robotName,
+    password: puller.secret,
+  });
+  return {
+    registry: {
+      repository: Output.interpolate`${images.imagePrefix}/web`,
+      username: pusher.robotName,
+      password: pusher.secret,
+    },
+    pullCredential: pullCredential.pullCredentialId,
+  };
+});
+```
+
+`HARBOR_USERNAME` and `HARBOR_CLI_SECRET` are your Harbor user and CLI secret, from
+your user profile in the registry's web UI. STACKIT credentials don't provide them.
+
+## Deploy a site on a Function
+
+Skip the registry under `alchemy dev`, which needs no image:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Registry } from "./src/registry.ts";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const { dev } = yield* Alchemy.AlchemyContext;
+    const hosting = dev ? {} : yield* Registry;
+
+    const site = yield* Stackit.Website.Astro("Website", {
+      ...hosting,
+    });
+    return { url: site.url, serverUrl: site.serverUrl };
+  }),
+);
+```
+
+`site.url` is the CDN's URL, and `site.serverUrl` is the Function's. Without
+`registry`, a site on a Function fails with `WebsiteRegistryRequired`.
+
+## Use another registry
+
+Set `repository` and leave out the login to push with your machine's `docker login`:
+
+```typescript
+const site = yield* Stackit.Website.Astro("Website", {
+  registry: { repository: "ghcr.io/my-org/web" },
+});
+```
+
+A private image also needs `pullCredential`, the id of a
+`Stackit.Functions.PullCredential`. See
+[Container Registry](/stackit/operations/container-registry).
+
+## Pass environment variables
+
+`env` sets the environment of the build and the server. Values can be Outputs from
+other resources:
+
+```typescript
+const site = yield* Stackit.Website.Nuxt("Website", {
+  ...hosting,
+  env: { API_BASE: "https://api.example.com" },
+});
+```
+
+Server code reads them from `process.env`. A `Redacted` value stays out of the
+build, because a build may embed what it reads, and reaches only the running server.
+
+:::caution[Variables are readable]
+A Function's variables are plain values on its revision. Anyone who can call
+`GetRevision` can read them, including the service account key a binding adds to the
+Function.
+:::
+
+## Tune the Function
+
+```typescript
+const site = yield* Stackit.Website.Nextjs("Website", {
+  ...hosting,
+  function: { plan: "f2", concurrency: 50, maxScale: 10, keepRevisions: 2 },
+});
+```
+
+`plan` defaults to `f2`, and the API has no list of plans, so check the valid values
+in the STACKIT portal. `concurrency` caps the requests per instance and defaults to
+100. `maxScale` caps the instances. `keepRevisions` is how many older revisions stay
+next to the active one.
+
+## Tune the CDN
+
+```typescript
+const site = yield* Stackit.Website.Vite("Website", {
+  cdn: { regions: ["EU", "US"] },
+});
+```
+
+`regions` defaults to `["EU"]`. `cdn` takes the settings of a
+`Stackit.CDN.Distribution` except its backend, labels, and project, such as `waf`,
+`redirects`, and `optimizer`, which is billed while enabled. See
+[CDN and custom domains](/stackit/networking/cdn-custom-domains).
+
+## Use a custom domain
+
+Set `domain` and create the CNAME to the distribution's hostname. The domain retries
+for about 5 minutes until the record is visible. To publish the record in a STACKIT
+zone, declare it next to the site:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const zone = yield* Stackit.DNS.Zone("Zone", { dnsName: "example.com" });
+    const site = yield* Stackit.Website.StaticSite("Web", {
+      command: "npm run build",
+      outdir: "dist",
+      domain: "www.example.com",
+    });
+    yield* Stackit.DNS.RecordSet("Www", {
+      zoneId: zone.zoneId,
+      name: "www",
+      type: "CNAME",
+      records: [Output.interpolate`${site.distribution!.hostname}.`],
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+`Stackit.DNS` has no DNS adapter. On another DNS host, pass its adapter instead:
+
+```typescript
+const site = yield* Stackit.Website.StaticSite("Web", {
+  command: "npm run build",
+  outdir: "dist",
+  domain: { name: "www.example.com", dns: Cloudflare.DNS.Adapter() },
+});
+```
+
+The certificate is managed unless you pass `certificate`. See
+[DNS adapters](/infrastructure-as-code/dns-adapters).
+
+## Pin the request's host
+
+Without `domain`, a server-rendered site takes the request's host from
+`X-Forwarded-Host`, and any hostname of the CDN passes. A client can make it another
+customer's. If your app builds links from the host, as in a password-reset email, set
+`domain`, or set the distribution's hostname after the first deploy:
+
+```typescript
+const site = yield* Stackit.Website.Astro("Website", {
+  ...hosting,
+  env: { ALCHEMY_SITE_HOST: "abc123.xyz.cdn.onstackit.cloud" },
+});
+```
+
+## Purge on deploy
+
+Files with a content hash in their name are cached for good, and HTML isn't cached. A
+deploy purges the unhashed files that changed, one call per path, or everything past
+100 paths. Change it with `invalidation`:
+
+```typescript
+const site = yield* Stackit.Website.ReactRouter("Website", {
+  ...hosting,
+  invalidation: { paths: "all" },
+});
+```
+
+`all` purges the whole distribution on every new build, and STACKIT's docs warn this
+can stampede the origin. `false` purges nothing.
+
+## Skip unchanged builds
+
+Alchemy hashes your project's files and skips the build when nothing changed. Limit
+the hash to the files that matter:
+
+```typescript
+const site = yield* Stackit.Website.Astro("Website", {
+  ...hosting,
+  memo: {
+    include: ["src/**", "public/**", "package.json", "astro.config.ts"],
+  },
+});
+```
+
+## Name the bucket
+
+A site on a bucket generates its bucket's name, and that bucket holds only the site's
+build. A bucket you name can hold more:
+
+```typescript
+const site = yield* Stackit.Website.StaticSite("Web", {
+  command: "npm run build",
+  outdir: "dist",
+  bucketName: "acme-www",
+});
+```
+
+A deploy only deletes the objects it wrote, and a destroy fails if anything else is
+left. Changing `bucketName` replaces the bucket.
+
+## Local development
+
+`alchemy dev` runs your framework's own dev server with hot reload and creates nothing
+in the cloud. `site.url` is the local address. To deploy a site for real during dev,
+remove the `dev` check on the registry, and pipe the site through `Alchemy.remote()`.
+
+## What it costs
+
+- **CDN:** STACKIT's billing docs list no request fees and no per-distribution fee.
+  Price list v1.0.44 has traffic at EUR 0.00005 per MB in the EU and North America, up
+  to EUR 0.00012 in Africa. The image optimizer is EUR 0.0208 per hour while enabled.
+- **Bucket:** Object Storage bills what you store and your traffic out. An empty bucket
+  is free.
+- **Function:** price list v1.0.44 has no Functions SKU. The product page says you pay
+  for what runs.
+- **Registry:** Container Registry is free during its beta.
+
+Check the current price list before you leave a site deployed.
+
+## Check your first deploy
+
+These sites haven't been deployed to STACKIT yet. STACKIT's API and docs leave these
+open, so check them:
+
+- `/`, and a page such as `/about`, on a bucket origin.
+- The Function answers on port `8080`, the port Alchemy assumes.
+- A new `ACTIVE` revision becomes the Function's current revision by itself.
+- The Function's URL takes requests with no STACKIT token.
+- The Function's URL has no path. The CDN ignores an origin's path, so a URL with one
+  fails the deploy with `WebsiteOriginUnusable`.
+- The Function answers on its own hostname behind the CDN.
+- The CDN sends `X-Forwarded-Host`. Without it, a site on the CDN's hostname sees the
+  Function's host, and Astro, SvelteKit, and Next.js may reject form posts because the
+  browser's `Origin` differs. A site with `domain` isn't affected.
+- The CDN honors `immutable`, `no-store`, and `no-cache`.
+
+## Where next
+
+- [Astro](/stackit/frontend/astro) and [Next.js](/stackit/frontend/nextjs): sites on
+  a Function.
+- [Vite](/stackit/frontend/vite) and [Static sites](/stackit/frontend/static-site):
+  sites on a bucket.
+- [Functions](/stackit/compute/functions): the runtime under a server-rendered site.
+- [Website reference](/providers/stackit/website): every prop.

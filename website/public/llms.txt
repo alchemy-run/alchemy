@@ -564,6 +564,105 @@ The Hetzner hub: overview (Servers and Services) and setup (project, API token, 
 - [Waku](https://alchemy.run/hetzner/frontend/waku) — Deploy a Waku app to Hetzner with Hetzner.Website.Waku — RSC server as a systemd unit on port 3000, SSG pages baked into the unit, and Waku's own dev server under alchemy dev.
 - [Octane](https://alchemy.run/hetzner/frontend/octane) — Deploy an OctaneJS app to Hetzner with Hetzner.Website.Octane — SSR as a systemd unit on port 3000, client assets baked into the unit, and Octane's own Vite dev server under alchemy dev.
 
+## STACKIT — start here
+
+The STACKIT hub: overview (runtimes, bindings, projects) and setup (customer account, project, service-account key, profile, Docker and registry login).
+
+- [STACKIT](https://alchemy.run/stackit) — Build applications on STACKIT with Alchemy — a runtime plus typed resources in one Effect program, wired together by bindings that create the credentials each one needs.
+- [Setup](https://alchemy.run/stackit/setup) — Install Alchemy and connect it to STACKIT — create a customer account and project, create a service account with a key, and store the key in a profile.
+
+## STACKIT — Tutorial
+
+- [Part 1: Your First Stack](https://alchemy.run/stackit/tutorial/part-1) — Install Alchemy, create a Stack with an Object Storage Bucket, and deploy it to your STACKIT project.
+- [Part 2: Add a Function](https://alchemy.run/stackit/tutorial/part-2) — Put an HTTP handler on a STACKIT Function, bind the Object Storage Bucket, and implement GET and PUT routes.
+- [Part 3: Testing](https://alchemy.run/stackit/tutorial/part-3) — Write integration tests that deploy your stack and make HTTP requests against the deployed STACKIT Function.
+- [Part 4: Stages](https://alchemy.run/stackit/tutorial/part-4) — Deploy isolated dev, staging, and prod copies of your stack with --stage, and tune the Function per stage.
+- [Part 5: CI/CD](https://alchemy.run/stackit/tutorial/part-5) — Deploy from GitHub Actions with a STACKIT service account — production on main, a preview stage per pull request, and state CI can reach.
+
+## STACKIT — Compute
+
+- [Choosing a runtime](https://alchemy.run/stackit/compute/choosing-a-runtime) — Functions vs Container Applications vs Cloud Foundry vs Kubernetes vs Services vs Servers on STACKIT — what each one is for and what it costs to run.
+- [Cloud Foundry](https://alchemy.run/stackit/compute/cloud-foundry) — Run an Effect program or a plain handler on STACKIT Cloud Foundry — organizations, spaces, credentials, routes, marketplace services, and consumers.
+- [Container Applications](https://alchemy.run/stackit/compute/container-applications) — Run an Effect program or a public image on a STACKIT Container Application — environments, registries, scaling, networking, secrets, and consumers.
+- [Functions](https://alchemy.run/stackit/compute/functions) — Run an Effect HTTP handler on a STACKIT Function — images, a registry, environment, scaling, and bindings that create the credentials they need.
+- [Kubernetes](https://alchemy.run/stackit/compute/kubernetes) — Run Effect programs and images as Kubernetes Deployments and Jobs on a STACKIT Kubernetes Engine cluster, with bindings that create the credentials they need.
+- [Servers](https://alchemy.run/stackit/compute/servers) — Create STACKIT virtual machines with Alchemy — networks, cloud-init, public addresses, SSH access, volumes, and power state.
+- [Services](https://alchemy.run/stackit/compute/services) — Run an Effect program on a STACKIT server as a systemd unit, driven through Run Command — no SSH, no Docker, and no key on the server.
+
+## STACKIT — Frontend
+
+- [Websites](https://alchemy.run/stackit/frontend/websites) — Deploy Vite, Astro, Next.js, Nuxt, SvelteKit, TanStack Start, React Router, SolidStart, Waku, vinext, Octane, Vocs, Foldkit, or any static build to STACKIT with Stackit.Website, from a bucket or a Function behind the CDN.
+- [Vite](https://alchemy.run/stackit/frontend/vite) — Deploy a client-only Vite app to a private STACKIT bucket behind the CDN with Stackit.Website.Vite, or to a Function when you need deep links.
+- [Foldkit](https://alchemy.run/stackit/frontend/foldkit) — Deploy a Foldkit app to a private STACKIT bucket behind the CDN with Stackit.Website.Foldkit, or to a Function for server rendering and deep links.
+- [Astro](https://alchemy.run/stackit/frontend/astro) — Deploy an Astro site to a STACKIT Function behind the CDN with Stackit.Website.Astro, or a fully static build to a private bucket with no compute.
+- [Next.js](https://alchemy.run/stackit/frontend/nextjs) — Deploy a Next.js app to a STACKIT Function behind the CDN with Stackit.Website.Nextjs, using Next's own production server with no OpenNext.
+- [Nuxt](https://alchemy.run/stackit/frontend/nuxt) — Deploy a Nuxt app to a STACKIT Function behind the CDN with Stackit.Website.Nuxt, with nitro's Node server and prerendered pages in one image.
+- [SvelteKit](https://alchemy.run/stackit/frontend/sveltekit) — Deploy a SvelteKit app to a STACKIT Function behind the CDN with Stackit.Website.SvelteKit, with no adapter in your config.
+- [TanStack Start](https://alchemy.run/stackit/frontend/tanstack-start) — Deploy a TanStack Start app to a STACKIT Function behind the CDN with Stackit.Website.TanStackStart, built by your own vite build.
+- [React Router](https://alchemy.run/stackit/frontend/react-router) — Deploy a React Router v8 app in framework mode to a STACKIT Function behind the CDN with Stackit.Website.ReactRouter.
+- [SolidStart](https://alchemy.run/stackit/frontend/solidstart) — Deploy a SolidStart app to a STACKIT Function behind the CDN with Stackit.Website.SolidStart, with nitro's Node server and prerendered pages in one image.
+- [Waku](https://alchemy.run/stackit/frontend/waku) — Deploy a Waku (React Server Components) app to a STACKIT Function behind the CDN with Stackit.Website.Waku.
+- [vinext](https://alchemy.run/stackit/frontend/vinext) — Deploy a vinext app, the Next.js API on Vite, to a STACKIT Function behind the CDN with Stackit.Website.Vinext.
+- [Octane](https://alchemy.run/stackit/frontend/octane) — Deploy an OctaneJS app to a STACKIT Function behind the CDN with Stackit.Website.Octane.
+- [Vocs](https://alchemy.run/stackit/frontend/vocs) — Deploy a Vocs documentation site to a STACKIT Function behind the CDN with Stackit.Website.Vocs.
+- [Static sites](https://alchemy.run/stackit/frontend/static-site) — Build Hugo, Zola, or any static site with a shell command and serve it from a private STACKIT bucket behind the CDN with Stackit.Website.StaticSite.
+
+## STACKIT — APIs
+
+- [Effect HTTP API on a Function](https://alchemy.run/stackit/apis/effect-http-api) — Build a schema-validated HTTP API with Effect's HttpApi module, deploy it to a STACKIT Function, and call it from a typed client.
+- [Effect RPC on a Function](https://alchemy.run/stackit/apis/effect-rpc) — Build a typed RPC API with Effect's Rpc module, deploy it to a STACKIT Function, and call its procedures from a typed client.
+
+## STACKIT — Data
+
+- [Airflow](https://alchemy.run/stackit/data/airflow) — Run managed Apache Airflow on STACKIT Workflows, load DAGs from Git or a bucket, and trigger and read DAG runs from a Function.
+- [Dremio](https://alchemy.run/stackit/data/dremio) — Run a managed Dremio lakehouse on STACKIT, add admin users, and submit SQL jobs and read their rows from a Function.
+- [File Storage](https://alchemy.run/stackit/data/file-storage) — Create STACKIT File Storage resource pools and NFS shares, control access with export policies, mount a share on a server, and take snapshots.
+- [Key Value Store](https://alchemy.run/stackit/data/valkey) — Run managed Valkey on STACKIT Key Value Store and run Redis commands from a Function with typed Read, Write, and ReadWrite bindings.
+- [MariaDB](https://alchemy.run/stackit/data/mariadb) — Run managed MariaDB on STACKIT, apply migrations at deploy time, and hand a credential's connection settings to your driver from a Function.
+- [MongoDB Flex](https://alchemy.run/stackit/data/mongodb) — Run a managed MongoDB replica set on STACKIT MongoDB Flex, add database users, and hand their connection settings to your driver from a Function.
+- [Object Storage](https://alchemy.run/stackit/data/object-storage) — Create S3-compatible STACKIT buckets, read and write objects from a Function with Read, Write, and ReadWrite bindings, and hand out presigned URLs.
+- [OpenSearch](https://alchemy.run/stackit/data/opensearch) — Run managed OpenSearch on STACKIT, then index, search, and delete documents from a Function with typed Read, Write, and ReadWrite bindings.
+- [PostgreSQL Flex](https://alchemy.run/stackit/data/postgres) — Run managed Postgres on STACKIT PostgreSQL Flex, apply migrations at deploy time, and connect from a Function with Stackit.PostgresFlex.Connect and Drizzle.
+- [SQL Server Flex](https://alchemy.run/stackit/data/sql-server) — Run managed Microsoft SQL Server on STACKIT SQL Server Flex, apply migrations at deploy time, and hand connection settings to your driver from a Function.
+
+## STACKIT — AI
+
+- [AI Model Experiments](https://alchemy.run/stackit/ai/model-experiments) — Run a managed MLflow tracking server on STACKIT AI Model Experiments, create tokens, and log experiments, runs, metrics, and parameters from a Function.
+- [AI Model Serving](https://alchemy.run/stackit/ai/model-serving) — Call STACKIT's shared chat and embedding models from a Function with an auth token, the OpenAI-compatible bindings, or Effect AI's LanguageModel.
+
+## STACKIT — Messaging
+
+- [Kafka (Intake)](https://alchemy.run/stackit/messaging/kafka) — Publish JSON over the Kafka protocol to a STACKIT Intake, flush it into an Iceberg table, and read the messages it couldn't deliver.
+- [Pub/Sub](https://alchemy.run/stackit/messaging/pubsub) — Publish to a STACKIT Pub/Sub topic, consume it from a host that keeps running, pull from a request, and handle messages that come back.
+- [RabbitMQ](https://alchemy.run/stackit/messaging/rabbitmq) — Create a managed RabbitMQ broker on STACKIT, publish from any host, consume from a host that keeps running, and declare queues and exchanges.
+
+## STACKIT — Security
+
+- [Firewall](https://alchemy.run/stackit/security/firewall) — Write access rules through STACKIT's Unified Firewall, without managing the same access twice, and add or remove rules from running code.
+- [IAM & bindings](https://alchemy.run/stackit/security/iam-bindings) — What a STACKIT binding creates and grants, why a grant reaches more than the bound resource, and how to keep those grants apart.
+- [Secrets Manager & KMS](https://alchemy.run/stackit/security/secrets-kms) — Keep API keys in STACKIT Secrets Manager, encrypt data with KMS, know what a host's environment exposes, and protect the state store that holds your Redacted values.
+
+## STACKIT — Observability
+
+- [Logs](https://alchemy.run/stackit/observability/logs) — Create a pay-per-use STACKIT Logs instance, push and query lines with an access token, and use LogMe when you want OpenSearch instead.
+- [Observability](https://alchemy.run/stackit/observability/observability) — Create a STACKIT Observability instance with Grafana and Prometheus, scrape targets, alert on rules, probe your endpoints, and query metrics from a host.
+- [Telemetry](https://alchemy.run/stackit/observability/telemetry) — Export the audit logs of a STACKIT project, folder, or organization to an OpenTelemetry endpoint or a bucket with a Telemetry Router.
+
+## STACKIT — Networking
+
+- [CDN & custom domains](https://alchemy.run/stackit/networking/cdn-custom-domains) — Put a STACKIT CDN distribution in front of an HTTP origin or a bucket, cache and block at the edge, serve your own domain, and purge from a host.
+- [DNS](https://alchemy.run/stackit/networking/dns) — Host a domain on STACKIT DNS, publish record sets next to the resources they point at, and change records from a running host.
+- [Load balancers](https://alchemy.run/stackit/networking/load-balancers) — Put a STACKIT Network or Application Load Balancer in front of private IP targets, terminate TLS, add a web application firewall, and change targets from a host.
+- [Networks](https://alchemy.run/stackit/networking/networks) — Create STACKIT networks, security groups, network interfaces, and public IPs, and share private routing across projects with a network area.
+- [VPN](https://alchemy.run/stackit/networking/vpn) — Connect a STACKIT network area to your own network with a highly available IPsec gateway, using policy-based, route-based, or BGP routing.
+
+## STACKIT — Operations
+
+- [Automation](https://alchemy.run/stackit/operations/automation) — Take scheduled recovery points of STACKIT volumes with a volume automation, pick a template, and run it on demand from a host.
+- [Container Registry](https://alchemy.run/stackit/operations/container-registry) — Keep images in STACKIT's Harbor registry, log in with robot accounts, push from Alchemy, and pull from Functions and Container Applications.
+- [Git](https://alchemy.run/stackit/operations/git) — Run a managed Forgejo server on STACKIT, declare repositories and technical users, add a CI runner, and read a repository from a host.
+- [Server operations](https://alchemy.run/stackit/operations/server-operations) — Run commands on a STACKIT server, reboot and rescue it from a host, schedule backups and operating system updates, and restore from a backup.
+
 ## Railway — start here
 
 The Railway hub: overview (Projects, Services, databases), setup (workspace, API token, profile), and networking.
@@ -920,4 +1019,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~201 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~220 KB) — only fetch it when you need to locate a specific resource's reference page.

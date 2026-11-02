@@ -1,0 +1,248 @@
+---
+title: AI Model Serving
+description: Call STACKIT's shared chat and embedding models from a Function with an auth token, the OpenAI-compatible bindings, or Effect AI's LanguageModel.
+---
+
+AI Model Serving runs shared chat and embedding models. One token reaches every shared model
+in its region. Create a token, bind it to your Function, and send prompts.
+
+:::caution[Inference bills per token, and an open endpoint spends your money]
+The token costs nothing. Inference bills per million tokens: on a standard chat model such as
+`openai/gpt-oss-20b`, EUR 0.15 input and EUR 0.25 output (price list v1.0.44). Add a check of
+who calls your Function before you leave it deployed, because every prompt spends money.
+:::
+
+## Create a token
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Inference = Stackit.ModelServing.Token("Inference", {});
+
+export const MODEL = "openai/gpt-oss-20b";
+```
+
+The first deploy enables the service (`cloud.stackit.model-serving`) for the project. Models
+may retire over time, so check the name with [`ListModels`](#list-the-models).
+
+## Answer a prompt
+
+`ChatCompletion` calls the OpenAI-compatible `POST /v1/chat/completions`:
+
+```typescript
+// src/Chat.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Inference, MODEL } from "./resources.ts";
+
+export default class Chat extends Stackit.Functions.Function<Chat>()(
+  "Chat",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/chat" },
+  },
+  Effect.gen(function* () {
+    const complete = yield* Stackit.ModelServing.ChatCompletion(yield* Inference);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const { prompt } = (yield* request.json) as { prompt: string };
+        const reply = yield* complete({
+          model: MODEL,
+          messages: [{ role: "user", content: prompt }],
+          max_completion_tokens: 64,
+        });
+        return yield* HttpServerResponse.json({
+          text: reply.choices[0]?.message.content,
+          usage: reply.usage,
+        });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.ModelServing.ChatCompletionHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+The binding grants only the bound token, which reaches every shared model in its region. No role
+and no service account are created. The token's value reaches the Function as a plain revision
+variable, so anyone who can call `GetRevision` can read it.
+
+The API keeps no session, so a request carries the whole conversation.
+
+## Use Effect AI
+
+`LanguageModel` turns a model into an `effect/ai` Layer, so any Effect AI program runs on it:
+
+```typescript
+// src/Chat.ts
+import * as Stackit from "@alchemy.run/stackit";
+import { LanguageModel } from "effect/ai";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Inference, MODEL } from "./resources.ts";
+
+export default class Chat extends Stackit.Functions.Function<Chat>()(
+  "Chat",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/chat" },
+  },
+  Effect.gen(function* () {
+    const model = yield* Stackit.ModelServing.LanguageModel(yield* Inference, {
+      model: MODEL,
+      parameters: { maxCompletionTokens: 256, temperature: 0.2 },
+    });
+
+    return {
+      fetch: Effect.gen(function* () {
+        const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(
+          Effect.provide(model),
+        );
+        return yield* HttpServerResponse.json({ text: reply.text });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.ModelServing.LanguageModelHttp)),
+) {}
+```
+
+It holds the same token and grants nothing else.
+
+## Override parameters per call
+
+```typescript
+const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(
+  Stackit.ModelServing.withModelParameters({ temperature: 0, maxCompletionTokens: 64 }),
+  Effect.provide(model),
+);
+```
+
+`withModelParameters` also takes `model`, to run one call on another model.
+
+## Call tools
+
+```typescript
+const GetWeather = Tool.make("get_weather", {
+  description: "Get the current weather for a city.",
+  parameters: Schema.Struct({ city: Schema.String }),
+  success: Schema.Struct({ celsius: Schema.Number }),
+});
+const Weather = Toolkit.make(GetWeather);
+
+const reply = yield* LanguageModel.generateText({
+  prompt: "What's the weather in Berlin?",
+  toolkit: Weather,
+}).pipe(
+  Effect.provide(Weather.toLayer({ get_weather: () => Effect.succeed({ celsius: 21 }) })),
+  Effect.provide(model),
+);
+```
+
+`Tool` and `Toolkit` come from `effect/ai`. Function tools and images depend on the model. Audio,
+provider-executed tools, and non-image files are refused with `InvalidRequestError`.
+
+## Stream a reply
+
+`StreamChatCompletion` sends `stream: true`:
+
+```typescript
+const { events } = yield* binding({
+  model: MODEL,
+  messages: [{ role: "user", content: "Say hello." }],
+  max_completion_tokens: 64,
+});
+const text = yield* events.pipe(
+  Stream.map((chunk) => chunk.choices[0]?.delta.content ?? ""),
+  Stream.mkString,
+);
+```
+
+Provide `Stackit.ModelServing.StreamChatCompletionHttp`. A refused request fails the call, and a
+failure after that fails the `events` stream.
+
+STACKIT's docs don't mention streaming. They promise OpenAI compatibility, so check this, and
+`LanguageModel`'s `streamText` and `generateObject`, on your first deploy.
+
+## Create embeddings
+
+```typescript
+const { data } = yield* embed({
+  model: "intfloat/e5-mistral-7b-instruct",
+  input: ["A sentence to embed."],
+});
+const dimension = data[0]?.embedding.length;
+```
+
+`embed` is `yield* Stackit.ModelServing.CreateEmbeddings(yield* Inference)`. Provide
+`Stackit.ModelServing.CreateEmbeddingsHttp`. It holds the same token and grants nothing else.
+
+## List the models
+
+`ListModels` takes no resource, because the catalogue belongs to the region:
+
+```typescript
+const listModels = yield* Stackit.ModelServing.ListModels();
+// …
+const { models } = yield* listModels({ regionId: "eu01" });
+const chat = models.filter((model) => model.type === "chat");
+```
+
+Provide `Stackit.ModelServing.ListModelsHttp`. A model's `name` is what inference requests pass as
+`model`. `GetChatModel` and `GetEmbeddingModel` read one model by its `id`. These three grant no
+role, but the host still gets a service account and key, because the API takes a STACKIT access
+token. `GetToken` and `ListTokens` grant a custom role with `model-serving.token.get` and
+`model-serving.token.list` on the project.
+
+## Make a token expire
+
+```diff lang="typescript"
+// src/resources.ts
+-export const Inference = Stackit.ModelServing.Token("Inference", {});
++export const Inference = Stackit.ModelServing.Token("Inference", {
++  ttlDuration: "720h",
++});
+```
+
+Without `ttlDuration`, the token never expires.
+
+## Rotate a token
+
+Change `rotateWhenChanged` to rotate. A host bound to the token gets the new value on the same
+deploy:
+
+```diff lang="typescript"
+// src/resources.ts
+-export const Inference = Stackit.ModelServing.Token("Inference", {});
++export const Inference = Stackit.ModelServing.Token("Inference", {
++  rotateWhenChanged: { rotation: "2026-11" },
++});
+```
+
+:::caution[Changing `ttlDuration`, `rotateWhenChanged`, `projectId`, or `region` replaces the token]
+So does a deploy after it expired. A host holding the old value only sees the new one when it
+redeploys, and anything else holding the old value stops working. With an explicit `name`, the old
+token is deleted first.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- `openai/gpt-oss-20b` is still on the list, with `ListModels`.
+- A token is readable right after it's created. Alchemy waits up to 10 minutes for it.
+- The inference host in your region. It's documented for `eu01` only.
+
+## Example
+
+[`examples/stackit-ai`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-ai) is a
+chat endpoint on a Function, with a test suite. It hasn't been deployed to STACKIT yet.
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [ModelServing reference](/providers/stackit/modelserving#token): every resource and binding.

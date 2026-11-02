@@ -1,0 +1,302 @@
+---
+title: Server operations
+description: Run commands on a STACKIT server, reboot and rescue it from a host, schedule backups and operating system updates, and restore from a backup.
+---
+
+Once a [server](/stackit/compute/servers) is running, these keep it healthy: Run Command for scripts,
+Server Backup Management, and Server Update Management. Each one is a binding you call from a host, or
+a resource in your Stack.
+
+These examples use this server:
+
+```typescript
+// src/server.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const App = Stackit.IaaS.Network("App", {
+  ipv4: { prefix: "10.0.1.0/24" },
+});
+
+export const Web = App.pipe(
+  Effect.flatMap((network) =>
+    Stackit.IaaS.Server("Web", {
+      machineType: "g1.1",
+      bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+      networking: { networkId: network.networkId },
+      agent: { provisioned: true },
+    }),
+  ),
+);
+```
+
+:::caution[Cost]
+A `g1.1` server is about EUR 0.038 an hour on price list v1.0.44, and its boot volume adds about
+EUR 0.01. Every created resource pays at least one started hour. Destroy what you only tried out.
+:::
+
+## Run a script
+
+`CreateCommand` runs a template through the Server Agent, so the server needs `agent`, and changing
+`agent` replaces the server:
+
+```typescript
+// src/Ops.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Web } from "./server.ts";
+
+export default class Ops extends Stackit.Functions.Function<Ops>()(
+  "Ops",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/ops" },
+  },
+  Effect.gen(function* () {
+    const createCommand = yield* Stackit.RunCommand.CreateCommand(yield* Web);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { id } = yield* createCommand({
+          commandTemplateName: "RunShellScript",
+          parameters: { script: "uname -a" },
+        });
+        return yield* HttpServerResponse.json({ id });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.RunCommand.CreateCommandHttp)),
+) {}
+```
+
+The command is queued. It grants a custom role holding `run-command.command.create` on the project, so
+it reaches every server in that project.
+
+The binding enables the service for the project at deploy, and leaves it enabled on destroy.
+
+:::caution
+The API keeps a command's script and output in its history for anyone holding
+`run-command.command.get`. Don't put a secret in a script.
+:::
+
+## Read a command
+
+`GetCommand` reads its status, exit code, script, and output. `output` and `script` come back `Redacted`.
+It grants a custom role holding `run-command.command.get`. Provide `Stackit.RunCommand.GetCommandHttp`:
+
+```typescript
+const getCommand = yield* Stackit.RunCommand.GetCommand(yield* Web);
+
+// inside fetch:
+const command = yield* getCommand({ commandId: "<command id>" });
+yield* Effect.log(command.status, command.exitCode);
+```
+
+## Find a template
+
+`ListCommandTemplates` lists what you can run. It has no bound resource and grants no role. Provide
+`Stackit.RunCommand.ListCommandTemplatesHttp`:
+
+```typescript
+const { items } = yield* listTemplates({ osType: "linux" });
+```
+
+## Reboot a server
+
+`RebootServer` reboots from deployed code. `action: "hard"` power cycles without waiting for the operating
+system. Provide `Stackit.IaaS.RebootServerHttp`:
+
+```typescript
+const reboot = yield* Stackit.IaaS.RebootServer(yield* Web);
+
+// inside fetch:
+yield* reboot({ action: "soft" });
+```
+
+It grants a custom role holding `iaas.server.reboot` on the project, so it reaches every server in that
+project.
+
+## Read the console log
+
+`GetServerLog` returns the last 2000 lines by default, and `length: 0` the whole log. It grants a custom
+role holding `iaas.server.console-log.get`. Provide `Stackit.IaaS.GetServerLogHttp`:
+
+```typescript
+const getLog = yield* Stackit.IaaS.GetServerLog(yield* Web);
+
+// inside fetch:
+const { output } = yield* getLog({ length: 100 });
+```
+
+## Rescue a server
+
+`RescueServer` shuts a server down and boots it from an image, with its original boot volume attached as
+a secondary volume. `UnrescueServer` reverses it. It grants a custom role holding `iaas.server.rescue`.
+Provide `Stackit.IaaS.RescueServerHttp`:
+
+```typescript
+const rescue = yield* Stackit.IaaS.RescueServer(yield* Web);
+
+// inside fetch:
+yield* rescue({ image: "00000000-0000-0000-0000-000000000000" });
+```
+
+## Enable backups
+
+`Enablement` turns Server Backup Management on for one server. It's billed about EUR 0.0064 per server per
+started hour on price list v1.0.44, plus backup storage:
+
+```diff lang="typescript"
+// src/server.ts
++export const WebBackups = Web.pipe(
++  Effect.flatMap((server) =>
++    Stackit.ServerBackup.Enablement("WebBackups", { serverId: server.serverId }),
++  ),
++);
+```
+
+Declare one enablement per server. To back up one volume instead, use `Stackit.IaaS.Backup`.
+
+## Schedule backups
+
+A schedule takes an iCalendar recurrence rule:
+
+```diff lang="typescript"
+// src/server.ts
++export const Nightly = WebBackups.pipe(
++  Effect.flatMap((backups) =>
++    Stackit.ServerBackup.Schedule("Nightly", {
++      serverId: backups.serverId,
++      rrule: "DTSTART;TZID=Europe/Berlin:20260101T020000 RRULE:FREQ=DAILY;INTERVAL=1",
++      backupProperties: { name: "nightly", retentionPeriod: 14 },
++    }),
++  ),
++);
+```
+
+`retentionPeriod` is in days. Everything but the server, project, and region updates in place.
+
+## Take a backup before a change
+
+A `Backup` is one backup, kept for as long as it's in the stack and its retention lasts:
+
+```diff lang="typescript"
+// src/server.ts
++export const PreMigration = WebBackups.pipe(
++  Effect.flatMap((backups) =>
++    Stackit.ServerBackup.Backup("PreMigration", {
++      serverId: backups.serverId,
++      retentionPeriod: 30,
++    }),
++  ),
++);
+```
+
+A deploy waits until it's `available`, for up to 30 minutes.
+
+:::caution
+A backup holds the server as it was when taken, and STACKIT can't change one. Changing its `name`,
+`retentionPeriod`, `volumeIds`, `serverId`, `projectId`, or `region` fails with
+`Stackit.ServerBackup.BackupImmutable`. To keep this point in time, add a second backup under a new logical
+ID. `allowReplace: true` takes a new backup of the server as it is now, and deletes the old one and its data.
+:::
+
+## Keep a backup after a destroy
+
+```typescript
+Stackit.ServerBackup.Backup("PreMigration", {
+  serverId: backups.serverId,
+  retentionPeriod: 365,
+}).pipe(Alchemy.RemovalPolicy.retain());
+```
+
+## Restore from a backup
+
+`RestoreBackup` starts a restore. What's on the restored volumes now is replaced, and it fails with
+`Conflict` while one is running. Pass `volumeIds` to restore only some. It grants a custom role holding
+`server-backup.backup.restore` on the project. Provide `Stackit.ServerBackup.RestoreBackupHttp`:
+
+```typescript
+const restoreBackup = yield* Stackit.ServerBackup.RestoreBackup(yield* Web);
+
+// inside fetch:
+yield* restoreBackup({ backupId: "<backup id>", startServerAfterRestore: true });
+```
+
+## Disable backups
+
+STACKIT doesn't document what disabling the service does to a server's backups, so a delete won't find out
+with your data. It waits up to two minutes for this stack's schedules and backups to go, then fails with
+`Stackit.ServerBackup.EnablementNotEmpty`, naming what's left.
+
+:::caution
+With `forceDestroy`, a delete first deletes every schedule and backup on the server, including those made
+in the portal or by another stack. Those backups are gone.
+:::
+
+## Enable updates
+
+`Stackit.ServerUpdate.Enablement` turns Server Update Management on for one server, for about EUR 0.005 per
+server per started hour on price list v1.0.44:
+
+```diff lang="typescript"
+// src/server.ts
++export const WebUpdates = Web.pipe(
++  Effect.flatMap((server) =>
++    Stackit.ServerUpdate.Enablement("WebUpdates", { serverId: server.serverId }),
++  ),
++);
+```
+
+## Schedule updates
+
+Updates start inside the maintenance window, can overrun it, and may restart the server:
+
+```diff lang="typescript"
+// src/server.ts
++export const Weekly = WebUpdates.pipe(
++  Effect.flatMap((updates) =>
++    Stackit.ServerUpdate.Schedule("Weekly", {
++      serverId: updates.serverId,
++      rrule: "DTSTART;TZID=Europe/Berlin:20260101T020000 RRULE:FREQ=WEEKLY;INTERVAL=1",
++      maintenanceWindow: 2,
++    }),
++  ),
++);
+```
+
+`maintenanceWindow` is in hours. Set `enabled: false` to deploy a schedule paused.
+
+## Patch now
+
+`CreateUpdate` starts patching from a host. It changes the server and can't be undone, and it fails with
+`Conflict` while an update is running. It grants a custom role holding `server-update.update.create` on the
+project. Provide `Stackit.ServerUpdate.CreateUpdateHttp`:
+
+```typescript
+const createUpdate = yield* Stackit.ServerUpdate.CreateUpdate(yield* Web);
+
+// inside fetch:
+const update = yield* createUpdate({ maintenanceWindow: 2, backupBeforeUpdate: true });
+```
+
+## Pause a schedule from a host
+
+`Stackit.ServerBackup.UpdateSchedule` and `Stackit.ServerUpdate.UpdateSchedule` change a schedule at runtime.
+A schedule changed this way keeps its live values until a deploy changes the schedule's props. They grant a
+custom role holding that one permission on the project, so they reach every server's schedules there.
+
+## Check on your first deploy
+
+- What enabling with `backupPolicyId` or `updatePolicyId` does, in particular whether it creates a schedule.
+  One that does isn't in the stack, so a later delete needs `forceDestroy`.
+- A nonzero script exit, which may report `failed` or `completed` with an `exitCode`.
+- What `createCommand` answers on a server whose agent isn't up.
+
+## Where next
+
+- [Servers](/stackit/compute/servers) — the server and what runs on it.
+- [Automation](/stackit/operations/automation) — scheduled recovery points of volumes.
+- [RunCommand](/providers/stackit/runcommand#createcommand),
+  [ServerBackup](/providers/stackit/serverbackup#enablement), and
+  [ServerUpdate](/providers/stackit/serverupdate#enablement) reference — every prop and attribute.

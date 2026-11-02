@@ -78,6 +78,25 @@ export interface NodeServeEntryOptions {
    * @default false
    */
   readonly printUrl?: boolean | undefined;
+  /**
+   * This server is the only origin of a CDN, so it also serves the build's
+   * content-hashed files, and the CDN decides what to cache from the headers
+   * it sends. Set by targets whose CDN can't route by path (`core/StackitServe.ts`).
+   *
+   * - Content-hashed files get a long immutable `Cache-Control`. Anything else
+   *   stays `no-cache`, and so does a framework response that sets none, since a
+   *   CDN may otherwise apply its own default duration to a rendered page.
+   * - The request's host is the site's: the `ALCHEMY_SITE_HOST` env var when
+   *   set, otherwise `X-Forwarded-Host` if it ends in `forwardedHostSuffix`.
+   *   Frameworks compare it with the browser's `Origin` on form posts. The
+   *   header is checked because a CDN forwards whatever the client sent, but
+   *   the suffix only proves a host of that CDN, not of this site. Without
+   *   `ALCHEMY_SITE_HOST`, a client can name another customer's host there, so
+   *   don't build links from the request's host (a password-reset email, say)
+   *   unless the site sets it.
+   * - A request with no `X-Forwarded-Proto` is taken to be `https`.
+   */
+  readonly behindCdn?: { readonly forwardedHostSuffix?: string | undefined } | undefined;
 }
 
 /**
@@ -127,6 +146,44 @@ export const staticAssetPathSource = (assetBasePath = "/"): string => {
 };
 
 /**
+ * Whether a path under the client directory carries a content hash, by the
+ * layouts frameworks write: inside a build-asset directory, with a name ending
+ * in a hash-shaped segment (`index-DiwrgTda.js`, `entry.a1b2c3d4.css`). A hash
+ * follows a separator, except for a Nuxt chunk, which is named after its hash
+ * alone. Rollup's are eight base64url characters, so they can hold `-` and `_`.
+ * Keep in step with `isHashedAsset` in `@alchemy.run/stackit`'s
+ * `Website/internal.ts`, which can't import this package.
+ */
+const HASHED_ASSET_SOURCE = `const isHashedAsset = (file) => {
+  if (/(?:^|\\/)(?:_app\\/immutable|_next\\/static)\\//.test(file)) return true;
+  if (!/(?:^|\\/)(?:assets|_astro|_nuxt|_build)\\//.test(file)) return false;
+  const name = file.slice(file.lastIndexOf("/") + 1);
+  const stem = name.replace(/\\.[A-Za-z0-9]+$/, "");
+  const hashLike = (hash) => /[A-Za-z]/.test(hash) && /[0-9]|.[A-Z]/.test(hash);
+  const plain = /[-.]([A-Za-z0-9]{8,})$/.exec(stem)?.[1];
+  if (plain !== undefined) return hashLike(plain);
+  const rollup = /[-.]([A-Za-z0-9_-]{8})$/.exec(stem)?.[1];
+  if (rollup !== undefined) return /.[A-Z]/.test(rollup);
+  return /(?:^|\\/)_nuxt\\/[^/]+$/.test(file) && /^[A-Za-z0-9_-]{8,}$/.test(stem) && hashLike(stem);
+};
+
+`;
+
+/** The per-request half of {@link NodeServeEntryOptions.behindCdn}. */
+export const cdnRequestSource = (
+  forwardedHostSuffix: string | undefined,
+): string => `    res.setHeader("cache-control", "no-cache");
+    const forwardedHost = req.headers["x-forwarded-host"];
+    const siteHost = process.env.ALCHEMY_SITE_HOST ?? (${
+      forwardedHostSuffix === undefined
+        ? "undefined"
+        : `typeof forwardedHost === "string" && /^[a-zA-Z0-9.\\-]+(?::[0-9]+)?$/.test(forwardedHost) && forwardedHost.split(":")[0].endsWith(${JSON.stringify(forwardedHostSuffix)}) ? forwardedHost : undefined`
+    });
+    if (siteHost) req.headers.host = siteHost;
+    req.headers["x-forwarded-proto"] ??= "https";
+`;
+
+/**
  * Generate a complete Node/Bun HTTP program: `/health`, GET static assets,
  * then the framework handler. No package imports other than `node:*` and
  * the handler module the caller passes in.
@@ -141,6 +198,7 @@ export const makeNodeServeEntrySource = (options: NodeServeEntryOptions): string
   const notFoundPage = notFoundHandling === "404-page";
   const handler = options.handler;
   const handlerIsFetch = handler?.kind === "fetch";
+  const behindCdn = options.behindCdn;
 
   const staticBlock = hasStatic
     ? `
@@ -216,11 +274,15 @@ ${
 // other unhashed file served with \`immutable\` pins the old app version
 // in the browser until the user clears storage, and every deploy must be
 // able to bust what it ships.
-const sendFile = (res, filePath, status) => {
+${behindCdn ? HASHED_ASSET_SOURCE : ""}const sendFile = (res, filePath, status) => {
   const ext = path.extname(filePath).toLowerCase();
   res.writeHead(status, {
     "content-type": MIME[ext] ?? "application/octet-stream",
-    "cache-control": "no-cache",
+    "cache-control": ${
+      behindCdn
+        ? `isHashedAsset(path.relative(CLIENT_DIR, filePath).replaceAll(path.sep, "/")) ? "public,max-age=31536000,immutable" : "no-cache"`
+        : `"no-cache"`
+    },
   });
   fs.createReadStream(filePath).pipe(res);
 };
@@ -392,7 +454,7 @@ const pathnameOf = (url) => {
 
 const server = http.createServer(async (req, res) => {
   try {
-    const urlPath = pathnameOf(req.url ?? "/");
+${behindCdn ? cdnRequestSource(behindCdn.forwardedHostSuffix) : ""}    const urlPath = pathnameOf(req.url ?? "/");
     if (
       (req.method === "GET" || req.method === "HEAD") &&
       urlPath === "/health"
@@ -455,6 +517,7 @@ export const writeNodeServeEntry = (
           serveRootIndex: options.serveRootIndex,
           htmlHandling: options.htmlHandling,
           notFoundHandling: options.notFoundHandling,
+          errorPage: options.errorPage,
         },
       },
       serveModule,

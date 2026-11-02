@@ -1,0 +1,436 @@
+---
+title: Servers
+description: Create STACKIT virtual machines with Alchemy — networks, cloud-init, public addresses, SSH access, volumes, and power state.
+---
+
+`Stackit.IaaS.Server` is a STACKIT virtual machine. Alchemy creates it, waits until it is
+`ACTIVE`, and keeps its name, labels, metadata, machine type, and power state converged.
+To run an Effect program on one, deploy a [Service](/stackit/compute/services) on it.
+
+:::note[Cost]
+A server bills per hour by machine type while it exists: `g1.1` at EUR 0.038, `g1.2` at
+EUR 0.076 (price list v1.0.44). A 10 GB boot volume adds about EUR 0.01 per hour, and a
+public IP about EUR 0.004. Networks and security groups are free. A project's first network
+with internet access also adds a small SNAT gateway charge. Check the current price list.
+:::
+
+## Declare a network
+
+A server needs somewhere to attach. Create `alchemy.run.ts`:
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const network = yield* Stackit.IaaS.Network("App", {
+      ipv4: { prefix: "10.0.2.0/24" },
+    });
+    return { networkId: network.networkId };
+  }),
+);
+```
+
+## Find an image
+
+A server boots from an image id. This lookup takes the newest public Ubuntu image of the
+region when you plan:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
++import * as iaas from "@distilled.cloud/stackit/iaas";
+import * as Alchemy from "alchemy";
++import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+
++const ubuntuImage = Output.fromEffect(
++  Effect.gen(function* () {
++    const { projectId, region } = yield* Stackit.StackitEnvironment.current;
++    const { items } = yield* iaas.listImages({ projectId, region, all: true });
++    return items
++      .filter((image) => image.scope === "public" && /ubuntu/i.test(image.name) && image.id)
++      .sort((a, b) => b.name.localeCompare(a.name))[0]!.id!;
++  }).pipe(Effect.orDie),
++);
++
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const network = yield* Stackit.IaaS.Network("App", {
+      ipv4: { prefix: "10.0.2.0/24" },
+    });
+    return { networkId: network.networkId };
+  }),
+);
+```
+
+Install `@distilled.cloud/stackit` for `iaas`.
+
+## Create a server
+
+Boot it from a network volume in the network:
+
+```diff lang="typescript"
+// alchemy.run.ts
+  Effect.gen(function* () {
+    const network = yield* Stackit.IaaS.Network("App", {
+      ipv4: { prefix: "10.0.2.0/24" },
+    });
+-    return { networkId: network.networkId };
++    const server = yield* Stackit.IaaS.Server("Box", {
++      machineType: "g1.1",
++      bootVolume: {
++        size: 10,
++        source: { type: "image", id: ubuntuImage },
++        deleteOnTermination: true,
++      },
++      networking: { networkId: network.networkId },
++    });
++    return { serverId: server.serverId };
+  }),
+```
+
+`deleteOnTermination` deletes the boot volume with the server, so keep data elsewhere.
+Check that `g1.1` is available in your region with `listMachineTypes`.
+
+## Start software on first boot
+
+`userData` passes a cloud-init file. This one writes a page and serves it:
+
+```typescript
+// src/user-data.ts
+export const PORT = 8080;
+
+export const userData = `#cloud-config
+write_files:
+  - path: /srv/www/index.html
+    content: "hello from a bare server"
+runcmd:
+  - [systemd-run, --working-directory=/srv/www, python3, -m, http.server, "${PORT}"]
+`;
+```
+
+```diff lang="typescript"
+// alchemy.run.ts
+    const server = yield* Stackit.IaaS.Server("Box", {
+      machineType: "g1.1",
+      bootVolume: {
+        size: 10,
+        source: { type: "image", id: ubuntuImage },
+        deleteOnTermination: true,
+      },
+      networking: { networkId: network.networkId },
++      userData,
+    });
+```
+
+Import `PORT` and `userData` from `./src/user-data.ts`. Changing `userData` replaces the
+server. Check that your image ships `python3` and cloud-init, and runs `runcmd`.
+
+## Open a port
+
+A server gets no public address and no security group rule unless you declare them. Add a
+group that allows the port in, and everything out:
+
+```diff lang="typescript"
+// alchemy.run.ts
+    const network = yield* Stackit.IaaS.Network("App", {
+      ipv4: { prefix: "10.0.2.0/24" },
+    });
++    const group = yield* Stackit.IaaS.SecurityGroup("WebGroup", {});
++    yield* Stackit.IaaS.SecurityGroupRule("Http", {
++      securityGroupId: group.securityGroupId,
++      direction: "ingress",
++      protocol: "tcp",
++      portRange: { min: PORT, max: PORT },
++    });
++    yield* Stackit.IaaS.SecurityGroupRule("Egress", {
++      securityGroupId: group.securityGroupId,
++      direction: "egress",
++    });
+```
+
+## Give it a public address
+
+Attach the group through a network interface, and put the address on the interface:
+
+```diff lang="typescript"
+// alchemy.run.ts
++    const nic = yield* Stackit.IaaS.NetworkInterface("WebNic", {
++      networkId: network.networkId,
++      securityGroups: [group.securityGroupId],
++    });
+    const server = yield* Stackit.IaaS.Server("Box", {
+      machineType: "g1.1",
+      bootVolume: {
+        size: 10,
+        source: { type: "image", id: ubuntuImage },
+        deleteOnTermination: true,
+      },
+-      networking: { networkId: network.networkId },
++      networking: { networkInterfaceIds: [nic.networkInterfaceId] },
+      userData,
+    });
++    const address = yield* Stackit.IaaS.PublicIp("Address", {
++      networkInterfaceId: nic.networkInterfaceId,
++    });
++
+-    return { serverId: server.serverId };
++    return {
++      serverId: server.serverId,
++      url: Output.interpolate`http://${address.ip}:${PORT}`,
++    };
+```
+
+## Check the whole file
+
+```typescript
+// alchemy.run.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as iaas from "@distilled.cloud/stackit/iaas";
+import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import { PORT, userData } from "./src/user-data.ts";
+
+const ubuntuImage = Output.fromEffect(
+  Effect.gen(function* () {
+    const { projectId, region } = yield* Stackit.StackitEnvironment.current;
+    const { items } = yield* iaas.listImages({ projectId, region, all: true });
+    return items
+      .filter((image) => image.scope === "public" && /ubuntu/i.test(image.name) && image.id)
+      .sort((a, b) => b.name.localeCompare(a.name))[0]!.id!;
+  }).pipe(Effect.orDie),
+);
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const network = yield* Stackit.IaaS.Network("App", {
+      ipv4: { prefix: "10.0.2.0/24" },
+    });
+    const group = yield* Stackit.IaaS.SecurityGroup("WebGroup", {});
+    yield* Stackit.IaaS.SecurityGroupRule("Http", {
+      securityGroupId: group.securityGroupId,
+      direction: "ingress",
+      protocol: "tcp",
+      portRange: { min: PORT, max: PORT },
+    });
+    yield* Stackit.IaaS.SecurityGroupRule("Egress", {
+      securityGroupId: group.securityGroupId,
+      direction: "egress",
+    });
+    const nic = yield* Stackit.IaaS.NetworkInterface("WebNic", {
+      networkId: network.networkId,
+      securityGroups: [group.securityGroupId],
+    });
+    const server = yield* Stackit.IaaS.Server("Box", {
+      machineType: "g1.1",
+      bootVolume: {
+        size: 10,
+        source: { type: "image", id: ubuntuImage },
+        deleteOnTermination: true,
+      },
+      networking: { networkInterfaceIds: [nic.networkInterfaceId] },
+      userData,
+    });
+    const address = yield* Stackit.IaaS.PublicIp("Address", {
+      networkInterfaceId: nic.networkInterfaceId,
+    });
+
+    return {
+      serverId: server.serverId,
+      url: Output.interpolate`http://${address.ip}:${PORT}`,
+    };
+  }),
+);
+```
+
+Run `alchemy deploy`. `url` is the page.
+
+## Log in with SSH
+
+Port 22 is closed and the server has no key pair. Register your public key, and add a rule
+for port 22 from your own address:
+
+```diff lang="typescript"
+// alchemy.run.ts
++    const key = yield* Stackit.IaaS.KeyPair("Admin", {
++      publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... admin@laptop",
++    });
++    yield* Stackit.IaaS.SecurityGroupRule("Ssh", {
++      securityGroupId: group.securityGroupId,
++      direction: "ingress",
++      protocol: "tcp",
++      ipRange: "203.0.113.7/32",
++      portRange: { min: 22, max: 22 },
++    });
+    const server = yield* Stackit.IaaS.Server("Box", {
+      machineType: "g1.1",
++      keypairName: key.name,
+```
+
+Changing `keypairName` replaces the server.
+
+## Keep data on a volume
+
+A volume outlives the server it is attached to:
+
+```typescript
+// src/data.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Db = Effect.gen(function* () {
+  const network = yield* Stackit.IaaS.Network("App", {
+    ipv4: { prefix: "10.0.2.0/24" },
+  });
+  const server = yield* Stackit.IaaS.Server("Db", {
+    machineType: "g1.2",
+    availabilityZone: "eu01-1",
+    bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+    networking: { networkId: network.networkId },
+  });
+  const data = yield* Stackit.IaaS.Volume("DbData", {
+    size: 100,
+    availabilityZone: "eu01-1",
+  });
+  yield* Stackit.IaaS.VolumeAttachment("DbDataAttachment", {
+    serverId: server.serverId,
+    volumeId: data.volumeId,
+  });
+  return { server, data };
+});
+```
+
+A volume bills per GB-hour while it exists.
+
+## Resize and stop it
+
+Change `machineType` to resize in place, which restarts the server. `desiredStatus` sets the
+power state:
+
+```typescript
+// src/batch.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Batch = Effect.gen(function* () {
+  const network = yield* Stackit.IaaS.Network("App", {
+    ipv4: { prefix: "10.0.2.0/24" },
+  });
+  return yield* Stackit.IaaS.Server("Batch", {
+    machineType: "c1.4",
+    bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+    networking: { networkId: network.networkId },
+    desiredStatus: "deallocated",
+  });
+});
+```
+
+`deallocated` stops the compute charge. The volume keeps billing.
+
+## Keep replicas apart
+
+```typescript
+// src/replicas.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Replicas = Effect.gen(function* () {
+  const group = yield* Stackit.IaaS.AffinityGroup("Replicas", {
+    policy: "soft-anti-affinity",
+  });
+  const network = yield* Stackit.IaaS.Network("App", {
+    ipv4: { prefix: "10.0.2.0/24" },
+  });
+  for (const replica of ["A", "B"]) {
+    yield* Stackit.IaaS.Server(`Replica${replica}`, {
+      machineType: "g1.1",
+      bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+      networking: { networkId: network.networkId },
+      affinityGroup: group.affinityGroupId,
+    });
+  }
+});
+```
+
+## Control a server at runtime
+
+`RebootServer` and the other server bindings grant a custom role holding only that one
+action on the project that holds the server. STACKIT binds roles to projects at the
+narrowest, so it reaches every server in that project:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Network = Stackit.IaaS.Network("App", {
+  ipv4: { prefix: "10.0.2.0/24" },
+});
+export const Web = Network.pipe(
+  Effect.flatMap((network) =>
+    Stackit.IaaS.Server("Web", {
+      machineType: "g1.1",
+      bootVolume: { size: 20, source: { type: "image", id: "<image id>" } },
+      networking: { networkId: network.networkId },
+    }),
+  ),
+);
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const reboot = yield* Stackit.IaaS.RebootServer(yield* Web);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* reboot({ action: "soft" });
+        return yield* HttpServerResponse.json({ rebooting: true });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.IaaS.RebootServerHttp)),
+) {}
+```
+
+## Replacing and deleting
+
+:::caution[What replaces a server]
+Changing `imageId`, `bootVolume`, `networking`, `availabilityZone`, `affinityGroup`,
+`keypairName`, `userData`, `agent`, `configDrive`, `projectId`, or `region` replaces the
+server. A replacement that keeps a `networkInterfaceIds` entry or a `volume` boot source
+deletes the old server first, since those attach to one server at a time. The old boot
+volume is deleted with it unless `bootVolume.deleteOnTermination` is `false`.
+:::
+
+:::caution[A server with backups stops a delete]
+A delete of a server that still has backups or backup schedules stops with
+`ServerHasBackups`. A destroy deletes the stack's own first, so only what the stack doesn't
+hold can stop it. To go ahead, deploy `forceDestroy: true` on its own, then make the change.
+:::
+
+## Example
+
+[`examples/stackit-server`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-server)
+is the server on this page: a network, a port, a public address, and a page served from
+cloud-init.
+
+## Where next
+
+- [Services](/stackit/compute/services): an Effect program on a server.
+- [Networks](/stackit/networking/networks): routing and network areas.
+- [Server reference](/providers/stackit/iaas#server): every prop and attribute.

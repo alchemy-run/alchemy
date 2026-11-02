@@ -16,6 +16,7 @@
     "@alchemy.run/planetscale": "workspace:*",
     "@alchemy.run/prisma": "workspace:*",
     "@alchemy.run/railway": "workspace:*",
+    "@alchemy.run/stackit": "workspace:*",
     "@alchemy.run/stripe": "workspace:*",
     "@alchemy.run/turso": "workspace:*",
     "@types/bun": "catalog:",

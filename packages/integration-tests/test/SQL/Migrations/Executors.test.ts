@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 const tags = { tags: ["unit", "local"] };
 
 /** A statement executor that records each request it would send. */
-const recording = (dialect: "postgres" | "mysql", batch: "transaction" | "atomic") => {
+const recording = (dialect: "postgres" | "mysql" | "mssql", batch: "transaction" | "atomic") => {
   const sent: string[] = [];
   const executor = makeStatementExecutor({
     dialect,
@@ -50,6 +50,9 @@ describe("makeStatementExecutor", () => {
         ]);
         expect(mysql.sent).toEqual(["START TRANSACTION;\nCREATE TABLE a (id int);\nCOMMIT;"]);
         expect(atomic.sent).toEqual(["SELECT 1;\nSELECT 2;"]);
+        const mssql = recording("mssql", "transaction");
+        yield* mssql.executor.batch(["CREATE TABLE a (id int)"]);
+        expect(mssql.sent).toEqual(["BEGIN TRANSACTION;\nCREATE TABLE a (id int);\nCOMMIT;"]);
       }),
     tags,
   );

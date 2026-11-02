@@ -1,0 +1,253 @@
+---
+title: Key Value Store
+description: Run managed Valkey on STACKIT Key Value Store and run Redis commands from a Function with typed Read, Write, and ReadWrite bindings.
+---
+
+Key Value Store runs Valkey for you. Create an instance and a credential, bind the
+credential to your Function, and run commands over the Redis protocol.
+
+:::caution[This creates a billed resource]
+An instance bills per started hour by plan. Check the current price list for the Key Value
+Store price. Comparable single-node STACKIT data services run about EUR 0.10 to 0.12 per
+hour. Destroy the stack when you're done.
+:::
+
+## Create an instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Cache = Stackit.Valkey.Instance("Cache", {
+  version: "x",
+  planName: "stackit-keyvalue-1.2.10-single",
+  acl: ["0.0.0.0/0"],
+});
+
+export const App = Cache.pipe(
+  Effect.flatMap((cache) => Stackit.Valkey.Credential("App", { instanceId: cache.instanceId })),
+);
+```
+
+A deploy waits until the instance reports `active`, which takes minutes. A wrong `version`
+or `planName` fails the deploy with `DataServicePlanNotFound`, which lists the choices.
+
+## Set the ACL
+
+The instance only takes connections from its `acl`, and a Function has no fixed egress
+address, so this instance takes connections from everywhere, behind its generated
+password. Narrow it once your hosts have known addresses:
+
+```diff lang="typescript"
+// src/resources.ts
+-  acl: ["0.0.0.0/0"],
++  acl: ["203.0.113.0/24"],
+```
+
+## Bind it to a Function
+
+Ask for the commands you need:
+
+| Binding | Commands |
+| --- | --- |
+| `ReadValkey` | read commands: `get`, `mget`, `hget`, `lrange`, and so on |
+| `WriteValkey` | write commands: `set`, `del`, `hset`, `lpush`, and so on |
+| `ReadWriteValkey` | every command, plus `send` and `pipeline` |
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { App } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const cache = yield* Stackit.Valkey.ReadWriteValkey(yield* App);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://function");
+        const count = yield* cache.incr(`hits:${url.pathname}`);
+        return yield* HttpServerResponse.json({ count });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Valkey.ReadWriteValkeyHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+The bindings grant no STACKIT role and create no service account, because commands
+authenticate with the credential. STACKIT has no Valkey ACLs, so a credential can do
+everything on the server: the limit is the client's surface, not a permission. The
+credential's URI reaches the Function as a plain revision variable, so anyone who can
+call `GetRevision` can read it.
+
+## Read a key
+
+`get` returns `null` when the key is missing:
+
+```typescript
+const value = yield* cache.get("marker");
+```
+
+## Write a key
+
+```typescript
+yield* cache.set("marker", "hello");
+yield* cache.set("session", "abc", { ex: 60 });
+```
+
+`ex` is a lifetime in seconds.
+
+## Count
+
+```typescript
+const visits = yield* cache.incr("visits");
+```
+
+## Run several commands
+
+Each command opens a connection and closes it. `pipeline` sends several on one:
+
+```typescript
+const replies = yield* cache.pipeline([
+  ["SET", "rate:alice", "0", "EX", 60, "NX"],
+  ["INCR", "rate:alice"],
+  ["TTL", "rate:alice"],
+]);
+```
+
+## Run another command
+
+`send` runs a command the client has no method for:
+
+```typescript
+const echoed = yield* cache.send("ECHO", ["hi"]);
+```
+
+## Use your own client
+
+`Connect` resolves a credential's settings and opens no socket:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { App } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const connect = yield* Stackit.Valkey.Connect(yield* App);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const info = yield* connect;
+        return yield* HttpServerResponse.json({ host: info.host });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Valkey.ConnectHttp)),
+) {}
+```
+
+`info` also has `hosts`, `loadBalancedHost`, `port`, `username`, and `Redacted` `password`
+and `url`. `Connect` grants no STACKIT role.
+
+## Rotate a credential
+
+Change `rotationKey` for a new user and password. STACKIT can't update a credential, so a
+new one is created first and the old one is deleted after:
+
+```diff lang="typescript"
+// src/resources.ts
+-  Effect.flatMap((cache) => Stackit.Valkey.Credential("App", { instanceId: cache.instanceId })),
++  Effect.flatMap((cache) =>
++    Stackit.Valkey.Credential("App", { instanceId: cache.instanceId, rotationKey: "2026-11" }),
++  ),
+```
+
+## Tune Valkey
+
+```diff lang="typescript"
+// src/resources.ts
+  planName: "stackit-keyvalue-1.2.10-single",
+  acl: ["0.0.0.0/0"],
++  maxmemoryPolicy: "allkeys-lru",
++  notifyKeyspaceEvents: "Ex",
+```
+
+Removing one of these props leaves its live value as it is.
+
+## Start a backup
+
+Runtime operations on the instance are one binding each:
+
+```typescript
+// src/Admin.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Cache } from "./resources.ts";
+
+export default class Admin extends Stackit.Functions.Function<Admin>()(
+  "Admin",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/admin" },
+  },
+  Effect.gen(function* () {
+    const createBackup = yield* Stackit.Valkey.CreateBackup(yield* Cache);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const backup = yield* createBackup({});
+        return yield* HttpServerResponse.json({ id: backup.id });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Valkey.CreateBackupHttp)),
+) {}
+```
+
+This grants a custom role with `key-value-store.proxy.write` and a service account key for
+the host. The role is bound on the project holding the instance, so it reaches every Key
+Value Store instance in that project, and it also allows metrics, restarts, and updates.
+`GetMetrics`, `ListBackups`, and `DownloadBackup` take `key-value-store.proxy.read`.
+
+:::caution[Changing `name`, `projectId`, or `region` replaces the instance]
+A replacement starts empty. Credentials on the old instance go with it, and each
+`Stackit.Valkey.Credential` is replaced with a new password.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- `version: "x"` and `planName: "stackit-keyvalue-1.2.10-single"`.
+- The credential's URI has a `redis://`, `rediss://`, `valkey://`, or `valkeys://` scheme.
+  Any other fails each command with `UrlMissing`.
+
+## Example
+
+[`examples/stackit-valkey`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-valkey)
+is a hit counter on a Function, with a test suite. It hasn't been deployed to STACKIT yet.
+
+## Where next
+
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [Valkey reference](/providers/stackit/valkey#instance): every prop and attribute.

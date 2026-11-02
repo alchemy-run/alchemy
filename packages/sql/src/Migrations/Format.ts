@@ -4,9 +4,9 @@ import type * as Effect from "effect/Effect";
 /**
  * `googlesql` is Cloud Spanner's GoogleSQL dialect. Spanner's PostgreSQL
  * dialect is `postgres` with `migrationTableId: "spanner"` and
- * `defaultSchema: "public"`.
+ * `defaultSchema: "public"`. `mssql` is SQL Server's T-SQL.
  */
-export type MigrationDialect = "postgres" | "mysql" | "sqlite" | "googlesql";
+export type MigrationDialect = "postgres" | "mysql" | "sqlite" | "googlesql" | "mssql";
 
 /**
  * A single migration read from disk, normalized across directory layouts.

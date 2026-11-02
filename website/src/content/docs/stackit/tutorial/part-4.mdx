@@ -1,0 +1,181 @@
+---
+title: "Part 4: Stages"
+description: Deploy isolated dev, staging, and prod copies of your stack with --stage, and tune the Function per stage.
+sidebar:
+  order: 4
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+
+In [Part 3](/stackit/tutorial/part-3) you tested a deployed Stack. So far
+everything lands in one environment. **Stages** are separate copies of the
+same Stack: one per developer, per environment, and (in
+[Part 5](/stackit/tutorial/part-5)) per pull request.
+
+## The default stage
+
+Without `--stage`, Alchemy deploys to `live_$USER`:
+
+```sh
+$ whoami
+sam
+
+$ bun alchemy deploy
+# deploys to stage `live_sam`
+```
+
+Every developer gets a personal copy with no setup. The stage comes from, in
+order:
+
+1. the `--stage <name>` flag
+2. the `ALCHEMY_STAGE` environment variable
+3. `live_${USER}` (or `live_${USERNAME}` on Windows)
+
+## Deploy a second stage
+
+```sh
+bun alchemy deploy --stage staging
+```
+
+<Terminal content={`[u]Plan[/u]: [g]8 to create[/g]
+[g]+[/g] [b]Images[/b] [d](Stackit.ContainerRegistry.Project)[/d]
+[g]+[/g] [b]Pusher[/b] [d](Stackit.ContainerRegistry.RobotAccount)[/d]
+[g]+[/g] [b]Puller[/b] [d](Stackit.ContainerRegistry.RobotAccount)[/d]
+[g]+[/g] [b]PullCredential[/b] [d](Stackit.Functions.PullCredential)[/d]
+[g]+[/g] [b]ApiBucketReadWriteCredentials[/b] [d](Stackit.ObjectStorage.CredentialsGroup)[/d]
+[g]+[/g] [b]ApiBucketReadWriteAccessKey[/b] [d](Stackit.ObjectStorage.AccessKey)[/d]
+[g]+[/g] [b]Api[/b] [d](Stackit.Functions.Function)[/d]
+[g]+[/g] [b]Bucket[/b] [d](Stackit.ObjectStorage.Bucket)[/d]
+
+Proceed?
+◉ Yes ○ No`} />
+
+`staging` gets its own Bucket, registry project, Function, and URL.
+`live_sam` is untouched.
+
+## How stages stay apart
+
+Each stage has its own state and its own resource names. The stage is part of
+every generated name, so `prod` and `live_sam` never collide in the same
+project.
+
+Deploying or destroying one stage never touches another:
+
+```sh
+bun alchemy deploy --stage prod
+bun alchemy deploy --stage pr-42
+bun alchemy destroy --stage pr-42   # only removes pr-42
+```
+
+Stage names must match `[a-z0-9][-_a-z0-9]*`.
+
+## Configure per stage
+
+Let prod scale further than the other stages. `Stack` gives the props the
+current stage:
+
+```diff lang="typescript"
+// src/api.ts
+import * as Stackit from "@alchemy.run/stackit";
++import { Stack } from "alchemy/Stack";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+import { Puller, registryFor } from "./registry.ts";
+import { Files } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
++    const stack = yield* Stack;
+    const puller = yield* Puller;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      registry,
+      pullCredential: puller.pullCredentialId,
++      maxScale: stack.stage === "prod" ? 10 : 1,
+    };
+  }),
+  Effect.gen(function* () {
+    const files = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Files);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://function");
+        const key = decodeURIComponent(url.pathname.slice(1));
+
+        if (request.method === "PUT") {
+          yield* files.putObject({ Key: key, Body: yield* request.text });
+          return HttpServerResponse.empty({ status: 204 });
+        }
+
+        if (request.method === "GET") {
+          return yield* files.getObject({ Key: key }).pipe(
+            Effect.flatMap((object) => Stream.mkString(Stream.decodeText(object.Body!))),
+            Effect.map((text) => HttpServerResponse.text(text)),
+            Effect.catchTag("NoSuchKey", () =>
+              Effect.succeed(HttpServerResponse.text("Not found", { status: 404 })),
+            ),
+          );
+        }
+
+        return HttpServerResponse.text("Method not allowed", { status: 405 });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+) {}
+```
+
+`alchemy deploy --stage prod` lets the Function run ten instances. Every
+other stage runs one. A new value rolls out a new revision.
+
+## Destroy a stage
+
+```sh
+bun alchemy destroy --stage staging
+```
+
+The plan lists everything in `staging` for deletion, including the
+credentials group and access key the binding created.
+
+## Stages in tests
+
+Tests default to `test_$USER`. In CI, give each pull request its own stage so
+parallel runs don't collide. Locally, `PR_NUMBER` isn't set and the default stays:
+
+```diff lang="typescript"
+// test/integ.test.ts
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Stackit.providers(),
+  state: Alchemy.localState(),
++  stage: process.env.PR_NUMBER ? `pr-${process.env.PR_NUMBER}` : undefined,
+});
+```
+
+See [Test harness → stage](/testing/test-harness#stage) for the per-call form.
+
+## Stages and projects
+
+Stages separate **what** is deployed. [Profiles](/environments/profiles)
+choose **where**: which STACKIT project and service-account key. Pair a `prod`
+stage with a `prod` profile pointing at a separate project:
+
+```sh
+bun alchemy deploy --stage prod --profile prod
+bun alchemy deploy --stage pr-42 --profile default
+```
+
+## Recap
+
+You now have:
+
+- A personal `live_<user>` stage for every plain `alchemy deploy`
+- A `staging` stage deployed and destroyed with `--stage`
+- A higher scale limit in prod only, through `Stack`
+- Tests pinned to their own stage
+
+In [Part 5](/stackit/tutorial/part-5), GitHub Actions deploys `prod` on every
+push to `main` and a `pr-<n>` preview for every pull request.

@@ -66,6 +66,10 @@ const HUBS: Record<string, { href: string; blurb: string }> = {
     href: "/hetzner",
     blurb: "Servers running Services over SSH, Volumes, Load Balancers, DNS",
   },
+  Stackit: {
+    href: "/stackit",
+    blurb: "Functions, containers, object storage, and Postgres on Schwarz Group's German cloud",
+  },
   Fly: {
     href: "/fly",
     blurb: "Machines, Services, Volumes, Secrets, and fly.dev on Fly.io",
@@ -112,6 +116,7 @@ const BLURBS: Record<string, string> = {};
 const DISPLAY_LABELS: Record<string, string> = {
   Planetscale: "PlanetScale",
   BetterAuth: "Better Auth",
+  Stackit: "STACKIT",
 };
 
 const providers = generatedSidebar() ?? [];

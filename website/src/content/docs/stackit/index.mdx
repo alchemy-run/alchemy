@@ -1,0 +1,264 @@
+---
+title: STACKIT
+description: Build applications on STACKIT with Alchemy — a runtime plus typed resources in one Effect program, wired together by bindings that create the credentials each one needs.
+---
+
+An Alchemy app on [STACKIT](https://www.stackit.de), the cloud of the
+Schwarz Group, is one **runtime**, usually a Function, plus the
+**resources** it uses: buckets, databases, topics, secrets. You connect
+them with typed **bindings**. Call
+`Stackit.ObjectStorage.ReadWriteBucket(uploads)` in your code and Alchemy
+creates a credentials group and an access key for that host, and limits
+the group to read and write actions on that bucket.
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+
+export const Uploads = Stackit.ObjectStorage.Bucket("Uploads", { forceDestroy: true });
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const uploads = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Uploads);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* uploads.putObject({ Key: "hello.txt", Body: "hello" });
+        const object = yield* uploads.getObject({ Key: "hello.txt" });
+        const text = yield* Stream.mkString(Stream.decodeText(object.Body!));
+        return HttpServerResponse.text(text);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+) {}
+```
+
+New here? [Set up credentials](/stackit/setup), then start the
+[tutorial](/stackit/tutorial/part-1).
+
+:::caution[Not yet run against STACKIT]
+This provider has not been deployed to a live STACKIT account yet. The
+examples and these pages describe what the code does. Each example's
+README lists what to check on a first deploy. Functions is an alpha API
+and Container Applications a beta API, both in `eu01` only.
+:::
+
+## Pick your runtime
+
+- **[Functions](/stackit/compute/functions)**: HTTP handlers at their
+  own URL. The default, and what most pages here build on.
+- **[Container Applications](/stackit/compute/container-applications)**:
+  a managed container with autoscaling and optional scale to zero.
+- **[Cloud Foundry](/stackit/compute/cloud-foundry)**: apps behind the
+  platform's router, in an organization and a space.
+- **[Kubernetes](/stackit/compute/kubernetes)**: Deployments and Jobs on
+  a STACKIT Kubernetes Engine cluster.
+- **[Services](/stackit/compute/services)**: a program on a server you
+  own, as a systemd unit, with no key on the server.
+- **[Servers](/stackit/compute/servers)**: virtual machines running
+  whatever you start on them.
+
+Not sure? See [Choosing a runtime](/stackit/compute/choosing-a-runtime).
+
+## Frontend & APIs
+
+- **[Websites](/stackit/frontend/websites)**: Astro, Next.js, Nuxt,
+  SvelteKit, Vite, and more, on a CDN with Functions for server rendering.
+- **[Effect HTTP](/stackit/apis/effect-http-api)** and
+  **[Effect RPC](/stackit/apis/effect-rpc)**: typed APIs with typed
+  clients.
+
+## Data
+
+- **[Object Storage](/stackit/data/object-storage)**: S3-compatible
+  buckets with read and write clients.
+- **[PostgreSQL Flex](/stackit/data/postgres)**,
+  **[MongoDB Flex](/stackit/data/mongodb)**,
+  **[SQL Server Flex](/stackit/data/sql-server)** and
+  **[MariaDB](/stackit/data/mariadb)**: managed databases.
+- **[Valkey](/stackit/data/valkey)**: a key-value store.
+- **[OpenSearch](/stackit/data/opensearch)**: search and analytics.
+- **[File Storage](/stackit/data/file-storage)**: network file shares.
+- **[Dremio](/stackit/data/dremio)** and
+  **[Airflow](/stackit/data/airflow)**: a query engine and managed Airflow.
+
+## AI
+
+- **[Model Serving](/stackit/ai/model-serving)**: shared chat and
+  embedding models, reached with a token.
+- **[Model Experiments](/stackit/ai/model-experiments)**: a managed MLflow
+  tracking server.
+
+## Messaging
+
+- **[Pub/Sub](/stackit/messaging/pubsub)**: topics and subscriptions, by
+  pull or as a consumer.
+- **[RabbitMQ](/stackit/messaging/rabbitmq)**: a managed broker.
+- **[Kafka](/stackit/messaging/kafka)**: publish over the Kafka protocol
+  into an Iceberg table.
+
+## Security, observability, and networking
+
+- **[IAM & bindings](/stackit/security/iam-bindings)**: what each binding
+  creates and grants.
+- **[Secrets Manager & KMS](/stackit/security/secrets-kms)**: credentials
+  and encryption.
+- **[Firewall](/stackit/security/firewall)**: network firewall rules.
+- **[Observability](/stackit/observability/observability)**,
+  **[Logs](/stackit/observability/logs)** and
+  **[Telemetry](/stackit/observability/telemetry)**: metrics, logs, and
+  where to send them.
+- **[Networks](/stackit/networking/networks)**,
+  **[DNS](/stackit/networking/dns)**,
+  **[Load balancers](/stackit/networking/load-balancers)**,
+  **[CDN & custom domains](/stackit/networking/cdn-custom-domains)** and
+  **[VPN](/stackit/networking/vpn)**: how traffic reaches your code.
+
+## Operations
+
+- **[Container Registry](/stackit/operations/container-registry)**: image
+  projects and robot accounts.
+- **[Git](/stackit/operations/git)**: hosted Git instances.
+- **[Server operations](/stackit/operations/server-operations)**: Run
+  Command, backups, and updates.
+- **[Automation](/stackit/operations/automation)**: scheduled recovery
+  points of your volumes.
+
+## What are you building?
+
+| You're building | Reach for |
+| --- | --- |
+| An HTTP API | [Functions](/stackit/compute/functions) + [Object Storage](/stackit/data/object-storage) |
+| A typed API | [Effect HTTP on a Function](/stackit/apis/effect-http-api) |
+| A Postgres-backed app | [PostgreSQL Flex](/stackit/data/postgres) |
+| A website | [Websites](/stackit/frontend/websites) |
+| A static site | [Static sites](/stackit/frontend/static-site) |
+| Background jobs | [Pub/Sub](/stackit/messaging/pubsub) + a [Container Application](/stackit/compute/container-applications) |
+| Kubernetes workloads | [Kubernetes](/stackit/compute/kubernetes) |
+| A program on a VM | [Services](/stackit/compute/services) |
+
+## Projects, regions, and services
+
+Every resource deploys into the project and region of your
+[profile](/stackit/setup). Pass `projectId` or `region` on a resource to
+deploy it elsewhere; changing either replaces the resource.
+
+STACKIT switches each product on per project. These services enable themselves
+on the first deploy: DNS, Object Storage, Functions, Container Applications,
+Container Registry, Kubernetes, Cloud Foundry, Load Balancer, ALB, WAF, IP Lists,
+Certificates, Logs, Model Serving, Model Experiments, Edge Cloud, Automation,
+Server Backup, and Server Update. So does `IaaS.Service`.
+
+The rest don't, including `IaaS.Server`, `IaaS.Network`, the databases, VPN, and
+Unified Firewall. If a deploy is refused because the service is off, declare it:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Stackit.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const ske = yield* Stackit.ServiceEnablement.Service("Ske", {
+      serviceId: "cloud.stackit.ske",
+    });
+    return { state: ske.state };
+  }),
+);
+```
+
+Destroying the stack disables the service again only if this resource
+enabled it; a service that was already on stays on.
+
+## Ownership
+
+Alchemy marks the resources it creates with `alchemy.stack`,
+`alchemy.stage`, and `alchemy.id` labels, and compute and networking
+resources also get `alchemy.instance`. A labeled resource without them is
+refused unless you deploy with `--adopt`.
+
+Some resources can't carry labels:
+
+- Buckets, credentials groups, service accounts, and affinity groups are
+  recognized by their generated name, or by state. One with an explicit
+  name is refused without `--adopt`.
+- DNS record sets, custom roles, and memberships are recognized by state.
+  One found without state is refused without `--adopt`.
+- Security group rules and server attachments are identified by what they
+  connect. A deploy without state takes over an identical one silently.
+
+`alchemy unsafe nuke` deletes labeled resources, the record sets of labeled
+zones, and buckets, credentials groups, service accounts, and affinity
+groups whose name has the generated shape. The shape match can't tell a
+hand-chosen name that looks generated, such as
+`acme-prod-eu-a2b3c4d5e6f7g2h3`, from a generated one, so that resource is
+deleted too.
+
+## Out of scope
+
+These parts of the STACKIT API have no resource:
+
+- DNS zone restore, clone, and move: imperative workflows that would desync
+  deployed state.
+- Deprecated DNS label operations, superseded by `labelsMap`.
+- Network area ranges: a duplicate, synced by
+  `Stackit.IaaS.NetworkAreaRegion`'s `networkRanges`.
+- Server public IP attachments: a duplicate of `PublicIp`'s
+  `networkInterfaceId`.
+- Server network attachments: a duplicate. Use `NetworkInterface` and
+  `ServerNetworkInterfaceAttachment`.
+- Image share consumers: an opt-out of another project's share, with nothing
+  to create.
+- IaaS event sources: the management API exposes none.
+- Long-lived IAM access tokens: deprecated, and absent from the v2 API.
+- Short-lived IAM access tokens: used internally to exchange service account
+  keys.
+- Secrets Manager ACL as its own resource: a duplicate, synced by
+  `Stackit.SecretsManager.Instance`'s `acls`.
+- Workflows DAG bundle as its own resource: a duplicate, synced by
+  `Stackit.Workflows.Instance`'s `dagBundles`.
+- File Storage schedules: deprecated in the API, replaced by snapshot policies.
+- `getLoginKubeconfig` and `getIDPKubeconfig`: a duplicate of `createKubeconfig`
+  for a person logging in with the STACKIT CLI.
+- Functions event sources: the API has no trigger or subscription object, so no
+  runtime has a scheduled job, and an upload to a bucket can't call a Function.
+- Local emulation: no STACKIT runtime has a local provider, so `alchemy dev`
+  deploys Functions and other runtimes to the cloud.
+- Observability `PushMetrics`: remote write needs a snappy-compressed protobuf
+  body, which the SDK can't send yet.
+- Observability `PushTraces`: the API has no OpenAPI document, and no STACKIT
+  source shows the route. It waits on a live probe.
+- `Telemetry.AuditLogEventSource`: the delivery's encoding isn't documented. It
+  waits on a live probe.
+- Legacy Redis: deprecated, and retires on 2027-08-01. Use
+  [Valkey](/stackit/data/valkey).
+- Cost, PIM, and Marketplace APIs: billing, price catalogue, and subscription
+  data, with nothing to deploy.
+
+### Durable workflows
+
+There's no Effect workflow engine for STACKIT, so `alchemy/Workflows` doesn't run
+here. [STACKIT Workflows](/stackit/data/airflow) is Airflow: it runs static Python
+DAGs, and workflow code can't reach a journaled step, a durable sleep, or an
+external event. STACKIT has no other durable runtime.
+
+## Where next
+
+- [Setup](/stackit/setup): connect your project.
+- [Tutorial](/stackit/tutorial/part-1): from an empty folder to CI/CD in
+  five parts.
+- [API reference](/providers/stackit): every STACKIT resource.

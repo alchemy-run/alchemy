@@ -1,0 +1,195 @@
+---
+title: Logs
+description: Create a pay-per-use STACKIT Logs instance, push and query lines with an access token, and use LogMe when you want OpenSearch instead.
+---
+
+`Stackit.Logs.Instance` is pay-per-use Grafana Loki, billed by what you ingest and
+keep. It isn't the Loki inside a
+[`Stackit.Observability.Instance`](/stackit/observability/observability).
+
+:::caution[Cost]
+STACKIT's price list (v1.0.44) has EUR 1.20 per GB ingested and EUR 0.01 per GB per
+retention day, with no hourly fee for the instance.
+:::
+
+## Create an instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Logs = Stackit.Logs.Instance("Logs", {
+  acl: ["203.0.113.7/32"],
+});
+```
+
+A client outside `acl` can't connect. Pass the address of every host that binds the
+instance. The first deploy enables the service for the project, and waits for the
+instance to report `active`.
+
+## Keep logs longer
+
+```diff lang="typescript"
+// src/resources.ts
+export const Logs = Stackit.Logs.Instance("Logs", {
++  retentionDays: 90,
+  acl: ["203.0.113.7/32"],
+});
+```
+
+Retention runs from 1 to 180 days, and updates in place.
+
+## Create a token
+
+An access token reads, writes, or both:
+
+```diff lang="typescript"
+// src/resources.ts
++export const Writer = Logs.pipe(
++  Effect.flatMap((logs) =>
++    Stackit.Logs.AccessToken("Writer", {
++      instanceId: logs.instanceId,
++      permissions: ["write"],
++    }),
++  ),
++);
+```
+
+STACKIT returns the value only when the token is created, and Alchemy keeps it
+`Redacted`. Set `lifetime`, in days, for a token that expires. A deploy after it expired
+replaces the token, and a host holding the old value only sees the new one when it
+redeploys. Changing `permissions` replaces it too.
+
+## Push lines
+
+`WriteInstance` takes the token, and its `push` takes Loki's JSON format, with
+nanosecond timestamps as strings:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Writer } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const logs = yield* Stackit.Logs.WriteInstance(yield* Writer);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* logs.push({
+          streams: [{ stream: { app: "api" }, values: [[`${Date.now()}000000`, "hello"]] }],
+        });
+        return HttpServerResponse.empty();
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Logs.WriteInstanceHttp)),
+) {}
+```
+
+`pushOtlp` takes an OTLP log record instead. The binding grants no STACKIT role and
+creates no service account: the token and the instance's URL reach the host's
+environment, with the token `Redacted`. The token needs `write`, and the host's egress
+address has to be in `acl`.
+
+## Query lines
+
+`ReadInstance` runs `query` and `queryRange` with a token holding `read`. Provide
+`Stackit.Logs.ReadInstanceHttp`:
+
+```typescript
+const logs = yield* Stackit.Logs.ReadInstance(yield* Reader);
+
+// inside fetch:
+const found = yield* logs.queryRange({ query: '{app="api"}', since: "5m", limit: 100 });
+```
+
+`ReadWriteInstance` does both, with a token holding both permissions.
+
+## Point other clients at it
+
+`ingestUrl`, `ingestOtlpUrl`, `queryUrl`, and `datasourceUrl` are attributes, for any
+Loki or OTLP client and for a Grafana data source. Return the one you need from your
+Stack.
+
+## Grant a person access
+
+`AccessPolicy` gives a STACKIT IAM subject read or write access, without a token. See
+the [reference](/providers/stackit/logs#accesspolicy).
+
+## Read the instance at runtime
+
+`GetInstance`, `ListInstances`, `GetAccessToken`, `ListAccessTokens`, and
+`CreateAccessToken` call the management API. Each grants a custom role with its one
+permission on the project, so it reaches every Logs instance in the project.
+
+## Replacing an instance
+
+Changing `projectId` or `region` replaces the instance, and the logs it holds aren't
+carried over.
+
+## Use OpenSearch with LogMe
+
+`Stackit.LogMe.Instance` is a managed log stack of OpenSearch, Fluentd, and OpenSearch
+Dashboards. It's billed per started hour by plan, from about EUR 0.38 an hour for
+`LogMe2-1.2.50-Replica-EU01` on price list v1.0.44, so check the current list first.
+Connection details come from a credential:
+
+```typescript
+// src/logme.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Stack = Stackit.LogMe.Instance("Stack", {
+  version: "2",
+  planName: "stackit-logme2-1.2.50-replica",
+  acl: ["203.0.113.7/32"],
+});
+
+export const App = Stack.pipe(
+  Effect.flatMap((stack) => Stackit.LogMe.Credential("App", { instanceId: stack.instanceId })),
+);
+```
+
+## Send to LogMe from a host
+
+`WriteLog` writes to the credential's syslog drain, opening a socket per call, so the host
+needs raw TCP. Provide `Stackit.LogMe.WriteLogHttp`:
+
+```typescript
+const writeLog = yield* Stackit.LogMe.WriteLog(yield* App);
+
+// inside fetch:
+yield* writeLog({ message: "order placed", severity: 6, appName: "api" });
+```
+
+Syslog has no acknowledgement, so nothing confirms a line was stored. It grants no STACKIT
+role, and the host's egress address has to be in `acl`. To forward another STACKIT
+instance's logs here, set that instance's `syslog` prop instead.
+
+## Search LogMe from a host
+
+`SearchLogs` takes OpenSearch's search body, and calls the instance as the credential's user.
+It grants no STACKIT role. Provide `Stackit.LogMe.SearchLogsHttp`.
+
+## Check on your first deploy
+
+- `datasourceUrl` is the API root. Query a line back through it.
+- What a token without `write` gets on a push.
+- What an instance with no `acl` lets in. STACKIT's guide only says a client outside the
+  list can't connect.
+
+## Where next
+
+- [Observability](/stackit/observability/observability) — metrics, Grafana, and alerts.
+- [Telemetry](/stackit/observability/telemetry) — audit logs, which this service doesn't
+  hold.
+- [Logs reference](/providers/stackit/logs#instance) and
+  [LogMe reference](/providers/stackit/logme#instance) — every prop and attribute.

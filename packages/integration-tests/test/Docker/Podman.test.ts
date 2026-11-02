@@ -93,6 +93,47 @@ describe.skipIf(!podman)(
       }),
     );
 
+    // The same `podman push` digest handling, through the machine's own login
+    // rather than an isolated config holding the credentials.
+    test.provider("reports the pushed digest with no credentials to push with", (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const registry = yield* hostRegistry();
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-podman-login-" });
+        yield* fs.writeFileString(path.join(root, "Dockerfile"), "FROM scratch\nLABEL podman=3\n");
+
+        yield* stack.deploy(
+          Docker.Image("podman-login-image", {
+            name: `${registry.host}/podman-login`,
+            tag: "v1",
+            build: { context: root },
+          }),
+        );
+
+        const pushed = yield* Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          yield* Effect.acquireRelease(
+            docker.run([
+              "login",
+              "--username",
+              registry.credentials.username,
+              "--password",
+              "alchemy-test-password",
+              registry.host,
+            ]),
+            () => docker.run(["logout", registry.host]).pipe(Effect.ignore),
+          );
+          return yield* docker.image.push(`${registry.host}/podman-login:v1`, undefined);
+        }).pipe(Effect.scoped, Effect.provide(Docker.dockerLive({ bin: podman ?? "podman" })));
+
+        const digest = yield* registryDigest(registry.host, "podman-login", "v1");
+        expect(digest).toMatch(/^sha256:/);
+        expect(pushed.stdout).toContain(`digest: ${digest}`);
+        yield* stack.destroy();
+      }),
+    );
+
     test.provider("reports the pushed digest of a re-tagged remote image", (stack) =>
       Effect.gen(function* () {
         const registry = yield* hostRegistry();

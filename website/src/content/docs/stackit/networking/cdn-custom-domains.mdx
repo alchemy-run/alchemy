@@ -1,0 +1,324 @@
+---
+title: CDN & custom domains
+description: Put a STACKIT CDN distribution in front of an HTTP origin or a bucket, cache and block at the edge, serve your own domain, and purge from a host.
+---
+
+A `Stackit.CDN.Distribution` is a content delivery endpoint in front of one origin, an HTTP
+server or a bucket. STACKIT assigns it a hostname, and a `Stackit.CDN.CustomDomain` adds
+yours. A [website](/stackit/frontend/websites) creates all of this for you.
+
+:::caution[Cost]
+STACKIT bills traffic per region and has no per-distribution or per-request fee: EUR 0.00005
+per MB in the EU and North America on price list v1.0.44, and up to EUR 0.00012 elsewhere. The
+image optimizer is billed while enabled.
+:::
+
+## Create a distribution
+
+```typescript
+// src/cdn.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Cdn = Stackit.CDN.Distribution("Cdn", {
+  backend: { type: "http", originUrl: "https://origin.example.com" },
+});
+```
+
+`cdn.url` is the CDN's URL, on the hostname STACKIT assigned. A deploy waits until the
+distribution is `ACTIVE`, for at most 10 minutes, and fails with the errors STACKIT reports on
+`ERROR`.
+
+A distribution has exactly one origin, and nothing routes by path. To serve `/assets/*` from
+somewhere else, use a second distribution.
+
+## Serve a Function
+
+The Function's URL is the origin, and the hostname stays the CDN's:
+
+```typescript
+yield* Stackit.CDN.Distribution("Cdn", {
+  backend: { type: "http", originUrl: api.url.as<string>() },
+});
+```
+
+`api` is a [Function](/stackit/compute/functions), an alpha API in `eu01`.
+
+## Serve a bucket
+
+A distribution reads a private bucket with an access key:
+
+```typescript
+// src/assets.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Assets = Stackit.ObjectStorage.Bucket("Assets", {});
+
+export const Readers = Stackit.ObjectStorage.CredentialsGroup("CdnReaders", {});
+
+export const ReaderKey = Readers.pipe(
+  Effect.flatMap((group) =>
+    Stackit.ObjectStorage.AccessKey("CdnKey", {
+      credentialsGroupId: group.credentialsGroupId,
+    }),
+  ),
+);
+
+export const AssetsCdn = Effect.gen(function* () {
+  const bucket = yield* Assets;
+  const key = yield* ReaderKey;
+  return yield* Stackit.CDN.Distribution("AssetsCdn", {
+    backend: {
+      type: "bucket",
+      bucketUrl: bucket.urlVirtualHostedStyle,
+      region: bucket.region,
+      credentials: {
+        accessKeyId: key.accessKeyId,
+        secretAccessKey: key.secretAccessKey,
+      },
+    },
+  });
+});
+```
+
+Request `/` once you've deployed: STACKIT has no default-document setting in its API, so
+whether a bucket origin serves `index.html` there is unconfirmed.
+
+## Send some countries elsewhere
+
+Geofencing sends countries to other origins. Add the regions you serve:
+
+```diff lang="typescript"
+// src/cdn.ts
+export const Cdn = Stackit.CDN.Distribution("Cdn", {
+-  backend: { type: "http", originUrl: "https://origin.example.com" },
++  regions: ["EU", "US"],
++  backend: {
++    type: "http",
++    originUrl: "https://eu.example.com",
++    geofencing: { "https://us.example.com": ["US", "CA"] },
++  },
+});
+```
+
+The default region is `EU`.
+
+## Cache
+
+`defaultCacheDuration` applies when the origin sends no `Cache-Control`:
+
+```diff lang="typescript"
+// src/cdn.ts
+export const Cdn = Stackit.CDN.Distribution("Cdn", {
+  backend: { type: "http", originUrl: "https://origin.example.com" },
++  defaultCacheDuration: "P1D",
++  cacheConfig: {
++    cacheKeyHeaders: ["Accept-Language"],
++    queryStringVaryEnabled: true,
++    queryStringVaryParameters: ["page"],
++  },
+});
+```
+
+## Limit traffic
+
+`monthlyLimitBytes` caps the month's bandwidth, and `optimizer` resizes images on the fly:
+
+```diff lang="typescript"
+// src/cdn.ts
+export const Cdn = Stackit.CDN.Distribution("Cdn", {
+  backend: { type: "http", originUrl: "https://origin.example.com" },
++  optimizer: { enabled: true },
++  monthlyLimitBytes: 500_000_000_000,
+});
+```
+
+## Block at the edge
+
+```diff lang="typescript"
+// src/cdn.ts
+export const Cdn = Stackit.CDN.Distribution("Cdn", {
+  backend: { type: "http", originUrl: "https://origin.example.com" },
++  blockedCountries: ["KP"],
++  blockedIps: ["203.0.113.7"],
+});
+```
+
+## Run the firewall
+
+Start in `LOG_ONLY` to see what it would block:
+
+```diff lang="typescript"
+// src/cdn.ts
+export const Cdn = Stackit.CDN.Distribution("Cdn", {
+  backend: { type: "http", originUrl: "https://origin.example.com" },
++  waf: {
++    mode: "LOG_ONLY",
++    paranoiaLevel: "L1",
++    enabledRuleCollectionIds: ["@builtin/crs/request"],
++  },
+});
+```
+
+## Redirect
+
+The CDN answers these itself:
+
+```diff lang="typescript"
+// src/cdn.ts
+export const Cdn = Stackit.CDN.Distribution("Cdn", {
+  backend: { type: "http", originUrl: "https://origin.example.com" },
++  redirects: {
++    rules: [
++      {
++        targetUrl: "https://shop.example.com",
++        statusCode: 301,
++        matchers: [{ values: ["/shop/*"] }],
++      },
++    ],
++  },
+});
+```
+
+## Add a custom domain
+
+The domain's DNS record has to point at the distribution's `hostname` first. With the record in
+a [STACKIT zone](/stackit/networking/dns), declare both, and the domain deploys after the record:
+
+```typescript
+// src/domain.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import { Cdn } from "./cdn.ts";
+
+export const Zone = Stackit.DNS.Zone("Zone", { dnsName: "example.com" });
+
+export const WwwRecord = Effect.gen(function* () {
+  const zone = yield* Zone;
+  const cdn = yield* Cdn;
+  return yield* Stackit.DNS.RecordSet("Www", {
+    zoneId: zone.zoneId,
+    name: "www",
+    type: "CNAME",
+    records: [Output.interpolate`${cdn.hostname}.`],
+  });
+});
+
+export const WwwDomain = Effect.gen(function* () {
+  const cdn = yield* Cdn;
+  const record = yield* WwwRecord;
+  return yield* Stackit.CDN.CustomDomain("WwwDomain", {
+    distributionId: cdn.distributionId,
+    domain: record.fqdn,
+  });
+});
+```
+
+STACKIT manages the certificate by default. A deploy retries for about 5 minutes while the
+record propagates, and waits for `ACTIVE` for up to 10 minutes.
+
+## Bring a certificate
+
+CDN domains take their certificate inline, not from `Stackit.Certificates`. The key goes in
+your [state store](/stackit/security/secrets-kms#protect-the-state-store):
+
+```typescript
+const certificate = Config.String("WWW_CERTIFICATE_PEM");
+const privateKey = Config.Redacted("WWW_PRIVATE_KEY_PEM");
+
+yield* Stackit.CDN.CustomDomain("WwwDomain", {
+  distributionId: cdn.distributionId,
+  domain: "www.example.com",
+  certificate: { type: "custom", certificate, privateKey },
+});
+```
+
+Only the certificate updates in place. Changing the domain or the distribution replaces the
+resource.
+
+## Move a live domain without downtime
+
+`skipDnsCheck` lets you add the domain before the record moves. Deploy it, repoint the record at
+`cdn.hostname`, then remove `skipDnsCheck` or switch to a managed certificate:
+
+```typescript
+certificate: { type: "custom", certificate, privateKey, skipDnsCheck: true },
+```
+
+## Ship access logs
+
+Push them to a Loki endpoint:
+
+```typescript
+const password = Config.Redacted("LOKI_PASSWORD");
+
+yield* Stackit.CDN.Distribution("Cdn", {
+  backend: { type: "http", originUrl: "https://origin.example.com" },
+  logSink: {
+    type: "loki",
+    pushUrl: "https://loki.example.com/loki/api/v1/push",
+    credentials: { username: "cdn", password },
+  },
+});
+```
+
+Use a [Logs](/stackit/observability/logs) instance's `ingestUrl` to keep them on STACKIT.
+
+## Purge from a host
+
+`PurgeCache` clears a path:
+
+```typescript
+// src/Purger.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Cdn } from "./cdn.ts";
+
+export default class Purger extends Stackit.Functions.Function<Purger>()(
+  "Purger",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/purger" },
+  },
+  Effect.gen(function* () {
+    const purgeCache = yield* Stackit.CDN.PurgeCache(yield* Cdn);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* purgeCache({ path: "/index.html" });
+        return HttpServerResponse.text("purged");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.CDN.PurgeCacheHttp)),
+) {}
+```
+
+It grants a custom role holding `cdn.distribution.edit` and `cdn.distribution.update` on the
+project, so it reaches every distribution in that project.
+
+## Read a distribution
+
+`GetDistribution` reads its status, and `GetStatistics` and `GetLogs` what it served. Provide the
+binding's `Http` layer. Each grants a custom role holding `cdn.distribution.get` on the project, so
+it reaches every distribution in that project.
+
+## Replacing a distribution
+
+Changing `projectId` replaces it. The new distribution gets a new `hostname`, so DNS records and
+custom domains have to point at it.
+
+## Check on your first deploy
+
+- Whether a Function URL carries a path. The API ignores paths on `originUrl`.
+- Whether `/` on a bucket origin serves `index.html`.
+- Whether `cdn.distribution.edit` and `cdn.distribution.update` exist as permissions a custom
+  role can hold. A wrong name fails the deploy.
+
+## Where next
+
+- [Websites](/stackit/frontend/websites) — a whole site on a Function and a CDN.
+- [DNS](/stackit/networking/dns) — the zone for your domain.
+- [CDN reference](/providers/stackit/cdn#distribution) — every prop and attribute.

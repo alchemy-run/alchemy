@@ -1,0 +1,128 @@
+---
+title: Automation
+description: Take scheduled recovery points of STACKIT volumes with a volume automation, pick a template, and run it on demand from a host.
+---
+
+A `Stackit.Automation.VolumeAutomation` takes recovery points of the volumes matching a label selector, on a
+schedule, from one of STACKIT's fixed templates. You pick a template and configure it; you can't write its
+steps.
+
+:::caution[Cost]
+The automation itself has no SKU on price list v1.0.44. Its recovery points bill as snapshot storage, so a
+broad selector with `indefinitely` keeps costing more.
+:::
+
+## Create an automation
+
+```typescript
+// src/automation.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Nightly = Stackit.Automation.VolumeAutomation("Nightly", {
+  templateId: "62c5178a-87fb-437f-88c8-c6f26b3ee4f6",
+  description: "Nightly recovery points",
+  schedule: "DTSTART;TZID=Europe/Berlin:20300101T023000 RRULE:FREQ=DAILY;INTERVAL=1",
+  input: {
+    volumeLabelSelector: "backup=nightly",
+    recoveryPointLabels: { "created-by": "alchemy" },
+    snapshotRetentionPolicy: { kind: "count", value: 7 },
+  },
+});
+```
+
+The first deploy enables the service for the project. `schedule` is an iCalendar recurrence rule, and an
+automation without one only runs on demand. This one keeps the last seven recovery points.
+
+## Cover a volume
+
+Label a volume so the selector matches it:
+
+```diff lang="typescript"
+// src/automation.ts
++export const Data = Stackit.IaaS.Volume("Data", {
++  size: 20,
++  labels: { backup: "nightly" },
++});
+```
+
+`inheritVolumeLabels: true` in `input` copies the volume's labels onto its recovery points, and
+`snapshotRetentionPolicy: { kind: "indefinitely" }` keeps every one.
+
+## Find a template
+
+`ListVolumeTemplates` lists STACKIT's templates in a region:
+
+```typescript
+// src/Templates.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Nightly } from "./automation.ts";
+
+export default class Templates extends Stackit.Functions.Function<Templates>()(
+  "Templates",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/templates" },
+  },
+  Effect.gen(function* () {
+    const listVolumeTemplates = yield* Stackit.Automation.ListVolumeTemplates(yield* Nightly);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { items } = yield* listVolumeTemplates({ pageSize: 100 });
+        return yield* HttpServerResponse.json({ templates: items.map((item) => item.id) });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Automation.ListVolumeTemplatesHttp)),
+) {}
+```
+
+It takes any resource in that project and region. It grants a custom role holding
+`automation-volumes.automation.list` on the project, so it reaches every automation in that project. The
+project needs the service on, which deploying an automation does.
+
+## Run it on demand
+
+`CreateVolumeExecution` runs the automation outside its schedule, and creates recovery points that bill as
+storage. Provide `Stackit.Automation.CreateVolumeExecutionHttp`:
+
+```typescript
+const createVolumeExecution = yield* Stackit.Automation.CreateVolumeExecution(yield* Nightly);
+
+// inside fetch:
+const execution = yield* createVolumeExecution();
+yield* Effect.log(execution.id, execution.status);
+```
+
+It grants a custom role holding `automation-volumes.execution.create` on the project, so it reaches every
+automation in that project.
+
+## Read an automation
+
+`GetVolumeAutomation` and `ListVolumeAutomations` grant `automation-volumes.automation.get` and
+`automation-volumes.automation.list` the same way. `GetVolumeExecution` and `ListVolumeExecutions` read its
+runs. Provide the binding's `Http` layer.
+
+## What a delete leaves behind
+
+A delete removes this one automation by its id. It makes no call against the recovery points the automation
+created, so delete those you don't want through `Stackit.IaaS` or the portal.
+
+## Replacing an automation
+
+Changing `templateId`, `projectId`, or `region` replaces it. With an explicit `name` that stays the same in
+the same project and region, the old automation goes first. An automation changed in the portal keeps its
+live values until a deploy changes its props.
+
+## Check on your first deploy
+
+- `updateMask` behaves as the API's spec says when you remove a selector or a schedule.
+- Whether names are unique in a project and region.
+- Whether `input` can be omitted on create.
+
+## Where next
+
+- [Server operations](/stackit/operations/server-operations) — whole-server backups and updates.
+- [Servers](/stackit/compute/servers) — the volumes this covers.
+- [Automation reference](/providers/stackit/automation#volumeautomation) — every prop and attribute.

@@ -1,0 +1,532 @@
+---
+title: Functions
+description: Run an Effect HTTP handler on a STACKIT Function — images, a registry, environment, scaling, and bindings that create the credentials they need.
+---
+
+`Stackit.Functions.Function` runs an Effect program, or a plain `fetch` handler,
+at its own URL. You write the handler, Alchemy builds an image with Docker on
+your machine, pushes it to a registry, and rolls out a new revision.
+
+:::caution[Alpha API]
+STACKIT Functions is an alpha API, available in `eu01` only, and your project
+needs access to it. STACKIT documents no container contract. Check these on your
+first deploy:
+
+- The Function answers on `8080`, the port Alchemy assumes, through `PORT`.
+- A new `ACTIVE` revision becomes the Function's current revision by itself.
+- `CreateRevision` accepts variables with no variable definition on the Function.
+- The Function's URL takes requests with no STACKIT token.
+:::
+
+:::note[Cost]
+STACKIT's price list (v1.0.44) has no Functions SKU. The product page says you
+pay for what runs. Check the current price list before you leave one deployed.
+:::
+
+## Declare a Function
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    };
+  }),
+) {}
+```
+
+`main` names the file to bundle. `registry.repository` is where the image goes.
+With no `username` or `password`, the push uses your machine's `docker login`.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+`api.url` is the Function's URL. The first deploy also enables the Functions
+service for your project.
+
+## Push to STACKIT Container Registry
+
+To keep images on STACKIT, declare a registry project and two robot accounts. Set
+`HARBOR_USERNAME` and `HARBOR_CLI_SECRET` to your Harbor user and CLI secret, from
+your user profile in the registry UI:
+
+```typescript
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+const harbor = {
+  username: Config.String("HARBOR_USERNAME"),
+  secret: Config.Redacted("HARBOR_CLI_SECRET"),
+};
+
+export const Images = Stackit.ContainerRegistry.Project("Images", {
+  forceDestroy: true,
+  harborCredentials: harbor,
+});
+
+export const Pusher = Effect.gen(function* () {
+  const images = yield* Images;
+  return yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [
+      { resource: "repository", action: "pull" },
+      { resource: "repository", action: "push" },
+    ],
+  });
+});
+
+export const Puller = Effect.gen(function* () {
+  const images = yield* Images;
+  const robot = yield* Stackit.ContainerRegistry.RobotAccount("Puller", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [{ resource: "repository", action: "pull" }],
+  });
+  return yield* Stackit.Functions.PullCredential("PullCredential", {
+    address: images.registryHost,
+    username: robot.robotName,
+    password: robot.secret,
+  });
+});
+
+export const registryFor = (image: string) =>
+  Effect.gen(function* () {
+    const images = yield* Images;
+    const pusher = yield* Pusher;
+    return {
+      repository: Output.interpolate`${images.imagePrefix}/${image}`,
+      username: pusher.robotName,
+      password: pusher.secret,
+    };
+  });
+```
+
+Alchemy pushes with `Pusher`, and STACKIT fetches the image with `Puller`.
+
+## Take the registry in the Function's props
+
+Props can be an Effect, so they can use resources:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
++import { Puller, registryFor } from "./registry.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+-  {
+-    main: import.meta.url,
+-    registry: { repository: "ghcr.io/my-org/api" },
+-  },
++  Effect.gen(function* () {
++    const puller = yield* Puller;
++    const registry = yield* registryFor("api");
++    return {
++      main: import.meta.url,
++      registry,
++      pullCredential: puller.pullCredentialId,
++    };
++  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    };
+  }),
+) {}
+```
+
+## Read the request
+
+`fetch` is an Effect. Get the request from `HttpServerRequest`:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://function");
+
+        if (request.method === "POST" && url.pathname === "/echo") {
+          const body = yield* request.json;
+          return yield* HttpServerResponse.json(body);
+        }
+
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+For typed routes, use [Effect HTTP](/stackit/apis/effect-http-api) or
+[Effect RPC](/stackit/apis/effect-rpc). Both produce a `fetch` handler.
+
+## Bind a bucket
+
+Declare a resource at module scope, bind it in the program, and provide its
+layer:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+
+export const Uploads = Stackit.ObjectStorage.Bucket("Uploads", {});
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    // init
+    const uploads = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Uploads);
+
+    return {
+      // runtime
+      fetch: Effect.gen(function* () {
+        yield* uploads.putObject({ Key: "hello.txt", Body: "hello" });
+        const object = yield* uploads.getObject({ Key: "hello.txt" });
+        const text = yield* Stream.mkString(Stream.decodeText(object.Body!));
+        return HttpServerResponse.text(text);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+) {}
+```
+
+`ReadWriteBucket` creates a credentials group and an access key for this Function
+and bucket, and adds statements to the bucket's policy limiting the group to read
+and write actions there. A bucket policy only speaks for its own bucket, so give
+your other buckets a `policy` that denies such groups.
+
+## Bind anything else
+
+A Function runs as no STACKIT identity. A binding on a STACKIT API, such as
+reading a DNS zone, creates a service account and a key, and the key reaches the
+Function as a revision variable:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Domain = Stackit.DNS.Zone("Domain", { dnsName: "example.com" });
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const getZone = yield* Stackit.DNS.GetZone(yield* Domain);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { zone } = yield* getZone({});
+        return yield* HttpServerResponse.json({ state: zone.state });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.DNS.GetZoneHttp)),
+) {}
+```
+
+`GetZone` grants the account the `dns.zone.list` permission on the project. Roles
+on STACKIT only bind to organizations, folders, and projects, so the grant reaches
+every zone in the project, not only this one. See
+[IAM & bindings](/stackit/security/iam-bindings).
+
+:::caution[Variables are readable]
+Revision variables are plain values. Anyone who can call `GetRevision` can read
+them, including the service account key a binding adds to the Function.
+:::
+
+## Pass environment variables
+
+`env` sets a variable on each revision:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+    env: { GREETING: "hello" },
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(Config.String("GREETING"));
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+Values can be Outputs from other resources. For credentials, use
+[Secrets Manager](/stackit/security/secrets-kms). A new value rolls out a new
+revision.
+
+## Write a plain handler
+
+You don't have to use Effect. Point `main` at a file with a `fetch` handler, and
+pass no program:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Ping = Stackit.Functions.Function("Ping", {
+  main: "./src/ping.ts",
+  registry: { repository: "ghcr.io/my-org/ping" },
+  env: { GREETING: "hello" },
+});
+
+export type PingEnv = Stackit.InferEnv<typeof Ping>;
+```
+
+`InferEnv` types the handler's second argument. Every value is a string:
+
+```typescript
+// src/ping.ts
+import type { PingEnv } from "./resources.ts";
+
+export default {
+  async fetch(_request: Request, env: PingEnv) {
+    return new Response(env.GREETING);
+  },
+};
+```
+
+A plain handler has no bindings, so you create credentials yourself and pass them
+in `env`. See
+[`examples/stackit-function-async`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-function-async).
+
+## Tune the limits
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Api = Stackit.Functions.Function("Api", {
+  name: "orders-api",
+  image: "ghcr.io/my-org/api:v1.2.3",
+  plan: "f2",
+  concurrency: 50,
+  maxScale: 10,
+  keepRevisions: 3,
+  env: { LOG_LEVEL: "info" },
+  labels: { team: "orders" },
+});
+```
+
+`concurrency` caps in-flight requests per instance, 100 by default. `maxScale`
+caps instances. The API has no list of plans, so check the valid `plan` values in
+the [STACKIT Portal](https://portal.stackit.cloud). Each of these rolls out a new
+revision. `keepRevisions` keeps that many older revisions next to the active one.
+
+## Run a pre-built image
+
+Leave out `main` to run an image you built. The API takes a semver tag or a
+digest, and a deploy rejects anything else:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Api = Stackit.Functions.Function("Api", {
+  image: "ghcr.io/my-org/api:v1.2.3",
+});
+```
+
+## Change the base image
+
+With `main`, `image` is the base image your program is layered on. It has to be
+able to run bun, and it defaults to `oven/bun:1`. Keep a package out of the bundle
+with `build`, and put it in the base image:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Api = Stackit.Functions.Function("Api", {
+  main: "./src/api.ts",
+  image: "ghcr.io/my-org/bun-with-sharp:1",
+  registry: { repository: "ghcr.io/my-org/api" },
+  build: {
+    input: { external: ["sharp"] },
+    output: { minify: true },
+  },
+});
+```
+
+## Call another Function
+
+`Stackit.Functions.Invoke` puts the other Function's URL in this one's environment
+and calls it at runtime. It takes the resource, so declare the backend with
+`Stackit.Functions.Function` and yield it:
+
+```typescript
+// src/Gateway.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Backend = Stackit.Functions.Function("Backend", {
+  image: "ghcr.io/my-org/backend:v1.0.0",
+});
+
+export default class Gateway extends Stackit.Functions.Function<Gateway>()(
+  "Gateway",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/gateway" },
+  },
+  Effect.gen(function* () {
+    const backend = yield* Stackit.Functions.Invoke(yield* Backend);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const response = yield* backend({ path: "/health" });
+        return HttpServerResponse.text(yield* response.text, {
+          status: response.status,
+        });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Functions.InvokeHttp)),
+) {}
+```
+
+`Invoke` grants nothing and creates no service account. The API has no private
+network and no invoke permission to set, so nothing limits who calls `Backend`. To
+keep it to the gateway, pass a shared secret in `env` to both, send it as a header,
+and check it in the handler.
+
+A backend built from `main` also runs this module inside the gateway, where its path
+means nothing.
+[`examples/stackit-service-to-service`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-service-to-service)
+guards it with `globalThis.__ALCHEMY_RUNTIME__`.
+
+## Do the work inside the request
+
+The Functions API has no trigger, schedule, or subscription, and STACKIT doesn't
+document whether instances keep running between requests. So don't rely on a loop
+or a queue consumer staying alive in one. To take messages from a queue, pull a
+batch inside a request:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Orders = Stackit.PubSub.Topic("Orders", {});
+export const Billing = Orders.pipe(
+  Effect.flatMap((topic) => Stackit.PubSub.Subscription("Billing", { topicId: topic.topicId })),
+);
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const billing = yield* Billing;
+    const pull = yield* Stackit.PubSub.Pull(billing);
+    const acknowledge = yield* Stackit.PubSub.Acknowledge(billing);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { messages } = yield* pull({ maxMessages: 10, longPullDuration: 1000 });
+        yield* acknowledge({ ackIds: messages.map((message) => message.ackId) });
+        return yield* HttpServerResponse.json({ pulled: messages.length });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide([Stackit.PubSub.PullHttp, Stackit.PubSub.AcknowledgeHttp])),
+) {}
+```
+
+`Pull` and `Acknowledge` add the Function's service account to this subscription's
+subscribers. The grant covers that one subscription. A program that has to stay
+running belongs on a
+[Container Application](/stackit/compute/container-applications#consume-a-queue).
+
+## Destroy
+
+`alchemy destroy` deletes the Function and waits until it is gone. Images stay in
+their registry unless you delete the registry project too.
+
+## Examples
+
+- [`examples/stackit-function`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-function)
+  is a file store on an Effect Function.
+- [`examples/stackit-function-async`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-function-async)
+  is a notes API with a plain handler.
+- [`examples/stackit-service-to-service`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-service-to-service)
+  is a gateway calling a backend.
+
+## Where next
+
+- [Object Storage](/stackit/data/object-storage): the bucket client used above.
+- [Container Applications](/stackit/compute/container-applications): programs that
+  stay running.
+- [Functions reference](/providers/stackit/functions#function): every prop and
+  attribute.

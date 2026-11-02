@@ -1,0 +1,199 @@
+---
+title: AI Model Experiments
+description: Run a managed MLflow tracking server on STACKIT AI Model Experiments, create tokens, and log experiments, runs, metrics, and parameters from a Function.
+---
+
+AI Model Experiments is a managed MLflow tracking server, with its artifacts in a bucket the
+service names. Create an instance and a tracking token, then log to it from a Function or with
+the MLflow SDK.
+
+:::caution[What it costs]
+Price list v1.0.44 has no AI Model Experiments SKU, and no public price is available. An instance
+is a long-lived server, so expect it to bill for as long as it exists. Check the portal before
+you deploy, and destroy the stack when you're done.
+:::
+
+## Create an instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Experiments = Stackit.ModelExperiments.Instance("Experiments", {});
+
+export const Tracking = Experiments.pipe(
+  Effect.flatMap((instance) =>
+    Stackit.ModelExperiments.Token("Tracking", { instanceId: instance.instanceId }),
+  ),
+);
+```
+
+The first deploy enables the service (`cloud.stackit.model-experiments`) for the project. A deploy
+waits until the instance is `active`, for which the Go SDK allows 45 minutes, and an `impaired` one
+fails it with STACKIT's message.
+
+A token lives at most 6 months, and 6 months by default. A deploy after it expired replaces it.
+
+## Log with the MLflow SDK
+
+`MLFLOW_TRACKING_URI` is `instance.url`, and `MLFLOW_TRACKING_TOKEN` is `token.token`, which stays
+`Redacted`. STACKIT's docs warn that the client must not be newer than the server.
+
+## Create an experiment from a Function
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Tracking } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const createExperiment = yield* Stackit.ModelExperiments.CreateExperiment(yield* Tracking);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { experiment_id } = yield* createExperiment({ name: "training" });
+        return yield* HttpServerResponse.json({ experiment_id });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.ModelExperiments.CreateExperimentHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+The tracking bindings grant only the bound token, which reaches its one instance. No role and no
+service account are created. The token's value reaches the Function as a plain revision variable,
+so anyone who can call `GetRevision` can read it. Field names are MLflow's own.
+
+A taken name fails with `ExperimentAlreadyExists`. `GetExperimentByName` reads the existing one:
+
+```typescript
+const experimentId = yield* createExperiment({ name: "training" }).pipe(
+  Effect.map((created) => created.experiment_id),
+  Effect.catchTag("ExperimentAlreadyExists", () =>
+    getExperimentByName({ experiment_name: "training" }).pipe(
+      Effect.map(({ experiment }) => experiment.experiment_id),
+    ),
+  ),
+);
+```
+
+## Start a run
+
+```typescript
+const { run } = yield* createRun({ experiment_id: "123", run_name: "nightly" });
+const runId = run.info.run_id;
+```
+
+A missing experiment fails with `NotFound`. Provide `Stackit.ModelExperiments.CreateRunHttp`.
+
+## Log a metric
+
+A metric keeps a history, so log the same key again at each step:
+
+```typescript
+const timestamp = yield* Clock.currentTimeMillis;
+yield* logMetric({ run_id: runId, key: "loss", value: 0.5, timestamp, step: 1 });
+```
+
+## Log a parameter
+
+```typescript
+yield* logParam({ run_id: runId, key: "lr", value: "0.1" });
+```
+
+Logging a key again with the same value does nothing. Another value fails with
+`ParamValueConflict`.
+
+## Finish a run
+
+```typescript
+yield* updateRun({ run_id: runId, status: "FINISHED", end_time: timestamp });
+```
+
+## Search runs
+
+```typescript
+const { runs } = yield* searchRuns({
+  experiment_ids: ["123"],
+  filter: "metrics.loss < 1",
+  order_by: ["metrics.loss ASC"],
+  max_results: 10,
+});
+```
+
+This returns one page. Pass `next_page_token` back as `page_token` for the next.
+
+## Read the instance from a Function
+
+`GetInstance`, `ListInstances`, `GetToken`, and `ListTokens` use STACKIT's API:
+
+| Binding | Permission |
+| --- | --- |
+| `GetInstance` | `model-experiments.instance.get` |
+| `ListInstances` | `model-experiments.instance.list` |
+| `GetToken` | `model-experiments.token.get` |
+| `ListTokens` | `model-experiments.token.list` |
+
+Each binding grants a custom role with that permission and a service account key for the host. The
+role is on the project holding the instance, because STACKIT binds roles on projects, folders, and
+organizations, never on one instance, so it reaches every instance of the service in the project.
+
+## Name the instance and keep deleted experiments
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Experiments = Stackit.ModelExperiments.Instance("Experiments", {
+  name: "research",
+  description: "Team experiments",
+  deletedExperimentRetention: "30d",
+  labels: { team: "research" },
+});
+```
+
+## Rotate a token
+
+Change `rotateWhenChanged` to rotate:
+
+```diff lang="typescript"
+// src/resources.ts
+    Stackit.ModelExperiments.Token("Tracking", {
+      instanceId: instance.instanceId,
++      rotateWhenChanged: { rotation: "2026-11" },
+    }),
+```
+
+A host holding the old value only sees the new one when it redeploys, and a host that doesn't
+redeploy for 6 months loses access.
+
+:::caution[Changing `projectId` or `region` replaces the instance]
+A replacement starts empty and loses the old instance's experiments. Nothing is copied.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- The tracking API behind `instance.url` answers like upstream MLflow. STACKIT's docs say it works
+  with the standard SDK and REST API, and name no version.
+- The bearer token is what the gateway takes.
+- Your deployer can create tokens. The docs restrict tracking tokens to project administrators.
+
+## Where next
+
+- [AI Model Serving](/stackit/ai/model-serving): run a shared model instead.
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [ModelExperiments reference](/providers/stackit/modelexperiments#instance): every resource and
+  binding.

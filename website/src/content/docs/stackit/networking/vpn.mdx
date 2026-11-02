@@ -1,0 +1,240 @@
+---
+title: VPN
+description: Connect a STACKIT network area to your own network with a highly available IPsec gateway, using policy-based, route-based, or BGP routing.
+---
+
+A `Stackit.VPN.Gateway` is a pair of IPsec endpoints, with two tunnels and two public IPs,
+connecting a [network area](/stackit/networking/networks#share-routing-across-projects) to an
+external network. A `Stackit.VPN.Connection` configures the tunnels toward one remote peer.
+STACKIT supports neither point-to-site VPN nor NAT on it.
+
+:::caution[Cost]
+A gateway bills per started hour by plan, for as long as it exists. On price list v1.0.44:
+`VPN-IPSec-100-HA` is about EUR 0.088 an hour, `VPN-IPSec-500-HA` about EUR 0.21, and
+`VPN-IPSec-1000-HA` about EUR 0.39.
+:::
+
+## Create a gateway
+
+Your project has to sit in a network area:
+
+```typescript
+// src/vpn.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export const Office = Stackit.VPN.Gateway("Office", {
+  planId: "p100",
+  routingType: "POLICY_BASED",
+  availabilityZones: { tunnel1: "eu01-1", tunnel2: "eu01-2" },
+});
+```
+
+A deploy waits for `READY`, for up to 45 minutes. `gateway.tunnels` holds the public IPs to
+configure on the remote peer.
+
+## Connect a peer
+
+A policy-based connection lists the networks on both sides:
+
+```diff lang="typescript"
+// src/vpn.ts
++const phase = {
++  encryptionAlgorithms: ["aes256" as const],
++  integrityAlgorithms: ["sha2_384" as const],
++  dhGroups: ["ecp384" as const],
++};
++
++export const Berlin = Effect.gen(function* () {
++  const gateway = yield* Office;
++  const preSharedKey = Config.Redacted("VPN_PRE_SHARED_KEY");
++  return yield* Stackit.VPN.Connection("Berlin", {
++    gatewayId: gateway.gatewayId,
++    localSubnets: ["10.0.0.0/16"],
++    remoteSubnets: ["192.168.0.0/24"],
++    tunnel1: { remoteAddress: "203.0.113.10", preSharedKey, phase1: phase, phase2: phase },
++    tunnel2: { remoteAddress: "203.0.113.11", preSharedKey, phase1: phase, phase2: phase },
++  });
++});
+```
+
+A deploy waits for the gateway to be `READY`, never for the tunnels to come up, because that
+depends on the remote peer.
+
+:::caution
+STACKIT never returns a pre-shared key, so one changed in the portal goes unnoticed. Change
+`preSharedKey` here to rotate it. The key stays out of the attributes, but it's in your [state
+store](/stackit/security/secrets-kms#protect-the-state-store), as every `Redacted` prop is.
+:::
+
+## Use static routes
+
+On a `ROUTE_BASED` gateway, list the networks to route into the tunnels, and give each tunnel
+its peering addresses:
+
+```typescript
+yield* Stackit.VPN.Connection("Berlin", {
+  gatewayId: gateway.gatewayId,
+  staticRoutes: ["192.168.0.0/24"],
+  tunnel1: {
+    remoteAddress: "203.0.113.10",
+    preSharedKey,
+    phase1: phase,
+    phase2: phase,
+    peering: { localAddress: "169.254.10.1", remoteAddress: "169.254.10.2" },
+  },
+  tunnel2: {
+    remoteAddress: "203.0.113.11",
+    preSharedKey,
+    phase1: phase,
+    phase2: phase,
+    peering: { localAddress: "169.254.11.1", remoteAddress: "169.254.11.2" },
+  },
+});
+```
+
+## Use a custom routing table
+
+```typescript
+Stackit.VPN.Gateway("Office", {
+  displayName: "office-vpn",
+  planId: "p100",
+  routingType: "ROUTE_BASED",
+  availabilityZones: { tunnel1: "eu01-1", tunnel2: "eu01-2" },
+  networkConfig: {
+    predefinedNetworkPrefix: "10.0.0.0/28",
+    routingTableId: "11111111-1111-4111-8111-111111111111",
+  },
+});
+```
+
+See [Use a routing table](/stackit/networking/networks#use-a-routing-table).
+
+## Route dynamically with BGP
+
+A `BGP_ROUTE_BASED` gateway takes a local ASN:
+
+```diff lang="typescript"
+// src/vpn.ts
++export const Backbone = Stackit.VPN.Gateway("Backbone", {
++  planId: "p100",
++  routingType: "BGP_ROUTE_BASED",
++  availabilityZones: { tunnel1: "eu01-1", tunnel2: "eu01-2" },
++  bgp: { localAsn: 64512 },
++});
+```
+
+Each tunnel of a connection then takes the peer's ASN:
+
+```typescript
+tunnel1: {
+  remoteAddress: "203.0.113.10",
+  preSharedKey,
+  phase1: phase,
+  phase2: phase,
+  bgp: { remoteAsn: 64600 },
+  peering: { localAddress: "169.254.10.1", remoteAddress: "169.254.10.2" },
+},
+```
+
+## Filter the routes you accept
+
+A BGP filter decides which routes a tunnel accepts:
+
+```typescript
+// src/filter.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Backbone } from "./vpn.ts";
+
+export const Inbound = Backbone.pipe(
+  Effect.flatMap((gateway) =>
+    Stackit.VPN.BGPFilter("Inbound", { gatewayId: gateway.gatewayId }),
+  ),
+);
+
+export const AllowOffice = Effect.gen(function* () {
+  const gateway = yield* Backbone;
+  const filter = yield* Inbound;
+  return yield* Stackit.VPN.BGPFilterRule("AllowOffice", {
+    gatewayId: gateway.gatewayId,
+    filterId: filter.filterId,
+    sequence: 10,
+    action: "PERMIT",
+    match: { prefixes: ["192.168.0.0/16"], maxPrefixLength: 24 },
+    set: { localPreference: 200 },
+  });
+});
+```
+
+Attach it with `bgp: { remoteAsn: 64600, inboundFilterId: filter.filterId }` on a tunnel.
+
+:::caution
+A filter ends in an implicit deny, so one with no rules attached to a tunnel denies every route.
+Deploy the rules before you attach it.
+:::
+
+## Read a tunnel's state
+
+`GetConnectionStatus` reads each tunnel's state and traffic counters:
+
+```typescript
+// src/Health.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Berlin } from "./vpn.ts";
+
+export default class Health extends Stackit.Functions.Function<Health>()(
+  "Health",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/health" },
+  },
+  Effect.gen(function* () {
+    const getStatus = yield* Stackit.VPN.GetConnectionStatus(yield* Berlin);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const status = yield* getStatus();
+        return yield* HttpServerResponse.json({
+          up: (status.tunnels ?? []).filter((tunnel) => tunnel.established).length,
+        });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.VPN.GetConnectionStatusHttp)),
+) {}
+```
+
+It grants a custom role holding `vpn.connection.status.get` on the project, so it reaches every
+connection in that project.
+
+## Replacing a gateway
+
+:::caution
+Changing `routingType`, `predefinedNetworkPrefix`, `projectId`, or `region` replaces the gateway.
+The replacement has new public IPs, and every connection on it moves to the new one, so the remote
+peers have to be reconfigured. Name, plan, availability zones, BGP settings, routing table, and
+labels update in place, which STACKIT documents can renegotiate connections.
+:::
+
+## Delete a gateway
+
+Deleting a gateway removes its connections too. So a delete waits up to two minutes for this
+stack's own to go, then fails with `Stackit.VPN.GatewayNotEmpty`, naming what is left. Deploy
+`forceDestroy: true` to let it take those too.
+
+## Check on your first deploy
+
+- `p100` is a valid `planId`. It comes from STACKIT's price list and docs, and the API's own
+  example is `p1000`. `Stackit.VPN.ListPlans` lists the choices.
+- Whether a gateway with no reachable peer reaches `READY`.
+- Whether VPN needs enabling for your project. If the first deploy is refused, a
+  [`Stackit.ServiceEnablement.Service`](/stackit#projects-regions-and-services) fixes it.
+
+## Where next
+
+- [Networks](/stackit/networking/networks) — the network area a gateway connects.
+- [IAM & bindings](/stackit/security/iam-bindings) — what the bindings grant.
+- [VPN reference](/providers/stackit/vpn#gateway) — every prop and attribute.

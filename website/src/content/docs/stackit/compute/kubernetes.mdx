@@ -1,0 +1,351 @@
+---
+title: Kubernetes
+description: Run Effect programs and images as Kubernetes Deployments and Jobs on a STACKIT Kubernetes Engine cluster, with bindings that create the credentials they need.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = "@alchemy.run/kubernetes";
+
+STACKIT Kubernetes Engine (SKE) runs your Effect program as a Kubernetes workload.
+You declare the cluster, then a `Kubernetes.Deployment` or `Kubernetes.Job` on it.
+Alchemy builds the image, pushes it, and applies the objects. No YAML, no `kubectl`.
+
+:::note[Cost]
+About **EUR 0.20 per hour** for the setup on this page (price list v1.0.44):
+
+- Cluster management: EUR 0.0996 per started hour, running or hibernated, until you
+  delete it.
+- One `c1.2` node: EUR 0.0607 per hour, plus its volume.
+- Each `LoadBalancer` Service adds a load balancer and a public IP. The list has
+  `p10` at EUR 0.0130 per hour and a public IP at EUR 0.0041 per hour. Check which
+  plan SKE picks.
+- The DNS zone the binding reads: about EUR 0.003 to EUR 0.004 per hour.
+
+STACKIT's Go SDK allows 45 minutes for a cluster to come up and 90 to go down, so
+plan on two to three started hours for a first try. Check the current price list.
+:::
+
+:::caution[Check these on your first deploy]
+- The kubeconfig STACKIT returns holds a client certificate or a token. Connecting
+  fails with a typed error if it holds neither.
+- Machine type `c1.2` and zone `eu01-1` are available, with `ListProviderOptions`.
+:::
+
+## Install
+
+<PackageManagers add={pkgs} />
+
+Merge the Kubernetes providers next to STACKIT's:
+
+```typescript
+// alchemy.run.ts
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Stackit.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
+
+## Create a cluster
+
+One node of a small machine:
+
+```typescript
+// src/infra.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const AppCluster = Stackit.SKE.Cluster("AppCluster", {
+  nodepools: [
+    {
+      name: "workers",
+      machineType: "c1.2",
+      availabilityZones: ["eu01-1"],
+      minimum: 1,
+      maximum: 1,
+      volumeSize: 20,
+    },
+  ],
+});
+```
+
+The first deploy also enables SKE for your project. A deploy waits until the cluster
+is healthy, up to 45 minutes.
+
+## Run an image
+
+Pass the cluster to a `Kubernetes.Deployment`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
++import { AppCluster } from "./src/infra.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Stackit.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+-    return {};
++    const cluster = yield* AppCluster;
++    const web = yield* Kubernetes.Deployment("Web", {
++      cluster,
++      image: "nginx:1.27",
++      port: 80,
++      serviceType: "LoadBalancer",
++    });
++    return { url: web.url };
+  }),
+);
+```
+
+`serviceType: "LoadBalancer"` gives the Deployment a public address.
+
+## Say where images go
+
+A workload with a `main` pushes its image to the cluster's `registry`. Your nodes pull
+from it with no login, so use a registry they can read, and log in to it on your machine
+with `docker login`:
+
+```typescript
+// src/infra.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+
+export const AppCluster = Stackit.SKE.Cluster("AppCluster", {
+  nodepools: [
+    {
+      name: "workers",
+      machineType: "c1.2",
+      availabilityZones: ["eu01-1"],
+      minimum: 1,
+      maximum: 1,
+      volumeSize: 20,
+    },
+  ],
+  registry: { server: Config.String("IMAGE_REGISTRY") },
+});
+```
+
+Set `IMAGE_REGISTRY` to something like `ghcr.io/my-org`. Pass the `Config` as the prop, and
+don't `yield*` it while declaring the cluster: a workload's props run again in the deployed
+program, where the variable isn't set, so the failed read would crash the pod.
+
+:::caution[Private registries need a pull secret]
+A `Stackit.ContainerRegistry.Project` has no public option, so its images are private.
+To use one, pass its `imagePrefix` and a robot's login in `registry`, and give the
+workload an image pull secret you create, through `podTemplate`.
+:::
+
+## Deploy an Effect program
+
+A Deployment takes the same `fetch` handler as a Function. The class declares the
+workload, and `Api.make` is its Layer:
+
+```typescript
+// src/Api.ts
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { AppCluster } from "./infra.ts";
+
+export class Api extends Kubernetes.Deployment<Api>()("Api") {}
+
+export default Api.make(
+  Effect.gen(function* () {
+    const cluster = yield* AppCluster;
+    return {
+      cluster,
+      main: import.meta.url,
+      port: 3000,
+      serviceType: "LoadBalancer" as const,
+    };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }),
+);
+```
+
+## Add it to the Stack
+
+Provide the Deployment's layer and yield the class:
+
+```typescript
+// alchemy.run.ts
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import ApiLive, { Api } from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Stackit.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }).pipe(Effect.provide(ApiLive)),
+);
+```
+
+## Bind a resource
+
+Pods run with no STACKIT identity. A binding on a STACKIT API creates a service account
+with a key, and the key reaches the container's environment:
+
+```typescript
+// src/Api.ts
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { AppCluster } from "./infra.ts";
+
+export const Domain = Stackit.DNS.Zone("Domain", {});
+
+export class Api extends Kubernetes.Deployment<Api>()("Api") {}
+
+export default Api.make(
+  Effect.gen(function* () {
+    const cluster = yield* AppCluster;
+    return {
+      cluster,
+      main: import.meta.url,
+      port: 3000,
+      serviceType: "LoadBalancer" as const,
+    };
+  }),
+  Effect.gen(function* () {
+    const getZone = yield* Stackit.DNS.GetZone(yield* Domain);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { zone } = yield* getZone({});
+        return yield* HttpServerResponse.json({ zoneId: zone.id });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.DNS.GetZoneHttp)),
+);
+```
+
+`GetZone` grants the account the `dns.zone.list` permission on the project. Roles on
+STACKIT only bind to organizations, folders, and projects, so the grant reaches every
+zone in the project. See [IAM & bindings](/stackit/security/iam-bindings).
+
+## Run a Job
+
+`Kubernetes.Job` takes a `run` entry and runs once when it is applied:
+
+```typescript
+// src/Migrate.ts
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Effect from "effect/Effect";
+import { AppCluster } from "./infra.ts";
+
+export default Kubernetes.Job(
+  "Migrate",
+  Effect.gen(function* () {
+    const cluster = yield* AppCluster;
+    return { cluster, main: import.meta.url };
+  }),
+  Effect.gen(function* () {
+    return { run: Effect.log("migrated") };
+  }),
+);
+```
+
+Add `schedule: "0 3 * * *"` to the props to make it a CronJob.
+
+## Install a Helm chart
+
+```typescript
+// src/Ingress.ts
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Effect from "effect/Effect";
+import { AppCluster } from "./infra.ts";
+
+export const Ingress = Effect.gen(function* () {
+  const cluster = yield* AppCluster;
+  return yield* Kubernetes.HelmChart("Ingress", {
+    cluster,
+    chart: "ingress-nginx",
+    repo: "https://kubernetes.github.io/ingress-nginx",
+    namespace: "ingress-nginx",
+    createNamespace: true,
+  });
+});
+```
+
+## Hibernate at night
+
+A schedule stops the workers. The control plane keeps billing:
+
+```typescript
+// src/infra.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const AppCluster = Stackit.SKE.Cluster("AppCluster", {
+  hibernation: {
+    schedules: [{ start: "0 20 * * *", end: "0 8 * * 1-5", timezone: "Europe/Berlin" }],
+  },
+  nodepools: [
+    {
+      name: "workers",
+      machineType: "c1.2",
+      availabilityZones: ["eu01-1"],
+      minimum: 1,
+      maximum: 3,
+    },
+  ],
+});
+```
+
+A deploy to a hibernated cluster fails with `KubernetesAdapterNotReady`. Wake it first
+with `Stackit.SKE.TriggerWakeup`.
+
+:::caution[Replacing a cluster deletes its workloads]
+Changing `name`, `projectId`, `region`, `network.id`, `network.accessScope`,
+`network.podAddressRanges`, or `network.serviceAddressRanges` replaces the cluster. The
+workloads on the old one go with it.
+:::
+
+## Destroy
+
+`alchemy destroy` deletes the workloads and the cluster, and waits until the cluster is
+gone, up to 90 minutes.
+
+## Example
+
+[`examples/stackit-kubernetes`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-kubernetes)
+is a cluster with an Effect program and a public image, each behind its own load
+balancer.
+
+## Where next
+
+- [Kubernetes](/kubernetes): Deployments, Jobs, manifests, and Helm charts in depth.
+- [Networks](/stackit/networking/networks): put a cluster on a network you declare.
+- [SKE reference](/providers/stackit/ske#cluster): every cluster prop.

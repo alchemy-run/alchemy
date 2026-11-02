@@ -1,0 +1,214 @@
+---
+title: Git
+description: Run a managed Forgejo server on STACKIT, declare repositories and technical users, add a CI runner, and read a repository from a host.
+---
+
+A `Stackit.Git.Instance` is a managed Forgejo server. Repositories, users, a CI runner, and sign-in
+sources are resources on it.
+
+:::caution[Cost]
+An instance bills per started hour by plan, on price list v1.0.44: `git-10` about EUR 0.021 and
+`git-100` about EUR 0.14. Pipelines bill EUR 0.004 per runner minute.
+:::
+
+## Create an instance
+
+```typescript
+// src/forge.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export const Forge = Stackit.Git.Instance("Forge", {
+  acl: ["203.0.113.7/32"],
+  featureToggle: { enableLocalLogin: true },
+});
+```
+
+`forge.url` is the instance's URL. A deploy waits until it reports `Ready`, for at most 10 minutes.
+`acl` lists the ranges that can reach it. Use `flavor: "git-100"` for the larger plan.
+
+## Add a technical user
+
+A user signs in without STACKIT's identity provider, and needs local login on the instance:
+
+```diff lang="typescript"
+// src/forge.ts
++const password = Config.Redacted("FORGE_CI_PASSWORD");
++
++export const Ci = Effect.gen(function* () {
++  const forge = yield* Forge;
++  return yield* Stackit.Git.User("Ci", {
++    instanceId: forge.instanceId,
++    username: "ci-bot",
++    email: "ci-bot@example.com",
++    name: "CI bot",
++    password: yield* password,
++  });
++});
+```
+
+The username is its identity, so changing it replaces the user. The e-mail, display name, and password
+update in place. Adopting a user with `--adopt` sets its password to the one you give.
+
+## Create a repository
+
+Repositories live on the instance's Forgejo API, which takes no STACKIT token. Pass a username and
+password, or a Forgejo access token as `token`:
+
+```diff lang="typescript"
+// src/forge.ts
++export const App = Effect.gen(function* () {
++  const forge = yield* Forge;
++  const user = yield* Ci;
++  return yield* Stackit.Git.Repository("App", {
++    instanceUrl: forge.url,
++    username: user.username,
++    password: yield* password,
++  });
++});
+```
+
+`repository.cloneUrl` is the clone URL.
+
+:::caution
+The machine running `alchemy deploy` has to be inside the instance's `acl`, because a deploy talks to
+the instance. The login is in your [state store](/stackit/security/secrets-kms#protect-the-state-store),
+as every prop is.
+:::
+
+## Configure a repository
+
+```typescript
+Stackit.Git.Repository("Docs", {
+  instanceUrl: forge.url,
+  token,
+  name: "docs",
+  private: false,
+  website: "https://docs.example.com",
+  hasWiki: false,
+  hasIssues: true,
+  hasActions: true,
+});
+```
+
+A new repository is private. A new `name` renames it in place and keeps its contents. Changing
+`instanceUrl` or `owner` replaces it, and the new one starts empty.
+
+## Turn on pipelines
+
+Enable them on the instance, then add its runner:
+
+```typescript
+// src/ci.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Forge = Stackit.Git.Instance("Forge", {
+  featureToggle: { pipelines: { enabled: true } },
+});
+
+export const Runner = Forge.pipe(
+  Effect.flatMap((forge) => Stackit.Git.Runner("CiRunner", { instanceId: forge.instanceId })),
+);
+```
+
+This runner takes jobs with `runs-on: stackit-docker`. An instance has one runner, and the API has no
+update, so changing `labels` or `familyName` deletes the old runner before creating the new one. Jobs
+have no runner in between. It isn't an Alchemy runtime: nothing deploys through it.
+
+## Sign in with your identity provider
+
+```diff lang="typescript"
+// src/forge.ts
++export const Sso = Effect.gen(function* () {
++  const forge = yield* Forge;
++  const clientSecret = Config.Redacted("FORGE_OIDC_CLIENT_SECRET");
++  return yield* Stackit.Git.AuthenticationSource("Sso", {
++    instanceId: forge.instanceId,
++    name: "company-sso",
++    autoDiscoverUrl: "https://id.example.com/.well-known/openid-configuration",
++    clientId: "forge",
++    clientSecret,
++  });
++});
+```
+
+## Read a repository from a host
+
+`GetRepository` reads a repository's branch, visibility, and clone URLs:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { App } from "./forge.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const getRepository = yield* Stackit.Git.GetRepository(yield* App);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const repository = yield* getRepository({});
+        return yield* HttpServerResponse.json({ empty: repository.empty });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.Git.GetRepositoryHttp)),
+) {}
+```
+
+It grants no STACKIT role. The host gets the login the repository resource manages it with, as
+`Redacted` values, and can do whatever that login can, beyond reading this repository. Give a repository
+a host binds a token with narrow scopes. The instance's `acl` has to let the host's egress address in.
+
+## Read an instance from a host
+
+`GetInstance`, `ListInstances`, and the other management bindings each grant a custom role with the
+operation's permission on the project, such as `git.instance.list`, so they reach every instance in
+that project.
+
+## Destroy an instance
+
+:::caution
+Deleting an instance deletes every repository on it, and the management API can't list them. So a
+destroy stops with `Stackit.Git.InstanceDeleteRefused`, and a plan that would replace the instance fails
+with it before anything changes, until you deploy `forceDestroy`. That holds for an empty instance too.
+:::
+
+```diff lang="typescript"
+// src/forge.ts
+export const Forge = Stackit.Git.Instance("Forge", {
+  acl: ["203.0.113.7/32"],
+  featureToggle: { enableLocalLogin: true },
++  forceDestroy: true,
+});
+```
+
+Deploy that first, then destroy the stack. Changing `name`, `flavor`, or `projectId` replaces the instance.
+
+## Delete a repository
+
+A delete stops with `Stackit.Git.RepositoryDeleteRefused` if the repository has commits, or if Alchemy
+adopted it, until you deploy `forceDestroy` on it. A plan that would replace such a repository fails the
+same way.
+
+## Check on your first deploy
+
+- The instance serves Forgejo's REST API at `<url>/api/v1`. STACKIT's docs have no API page.
+- A `Stackit.Git.User` can use HTTP Basic against that API. If it can't, pass a token instead.
+- What an instance with no `acl` lets in.
+- Whether your project needs the service switched on. If `createInstance` is refused, a
+  [`Stackit.ServiceEnablement.Service`](/stackit#projects-regions-and-services) with the right id fixes it.
+
+## Where next
+
+- [IAM & bindings](/stackit/security/iam-bindings) — bindings that use a login instead of a role.
+- [Container Registry](/stackit/operations/container-registry) — where a pipeline's images go.
+- [Git reference](/providers/stackit/git#instance) — every prop and attribute.

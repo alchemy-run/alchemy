@@ -1,0 +1,193 @@
+import { expect } from "bun:test";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Test from "@alchemy.run/test/Bun";
+import * as cdn from "@distilled.cloud/stackit/cdn";
+import * as functions from "@distilled.cloud/stackit/functions";
+import * as Alchemy from "alchemy";
+import * as Console from "effect/Console";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import Stack from "../alchemy.run.ts";
+
+// A fresh distribution (and the function behind it) can serve
+// transient 404/5xx responses while it propagates. `Test.getWhenReady`
+// fails on that cold-start window and retries until the site serves a
+// real response.
+const { getWhenReady } = Test;
+
+class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
+  body: string;
+}> {}
+
+// While the CDN and the function are still
+// propagating, a 200 body can be stale — the status alone can't
+// distinguish "not yet" from "served", so retry until the body matches.
+const getBodyWhenReady = (url: string, expected: string) =>
+  Effect.gen(function* () {
+    const res = yield* getWhenReady(url);
+    expect(res.status).toBe(200);
+    const body = yield* res.text;
+    if (!body.includes(expected)) {
+      return yield* Effect.fail(new AssetNotReady({ body }));
+    }
+    return body;
+  }).pipe(
+    Effect.retry({
+      while: (error) => error instanceof AssetNotReady,
+      schedule: Schedule.max([
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
+        Schedule.recurs(20),
+      ]),
+    }),
+  );
+
+// Out-of-band calls to the STACKIT APIs resolve the same credentials the deploy uses.
+const StackitApi = Layer.mergeAll(Stackit.StackitAuth, Stackit.fromAuthProvider());
+
+// Functions is an alpha API an account may not be entitled to, and the image goes
+// to a registry whose login STACKIT credentials don't provide. Without these, the
+// suite skips.
+const hasCreds =
+  !!process.env.STACKIT_TEST_FUNCTIONS &&
+  !!process.env.HARBOR_USERNAME &&
+  !!process.env.HARBOR_CLI_SECRET;
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Stackit.providers(),
+  state: Alchemy.localState(),
+  profile: process.env.ALCHEMY_PROFILE,
+});
+
+// The first deploy builds the site and its image, pushes the image, and creates the
+// function and the distribution, so give the hook far more headroom than the default 120s.
+if (!hasCreds) {
+  test.skip(
+    "skipped without STACKIT_TEST_FUNCTIONS, HARBOR_USERNAME and HARBOR_CLI_SECRET",
+    Effect.void,
+  );
+} else {
+  const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), {
+    timeout: 1_500_000,
+  });
+  // Destroying the stack takes a while too.
+  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
+    timeout: 900_000,
+  });
+
+  const base = Effect.map(stack, ({ url }) => {
+    if (!url) throw new Error("expected the site to expose a url");
+    return String(url).replace(/\/+$/, "");
+  });
+
+  test(
+    "deploys and exposes a url",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      expect(url).toBeString();
+    }),
+    { timeout: 180_000 },
+  );
+
+  test(
+    "serves through the CDN, with the function as its origin",
+    Effect.gen(function* () {
+      const { url, serverUrl, projectId, distributionId, hostname } = yield* stack;
+      expect(new URL(String(url)).hostname).toBe(String(hostname));
+      const { distribution } = yield* cdn.getDistribution({
+        projectId: projectId!,
+        distributionId: distributionId!,
+      });
+      expect(distribution.status).toBe("ACTIVE");
+      const { backend } = distribution.config;
+      expect(backend.type).toBe("http");
+      if (backend.type === "http") {
+        // STACKIT normalizes the origin, so compare the hosts.
+        expect(new URL(backend.originUrl).host).toBe(new URL(String(serverUrl)).host);
+      }
+    }).pipe(Effect.provide(StackitApi)),
+    { timeout: 180_000 },
+  );
+
+  test(
+    "renders on the function",
+    Effect.gen(function* () {
+      const { serverUrl, projectId, functionId } = yield* stack;
+      const observed = yield* functions.getFunction({
+        projectId: projectId!,
+        functionId: functionId!,
+      });
+      expect(observed.state).toBe("ACTIVE");
+      // The function's own URL answers the same route, with no CDN in front of it.
+      const origin = String(serverUrl).replace(/\/+$/, "");
+      const res = yield* getWhenReady(`${origin}/`);
+      expect(res.status).toBe(200);
+      expect(yield* res.text).toContain("Hello from SolidStart on STACKIT!");
+    }).pipe(Effect.provide(StackitApi)),
+    { timeout: 180_000 },
+  );
+
+  test(
+    "serves the server-rendered home page",
+    Effect.gen(function* () {
+      const url = yield* base;
+      const res = yield* getWhenReady(url);
+      expect(res.status).toBe(200);
+      const html = yield* res.text;
+      // The `GREETING` env value from alchemy.run.ts, read via
+      // `process.env` in the index route — proves the function
+      // rendered it at request time.
+      expect(html).toContain("Hello from SolidStart on STACKIT!");
+      expect(html).toContain("Styled with Tailwind CSS");
+    }),
+    { timeout: 180_000 },
+  );
+
+  test(
+    "compiles tailwind from vite.config.ts",
+    Effect.gen(function* () {
+      const url = yield* base;
+      // The utility class in the markup proves the page shipped with Tailwind
+      // classes; wait until the deployed HTML includes it.
+      const html = yield* getBodyWhenReady(url, "text-3xl");
+
+      // The compiled rule for the utility must be served from one of the
+      // linked stylesheets — it only exists if the @tailwindcss/vite plugin
+      // from the project's own vite.config.ts ran during the build.
+      // SolidStart emits `href` before `rel`, so match attribute-order-
+      // agnostically and collect every stylesheet link.
+      const hrefs = [...html.matchAll(/<link\b[^>]*>/g)]
+        .map((m) => m[0])
+        .filter((tag) => /rel="stylesheet"/.test(tag))
+        .map((tag) => tag.match(/href="([^"]+)"/)?.[1])
+        .filter((href): href is string => !!href);
+      expect(hrefs.length).toBeGreaterThan(0);
+
+      const stylesheets = yield* Effect.all(
+        hrefs.map((href) =>
+          Effect.gen(function* () {
+            const cssUrl = href.startsWith("http")
+              ? href
+              : `${url}${href.startsWith("/") ? "" : "/"}${href}`;
+            const res = yield* getWhenReady(cssUrl);
+            expect(res.status).toBe(200);
+            return yield* res.text;
+          }),
+        ),
+      );
+      expect(stylesheets.some((css) => css.includes(".text-3xl"))).toBe(true);
+    }),
+    { timeout: 180_000 },
+  );
+
+  test(
+    "serves a static asset from public/",
+    Effect.gen(function* () {
+      const url = yield* base;
+      const body = yield* getBodyWhenReady(`${url}/robots.txt`, "User-agent: *");
+      expect(body).toContain("User-agent: *");
+    }),
+    { timeout: 180_000 },
+  );
+}

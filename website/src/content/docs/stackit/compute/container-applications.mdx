@@ -1,0 +1,426 @@
+---
+title: Container Applications
+description: Run an Effect program or a public image on a STACKIT Container Application — environments, registries, scaling, networking, secrets, and consumers.
+---
+
+`Stackit.ContainerApplications.Application` runs a managed container with a
+generated public domain, autoscaling, and optional scale to zero. Run a public
+image, or let Alchemy build your program into one with Docker on your machine.
+
+:::caution[Beta API]
+Container Applications is a beta API, available in `eu01` only. STACKIT documents
+no container contract. Check these on your first deploy:
+
+- The API takes a pinned image reference (`repo@sha256:...`).
+- The applications run on `linux/amd64` images, which Alchemy assumes.
+- The service enablement id is `cloud.stackit.sca`.
+:::
+
+:::note[Cost]
+STACKIT's price list (v1.0.44) has no SKU for Container Applications, so the rate
+is unknown. An application with a fixed instance count runs for as long as the
+stack is deployed. Check the current price list, and destroy what you don't need.
+:::
+
+## Create an environment
+
+An application lives in an environment:
+
+```typescript
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Apps = Stackit.ContainerApplications.Environment("Apps", {});
+```
+
+:::caution[Environments stay behind]
+The API can't delete an environment. Destroying a stack removes its applications
+and leaves the environment. Its generated name is stable, so the next deploy
+finds it again.
+:::
+
+## Run a public image
+
+Pass an image and the environment:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Apps } from "./registry.ts";
+
+export const Web = Effect.gen(function* () {
+  const apps = yield* Apps;
+  return yield* Stackit.ContainerApplications.Application("Web", {
+    environmentId: apps.environmentId,
+    image: "nginxinc/nginx-unprivileged",
+    scaling: { type: "manual", instances: 1 },
+  });
+});
+```
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Web } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Stackit.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const web = yield* Web;
+    return { url: web.url };
+  }),
+);
+```
+
+`web.url` is the application's generated domain. A deploy waits until the
+application is running, idle at zero, or stopped.
+
+## Add a registry
+
+A private image needs a registry project, a login to push with, and a pull login
+in the environment. Set `HARBOR_USERNAME` and `HARBOR_CLI_SECRET` to your Harbor
+user and CLI secret, from your user profile in the registry UI:
+
+```typescript
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+const harbor = {
+  username: Config.String("HARBOR_USERNAME"),
+  secret: Config.Redacted("HARBOR_CLI_SECRET"),
+};
+
+export const Apps = Stackit.ContainerApplications.Environment("Apps", {});
+
+export const Images = Stackit.ContainerRegistry.Project("Images", {
+  forceDestroy: true,
+  harborCredentials: harbor,
+});
+
+export const Pusher = Effect.gen(function* () {
+  const images = yield* Images;
+  return yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [
+      { resource: "repository", action: "pull" },
+      { resource: "repository", action: "push" },
+    ],
+  });
+});
+
+export const PullLogin = Effect.gen(function* () {
+  const apps = yield* Apps;
+  const images = yield* Images;
+  const robot = yield* Stackit.ContainerRegistry.RobotAccount("Puller", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [{ resource: "repository", action: "pull" }],
+  });
+  return yield* Stackit.ContainerApplications.EnvironmentRegistry("PullLogin", {
+    environmentId: apps.environmentId,
+    server: images.registryHost,
+    username: robot.robotName,
+    password: robot.secret,
+  });
+});
+
+export const registryFor = (image: string) =>
+  Effect.gen(function* () {
+    const images = yield* Images;
+    const pusher = yield* Pusher;
+    return {
+      repository: Output.interpolate`${images.imagePrefix}/${image}`,
+      username: pusher.robotName,
+      password: pusher.secret,
+    };
+  });
+```
+
+An application that takes `login.environmentId` deploys after the login exists.
+
+## Deploy an Effect program
+
+An application is a class. The props come from an Effect, so they can use the
+registry:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { PullLogin, registryFor } from "./registry.ts";
+
+export default class Api extends Stackit.ContainerApplications.Application<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const login = yield* PullLogin;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      environmentId: login.environmentId,
+      registry,
+      env: { GREETING: "hello" },
+    };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(Config.String("GREETING"));
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+By default it runs at most one instance and may scale to zero between requests.
+
+## Bind a resource
+
+An application runs as no STACKIT identity. A binding on a STACKIT API creates a
+service account with a key, and the key reaches the application as an environment
+secret:
+
+```typescript
+// src/Api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { PullLogin, registryFor } from "./registry.ts";
+
+export const Domain = Stackit.DNS.Zone("Domain", {});
+
+export default class Api extends Stackit.ContainerApplications.Application<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const login = yield* PullLogin;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      environmentId: login.environmentId,
+      registry,
+    };
+  }),
+  Effect.gen(function* () {
+    const getZone = yield* Stackit.DNS.GetZone(yield* Domain);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { zone } = yield* getZone({});
+        return yield* HttpServerResponse.json({ zoneId: zone.id });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.DNS.GetZoneHttp)),
+) {}
+```
+
+`GetZone` grants the account the `dns.zone.list` permission on the project. Roles
+on STACKIT only bind to organizations, folders, and projects, so the grant reaches
+every zone in the project. See [IAM & bindings](/stackit/security/iam-bindings).
+
+## Write a plain handler
+
+You don't have to use Effect. Point `main` at a file with a `fetch` handler:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Apps } from "./registry.ts";
+
+export const Ping = Effect.gen(function* () {
+  const apps = yield* Apps;
+  return yield* Stackit.ContainerApplications.Application("Ping", {
+    environmentId: apps.environmentId,
+    main: "./src/ping.ts",
+    registry: { repository: "ghcr.io/my-org/ping" },
+    env: { GREETING: "hello" },
+  });
+});
+
+export type PingEnv = Stackit.InferEnv<typeof Ping>;
+```
+
+```typescript
+// src/ping.ts
+import type { PingEnv } from "./resources.ts";
+
+export default {
+  async fetch(_request: Request, env: PingEnv) {
+    return new Response(env.GREETING);
+  },
+};
+```
+
+## Scale on traffic
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Apps } from "./registry.ts";
+
+export const Api = Effect.gen(function* () {
+  const apps = yield* Apps;
+  return yield* Stackit.ContainerApplications.Application("Api", {
+    environmentId: apps.environmentId,
+    image: "ghcr.io/my-org/api:v1.0.0",
+    scaling: {
+      type: "auto",
+      minInstances: 2,
+      maxInstances: 5,
+      rules: [{ name: "traffic", http: { rps: 10 } }],
+    },
+  });
+});
+```
+
+Use `{ type: "manual", instances: 2 }` for a fixed count.
+
+## Limit who can reach it
+
+Narrow the public address to one network, or keep the application inside its
+environment:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Apps } from "./registry.ts";
+
+export const Office = Effect.gen(function* () {
+  const apps = yield* Apps;
+  return yield* Stackit.ContainerApplications.Application("Office", {
+    environmentId: apps.environmentId,
+    image: "ghcr.io/my-org/api:v1.0.0",
+    network: {
+      public: { enabled: true, port: 3000, accessControl: { ingress: ["203.0.113.0/24"] } },
+    },
+  });
+});
+
+export const Backend = Effect.gen(function* () {
+  const apps = yield* Apps;
+  return yield* Stackit.ContainerApplications.Application("Backend", {
+    environmentId: apps.environmentId,
+    image: "ghcr.io/my-org/backend:v1.0.0",
+    network: {
+      public: { enabled: false },
+      internal: { enabled: true, port: 8080 },
+    },
+  });
+});
+```
+
+## Keep secrets out of variables
+
+A `Redacted` value in `env` goes into the environment's secrets, under a key
+`alchemy-<displayName>-<variable>` the application manages. A secret you declare
+yourself goes through `secrets`:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import { Apps } from "./registry.ts";
+
+export const Api = Effect.gen(function* () {
+  const apps = yield* Apps;
+  const apiKey = yield* Config.Redacted("API_KEY");
+  const shared = yield* Config.Redacted("SHARED_TOKEN");
+  const token = yield* Stackit.ContainerApplications.EnvironmentSecret("SharedToken", {
+    environmentId: apps.environmentId,
+    key: "shared-token",
+    value: shared,
+  });
+  return yield* Stackit.ContainerApplications.Application("Api", {
+    environmentId: apps.environmentId,
+    image: "ghcr.io/my-org/api:v1.0.0",
+    env: { API_KEY: apiKey, LOG_LEVEL: "info" },
+    secrets: { SHARED_TOKEN: token.key },
+  });
+}).pipe(Effect.orDie);
+```
+
+A new value in `env` updates the application. A new value in an
+`EnvironmentSecret` doesn't.
+
+## Consume a queue
+
+An Effect application can hold a consumer open for as long as an instance runs:
+
+```typescript
+// src/BillingWorker.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Apps = Stackit.ContainerApplications.Environment("Apps", {});
+export const Orders = Stackit.PubSub.Topic("Orders", {});
+export const Billing = Orders.pipe(
+  Effect.flatMap((topic) => Stackit.PubSub.Subscription("Billing", { topicId: topic.topicId })),
+);
+
+export default class BillingWorker extends Stackit.ContainerApplications.Application<BillingWorker>()(
+  "BillingWorker",
+  Effect.gen(function* () {
+    const apps = yield* Apps;
+    return {
+      main: import.meta.url,
+      environmentId: apps.environmentId,
+      registry: { repository: "ghcr.io/my-org/billing" },
+    };
+  }),
+  Effect.gen(function* () {
+    yield* Stackit.PubSub.consumeSubscriptionMessages(
+      Billing,
+      { maxMessages: 32, concurrency: 8 },
+      (message) => Effect.log(message.text),
+    );
+    return {};
+  }).pipe(Effect.provide(Stackit.PubSub.ServerSubscriptionEventSource)),
+) {}
+```
+
+A program with a consumer runs exactly one instance by default. A deploy that
+scales it to zero with no custom rule to wake it fails with
+`ApplicationBackgroundWorkScalesToZero`.
+
+:::caution[A deploy interrupts a handler]
+A deploy or a scale-in stops an instance with a signal. HTTP requests get about
+six seconds to finish, and a consumer's handler is interrupted mid message, so
+that message comes back. A handler has to tolerate running twice.
+:::
+
+## Destroy
+
+`alchemy destroy` deletes the applications and waits until they are gone. The
+environment stays. Changing `environmentId`, `projectId`, or `region` replaces an
+application, with a new URL.
+
+## Example
+
+[`examples/stackit-container-app`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-container-app)
+is an Effect program and a public image in one environment.
+[`examples/stackit-pubsub`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-pubsub)
+runs a producer and a consumer.
+
+## Where next
+
+- [Pub/Sub](/stackit/messaging/pubsub): topics and subscriptions in depth.
+- [Container Registry](/stackit/operations/container-registry): projects and
+  robot accounts.
+- [Container Applications reference](/providers/stackit/containerapplications#application):
+  every prop and attribute.

@@ -1,0 +1,32 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "outDir": "./lib",
+    "rootDir": "./src",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "lib": ["DOM", "DOM.Iterable", "ES2023"]
+  },
+  "references": [
+    {
+      "path": "../../submodules/distilled/packages/aws/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/stackit/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/core/tsconfig.json"
+    },
+    {
+      "path": "../alchemy/tsconfig.json"
+    },
+    { "path": "../docker/tsconfig.json" },
+    { "path": "../sql/tsconfig.json" },
+    { "path": "../redis/tsconfig.json" },
+    { "path": "../kubernetes/tsconfig.json" }
+  ]
+}

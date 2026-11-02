@@ -1,0 +1,539 @@
+---
+title: "Part 2: Add a Function"
+description: Put an HTTP handler on a STACKIT Function, bind the Object Storage Bucket, and implement GET and PUT routes.
+sidebar:
+  order: 2
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+In [Part 1](/stackit/tutorial/part-1) you deployed an Object Storage Bucket.
+Now you put an HTTP handler on a Function that reads and writes objects in
+it.
+
+:::caution[Alpha API]
+STACKIT Functions is an alpha API, available in `eu01` only, and your
+project needs access to it. STACKIT documents no container contract, so
+Alchemy assumes your program listens on port `8080`, through `PORT`. Check
+that on your first deploy.
+:::
+
+:::note[Cost]
+STACKIT's price list (v1.0.44) has no Functions SKU, and the product page
+says you pay for what runs. Container Registry is free during its beta.
+Check the current price list before you leave this deployed.
+:::
+
+## Get ready to build an image
+
+Alchemy builds an image for the Function with Docker on your machine, so
+Docker has to be running when you deploy.
+
+## Set your registry login
+
+The image goes to a STACKIT Container Registry project. Alchemy creates the
+project's robot accounts with your Harbor user and CLI secret, from your
+user profile in the registry UI:
+
+```sh
+export HARBOR_USERNAME=...
+export HARBOR_CLI_SECRET=...
+```
+
+[Setup](/stackit/setup#get-ready-to-deploy-a-runtime) says what to check about this
+login on your first deploy.
+
+## Move the Bucket to its own file
+
+The Function and the Stack both need the Bucket, so declare it once at
+module scope:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Files = Stackit.ObjectStorage.Bucket("Bucket", {});
+```
+
+The logical id is still `Bucket`, so this is the same Bucket you deployed in
+Part 1. Moving a declaration doesn't recreate it.
+
+## Create a registry project
+
+Declare the project the image goes to:
+
+```typescript
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
+
+const harbor = {
+  username: Config.String("HARBOR_USERNAME"),
+  secret: Config.Redacted("HARBOR_CLI_SECRET"),
+};
+
+export const Images = Stackit.ContainerRegistry.Project("Images", {
+  forceDestroy: true,
+  harborCredentials: harbor,
+});
+```
+
+`forceDestroy` empties the project when you destroy the Stack. STACKIT only
+deletes an empty project.
+
+## Add a login to push with
+
+Create a robot account that can pull and push:
+
+```diff lang="typescript"
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Config from "effect/Config";
++import * as Effect from "effect/Effect";
+
+const harbor = {
+  username: Config.String("HARBOR_USERNAME"),
+  secret: Config.Redacted("HARBOR_CLI_SECRET"),
+};
+
+export const Images = Stackit.ContainerRegistry.Project("Images", {
+  forceDestroy: true,
+  harborCredentials: harbor,
+});
++
++export const Pusher = Effect.gen(function* () {
++  const images = yield* Images;
++  return yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
++    project: images.name,
++    registryUrl: images.url,
++    credentials: harbor,
++    permissions: [
++      { resource: "repository", action: "pull" },
++      { resource: "repository", action: "push" },
++    ],
++  });
++});
+```
+
+## Add a login to pull with
+
+STACKIT Functions needs its own login to fetch a private image. Give it a
+pull-only robot account through a `PullCredential`:
+
+```diff lang="typescript"
+// src/registry.ts
++export const Puller = Effect.gen(function* () {
++  const images = yield* Images;
++  const robot = yield* Stackit.ContainerRegistry.RobotAccount("Puller", {
++    project: images.name,
++    registryUrl: images.url,
++    credentials: harbor,
++    permissions: [{ resource: "repository", action: "pull" }],
++  });
++  return yield* Stackit.Functions.PullCredential("PullCredential", {
++    address: images.registryHost,
++    username: robot.robotName,
++    password: robot.secret,
++  });
++});
+```
+
+## Say where each image goes
+
+Add a helper that points a Function at a repository in the project:
+
+```diff lang="typescript"
+// src/registry.ts
+import * as Stackit from "@alchemy.run/stackit";
++import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+const harbor = {
+  username: Config.String("HARBOR_USERNAME"),
+  secret: Config.Redacted("HARBOR_CLI_SECRET"),
+};
+
+export const Images = Stackit.ContainerRegistry.Project("Images", {
+  forceDestroy: true,
+  harborCredentials: harbor,
+});
+
+export const Pusher = Effect.gen(function* () {
+  const images = yield* Images;
+  return yield* Stackit.ContainerRegistry.RobotAccount("Pusher", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [
+      { resource: "repository", action: "pull" },
+      { resource: "repository", action: "push" },
+    ],
+  });
+});
+
+export const Puller = Effect.gen(function* () {
+  const images = yield* Images;
+  const robot = yield* Stackit.ContainerRegistry.RobotAccount("Puller", {
+    project: images.name,
+    registryUrl: images.url,
+    credentials: harbor,
+    permissions: [{ resource: "repository", action: "pull" }],
+  });
+  return yield* Stackit.Functions.PullCredential("PullCredential", {
+    address: images.registryHost,
+    username: robot.robotName,
+    password: robot.secret,
+  });
+});
++
++export const registryFor = (image: string) =>
++  Effect.gen(function* () {
++    const images = yield* Images;
++    const pusher = yield* Pusher;
++    return {
++      repository: Output.interpolate`${images.imagePrefix}/${image}`,
++      username: pusher.robotName,
++      password: pusher.secret,
++    };
++  });
+```
+
+## Create the Function file
+
+A Function is a class with an infrastructure definition and a runtime
+implementation. Create `src/api.ts`:
+
+```typescript
+// src/api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { Puller, registryFor } from "./registry.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const puller = yield* Puller;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      registry,
+      pullCredential: puller.pullCredentialId,
+    };
+  }),
+  Effect.gen(function* () {
+    return {};
+  }),
+) {}
+```
+
+`main: import.meta.url` makes this file the entrypoint. Alchemy bundles it
+into an image, pushes it to `registry`, and rolls out a new revision.
+
+## Serve HTTP with `fetch`
+
+Return a `fetch` handler to answer requests:
+
+```diff lang="typescript"
+// src/api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
++import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Puller, registryFor } from "./registry.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const puller = yield* Puller;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      registry,
+      pullCredential: puller.pullCredentialId,
+    };
+  }),
+  Effect.gen(function* () {
+-    return {};
++    return {
++      fetch: Effect.succeed(HttpServerResponse.text("Hello from STACKIT!")),
++    };
+  }),
+) {}
+```
+
+:::note
+The outer generator is the **Construction phase**. It runs when you deploy
+and again when the program starts. The inner `fetch` is the **Runtime
+phase**. It runs for each request.
+:::
+
+## Bind the Bucket
+
+Ask for read and write access to the Bucket:
+
+```diff lang="typescript"
+// src/api.ts
+Effect.gen(function* () {
++  const files = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Files);
++
+  return {
+    fetch: Effect.succeed(HttpServerResponse.text("Hello from STACKIT!")),
+  };
+}),
+```
+
+Import `Files` from `./resources.ts`. `ReadWriteBucket` gives you an S3
+client with `getObject`, `putObject`, `listObjects`, and `deleteObject`.
+
+On deploy it creates a credentials group and an access key for this
+Function, and adds statements to the Bucket's policy limiting the group to
+read and write actions there. A bucket policy only speaks for its own
+bucket, so give your other buckets a `policy` that denies this group if it
+shouldn't reach them. `ReadBucket` and `WriteBucket` ask for less.
+
+## Write objects with `PUT /:key`
+
+Use the URL path as the object key and store the request body:
+
+```diff lang="typescript"
+// src/api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Puller, registryFor } from "./registry.ts";
+import { Files } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const puller = yield* Puller;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      registry,
+      pullCredential: puller.pullCredentialId,
+    };
+  }),
+  Effect.gen(function* () {
+    const files = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Files);
+
+    return {
+-      fetch: Effect.succeed(HttpServerResponse.text("Hello from STACKIT!")),
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const url = new URL(request.url, "http://function");
++        const key = decodeURIComponent(url.pathname.slice(1));
++
++        if (request.method === "PUT") {
++          yield* files.putObject({ Key: key, Body: yield* request.text });
++          return HttpServerResponse.empty({ status: 204 });
++        }
++
++        return HttpServerResponse.text("Method not allowed", { status: 405 });
++      }),
+    };
+  }),
+) {}
+```
+
+## Read objects with `GET /:key`
+
+Add a `GET` branch and import `effect/Stream`:
+
+```diff lang="typescript"
+// src/api.ts
+if (request.method === "PUT") {
+  yield* files.putObject({ Key: key, Body: yield* request.text });
+  return HttpServerResponse.empty({ status: 204 });
+}
+
++if (request.method === "GET") {
++  return yield* files.getObject({ Key: key }).pipe(
++    Effect.flatMap((object) => Stream.mkString(Stream.decodeText(object.Body!))),
++    Effect.map((text) => HttpServerResponse.text(text)),
++    Effect.catchTag("NoSuchKey", () =>
++      Effect.succeed(HttpServerResponse.text("Not found", { status: 404 })),
++    ),
++  );
++}
+
+return HttpServerResponse.text("Method not allowed", { status: 405 });
+```
+
+A missing key fails with the typed `NoSuchKey`, so a 404 is one `catchTag`.
+
+## Turn unhandled errors into 500s
+
+Apply `Effect.orDie` once at the end of `fetch`:
+
+```diff lang="typescript"
+// src/api.ts
+return {
+  fetch: Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+-  }),
++  }).pipe(Effect.orDie),
+};
+```
+
+Any failure you didn't handle becomes a 500.
+
+## Provide the client
+
+Bindings declare what the Function needs. Provide the layer that implements
+the Bucket client at the end of the program:
+
+```diff lang="typescript"
+// src/api.ts
+Effect.gen(function* () {
+  const files = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Files);
+-}),
++}).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+```
+
+Every binding has a matching `Http` layer: `ReadWriteBucket` →
+`ReadWriteBucketHttp`. Forget one and the type error names it.
+
+## Check the whole file
+
+```typescript
+// src/api.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+import { Puller, registryFor } from "./registry.ts";
+import { Files } from "./resources.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const puller = yield* Puller;
+    const registry = yield* registryFor("api");
+    return {
+      main: import.meta.url,
+      registry,
+      pullCredential: puller.pullCredentialId,
+    };
+  }),
+  Effect.gen(function* () {
+    const files = yield* Stackit.ObjectStorage.ReadWriteBucket(yield* Files);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://function");
+        const key = decodeURIComponent(url.pathname.slice(1));
+
+        if (request.method === "PUT") {
+          yield* files.putObject({ Key: key, Body: yield* request.text });
+          return HttpServerResponse.empty({ status: 204 });
+        }
+
+        if (request.method === "GET") {
+          return yield* files.getObject({ Key: key }).pipe(
+            Effect.flatMap((object) => Stream.mkString(Stream.decodeText(object.Body!))),
+            Effect.map((text) => HttpServerResponse.text(text)),
+            Effect.catchTag("NoSuchKey", () =>
+              Effect.succeed(HttpServerResponse.text("Not found", { status: 404 })),
+            ),
+          );
+        }
+
+        return HttpServerResponse.text("Method not allowed", { status: 405 });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.ObjectStorage.ReadWriteBucketHttp)),
+) {}
+```
+
+## Add the Function to the Stack
+
+Yield `Api` in the Stack and return its URL:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
++import Api from "./src/api.ts";
++import { Files } from "./src/resources.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Stackit.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+-    const bucket = yield* Stackit.ObjectStorage.Bucket("Bucket", {});
++    const bucket = yield* Files;
++    const api = yield* Api;
+
+    return {
+      bucketName: bucket.bucketName,
++      url: api.url,
+    };
+  }),
+);
+```
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+<Terminal content={`[u]Plan[/u]: [g]7 to create[/g], [y]1 to update[/y]
+
+[g]+[/g] [b]Images[/b] [d](Stackit.ContainerRegistry.Project)[/d]
+[g]+[/g] [b]Pusher[/b] [d](Stackit.ContainerRegistry.RobotAccount)[/d]
+[g]+[/g] [b]Puller[/b] [d](Stackit.ContainerRegistry.RobotAccount)[/d]
+[g]+[/g] [b]PullCredential[/b] [d](Stackit.Functions.PullCredential)[/d]
+[g]+[/g] [b]ApiBucketReadWriteCredentials[/b] [d](Stackit.ObjectStorage.CredentialsGroup)[/d]
+[g]+[/g] [b]ApiBucketReadWriteAccessKey[/b] [d](Stackit.ObjectStorage.AccessKey)[/d]
+[g]+[/g] [b]Api[/b] [d](Stackit.Functions.Function)[/d]
+[y]~[/y] [b]Bucket[/b] [d](Stackit.ObjectStorage.Bucket)[/d]
+
+Proceed?
+◉ Yes ○ No`} />
+
+The binding added the credentials group, the access key, and the policy on the
+Bucket. `url` in the outputs is the Function's URL. A deploy waits until the new
+revision is active and current.
+
+## Try it out
+
+```sh
+curl -X PUT "$URL/hello.txt" -d 'Hello, world!'
+
+curl "$URL/hello.txt"
+# → Hello, world!
+```
+
+:::caution[Check these on your first deploy]
+STACKIT doesn't document that a Function's URL takes requests with no token,
+or that a new `ACTIVE` revision becomes current by itself. If a request
+fails, start with those. The
+[`stackit-function` README](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-function)
+has the full list.
+:::
+
+## Recap
+
+You now have:
+
+- A registry project with a push login and a pull login
+- A Function with GET and PUT routes at its own URL
+- A Bucket bound to the Function, with a credentials group limited to it
+
+In [Part 3](/stackit/tutorial/part-3), you write tests that deploy the Stack
+and call the Function over HTTP.
+
+:::tip[Want to build something now?]
+Skip ahead to [PostgreSQL Flex](/stackit/data/postgres),
+[Pub/Sub](/stackit/messaging/pubsub), or
+[Websites](/stackit/frontend/websites), and come back for testing, stages,
+and CI/CD later.
+:::

@@ -1,0 +1,310 @@
+---
+title: PostgreSQL Flex
+description: Run managed Postgres on STACKIT PostgreSQL Flex, apply migrations at deploy time, and connect from a Function with Stackit.PostgresFlex.Connect and Drizzle.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = "@alchemy.run/drizzle @effect/sql-pg drizzle-orm pg";
+
+PostgreSQL Flex runs Postgres for you. Instances, users, and databases are separate
+resources. Only the addresses in the instance's `acl` can connect, and there is no data
+API, so your machine and your hosts both need a route.
+
+Build a todo API with Drizzle. Install it first:
+
+<PackageManagers add={pkgs} />
+
+:::caution[This creates a billed resource]
+An instance bills per started hour for as long as it exists, by flavor, plus storage and
+backups. Flavor `2.4` is about EUR 0.13 per hour on a snapshot of STACKIT's price page.
+Check the current price list, and destroy the stack when you're done.
+:::
+
+## Create the instance
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export const Db = Stackit.PostgresFlex.Instance("Db", {
+  flavorId: "2.4",
+  version: "17",
+  storage: { class: "premium-perf2-stackit", size: 5 },
+  backupSchedule: "0 2 * * *",
+  retentionDays: 32,
+  acl: ["0.0.0.0/0"],
+});
+
+export const AppUser = Db.pipe(
+  Effect.flatMap((db) => Stackit.PostgresFlex.User("AppUser", { instanceId: db.instanceId })),
+);
+
+export const AppDatabase = Effect.gen(function* () {
+  const db = yield* Db;
+  const user = yield* AppUser;
+  return yield* Stackit.PostgresFlex.Database("AppDatabase", {
+    instanceId: db.instanceId,
+    owner: user.userName,
+    migrations: "./migrations",
+    migrationsUser: user.userName,
+    migrationsPassword: user.password,
+  });
+});
+```
+
+A deploy waits until the instance reports `READY`, which takes minutes.
+
+STACKIT generates the user's password, and only returns it when it creates or resets
+it. Alchemy keeps it `Redacted` in the `password` and `uri` attributes.
+
+## Set the ACL
+
+A Function has no fixed egress address, and migrations connect from the machine running
+the deploy, so this instance takes connections from everywhere, behind TLS and the
+generated password. STACKIT's docs discourage `0.0.0.0/0`. Narrow it once your hosts
+have known addresses, with your machine's public IP as a `/32`:
+
+```diff lang="typescript"
+// src/resources.ts
+-  acl: ["0.0.0.0/0"],
++  acl: ["203.0.113.7/32"],
+```
+
+Alchemy doesn't open the ACL for you. A host outside it can't connect.
+
+## Write a migration
+
+Each deploy applies the pending files in `./migrations`, logged in as `migrationsUser`,
+over a direct `pg` connection from your machine:
+
+```sql
+-- migrations/0001_create_todos.sql
+CREATE TABLE todos (
+  id uuid PRIMARY KEY,
+  title text NOT NULL,
+  done boolean NOT NULL DEFAULT false
+);
+```
+
+History lives in `__alchemy_migrations`. Editing or removing an applied file fails the
+deploy. Log in as the database's owner, so it owns the tables the migrations create.
+
+An instance with `accessScope: "SNA"` can't be reached from outside, so migrations fail
+on it.
+
+## Keep migration history in another table
+
+```diff lang="typescript"
+// src/resources.ts
+-    migrations: "./migrations",
++    migrations: { dir: "./migrations", table: "schema_history" },
+```
+
+## Describe the table for Drizzle
+
+```typescript
+// src/schema.ts
+import { boolean, pgTable, text, uuid } from "drizzle-orm/pg-core";
+
+export const todos = pgTable("todos", {
+  id: uuid("id").primaryKey(),
+  title: text("title").notNull(),
+  done: boolean("done").notNull().default(false),
+});
+```
+
+## Connect from a Function
+
+`Connect` resolves the connection settings for a database as a user. Pass its URL to
+Drizzle, which opens one pool per request:
+
+```typescript
+// src/Api.ts
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { AppDatabase, AppUser } from "./resources.ts";
+import { todos } from "./schema.ts";
+
+export default class Api extends Stackit.Functions.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/api" },
+  },
+  Effect.gen(function* () {
+    const connect = yield* Stackit.PostgresFlex.Connect(yield* AppDatabase, yield* AppUser);
+    const db = yield* Drizzle.Postgres(connect.pipe(Effect.map((info) => info.url)));
+
+    return {
+      fetch: Effect.gen(function* () {
+        const rows = yield* db.select().from(todos).orderBy(todos.title);
+        return yield* HttpServerResponse.json(rows);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.PostgresFlex.ConnectHttp)),
+) {}
+```
+
+`registry` is where the Function's image goes. See
+[Functions](/stackit/compute/functions) for a STACKIT registry and its pull credential.
+
+`Connect` grants no STACKIT role and creates no service account, because connections
+authenticate with the database user. The password reaches the Function as a plain
+revision variable, so anyone who can call `GetRevision` can read it.
+
+## List rows
+
+```typescript
+const rows = yield* db.select().from(todos).orderBy(todos.title);
+```
+
+## Insert a row
+
+```typescript
+const [todo] = yield* db
+  .insert(todos)
+  .values({ id: crypto.randomUUID(), title: input.title })
+  .returning();
+```
+
+## Read a row
+
+```typescript
+const [todo] = yield* db.select().from(todos).where(eq(todos.id, id));
+```
+
+`eq` comes from `drizzle-orm`.
+
+## Use your own driver
+
+`Connect` opens no socket. `yield* connect` gives you the settings:
+
+```typescript
+const info = yield* connect;
+// info.host, info.port, info.database, info.username, and `Redacted` info.password and info.url
+```
+
+## Read the instance at runtime
+
+| Binding | Methods | Permissions |
+| --- | --- | --- |
+| `ReadInstance` | `getInstance`, `listDatabases`, `getDatabase`, `listUsers`, `getUser`, `listBackups`, `getBackup` | `postgres-flex.instance.get`, `postgres-flex.database.list`, `postgres-flex.database.get`, `postgres-flex.user.list`, `postgres-flex.user.get`, `postgres-flex.backup.list`, `postgres-flex.backup.get` |
+| `WriteInstance` | `resetUserPassword` | `postgres-flex.user.reset` |
+| `ReadWriteInstance` | all of the above | all of the above |
+
+```typescript
+// src/Admin.ts
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Db } from "./resources.ts";
+
+export default class Admin extends Stackit.Functions.Function<Admin>()(
+  "Admin",
+  {
+    main: import.meta.url,
+    registry: { repository: "ghcr.io/my-org/admin" },
+  },
+  Effect.gen(function* () {
+    const client = yield* Stackit.PostgresFlex.ReadInstance(yield* Db);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { users } = yield* client.listUsers();
+        return yield* HttpServerResponse.json({ count: users.length });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Stackit.PostgresFlex.ReadInstanceHttp)),
+) {}
+```
+
+Each binding grants a custom role with those permissions and a service account key for
+the host. The role is bound on the project holding the instance, because STACKIT binds
+roles on projects at the narrowest, so it reaches every PostgreSQL Flex instance in that
+project.
+
+## Rotate a password
+
+Change `rotationKey` on the user, then deploy. The database and its data stay:
+
+```diff lang="typescript"
+// src/resources.ts
+export const AppUser = Db.pipe(
+-  Effect.flatMap((db) => Stackit.PostgresFlex.User("AppUser", { instanceId: db.instanceId })),
++  Effect.flatMap((db) =>
++    Stackit.PostgresFlex.User("AppUser", {
++      instanceId: db.instanceId,
++      rotationKey: "2026-11",
++    }),
++  ),
+);
+```
+
+To rotate at runtime, call `resetUserPassword` through `WriteInstance`.
+
+## Protect an instance
+
+```diff lang="typescript"
+// src/resources.ts
+  retentionDays: 32,
+  acl: ["0.0.0.0/0"],
++  deletionProtection: true,
+```
+
+While it's on, STACKIT rejects a destroy. Turn it off with a deploy first.
+
+## Clone an instance
+
+`cloneFrom` creates an instance from another one's backups, then converges it to the
+props:
+
+```typescript
+// src/resources.ts
+import * as Stackit from "@alchemy.run/stackit";
+
+export const Restored = Stackit.PostgresFlex.Instance("Restored", {
+  flavorId: "2.4",
+  version: "17",
+  storage: { class: "premium-perf4-stackit", size: 5 },
+  backupSchedule: "0 2 * * *",
+  retentionDays: 32,
+  acl: ["203.0.113.7/32"],
+  cloneFrom: {
+    instanceId: "the-source-instance-id",
+    pointInTime: "2026-11-01T02:30:00Z",
+  },
+});
+```
+
+:::caution[Changing `accessScope`, `encryption`, `cloneFrom`, `storage.class`, `projectId`, or `region` replaces the instance]
+A replacement starts empty, so back up what you need first. With an explicit `name`, the
+old instance is deleted first, so the database is down until the new one is `READY`.
+Removing `cloneFrom` keeps the instance.
+:::
+
+## What to check on your first deploy
+
+This hasn't run against STACKIT yet. Check:
+
+- Flavor `2.4`, version `17`, and storage class `premium-perf2-stackit` are orderable on
+  your project.
+- The instance's certificate chains to a public root. Migrations verify it, so a private
+  CA fails the connection.
+- A new user can log in soon enough. Migrations retry login errors for a few minutes.
+
+## Example
+
+[`examples/stackit-postgres`](https://github.com/alchemy-run/alchemy/tree/main/examples/stackit-postgres)
+is the complete todo API, migrations included, with a test suite. It hasn't been deployed
+to STACKIT yet.
+
+## Where next
+
+- [Drizzle on Postgres](/sql/drizzle/postgres): schemas, migrations, and queries.
+- [Functions](/stackit/compute/functions): the host in these examples.
+- [PostgresFlex reference](/providers/stackit/postgresflex#instance): every prop and
+  attribute.
