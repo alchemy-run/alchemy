@@ -1098,12 +1098,12 @@ export const make = (
         }),
 
       // A deploy that adds consumers starts their runs.
-      start: (targets, plans) =>
+      start: (targets, plans, backfill) =>
         Effect.suspend(() => {
           model = targets;
           planOf = plans;
           return Effect.forEach(
-            targets,
+            backfill,
             (target) => {
               const plan = plans(target);
               if (plan === undefined) return Effect.void;

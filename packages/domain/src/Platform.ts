@@ -625,6 +625,11 @@ export interface ModelHost {
     targets: ReadonlyArray<string>,
     /** What a backfill needs to know of each consumer: the sources it reads, and its keys' shape. */
     planOf: (target: string) => Plan | undefined,
+    /**
+     * The consumers among `targets` the deploy backfills. The others fill each
+     * key themselves, from its own instance (see `ViewKit.catchUp`).
+     */
+    backfill: ReadonlyArray<string>,
   ) => Effect.Effect<void>;
   /**
    * How much of the history recorded before a consumer (by

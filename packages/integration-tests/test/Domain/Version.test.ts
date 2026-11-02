@@ -218,4 +218,20 @@ describe("Domain view versions", () => {
       expect(top).toEqual({ net: 6 });
     }),
   );
+  it.live("an account opened after the bump fills its rebuilt row", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      yield* bank.deploy(Bank, Effect.all(history));
+      const fresh = yield* bank.deploy(
+        BankV1,
+        Effect.gen(function* () {
+          yield* send("a-9", new Deposit({ amount: 7 }));
+          yield* send("a-9", new Withdraw({ amount: 2 }));
+          yield* bank.settle;
+          return Option.getOrUndefined(yield* (yield* SummaryV1).query(Account.ref("a-9")));
+        }),
+      );
+      expect(fresh).toEqual({ net: 5 });
+    }),
+  );
 });

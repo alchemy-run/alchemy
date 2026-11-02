@@ -2031,18 +2031,18 @@ const durableObjectPlatform = (
                 .pipe(
                   Effect.map((phase) => ({ complete: phase === "complete", through: undefined })),
                 ),
-            start: (targets, plansOfTarget) =>
+            start: (targets, plansOfTarget, backfilled) =>
               Effect.gen(function* () {
                 // At deploy time: reconciliation runs the backfill of new consumers and waits.
-                if (!globalThis.__ALCHEMY_RUNTIME__ && targets.length > 0) {
+                if (!globalThis.__ALCHEMY_RUNTIME__ && backfilled.length > 0) {
                   yield* inInit(
                     Effect.gen(function* () {
                       const worker = yield* CloudflareWorker;
                       yield* BackfillRun(named("DomainBackfillRun"), {
                         scriptName: worker.workerName as unknown as string,
                         workflowName: backfill.workflowName as string,
-                        targets: [...targets],
-                        plans: plansOf(targets, plansOfTarget) as Record<
+                        targets: [...backfilled],
+                        plans: plansOf(backfilled, plansOfTarget) as Record<
                           string,
                           { sources?: string[]; singleSource: boolean }
                         >,
@@ -2058,12 +2058,12 @@ const durableObjectPlatform = (
                   Effect.sync(() => {
                     model = targets;
                     planOf = plansOfTarget;
-                    if (targets.length === 0) return;
+                    if (backfilled.length === 0) return;
                     // Locally no Workflow runs: the first call starts each run (once).
                     news = Effect.suspend(() => {
-                      const plans = plansOf(targets, planOf);
+                      const plans = plansOf(backfilled, planOf);
                       return Effect.forEach(
-                        targets.filter((target) => plans[target] !== undefined),
+                        backfilled.filter((target) => plans[target] !== undefined),
                         (target) => net.run.begin(target, plans[target]!),
                         { discard: true },
                       );

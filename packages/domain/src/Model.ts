@@ -567,10 +567,13 @@ const build = <A, E, R>(
     // Every store is built: catch up the consumers that are new to the platform.
     // Lazy views have no backfill: their keys catch up when read.
     const lazyTargets = new Set([...selfFilled].map(viewTarget));
+    // Every consumer is in the model, so its sources route to it; those that fill
+    // themselves get no backfill.
     if (platform.start)
       yield* platform.start(
-        kernel.targets.filter((target) => !lazyTargets.has(target)),
+        kernel.targets,
         kernel.planOf,
+        kernel.targets.filter((target) => !lazyTargets.has(target)),
       );
 
     return Context.add(hosts, Internals, {
