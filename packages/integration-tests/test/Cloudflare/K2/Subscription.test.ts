@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as k2 from "@distilled.cloud/cloudflare/k2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 import { waitForStreamGone, waitForSubscriptionGone } from "./k2-test-utils.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -76,19 +77,19 @@ test.provider(
           const stream = yield* Cloudflare.K2.Stream("NamedSubscriptionStream");
           const subscription = yield* Cloudflare.K2.Subscription("Named", {
             stream,
-            name: "alchemy-k2-named",
+            name: testName("alchemy-k2-named"),
             startAt,
           });
           return { stream, subscription };
         });
 
       const first = yield* stack.deploy(named("latest"));
-      expect(first.subscription.subscriptionName).toEqual("alchemy-k2-named");
+      expect(first.subscription.subscriptionName).toEqual(testName("alchemy-k2-named"));
 
       // K2 rejects the same name with different settings, so the engine must
       // delete the old subscription before creating the new one.
       const second = yield* stack.deploy(named("earliest"));
-      expect(second.subscription.subscriptionName).toEqual("alchemy-k2-named");
+      expect(second.subscription.subscriptionName).toEqual(testName("alchemy-k2-named"));
       expect(second.subscription.startAt).toEqual("earliest");
       const observed = yield* k2.getSubscription({
         streamId: second.stream.streamId,

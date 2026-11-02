@@ -60,6 +60,7 @@ describe.skipIf(runEmulated)(
           expect(types).toContain("AWS.S3.Bucket");
           expect(types.filter((type) => type.startsWith("AWS.Lambda."))).toEqual([]);
         }),
+      { tags: ["live"] },
     );
   },
 );

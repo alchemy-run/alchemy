@@ -221,7 +221,9 @@ const findByName = (accountId: string, name: string) =>
 
 const createTsigName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
+    // A TSIG name is a domain name, so a generated one is a single label of at
+    // most 63 characters.
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }));
   });
 
 const toAttributes = (

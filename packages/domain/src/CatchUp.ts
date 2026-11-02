@@ -15,14 +15,17 @@ export type Routed = Readonly<Record<string, number>>;
 
 /**
  * A consumer's id in {@link Routed}: `view:Name` or `projection:Name`, with
- * `#<generation>` once it has been rebuilt. A rebuilt consumer is a new one
- * to its sources, so they replay their history to it.
+ * `#<generation>` once it has been rebuilt, or `@<generation>` once it has
+ * been rebuilt in place (in the storage it had). A rebuilt consumer is a new
+ * one to its sources, so they replay their history to it.
  */
 export const targetId = (target: {
   readonly kind: string;
   readonly name: string;
   readonly generation?: number;
-}): string => `${target.kind}:${target.name}${target.generation ? `#${target.generation}` : ""}`;
+  readonly inPlace?: boolean;
+}): string =>
+  `${target.kind}:${target.name}${target.generation ? `${target.inPlace ? "@" : "#"}${target.generation}` : ""}`;
 
 /**
  * Route a commit's deliveries: drop those to lagging consumers (they receive

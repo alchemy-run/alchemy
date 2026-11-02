@@ -66,7 +66,10 @@ export interface WorkerBundleEngine<Options extends WorkerBundleOptions, ModuleR
    * resolved entry path. Nested `?worker` builds keep only their entry
    * chunk, so rules never apply to them.
    */
-  readonly moduleRules?: (options: Options, main: string) => ModuleRule[] | undefined;
+  readonly moduleRules?: (
+    options: Options,
+    main: string,
+  ) => Effect.Effect<ModuleRule[] | undefined, never, FileSystem.FileSystem>;
   /** Rewrite a build failure, e.g. to point at the engine's own options. */
   readonly mapError?: (error: Bundle.BundleError) => Bundle.BundleError;
   /**
@@ -161,6 +164,10 @@ export const makeWorkerBundle = <Options extends WorkerBundleOptions, ModuleRule
         Promise.all([engine.loadCompatPlugins(), import("rolldown/plugins")]),
       );
       const realMain = yield* sanitizeMain(options.main);
+      const moduleRules =
+        engine.moduleRules === undefined
+          ? undefined
+          : yield* engine.moduleRules(options, realMain).pipe(Effect.provide(context));
       const virtualEntry = engine.virtualEntry(options);
       const cwd = yield* findCwdForBundle(realMain).pipe(
         Effect.mapError((cause) =>
@@ -211,7 +218,7 @@ export const makeWorkerBundle = <Options extends WorkerBundleOptions, ModuleRule
         input: realMain,
         plugins: [
           overrides?.plugins,
-          compatPlugins(engine.moduleRules?.(options, realMain)),
+          compatPlugins(moduleRules),
           workerModules,
           virtualEntry === undefined ? undefined : [virtualEntryPlugin(virtualEntry)],
         ],

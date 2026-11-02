@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -129,7 +130,7 @@ test.provider(
       const deploy = () =>
         stack.deploy(
           Cloudflare.Worker("AdoptIdWorker", {
-            name: "alchemy-test-workerid-adopt",
+            name: testName("alchemy-test-workerid-adopt"),
             script: script("v1"),
           }),
         );

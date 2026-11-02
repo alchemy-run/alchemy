@@ -941,6 +941,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Part 5: Deploy to Cloudflare](https://alchemy.run/domain/tutorial/part-5) — Host the bank on Durable Objects behind a Worker, run it locally, deploy it, and watch a balance change live.
 - [Part 6: Build the UI with foldkit](https://alchemy.run/domain/tutorial/part-6) — A browser app that signs in with a cookie, opens an account, deposits, and watches its balance live.
 - [Part 7: Observe it](https://alchemy.run/domain/tutorial/part-7) — Send the bank's traces and logs to Axiom, follow a deposit through every Durable Object it reaches, and trace clicks from the browser.
+- [Part 8: Change a deployed model](https://alchemy.run/domain/tutorial/part-8) — Change what a view computes after it has data, add a view over every account, and follow what each deploy does with the events already recorded.
 - [Domain Model](https://alchemy.run/domain/model) — What a domain model contains, how it processes every command, and how you declare, run and use one.
 - [Command](https://alchemy.run/domain/command) — How a command names its target, carries its data, declares every outcome, and reaches its aggregate exactly once.
 - [Event](https://alchemy.run/domain/event) — What an event records, what to put in it, how it's stored, and how the rest of the model consumes it.

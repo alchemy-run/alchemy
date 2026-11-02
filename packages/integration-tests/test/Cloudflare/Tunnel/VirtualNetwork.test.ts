@@ -8,6 +8,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -49,19 +50,19 @@ test.provider(
 
       const vnet = yield* stack.deploy(
         Cloudflare.Tunnel.VirtualNetwork("BasicVnet", {
-          name: "alchemy-zt-vnet-basic",
+          name: testName("alchemy-zt-vnet-basic"),
           comment: "alchemy test vnet",
         }).pipe(adopt(true)),
       );
 
       expect(vnet.virtualNetworkId).toBeTruthy();
       expect(vnet.accountId).toEqual(accountId);
-      expect(vnet.name).toEqual("alchemy-zt-vnet-basic");
+      expect(vnet.name).toEqual(testName("alchemy-zt-vnet-basic"));
       expect(vnet.comment).toEqual("alchemy test vnet");
       expect(vnet.isDefaultNetwork).toBe(false);
 
       const live = yield* getVnet(accountId, vnet.virtualNetworkId);
-      expect(live.name).toEqual("alchemy-zt-vnet-basic");
+      expect(live.name).toEqual(testName("alchemy-zt-vnet-basic"));
       expect(live.comment).toEqual("alchemy test vnet");
 
       yield* stack.destroy();
@@ -80,31 +81,31 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Cloudflare.Tunnel.VirtualNetwork("UpdateVnet", {
-          name: "alchemy-zt-vnet-update",
+          name: testName("alchemy-zt-vnet-update"),
           comment: "v1",
         }).pipe(adopt(true)),
       );
 
       const updated = yield* stack.deploy(
         Cloudflare.Tunnel.VirtualNetwork("UpdateVnet", {
-          name: "alchemy-zt-vnet-update-v2",
+          name: testName("alchemy-zt-vnet-update-v2"),
           comment: "v2",
         }).pipe(adopt(true)),
       );
 
       // Same vnet mutated in place — not a replacement.
       expect(updated.virtualNetworkId).toEqual(initial.virtualNetworkId);
-      expect(updated.name).toEqual("alchemy-zt-vnet-update-v2");
+      expect(updated.name).toEqual(testName("alchemy-zt-vnet-update-v2"));
       expect(updated.comment).toEqual("v2");
 
       const live = yield* getVnet(accountId, updated.virtualNetworkId);
-      expect(live.name).toEqual("alchemy-zt-vnet-update-v2");
+      expect(live.name).toEqual(testName("alchemy-zt-vnet-update-v2"));
       expect(live.comment).toEqual("v2");
 
       // Redeploying identical props is a no-op.
       const noop = yield* stack.deploy(
         Cloudflare.Tunnel.VirtualNetwork("UpdateVnet", {
-          name: "alchemy-zt-vnet-update-v2",
+          name: testName("alchemy-zt-vnet-update-v2"),
           comment: "v2",
         }).pipe(adopt(true)),
       );
@@ -126,7 +127,7 @@ test.provider(
 
       const vnet = yield* stack.deploy(
         Cloudflare.Tunnel.VirtualNetwork("HealVnet", {
-          name: "alchemy-zt-vnet-heal",
+          name: testName("alchemy-zt-vnet-heal"),
           comment: "v1",
         }).pipe(adopt(true)),
       );
@@ -145,7 +146,7 @@ test.provider(
       // missing and recreate it instead of failing on a 404.
       const healed = yield* stack.deploy(
         Cloudflare.Tunnel.VirtualNetwork("HealVnet", {
-          name: "alchemy-zt-vnet-heal",
+          name: testName("alchemy-zt-vnet-heal"),
           comment: "v2",
         }).pipe(adopt(true)),
       );
@@ -169,7 +170,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.Tunnel.VirtualNetwork("ListVnet", {
-          name: "alchemy-zt-vnet-list",
+          name: testName("alchemy-zt-vnet-list"),
           comment: "alchemy list test vnet",
         }).pipe(adopt(true)),
       );
@@ -179,7 +180,7 @@ test.provider(
 
       expect(all.some((v) => v.virtualNetworkId === deployed.virtualNetworkId)).toBe(true);
       const found = all.find((v) => v.virtualNetworkId === deployed.virtualNetworkId);
-      expect(found?.name).toEqual("alchemy-zt-vnet-list");
+      expect(found?.name).toEqual(testName("alchemy-zt-vnet-list"));
 
       yield* stack.destroy();
       yield* expectGone(deployed.accountId, deployed.virtualNetworkId);

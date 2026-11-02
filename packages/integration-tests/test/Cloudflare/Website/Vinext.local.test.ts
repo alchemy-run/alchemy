@@ -78,7 +78,7 @@ describe.concurrent(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { timeout: 300_000 },
+      { timeout: 300_000, tags: ["provider:cloudflare", "provider:cloudflare:website", "local"] },
     );
 
     // alchemy-run/alchemy#2231: tail consumers were dropped on the source
@@ -146,7 +146,7 @@ describe.concurrent(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { timeout: 300_000 },
+      { timeout: 300_000, tags: ["provider:cloudflare", "provider:cloudflare:website", "local"] },
     );
   },
 );

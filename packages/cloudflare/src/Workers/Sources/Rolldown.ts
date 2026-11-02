@@ -4,6 +4,7 @@ import * as Artifacts from "alchemy/Artifacts";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import * as Shared from "alchemy/Workers/Workerd/Bundle";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import path from "pathe";
 import picomatch from "picomatch";
 import { isWorkflowExport } from "../../Workflows/Workflow.ts";
@@ -96,6 +97,29 @@ const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) =
 };
 
 /**
+ * Rolldown resolves imports to real paths, so an absolute glob under a
+ * symlink (macOS `/var` → `/private/var`) is matched by its real base.
+ */
+const realGlobs = (rules: readonly ModuleRule[] | undefined) =>
+  Effect.gen(function* () {
+    if (rules === undefined) return rules;
+    const fs = yield* FileSystem.FileSystem;
+    const real = (glob: string) => {
+      const negated = glob.startsWith("!");
+      const body = negated ? glob.slice(1) : glob;
+      if (!path.isAbsolute(body)) return Effect.succeed(glob);
+      const { base } = picomatch.scan(body);
+      return fs.realPath(base).pipe(
+        Effect.map((resolved) => `${negated ? "!" : ""}${resolved}${body.slice(base.length)}`),
+        Effect.orElseSucceed(() => glob),
+      );
+    };
+    return yield* Effect.forEach(rules, (rule) =>
+      Effect.forEach(rule.globs, real).pipe(Effect.map((globs) => ({ ...rule, globs }))),
+    );
+  });
+
+/**
  * Point rolldown's failure to load an imported non-JavaScript file (a font,
  * markdown, an image) at the `rules` that upload it as a module. A text file
  * that happens to parse as JavaScript fails later, without a default export.
@@ -149,7 +173,8 @@ export const WorkerBundle = Shared.makeWorkerBundle<WorkerBundleOptions, Additio
     options.entry.kind === "effect"
       ? makeEffectVirtualEntry(options.entry.exports, options.stack)
       : undefined,
-  moduleRules: (options, main) => toModuleRules(main, options.rules),
+  moduleRules: (options, main) =>
+    Effect.map(realGlobs(options.rules), (rules) => toModuleRules(main, rules)),
   mapError: withRulesHint,
 });
 
