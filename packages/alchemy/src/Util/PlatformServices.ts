@@ -130,7 +130,7 @@ export const runMain = <E, A>(
   // only a command's output (`--log-format json` records, for one).
   if (options?.disableErrorReporting !== true) {
     effect = Effect.tapCause(effect, (cause) =>
-      Cause.hasInterruptsOnly(cause) || !getErrorReported(Cause.squash(cause))
+      Cause.hasInterruptsOnly(cause) || !cause.pipe(Cause.squash, getErrorReported)
         ? Effect.void
         : Effect.logError(cause).pipe(Effect.provideService(Logger.LogToStderr, true)),
     );

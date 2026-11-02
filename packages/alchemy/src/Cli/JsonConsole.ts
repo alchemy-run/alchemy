@@ -51,7 +51,7 @@ const captureStdout = Effect.gen(function* () {
       callback();
     },
   });
-  const write = process.stdout.write;
+  const write = process.stdout.write.bind(process.stdout);
   const console = globalThis.console;
   yield* Effect.acquireRelease(
     Effect.sync(() => {
