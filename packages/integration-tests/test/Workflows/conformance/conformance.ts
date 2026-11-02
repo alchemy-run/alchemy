@@ -498,6 +498,24 @@ export const conformance = (engine: Engine) => {
   );
 
   test(
+    "runs parallel branches of several activities, and replays them",
+    Effect.gen(function* () {
+      const id = yield* freshId("fanout-steps");
+      const run = yield* start("FanoutSteps", id);
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: 6 });
+      expect([...(yield* journal(id))].sort()).toEqual([
+        "first:1",
+        "first:2",
+        "first:3",
+        "second:1",
+        "second:2",
+        "second:3",
+      ]);
+    }),
+    { timeout },
+  );
+
+  test(
     "a child's typed failure reaches its parent",
     Effect.gen(function* () {
       const id = yield* freshId("parent-failing");

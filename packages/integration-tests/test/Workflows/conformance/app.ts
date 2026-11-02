@@ -11,6 +11,7 @@ import {
   Checkout,
   Crash,
   Fanout,
+  FanoutSteps,
   Flaky,
   Greet,
   Guarded,
@@ -63,6 +64,7 @@ export const app = Effect.gen(function* () {
     ParentOfFailing: yield* Workflows.RunWorkflow(ParentOfFailing),
     Queued: yield* Workflows.RunWorkflow(Queued),
     QueuedPair: yield* Workflows.RunWorkflow(QueuedPair),
+    FanoutSteps: yield* Workflows.RunWorkflow(FanoutSteps),
   };
   return {
     fetch: Effect.gen(function* () {

@@ -151,6 +151,13 @@ export const Fanout = Workflow.make("Fanout", {
   idempotencyKey: ({ id }) => id,
 });
 
+/** Runs three branches at once, each two activities long, then sleeps so it replays. */
+export const FanoutSteps = Workflow.make("FanoutSteps", {
+  payload: { id: Schema.String },
+  success: Schema.Number,
+  idempotencyKey: ({ id }) => id,
+});
+
 /** Runs a declined Checkout as a child, and handles the child's typed failure. */
 export const ParentOfFailing = Workflow.make("ParentOfFailing", {
   payload: { id: Schema.String },
@@ -213,6 +220,7 @@ export const workflows = [
   ParentOfFailing,
   Queued,
   QueuedPair,
+  FanoutSteps,
 ] as const;
 
 export const GreetLive = Workflows.layer(
@@ -547,6 +555,37 @@ export const FanoutLive = Workflows.layer(
   }),
 );
 
+export const FanoutStepsLive = Workflows.layer(
+  FanoutSteps,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id }) {
+      const parts = yield* Effect.all(
+        [1, 2, 3].map((part) =>
+          Effect.gen(function* () {
+            yield* Activity.make({
+              name: `first-${part}`,
+              execute: journal.append(id, `first:${part}`),
+            });
+            return yield* Activity.make({
+              name: `second-${part}`,
+              success: Schema.Number,
+              execute: journal.append(id, `second:${part}`).pipe(Effect.as(part)),
+            });
+          }),
+        ),
+        { concurrency: "unbounded" },
+      );
+      yield* DurableClock.sleep({
+        name: "after-fanout",
+        duration: "1 second",
+        inMemoryThreshold: 0,
+      });
+      return parts.reduce((sum, part) => sum + part, 0);
+    });
+  }),
+);
+
 export const ParentOfFailingLive = Workflows.layer(
   ParentOfFailing,
   Effect.gen(function* () {
@@ -632,4 +671,5 @@ export const WorkflowsLive = Layer.mergeAll(
   ParentOfFailingLive,
   QueuedLive,
   QueuedPairLive,
+  FanoutStepsLive,
 );
