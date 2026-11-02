@@ -3,6 +3,8 @@ title: Workflows
 description: Cloudflare Workflows run durable multi-step jobs — define a typed workflow class, checkpoint steps with task and sleep, trigger instances from a Worker, and poll status until completion.
 ---
 
+import DAG from "../../../../components/DAG.astro";
+
 A Cloudflare Workflow is a multi-step job where each named step's
 result is checkpointed — if the process crashes mid-run, Cloudflare
 replays from the last completed step instead of restarting. In
@@ -16,6 +18,27 @@ compute, a [Worker](/cloudflare/compute/workers) is enough; per-entity
 state, a [Durable Object](/cloudflare/compute/durable-objects); buffered
 fan-out of messages, [Queues](/cloudflare/messaging/queues); a fixed schedule,
 [cron](/cloudflare/messaging/cron).
+
+## How a Workflow runs
+
+Each run of a Workflow is an **instance**, started with an input. Its body is a series of **steps**. When a step finishes, its result is saved. If the instance fails or the machine running it goes away, Cloudflare runs the body again from the top, and every step that already finished returns its saved result instead of running again.
+
+<DAG
+  nodes={[
+    { id: "charge", label: "charge card", type: "step · saved", layer: 0 },
+    { id: "sleep", label: "sleep 24h", type: "no compute", layer: 1 },
+    { id: "email", label: "send reminder", type: "step · retried", tone: "accent", layer: 2 },
+    { id: "done", label: "complete", type: "output", layer: 3 },
+  ]}
+  edges={[
+    { from: "charge", to: "sleep" },
+    { from: "sleep", to: "email" },
+    { from: "email", to: "done" },
+  ]}
+  caption="A rerun skips the steps that already finished and picks up at the first that didn't."
+/>
+
+So the work inside a step happens once, even if the body runs many times. Keep anything with side effects, a charge, an email, a write, inside a step. A sleep or a wait for an event costs nothing while it lasts, whether it's seconds or weeks.
 
 ## Define a workflow
 
