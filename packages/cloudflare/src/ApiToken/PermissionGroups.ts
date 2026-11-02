@@ -624,6 +624,12 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "477938ebf30f4bc781d5cb94a8710606",
+    name: "Audit Logs Read",
+    description: "Grants read access to Audit Logs",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "d7887c7a417e4cf2a69f1d01c1a1dc3b",
     name: "Auto Rag Read",
     description: "Grants access to reading data from Auto Rag",
@@ -1355,6 +1361,13 @@ export const PERMISSION_GROUPS = [
     name: "Health Checks Write",
     description: "Grants write access to Health Checks",
     scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "8403be883cd24643a746fba96c37ec0b",
+    name: "Hyperdrive PlanetScale Setup",
+    description:
+      "Grants access to create Cloudflare-billed PlanetScale databases through Hyperdrive",
+    scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "4d62ccf834df44808bc9283d65c4e4e9",
