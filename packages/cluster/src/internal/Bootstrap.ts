@@ -10,7 +10,6 @@ import { spawn } from "node:child_process";
 import { lookup } from "node:dns/promises";
 import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
-import { fileURLToPath } from "node:url";
 import { NodeClusterHttp, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
@@ -32,11 +31,13 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type { Rpc, RpcGroup } from "effect/rpc";
 import type { Workflow as EffectWorkflow } from "effect/workflow";
@@ -111,21 +112,28 @@ const runnerHost = Effect.gen(function* () {
 });
 
 /**
- * Run an existing Effect Cluster program as it is, as its own process
- * (`program.mjs`), with the gateway beside it. The program reads its
- * settings the way Effect Cluster programs do, from its environment:
- * `HOST` and `PORT` for the runner's address, `ASSIGNED_SHARD_GROUPS` and
+ * Run an existing Effect Cluster program as it is, as its own process, with
+ * the gateway beside it. The program reads its settings the way Effect
+ * Cluster programs do, from its environment, when it loads: `HOST` and
+ * `PORT` for the runner's address, `ASSIGNED_SHARD_GROUPS` and
  * `AVAILABLE_SHARD_GROUPS` (`ShardingConfig.layerFromEnv`), and
  * `DATABASE_URL`. The gateway joins the cluster as a client and routes
  * callers to the program's entities.
  */
 export const runExternal = (
   definitions: ReadonlyArray<{ readonly name: string; readonly value: unknown }>,
+  programSource: string,
 ): Promise<void> =>
   runProcess(
     "Effect Cluster runner",
     Effect.gen(function* () {
       const host = yield* runnerHost;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      // The program ships inside the runner; write it out to run it.
+      const programDir = yield* fs.makeTempDirectoryScoped({ prefix: "cluster-program-" });
+      const programFile = path.join(programDir, "program.mjs");
+      yield* fs.writeFileString(programFile, programSource);
       const programEnv = {
         ...process.env,
         HOST: host,
@@ -138,10 +146,7 @@ export const runExternal = (
       yield* Effect.logInfo(`Effect Cluster runner ${host}:${RUNNER_PORT}: external program`);
       // The program owns this runner: if it stops, so does the runner.
       const child = yield* Effect.sync(() =>
-        spawn(process.execPath, [fileURLToPath(new URL("./program.mjs", import.meta.url))], {
-          env: programEnv,
-          stdio: "inherit",
-        }),
+        spawn(process.execPath, [programFile], { env: programEnv, stdio: "inherit" }),
       );
       yield* Effect.addFinalizer(() => Effect.sync(() => child.kill("SIGTERM")));
       const exited = Effect.callback<never, ExternalProgramExited>((resume) => {

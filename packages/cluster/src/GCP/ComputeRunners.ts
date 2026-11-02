@@ -35,10 +35,7 @@ export interface ComputeRunnersOptions extends RunnersSettings {
  * When the instance's metadata changes (a new program, new environment), run
  * this script again, so every runner picks the change up.
  */
-const startupScript = (options: {
-  readonly bucket: string;
-  readonly external: boolean;
-}) => `#!/bin/bash
+const startupScript = (options: { readonly bucket: string }) => `#!/bin/bash
 set -uo pipefail
 MD=http://metadata.google.internal/computeMetadata/v1
 mkdir -p ${APP_PATH}
@@ -54,7 +51,6 @@ fetch() {
 }
 start() {
   fetch runner.mjs
-  ${options.external ? "fetch program.mjs" : ":"}
   curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${ENV_KEY}" > ${APP_PATH}/env.list
   docker rm -f cluster-runner >/dev/null 2>&1 || true
   docker run -d --name cluster-runner --restart always --network host \\
@@ -144,16 +140,6 @@ export const ComputeRunners = (id: string, options: ComputeRunnersOptions = {}) 
           file: program.pipe(Output.map((p) => `${p.dir}/runner.mjs`)) as unknown as string,
           contentType: "text/javascript",
         });
-        const external = program.pipe(Output.map((p) => p.external));
-        // An external program runs beside the runner, from the same bucket.
-        yield* Storage.Object(`${id}ProgramObject`, {
-          bucketName: bucket.bucketName,
-          key: "program.mjs",
-          file: program.pipe(
-            Output.map((p) => (p.external ? `${p.dir}/program.mjs` : `${p.dir}/runner.mjs`)),
-          ) as unknown as string,
-          contentType: "text/javascript",
-        });
         const account = yield* IAM.ServiceAccount(`${id}RunnerAccount`, {
           displayName: "Effect Cluster runners",
         });
@@ -172,15 +158,9 @@ export const ComputeRunners = (id: string, options: ComputeRunnersOptions = {}) 
               .join("\n"),
           ),
         );
-        const metadata = Output.all(
-          bucket.bucketName,
-          runner.md5Hash,
-          external,
-          envFile,
-          grant.role,
-        ).pipe(
-          Output.map(([bucketName, hash, isExternal, env]) => ({
-            "startup-script": startupScript({ bucket: bucketName, external: isExternal }),
+        const metadata = Output.all(bucket.bucketName, runner.md5Hash, envFile, grant.role).pipe(
+          Output.map(([bucketName, hash, env]) => ({
+            "startup-script": startupScript({ bucket: bucketName }),
             [HASH_KEY]: hash ?? "",
             [ENV_KEY]: env,
           })),

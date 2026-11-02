@@ -100,15 +100,13 @@ export const Runners = (id: string, options: RunnersOptions = {}) =>
           yield* Hetzner.Service(`${id}Runner${i}Service`, {
             server,
             main: program.pipe(Output.map((p) => `${p.dir}/runner.mjs`)) as unknown as string,
-            extraFiles: program.pipe(
-              Output.map((p) =>
-                p.external ? [{ source: `${p.dir}/program.mjs`, destination: "program.mjs" }] : [],
-              ),
-            ) as unknown as { source: string; destination: string }[],
             port: GATEWAY_PORT,
             env: environment.pipe(
               // Each runner finds its own address in the Network's range.
-              Output.map((env) => ({ ...env, CLUSTER_RUNNER_NETWORK: network.ipRange })),
+              Output.map((env) => ({
+                ...env,
+                CLUSTER_RUNNER_NETWORK: network.ipRange,
+              })),
             ) as unknown as Record<string, string>,
           });
         }

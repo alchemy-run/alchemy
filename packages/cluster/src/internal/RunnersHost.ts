@@ -123,15 +123,13 @@ export interface RunnersNodes<Network, Gateway extends RunnersGateway = RunnersG
   /** The runners' name, a DNS label. */
   readonly name: string;
   /**
-   * The bundled program: a directory holding `runner.mjs` (and an external
-   * program's `program.mjs`) with a `Dockerfile`, and a hash of its
+   * The bundled program: a directory holding `runner.mjs` with a
+   * `Dockerfile`, and a hash of its
    * contents, which changes whenever the program does.
    */
   readonly program: Output.Output<{
     readonly dir: string;
     readonly hash: string;
-    /** Whether the directory holds an external program (`program.mjs`). */
-    readonly external: boolean;
   }>;
   /** Environment every runner needs, as plain strings. */
   readonly environment: Output.Output<Record<string, string>>;
@@ -169,6 +167,8 @@ export const makeRunnersLayer = <
   readonly settings: RunnersSettings;
   readonly network: (database: DatabaseShape) => Network | undefined;
   readonly expected: string;
+  /** The longest runner name the host accepts. @default 63 */
+  readonly nameLength?: number;
   /** The runner image's Dockerfile, when the host needs more than {@link RUNNER_DOCKERFILE}. */
   readonly dockerfile?: string;
   /** Where callers reach the gateway, declaring what it needs; before the runners' service. */
@@ -201,7 +201,7 @@ export const makeRunnersLayer = <
       }
       // Named up front, so an entity knows its runners without depending on
       // the runners resource, whose bindings carry every entity's env.
-      const name = options.settings.name ?? (yield* stackDnsLabel(options.id));
+      const name = options.settings.name ?? (yield* stackDnsLabel(options.id, options.nameLength));
       // A shard group only has to be unique within its database, and must
       // never be one an external program uses (usually `default`). Effect
       // Cluster stores `group:shard` in a 50-character column, so keep it short.
@@ -298,6 +298,18 @@ export const makeRunnersLayer = <
     }),
   );
 
+const PROGRAM = "virtual:cluster-program";
+
+/** Resolve {@link PROGRAM} to the external program's bundled source, as a string. */
+const programPlugin = (source: string | undefined) => [
+  {
+    name: "cluster-program",
+    resolveId: (id: string) => (id === PROGRAM ? `\0${PROGRAM}` : null),
+    load: (id: string) =>
+      id === `\0${PROGRAM}` ? `export default ${JSON.stringify(source ?? "")};` : null,
+  },
+];
+
 /** A runner entry beside this module: `runner` (Alchemy entities) or `external-runner`. */
 const runnerEntry = (name: "runner" | "external-runner") =>
   fileURLToPath(
@@ -316,36 +328,40 @@ const bundleRunners = Effect.fn(function* (id: string, runners: Runners, dockerf
     Effect.gen(function* () {
       yield* fs.remove(dir, { recursive: true, force: true });
       yield* fs.makeDirectory(dir, { recursive: true });
-      // An external program is bundled on its own and run as its own
-      // process (`program.mjs`), with the gateway beside it.
+      // An external program is bundled on its own and embedded in the
+      // runner, which writes it out and runs it as its own process: it reads
+      // its settings from its environment when it loads, so it can't share
+      // the runner's modules. One file, on every host.
       const program = entities.find((entity) => entity.program !== undefined)?.program;
-      const hashes: string[] = [];
+      let programSource: string | undefined;
       if (program !== undefined) {
-        const external = yield* Bundle.build(
+        const programDir = path.join(dir, "program");
+        yield* Bundle.build(
           {
             input: path.resolve(program),
             platform: "node",
             resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
           },
-          { dir, format: "esm", entryFileNames: "program.mjs", codeSplitting: false },
+          { dir: programDir, format: "esm", entryFileNames: "program.mjs", codeSplitting: false },
         );
-        hashes.push(external.hash);
+        programSource = yield* fs.readFileString(path.join(programDir, "program.mjs"));
+        yield* fs.remove(programDir, { recursive: true });
       }
       const runner = yield* Bundle.build(
         {
           input: runnerEntry(program === undefined ? "runner" : "external-runner"),
           platform: "node",
           resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
-          plugins: entitiesPlugin(entities),
+          plugins: [...entitiesPlugin(entities), ...programPlugin(programSource)],
         },
         { dir, format: "esm", entryFileNames: "runner.mjs", codeSplitting: false },
       );
-      hashes.push(runner.hash, dockerfile);
+      const hashes = [runner.hash, dockerfile];
       yield* fs.writeFileString(path.join(dir, "Dockerfile"), dockerfile);
       const hash = yield* Effect.sync(() =>
         createHash("sha256").update(hashes.join("\n")).digest("hex").slice(0, 16),
       );
-      return { dir, hash, external: program !== undefined };
+      return { dir, hash };
     }).pipe(Effect.orDie),
   )(runners.entities);
 });

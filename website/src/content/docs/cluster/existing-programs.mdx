@@ -41,7 +41,7 @@ export const Tally = Cluster.Entity(TallyEntity, {
 }).pipe(Effect.provide(Legacy));
 ```
 
-`main` exports the entity under its type's name; the gateway imports it to serve the entity's RPCs. The program runs as its own process on every runner, with the gateway beside it.
+`main` exports the entity under its type's name; the gateway imports it to serve the entity's RPCs. The program is bundled into the runners' image and runs as its own process on every runner, with the gateway beside it.
 
 ## Give it runners of its own
 

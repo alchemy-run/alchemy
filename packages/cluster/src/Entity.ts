@@ -174,8 +174,8 @@ export interface ExternalEntityProps {
   /**
    * Your existing Effect Cluster program, relative to where the deploy
    * runs: one that launches its entities on `NodeClusterHttp` with HTTP
-   * transport and SQL storage. It is bundled and run on every runner as it
-   * is, with `HOST`, `PORT` and `DATABASE_URL` set.
+   * transport and SQL storage. It is bundled into the runners and run as
+   * its own process on every runner, with `HOST`, `PORT` and `DATABASE_URL` set.
    */
   program: string;
 }

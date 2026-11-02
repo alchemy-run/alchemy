@@ -539,10 +539,10 @@ export const createFlyHostedSupport = ({
         );
         const entryRel = posixRelUnder(root, realMain, path) ?? path.basename(realMain);
         const dest = path.join(contextDir, entryRel);
-        if (!(yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false)))) {
-          yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
-          yield* fs.copy(realMain, dest, { overwrite: true });
-        }
+        // The context directory is reused across deploys: always copy the
+        // entry, or a changed entry ships the previous deploy's copy.
+        yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
+        yield* fs.copy(realMain, dest, { overwrite: true });
       }
       return contextDir;
     });
