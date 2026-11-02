@@ -4,7 +4,7 @@ import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { Database as ClusterDatabase } from "../Database.ts";
+import { clusterShardGroups, Database as ClusterDatabase } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
 
 /** The Postgres release `ClusterDocker.Database` runs by default. */
@@ -53,7 +53,8 @@ export const Database = (
     ClusterDatabase,
     Effect.gen(function* () {
       if (globalThis.__ALCHEMY_RUNTIME__) {
-        return { url: Redacted.make("") };
+        // Runners read their database from their own environment at runtime.
+        return { url: Redacted.make(""), shardGroups: undefined as never };
       }
       const context = props.context === undefined ? {} : { context: props.context };
       const password = yield* Random(`${id}Password`, { bytes: 24 }) as unknown as Effect.Effect<
@@ -87,6 +88,7 @@ export const Database = (
           ),
         ),
         network: { kind: "docker" as const, name: network.name },
+        shardGroups: yield* clusterShardGroups(id),
       };
     }),
   );

@@ -36,7 +36,7 @@ export const waitForReady = (baseUrl: string) =>
         ? Effect.void
         : Effect.fail(new NotReady({ detail: `${response.status}` })),
     ),
-    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 60 }),
+    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 12 }),
   );
 
 type TestFn = (name: string, effect: Effect.Effect<void, unknown, any>, options?: object) => void;

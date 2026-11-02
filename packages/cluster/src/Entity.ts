@@ -1,3 +1,4 @@
+import * as nodePath from "node:path";
 import type { InputProps } from "alchemy/Input";
 import type { Named } from "alchemy/Named";
 import * as Output from "alchemy/Output";
@@ -12,7 +13,7 @@ import type { Resource } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
 import type { Self } from "alchemy/Self";
-import { Entity as EffectEntity } from "effect/cluster";
+import { ClusterSchema, Entity as EffectEntity } from "effect/cluster";
 import type {
   AlreadyProcessingMessage,
   EntityNotAssignedToRunner,
@@ -31,6 +32,7 @@ import * as Redacted from "effect/Redacted";
 import type { Rpc, RpcClient, RpcClientError, RpcGroup } from "effect/rpc";
 import type { Scope } from "effect/Scope";
 import { makeGatewayClient } from "./internal/Gateway.ts";
+import { RunnersHost } from "./internal/RunnersHostService.ts";
 import type { Providers } from "./Providers.ts";
 
 export const EntityTypeId = "Cluster.Entity";
@@ -61,7 +63,7 @@ export interface EntityProps extends PlatformProps {
 export interface EntityAttributes {
   /** The entity type: the class's logical id. */
   type: string;
-  /** The runners that host it. */
+  /** The shard group of the runners that host it. */
   runners: string | undefined;
   /** The gateway URL callers send requests to. */
   gateway: string | undefined;
@@ -142,8 +144,39 @@ type ClassMembers<Type extends string, Rpcs extends Rpc.Any> = Named<Type> &
     new (_: never): EntityClient<Rpcs>;
   };
 
+/** Props of an external entity: an existing Effect Cluster program, run as it is. */
+export interface ExternalEntityProps {
+  /**
+   * The module that defines the Effect Cluster entity, relative to where
+   * the deploy runs. The gateway imports it to serve the entity's RPCs.
+   */
+  main: string;
+  /**
+   * The export of {@link main} that holds the entity.
+   * @default the entity's type
+   */
+  handler?: string;
+  /**
+   * Your existing Effect Cluster program, relative to where the deploy
+   * runs: one that launches its entities on `NodeClusterHttp` with HTTP
+   * transport and SQL storage. It is bundled and run on every runner as it
+   * is, with `HOST`, `PORT` and `DATABASE_URL` set.
+   */
+  program: string;
+}
+
 /** The class surface of {@link Entity}. */
 export interface EntityClass {
+  /**
+   * An external entity: an existing Effect Cluster program, referenced by
+   * file and run as it is. Provide a runners Layer to it.
+   */
+  <const Type extends string, Rpcs extends Rpc.Any>(
+    entity: EffectEntity.Entity<Type, Rpcs>,
+    props: ExternalEntityProps,
+  ): Effect.Effect<EntityClient<Rpcs>, never, RunnersHost | Providers> & {
+    readonly entity: EffectEntity.Entity<Type, Rpcs>;
+  };
   // `Self` names the class (`extends Cluster.Entity<Counter>()`).
   <Self>(): {
     /** Declared with its RPCs, implemented inline. */
@@ -376,18 +409,68 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  *
  * @resource
  */
-export const Entity: EntityClass = (() =>
-  (...args: ReadonlyArray<unknown>) => {
-    // `(type, rpcs, …)` declares the entity; `(entity, …)` takes an existing one.
-    const declared = typeof args[0] === "string";
-    const entity = declared
-      ? EffectEntity.make(args[0] as string, args[1] as ReadonlyArray<Rpc.Any>)
-      : (args[0] as EffectEntity.Entity<string, Rpc.Any>);
-    const [props, given] = declared ? args.slice(2) : args.slice(1);
-    const impl = typeof given === "function" ? (given as (e: unknown) => unknown)(entity) : given;
-    entities.set(entity.type, entity);
-    return declare(entity, (platform as any)()(entity.type, props, impl));
-  }) as unknown as EntityClass;
+export const Entity: EntityClass = ((...outer: ReadonlyArray<unknown>) =>
+  outer.length > 0
+    ? external(outer[0] as EffectEntity.Entity<string, Rpc.Any>, outer[1] as ExternalEntityProps)
+    : (...args: ReadonlyArray<unknown>) => {
+        // `(type, rpcs, …)` declares the entity; `(entity, …)` takes an existing one.
+        const declared = typeof args[0] === "string";
+        const entity = placedInRunnersGroup(
+          declared
+            ? EffectEntity.make(args[0] as string, args[1] as ReadonlyArray<Rpc.Any>)
+            : (args[0] as EffectEntity.Entity<string, Rpc.Any>),
+        );
+        const [props, given] = declared ? args.slice(2) : args.slice(1);
+        const impl =
+          typeof given === "function" ? (given as (e: unknown) => unknown)(entity) : given;
+        entities.set(entity.type, entity);
+        return declare(entity, (platform as any)()(entity.type, props, impl));
+      }) as unknown as EntityClass;
+
+/** The environment key holding the shard group an entity's runners serve. @internal */
+export const shardGroupKey = (type: string) => sanitizeKey(`CLUSTER_${type}_SHARD_GROUP`);
+
+/**
+ * Place an entity in its runners' shard group, read when a message is
+ * routed: its runners, and every runtime that yields the class, have it in
+ * their environment. Effect Cluster's own client (`Counter.entity.client`)
+ * then routes to the right runners too.
+ */
+const placedInRunnersGroup = (entity: EffectEntity.Entity<string, Rpc.Any>) => {
+  const key = shardGroupKey(entity.type);
+  return entity.annotate(
+    ClusterSchema.ShardGroup,
+    // A synchronous lookup at routing time; workerd has no `process`.
+    () =>
+      (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env[key] ??
+      "default",
+  );
+};
+
+/**
+ * An external entity: declare its resource, then have the runners it was
+ * given run its program. The runners Layer is what provides `RunnersHost`.
+ */
+const external = (entity: EffectEntity.Entity<string, Rpc.Any>, props: ExternalEntityProps) => {
+  entities.set(entity.type, entity);
+  const declaration = Effect.gen(function* () {
+    const resource = yield* (platform as any)(entity.type, {
+      main: props.main,
+      handler: props.handler,
+    }) as Effect.Effect<Entity, never, Providers>;
+    if (globalThis.__ALCHEMY_RUNTIME__) return resource;
+    const host = yield* RunnersHost;
+    yield* host.deployExternal({
+      type: entity.type,
+      main: yield* Effect.sync(() => nodePath.resolve(props.main)),
+      handler: props.handler ?? entity.type,
+      program: props.program,
+      resource,
+    });
+    return resource;
+  });
+  return Object.assign(clientOf(entity, declaration), { entity });
+};
 
 /**
  * A class whose `yield*` is its client. While deploying it registers the
@@ -435,6 +518,8 @@ const clientOf = (
         )
         .pipe(Effect.flatMap((bound) => ctx.get<T>(bound)));
     const url = (yield* bind<string>("GATEWAY", resource?.gateway)) ?? "";
+    // The runners' shard group, for Effect Cluster's own client (`.entity.client`).
+    yield* bind<string>("SHARD_GROUP", resource?.runners);
     const token = yield* bind<Redacted.Redacted<string> | string>("TOKEN", resource?.token);
     return makeGatewayClient(entity, {
       url,

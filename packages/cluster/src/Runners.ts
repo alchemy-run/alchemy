@@ -1,5 +1,6 @@
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "./Providers.ts";
 
@@ -11,6 +12,11 @@ export interface RunnersEntity {
   module: string;
   /** The export of {@link module} that holds it. */
   handler: string;
+  /**
+   * An existing Effect Cluster program that hosts the entity, run as it is:
+   * an external `Cluster.Entity`. It owns every runner in its set.
+   */
+  program?: string;
 }
 
 /** Data the entities a set of runners hosts bind onto it. */
@@ -51,16 +57,34 @@ export interface Runners extends Resource<
  */
 export const Runners = Resource<Runners>("Cluster.Runners");
 
+/**
+ * A set of runners was given an external `Cluster.Entity` and something
+ * else hosted another way: an external program owns every runner it runs on.
+ */
+export class RunnersProgramConflict extends Data.TaggedError("Cluster.RunnersProgramConflict")<{
+  readonly message: string;
+}> {}
+
 export const RunnersProvider = () =>
   Provider.succeed(Runners, {
     stables: ["name"],
-    reconcile: ({ news, bindings }) =>
-      Effect.sync(() => {
+    reconcile: ({ id, news, bindings }) =>
+      Effect.gen(function* () {
         const entities = new Map<string, RunnersEntity>();
         const env: Record<string, unknown> = {};
         for (const { data } of bindings) {
           for (const entity of data.entities ?? []) entities.set(entity.name, entity);
           Object.assign(env, data.env);
+        }
+        const all = [...entities.values()];
+        const programs = new Set(all.flatMap((entity) => (entity.program ? [entity.program] : [])));
+        if (programs.size > 1 || (programs.size === 1 && all.some((entity) => !entity.program))) {
+          return yield* new RunnersProgramConflict({
+            message:
+              `Runners '${id}' were given ${all.map((entity) => `'${entity.name}'`).join(", ")}, ` +
+              `but an external program runs on every runner it is given: give each program ` +
+              `runners of its own, and host Alchemy entities on other runners.`,
+          });
         }
         return {
           name: news.name,

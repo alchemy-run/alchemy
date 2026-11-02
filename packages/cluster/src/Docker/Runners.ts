@@ -1,12 +1,12 @@
 import * as Docker from "@alchemy.run/docker";
 import * as Output from "alchemy/Output";
-import type { Self } from "alchemy/Self";
 import type { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { Database } from "../Database.ts";
 import { GATEWAY_PORT } from "../internal/Gateway.ts";
 import { makeRunnersLayer, type RunnersSettings } from "../internal/RunnersHost.ts";
+import type { RunnersHost } from "../internal/RunnersHostService.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface RunnersOptions extends RunnersSettings {
@@ -48,7 +48,7 @@ export interface RunnersOptions extends RunnersSettings {
 export const Runners = (
   id: string,
   options: RunnersOptions = {},
-): Layer.Layer<never, never, Database | Self | Stack | Providers | Docker.Providers> =>
+): Layer.Layer<RunnersHost, never, Database | Stack | Providers | Docker.Providers> =>
   makeRunnersLayer({
     label: "ClusterDocker.Runners",
     id,

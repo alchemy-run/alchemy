@@ -19,13 +19,15 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { Database, type DatabaseShape } from "../Database.ts";
-import { EntityTypeId, type Entity, type EntityRuntimeContext } from "../Entity.ts";
+import { EntityTypeId, shardGroupKey, type Entity, type EntityRuntimeContext } from "../Entity.ts";
 import type { Providers } from "../Providers.ts";
 import { Runners, type RunnersEntity } from "../Runners.ts";
 import { GATEWAY_PORT, RUNNER_PORT } from "./Gateway.ts";
+import { RunnersHost } from "./RunnersHostService.ts";
 
 const VIRTUAL = "virtual:cluster-entities";
 
@@ -66,6 +68,19 @@ export const stackDnsLabel = Effect.fn(function* (id: string, max = 63) {
   return `${full.slice(0, max - 9).replace(/-+$/, "")}-${hash}`;
 });
 
+/** `id` as a lowercase label of at most `max` characters, ending in a hash when shortened. */
+const shortLabel = Effect.fn(function* (id: string, max: number) {
+  const label = id
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (label.length <= max) return label;
+  const hash = yield* Effect.sync(() =>
+    createHash("sha256").update(label).digest("hex").slice(0, 8),
+  );
+  return `${label.slice(0, max - 9).replace(/-+$/, "")}-${hash}`;
+});
+
 /** A runners Layer was provided to something other than an entity's Effect. */
 export class RunnersOutsideEntity extends Data.TaggedError("Cluster.RunnersOutsideEntity")<{
   readonly message: string;
@@ -78,10 +93,18 @@ export class DatabaseNetworkMismatch extends Data.TaggedError("Cluster.DatabaseN
 
 export interface RunnersSettings {
   /**
-   * The name the runners are known by.
+   * The name the runners are known by. It is also the shard group the
+   * entities they host are placed in.
    * @default ${stack}-${stage}-${id}
    */
   name?: string;
+  /**
+   * The shard groups an external program's entities use, which these
+   * runners serve. Entities declared with Alchemy always use the runners'
+   * own group.
+   * @default ["default"]
+   */
+  shardGroups?: string[];
 }
 
 /** What a host needs to declare the service that runs the runners. */
@@ -127,20 +150,13 @@ export const makeRunnersLayer = <Network, Req>(options: {
   readonly expected: string;
   readonly gateway: (name: string) => RunnersGateway;
   readonly nodes: (nodes: RunnersNodes<Network>) => Effect.Effect<void, never, Req>;
-}): Layer.Layer<never, never, Database | Self | Stack | Providers | Req> =>
-  Layer.effectDiscard(
+}): Layer.Layer<RunnersHost, never, Database | Stack | Providers | Req> =>
+  Layer.effect(
+    RunnersHost,
     Effect.gen(function* () {
       const database = yield* Database;
-      if (globalThis.__ALCHEMY_RUNTIME__) return;
-      const self = yield* Self;
-      if (self.Type !== EntityTypeId) {
-        return yield* Effect.die(
-          new RunnersOutsideEntity({
-            message: `${options.label}("${options.id}") was provided to ${self.Type} '${self.LogicalId}', not an Cluster.Entity.`,
-          }),
-        );
-      }
-      const entity = self as unknown as Entity & EntityRuntimeContext;
+      const noop: RunnersHost["Service"] = { deployExternal: () => Effect.void };
+      if (globalThis.__ALCHEMY_RUNTIME__) return noop;
       const network = options.network(database);
       if (network === undefined) {
         return yield* Effect.die(
@@ -152,27 +168,36 @@ export const makeRunnersLayer = <Network, Req>(options: {
       // Named up front, so an entity knows its runners without depending on
       // the runners resource, whose bindings carry every entity's env.
       const name = options.settings.name ?? (yield* stackDnsLabel(options.id));
+      // A shard group only has to be unique within its database. Effect
+      // Cluster stores `group:shard` in a 50-character column, so keep it short.
+      const group = yield* shortLabel(options.id, 40);
       const gateway = options.gateway(name);
       const context = yield* Effect.context<Stack | Providers | Req>();
 
-      yield* entity.registerRunners((env) =>
+      /** Put `hosted` on the runners, bind the gateway onto `resource`, and declare the runners. */
+      const deploy = (hosted: RunnersEntity, env: Record<string, unknown>, resource: Entity) =>
         Effect.gen(function* () {
           const runners = yield* Runners(options.id, { name });
           const token = yield* Random(`${options.id}GatewayToken`, {
             bytes: 32,
           }) as unknown as Effect.Effect<Random, never, Providers>;
-          yield* runners.bind`${entity.LogicalId}`({
-            entities: [
-              {
-                name: entity.LogicalId,
-                module: entity.Props.main,
-                handler: entity.Props.handler ?? "default",
-              },
-            ],
-            env,
+          // The hosting runners route the entity to its own shard group.
+          yield* runners.bind`${hosted.name}`({
+            entities: [hosted],
+            env:
+              hosted.program === undefined ? { ...env, [shardGroupKey(hosted.name)]: group } : env,
           });
+          // Alchemy entities live in the runners' own shard group; an
+          // external program keeps the groups its entities use.
+          const groups =
+            hosted.program === undefined ? [group] : (options.settings.shardGroups ?? ["default"]);
+          yield* database.shardGroups.bind`${name}`({ groups });
           // What callers need to reach the entity through the gateway.
-          yield* entity.bind`Runners`({ runners: name, gateway: gateway.url, token: token.text });
+          yield* resource.bind`Runners`({
+            runners: group,
+            gateway: gateway.url,
+            token: token.text,
+          });
           const stack = yield* Stack;
           yield* options.nodes({
             database,
@@ -180,10 +205,15 @@ export const makeRunnersLayer = <Network, Req>(options: {
             runners,
             name,
             program: yield* bundleRunners(options.id, runners),
-            environment: Output.all(runners.env, output(database.url), token.text).pipe(
-              Output.map(([env, url, tokenText]) => ({
+            environment: Output.all(
+              runners.env,
+              output(database.url),
+              token.text,
+              database.shardGroups.groups,
+            ).pipe(
+              Output.map(([values, url, tokenText, allGroups]) => ({
                 ...Object.fromEntries(
-                  Object.entries(env).map(([key, value]) => [key, String(value)]),
+                  Object.entries(values).map(([key, value]) => [key, String(value)]),
                 ),
                 ALCHEMY_STACK_NAME: stack.name,
                 ALCHEMY_STAGE: stack.stage,
@@ -191,19 +221,69 @@ export const makeRunnersLayer = <Network, Req>(options: {
                 CLUSTER_DATABASE_URL: Redacted.value(url),
                 CLUSTER_GATEWAY_TOKEN: Redacted.value(tokenText),
                 CLUSTER_RUNNERS: name,
+                CLUSTER_SHARD_GROUPS: groups.join(","),
+                CLUSTER_AVAILABLE_SHARD_GROUPS: allGroups.join(","),
               })),
             ),
           });
-        }).pipe(Effect.provide(context)),
-      );
+        }).pipe(Effect.provide(context));
+
+      // The generic `Self` is the class whose phase is running. Outside a
+      // class phase there is none: the runners were given an external entity.
+      const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
+      if (self !== undefined) {
+        if (self.Type !== EntityTypeId) {
+          return yield* Effect.die(
+            new RunnersOutsideEntity({
+              message: `${options.label}("${options.id}") was provided to ${self.Type} '${self.LogicalId}', not a Cluster.Entity.`,
+            }),
+          );
+        }
+        const entity = self as unknown as Entity & EntityRuntimeContext;
+        yield* entity.registerRunners((env) =>
+          deploy(
+            {
+              name: entity.LogicalId,
+              module: entity.Props.main,
+              handler: entity.Props.handler ?? "default",
+            },
+            env,
+            entity,
+          ),
+        );
+      }
+
+      return {
+        deployExternal: ({ type, main, handler, program, resource }) =>
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
+          deploy(
+            { name: type, module: main, handler, program },
+            {},
+            resource,
+          ) as Effect.Effect<void>,
+      } satisfies RunnersHost["Service"];
     }),
   );
 
-/** The runner entry, which imports the runners' classes from {@link VIRTUAL}. */
-const runnerEntry = () =>
+/** A runner entry beside this module: `runner` (Alchemy entities) or `external-runner`. */
+const runnerEntry = (name: "runner" | "external-runner") =>
   fileURLToPath(
-    new URL(import.meta.url.endsWith(".ts") ? "./runner.ts" : "./runner.js", import.meta.url),
+    new URL(import.meta.url.endsWith(".ts") ? `./${name}.ts` : `./${name}.js`, import.meta.url),
   );
+
+const PROGRAM = "virtual:cluster-program";
+
+/** Resolve {@link PROGRAM} to the external program the runners run. */
+const programPlugin = (program: string) => [
+  {
+    name: "cluster-program",
+    resolveId: (id: string) => (id === PROGRAM ? `\0${PROGRAM}` : null),
+    load: (id: string) =>
+      id === `\0${PROGRAM}`
+        ? `import ${JSON.stringify(program.startsWith("file:") ? fileURLToPath(program) : program)};`
+        : null,
+  },
+];
 
 /**
  * Bundle the runner program and its Dockerfile into a directory of their
@@ -217,12 +297,17 @@ const bundleRunners = Effect.fn(function* (id: string, runners: Runners) {
     Effect.gen(function* () {
       yield* fs.remove(dir, { recursive: true, force: true });
       yield* fs.makeDirectory(dir, { recursive: true });
+      // An external program is run as it is, with the gateway beside it.
+      const program = entities.find((entity) => entity.program !== undefined)?.program;
       yield* Bundle.build(
         {
-          input: runnerEntry(),
+          input: runnerEntry(program === undefined ? "runner" : "external-runner"),
           platform: "node",
           resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
-          plugins: entitiesPlugin(entities),
+          plugins: [
+            entitiesPlugin(entities),
+            program === undefined ? [] : programPlugin(path.resolve(program)),
+          ],
         },
         { dir, format: "esm", entryFileNames: "runner.mjs", codeSplitting: false },
       );

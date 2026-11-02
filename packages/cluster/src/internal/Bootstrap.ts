@@ -18,7 +18,7 @@ import {
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
-import { RunnerAddress } from "effect/cluster";
+import { ClusterSchema, RunnerAddress } from "effect/cluster";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -62,6 +62,60 @@ const runnerHost = Effect.gen(function* () {
   return local.find((address) => !address.includes(":")) ?? "127.0.0.1";
 });
 
+/**
+ * Run an existing Effect Cluster program as it is, with the gateway beside
+ * it. The program reads its settings the way Effect Cluster programs do:
+ * `HOST` and `PORT` (`ShardingConfig.layerFromEnv`) for the runner's
+ * address, and `DATABASE_URL` for its database. The gateway joins the
+ * cluster as a client and routes callers to the program's entities.
+ */
+export const runExternal = (
+  definitions: ReadonlyArray<unknown>,
+  program: () => Promise<unknown>,
+): Promise<void> =>
+  runProcess(
+    "Effect Cluster runner",
+    Effect.gen(function* () {
+      const host = yield* runnerHost;
+      process.env.HOST = host;
+      process.env.PORT = String(RUNNER_PORT);
+      process.env.LISTEN_HOST = "0.0.0.0";
+      // `ShardingConfig.layerFromEnv` reads the cluster's shard groups too.
+      process.env.ASSIGNED_SHARD_GROUPS ??= env("CLUSTER_SHARD_GROUPS");
+      process.env.AVAILABLE_SHARD_GROUPS ??= env("CLUSTER_AVAILABLE_SHARD_GROUPS");
+      process.env.DATABASE_URL ??= env("CLUSTER_DATABASE_URL");
+      yield* Effect.logInfo(`Effect Cluster runner ${host}:${RUNNER_PORT}: external program`);
+      // The program launches its own runner and keeps it running.
+      yield* Effect.tryPromise(program).pipe(Effect.orDie);
+      const entities = definitions.map((definition) => definition as HostedEntity["entity"]);
+      const cluster = NodeClusterHttp.layer({
+        transport: "http",
+        storage: "sql",
+        clientOnly: true,
+        shardingConfig: shardGroupsConfig(),
+      }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
+      const gateway = gatewayLayer(entities, env("CLUSTER_GATEWAY_TOKEN") ?? "").pipe(
+        Layer.provide(NodeHttpServer.layer(createServer, { port: GATEWAY_PORT })),
+      );
+      return yield* Layer.launch(gateway.pipe(Layer.provide(cluster)));
+    }).pipe(Effect.provide(NodeServices.layer)) as Effect.Effect<never, unknown, never>,
+  );
+
+/** The shard groups these runners serve, and every group in the cluster. */
+const shardGroupsConfig = () => {
+  const list = (name: string) =>
+    (env(name) ?? "")
+      .split(",")
+      .map((group) => group.trim())
+      .filter((group) => group.length > 0);
+  const assigned = list("CLUSTER_SHARD_GROUPS");
+  const available = list("CLUSTER_AVAILABLE_SHARD_GROUPS");
+  return {
+    ...(assigned.length > 0 ? { assignedShardGroups: assigned } : {}),
+    ...(available.length > 0 ? { availableShardGroups: available } : {}),
+  };
+};
+
 /** Build each class's Construction phase, then run the runner until it is stopped. */
 export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> => {
   const platform = Layer.mergeAll(
@@ -98,7 +152,13 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
     }
 
     const host = yield* runnerHost;
-    const entityLayers = hosted.map((entry) =>
+    const group = env("CLUSTER_SHARD_GROUPS") ?? "default";
+    // Every hosted entity lives in these runners' own shard group.
+    const placed = hosted.map((entry) => ({
+      ...entry,
+      entity: entry.entity.annotate(ClusterSchema.ShardGroup, () => group),
+    }));
+    const entityLayers = placed.map((entry) =>
       entry.entity.toLayer(
         // The instance phase runs with the services its Construction phase had.
         Effect.provide(entry.instance, entry.context) as Effect.Effect<any, never, any>,
@@ -114,10 +174,11 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
       shardingConfig: {
         runnerAddress: Option.some(RunnerAddress.make(host, RUNNER_PORT)),
         runnerListenAddress: Option.some(RunnerAddress.make("0.0.0.0", RUNNER_PORT)),
+        ...shardGroupsConfig(),
       },
     }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
     const gateway = gatewayLayer(
-      hosted.map((entry) => entry.entity),
+      placed.map((entry) => entry.entity),
       env("CLUSTER_GATEWAY_TOKEN") ?? "",
     ).pipe(Layer.provide(NodeHttpServer.layer(createServer, { port: GATEWAY_PORT })));
 
