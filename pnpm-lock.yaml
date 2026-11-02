@@ -4120,6 +4120,21 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy-test
 
+  examples/cluster-rooms:
+    dependencies:
+      '@alchemy.run/cluster':
+        specifier: workspace:*
+        version: link:../../packages/cluster
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../../packages/docker
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+
   examples/dev-stress:
     dependencies:
       '@alchemy.run/aws':

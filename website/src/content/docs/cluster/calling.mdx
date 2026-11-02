@@ -1,0 +1,108 @@
+---
+title: Calling an entity
+description: Call an Effect Cluster entity from any runtime by id — RPCs, streams, typed errors, fire-and-forget messages and headers.
+---
+
+Any runtime calls an entity the same way, a Cloudflare Worker, a Lambda function, a container or another entity: yield the declaration, then name an instance.
+
+## Get a client
+
+`yield* Room` returns the entity's namespace. `getByName` returns a client for one instance, with one method per RPC:
+
+```typescript title="src/Api.ts"
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Room } from "./Room.ts";
+
+export default class Api extends Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, functionUrl: true },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        const members = yield* lobby.Join({ name: "sam" });
+        return yield* HttpServerResponse.json({ members });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+The client has the same shape as Effect Cluster's own `Entity.client`, and the same shape as a Cloudflare Durable Object's `getByName`.
+
+## How the call travels
+
+While deploying, `yield* Room` binds three values into the caller's environment: the address of the runners' gateway, the token it checks, and the runners' shard group. At runtime, it reads them back and calls the gateway over HTTP. The caller needs no access to the database and no route to the runners.
+
+Inside the cluster, one entity calling another (or a workflow calling an entity) goes straight from runner to runner, through Effect Cluster itself.
+
+## Typed errors and streams
+
+An RPC's error comes back with its tag:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+import { Room } from "./Room.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        const joined = yield* lobby.Join({ name: "sam" }).pipe(
+          Effect.catchTag("RoomFull", () => Effect.succeed(-1)),
+        );
+        const history = yield* Stream.runCollect(lobby.History());
+        return yield* HttpServerResponse.json({ joined, history: [...history] });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+A streaming RPC returns a `Stream` that delivers every value the handler emits.
+
+## Send without waiting
+
+Pass `discard: true` to send a message and return as soon as it's on its way:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Room } from "./Room.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        yield* lobby.Join({ name: "sam" }, { discard: true });
+        return HttpServerResponse.text("sent");
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+The handler still runs; only the reply is skipped. Errors before the message is sent, like a full mailbox, still fail the call.
+
+## Gateway errors
+
+Besides the RPC's own errors, a call can fail with Effect Cluster's: `MailboxFull` when an instance has too many messages waiting, `AlreadyProcessingMessage` when a persisted message with the same key is still running, `PersistenceError` when the database can't be reached, and `EntityNotAssignedToRunner` while a shard moves. Each is a tagged error you can retry.
+
+## Headers
+
+Pass `headers` to send request headers along with a message. RPC middleware on the entity reads them; see [RPC middleware](/cluster/middleware).

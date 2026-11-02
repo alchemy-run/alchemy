@@ -1,0 +1,64 @@
+---
+title: Singletons
+description: Run one fiber across the whole cluster with an Effect Cluster singleton — on exactly one runner, moved when that runner stops.
+---
+
+A singleton is one fiber that runs on exactly one runner. When that runner stops, another runner starts it. Use it for work that must not run twice at once: a poller, a leader's loop, a queue consumer.
+
+## Declare and implement it
+
+A singleton is declared by name. `.make` takes an Effect that resolves bindings once per runner and returns the fiber:
+
+```typescript title="src/Sweeper.ts"
+import * as Cluster from "@alchemy.run/cluster";
+
+export class Sweeper extends Cluster.Singleton<Sweeper>()("Sweeper") {}
+```
+
+```typescript title="src/SweeperLive.ts"
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import { Default } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+import { Sweeper } from "./Sweeper.ts";
+
+export default Sweeper.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return Effect.gen(function* () {
+      const lobby = yield* rooms.getByName("lobby");
+      const members = yield* lobby.Members();
+      yield* Effect.logInfo(`lobby has ${members.length} members`);
+    }).pipe(Effect.repeat(Schedule.spaced("1 minute")), Effect.orDie);
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+Every runner builds the outer Effect. Only the runner that owns the singleton runs the fiber it returns.
+
+## Deploy it
+
+Provide the Layer to the Stack, next to the rest of your implementations:
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Cluster from "@alchemy.run/cluster";
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import RoomLive from "./src/RoomLive.ts";
+import SweeperLive from "./src/SweeperLive.ts";
+
+export default Alchemy.Stack(
+  "Rooms",
+  { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { api: api.name };
+  }).pipe(Effect.provide(Layer.mergeAll(RoomLive, SweeperLive))),
+);
+```
+
+Runners hand a singleton over through their shard locks, so while shards settle, after a deploy or when a runner starts, it can move once or twice. It never runs on two runners at once.

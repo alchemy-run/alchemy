@@ -104,6 +104,9 @@ export const DOCS_TABS: DocsTab[] = [
   hub("Rivet", "rivet", "Containers", "durable objects · control planes · pools", [
     "/providers/rivet",
   ]),
+  hub("Effect Cluster", "cluster", "Containers", "entities · workflows · runners", [
+    "/providers/cluster",
+  ]),
   hub("Git", "git", "Source & CI", "self-hosted git · clone · push · pull requests", [
     "/providers/git",
   ]),

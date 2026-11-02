@@ -1,0 +1,111 @@
+---
+title: Effect Cluster
+description: Effect Cluster entities, workflows, singletons and crons, deployed to runners on your own cloud and called by name from any runtime.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+`@alchemy.run/cluster` deploys [Effect Cluster](https://effect.website) programs. An **entity** is a class with one instance per id: a chat room, a shopping cart, a user's session. Each instance handles its messages one at a time, so it can keep state without locks.
+
+You run the cluster yourself. A Postgres **database** tracks which runner owns which entities. A set of **runners** runs your code. Both deploy in the same Stack as the rest of your app, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner.
+
+<DAG
+  nodes={[
+    { id: "caller", label: "Callers", type: "Worker, Lambda, container", col: 0, row: 0 },
+    { id: "runners", label: "Runners", type: "run your code", tone: "accent", col: 1, row: 0 },
+    { id: "db", label: "Database", type: "shards and messages", col: 2, row: 0 },
+  ]}
+  edges={[
+    { from: "caller", to: "runners", label: "room lobby" },
+    { from: "runners", to: "db" },
+  ]}
+  caption="Callers name an entity. The runners route the message to the runner that owns it."
+/>
+
+## A taste
+
+An entity declares its messages with Effect's RPC schemas:
+
+```typescript title="src/Room.ts"
+import * as Cluster from "@alchemy.run/cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+
+export class Room extends Cluster.Entity<Room>()("Room", [
+  Rpc.make("Join", { payload: { name: Schema.String }, success: Schema.Int }),
+]) {}
+```
+
+Its implementation is a Layer, deployed by providing runners to it:
+
+```typescript title="src/RoomLive.ts"
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import { Default } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+
+export default Room.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const members = yield* Ref.make(new Set<string>());
+      return Room.of({
+        Join: ({ payload }) =>
+          Ref.modify(members, (all) => {
+            const next = new Set(all).add(payload.name);
+            return [next.size, next];
+          }),
+      });
+    });
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+`Default` is the runners it runs on, given the database they coordinate through:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterDocker.Database("Cluster");
+
+export const Default = ClusterDocker.Runners("Default").pipe(Layer.provide(Database));
+```
+
+And any runtime calls a room by its id:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Room } from "./Room.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        const members = yield* lobby.Join({ name: "sam" });
+        return yield* HttpServerResponse.json({ members });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+Swap `ClusterDocker` for `ClusterAWS`, `ClusterFly` or any other cloud, and the room doesn't change.
+
+## Where to start
+
+**New to Effect Cluster?** [What is Effect Cluster?](/cluster/what-is-effect-cluster) walks through every concept once, with chat rooms as the example.
+
+**Want to build one?** The [tutorial](/cluster/tutorial/part-1) builds chat rooms step by step, from a room on your machine to invitations, a nightly cleanup and AWS.
+
+**Want the whole picture?** The concepts read as a manual, one idea per chapter: [Entities](/cluster/entities), [Calling an entity](/cluster/calling), [RPC middleware](/cluster/middleware), [Workflows](/cluster/workflows), [Singletons](/cluster/singletons), [Crons](/cluster/crons), [Databases](/cluster/databases) and [Runners](/cluster/runners).
+
+**Already have an Effect Cluster program?** It deploys unchanged. See [Existing programs](/cluster/existing-programs).
+
+**Choosing a cloud?** Each platform page shows what runs where: [Docker](/cluster/docker), [AWS](/cluster/aws), [GCP](/cluster/gcp), [Kubernetes](/cluster/kubernetes), [Fly](/cluster/fly) and [Hetzner](/cluster/hetzner). Start with [Setup](/cluster/setup).

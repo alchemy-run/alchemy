@@ -547,6 +547,37 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Effect Cluster",
+    intro:
+      "Effect Cluster entities, workflows, singletons and crons, on a Postgres database and runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, called by id from any runtime.",
+    pages: {
+      slugs: [
+        "cluster/index",
+        "cluster/what-is-effect-cluster",
+        "cluster/setup",
+        "cluster/tutorial/part-1",
+        "cluster/tutorial/part-2",
+        "cluster/tutorial/part-3",
+        "cluster/tutorial/part-4",
+        "cluster/entities",
+        "cluster/calling",
+        "cluster/middleware",
+        "cluster/workflows",
+        "cluster/singletons",
+        "cluster/crons",
+        "cluster/existing-programs",
+        "cluster/databases",
+        "cluster/runners",
+        "cluster/docker",
+        "cluster/aws",
+        "cluster/gcp",
+        "cluster/kubernetes",
+        "cluster/fly",
+        "cluster/hetzner",
+      ],
+    },
+  },
+  {
     heading: "Better Auth",
     intro:
       "Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.",

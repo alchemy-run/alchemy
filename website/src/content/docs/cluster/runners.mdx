@@ -1,0 +1,126 @@
+---
+title: Runners
+description: How a set of Effect Cluster runners hosts your entities, workflows, singletons and crons — what's bundled together, shard groups, the gateway, and how to split work across sets.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+**Runners** are the processes that run your code. A set of runners is a Layer: provide it to an implementation, and that implementation runs on every runner in the set.
+
+```typescript title="src/Cluster.ts"
+import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterDocker.Database("Cluster");
+
+export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
+  Layer.provide(Database),
+);
+```
+
+## One set, one program
+
+Every class provided the same runners is bundled into one Node program, built into one image, and run on every runner in the set. A change to any of them builds a new image, and the host replaces the runners, a few at a time.
+
+<DAG
+  nodes={[
+    { id: "room", label: "Room", type: "entity", layer: 0 },
+    { id: "invite", label: "Invite", type: "workflow", layer: 0 },
+    { id: "cleanup", label: "Cleanup", type: "cron", layer: 0 },
+    { id: "default", label: "Default", type: "one image", tone: "accent", layer: 1 },
+    { id: "r1", label: "Runner 1", layer: 2 },
+    { id: "r2", label: "Runner 2", layer: 2 },
+  ]}
+  edges={[
+    { from: "room", to: "default" },
+    { from: "invite", to: "default" },
+    { from: "cleanup", to: "default" },
+    { from: "default", to: "r1" },
+    { from: "default", to: "r2" },
+  ]}
+  caption="Every runner in a set runs the same classes."
+/>
+
+Effect Cluster needs this: it gives each shard to any runner in a group, whatever classes the runner has, so every runner must have them all.
+
+## Split work across sets
+
+A second set is its own program, image and service, scaled and deployed on its own:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterDocker from "@alchemy.run/cluster/Docker";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterDocker.Database("Cluster");
+
+export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
+  Layer.provide(Database),
+);
+
+export const Billing = ClusterDocker.Runners("Billing", { replicas: 4 }).pipe(
+  Layer.provide(Database),
+);
+```
+
+Each set is its own **shard group**, so its classes' instances only run on its runners. Sets on the same database are one cluster: an entity on `Default` calls one on `Billing` directly.
+
+## Deploying with Layers
+
+Provide runners to an implementation's Effect, with whatever its handlers need from them, like RPC middleware:
+
+```typescript title="src/RoomLive.ts"
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import { AuthLive } from "./Auth.ts";
+import { Default } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+
+export default Room.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const members = yield* Ref.make(new Set<string>());
+      return Room.of({
+        Join: () => Effect.map(Ref.get(members), (all) => all.size),
+        Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+      });
+    });
+  }).pipe(Effect.provide(Default.pipe(Layer.provide(AuthLive)))),
+);
+```
+
+Or provide them to the Layer `.make` returns, as Effect does with `toLayer`:
+
+```typescript title="src/SweeperLive.ts"
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Default } from "./Cluster.ts";
+import { Sweeper } from "./Sweeper.ts";
+
+export default Sweeper.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.logInfo("sweeping");
+  }),
+).pipe(Layer.provide(Default));
+```
+
+## The gateway
+
+Every set serves its classes over HTTP to callers outside the cluster, behind a token. Where the gateway is reachable depends on the cloud:
+
+| Cloud | Gateway |
+|---|---|
+| Docker | the service's name, on the swarm's network |
+| AWS | an internet-facing Application Load Balancer |
+| GCP | a regional load balancer on a static address |
+| Kubernetes | a Service, in the cluster (or a load balancer, with `serviceType`) |
+| Fly | `https://{name}.fly.dev` |
+| Hetzner | a Load Balancer |
+
+Load balancers check the gateway at `/health`, which needs no token.
+
+## What happens on a deploy
+
+When the host replaces runners, each new runner registers and takes shards as the old ones release them. Instances on a moving shard stop and start again on their new runner, with fresh state. Persisted messages and workflows continue; a call in flight to a moving instance can fail with `EntityNotAssignedToRunner` and is safe to retry.
