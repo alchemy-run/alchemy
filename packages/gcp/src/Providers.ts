@@ -2435,6 +2435,10 @@ import {
 } from "./Storage/Object.ts";
 import { ObjectAccessControl, ObjectAccessControlProvider } from "./Storage/ObjectAccessControl.ts";
 import { PutObjectHttp } from "./Storage/PutObjectHttp.ts";
+import {
+  ReportConfig as StorageInsightsReportConfig,
+  ReportConfigProvider as StorageInsightsReportConfigProvider,
+} from "./StorageInsights/ReportConfig.ts";
 import { AgentPool, AgentPoolProvider } from "./StorageTransfer/AgentPool.ts";
 import { GetGoogleServiceAccountHttp } from "./StorageTransfer/GetGoogleServiceAccountHttp.ts";
 import { RunTransferJobHttp } from "./StorageTransfer/RunTransferJobHttp.ts";
@@ -2641,6 +2645,7 @@ const makeProviders = () =>
           Managed,
           ObjectAccessControl,
           StorageObject,
+          StorageInsightsReportConfig,
           AgentPool,
           TransferJob,
           Topic,
@@ -3647,6 +3652,7 @@ const makeProviders = () =>
             ManagedProvider(),
             ObjectAccessControlProvider(),
             StorageObjectProvider(),
+            StorageInsightsReportConfigProvider(),
             AgentPoolProvider(),
             TransferJobProvider(),
           ),
