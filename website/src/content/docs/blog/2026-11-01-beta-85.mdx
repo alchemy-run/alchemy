@@ -15,15 +15,26 @@ It moves Alchemy to **Effect 4.1**. Alchemy Domain's deploys now **roll out
 every model change** by replaying history, and one Domain model can be served
 **over HTTP, MCP or the CLI**, so people and agents reach it however they
 prefer. GCP gets **redesigned Cloud Run services and containers** and **connects to AWS
-without keys**. Custom domains work with **any DNS provider**, **AWS state
-uses DynamoDB** and plans 270× faster, **Alchemist** exposes the whole CLI
+without keys**. Custom domains work with **any DNS provider**, the
+**Cloudflare state store** takes its Worker name, account and domain, **AWS
+state uses DynamoDB** and plans 270× faster, **Alchemist** exposes the whole CLI
 as a programmatic API, and Alchemy's test runner ships as
 **`@alchemy.run/test`**.
+
+:::danger
+**Upgrade the Cloudflare state store to v8, and don't go back**
+
+Your next `alchemy deploy` asks to upgrade the store (pass `--yes` in CI). After
+that, don't run an older Alchemy against it: you risk losing the encryption key,
+which nothing can recover. Upgrade every machine and CI job together
+([below](#cloudflare-state-store-v8)).
+:::
 
 :::caution
 **Breaking changes**
 
 - **Effect 4.1**: bump `effect` and `@effect/*` to `^4.1.0` ([below](#effect-41)).
+- **`Cloudflare.state({ name })` is `workerName`**, the store's full Worker name, and `--name` takes the Worker name too: `name: "team-a"` becomes `workerName: "alchemy-state-store-team-a"`, the same Worker and secrets ([below](#choose-the-worker-name)).
 - **`AWS.state()` uses DynamoDB**: run `alchemy state migrate`, or keep S3 with `AWS.state({ backend: "s3" })` ([below](#aws-state-now-uses-dynamodb-and-plans-270-faster)).
 - **Lambda event-source handlers take the Lambda event** instead of a `Stream`, and can return a partial batch response ([below](#lambda-aliases-streaming-and-partial-batch-failures)):
 
@@ -810,6 +821,81 @@ is three functions. Thanks [Dan Myles](https://github.com/dan-myles) and
 
 Docs: [DNS adapters](/infrastructure-as-code/dns-adapters).
 
+## Cloudflare State Store v8
+
+The Cloudflare state store is now deployed with direct API calls instead of a
+stack, as state store v8, and you choose its Worker name, account and domain
+([#2385](https://github.com/alchemy-run/alchemy/pull/2385)).
+
+### Choose the Worker name
+
+`workerName` sets the store's Worker name. Without it, you get the same default
+store as before:
+
+```typescript
+state: Cloudflare.state({ workerName: "team-a-state" }),
+```
+
+It replaces `name`, which prefixed the Worker name with `alchemy-state-store-`.
+A store you named that way keeps its Worker and secrets when you pass the full
+name:
+
+```diff lang="typescript"
+Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
+-    state: Cloudflare.state({ name: "team-a" }),
++    state: Cloudflare.state({ workerName: "alchemy-state-store-team-a" }),
+  },
+  Effect.gen(function* () {}),
+);
+```
+
+`--name` takes the Worker name too:
+
+```sh
+alchemy state list --backend cloudflare --name alchemy-state-store-team-a
+```
+
+### Pin the account and serve it on your domain
+
+Pin the account so a login against another one can't read or deploy the store
+there, and serve it on a hostname in one of your zones for networks that can't
+reach `workers.dev`:
+
+```typescript
+state: Cloudflare.state({
+  accountId: "c8eeff0e...",
+  domain: "alchemy-state.example.com",
+}),
+```
+
+### Upgrade from v7
+
+Your next `alchemy deploy` asks to upgrade the store. In CI, pass `--yes`, or
+upgrade it ahead of time:
+
+```sh
+alchemy state bootstrap
+```
+
+The upgrade keeps the store's auth token, encryption key and state, and only
+ever creates a secret that's missing, so a deploy can't rotate the token or
+replace the key. A store that has lost its key isn't given a new one unless you
+confirm.
+
+:::danger
+The upgrade deletes the `CloudflareStateStore` stack that beta.84 and earlier
+use to manage the store. Don't run an older Alchemy against the store after
+upgrading: it can no longer manage it, and you risk losing the encryption key,
+which nothing can recover. Upgrade every machine and CI job that uses the store
+together.
+:::
+
+Docs: [Cloudflare state store](/state-store#cloudflare-state-store) ·
+[More than one store](/state-store#more-than-one-store-per-account).
+
 ## AWS state now uses DynamoDB and plans 270× faster
 
 `AWS.state()` keeps state in one on-demand DynamoDB table per account and
@@ -1121,7 +1207,6 @@ Thanks [Yanqi Zong](https://github.com/xiaoyu2er) and
 
 **Cloudflare**
 
-- The Cloudflare state store takes your account, Worker name and domain ([#2385](https://github.com/alchemy-run/alchemy/pull/2385)). [Docs](/state-store#cloudflare-state-store).
 - `codeUpdateStrategy` sets how running Durable Objects move onto new code ([#2863](https://github.com/alchemy-run/alchemy/pull/2863)). [Docs](/cloudflare/compute/code-updates).
 - Workers import any file through `rules` ([#2792](https://github.com/alchemy-run/alchemy/pull/2792)), and Flagship flags evaluate locally in `alchemy dev` ([#2746](https://github.com/alchemy-run/alchemy/pull/2746)).
 - `consumeNotifications` handles Cloudflare alerts in code, and Effect logs reach Workers Logs at their own level ([#2519](https://github.com/alchemy-run/alchemy/pull/2519)).
