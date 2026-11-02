@@ -9147,6 +9147,25 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/effect-cluster:
+    dependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)
+    devDependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+
   packages/fly:
     dependencies:
       '@alchemy.run/docker':
@@ -10196,6 +10215,9 @@ importers:
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../drizzle
+      '@alchemy.run/effect-cluster':
+        specifier: workspace:*
+        version: link:../effect-cluster
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../fly

@@ -1,0 +1,83 @@
+{
+  "name": "@alchemy.run/effect-cluster",
+  "version": "2.0.0-beta.84",
+  "description": "Effect Cluster entities, with their database and runners on any cloud, for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "cluster",
+    "effect",
+    "entities",
+    "infrastructure-as-code",
+    "sharding"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/effect-cluster"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Docker": "./src/Docker/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Docker": {
+        "types": "./lib/Docker/index.d.ts",
+        "bun": "./src/Docker/index.ts",
+        "worker": "./src/Docker/index.ts",
+        "default": "./lib/Docker/index.js"
+      },
+      "./internal/*": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/sql-pg": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/docker": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "@alchemy.run/docker": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/docker": {
+      "optional": true
+    }
+  }
+}
