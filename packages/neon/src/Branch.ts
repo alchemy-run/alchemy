@@ -337,7 +337,7 @@ export const BranchProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       if (output?.branchId) {
         return yield* getProjectBranch({
           project_id: output.projectId,
@@ -365,6 +365,8 @@ export const BranchProvider = () =>
       const match = matches[0];
       if (!match) return undefined;
       const attrs = yield* hydrateBranch(projectId, match);
+      // The generation a replacement is replacing is ours.
+      if (attrs && attrs.branchId === previous?.branchId) return attrs;
       return attrs && Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {

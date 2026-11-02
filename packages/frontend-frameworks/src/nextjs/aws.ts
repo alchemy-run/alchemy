@@ -179,8 +179,13 @@ const runOpenNextBuild = (options: {
       // mutates its own process.env (NEXT_PRIVATE_STANDALONE,
       // NEXT_PRIVATE_OUTPUT_TRACE_ROOT) before exec'ing `next build`, and
       // those mutations do not reliably reach execSync children under bun.
+      // `next build` must run as production, like `nextjs/node.ts` and
+      // `BuildChild`: an inherited NODE_ENV (left by an in-process dev server
+      // in the same long-lived process) breaks prerendering `/_global-error`
+      // ("Cannot read properties of null (reading 'useContext')").
       const env = yield* Effect.sync(() => ({
         ...process.env,
+        NODE_ENV: "production",
         ...options.env,
       }));
       const child = yield* ChildProcess.make(

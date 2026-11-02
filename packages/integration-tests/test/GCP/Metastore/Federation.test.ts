@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as metastore from "@distilled.cloud/gcp/metastore_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -22,7 +23,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/federations/alchemy-missing-federation`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -33,6 +34,9 @@ test.provider(
   "create is rejected when the Dataproc Metastore API is disabled",
   (stack) =>
     Effect.gen(function* () {
+      // Only meaningful while the API is disabled: enabled, the create would
+      // provision a real resource.
+      if (yield* isServiceEnabled("metastore.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 

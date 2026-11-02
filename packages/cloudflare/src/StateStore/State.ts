@@ -78,7 +78,7 @@ export type CloudflareStateOptions = {
   | {
       /**
        * The store's full Worker name, instead of deriving it from `name`:
-       * 1-63 lowercase letters, digits, `-` and `_`, starting with a letter or
+       * 1-54 lowercase letters, digits, `-` and `_`, starting with a letter or
        * digit. Its secrets are named after it, e.g. `acme-state` keeps its
        * token in `AlchemyStateStoreToken_acme_state`.
        */

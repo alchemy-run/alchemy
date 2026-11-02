@@ -210,6 +210,39 @@ const databaseStack = (props: { name?: string; logicalId?: string } = {}) =>
   });
 
 test.provider(
+  "an explicitly named database moves region by replacing itself delete-first",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const regional = (region: "us-east-1" | "eu-central-1") =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const database = yield* Prisma.Database("Regional", {
+          project,
+          name: "regional",
+          region,
+        });
+        return { project, database };
+      });
+
+    const initial = yield* stack.deploy(regional("us-east-1"));
+    expect((yield* observeDatabase(initial.database.databaseId)).region?.id).toBe("us-east-1");
+
+    // The replacement reuses the explicit name, so the old database goes first.
+    const moved = yield* stack.deploy(regional("eu-central-1"));
+    expect(moved.database.databaseId).not.toBe(initial.database.databaseId);
+    expect(moved.database.databaseName).toBe("regional");
+    expect((yield* observeDatabase(moved.database.databaseId)).region?.id).toBe("eu-central-1");
+    yield* expectDatabaseGone(initial.database.databaseId);
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(moved.database.databaseId);
+    yield* expectProjectGone(moved.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+test.provider(
   "creates a database under its fqn logical ID and rebinds the logical ID in place",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();

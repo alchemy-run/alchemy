@@ -16,7 +16,6 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -35,14 +34,19 @@ const workspaceCli = pathe.join(repoRoot, "packages/alchemy/bin/alchemy.js");
 const fixtures = pathe.resolve(import.meta.dirname, "fixtures");
 
 /**
- * The published alchemy's platform peers, pinned to the workspace's exact
- * Effect: a newer platform patch calls Effect APIs (e.g. `Path.make`) that an
- * older `effect` does not export.
+ * The Effect release that was current when the published alchemy came out
+ * (2026-10-05). Its peers accept `^4.0.0`, but later releases break it: 4.0.7
+ * rejects a schema it builds (`Schema.optional` on an index signature) and 4.1
+ * removed `effect/Crypto`, which it imports. Platform peers match: a platform
+ * package from another release calls Effect APIs (e.g. `Path.make`) that the
+ * other `effect` does not export.
  */
-const platformPeers = {
-  "@effect/platform-node": effectPackage.version,
-  "@effect/platform-bun": effectPackage.version,
-  "@effect/platform-node-shared": effectPackage.version,
+const PUBLISHED_EFFECT = "4.0.1";
+const publishedPeers = {
+  effect: PUBLISHED_EFFECT,
+  "@effect/platform-node": PUBLISHED_EFFECT,
+  "@effect/platform-bun": PUBLISHED_EFFECT,
+  "@effect/platform-node-shared": PUBLISHED_EFFECT,
 };
 
 /**
@@ -86,7 +90,7 @@ interface UpgradeCase {
   readonly tempRoot: string | undefined;
   readonly install: string[];
   /**
-   * Peers the published alchemy needs, pinned to the workspace's Effect.
+   * Peers the published alchemy needs, pinned to the Effect it was built for.
    */
   readonly peers?: Record<string, string>;
   readonly marker: string;
@@ -104,7 +108,7 @@ const cases: UpgradeCase[] = [
     tempRoot: pathe.resolve(import.meta.dirname, "../../../.tmp"),
     // Peers (nuxt, astro, ...) resolve from the workspace above.
     install: ["install", "--omit", "peer"],
-    peers: platformPeers,
+    peers: publishedPeers,
     marker: "NUXT_AWS_PAGE_MARKER",
     moved: [{ from: "Site__Server", to: "Site__WebServer" }],
   },
@@ -114,7 +118,7 @@ const cases: UpgradeCase[] = [
     entries: [".gitignore", "package.json", "next.config.ts", "tsconfig.json", "app", "public"],
     tempRoot: undefined,
     install: ["install", "--linker=hoisted", "--omit", "peer"],
-    peers: { effect: effectPackage.version, ...platformPeers },
+    peers: publishedPeers,
     marker: "NEXTJS_AWS_PAGE_MARKER",
     moved: [{ from: "Site__Server", to: "Site__WebServer" }],
     // Next's standalone server optimizes images and revalidates in-process.

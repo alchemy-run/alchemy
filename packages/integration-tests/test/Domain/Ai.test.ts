@@ -110,7 +110,7 @@ const ServerCredential = RpcMiddleware.layerClient(Session, ({ request, next }) 
 
 // ---------------------------------------------------------------- tests
 
-describe("Domain Ai: toToolkit", () => {
+describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
   it("has one tool per call that returns once, with the Api's schemas", () => {
     const { toolkit } = DomainAi.toToolkit(WalletApi);
     expect(Object.keys(toolkit.tools)).toEqual([
@@ -275,7 +275,7 @@ const mcpClient = (handler: (request: Request) => Promise<Response>) => {
   return { connect, request };
 };
 
-describe("Domain Ai: toMcp", () => {
+describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
   it.live("serves the tools over MCP; a call carries the request's headers to the Api", () =>
     Effect.gen(function* () {
       const { handler, dispose } = HttpRouter.toWebHandler(

@@ -34,14 +34,14 @@ const scheduledApplication = (app: Containers.ContainerApplicationItem) => {
 describe.concurrent.each([
   {
     dev: true,
-    stage: process.env.ALCHEMY_TEST_STAGE
-      ? `${process.env.ALCHEMY_TEST_STAGE}-local`
-      : "test-local",
+    // The user's test stage (`test_$USER` or `--stage`), so concurrent runs by
+    // different users never share containers.
+    stage: `${Test.defaultStage()}-local`,
     // Must cover the full readiness budget (readinessRetries × 3s ≈ 3 min)
     // when a saturated machine keeps the local container answering 500s.
     timeout: 300_000,
   },
-  { dev: false, stage: process.env.ALCHEMY_TEST_STAGE ?? "test-live", timeout: 300_000 },
+  { dev: false, stage: Test.defaultStage(), timeout: 300_000 },
 ])(
   "Container (dev: $dev)",
   ({ dev, stage, timeout }) => {
@@ -389,7 +389,7 @@ describe.sequential(
     ],
   },
   () => {
-    const stage = process.env.ALCHEMY_TEST_STAGE ?? "test-live";
+    const stage = Test.defaultStage();
     const providers = Cloudflare.providers();
     const services = Layer.effectContext(
       AttachmentStack.pipe(Effect.map((stack) => stack.services)),
@@ -790,7 +790,7 @@ describe.sequential(
     ],
   },
   () => {
-    const stage = process.env.ALCHEMY_TEST_STAGE ?? "test-live";
+    const stage = Test.defaultStage();
     const name = `alchemy-named-attachment-${stage}`;
     const NamedStack = attachmentStack(true, name);
     const services = Layer.effectContext(

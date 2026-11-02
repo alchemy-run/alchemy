@@ -95,6 +95,13 @@ const failure = (
   message: typeof cause === "string" ? cause : Formatter.format(cause),
 });
 
+/**
+ * One provider's failure, typed or defect, must not abort an account-wide
+ * sweep: credential layers die on a rejected token, so collect both.
+ */
+const settle = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.result(effect.pipe(Effect.catchDefect((defect) => Effect.fail(defect))));
+
 /** Deletions here run out-of-band, so nothing reports through an apply session. */
 const silent = {
   note: () => Effect.void,
@@ -194,7 +201,7 @@ export const list = (
       ({ id, provider }) =>
         Effect.gen(function* () {
           yield* emit({ type: "nuke.scan.provider.started", provider: id });
-          const result = yield* Effect.result(
+          const result = yield* settle(
             Effect.gen(function* () {
               const listed = yield* provider
                 .list()
@@ -304,7 +311,7 @@ export const destroy = ({
       yield* Effect.forEach(
         targets,
         (resource) =>
-          Effect.result(
+          settle(
             attempt(resource).pipe(
               Effect.retry({
                 schedule: Schedule.min([
@@ -391,7 +398,7 @@ export const destroy = ({
             remaining,
             (resource) =>
               Effect.gen(function* () {
-                const result = yield* Effect.result(attempt(resource));
+                const result = yield* settle(attempt(resource));
                 if (result._tag === "Success") {
                   deleted.push(resource);
                   yield* onDeleted(resource);
