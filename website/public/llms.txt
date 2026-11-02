@@ -112,9 +112,10 @@ Tests run against real clouds: the model, the end-to-end walkthrough, provider-l
 
 ## Cloudflare — start here
 
-The Cloudflare hub: overview (resources + recipes), setup (install, account, OAuth vs API token, profiles), and local development.
+The Cloudflare hub: overview, What is Cloudflare? (accounts, zones, Workers, bindings, Durable Objects, storage, queues, workflows, containers, API tokens and how Alchemy models each), setup (install, account, OAuth vs API token, profiles), and local development.
 
 - [Cloudflare](https://alchemy.run/cloudflare) — Build and deploy full applications on Cloudflare with Alchemy — one Worker runtime plus resources like Durable Objects, D1, R2, Queues, and Hyperdrive, wired together by typed bindings.
+- [What is Cloudflare?](https://alchemy.run/cloudflare/what-is-cloudflare) — The concepts behind Cloudflare — accounts, zones, the global network, Workers, bindings, Durable Objects, storage, queues, workflows, containers and API tokens — and how @alchemy.run/cloudflare models each of them.
 - [Setup](https://alchemy.run/cloudflare/setup) — Install Alchemy, create a Cloudflare account, and connect the two — OAuth or API token, saved to a local profile. No environment variables required.
 - [Local development](https://alchemy.run/cloudflare/local-development) — alchemy dev runs Workers in workerd with local simulators for KV, R2, D1, Queues, Hyperdrive, Workflows, Containers, and the Worker binding surface — browser rendering, images, email, cron, Stream, and more.
 
@@ -286,9 +287,12 @@ A four-part walkthrough: a Project, an Effect-native Compute API, Postgres, and 
 
 ## AWS — start here
 
-The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), local development, and the Lambda vs ECS vs EKS vs EC2 decision page.
+The AWS hub: overview, What is AWS? (accounts, regions, IAM, resources and ARNs, runtimes, bindings, event sources, VPCs, the edge and how Alchemy models each), the accounts-and-regions and IAM-and-bindings chapters, setup (credentials, profiles, region), local development, and the Lambda vs ECS vs EKS vs EC2 decision page.
 
-- [AWS](https://alchemy.run/aws) — Build AWS applications with Alchemy — a runtime (usually Lambda) plus typed resources, wired together by bindings that mint least-privilege IAM policies.
+- [AWS](https://alchemy.run/aws) — Build on AWS with Alchemy. Declare Lambda Functions, containers, tables, buckets and queues in TypeScript, and let bindings write each runtime's IAM policy from the calls its code makes.
+- [What is AWS?](https://alchemy.run/aws/what-is-aws) — The concepts behind AWS — accounts, regions, IAM identities and policies, resources and ARNs, runtimes, event sources, VPCs and the edge — and how @alchemy.run/aws models each of them.
+- [Accounts and regions](https://alchemy.run/aws/accounts-and-regions) — How AWS accounts isolate resources, how regions and Availability Zones place them, and how profiles and stages choose where each Alchemy deploy goes.
+- [IAM and bindings](https://alchemy.run/aws/iam) — How IAM identities, roles, policies and trust work on AWS, and how Alchemy bindings generate each runtime's least-privilege policy from the calls its code makes.
 - [Setup](https://alchemy.run/aws/setup) — Connect Alchemy to AWS with SSO, console login, stored access keys, or CI environment credentials.
 - [Local development](https://alchemy.run/aws/local-development) — alchemy dev runs your AWS stack on your machine — Lambda in Docker containers, local S3/DynamoDB/SQS, event sources firing, hot reload — with no AWS account or credentials required.
 - [Choosing a runtime](https://alchemy.run/aws/compute/choosing-a-runtime) — Lambda vs ECS vs EKS vs EC2 for Alchemy apps — cold starts, cost shape, packaging, and how much of each Alchemy currently covers.
@@ -347,7 +351,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 - [Drizzle + Aurora PostgreSQL](https://alchemy.run/aws/data/drizzle-aurora) — Drizzle on Lambda with private Aurora PostgreSQL, IAM authentication, verified TLS, and reviewed SQL migrations.
 - [DynamoDB](https://alchemy.run/aws/data/dynamodb) — Add a DynamoDB Table, bind GetItem and PutItem to your Lambda, and serve a typed key/value HTTP API backed by DynamoDB.
 - [RDS & Aurora](https://alchemy.run/aws/data/rds) — Stand up an Aurora cluster in one call with the Aurora helper, connect from Lambda over the Connect binding with Effect SQL, or skip connections entirely with the Data API.
-- [S3](https://alchemy.run/aws/data/s3) — Add an S3 Bucket to your Stack, bind PutObject and GetObject as runtime capabilities, and let Alchemy mint the IAM policy for you.
+- [S3](https://alchemy.run/aws/data/s3) — How S3 Buckets hold objects under keys, how a runtime reads and writes them through bindings, and how to share, react to and serve the objects you store.
 
 ## AWS — AI
 
@@ -920,4 +924,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~201 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~203 KB) — only fetch it when you need to locate a specific resource's reference page.

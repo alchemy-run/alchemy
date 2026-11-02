@@ -549,6 +549,7 @@ export default defineConfig({
           label: "Cloudflare",
           items: [
             { label: "Overview", link: "/cloudflare" },
+            { label: "What is Cloudflare?", link: "/cloudflare/what-is-cloudflare" },
             { label: "Setup", link: "/cloudflare/setup" },
             {
               label: "Local development",
@@ -559,57 +560,146 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "cloudflare/tutorial" } }],
             },
             {
-              label: "Compute",
+              label: "Workers",
               items: [
                 { label: "Workers", link: "/cloudflare/compute/workers" },
+                { label: "Code updates", link: "/cloudflare/compute/code-updates" },
                 {
                   label: "Gradual deployments",
                   link: "/cloudflare/compute/gradual-deployments",
                 },
-                {
-                  label: "Python Workers",
-                  link: "/cloudflare/compute/python-workers",
-                },
+                { label: "Previews", link: "/cloudflare/compute/previews" },
+                { label: "Python Workers", link: "/cloudflare/compute/python-workers" },
                 { label: "Workers Cache", link: "/cloudflare/compute/cache" },
-                {
-                  label: "Rate limiting",
-                  link: "/cloudflare/compute/rate-limiting",
-                },
-                {
-                  label: "Browser rendering",
-                  link: "/cloudflare/compute/browser-rendering",
-                },
-                {
-                  label: "Worker Loader",
-                  link: "/cloudflare/compute/worker-loader",
-                },
+                { label: "Rate limiting", link: "/cloudflare/compute/rate-limiting" },
+                { label: "Browser rendering", link: "/cloudflare/compute/browser-rendering" },
+                { label: "Worker Loader", link: "/cloudflare/compute/worker-loader" },
                 {
                   label: "Workers for Platforms",
                   link: "/cloudflare/compute/workers-for-platforms",
                 },
-                {
-                  label: "Durable Objects",
-                  link: "/cloudflare/compute/durable-objects",
-                },
+              ],
+            },
+            {
+              label: "Durable Objects",
+              items: [
+                { label: "Durable Objects", link: "/cloudflare/compute/durable-objects" },
                 {
                   label: "Cross-worker DOs",
                   link: "/cloudflare/compute/cross-worker-durable-object",
                 },
-                {
-                  label: "WebSockets",
-                  link: "/cloudflare/compute/hibernatable-websockets",
-                },
-                {
-                  label: "Code updates",
-                  link: "/cloudflare/compute/code-updates",
-                },
+                { label: "WebSockets", link: "/cloudflare/compute/hibernatable-websockets" },
+              ],
+            },
+            {
+              label: "Workflows",
+              items: [
+                { label: "Workflows", link: "/cloudflare/compute/workflows" },
+                { label: "Add a Workflow", link: "/cloudflare/compute/add-a-workflow" },
+                { label: "Effect workflows", link: "/cloudflare/compute/effect-workflows" },
+              ],
+            },
+            {
+              label: "Containers",
+              items: [
                 { label: "Containers", link: "/cloudflare/compute/containers" },
+                { label: "Run a Container", link: "/cloudflare/compute/run-a-container" },
                 {
                   label: "Container lifecycle",
                   link: "/cloudflare/compute/container-lifecycle",
                 },
-                { label: "Workflows", link: "/cloudflare/compute/workflows" },
-                { label: "Effect workflows", link: "/cloudflare/compute/effect-workflows" },
+              ],
+            },
+            {
+              label: "Storage & databases",
+              items: [
+                { label: "D1", link: "/cloudflare/data/d1" },
+                { label: "KV", link: "/cloudflare/data/kv" },
+                { label: "R2", link: "/cloudflare/data/r2" },
+                {
+                  label: "R2 presigned URLs",
+                  link: "/cloudflare/data/r2-presigned-urls",
+                },
+                { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
+                {
+                  label: "Private database (Workers VPC)",
+                  link: "/cloudflare/data/hyperdrive-private-database",
+                },
+                { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
+                { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
+                { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
+                {
+                  label: "Shared database",
+                  link: "/cloudflare/data/shared-database",
+                },
+                {
+                  label: "Branch from a shared database",
+                  link: "/cloudflare/data/branch-from-shared-database",
+                },
+                { label: "Artifacts", link: "/cloudflare/data/artifacts" },
+                { label: "Pipelines", link: "/cloudflare/data/pipelines" },
+                { label: "Iceberg tables", link: "/cloudflare/data/iceberg-tables" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Queues", link: "/cloudflare/messaging/queues" },
+                { label: "K2 streams", link: "/cloudflare/messaging/k2" },
+                { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
+                {
+                  label: "GitHub events",
+                  link: "/cloudflare/messaging/github-events",
+                },
+              ],
+            },
+            {
+              label: "Networking & edge",
+              items: [
+                {
+                  label: "Domains & DNS",
+                  link: "/cloudflare/networking/domains",
+                },
+                {
+                  label: "Custom domains & routes",
+                  link: "/cloudflare/networking/custom-domains",
+                },
+                {
+                  label: "Federated APIs",
+                  link: "/cloudflare/networking/federated-apis",
+                },
+                { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
+              ],
+            },
+            {
+              label: "Security & secrets",
+              items: [
+                {
+                  label: "Secrets & env",
+                  link: "/cloudflare/security/secrets-env",
+                },
+                {
+                  label: "Secrets Store",
+                  link: "/cloudflare/security/secrets-store",
+                },
+                { label: "Turnstile", link: "/cloudflare/security/turnstile" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [
+                {
+                  label: "Native tracing",
+                  link: "/cloudflare/observability/workers-tracing",
+                },
+                {
+                  label: "Axiom telemetry",
+                  link: "/cloudflare/observability/axiom-observability",
+                },
+                {
+                  label: "Analytics Engine",
+                  link: "/cloudflare/observability/analytics-engine",
+                },
               ],
             },
             {
@@ -670,59 +760,6 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
-              items: [
-                { label: "D1", link: "/cloudflare/data/d1" },
-                { label: "KV", link: "/cloudflare/data/kv" },
-                { label: "R2", link: "/cloudflare/data/r2" },
-                {
-                  label: "R2 presigned URLs",
-                  link: "/cloudflare/data/r2-presigned-urls",
-                },
-                { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
-                {
-                  label: "Private database (Workers VPC)",
-                  link: "/cloudflare/data/hyperdrive-private-database",
-                },
-                { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
-                { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
-                { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
-                {
-                  label: "Shared database",
-                  link: "/cloudflare/data/shared-database",
-                },
-                {
-                  label: "Branch from a shared database",
-                  link: "/cloudflare/data/branch-from-shared-database",
-                },
-                { label: "Artifacts", link: "/cloudflare/data/artifacts" },
-                { label: "Pipelines", link: "/cloudflare/data/pipelines" },
-                { label: "Iceberg tables", link: "/cloudflare/data/iceberg-tables" },
-              ],
-            },
-            {
-              label: "Messaging & events",
-              items: [
-                { label: "Queues", link: "/cloudflare/messaging/queues" },
-                { label: "K2 streams", link: "/cloudflare/messaging/k2" },
-                { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
-                {
-                  label: "GitHub events",
-                  link: "/cloudflare/messaging/github-events",
-                },
-              ],
-            },
-            {
-              label: "Email",
-              items: [
-                { label: "Email", link: "/cloudflare/email" },
-                {
-                  label: "Send & receive email",
-                  link: "/cloudflare/email/send-and-receive",
-                },
-              ],
-            },
-            {
               label: "AI",
               items: [
                 { label: "Workers AI", link: "/cloudflare/ai/workers-ai" },
@@ -736,52 +773,13 @@ export default defineConfig({
               ],
             },
             {
-              label: "Security & secrets",
+              label: "Email",
               items: [
+                { label: "Email", link: "/cloudflare/email" },
                 {
-                  label: "Secrets & env",
-                  link: "/cloudflare/security/secrets-env",
+                  label: "Send & receive email",
+                  link: "/cloudflare/email/send-and-receive",
                 },
-                {
-                  label: "Secrets Store",
-                  link: "/cloudflare/security/secrets-store",
-                },
-                { label: "Turnstile", link: "/cloudflare/security/turnstile" },
-              ],
-            },
-            {
-              label: "Observability",
-              items: [
-                {
-                  label: "Native tracing",
-                  link: "/cloudflare/observability/workers-tracing",
-                },
-                {
-                  label: "Axiom telemetry",
-                  link: "/cloudflare/observability/axiom-observability",
-                },
-                {
-                  label: "Analytics Engine",
-                  link: "/cloudflare/observability/analytics-engine",
-                },
-              ],
-            },
-            {
-              label: "Networking",
-              items: [
-                {
-                  label: "Domains & DNS",
-                  link: "/cloudflare/networking/domains",
-                },
-                {
-                  label: "Custom domains & routes",
-                  link: "/cloudflare/networking/custom-domains",
-                },
-                {
-                  label: "Federated APIs",
-                  link: "/cloudflare/networking/federated-apis",
-                },
-                { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
               ],
             },
             providerResourcesEntry("Cloudflare"),

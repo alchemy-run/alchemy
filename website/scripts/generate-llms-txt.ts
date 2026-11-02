@@ -181,8 +181,15 @@ const SECTIONS: Section[] = [
   {
     heading: "Cloudflare — start here",
     intro:
-      "The Cloudflare hub: overview (resources + recipes), setup (install, account, OAuth vs API token, profiles), and local development.",
-    pages: { slugs: ["cloudflare/index", "cloudflare/setup", "cloudflare/local-development"] },
+      "The Cloudflare hub: overview, What is Cloudflare? (accounts, zones, Workers, bindings, Durable Objects, storage, queues, workflows, containers, API tokens and how Alchemy models each), setup (install, account, OAuth vs API token, profiles), and local development.",
+    pages: {
+      slugs: [
+        "cloudflare/index",
+        "cloudflare/what-is-cloudflare",
+        "cloudflare/setup",
+        "cloudflare/local-development",
+      ],
+    },
   },
   {
     heading: "Cloudflare — tutorial",
@@ -259,9 +266,17 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — start here",
     intro:
-      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), local development, and the Lambda vs ECS vs EKS vs EC2 decision page.",
+      "The AWS hub: overview, What is AWS? (accounts, regions, IAM, resources and ARNs, runtimes, bindings, event sources, VPCs, the edge and how Alchemy models each), the accounts-and-regions and IAM-and-bindings chapters, setup (credentials, profiles, region), local development, and the Lambda vs ECS vs EKS vs EC2 decision page.",
     pages: {
-      slugs: ["aws/index", "aws/setup", "aws/local-development", "aws/compute/choosing-a-runtime"],
+      slugs: [
+        "aws/index",
+        "aws/what-is-aws",
+        "aws/accounts-and-regions",
+        "aws/iam",
+        "aws/setup",
+        "aws/local-development",
+        "aws/compute/choosing-a-runtime",
+      ],
     },
   },
   {
