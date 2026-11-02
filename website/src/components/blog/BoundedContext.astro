@@ -15,10 +15,10 @@ const NH = 46;
 
 const box = { x: 300, y: 12, w: W - 300 - 12, h: H - 24 };
 
-const clients: Array<{ label: string; type: string; y: number }> = [
-  { label: "HTTP client", type: "toHttpApi", y: 112 },
-  { label: "Agent", type: "toMcp", y: 197 },
-  { label: "Terminal", type: "toCli", y: 282 },
+const clients: Array<{ label: string; type: string; y: number; icon: ReadonlyArray<string> }> = [
+  { label: "HTTP client", type: "toHttpApi", y: 112, icon: ["M3 5h18v14H3z", "M3 9h18", "M6 7h.01", "M9 7h.01"] },
+  { label: "Agent", type: "toMcp", y: 197, icon: ["M11 3l2 5.5L18.5 10.5 13 12.5 11 18l-2-5.5L3.5 10.5 9 8.5z", "M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"] },
+  { label: "Terminal", type: "toCli", y: 282, icon: ["M4 17l6-6-6-6", "M12 19h8"] },
 ];
 const api = { x: box.x - NW / 2, y: 197 };
 
@@ -56,7 +56,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
     {
       clients.map((c) => (
         <g transform={`translate(16 ${c.y - NH / 2})`}>
-          <DomainNode kind="client" width={NW} height={NH} label={c.label} type={c.type} />
+          <DomainNode kind="client" width={NW} height={NH} label={c.label} type={c.type} icon={c.icon} />
         </g>
       ))
     }
