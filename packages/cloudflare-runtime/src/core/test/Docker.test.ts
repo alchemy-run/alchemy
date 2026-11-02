@@ -566,7 +566,12 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, missing.layer)))
       );
       expect(result._tag).toBe("Failure");
       if (result._tag !== "Failure") return;
-      expect((result.failure as { subtag: string }).subtag).toBe("DockerPullFailed");
+      const error = result.failure as { subtag: string; message: string; hint?: string };
+      expect(error.subtag).toBe("DockerPullFailed");
+      expect(error.message).toContain("not in the local Docker");
+      // Tells the user both ways out: log in to the registry, or build it.
+      expect(error.hint).toContain("docker login");
+      expect(error.hint).toContain(`docker build --platform linux/amd64 -t ${LOCAL_ONLY} .`);
       expect(missing.spawned.filter(([, verb]) => verb === "tag")).toEqual([]);
     }),
   );

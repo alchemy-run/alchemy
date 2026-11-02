@@ -621,7 +621,38 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Pulling container image ${build.image}...`);
           }
-          yield* docker.image.pull(build.image, platform, undefined, session);
+          // Pull every time so a mutable tag publishes the newest image. An
+          // image built on this machine or `docker load`ed has no registry
+          // to pull from, so when the pull fails and the image is present
+          // locally, publish the local copy.
+          const usedLocalImage = yield* docker.image
+            .pull(build.image, platform, undefined, session)
+            .pipe(
+              Effect.as(false),
+              Effect.catch((pullError) =>
+                docker.image.inspect(build.image).pipe(
+                  Effect.flatMap((local) =>
+                    local
+                      ? Effect.logInfo(
+                          `Cloudflare Container image: ${build.image} could not be pulled, publishing the local image`,
+                        ).pipe(Effect.as(true))
+                      : Effect.fail(pullError),
+                  ),
+                  Effect.catch(() =>
+                    Effect.fail(
+                      new ContainerProviderOperationFailed({
+                        message:
+                          `Container image "${build.image}" could not be pulled and is not in the local Docker. ` +
+                          `If it is in a registry, check the name and tag, and run \`docker login\` for a private registry. ` +
+                          `If it is built on this machine, build or load it before deploying: ` +
+                          `\`docker build --platform ${platform} -t ${build.image} .\` or \`docker load\`.`,
+                        cause: pullError,
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            );
           yield* docker.image.tag(build.image, imageRef);
           yield* Effect.logInfo(`Cloudflare Container image: pushing ${imageRef}`);
           if (session) {
@@ -629,9 +660,19 @@ export const LiveContainerProvider = () =>
           }
           // Push the same platform that was pulled. A containerd image store
           // may also hold a host-architecture variant under this tag.
-          yield* docker.image
-            .push(imageRef, credentials, platform, undefined, session)
-            .pipe(retryContainerPublication);
+          yield* docker.image.push(imageRef, credentials, platform, undefined, session).pipe(
+            retryContainerPublication,
+            Effect.mapError((pushError) =>
+              usedLocalImage
+                ? new ContainerProviderOperationFailed({
+                    message:
+                      `Could not publish the local image "${build.image}" as ${platform}, the platform Cloudflare runs. ` +
+                      `Rebuild it for that platform: \`docker build --platform ${platform} -t ${build.image} .\`.`,
+                    cause: pushError,
+                  })
+                : pushError,
+            ),
+          );
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
