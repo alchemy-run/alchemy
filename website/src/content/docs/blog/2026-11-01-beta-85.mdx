@@ -6,7 +6,6 @@ excerpt: Effect 4.1, Alchemy Domain deploys that backfill and rebuild views and 
 ---
 
 import BackfillFanout from "../../../components/blog/BackfillFanout.astro";
-import ModelUpgrade from "../../../components/blog/ModelUpgrade.astro";
 
 beta.85 is 249 pull requests from 39 contributors: 84 features and 95 bug
 fixes.
@@ -203,7 +202,22 @@ changes ship as new upgrade steps in Alchemy, and your deploy applies them.
 A Worker deployed by a newer Alchemy is never moved back: an older one
 refuses with `DomainVersionTooNew` before uploading anything.
 
-<ModelUpgrade />
+For the bank example, the first deploy with beta.85 changes the Worker like
+this:
+
+```diff lang="text"
+Worker
+-  tag    (none)
++  tag    alchemy:domain:v0
+-  class  AccountAggregate
++  class  Bank.AccountAggregate
+-  class  OpenAccountWorkflow
++  class  Bank.OpenAccountWorkflow
+```
+
+The renames ride in the same upload as the new code, as Cloudflare
+`renamed_classes` migrations, so every account and running saga keeps its
+storage and nothing is copied.
 
 This is what DDD buys you here. Because Alchemy knows the shape of your
 model (its aggregates, views and sagas), it can own the infrastructure under
