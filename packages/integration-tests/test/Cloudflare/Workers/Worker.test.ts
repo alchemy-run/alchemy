@@ -29,7 +29,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
-import { testName } from "../../names.ts";
+import { stageSuffix, testName } from "../../names.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
@@ -2093,7 +2093,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const suffix = stageSuffix();
           const domainA = `alchemy-circular-url-${suffix}.${circularUrlZone}`;
 
           yield* stack.destroy();
@@ -2452,7 +2452,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const suffix = stageSuffix();
           const domainA = `alchemy-worker-a-${suffix}.${customDomainZone}`;
           const domainB = `alchemy-worker-b-${suffix}.${customDomainZone}`;
 

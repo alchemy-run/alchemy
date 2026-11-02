@@ -17,7 +17,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { testName } from "../../names.ts";
+import { stageSuffix, testName } from "../../names.ts";
 import MultipartWorker, { MultipartBucket } from "./fixtures/multipart-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -1282,7 +1282,7 @@ test.provider(
       // Pin the physical name on every deploy so adding `name` cannot be
       // what schedules the update — same shape as the CORS drift case
       // above. A PR/user suffix keeps concurrent runs from colliding.
-      const suffix = (process.env.PULL_REQUEST ?? process.env.USER ?? "local")
+      const suffix = stageSuffix()
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "")
         .slice(0, 24);

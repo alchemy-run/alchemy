@@ -12,6 +12,13 @@ import * as Test from "@alchemy.run/test/Alchemy";
 export const testName = (base: string, separator = "-"): string =>
   `${base}${separator}${stageHash(Test.defaultStage())}`;
 
+/**
+ * The short stage hash `testName` appends, for names a test assembles itself
+ * (hostnames, route prefixes): the same on every run, distinct per user and
+ * worktree.
+ */
+export const stageSuffix = (): string => stageHash(Test.defaultStage());
+
 // FNV-1a: deterministic and dependency-free.
 const stageHash = (stage: string): string => {
   let hash = 0x811c9dc5;
