@@ -66,8 +66,8 @@ credentials from your Alchemy profile — SSO, console login,
 or stored keys, whichever you picked in
 [Setup](/aws/setup).
 
-`state: AWS.state()` stores deploy state in an account-regional
-S3 bucket (`alchemy-state-{accountId}-{region}-an`), created
+`state: AWS.state()` stores deploy state in a DynamoDB table
+(`alchemy-state`) in your account, created
 lazily on the first deploy. Because the state lives in your AWS
 account rather than on disk, the same configuration works
 locally and in CI. (For purely local iteration you can use

@@ -791,11 +791,21 @@ export default defineConfig({
           label: "AWS",
           items: [
             { label: "Overview", link: "/aws" },
+            { label: "What is AWS?", link: "/aws/what-is-aws" },
             { label: "Setup", link: "/aws/setup" },
             { label: "Local development", link: "/aws/local-development" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "aws/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Accounts and regions", link: "/aws/accounts-and-regions" },
+                { label: "IAM and bindings", link: "/aws/iam" },
+                { label: "Secrets & env", link: "/aws/security/secrets-env" },
+                { label: "Federated identity", link: "/aws/security/federated-identity" },
+              ],
             },
             {
               label: "Compute",
@@ -808,11 +818,52 @@ export default defineConfig({
                 { label: "Lambda Web Functions", link: "/aws/compute/web-functions" },
                 { label: "Effect workflows", link: "/aws/compute/effect-workflows" },
                 { label: "ECS", link: "/aws/compute/ecs" },
-                { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "EKS", link: "/aws/compute/eks" },
+                { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "HyperPod", link: "/aws/compute/hyperpod" },
                 { label: "Lambda MicroVMs", link: "/aws/compute/microvms" },
               ],
+            },
+            {
+              label: "Storage & databases",
+              items: [
+                { label: "S3", link: "/aws/data/s3" },
+                { label: "DynamoDB", link: "/aws/data/dynamodb" },
+                { label: "RDS & Aurora", link: "/aws/data/rds" },
+                { label: "Drizzle + Aurora", link: "/aws/data/drizzle-aurora" },
+                { label: "Drizzle + DSQL", link: "/aws/data/drizzle-dsql" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "SQS", link: "/aws/messaging/sqs" },
+                { label: "SNS", link: "/aws/messaging/sns" },
+                { label: "Kinesis", link: "/aws/messaging/kinesis" },
+                {
+                  label: "EventBridge & Scheduler",
+                  link: "/aws/messaging/eventbridge",
+                },
+                {
+                  label: "DynamoDB Streams",
+                  link: "/aws/messaging/dynamodb-streams",
+                },
+                { label: "S3 events", link: "/aws/messaging/s3-events" },
+              ],
+            },
+            {
+              label: "Networking & edge",
+              items: [
+                { label: "VPC & networking", link: "/aws/networking" },
+                {
+                  label: "Custom domains",
+                  link: "/aws/networking/custom-domains",
+                },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "CloudWatch", link: "/aws/observability/cloudwatch" }],
             },
             {
               label: "Frontend",
@@ -873,35 +924,8 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
-              items: [
-                { label: "DynamoDB", link: "/aws/data/dynamodb" },
-                { label: "S3", link: "/aws/data/s3" },
-                { label: "RDS & Aurora", link: "/aws/data/rds" },
-                { label: "Drizzle + Aurora", link: "/aws/data/drizzle-aurora" },
-                { label: "Drizzle + DSQL", link: "/aws/data/drizzle-dsql" },
-              ],
-            },
-            {
               label: "AI",
               items: [{ label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" }],
-            },
-            {
-              label: "Messaging & events",
-              items: [
-                { label: "SQS", link: "/aws/messaging/sqs" },
-                { label: "SNS", link: "/aws/messaging/sns" },
-                { label: "Kinesis", link: "/aws/messaging/kinesis" },
-                {
-                  label: "EventBridge & Scheduler",
-                  link: "/aws/messaging/eventbridge",
-                },
-                {
-                  label: "DynamoDB Streams",
-                  link: "/aws/messaging/dynamodb-streams",
-                },
-                { label: "S3 events", link: "/aws/messaging/s3-events" },
-              ],
             },
             {
               label: "Email",
@@ -913,27 +937,6 @@ export default defineConfig({
                 {
                   label: "Receiving inbound email",
                   link: "/aws/email/receiving",
-                },
-              ],
-            },
-            {
-              label: "Security & secrets",
-              items: [
-                { label: "Secrets & env", link: "/aws/security/secrets-env" },
-                { label: "Federated identity", link: "/aws/security/federated-identity" },
-              ],
-            },
-            {
-              label: "Observability",
-              items: [{ label: "CloudWatch", link: "/aws/observability/cloudwatch" }],
-            },
-            {
-              label: "Networking",
-              items: [
-                { label: "VPC & networking", link: "/aws/networking" },
-                {
-                  label: "Custom domains",
-                  link: "/aws/networking/custom-domains",
                 },
               ],
             },

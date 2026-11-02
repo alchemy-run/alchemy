@@ -70,11 +70,10 @@ keys with `alchemy profile edit --add AWS`. See
 
 ## Where state lives
 
-`state: AWS.state()` stores deploy state in an account-regional S3
-bucket (`alchemy-state-{accountId}-{region}-an`), created lazily on
+`state: AWS.state()` stores deploy state in a DynamoDB table
+(`alchemy-state`) in your account, created lazily on
 the first deploy. Because the state lives in your AWS account rather
-than on disk, the same configuration works locally and in CI with no
-extra setup.
+than on disk, the same configuration works locally and in CI.
 
 :::note[Other state stores]
 For purely local iteration you can use `Alchemy.localState()`

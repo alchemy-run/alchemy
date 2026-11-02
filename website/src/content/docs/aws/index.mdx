@@ -1,120 +1,90 @@
 ---
 title: AWS
-description: Build AWS applications with Alchemy — a runtime (usually Lambda) plus typed resources, wired together by bindings that mint least-privilege IAM policies.
+description: Build on AWS with Alchemy. Declare Lambda Functions, containers, tables, buckets and queues in TypeScript, and let bindings write each runtime's IAM policy from the calls its code makes.
 ---
 
-An Alchemy app on AWS is one **runtime** — usually a Lambda
-Function — plus the **resources** it talks to: tables,
-buckets, queues, streams. You wire them together with typed
-**bindings**: call `S3.PutObject(bucket)` in your code and
-Alchemy attaches the matching least-privilege IAM statement to
-the function's role. The code is the policy.
+import DAG from "../../../components/DAG.astro";
 
-New here? [Set up credentials](/aws/setup) first, then deploy
-your first [Lambda](/aws/compute/lambda).
+`@alchemy.run/aws` puts your AWS infrastructure and the code that runs on it in one TypeScript program. A Lambda Function is a class that holds its own handler. The Bucket and Queue it uses are declared next to it. Every call it makes to them is a binding, and the bindings write its IAM policy.
 
-## Pick your runtime
+Deploy it to your account with `alchemy deploy`, or run it on your machine with `alchemy dev`, against a local emulator, with no account at all.
 
-- **[Lambda](/aws/compute/lambda)** — serverless, event-driven functions
-  with public Function URLs. The primary documented path: every
-  resource and event source in this section is shown
-  running on Lambda.
-- **[ECS](/aws/compute/ecs)** — long-running containers on Fargate.
-  Alchemy bundles your Effect program into a Docker image and
-  runs it as a Cluster + Service + Task.
-- **[EKS](/aws/compute/eks)** — managed Kubernetes (Auto Mode).
-  Deployments, Jobs, raw manifests, and Helm charts in the same
-  TypeScript program as the cluster — no YAML, no kubectl.
-- **[EC2](/aws/compute/ec2)** — full-control virtual machines, with the
-  complete VPC networking toolkit around them.
+<DAG
+  nodes={[
+    { id: "api", label: "Api", type: "Lambda Function", col: 0, row: 0 },
+    { id: "files", label: "Files", type: "S3 Bucket", col: 1, row: 0 },
+    { id: "jobs", label: "Jobs", type: "SQS Queue", col: 1, row: 1 },
+    { id: "worker", label: "Worker", type: "Lambda Function", col: 2, row: 1 },
+  ]}
+  edges={[
+    { from: "api", to: "files", label: "s3:PutObject" },
+    { from: "api", to: "jobs", label: "sqs:SendMessage" },
+    { from: "jobs", to: "worker", dashed: true },
+  ]}
+  caption="Each edge is a binding in the code, and an IAM statement on the caller's role."
+/>
 
-Not sure which? See
-[Choosing a runtime](/aws/compute/choosing-a-runtime).
+## A taste
 
-## Data
+A Queue is a declaration:
 
-- **[DynamoDB](/aws/data/dynamodb)** — key/value tables with
-  `GetItem`/`PutItem` bindings and change-data-capture Streams.
-- **[S3](/aws/data/s3)** — object storage with `GetObject`/`PutObject`
-  bindings and bucket event notifications.
-- **[RDS & Aurora](/aws/data/rds)** — managed Postgres/MySQL: the
-  `Aurora` helper stands up the whole cluster in one call, with
-  a `Connect` binding or the Data API at runtime.
+```typescript title="src/jobs.ts"
+import * as AWS from "@alchemy.run/aws";
 
-## Messaging & events
+export const Jobs = AWS.SQS.Queue("Jobs");
+```
 
-- **[SQS](/aws/messaging/sqs)** — queues with a `SendMessage` binding and a
-  `Stream`-shaped Lambda consumer.
-- **[SNS](/aws/messaging/sns)** — pub/sub topics with a `Publish` binding
-  and fan-out to queues and functions.
-- **[EventBridge & Scheduler](/aws/messaging/eventbridge)** — event buses,
-  rules, and cron/rate schedules that invoke your functions.
-- **[Kinesis](/aws/messaging/kinesis)** — ordered, sharded data streams
-  with a `PutRecord` binding and the same `Stream` consumer
-  surface.
+A Lambda Function binds it and sends to it. The binding gives the Function `sqs:SendMessage` on that one Queue, and `SendMessageHttp` is the client that makes the call:
 
-## Email
+```typescript title="src/api.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Jobs } from "./jobs.ts";
 
-- **[Sending & managing email](/aws/email/sending)** — verify an SES
-  identity, send from a Lambda with the `SendEmail` binding, and
-  manage identity policies, contact lists, dedicated IP pools,
-  tenants, account settings, and deliverability insights.
-- **[Receiving inbound email](/aws/email/receiving)** — SES receipt
-  rule sets and rules that store mail in S3, fan out to SNS, invoke
-  a Lambda, or bounce it. Region-limited to `us-east-1`,
-  `us-west-2`, and `eu-west-1`.
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const send = yield* AWS.SQS.SendMessage(Jobs);
+    return {
+      fetch: send({ MessageBody: "hello" }).pipe(
+        Effect.as(HttpServerResponse.text("queued")),
+        Effect.orDie,
+      ),
+    };
+  }).pipe(Effect.provide(AWS.SQS.SendMessageHttp)),
+) {}
+```
 
-## Security & secrets
+And the Stack deploys it to the account your profile signs in to:
 
-- **[Secrets & env](/aws/security/secrets-env)** — .env values via
-  Config, Secrets Manager when the secret is shared, generated,
-  or rotated.
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as AWS from "@alchemy.run/aws";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
 
-## Observability
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: AWS.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.functionUrl };
+  }),
+);
+```
 
-- **[CloudWatch](/aws/observability/cloudwatch)** — dashboards and metric
-  alarms, declared in the same Stack as the resources they
-  watch.
+## Where to start
 
-## Frontend & networking
+**New to AWS?** [What is AWS?](/aws/what-is-aws) walks through accounts, regions, IAM, runtimes, event sources, networks and the edge, once each, and shows how Alchemy models every one.
 
-- **[Websites](/aws/frontend/websites)** — the frontend block: static
-  sites and built Vite apps on S3 + CloudFront as a single
-  `StaticSite` resource.
-- **[VPC & networking](/aws/networking)** — the `Network` helper
-  and the VPC primitives, for when ECS, EKS, or EC2 needs
-  explicit networking.
+**Want to build one?** The [tutorial](/aws/tutorial/part-1) goes from a single Bucket to a Lambda Function with tests and CI, one step at a time. Start with [Setup](/aws/setup) to connect your account.
 
-## What are you building?
+**Want the whole picture?** The chapters follow the shape of AWS itself. Start with where things live and who may touch them: [Accounts and regions](/aws/accounts-and-regions) and [IAM and bindings](/aws/iam). Then where code runs: [Choosing a runtime](/aws/compute/choosing-a-runtime), [Lambda](/aws/compute/lambda), [Lambda Web Functions](/aws/compute/web-functions), [ECS](/aws/compute/ecs), [EKS](/aws/compute/eks) and [EC2](/aws/compute/ec2). Then what it stores: [S3](/aws/data/s3), [DynamoDB](/aws/data/dynamodb) and [RDS & Aurora](/aws/data/rds). Then how work flows between them: [SQS](/aws/messaging/sqs), [SNS](/aws/messaging/sns), [Kinesis](/aws/messaging/kinesis) and [EventBridge](/aws/messaging/eventbridge). And finally how traffic reaches it and how you watch it: [VPC & networking](/aws/networking), [Custom domains](/aws/networking/custom-domains) and [CloudWatch](/aws/observability/cloudwatch).
 
-| You're building                       | Reach for                                                                     |
-| ------------------------------------- | ----------------------------------------------------------------------------- |
-| An HTTP API                           | [Lambda](/aws/compute/lambda) + Function URL + [DynamoDB](/aws/data/dynamodb)              |
-| A typed HTTP API                      | [Effect HTTP API on Lambda](/aws/apis/effect-http-api)                      |
-| A typed API for external clients      | [Effect RPC on Lambda](/aws/apis/effect-rpc)                                |
-| Drive a MicroVM from a Lambda (internal RPC) | [MicroVMs](/aws/compute/microvms) + [Schemaless RPC](/apis/schemaless)   |
-| An ML training fleet                  | [HyperPod](/aws/compute/hyperpod) — Slurm or EKS orchestrated, with task governance |
-| A REST API with stages/custom domains | [API Gateway](/aws/apis/api-gateway)                                        |
-| Your own domain on a site or API      | [Custom domains with Route53 + ACM](/aws/networking/custom-domains)               |
-| A static site                         | [Deploy a static site](/aws/frontend/static-site) on S3 + CloudFront            |
-| An event pipeline                     | [Kinesis](/aws/messaging/kinesis) → Lambda                                              |
-| Background jobs                       | [SQS](/aws/messaging/sqs) + Lambda                                                      |
-| Scheduled jobs                        | [EventBridge Scheduler](/aws/messaging/eventbridge) → Lambda                            |
-| A Postgres database                   | [RDS & Aurora](/aws/data/rds)                                                      |
-| Kubernetes workloads or Helm charts   | [EKS](/aws/compute/eks)                                                            |
-| Object processing                     | [S3 events](/aws/messaging/s3-events)                                            |
-| Sending transactional email           | [SES sending](/aws/email/sending) — identity + `SendEmail` binding               |
-| Inbound email pipelines               | [SES email receiving](/aws/email/receiving) → S3 / SNS / Lambda                  |
-| Change data capture                   | [DynamoDB Streams](/aws/messaging/dynamodb-streams)                              |
-| API keys or credentials for a function | [Secrets & env](/aws/security/secrets-env)                                            |
+**Building a website or an API?** [Websites](/aws/frontend/websites) covers static sites and every supported framework on S3 and CloudFront. [Effect HTTP API](/aws/apis/effect-http-api) and [Effect RPC](/aws/apis/effect-rpc) serve typed APIs from Lambda.
 
-## Where next
+**Working offline?** [Local development](/aws/local-development) runs the whole Stack on your machine.
 
-- [Setup](/aws/setup) — install Alchemy and connect your AWS
-  account.
-- [Deploy a static site](/aws/frontend/static-site) and
-  [Effect HTTP API on Lambda](/aws/apis/effect-http-api) —
-  end-to-end guides for the two most common app shapes.
-- [Providers reference](/providers) — generated API docs for
-  every AWS resource Alchemy ships, well beyond the blocks
-  documented here (CloudFront, Route53, IAM, and more).
+Every resource is in the generated [API reference](/providers), including the hundreds of services these chapters don't cover.

@@ -1,0 +1,146 @@
+---
+title: IAM and bindings
+description: How IAM identities, roles, policies and trust work on AWS, and how Alchemy bindings generate each runtime's least-privilege policy from the calls its code makes.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+IAM is the part of AWS that answers one question on every request: may this identity do this action on this resource? Nothing is allowed until a policy says so.
+
+This chapter explains the pieces IAM uses to answer that question, from identities and policies to roles and trust, then shows how Alchemy writes a runtime's policy for you from the calls its code makes. It ends with the roles you still declare yourself.
+
+## Every request has an identity
+
+When your code calls `s3:PutObject`, AWS first works out who is asking. The caller signs each request with credentials, and the credentials belong to an **identity**.
+
+There are two kinds. An **IAM user** has long-lived keys of its own. An **IAM role** has none: a trusted principal **assumes** it and receives temporary credentials that expire within hours.
+
+Prefer roles everywhere. A person signs in through IAM Identity Center and assumes a role in the account they work in. A Lambda Function, an ECS task or an EC2 instance runs as a role AWS assumes for it. CI assumes a role through OIDC. No long-lived key is ever written down.
+
+## A policy lists what an identity may do
+
+A **policy** is a JSON document of statements. Each statement names an effect, the actions it covers and the resources it applies to:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["sqs:SendMessage"],
+  "Resource": "arn:aws:sqs:us-east-1:123456789012:myapp-jobs-a1b2c3"
+}
+```
+
+Actions are `service:Operation` pairs, one per API call. Resources are ARNs, and a `*` in one matches many: `arn:aws:s3:::myapp-files-a1b2c3/*` is every object in one Bucket.
+
+AWS denies by default. A request is allowed only if some statement allows it and no statement denies it. So the safe policy is the smallest one: exactly the actions the code calls, on exactly the resources it calls them on. That's **least privilege**.
+
+## A role is trusted, then assumed
+
+A role has two policies. Its **permissions** say what it may do. Its **trust policy** says who may assume it.
+
+<DAG
+  nodes={[
+    { id: "lambda", label: "lambda.amazonaws.com", type: "trusted principal", layer: 0 },
+    { id: "role", label: "Execution role", type: "IAM role", tone: "accent", layer: 1 },
+    { id: "queue", label: "Jobs", type: "SQS Queue", layer: 2 },
+  ]}
+  edges={[
+    { from: "lambda", to: "role", label: "assumes" },
+    { from: "role", to: "queue", label: "sqs:SendMessage" },
+  ]}
+  caption="The trust policy lets Lambda assume the role. The permissions let the role send to one Queue."
+/>
+
+A Lambda Function's execution role trusts `lambda.amazonaws.com`, so the Lambda service can assume it on the Function's behalf. Every time your code runs, it carries the role's temporary credentials, and every call it makes is checked against the role's permissions.
+
+## Bindings write the policy
+
+Writing that policy by hand means keeping two lists in step: the calls in the code, and the statements in the role. Add a call and forget the statement, and the call fails in production. Remove a call and forget the statement, and the role keeps a permission nobody uses.
+
+A **binding** keeps them in step. It's one line in the runtime's Construction phase that returns a typed client and adds the matching statement to the runtime's role:
+
+```typescript title="src/api.ts"
+const sendMessage = yield* SQS.SendMessage(Jobs);
+```
+
+Deploy adds `sqs:SendMessage` on the `Jobs` Queue's ARN to the Function's role. Call the client while the Function runs:
+
+```typescript title="src/api.ts"
+yield* sendMessage({ MessageBody: JSON.stringify({ id }) });
+```
+
+The client comes from the binding's Layer, `SQS.SendMessageHttp`, which the Function provides:
+
+```typescript title="src/api.ts"
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sendMessage = yield* SQS.SendMessage(Jobs);
+    return {
+      fetch: sendMessage({ MessageBody: "hello" }).pipe(
+        Effect.as(HttpServerResponse.text("queued")),
+        Effect.orDie,
+      ),
+    };
+  }).pipe(Effect.provide(SQS.SendMessageHttp)),
+) {}
+```
+
+Each binding is one IAM statement. Bind `S3.GetObject` as well, and the role gains `s3:GetObject` on that Bucket's objects. Delete a binding, and the next deploy removes its statement.
+
+## Bindings are scoped to one resource
+
+A binding takes the resource it grants access to, so its statement names that resource's ARN and nothing else:
+
+```typescript title="src/api.ts"
+const getObject = yield* S3.GetObject(Files);
+const putObject = yield* S3.PutObject(Uploads);
+```
+
+The Function may read from `Files` and write to `Uploads`. It can't write to `Files`, and it can't touch any other Bucket in the account, even one created by the same Stack.
+
+## The role comes with the runtime
+
+You never declare a Lambda Function's execution role. Deploying the Function creates it, with the Lambda trust policy, permission to write its own logs, and one statement per binding. Destroying the Function deletes it.
+
+The role's name and ARN are on the Function, for anything outside the Function that needs them:
+
+```typescript title="alchemy.run.ts"
+const api = yield* Api;
+return { role: api.roleArn };
+```
+
+ECS tasks, EKS workloads and EC2 instances work the same way. A binding on any of them adds its statement to the role that runs it. See [Choosing a runtime](/aws/compute/choosing-a-runtime).
+
+## Declare a role for anything else
+
+Some identities aren't runtimes: the role CI assumes to deploy, a role another service assumes, a role you hand to a partner account. Declare those with `AWS.IAM.Role`, giving its trust policy and its permissions:
+
+```typescript title="alchemy.run.ts"
+const role = yield* AWS.IAM.Role("DeployRole", {
+  assumeRolePolicyDocument: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { Federated: oidc.openIDConnectProviderArn },
+        Action: ["sts:AssumeRoleWithWebIdentity"],
+        Condition: {
+          StringLike: { "token.actions.githubusercontent.com:sub": "repo:your-org/your-repo:*" },
+        },
+      },
+    ],
+  },
+  managedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"],
+});
+```
+
+This one lets GitHub Actions in one repository deploy without a stored key. The [CI tutorial](/aws/tutorial/part-5) builds it step by step.
+
+## Trust another cloud
+
+A runtime on another cloud can be trusted the same way. A Cloud Run service binds an SQS Queue exactly as a Lambda does, and the binding creates a role that trusts that one Google service account. There's no access key to create, store or rotate. See [Federated identity](/aws/security/federated-identity).
+
+## Keep secrets out of policies
+
+IAM decides who may call AWS. It doesn't hold your third-party API keys. Pass those to a runtime from your `.env` through `effect/Config`, or keep them in Secrets Manager when other resources share or rotate them. See [Secrets & env](/aws/security/secrets-env).
