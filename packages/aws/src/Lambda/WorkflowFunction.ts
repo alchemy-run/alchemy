@@ -517,12 +517,14 @@ export const executionNameOf = (workflowName: string, executionId: string) => {
 };
 
 /**
- * Callbacks a run is waiting on: started, and not yet completed. A callback's
- * name is on the `waitForCallback` context it was started in, its parent.
+ * A run's callbacks: the ones it is waiting on, started and not yet completed,
+ * and the names of the ones already completed. A callback's name is on the
+ * `waitForCallback` context it was started in, its parent.
  */
-const pendingCallbacks = (events: ReadonlyArray<Lambda.Event>) => {
+const callbacksOf = (events: ReadonlyArray<Lambda.Event>) => {
   const names = new Map<string, string>();
   const started = new Map<string, { readonly name: string; readonly callbackId: string }>();
+  const completed = new Set<string>();
   for (const event of events) {
     if (event.SubType === "WaitForCallback" && event.Id && event.Name) {
       names.set(event.Id, event.Name);
@@ -539,21 +541,45 @@ const pendingCallbacks = (events: ReadonlyArray<Lambda.Event>) => {
         event.CallbackFailedDetails ||
         event.CallbackTimedOutDetails)
     ) {
+      const callback = started.get(event.Id);
+      if (callback) completed.add(callback.name);
       started.delete(event.Id);
     }
   }
-  return [...started.values()];
+  return { pending: [...started.values()], completed };
 };
 
-/** Find a waiting run's callback, retrying while the run is on its way to the wait. */
+const pendingCallbacks = (events: ReadonlyArray<Lambda.Event>) => callbacksOf(events).pending;
+
+/** Whether a run is in a durable wait: a sleep, or a parent checking on its child. */
+const sleeping = (events: ReadonlyArray<Lambda.Event>) => {
+  const waits = new Set<string>();
+  for (const event of events) {
+    if (!event.Id) continue;
+    if (event.WaitStartedDetails) waits.add(event.Id);
+    if (event.WaitSucceededDetails || event.WaitCancelledDetails) waits.delete(event.Id);
+  }
+  return waits.size > 0;
+};
+
+/** Whether a run has finished, so there's nothing left to signal or interrupt. */
+const finished = (calls: Calls, executionArn: string) =>
+  Effect.map(calls.get(executionArn), ({ status }) => status !== "RUNNING");
+
+/**
+ * Find a waiting run's callback, retrying while the run is on its way to the
+ * wait. Undefined once the wait is over, or the run is: a signal sent again,
+ * or after the run finished, has nothing to complete.
+ */
 const findCallback = (calls: Calls, executionName: string, deferredName: string) =>
   Effect.gen(function* () {
     const arn = yield* calls.find(executionName);
     if (!arn) return yield* Effect.fail("not started" as const);
-    const callback = pendingCallbacks(yield* calls.history(arn)).find(
-      (pending) => pending.name === deferredName,
-    );
-    return callback ? callback.callbackId : yield* Effect.fail("not waiting" as const);
+    const { pending, completed } = callbacksOf(yield* calls.history(arn));
+    const callback = pending.find((waiting) => waiting.name === deferredName);
+    if (callback) return callback.callbackId;
+    if (completed.has(deferredName) || (yield* finished(calls, arn))) return undefined;
+    return yield* Effect.fail("not waiting" as const);
   }).pipe(
     Effect.retry({
       schedule: Schedule.min([Schedule.exponential("200 millis"), Schedule.spaced("5 seconds")]),
@@ -646,17 +672,41 @@ const makeEngine = (options: {
       }),
 
     // A run waiting on a signal is woken with an interrupt, so its
-    // compensations run; a run busy in a step can only be stopped.
+    // compensations run. A sleeping run is stopped. A run still working,
+    // or not listed yet, gets a while to reach one or the other.
     interrupt: (workflow, executionId) =>
       Effect.gen(function* () {
         const calls = yield* route(workflow._tag);
-        const arn = yield* calls.find(executionNameOf(workflow._tag, executionId));
-        if (!arn) return;
-        const pending = pendingCallbacks(yield* calls.history(arn));
-        if (pending.length === 0) return yield* calls.stop(arn);
-        yield* Effect.forEach(pending, (callback) => calls.fail(callback.callbackId, INTERRUPT), {
-          discard: true,
-        });
+        const executionName = executionNameOf(workflow._tag, executionId);
+        const target = yield* Effect.gen(function* () {
+          const arn = yield* calls.find(executionName);
+          if (!arn) return yield* Effect.fail({ arn } as const);
+          const events = yield* calls.history(arn);
+          const pending = pendingCallbacks(events);
+          if (pending.length > 0) return { arn, pending, stop: false };
+          if (sleeping(events)) return { arn, pending, stop: true };
+          if (yield* finished(calls, arn)) return { arn, pending, stop: false };
+          return yield* Effect.fail({ arn } as const);
+        }).pipe(
+          Effect.retry({
+            schedule: Schedule.min([
+              Schedule.exponential("200 millis"),
+              Schedule.spaced("2 seconds"),
+            ]),
+            times: 25,
+          }),
+          // Still working after all that: it can only be stopped.
+          Effect.catch(({ arn }) => Effect.succeed({ arn, pending: [], stop: true })),
+        );
+        if (!target.arn) return;
+        if (target.stop) return yield* calls.stop(target.arn);
+        yield* Effect.forEach(
+          target.pending,
+          (callback) => calls.fail(callback.callbackId, INTERRUPT),
+          {
+            discard: true,
+          },
+        );
       }),
 
     interruptUnsafe: (workflow, executionId) =>
@@ -739,6 +789,7 @@ const makeEngine = (options: {
         const calls = yield* route(opts.workflowName);
         const executionName = executionNameOf(opts.workflowName, opts.executionId);
         const callbackId = yield* findCallback(calls, executionName, opts.deferredName);
+        if (callbackId === undefined) return;
         yield* calls.succeed(callbackId, yield* encodeExit(opts.exit));
       }),
 

@@ -283,6 +283,18 @@ export const conformance = (engine: Engine) => {
   );
 
   test(
+    "interrupting a workflow on its way to a wait runs its compensations",
+    Effect.gen(function* () {
+      const id = yield* freshId("hold-early");
+      const run = yield* start("Hold", id);
+      yield* run.interrupt;
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
+      expect(yield* journal(id)).toEqual(["reserve", "release"]);
+    }),
+    { timeout },
+  );
+
+  test(
     "interrupting a sleeping workflow finishes it",
     Effect.gen(function* () {
       const id = yield* freshId("sleeping");
