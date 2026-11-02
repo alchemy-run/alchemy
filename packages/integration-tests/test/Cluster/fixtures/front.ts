@@ -8,6 +8,7 @@ import * as Stream from "effect/Stream";
 import { Database, FRONT_PORT } from "./cluster.ts";
 import Counters from "./counter.ts";
 import { Greeters } from "./greeter.ts";
+import { Tally } from "./legacy.ts";
 
 export default class Front extends Docker.Service<Front>()(
   "ClusterFront",
@@ -23,6 +24,7 @@ export default class Front extends Docker.Service<Front>()(
   Effect.gen(function* () {
     const counters = yield* Counters;
     const greeters = yield* Greeters;
+    const tallies = yield* Tally;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -52,6 +54,10 @@ export default class Front extends Docker.Service<Front>()(
             });
           case "greet":
             return yield* json({ value: yield* greeters("front").Greet({ name: id }) });
+          case "tally":
+            return yield* json({
+              value: yield* tallies(id).Add({ amount: Number(arg ?? 1) }),
+            });
           case "ready":
             return HttpServerResponse.text("ok");
           default:

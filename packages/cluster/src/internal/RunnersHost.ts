@@ -81,11 +81,6 @@ const shortLabel = Effect.fn(function* (id: string, max: number) {
   return `${label.slice(0, max - 9).replace(/-+$/, "")}-${hash}`;
 });
 
-/** A runners Layer was provided to something other than an entity's Effect. */
-export class RunnersOutsideEntity extends Data.TaggedError("Cluster.RunnersOutsideEntity")<{
-  readonly message: string;
-}> {}
-
 /** The runners were given a database whose network they cannot join. */
 export class DatabaseNetworkMismatch extends Data.TaggedError("Cluster.DatabaseNetworkMismatch")<{
   readonly message: string;
@@ -114,8 +109,12 @@ export interface RunnersNodes<Network> {
   readonly runners: Runners;
   /** The runners' name, a DNS label. */
   readonly name: string;
-  /** The directory holding the bundled program (`runner.mjs`) and a `Dockerfile`. */
-  readonly program: Output.Output<string>;
+  /**
+   * The bundled program: a directory holding `runner.mjs` (and an external
+   * program's `program.mjs`) with a `Dockerfile`, and a hash of its
+   * contents, which changes whenever the program does.
+   */
+  readonly program: Output.Output<{ readonly dir: string; readonly hash: string }>;
   /** Environment every runner needs, as plain strings. */
   readonly environment: Output.Output<Record<string, string>>;
 }
@@ -131,7 +130,7 @@ const output = <T>(value: Input<T>): Output.Output<T> =>
 /** The Dockerfile every host builds the runner image from. */
 export const RUNNER_DOCKERFILE = `FROM node:26-slim
 WORKDIR /app
-COPY runner.mjs /app/runner.mjs
+COPY *.mjs /app/
 ENV NODE_ENV=production
 EXPOSE ${RUNNER_PORT} ${GATEWAY_PORT}
 ENTRYPOINT ["node", "/app/runner.mjs"]
@@ -168,9 +167,10 @@ export const makeRunnersLayer = <Network, Req>(options: {
       // Named up front, so an entity knows its runners without depending on
       // the runners resource, whose bindings carry every entity's env.
       const name = options.settings.name ?? (yield* stackDnsLabel(options.id));
-      // A shard group only has to be unique within its database. Effect
+      // A shard group only has to be unique within its database, and must
+      // never be one an external program uses (usually `default`). Effect
       // Cluster stores `group:shard` in a 50-character column, so keep it short.
-      const group = yield* shortLabel(options.id, 40);
+      const group = `alchemy:${yield* shortLabel(options.id, 32)}`;
       const gateway = options.gateway(name);
       const context = yield* Effect.context<Stack | Providers | Req>();
 
@@ -228,17 +228,11 @@ export const makeRunnersLayer = <Network, Req>(options: {
           });
         }).pipe(Effect.provide(context));
 
-      // The generic `Self` is the class whose phase is running. Outside a
-      // class phase there is none: the runners were given an external entity.
+      // The generic `Self` is the class whose phase is running. When it is
+      // not an entity, the runners were given an external entity, which may
+      // be declared inside any runtime's Construction phase.
       const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
-      if (self !== undefined) {
-        if (self.Type !== EntityTypeId) {
-          return yield* Effect.die(
-            new RunnersOutsideEntity({
-              message: `${options.label}("${options.id}") was provided to ${self.Type} '${self.LogicalId}', not a Cluster.Entity.`,
-            }),
-          );
-        }
+      if (self !== undefined && self.Type === EntityTypeId) {
         const entity = self as unknown as Entity & EntityRuntimeContext;
         yield* entity.registerRunners((env) =>
           deploy(
@@ -271,20 +265,6 @@ const runnerEntry = (name: "runner" | "external-runner") =>
     new URL(import.meta.url.endsWith(".ts") ? `./${name}.ts` : `./${name}.js`, import.meta.url),
   );
 
-const PROGRAM = "virtual:cluster-program";
-
-/** Resolve {@link PROGRAM} to the external program the runners run. */
-const programPlugin = (program: string) => [
-  {
-    name: "cluster-program",
-    resolveId: (id: string) => (id === PROGRAM ? `\0${PROGRAM}` : null),
-    load: (id: string) =>
-      id === `\0${PROGRAM}`
-        ? `import ${JSON.stringify(program.startsWith("file:") ? fileURLToPath(program) : program)};`
-        : null,
-  },
-];
-
 /**
  * Bundle the runner program and its Dockerfile into a directory of their
  * own, once the runners know their classes, and resolve to the directory.
@@ -297,22 +277,36 @@ const bundleRunners = Effect.fn(function* (id: string, runners: Runners) {
     Effect.gen(function* () {
       yield* fs.remove(dir, { recursive: true, force: true });
       yield* fs.makeDirectory(dir, { recursive: true });
-      // An external program is run as it is, with the gateway beside it.
+      // An external program is bundled on its own and run as its own
+      // process (`program.mjs`), with the gateway beside it.
       const program = entities.find((entity) => entity.program !== undefined)?.program;
-      yield* Bundle.build(
+      const hashes: string[] = [];
+      if (program !== undefined) {
+        const external = yield* Bundle.build(
+          {
+            input: path.resolve(program),
+            platform: "node",
+            resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
+          },
+          { dir, format: "esm", entryFileNames: "program.mjs", codeSplitting: false },
+        );
+        hashes.push(external.hash);
+      }
+      const runner = yield* Bundle.build(
         {
           input: runnerEntry(program === undefined ? "runner" : "external-runner"),
           platform: "node",
           resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
-          plugins: [
-            entitiesPlugin(entities),
-            program === undefined ? [] : programPlugin(path.resolve(program)),
-          ],
+          plugins: entitiesPlugin(entities),
         },
         { dir, format: "esm", entryFileNames: "runner.mjs", codeSplitting: false },
       );
+      hashes.push(runner.hash, RUNNER_DOCKERFILE);
       yield* fs.writeFileString(path.join(dir, "Dockerfile"), RUNNER_DOCKERFILE);
-      return dir;
+      const hash = yield* Effect.sync(() =>
+        createHash("sha256").update(hashes.join("\n")).digest("hex").slice(0, 16),
+      );
+      return { dir, hash };
     }).pipe(Effect.orDie),
   )(runners.entities);
 });

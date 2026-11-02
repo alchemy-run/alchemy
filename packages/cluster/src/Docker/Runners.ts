@@ -59,8 +59,10 @@ export const Runners = (
     gateway: (name) => ({ url: `http://${name}:${GATEWAY_PORT}` }),
     nodes: ({ network, name, program, environment }) =>
       Effect.gen(function* () {
+        // Tagged with the program's hash, so a changed program is a new image.
         const image = yield* Docker.Image(`${id}RunnerImage`, {
-          build: { context: program as unknown as string },
+          build: { context: program.pipe(Output.map((p) => p.dir)) as unknown as string },
+          tag: program.pipe(Output.map((p) => p.hash)) as unknown as string,
           skipPush: true,
         });
         yield* Docker.Service(`${id}Runners`, {

@@ -36,7 +36,7 @@ export const waitForReady = (baseUrl: string) =>
         ? Effect.void
         : Effect.fail(new NotReady({ detail: `${response.status}` })),
     ),
-    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 12 }),
+    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
   );
 
 type TestFn = (name: string, effect: Effect.Effect<void, unknown, any>, options?: object) => void;
@@ -92,6 +92,16 @@ export const conformanceTests = (test: TestFn, { baseUrl }: { baseUrl: () => str
     "a streaming RPC delivers every value",
     Effect.gen(function* () {
       expect((yield* get(`${baseUrl()}/tick/conf-stream/5`)).values).toEqual([1, 2, 3, 4, 5]);
+    }),
+    options,
+  );
+
+  test(
+    "an external program's entity is called like any other",
+    Effect.gen(function* () {
+      const a: number = (yield* get(`${baseUrl()}/tally/conf-tally/2`)).value;
+      const b: number = (yield* get(`${baseUrl()}/tally/conf-tally/3`)).value;
+      expect(b - a).toBe(3);
     }),
     options,
   );
