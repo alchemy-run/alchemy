@@ -414,7 +414,7 @@ export const conformance = (engine: Engine) => {
       const started = yield* Clock.currentTimeMillis;
       const run = yield* start("WakeInStep", id, "?seconds=2");
       const status = yield* awaitResult(run.status);
-      expect(status._tag).toBe("Completed");
+      expect(status).toMatchObject({ _tag: "Completed" });
       // A DateTime, sent back as its ISO string: after the sleep, not before.
       const at = Date.parse((status as { result: string }).result);
       expect(at).toBeGreaterThanOrEqual(started + 2_000);
@@ -482,6 +482,32 @@ export const conformance = (engine: Engine) => {
       });
       expect(yield* journal(`${id}-child`)).toEqual(["requested", "approved:agent"]);
       expect(yield* journal(id)).toEqual(["parent:approved by agent"]);
+    }),
+    { timeout },
+  );
+
+  test(
+    "runs activities in parallel",
+    Effect.gen(function* () {
+      const id = yield* freshId("fanout");
+      const run = yield* start("Fanout", id);
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: 6 });
+      expect([...(yield* journal(id))].sort()).toEqual(["part:1", "part:2", "part:3"]);
+    }),
+    { timeout },
+  );
+
+  test(
+    "a child's typed failure reaches its parent",
+    Effect.gen(function* () {
+      const id = yield* freshId("parent-failing");
+      const run = yield* start("ParentOfFailing", id);
+      expect(yield* awaitResult(run.status)).toEqual({
+        _tag: "Completed",
+        result: "child card declined",
+      });
+      expect(yield* journal(`${id}-child`)).toEqual(["reserve", "declined", "release"]);
+      expect(yield* journal(id)).toEqual(["parent:child card declined"]);
     }),
     { timeout },
   );

@@ -10,6 +10,7 @@ import {
   Approve,
   Checkout,
   Crash,
+  Fanout,
   Flaky,
   Greet,
   Guarded,
@@ -17,6 +18,7 @@ import {
   Nap,
   Naps,
   Parent,
+  ParentOfFailing,
   ParentOfWaiting,
   Race,
   Recover,
@@ -55,6 +57,8 @@ export const app = Effect.gen(function* () {
     ParentOfWaiting: yield* Workflows.RunWorkflow(ParentOfWaiting),
     Suspends: yield* Workflows.RunWorkflow(Suspends),
     Recover: yield* Workflows.RunWorkflow(Recover),
+    Fanout: yield* Workflows.RunWorkflow(Fanout),
+    ParentOfFailing: yield* Workflows.RunWorkflow(ParentOfFailing),
   };
   return {
     fetch: Effect.gen(function* () {

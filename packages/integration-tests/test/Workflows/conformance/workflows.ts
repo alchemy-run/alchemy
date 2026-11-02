@@ -143,6 +143,20 @@ export const Recover = Workflow.make("Recover", {
   idempotencyKey: ({ id }) => id,
 });
 
+/** Runs three activities at once. */
+export const Fanout = Workflow.make("Fanout", {
+  payload: { id: Schema.String },
+  success: Schema.Number,
+  idempotencyKey: ({ id }) => id,
+});
+
+/** Runs a declined Checkout as a child, and handles the child's typed failure. */
+export const ParentOfFailing = Workflow.make("ParentOfFailing", {
+  payload: { id: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
 /** Every conformance workflow, for the engine that hosts them. */
 export const workflows = [
   Greet,
@@ -161,6 +175,8 @@ export const workflows = [
   ParentOfWaiting,
   Suspends,
   Recover,
+  Fanout,
+  ParentOfFailing,
 ] as const;
 
 export const GreetLive = Workflows.layer(
@@ -475,6 +491,42 @@ export const RecoverLive = Workflows.layer(
   }),
 );
 
+export const FanoutLive = Workflows.layer(
+  Fanout,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id }) {
+      const parts = yield* Effect.all(
+        [1, 2, 3].map((part) =>
+          Activity.make({
+            name: `part-${part}`,
+            success: Schema.Number,
+            execute: journal.append(id, `part:${part}`).pipe(Effect.as(part)),
+          }),
+        ),
+        { concurrency: "unbounded" },
+      );
+      return parts.reduce((sum, part) => sum + part, 0);
+    });
+  }),
+);
+
+export const ParentOfFailingLive = Workflows.layer(
+  ParentOfFailing,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id }) {
+      const outcome = yield* Checkout.execute({
+        id: `${id}-child`,
+        decline: true,
+        abandon: false,
+      }).pipe(Effect.catchTag("Declined", ({ reason }) => Effect.succeed(`child ${reason}`)));
+      yield* Activity.make({ name: "parent", execute: journal.append(id, `parent:${outcome}`) });
+      return outcome;
+    });
+  }),
+);
+
 /** Every conformance workflow's implementation. Provide the cloud's `Journal` and engine. */
 export const WorkflowsLive = Layer.mergeAll(
   GreetLive,
@@ -493,4 +545,6 @@ export const WorkflowsLive = Layer.mergeAll(
   ParentOfWaitingLive,
   SuspendsLive,
   RecoverLive,
+  FanoutLive,
+  ParentOfFailingLive,
 );

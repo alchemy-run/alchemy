@@ -668,7 +668,7 @@ const makeEngine = (options: {
   readonly register: (workflow: Workflow.AnyWithProps, execute: Execute) => void;
 }): WorkflowEngine.WorkflowEngine["Service"] => {
   const { route } = options;
-  return WorkflowEngine.makeUnsafe({
+  const engine: WorkflowEngine.WorkflowEngine["Service"] = WorkflowEngine.makeUnsafe({
     register: (workflow, execute) =>
       Effect.sync(() => options.register(workflow as Workflow.AnyWithProps, execute)),
 
@@ -816,6 +816,8 @@ const makeEngine = (options: {
                     Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
                     // The step runs on its own fiber: carry the attempt `Activity.retry` set.
                     Context.add(Activity.CurrentAttempt, attempt),
+                    // A durable clock or deferred inside the activity needs the engine.
+                    Context.add(WorkflowEngine.WorkflowEngine, engine),
                     Context.add(CurrentRun, { ...run, step }),
                     Context.add(
                       CurrentActivity,
@@ -890,4 +892,5 @@ const makeEngine = (options: {
         Effect.sync(() => void run.clocks.set(opts.clock.deferred.name, opts.clock.duration)),
       ),
   });
+  return engine;
 };
