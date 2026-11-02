@@ -1,13 +1,13 @@
 ---
 title: IAM and bindings
-description: How IAM identities, roles, policies and trust work on AWS, and how Alchemy bindings generate each runtime's least-privilege policy from the calls its code makes.
+description: How IAM identities, roles, trust, resource-based policies and tag-based access (ABAC) work on AWS, and how Alchemy bindings write each runtime's least-privilege policies from the calls its code makes.
 ---
 
 import DAG from "../../../components/DAG.astro";
 
 IAM is the part of AWS that answers one question on every request: may this identity do this action on this resource? Nothing is allowed until a policy says so.
 
-This chapter explains the pieces IAM uses to answer that question, from identities and policies to roles and trust, then shows how Alchemy writes a runtime's policy for you from the calls its code makes. It ends with the roles you still declare yourself.
+This chapter explains the pieces IAM uses to answer that question: identities, policies, roles and trust, the policies a resource carries itself, and tags as attributes. Along the way it shows how Alchemy writes those policies for you from the calls your code makes. It ends with the policies and roles you still write yourself.
 
 ## Every request has an identity
 
@@ -51,6 +51,42 @@ A role has two policies. Its **permissions** say what it may do. Its **trust pol
 />
 
 A Lambda Function's execution role trusts `lambda.amazonaws.com`, so the Lambda service can assume it on the Function's behalf. Every time your code runs, it carries the role's temporary credentials, and every call it makes is checked against the role's permissions.
+
+## A resource can have a policy too
+
+So far every policy has been attached to an identity, saying what it may do. Many resources carry a policy of their own, saying who may reach them. Buckets, Queues, Topics, KMS keys, Secrets and Lambda Functions all do. This is a **resource-based policy**, and its statements name a **principal**: the account, role or service the statement is about.
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": { "Service": "cloudfront.amazonaws.com" },
+  "Action": ["s3:GetObject"],
+  "Resource": "arn:aws:s3:::myapp-site-a1b2c3/*",
+  "Condition": { "StringEquals": { "AWS:SourceArn": "arn:aws:cloudfront::123456789012:distribution/E1A2B3" } }
+}
+```
+
+This one lets CloudFront read the site's files, but only on behalf of one distribution. The condition matters: without it, any distribution in any account could read the Bucket.
+
+Within one account, either kind of policy can allow a request. Across accounts, both must: the caller's identity policy has to allow the call, and the resource's policy has to allow the caller's account.
+
+<DAG
+  nodes={[
+    { id: "caller", label: "Role", type: "account 1111", layer: 0 },
+    { id: "identity", label: "Identity policy", type: "may call s3:GetObject?", tone: "accent", layer: 1 },
+    { id: "resource", label: "Bucket policy", type: "trusts account 1111?", tone: "accent", layer: 1 },
+    { id: "bucket", label: "Bucket", type: "account 2222", layer: 2 },
+  ]}
+  edges={[
+    { from: "caller", to: "identity" },
+    { from: "caller", to: "resource" },
+    { from: "identity", to: "bucket" },
+    { from: "resource", to: "bucket" },
+  ]}
+  caption="A call across accounts needs both policies to allow it. Within one account, either is enough."
+/>
+
+Services that call your resources, like CloudFront, EventBridge, SNS or S3 notifications, have no identity policy in your account. A resource policy is the only way to let them in.
 
 ## Bindings write the policy
 
@@ -111,6 +147,97 @@ return { role: api.roleArn };
 ```
 
 ECS tasks, EKS workloads and EC2 instances work the same way. A binding on any of them adds its statement to the role that runs it. See [Choosing a runtime](/aws/compute/choosing-a-runtime).
+
+## Bindings write resource policies too
+
+When the caller is a service rather than your code, the binding writes the resource's policy instead of a role's. You don't declare these statements, and each one carries the condition that limits it to the one caller:
+
+A Website's CloudFront distribution gets `s3:GetObject` in its Bucket's policy, for that distribution only. An EventBridge rule that targets a Queue gets `sqs:SendMessage` in the Queue's policy, for that rule only. A rule, schedule or Bucket notification that targets a Function gets a **Lambda permission**, the resource policy that lets the service invoke it. An event source that polls, like a Queue or a Stream, instead gets read permissions on the Function's role.
+
+Remove the website, rule or subscription, and the next deploy removes its statement.
+
+## Open a resource to another account
+
+A resource policy is also how you share a resource with another account. Add your own statements to a Bucket's `policy`, and they're merged with the ones bindings contribute:
+
+```typescript title="src/reports.ts"
+export const Reports = AWS.S3.Bucket("Reports", {
+  bucketName: "acme-reports",
+  policy: [
+    {
+      Effect: "Allow",
+      Principal: { AWS: "arn:aws:iam::222222222222:root" },
+      Action: ["s3:GetObject"],
+      Resource: ["arn:aws:s3:::acme-reports/*"],
+    },
+  ],
+});
+```
+
+Name the Bucket yourself here, so the statement can name its ARN. The other account still has to allow its own roles to make the call. Queues and KMS keys take a `policy` the same way. To let another account or a service invoke a Function, declare a permission:
+
+```typescript title="alchemy.run.ts"
+yield* AWS.Lambda.Permission("PartnerInvoke", {
+  functionName: api.functionName,
+  action: "lambda:InvokeFunction",
+  principal: "222222222222",
+});
+```
+
+## Grant by tag with ABAC
+
+Bindings grant access to named resources: this Function may write to this Bucket. That's the right model when the code knows what it calls. Sometimes access follows a rule instead: anyone on the payments team may read the payments team's tables, including ones created next month.
+
+**Attribute-based access control** (ABAC) writes that rule with tags. A statement's condition compares a tag on the resource with a tag on the caller, so one statement covers every matching resource, current and future:
+
+```typescript title="alchemy.run.ts"
+const analysts = yield* AWS.IAM.Role("PaymentsAnalysts", {
+  assumeRolePolicyDocument: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { AWS: "arn:aws:iam::123456789012:root" },
+        Action: ["sts:AssumeRole", "sts:TagSession"],
+      },
+    ],
+  },
+  tags: { team: "payments" },
+  inlinePolicies: {
+    ReadTeamTables: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: ["dynamodb:GetItem", "dynamodb:Query"],
+          Resource: "*",
+          Condition: {
+            StringEquals: { "aws:ResourceTag/team": "${aws:PrincipalTag/team}" },
+          },
+        },
+      ],
+    },
+  },
+});
+```
+
+Tag the resources the rule should cover:
+
+```typescript title="src/ledger.ts"
+export const Ledger = AWS.DynamoDB.Table("Ledger", {
+  partitionKey: "id",
+  attributes: { id: "S" },
+  tags: { team: "payments" },
+});
+```
+
+Alchemy already tags everything it creates with `alchemy::stack`, `alchemy::stage` and `alchemy::id`, so you can scope a rule to one stage without adding tags of your own:
+
+```json
+{ "StringEquals": { "aws:ResourceTag/alchemy::stage": "prod" } }
+```
+
+Not every action supports tag conditions. Check the service's entry in the [AWS service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) before relying on one. And keep tags under control: whoever can change a tag can change who has access.
 
 ## Declare a role for anything else
 
