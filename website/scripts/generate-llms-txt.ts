@@ -729,6 +729,7 @@ const SECTIONS: Section[] = [
         "domain/tutorial/part-5",
         "domain/tutorial/part-6",
         "domain/tutorial/part-7",
+        "domain/tutorial/part-8",
         "domain/model",
         "domain/command",
         "domain/event",

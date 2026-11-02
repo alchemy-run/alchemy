@@ -142,11 +142,13 @@ bun alchemy deploy
 Open the app, deposit, and open `bank-traces` in Axiom. The deposit is one trace:
 
 ```text
-Domain.send Account.DepositMoney         the bank's Worker received the command
-└─ Domain.decide Account.DepositMoney    the account's Durable Object decided and committed
-   │   event MoneyDeposited              one span event per committed event
-   ├─ Domain.view AccountSummary         the summary view applied the event
-   └─ Domain.view Statement              the statement view applied the event
+POST                                            the bank's Worker received the request
+└─ DepositMoney                                 the Api ran the call
+   └─ Domain.send Account.DepositMoney          the Worker sent the command to the account
+      └─ Domain.decide Account.DepositMoney     the account's Durable Object decided and committed
+         │   event MoneyDeposited               one span event per committed event
+         ├─ Domain.view AccountSummary          the summary view applied the event
+         └─ Domain.view Statement               the statement view applied the event
 ```
 
 The trace crosses the Worker and three Durable Objects. Each event carries the span that committed it, so the views that react to it continue the same trace.
@@ -349,16 +351,20 @@ bun alchemy deploy
 Deposit again. The trace now starts in the browser:
 
 ```text
-Deposit                                     the app ran its Deposit command
-└─ Domain.send Account.DepositMoney         the bank's Worker received the command
-   └─ Domain.decide Account.DepositMoney    the account's Durable Object decided and committed
-      │   event MoneyDeposited
-      ├─ Domain.view AccountSummary
-      └─ Domain.view Statement
+Deposit                                                  the app ran its Deposit command
+└─ DepositMoney                                          the app's bank client made the call
+   └─ POST                                               the browser sent the request
+      └─ POST                                            the bank's Worker received it
+         └─ DepositMoney
+            └─ Domain.send Account.DepositMoney
+               └─ Domain.decide Account.DepositMoney
+                  │   event MoneyDeposited
+                  ├─ Domain.view AccountSummary
+                  └─ Domain.view Statement
 ```
 
 One trace shows the click, the command it sent, and everything it changed.
 
 :::note
-Metrics, logs from handlers, and turning off view spans are in [Observability](/domain/observability). To get alerted on what you now record, see [Monitors & Alerting](/axiom/guides/alerting).
+Next, [change a deployed model](/domain/tutorial/part-8). Metrics, logs from handlers, and turning off view spans are in [Observability](/domain/observability). To get alerted on what you now record, see [Monitors & Alerting](/axiom/guides/alerting).
 :::
