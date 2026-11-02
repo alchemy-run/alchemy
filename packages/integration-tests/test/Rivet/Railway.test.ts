@@ -22,7 +22,8 @@ let baseUrl = "";
 
 // The engine conformance spec, run against Rivet Durable Objects on a
 // control plane on Hetzner and a pool of nodes on Railway, called from a Railway Service.
-describe.skipIf(!!process.env.FAST)(
+// Skipped: Railway is out of scope for now.
+describe.skipIf(true)(
   "Rivet on Railway (Hetzner control plane, Railway Service pool)",
   { tags: ["provider:rivet", "provider:hetzner", "provider:railway", "live"] },
   () => {
