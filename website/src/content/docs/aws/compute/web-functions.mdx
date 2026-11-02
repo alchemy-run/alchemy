@@ -3,16 +3,34 @@ title: Lambda Web Functions
 description: Run an HTTP server on AWS Lambda Web Functions — an Effect fetch handler or any Node server, with streaming responses, many concurrent requests per environment, and a built-in HTTPS endpoint.
 ---
 
-A **Lambda Web Function** runs your HTTP server on Lambda. Each execution
-environment serves many requests at once (up to 128), responses stream to
-the client as you produce them, and every function gets an HTTPS endpoint.
-It scales to zero when idle.
+import DAG from "../../../../components/DAG.astro";
 
-Use it for anything that answers HTTP: APIs, server-rendered apps, AI
-responses streamed token by token. The [AWS websites](/aws/frontend/websites)
-(Nuxt, SvelteKit, Astro, and the rest) run their server on one by
-default. For queues, streams, schedules, and
-other event sources, use a [Lambda Function](/aws/compute/lambda).
+A Lambda Web Function runs an HTTP server on Lambda. Where a [Lambda Function](/aws/compute/lambda) runs one invocation at a time per environment, a Web Function's environment is a long-running server that takes many requests at once, up to 128. Responses stream to the client as your server writes them, and there's nothing to run while nobody calls it.
+
+This chapter starts with the pieces a Web Function is made of, then builds one: serving and streaming, using AWS resources, bringing a server you already have, and tuning how it scales. It ends with rolling out changes, serving from several Regions, and controlling who may call it.
+
+## Environments, endpoints and revisions
+
+Your server runs in **environments**, each a copy of your code with 2 GB of memory and 2 vCPUs. Lambda starts more as traffic grows and stops them as it falls. Because each one serves many requests, a spike starts few environments, and requests share warm connection pools.
+
+<DAG
+  nodes={[
+    { id: "endpoint", label: "endpoint", type: "HTTPS URL · auth · limits", tone: "accent", layer: 0 },
+    { id: "rev", label: "revision 7", type: "code + config", layer: 1 },
+    { id: "e1", label: "environment", type: "≤ 128 requests", layer: 2 },
+    { id: "e2", label: "environment", type: "≤ 128 requests", layer: 2 },
+  ]}
+  edges={[
+    { from: "endpoint", to: "rev" },
+    { from: "rev", to: "e1" },
+    { from: "rev", to: "e2" },
+  ]}
+  caption="Requests arrive at an endpoint, which sends them to the current revision's environments."
+/>
+
+Requests arrive through an **endpoint**: an HTTPS URL with its own auth, rate limit and cap on environments. Every Web Function has one, and you can add more. Each deploy publishes a new **revision**, and the endpoint moves its traffic to it, all at once or a share at a time.
+
+Use a Web Function for anything that answers HTTP: APIs, server-rendered sites, AI responses streamed token by token. The [AWS websites](/aws/frontend/websites) run their servers on one. For queues, streams, schedules and other events, use a [Lambda Function](/aws/compute/lambda).
 
 :::caution
 Web Functions run Node.js 24 on Arm64. They launched in `us-east-1`,
