@@ -7,7 +7,7 @@ import { expect, it } from "@alchemy.run/test";
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(here, "../bin/alchemy-test.ts");
 const apiUrl = pathToFileURL(resolve(here, "../src/index.ts")).href;
-const effectUrl = pathToFileURL(resolve(here, "../../../node_modules/effect/dist/Effect.js")).href;
+const effectUrl = import.meta.resolve("effect/Effect");
 
 it(
   "excludes exclusive-lock queue time from test durations",
