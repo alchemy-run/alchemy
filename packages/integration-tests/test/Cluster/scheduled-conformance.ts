@@ -19,17 +19,21 @@ export const scheduledConformanceTests = (test: TestFn, { baseUrl }: { baseUrl: 
     "a singleton runs on one runner at a time",
     Effect.gen(function* () {
       const url = `${baseUrl()}/wf/journal/heartbeat`;
-      const before = yield* journal(url).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          until: (entries) => entries.length >= 3,
-          times: 60,
-        }),
-      );
-      // Once shards have settled, every beat comes from the same runner.
+      const atLeast = (count: number) =>
+        journal(url).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (entries) => entries.length >= count,
+            times: 60,
+          }),
+        );
+      yield* atLeast(3);
+      // Once shards have settled, every beat comes from the same runner. The
+      // journal lives in memory, so read its newest beats rather than an
+      // offset an instance restart would invalidate.
       yield* Effect.sleep("4 seconds");
-      const recent = (yield* journal(url)).slice(before.length);
-      expect(recent.length).toBeGreaterThanOrEqual(2);
+      const recent = (yield* atLeast(3)).slice(-3);
+      expect(recent.length).toBe(3);
       expect(new Set(recent).size).toBe(1);
     }),
     options,
