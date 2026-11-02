@@ -638,8 +638,8 @@ export const LiveContainerProvider = () =>
                         ).pipe(Effect.as(true))
                       : Effect.fail(pullError),
                   ),
-                  Effect.catch(() =>
-                    Effect.fail(
+                  Effect.mapError(
+                    () =>
                       new ContainerProviderOperationFailed({
                         message:
                           `Container image "${build.image}" could not be pulled and is not in the local Docker. ` +
@@ -648,7 +648,6 @@ export const LiveContainerProvider = () =>
                           `\`docker build --platform ${platform} -t ${build.image} .\` or \`docker load\`.`,
                         cause: pullError,
                       }),
-                    ),
                   ),
                 ),
               ),
