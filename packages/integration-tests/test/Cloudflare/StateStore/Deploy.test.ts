@@ -39,6 +39,7 @@ import { ChildProcess } from "effect/process";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 import { workerName as configuredWorkerName } from "./fixtures/configured-store.ts";
 
 /**
@@ -52,7 +53,8 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const tags = ["provider:cloudflare", "provider:cloudflare:statestore", "live"];
 const stage = Test.defaultStage().replaceAll("_", "-");
-const storeWorker = (name: string) => `alchemy-state-store-${name}-${stage}`;
+/** A store Worker name, unique per stage and short enough for previews (54). */
+const storeWorker = (name: string) => testName(`alchemy-state-store-${name}`);
 /** A store `--name`, which allows 20 characters: unique per stage. */
 const storeName = (prefix: string) =>
   `${prefix}-${crypto.createHash("sha256").update(stage).digest("hex").slice(0, 8)}`;
@@ -213,9 +215,9 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Cloudflare uploads a 64-character Worker name, but a workers.dev label
-      // holds 63.
-      const workerName = `${storeWorker("too-long")}-`.padEnd(64, "x");
+      // The store enables workers.dev previews, and Cloudflare rejects a
+      // script name over 54 characters with previews enabled.
+      const workerName = `${storeWorker("too-long")}-`.padEnd(55, "x");
       const message = `Invalid Cloudflare State Store Worker name '${workerName}'`;
       expectFailure(yield* Effect.exit(open({ workerName })), message);
       expectFailure(yield* Effect.exit(bootstrap({ workerName })), message);
