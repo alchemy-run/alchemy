@@ -56,7 +56,7 @@ export const Runners = (
     expected: "a Docker network (ClusterDocker.Database)",
     network: (database) => (database.network?.kind === "docker" ? database.network : undefined),
     // Callers on the swarm reach the gateway by the service's name.
-    gateway: (name) => ({ url: `http://${name}:${GATEWAY_PORT}` }),
+    gateway: (name) => Effect.succeed({ url: `http://${name}:${GATEWAY_PORT}` }),
     nodes: ({ network, name, program, environment }) =>
       Effect.gen(function* () {
         // Tagged with the program's hash, so a changed program is a new image.

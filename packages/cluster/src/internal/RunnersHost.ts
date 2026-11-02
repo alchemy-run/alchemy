@@ -114,7 +114,9 @@ export interface RunnersSettings {
 }
 
 /** What a host needs to declare the service that runs the runners. */
-export interface RunnersNodes<Network> {
+export interface RunnersNodes<Network, Gateway extends RunnersGateway = RunnersGateway> {
+  /** What the host declared for the gateway (e.g. a load balancer to register with). */
+  readonly gateway: Gateway;
   readonly database: DatabaseShape;
   readonly network: Network;
   readonly runners: Runners;
@@ -125,7 +127,12 @@ export interface RunnersNodes<Network> {
    * program's `program.mjs`) with a `Dockerfile`, and a hash of its
    * contents, which changes whenever the program does.
    */
-  readonly program: Output.Output<{ readonly dir: string; readonly hash: string }>;
+  readonly program: Output.Output<{
+    readonly dir: string;
+    readonly hash: string;
+    /** Whether the directory holds an external program (`program.mjs`). */
+    readonly external: boolean;
+  }>;
   /** Environment every runner needs, as plain strings. */
   readonly environment: Output.Output<Record<string, string>>;
 }
@@ -152,14 +159,19 @@ ENTRYPOINT ["node", "/app/runner.mjs"]
  * host can join; `gateway` names where callers reach the runners;
  * `nodes` declares the service that runs them.
  */
-export const makeRunnersLayer = <Network, Req>(options: {
+export const makeRunnersLayer = <
+  Network,
+  Req,
+  Gateway extends RunnersGateway = RunnersGateway,
+>(options: {
   readonly label: string;
   readonly id: string;
   readonly settings: RunnersSettings;
   readonly network: (database: DatabaseShape) => Network | undefined;
   readonly expected: string;
-  readonly gateway: (name: string) => RunnersGateway;
-  readonly nodes: (nodes: RunnersNodes<Network>) => Effect.Effect<void, never, Req>;
+  /** Where callers reach the gateway, declaring what it needs; before the runners' service. */
+  readonly gateway: (name: string, network: Network) => Effect.Effect<Gateway, never, Req>;
+  readonly nodes: (nodes: RunnersNodes<Network, Gateway>) => Effect.Effect<void, never, Req>;
 }): Layer.Layer<RunnersHost, never, Database | Stack | Providers | Req> =>
   Layer.effect(
     RunnersHost,
@@ -192,7 +204,7 @@ export const makeRunnersLayer = <Network, Req>(options: {
       // never be one an external program uses (usually `default`). Effect
       // Cluster stores `group:shard` in a 50-character column, so keep it short.
       const group = `alchemy:${yield* shortLabel(options.id, 32)}`;
-      const gateway = options.gateway(name);
+      const gateway = yield* options.gateway(name, network);
       const context = yield* Effect.context<Stack | Providers | Req>();
 
       /** Put `hosted` on the runners, bind the gateway onto `resource`, and declare the runners. */
@@ -221,6 +233,7 @@ export const makeRunnersLayer = <Network, Req>(options: {
           });
           const stack = yield* Stack;
           yield* options.nodes({
+            gateway,
             database,
             network,
             runners,
@@ -326,7 +339,7 @@ const bundleRunners = Effect.fn(function* (id: string, runners: Runners) {
       const hash = yield* Effect.sync(() =>
         createHash("sha256").update(hashes.join("\n")).digest("hex").slice(0, 16),
       );
-      return { dir, hash };
+      return { dir, hash, external: program !== undefined };
     }).pipe(Effect.orDie),
   )(runners.entities);
 });

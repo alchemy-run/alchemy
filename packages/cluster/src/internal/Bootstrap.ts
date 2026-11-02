@@ -33,6 +33,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -48,6 +49,16 @@ import { HasNoRunners, type HostedRuntimeContext } from "./HostedRuntime.ts";
 
 const env = (name: string) => process.env[name];
 
+/** Whether an IPv4 address is in a CIDR range (`10.46.0.0/16`). */
+const inIpv4Range = (address: string, range: string) => {
+  const [base, bits] = range.split("/");
+  const toNumber = (ip: string) =>
+    ip.split(".").reduce((total, part) => total * 256 + Number(part), 0);
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(address) || base === undefined) return false;
+  const size = 2 ** (32 - Number(bits ?? 32));
+  return Math.floor(toNumber(address) / size) === Math.floor(toNumber(base) / size);
+};
+
 /**
  * The address other runners reach this one at: an explicit
  * `CLUSTER_RUNNER_HOST`, else the local address that
@@ -60,7 +71,33 @@ const runnerHost = Effect.gen(function* () {
   const local = Object.values(networkInterfaces())
     .flat()
     .filter((iface) => iface !== undefined && !iface.internal)
-    .map((iface) => iface!.address);
+    .map((iface) => iface!.address)
+    // Link-local addresses (an agent's, a metadata endpoint's) aren't reachable.
+    .filter((address) => !address.startsWith("169.254.") && !address.startsWith("fe80:"));
+  // On a private network with a known range, the address in it.
+  const range = env("CLUSTER_RUNNER_NETWORK");
+  if (range) {
+    const inRange = local.find((address) => inIpv4Range(address, range));
+    if (inRange) return inRange;
+  }
+  // On Fly, the Machine's name on the App's private network.
+  const flyMachine = env("FLY_MACHINE_ID");
+  const flyApp = env("FLY_APP_NAME");
+  if (flyMachine && flyApp) return `${flyMachine}.vm.${flyApp}.internal`;
+  // On ECS, the task's own address in its VPC.
+  const ecsMetadata = env("ECS_CONTAINER_METADATA_URI_V4");
+  if (ecsMetadata) {
+    const address = yield* HttpClient.get(ecsMetadata).pipe(
+      Effect.flatMap((response) => response.json),
+      Effect.map(
+        (metadata) =>
+          (metadata as { Networks?: Array<{ IPv4Addresses?: string[] }> }).Networks?.[0]
+            ?.IPv4Addresses?.[0],
+      ),
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (address) return address;
+  }
   const peers = env("CLUSTER_PEERS");
   if (peers) {
     const resolved = yield* Effect.tryPromise(() => lookup(peers, { all: true })).pipe(
@@ -93,7 +130,7 @@ export const runExternal = (
         ...process.env,
         HOST: host,
         PORT: String(RUNNER_PORT),
-        LISTEN_HOST: "0.0.0.0",
+        LISTEN_HOST: env("CLUSTER_LISTEN_HOST") ?? "0.0.0.0",
         DATABASE_URL: env("DATABASE_URL") ?? env("CLUSTER_DATABASE_URL"),
         ASSIGNED_SHARD_GROUPS: env("CLUSTER_SHARD_GROUPS"),
         AVAILABLE_SHARD_GROUPS: env("CLUSTER_AVAILABLE_SHARD_GROUPS"),
@@ -128,11 +165,10 @@ export const runExternal = (
         Layer.provide(NodeHttpServer.layer(createServer, { port: GATEWAY_PORT })),
       );
       return yield* Effect.raceFirst(Layer.launch(gateway.pipe(Layer.provide(cluster))), exited);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)) as Effect.Effect<
-      never,
-      unknown,
-      never
-    >,
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+    ) as Effect.Effect<never, unknown, never>,
   );
 
 /** The external program a runner runs stopped, so the runner stops too. */
@@ -234,7 +270,10 @@ export const bootstrap = (
       storage: "sql",
       shardingConfig: {
         runnerAddress: Option.some(RunnerAddress.make(host, RUNNER_PORT)),
-        runnerListenAddress: Option.some(RunnerAddress.make("0.0.0.0", RUNNER_PORT)),
+        // Fly's private network is IPv6 only.
+        runnerListenAddress: Option.some(
+          RunnerAddress.make(env("CLUSTER_LISTEN_HOST") ?? "0.0.0.0", RUNNER_PORT),
+        ),
         ...shardGroupsConfig(),
       },
     }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));

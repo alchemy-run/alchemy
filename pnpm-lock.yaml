@@ -9045,9 +9045,24 @@ importers:
         specifier: 'catalog:'
         version: 4.1.0(effect@4.1.0)
     devDependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../aws
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/fly':
+        specifier: workspace:*
+        version: link:../fly
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../gcp
+      '@alchemy.run/hetzner':
+        specifier: workspace:*
+        version: link:../hetzner
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
       alchemy:
         specifier: workspace:*
         version: link:../alchemy

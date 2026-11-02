@@ -18,6 +18,21 @@
     },
     {
       "path": "../docker/tsconfig.json"
+    },
+    {
+      "path": "../aws/tsconfig.json"
+    },
+    {
+      "path": "../fly/tsconfig.json"
+    },
+    {
+      "path": "../gcp/tsconfig.json"
+    },
+    {
+      "path": "../hetzner/tsconfig.json"
+    },
+    {
+      "path": "../kubernetes/tsconfig.json"
     }
   ]
 }

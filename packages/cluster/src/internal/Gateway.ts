@@ -273,6 +273,8 @@ export function gatewayLayer(
       middleware: (app) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
+          // Load balancers check the gateway without the token.
+          if (request.url === "/health") return HttpServerResponse.text("ok");
           return request.headers.authorization === expected
             ? yield* app
             : HttpServerResponse.empty({ status: 401 });

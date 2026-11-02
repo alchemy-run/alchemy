@@ -29,7 +29,12 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./AWS": "./src/AWS/index.ts",
     "./Docker": "./src/Docker/index.ts",
+    "./Fly": "./src/Fly/index.ts",
+    "./GCP": "./src/GCP/index.ts",
+    "./Hetzner": "./src/Hetzner/index.ts",
+    "./Kubernetes": "./src/Kubernetes/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -41,12 +46,43 @@
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
       },
+      "./AWS": {
+        "types": "./lib/AWS/index.d.ts",
+        "bun": "./src/AWS/index.ts",
+        "worker": "./src/AWS/index.ts",
+        "default": "./lib/AWS/index.js"
+      },
       "./Docker": {
         "types": "./lib/Docker/index.d.ts",
         "bun": "./src/Docker/index.ts",
         "worker": "./src/Docker/index.ts",
         "default": "./lib/Docker/index.js"
       },
+      "./Fly": {
+        "types": "./lib/Fly/index.d.ts",
+        "bun": "./src/Fly/index.ts",
+        "worker": "./src/Fly/index.ts",
+        "default": "./lib/Fly/index.js"
+      },
+      "./GCP": {
+        "types": "./lib/GCP/index.d.ts",
+        "bun": "./src/GCP/index.ts",
+        "worker": "./src/GCP/index.ts",
+        "default": "./lib/GCP/index.js"
+      },
+      "./Hetzner": {
+        "types": "./lib/Hetzner/index.d.ts",
+        "bun": "./src/Hetzner/index.ts",
+        "worker": "./src/Hetzner/index.ts",
+        "default": "./lib/Hetzner/index.js"
+      },
+      "./Kubernetes": {
+        "types": "./lib/Kubernetes/index.d.ts",
+        "bun": "./src/Kubernetes/index.ts",
+        "worker": "./src/Kubernetes/index.ts",
+        "default": "./lib/Kubernetes/index.js"
+      },
+      "./AWS/internal/*": null,
       "./internal/*": null,
       "./*": {
         "types": "./lib/*.d.ts",
@@ -67,17 +103,42 @@
     "@effect/sql-pg": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/fly": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
+    "@alchemy.run/hetzner": "workspace:*",
+    "@alchemy.run/kubernetes": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/fly": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
+    "@alchemy.run/hetzner": "workspace:*",
+    "@alchemy.run/kubernetes": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    },
     "@alchemy.run/docker": {
+      "optional": true
+    },
+    "@alchemy.run/fly": {
+      "optional": true
+    },
+    "@alchemy.run/gcp": {
+      "optional": true
+    },
+    "@alchemy.run/hetzner": {
+      "optional": true
+    },
+    "@alchemy.run/kubernetes": {
       "optional": true
     }
   }

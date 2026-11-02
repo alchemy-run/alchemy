@@ -12,11 +12,51 @@ import { ShardGroups } from "./ShardGroups.ts";
  * other. A runners Layer matches on `kind` and refuses a network it cannot
  * join.
  */
-export type ClusterNetwork = {
-  /** A Docker network; runner containers join it by name. */
-  readonly kind: "docker";
-  readonly name: Input<string>;
-};
+export type ClusterNetwork =
+  | {
+      /** A Docker network; runner containers join it by name. */
+      readonly kind: "docker";
+      readonly name: Input<string>;
+    }
+  | {
+      /** An AWS VPC; runners run in its subnets, in the runners' security group. */
+      readonly kind: "aws";
+      readonly vpcId: Input<string>;
+      readonly subnetIds: Input<string>[];
+      /** The group every runner joins: it reaches the database and the other runners. */
+      readonly securityGroupId: Input<string>;
+    }
+  | {
+      /** A Fly private network; runners' Apps join it by name. */
+      readonly kind: "fly";
+      readonly network: Input<string>;
+    }
+  | {
+      /** A Hetzner private Network; runners' Servers attach to it. */
+      readonly kind: "hetzner";
+      readonly networkId: Input<number>;
+      /** Its IPv4 range, where each runner finds its own address. */
+      readonly ipRange: string;
+      readonly location: string;
+    }
+  | {
+      /** A GCP VPC; runners' instances join its subnetwork. */
+      readonly kind: "gcp";
+      readonly network: Input<string>;
+      readonly subnetwork: Input<string>;
+      readonly region: string;
+      /** The subnetwork's IPv4 range, where each runner finds its own address. */
+      readonly cidr: string;
+      /** The network tag every runner carries: it reaches the database and the other runners. */
+      readonly tag: string;
+    }
+  | {
+      /** A Kubernetes cluster; runners run as a Deployment in its namespace. */
+      readonly kind: "kubernetes";
+      /** The cluster, as `@alchemy.run/kubernetes` takes it. */
+      readonly cluster: unknown;
+      readonly namespace: string;
+    };
 
 /** What every database Layer gives the runners it is provided to. */
 export interface DatabaseShape {
