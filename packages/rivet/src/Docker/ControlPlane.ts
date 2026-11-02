@@ -1,12 +1,12 @@
 import * as Docker from "@alchemy.run/docker";
 import * as Output from "alchemy/Output";
-import type { Provider } from "alchemy/Provider";
-import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Cluster } from "../Cluster.ts";
+import { adminToken } from "../internal/AdminToken.ts";
 import { Namespace } from "../Namespace.ts";
+import type { Providers as RivetProviders } from "../Providers.ts";
 
 /** The engine release `RivetDocker.ControlPlane` runs by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0-preview.4";
@@ -58,7 +58,7 @@ export interface ControlPlaneProps {
 export const ControlPlane = (
   id: string,
   props: ControlPlaneProps = {},
-): Layer.Layer<Cluster, never, Provider<Namespace> | Provider<Random> | Docker.Providers> =>
+): Layer.Layer<Cluster, never, RivetProviders | Docker.Providers> =>
   Layer.effect(
     Cluster,
     Effect.gen(function* () {
@@ -69,7 +69,7 @@ export const ControlPlane = (
         // runtime; the cluster is only consulted while deploying.
         return { endpoint, token: Redacted.make(""), namespace: "default" };
       }
-      const token = yield* Random(`${id}AdminToken`, { bytes: 32 });
+      const token = yield* adminToken(id);
       const context = props.context === undefined ? {} : { context: props.context };
       const network = yield* Docker.Network(`${id}Network`, { driver: "overlay", ...context });
       const volumeContext = Docker.dockerEngineContextName(props.context);

@@ -1,3 +1,4 @@
+import * as nodePath from "node:path";
 import type { HttpEffect } from "alchemy/Http";
 import type { InputProps } from "alchemy/Input";
 import type { Named } from "alchemy/Named";
@@ -31,6 +32,7 @@ import type { Scope } from "effect/Scope";
 import type { DurableObjectState } from "./DurableObjectState.ts";
 import { fromNativeFetcher } from "./internal/Fetcher.ts";
 import { gatewayFetcher, type GatewayTarget } from "./internal/Gateway.ts";
+import { PoolHost } from "./internal/PoolHostService.ts";
 import type { Providers } from "./Providers.ts";
 
 export const DurableObjectTypeId = "Rivet.DurableObject";
@@ -122,8 +124,28 @@ type ClassProps<PropsReq> =
 
 type ClassRequirements<Req> = Providers | Exclude<Req, DurableObjectServices | PlatformServices>;
 
+/** Props of an external Durable Object: a RivetKit program, run as it is. */
+export interface ExternalDurableObjectProps {
+  /**
+   * The program's entry file, relative to where the deploy runs: a RivetKit
+   * registry that calls `registry.start()`, or a `@rivetkit/effect` program
+   * that launches `Registry.serve`. It is bundled and run on the pool's
+   * nodes unchanged, with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
+   * `RIVET_NAMESPACE` and `RIVET_POOL` set.
+   */
+  main: string;
+}
+
 /** The class surface of {@link DurableObject}. */
 export interface DurableObjectClass {
+  /**
+   * An external Durable Object: Actors written with RivetKit, in its async
+   * or Effect form, deployed as they are. Provide a pool Layer to it.
+   */
+  <const Id extends string>(
+    id: Id,
+    props: ExternalDurableObjectProps,
+  ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
   <Self, Shape = {}>(): {
     /** The class form with an inline implementation. */
     <
@@ -259,6 +281,10 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * instance in its pool on first use, so callers need no RivetKit and no
  * route to the nodes.
  *
+ * Given only `main`, it is external: a RivetKit program, async or
+ * `@rivetkit/effect`, that its pool bundles and runs as it is. It needs a
+ * pool of its own, and has no bindings or `yield*` calls.
+ *
  * ### Declaring a Durable Object
  * **Example:** A counter on a local pool
  * ```typescript
@@ -320,11 +346,39 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * );
  * ```
  *
+ * ### Deploying RivetKit Actors
+ * **Example:** Actors written with RivetKit, or `@rivetkit/effect`, run unchanged
+ * ```typescript
+ * export const Counters = RivetDocker.Pool("Counters").pipe(Layer.provide(Cluster));
+ *
+ * export const Counter = Rivet.DurableObject("Counter", { main: "./src/actors.ts" }).pipe(
+ *   Effect.provide(Counters),
+ * );
+ * ```
+ *
  * @resource
  */
-export const DurableObject: DurableObjectClass = (() =>
-  (id: string, props?: unknown, impl?: unknown) =>
-    declare(id, (platform as any)()(id, props, impl))) as unknown as DurableObjectClass;
+export const DurableObject: DurableObjectClass = ((
+  ...args: [string, ExternalDurableObjectProps] | []
+) =>
+  args.length === 0
+    ? (id: string, props?: unknown, impl?: unknown) =>
+        declare(id, (platform as any)()(id, props, impl))
+    : external(args[0], args[1])) as unknown as DurableObjectClass;
+
+/**
+ * An external Durable Object: declare its resource, then have the pool it
+ * was given run its program. The pool Layer is what provides `PoolHost`.
+ */
+const external = (id: string, props: ExternalDurableObjectProps) =>
+  Effect.gen(function* () {
+    const resource: DurableObject = yield* (platform as any)(id, { main: props.main });
+    if (globalThis.__ALCHEMY_RUNTIME__) return resource;
+    const host = yield* PoolHost;
+    const main = yield* Effect.sync(() => nodePath.resolve(props.main));
+    yield* host.deployExternal({ id, main, resource });
+    return resource;
+  });
 
 /** The engine-facing Platform behind {@link DurableObject}. */
 type DurableObjectPlatform = Platform<

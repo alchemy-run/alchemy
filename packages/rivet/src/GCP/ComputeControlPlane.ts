@@ -3,11 +3,11 @@ import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as IAM from "@alchemy.run/gcp/IAM";
 import * as Storage from "@alchemy.run/gcp/Storage";
 import * as Output from "alchemy/Output";
-import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Cluster } from "../Cluster.ts";
+import { adminToken } from "../internal/AdminToken.ts";
 import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
 
@@ -130,7 +130,7 @@ export const ComputeControlPlane = (id: string, props: ComputeControlPlaneProps 
       const zones = props.zones ?? [`${region}-a`, `${region}-b`, `${region}-c`];
       const tag = yield* stackDnsLabel(`${id}-engine`, 63);
 
-      const token = yield* Random(`${id}AdminToken`, { bytes: 32 });
+      const token = yield* adminToken(id);
       const network = yield* Compute.Network(`${id}Network`, { autoCreateSubnetworks: false });
       const subnet = yield* Compute.Subnetwork(`${id}Subnet`, {
         network: network.networkName,

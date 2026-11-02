@@ -117,6 +117,8 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   "Consistency patterns": l("git-merge"),
   Hosting: l("server"),
   Platforms: l("cloud"),
+  "Building Actors": l("boxes"),
+  "Running Rivet": l("server-cog"),
   Testing: l("flask-conical"),
   Domain: l("blocks"),
   // Reference tab: provider groups get their official brand marks.

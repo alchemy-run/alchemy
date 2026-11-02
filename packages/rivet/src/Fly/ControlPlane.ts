@@ -1,10 +1,10 @@
 import * as Fly from "@alchemy.run/fly";
 import * as Output from "alchemy/Output";
-import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Cluster } from "../Cluster.ts";
+import { adminToken } from "../internal/AdminToken.ts";
 import { Namespace } from "../Namespace.ts";
 
 /** The engine release `RivetFly.ControlPlane` runs by default. */
@@ -91,7 +91,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
         return { endpoint: "", token: Redacted.make(""), namespace: "default" };
       }
       const instances = props.instances ?? 3;
-      const token = yield* Random(`${id}AdminToken`, { bytes: 32 });
+      const token = yield* adminToken(id);
       const bucket = yield* Fly.Bucket(`${id}Data`, {});
       const app = yield* Fly.App(`${id}App`, {});
       yield* Fly.IpAssignment(`${id}PublicV4`, { app, type: "shared_v4" });

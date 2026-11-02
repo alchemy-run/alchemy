@@ -9,6 +9,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface NamespaceProps extends ConnectionProps {
   /**
@@ -29,7 +30,9 @@ export interface Namespace extends Resource<
     endpoint: string;
     /** When the namespace was created, in Unix milliseconds. */
     createdAt: number;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**

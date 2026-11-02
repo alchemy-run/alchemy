@@ -10364,6 +10364,9 @@ importers:
       '@react-router/node':
         specifier: 'catalog:'
         version: 8.5.0(react-router@8.5.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(typescript@7.0.2)
+      '@rivetkit/effect':
+        specifier: 3.0.0-preview.4
+        version: 3.0.0-preview.4(effect@4.1.0)(rivetkit@3.0.0-preview.4(d49aba7c7e2ee72c045453cae495080d))
       '@solidjs/router':
         specifier: 'catalog:'
         version: 1.0.0(solid-js@1.9.17)
@@ -10517,6 +10520,9 @@ importers:
       react-server-dom-webpack:
         specifier: 'catalog:'
         version: 19.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(webpack@5.105.0(cssnano@9.9.0(postcss@8.5.31))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.31))
+      rivetkit:
+        specifier: 3.0.0-preview.4
+        version: 3.0.0-preview.4(d49aba7c7e2ee72c045453cae495080d)
       rolldown:
         specifier: 1.2.13
         version: 1.2.13
@@ -18433,6 +18439,12 @@ packages:
   '@rivetkit/bare-ts@0.6.2':
     resolution: {integrity: sha512-3qndQUQXLdwafMEqfhz24hUtDPcsf1Bu3q52Kb8MqeH8JUh3h6R4HYW3ZJXiQsLcyYyFM68PuIwlLRlg1xDEpg==}
     engines: {node: ^14.18.0 || >=16.0.0}
+
+  '@rivetkit/effect@3.0.0-preview.4':
+    resolution: {integrity: sha512-P7ScHpGMzoCCX0TWd7ILH3R3KTPuT2bioHicETcnGGHuqJPeQRexV4FPXu5G4O0NPHbLbe59eX9C//en9mS4wA==}
+    peerDependencies:
+      effect: 4.1.0
+      rivetkit: 3.0.0-preview.4
 
   '@rivetkit/engine-api-full@3.0.0-preview.4':
     resolution: {integrity: sha512-mWXzmhSh/ClSbxmRVbvrx3W/RFc9GLvEc+SrR8FEEHSY7+mlCL9G6mGw5DedPp86pkGpSRSRmqsWCNc6awV5qw==}
@@ -36778,6 +36790,11 @@ snapshots:
 
   '@rivetkit/bare-ts@0.6.2': {}
 
+  '@rivetkit/effect@3.0.0-preview.4(effect@4.1.0)(rivetkit@3.0.0-preview.4(d49aba7c7e2ee72c045453cae495080d))':
+    dependencies:
+      effect: 4.1.0
+      rivetkit: 3.0.0-preview.4(d49aba7c7e2ee72c045453cae495080d)
+
   '@rivetkit/engine-api-full@3.0.0-preview.4':
     dependencies:
       form-data: 4.0.6
@@ -48127,6 +48144,84 @@ snapshots:
       zod: 4.5.4
     optionalDependencies:
       drizzle-kit: 1.0.0-rc.5(drizzle-orm@1.0.0-rc.5(@cloudflare/workers-types@5.20261026.1)(@effect/sql-d1@4.1.0(effect@4.1.0))(@effect/sql-libsql@4.1.0(effect@4.1.0))(@effect/sql-mysql2@4.1.0(@types/node@26.6.5)(effect@4.1.0))(@effect/sql-pg@4.1.0(effect@4.1.0))(@effect/sql-sqlite-do@4.1.0(effect@4.1.0))(@electric-sql/pglite@0.4.3)(@libsql/client@0.18.0)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.10.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.1.0)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.4.2(typescript@7.0.2))(zod@4.5.4))
+      eventsource: 4.1.1
+      ws: 8.22.0
+    transitivePeerDependencies:
+      - '@aws-sdk/client-rds-data'
+      - '@aws/aurora-dsql-node-postgres-connector'
+      - '@aws/aurora-dsql-postgresjs-connector'
+      - '@cloudflare/workers-types'
+      - '@drizzle-team/minipg'
+      - '@effect/sql-d1'
+      - '@effect/sql-libsql'
+      - '@effect/sql-mysql2'
+      - '@effect/sql-pg'
+      - '@effect/sql-pglite'
+      - '@effect/sql-sqlite-bun'
+      - '@effect/sql-sqlite-do'
+      - '@effect/sql-sqlite-node'
+      - '@effect/sql-sqlite-wasm'
+      - '@electric-sql/pglite'
+      - '@libsql/client'
+      - '@libsql/client-wasm'
+      - '@neondatabase/serverless'
+      - '@op-engineering/op-sqlite'
+      - '@planetscale/database'
+      - '@sinclair/typebox'
+      - '@sqlitecloud/drivers'
+      - '@tidbcloud/serverless'
+      - '@tursodatabase/database'
+      - '@tursodatabase/database-common'
+      - '@tursodatabase/database-wasm'
+      - '@tursodatabase/serverless'
+      - '@tursodatabase/sync'
+      - '@types/better-sqlite3'
+      - '@types/mssql'
+      - '@types/pg'
+      - '@types/sql.js'
+      - '@upstash/redis'
+      - '@vercel/postgres'
+      - '@xata.io/client'
+      - arktype
+      - better-sqlite3
+      - bun-types
+      - effect
+      - encoding
+      - expo-sqlite
+      - mssql
+      - mysql2
+      - pg
+      - postgres
+      - sql.js
+      - sqlite3
+      - typebox
+      - valibot
+
+  rivetkit@3.0.0-preview.4(d49aba7c7e2ee72c045453cae495080d):
+    dependencies:
+      '@hono/zod-openapi': 1.6.3(hono@4.13.13)(zod@4.5.4)
+      '@opentelemetry/api': 1.10.0
+      '@rivetkit/bare-ts': 0.6.2
+      '@rivetkit/engine-api-full': 3.0.0-preview.4
+      '@rivetkit/engine-cli': 3.0.0-preview.4
+      '@rivetkit/engine-envoy-protocol': 3.0.0-preview.4
+      '@rivetkit/on-change': 6.0.1
+      '@rivetkit/rivetkit-napi': 3.0.0-preview.4
+      '@rivetkit/rivetkit-wasm': 3.0.0-preview.4
+      '@rivetkit/traces': 3.0.0-preview.4
+      '@rivetkit/virtual-websocket': 3.0.0-preview.4
+      '@rivetkit/workflow-engine': 3.0.0-preview.4
+      cbor-x: 1.6.8
+      drizzle-orm: 1.0.0-rc.5(@cloudflare/workers-types@5.20261026.1)(@effect/sql-d1@4.1.0(effect@4.1.0))(@effect/sql-libsql@4.1.0(effect@4.1.0))(@effect/sql-mysql2@4.1.0(@types/node@26.6.5)(effect@4.1.0))(@effect/sql-pg@4.1.0(effect@4.1.0))(@effect/sql-sqlite-do@4.1.0(effect@4.1.0))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.10.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.1.0)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4)
+      hono: 4.13.13
+      invariant: 2.2.4
+      p-retry: 6.2.1
+      pino: 9.14.0
+      uuid: 12.0.1
+      vbare: 0.0.4
+      zod: 4.5.4
+    optionalDependencies:
+      drizzle-kit: 1.0.0-rc.5(drizzle-orm@1.0.0-rc.5(@cloudflare/workers-types@5.20261026.1)(@effect/sql-d1@4.1.0(effect@4.1.0))(@effect/sql-libsql@4.1.0(effect@4.1.0))(@effect/sql-mysql2@4.1.0(@types/node@26.6.5)(effect@4.1.0))(@effect/sql-pg@4.1.0(effect@4.1.0))(@effect/sql-sqlite-do@4.1.0(effect@4.1.0))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.10.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.1.0)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))
       eventsource: 4.1.1
       ws: 8.22.0
     transitivePeerDependencies:

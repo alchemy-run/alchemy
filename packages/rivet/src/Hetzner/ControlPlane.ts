@@ -1,10 +1,10 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import * as Output from "alchemy/Output";
-import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Cluster } from "../Cluster.ts";
+import { adminToken } from "../internal/AdminToken.ts";
 import {
   objectStorageEnvironment,
   ObjectStorageRequired,
@@ -165,7 +165,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
       }
       const location = props.location ?? "nbg1";
       const image = props.image ?? DEFAULT_ENGINE_IMAGE;
-      const token = yield* Random(`${id}AdminToken`, { bytes: 32 });
+      const token = yield* adminToken(id);
 
       const network = yield* Hetzner.Network(`${id}Network`, {
         ipRange: props.ipRange ?? "10.45.0.0/16",

@@ -12,11 +12,11 @@ import * as IAM from "@alchemy.run/aws/IAM";
 import * as S3 from "@alchemy.run/aws/S3";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
-import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Cluster } from "../../Cluster.ts";
+import { adminToken } from "../../internal/AdminToken.ts";
 import { Namespace } from "../../Namespace.ts";
 
 /** The engine release AWS control planes run by default. */
@@ -157,7 +157,7 @@ export const makeControlPlane = <Req>(
       const instances = props.instances ?? 3;
       const image = props.image ?? DEFAULT_ENGINE_IMAGE;
 
-      const token = yield* Random(`${id}AdminToken`, { bytes: 32 });
+      const token = yield* adminToken(id);
       // The load balancer needs subnets in two zones, even for one instance.
       const network = yield* EC2.Network(`${id}Network`, {
         cidrBlock: props.cidrBlock ?? "10.42.0.0/16",

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as Schedule from "effect/Schedule";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface PoolProps extends ConnectionProps {
   /** The namespace the pool belongs to. */
@@ -67,6 +68,11 @@ export interface PoolDurableObject {
   module: string;
   /** The export of {@link module} that holds it. */
   handler: string;
+  /**
+   * The module is a whole RivetKit program, run as it is: an external
+   * `Rivet.DurableObject`. It owns the pool's nodes.
+   */
+  external?: boolean;
 }
 
 /** Data the Durable Objects a pool hosts bind onto it. */
@@ -79,7 +85,8 @@ export interface Pool extends Resource<
   "Rivet.Pool",
   PoolProps,
   PoolAttributes,
-  PoolBindingContract
+  PoolBindingContract,
+  Providers
 > {}
 
 /**
@@ -116,6 +123,14 @@ export const Pool = Resource<Pool>("Rivet.Pool");
 
 /** The pool still has nodes connected after they were given time to drain. */
 export class PoolStillConnected extends Data.TaggedError("Rivet.PoolStillConnected")<{
+  readonly message: string;
+}> {}
+
+/**
+ * A pool was given an external `Rivet.DurableObject` and something else: an
+ * external program owns every node in its pool.
+ */
+export class PoolProgramConflict extends Data.TaggedError("Rivet.PoolProgramConflict")<{
   readonly message: string;
 }> {}
 
@@ -209,6 +224,15 @@ export const PoolProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
           const name = output?.name ?? (yield* poolName(id, news.name));
           const hosted = hostedOf(bindings.map((binding) => binding.data));
+          const external = hosted.durableObjects.filter((object) => object.external === true);
+          if (external.length > 0 && hosted.durableObjects.length > 1) {
+            return yield* new PoolProgramConflict({
+              message:
+                `Pool '${id}' was given ${hosted.durableObjects.map((object) => `'${object.name}'`).join(" and ")}, ` +
+                `but ${external.map((object) => `'${object.name}'`).join(" and ")} runs a program of its own ` +
+                `on every node in the pool. Give it a pool of its own.`,
+            });
+          }
           const tags = yield* createInternalTags(id);
           const desired = {
             drain_on_version_upgrade: news.drainOnVersionUpgrade ?? false,

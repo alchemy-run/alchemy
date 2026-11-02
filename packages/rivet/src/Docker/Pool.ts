@@ -1,13 +1,12 @@
 import { fileURLToPath } from "node:url";
 import * as Docker from "@alchemy.run/docker";
-import type { Provider } from "alchemy/Provider";
-import type { Self } from "alchemy/Self";
 import type { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { Cluster } from "../Cluster.ts";
 import { makePoolLayer, RIVETKIT_VERSION, type PoolSettings } from "../internal/PoolHost.ts";
-import type { Pool as RivetPool } from "../Pool.ts";
+import type { PoolHost } from "../internal/PoolHostService.ts";
+import type { Providers as RivetProviders } from "../Providers.ts";
 
 export interface PoolOptions extends PoolSettings {
   /**
@@ -46,7 +45,7 @@ export interface PoolOptions extends PoolSettings {
 export const Pool = (
   id: string,
   options: PoolOptions = {},
-): Layer.Layer<never, never, Cluster | Self | Stack | Provider<RivetPool> | Docker.Providers> =>
+): Layer.Layer<PoolHost, never, Cluster | Stack | RivetProviders | Docker.Providers> =>
   makePoolLayer({
     label: "RivetDocker.Pool",
     id,

@@ -1,11 +1,11 @@
 import type { Input } from "alchemy/Input";
-import type { Provider } from "alchemy/Provider";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import { Namespace } from "./Namespace.ts";
+import type { Providers } from "./Providers.ts";
 
 /**
  * The private network a node must join to reach {@link ClusterShape.nodeEndpoint}.
@@ -104,7 +104,7 @@ export interface ControlPlaneProps {
 export const ControlPlane = (
   id: string,
   props: ControlPlaneProps,
-): Layer.Layer<Cluster, Config.ConfigError, Provider<Namespace>> =>
+): Layer.Layer<Cluster, Config.ConfigError, Providers> =>
   Layer.effect(
     Cluster,
     Effect.gen(function* () {

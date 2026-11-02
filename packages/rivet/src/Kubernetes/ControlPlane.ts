@@ -2,13 +2,13 @@ import * as Kubernetes from "@alchemy.run/kubernetes";
 import { connectCluster, readObject } from "@alchemy.run/kubernetes/Client";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
-import { Random } from "alchemy/Random";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Cluster } from "../Cluster.ts";
+import { adminToken } from "../internal/AdminToken.ts";
 import {
   objectStorageEnvironment,
   ObjectStorageRequired,
@@ -172,7 +172,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps) =>
       const labels = { "app.kubernetes.io/name": name, "app.kubernetes.io/part-of": "rivet" };
       const expose = props.expose ?? { type: "LoadBalancer" as const };
 
-      const token = yield* Random(`${id}AdminToken`, { bytes: 32 });
+      const token = yield* adminToken(id);
       const secret = yield* Kubernetes.Manifest(`${id}TokenSecret`, {
         cluster,
         manifest: {

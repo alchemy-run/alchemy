@@ -1843,11 +1843,19 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "rivet/tutorial" } }],
             },
             {
-              label: "Concepts",
+              label: "Building Actors",
               items: [
-                { label: "Durable Object", link: "/rivet/durable-objects" },
+                { label: "Three ways to build Actors", link: "/rivet/actors" },
+                { label: "Durable Objects", link: "/rivet/durable-objects" },
                 { label: "Storage", link: "/rivet/storage" },
                 { label: "Calling a Durable Object", link: "/rivet/calling" },
+                { label: "RivetKit Actors", link: "/rivet/rivetkit" },
+                { label: "RivetKit Effect Actors", link: "/rivet/rivetkit-effect" },
+              ],
+            },
+            {
+              label: "Running Rivet",
+              items: [
                 { label: "Control Plane", link: "/rivet/control-planes" },
                 { label: "Pool", link: "/rivet/pools" },
               ],

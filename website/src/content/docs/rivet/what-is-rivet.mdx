@@ -1,13 +1,13 @@
 ---
 title: What is Rivet?
-description: The concepts behind Rivet — actors, instances addressed by name, state that lives with them, control planes, namespaces, pools and the gateway — and how @alchemy.run/rivet models them as Durable Objects.
+description: The concepts behind Rivet — Actors, instances addressed by name, state that lives with them, control planes, namespaces, pools and the gateway — and how @alchemy.run/rivet models them as Durable Objects.
 ---
 
 import DAG from "../../../components/DAG.astro";
 
-[Rivet](https://rivet.dev) is an open-source platform for stateful programs called **actors**. An actor is a small, long-lived program with a name and its own data: one chat room, one game, one user's session. Rivet keeps every actor's data, runs each one on demand, and routes calls to it by name.
+[Rivet](https://rivet.dev) is an open-source platform for stateful programs called **Actors**. An Actor is a small, long-lived program with a name and its own data: one chat room, one game, one user's session. Rivet keeps every Actor's data, runs each one on demand, and routes calls to it by name.
 
-`@alchemy.run/rivet` presents Rivet's actors as **Durable Objects**, with the same shape as Cloudflare's, and deploys everything Rivet needs into your Stack, on the cloud you choose. This page introduces each concept once, with the chat rooms the [tutorial](/rivet/tutorial/part-1) builds as the example.
+`@alchemy.run/rivet` presents Rivet's Actors as **Durable Objects**, with the same shape as Cloudflare's, and deploys everything Rivet needs into your Stack, on the cloud you choose. This page introduces each concept once, with the chat rooms the [tutorial](/rivet/tutorial/part-1) builds as the example.
 
 Here is the whole picture, which the rest of this page explains piece by piece. A caller names a room; the control plane finds it, or starts it on a node in its pool; and the room answers from its own state.
 
@@ -52,7 +52,7 @@ export default class Room extends Rivet.DurableObject<Room>()(
 ) {}
 ```
 
-An **instance** is one room: the lobby, the kitchen. Every instance runs the same code against its own state. In Rivet's terms, the class is an actor name and each instance is an actor with its own key.
+An **instance** is one room: the lobby, the kitchen. Every instance runs the same code against its own state. In Rivet's terms, the class is an Actor name and each instance is an Actor with its own key.
 
 See [Durable Object](/rivet/durable-objects).
 
@@ -150,7 +150,9 @@ See [Rivet Cloud](/rivet/rivet-cloud).
 
 Each concept on this page is something you declare in your Stack.
 
-A Durable Object class is a [`Rivet.DurableObject`](/rivet/durable-objects): its methods, `fetch` and `alarm` become a Rivet actor, its storage becomes `Rivet.DurableObjectState`, and `yield* Room` gives any runtime a typed client that calls it through the gateway.
+A Durable Object class is a [`Rivet.DurableObject`](/rivet/durable-objects): its methods, `fetch` and `alarm` become a Rivet Actor, its storage becomes `Rivet.DurableObjectState`, and `yield* Room` gives any runtime a typed client that calls it through the gateway.
+
+Actors you've already written with RivetKit, in its async or Effect form, deploy the same way: a `Rivet.DurableObject` given just their entry file runs them unchanged. See [Three ways to build Actors](/rivet/actors).
 
 A control plane is a Layer, one per place it can run. It creates the engines, disks, storage, load balancer and admin token on that cloud, and a namespace for your stage. A pool is a Layer too, given the control plane it joins:
 
