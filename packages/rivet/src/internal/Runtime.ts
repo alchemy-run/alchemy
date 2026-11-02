@@ -11,12 +11,14 @@ import {
   makeDurableObjectInstance,
   type DurableObjectInstance,
 } from "alchemy/Workers/DurableObjectBridge";
+import { InputGateLive } from "alchemy/Workers/InputGate";
 import type { WorkerBuild } from "alchemy/Workers/Worker";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
@@ -26,6 +28,13 @@ import {
   migrateStorage,
   type ActorContextLike,
 } from "../DurableObjectState.ts";
+
+/** What an actor activation keeps in memory until it sleeps. */
+interface ActivationVars {
+  instance: DurableObjectInstance | undefined;
+}
+
+type ActivationContext = ActorContextLike & { readonly vars: ActivationVars };
 
 /** Read a RivetKit setting the pool put in the node's environment. */
 const env = (name: string): string | undefined => process.env[name];
@@ -77,28 +86,38 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
         shape: () => ({}),
         telemetry: () => undefined,
       };
-      // One instance per actor activation, built on first use.
-      const instances = new WeakMap<object, DurableObjectInstance>();
-      const instanceOf = (c: ActorContextLike) => {
-        let instance = instances.get(c);
+      // One instance per actor activation, built on its first call. RivetKit
+      // hands every request its own context object, so the instance lives
+      // in the activation's vars, which last until the actor sleeps.
+      const instanceOf = (c: ActivationContext) => {
+        let instance = c.vars.instance;
         if (instance === undefined) {
           instance = makeDurableObjectInstance({
             build: () => Promise.resolve(build),
-            services: Context.make(DurableObjectState, makeDurableObjectState(c)),
+            // RivetKit runs an actor's calls concurrently over async
+            // storage: the instance's own input gate keeps one call's
+            // storage from interleaving with another's.
+            services: Context.add(
+              Effect.runSync(Effect.scoped(Layer.build(InputGateLive))),
+              DurableObjectState,
+              makeDurableObjectState(c),
+            ),
             waitUntil: (promise) => c.waitUntil(promise),
             // RPC arrives as fetch-RPC over the actor's `fetch`.
             dispatch: "static",
           });
-          instances.set(c, instance);
+          c.vars.instance = instance;
         }
         return instance;
       };
 
       use[name] = actor({
         db: db({ onMigrate: (database) => migrateStorage(database) }),
-        onRequest: (c: ActorContextLike, request: Request) => handleRequest(instanceOf(c), request),
+        createVars: (): ActivationVars => ({ instance: undefined }),
+        onRequest: (c: ActivationContext, request: Request) =>
+          handleRequest(instanceOf(c), request),
         actions: {
-          [ALARM_ACTION]: (c: ActorContextLike) =>
+          [ALARM_ACTION]: (c: ActivationContext) =>
             instanceOf(c).execute((shape) =>
               clearFiredAlarm(c).pipe(
                 Effect.andThen(

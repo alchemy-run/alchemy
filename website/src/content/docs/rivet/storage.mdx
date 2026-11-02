@@ -5,7 +5,7 @@ description: What each Rivet Durable Object instance keeps — key-value entries
 
 Every room keeps its own data. Nothing else can read it, and it outlives the room going to sleep, the node it ran on, and every deploy.
 
-This chapter covers the three ways a room uses its storage: key-value entries for small values, a SQL database for anything with structure, and one alarm to wake itself later. It ends with how to keep a change correct when two calls reach a room at once.
+This chapter covers the three ways a room uses its storage: key-value entries for small values, a SQL database for anything with structure, and one alarm to wake itself later. It ends with what happens when two calls reach a room at once.
 
 All three come from the room's state:
 
@@ -120,31 +120,36 @@ alarm: () =>
 
 `getAlarm` returns when the alarm is due, or `null`. `deleteAlarm` cancels it. A room that needs several timers keeps them in a table and sets the alarm to the earliest.
 
-## Keep a change in one step
+## Change state safely while calls overlap
 
-A room can run more than one call at once: while one call waits on storage, another can start. So a change written as a read and then a write can lose an update.
+A room runs more than one call at once: while one call waits on something, another can start. Storage is the exception. Once a call starts using storage, no other call touches it until the first one waits on something else, so a read followed by a write stays together:
 
 ```typescript title="src/room.ts"
 const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
 yield* state.storage.put("visitors", visitors);
 ```
 
-Two joins at the same moment can both read 2, and both write 3. One visitor goes uncounted.
+Fifty joins at once count fifty visitors. That's the same rule Cloudflare's Durable Objects follow, so code written for one runs correctly on the other.
 
-Make the change a single SQL statement, and the database applies it in one step:
+The protection ends when the call waits on anything that isn't storage, like another Durable Object or an HTTP request. Read again after the wait rather than reusing a value from before it.
+
+## Group changes in a transaction
+
+When a change has to wait in the middle, or must undo itself on failure, run it as a transaction. Admitting someone from the waiting list moves them in one go:
 
 ```typescript title="src/room.ts"
-yield* (yield* state.storage.sql.exec(
-  "CREATE TABLE IF NOT EXISTS counts (name TEXT PRIMARY KEY, n INTEGER NOT NULL)",
-)).toArray();
-
-const row = yield* (yield* state.storage.sql.exec<{ n: number }>(
-  `INSERT INTO counts (name, n) VALUES ('visitors', 1)
-   ON CONFLICT (name) DO UPDATE SET n = n + 1
-   RETURNING n`,
-)).one();
+yield* state.storage.transaction(
+  Effect.gen(function* () {
+    const waiting = (yield* state.storage.get<number>("waiting")) ?? 0;
+    const visitors = (yield* state.storage.get<number>("visitors")) ?? 0;
+    yield* state.storage.put("waiting", waiting - 1);
+    yield* state.storage.put("visitors", visitors + 1);
+  }),
+);
 ```
 
-Each join adds one, however many arrive together, and gets back the count after its own.
+Its writes commit together if it succeeds and roll back if it fails. No other call touches storage until it finishes, whatever it waits on.
+
+That also means a call back into this room from inside the transaction would wait for the transaction itself, so don't call other Durable Objects from one.
 
 Next, [Calling a Durable Object](/rivet/calling): how callers reach a room.

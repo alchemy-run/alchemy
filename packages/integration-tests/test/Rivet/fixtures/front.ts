@@ -11,6 +11,7 @@ import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts
 import { Cluster, FRONT_PORT } from "./cluster.ts";
 import Counter from "./counter.ts";
 import Greeter from "./greeter.ts";
+import Tally from "./tally.ts";
 
 export default class Front extends Docker.Service<Front>()(
   "RivetFront",
@@ -28,6 +29,7 @@ export default class Front extends Docker.Service<Front>()(
   Effect.gen(function* () {
     const counters = yield* Counter;
     const greeters = yield* Greeter;
+    const tallies = yield* Tally;
     const conformance = conformanceFetch(counters);
     return {
       fetch: Effect.gen(function* () {
@@ -37,6 +39,41 @@ export default class Front extends Docker.Service<Front>()(
         if (group === "greet" && name !== undefined) {
           const greeting = yield* greeters.getByName("front").greet(name);
           return yield* HttpServerResponse.json({ greeting });
+        }
+        // `n` concurrent increments on one instance; returns its final count.
+        if (group === "race" && name !== undefined) {
+          const n = Number(url.searchParams.get("n") ?? "50");
+          const tally = tallies.getByName(name);
+          yield* Effect.forEach(
+            Array.from({ length: n }, () => tally.increment("count")),
+            (call) => call,
+            { concurrency: "unbounded", discard: true },
+          );
+          return yield* HttpServerResponse.json({ count: yield* tally.read("count") });
+        }
+        // A slow transaction racing `n` increments, then a rolled-back one.
+        if (group === "transaction" && name !== undefined) {
+          const n = Number(url.searchParams.get("n") ?? "10");
+          const tally = tallies.getByName(name);
+          yield* Effect.all(
+            [
+              tally.addSlowly("count", 100, 300),
+              Effect.forEach(
+                Array.from({ length: n }, () => tally.increment("count")),
+                (call) => Effect.andThen(Effect.sleep("20 millis"), call),
+                { concurrency: "unbounded", discard: true },
+              ),
+            ],
+            { concurrency: "unbounded" },
+          );
+          const aborted = yield* tally.addThenAbort("count", 1000).pipe(
+            Effect.as(false),
+            Effect.catchTag("TallyAborted", () => Effect.succeed(true)),
+          );
+          return yield* HttpServerResponse.json({
+            count: yield* tally.read("count"),
+            aborted,
+          });
         }
         return yield* conformance;
       }),

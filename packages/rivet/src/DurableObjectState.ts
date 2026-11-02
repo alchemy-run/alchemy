@@ -1,6 +1,8 @@
+import { gateExclusive, gateStorage } from "alchemy/Workers/InputGate";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 
 /**
  * The least of a RivetKit actor context the state needs: its raw SQLite
@@ -11,17 +13,22 @@ import * as Effect from "effect/Effect";
  */
 export interface ActorContextLike {
   readonly key: ReadonlyArray<string>;
-  readonly db: {
-    execute<Row extends Record<string, unknown> = Record<string, unknown>>(
-      query: string,
-      ...args: unknown[]
-    ): Promise<Row[]>;
-  };
+  readonly db: ActorDatabase;
   readonly schedule: {
     at(timestamp: number, action: string, ...args: unknown[]): Promise<string>;
     cancel(id: string): Promise<boolean>;
   };
   waitUntil(promise: Promise<unknown>): void;
+}
+
+/** An actor's raw SQLite database, or a transaction on it. @internal */
+export interface ActorDatabase {
+  execute<Row extends Record<string, unknown> = Record<string, unknown>>(
+    query: string,
+    ...args: unknown[]
+  ): Promise<Row[]>;
+  /** Run `callback` in an isolated transaction: commit if it resolves, roll back if it throws. */
+  transaction<T>(callback: (tx: ActorDatabase) => Promise<T>): Promise<T>;
 }
 
 /** `SqlCursor.one` found no row, or more than one. */
@@ -75,6 +82,13 @@ export interface DurableObjectStorage {
   /** When the alarm fires, in ms since epoch, or `null`. */
   getAlarm(): Effect.Effect<number | null>;
   deleteAlarm(): Effect.Effect<void>;
+  /**
+   * Run `effect` as one transaction: its storage operations commit together
+   * if it succeeds and roll back if it fails, and no other call touches
+   * storage until it finishes. A call back into this instance from inside
+   * waits for it to finish, so don't call out from a transaction.
+   */
+  transaction<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
 }
 
 /** The instance a Durable Object's methods run against. */
@@ -122,11 +136,24 @@ const decode = <T>(text: string) =>
     return v8.deserialize(Buffer.from(text, "base64")) as T;
   });
 
+/** The transaction storage runs in, inside `storage.transaction`. */
+const CurrentTransaction = Context.Reference<ActorDatabase | undefined>(
+  "Rivet/DurableObjectState/CurrentTransaction",
+  { defaultValue: () => undefined },
+);
+
 const query = <Row extends Record<string, unknown>>(
   c: ActorContextLike,
   sql: string,
   ...args: unknown[]
-) => Effect.promise(() => c.db.execute<Row>(sql, ...args));
+) =>
+  Effect.gen(function* () {
+    const db = (yield* CurrentTransaction) ?? c.db;
+    return yield* Effect.promise(() => db.execute<Row>(sql, ...args));
+  });
+
+/** Thrown inside a RivetKit transaction to roll it back. */
+const rollback = Symbol("Rivet/DurableObjectState/rollback");
 
 /** Build the state for one actor activation. @internal */
 export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateShape => {
@@ -142,7 +169,7 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
     ),
   );
 
-  const storage: DurableObjectStorage = {
+  const ops: Omit<DurableObjectStorage, "transaction"> = {
     get: <T>(key: string) =>
       query<{ value: string }>(c, `SELECT value FROM ${KV_TABLE} WHERE key = ?`, key).pipe(
         Effect.flatMap((rows) =>
@@ -233,6 +260,48 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
         yield* Effect.promise(() => c.schedule.cancel(existing.id));
         yield* query(c, `DELETE FROM ${META_TABLE} WHERE key = ?`, ALARM_KEY);
       }),
+  };
+
+  // Calls run concurrently and every operation is a round trip, so each
+  // one goes through the instance's input gate: a call's storage, with only
+  // plain code between, can't interleave with another call's.
+  const storage: DurableObjectStorage = {
+    get: <T>(key: string) => gateStorage(ops.get<T>(key)),
+    put: (key, value) => gateStorage(ops.put(key, value)),
+    delete: (key) => gateStorage(ops.delete(key)),
+    list: <T>(options?: ListOptions) => gateStorage(ops.list<T>(options)),
+    deleteAll: () => gateStorage(ops.deleteAll()),
+    sql: {
+      exec: <T extends Record<string, unknown>>(sql: string, ...bindings: unknown[]) =>
+        gateStorage(ops.sql.exec<T>(sql, ...bindings)),
+    },
+    setAlarm: (scheduledTime) => gateStorage(ops.setAlarm(scheduledTime)),
+    getAlarm: () => gateStorage(ops.getAlarm()),
+    deleteAlarm: () => gateStorage(ops.deleteAlarm()),
+    transaction: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      gateExclusive(
+        Effect.gen(function* () {
+          const context = yield* Effect.context<R>();
+          const db = (yield* CurrentTransaction) ?? c.db;
+          let exit: Exit.Exit<A, E> | undefined;
+          yield* Effect.promise(() =>
+            db
+              .transaction(async (tx) => {
+                exit = await Effect.runPromiseExit(
+                  effect.pipe(
+                    Effect.provideService(CurrentTransaction, tx),
+                    Effect.provideContext(context),
+                  ),
+                );
+                if (Exit.isFailure(exit)) throw rollback;
+              })
+              .catch((error: unknown) => {
+                if (error !== rollback) throw error;
+              }),
+          );
+          return yield* exit!;
+        }),
+      ),
   };
 
   return {
