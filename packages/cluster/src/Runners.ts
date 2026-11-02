@@ -2,7 +2,15 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
+import type { RunnersHost } from "./internal/RunnersHostService.ts";
 import type { Providers } from "./Providers.ts";
+
+/**
+ * A runners Layer, as every host's `Runners` returns it: provide it to an
+ * implementation to deploy it to those runners.
+ */
+export type RunnersLayer<R = never> = Layer.Layer<RunnersHost, never, R>;
 
 /** An entity class a set of runners is built with. */
 export interface RunnersEntity {

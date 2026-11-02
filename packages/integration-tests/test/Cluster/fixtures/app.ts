@@ -1,29 +1,21 @@
+/**
+ * The HTTP routes of every suite's front: each calls the entities,
+ * workflows and journals through their gateways, whatever runtime serves it.
+ */
 import * as Cluster from "@alchemy.run/cluster";
-/** The HTTP front of the suite: a Docker service on the database's network, calling entities through the gateway. */
-import * as Docker from "@alchemy.run/docker";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Stream from "effect/Stream";
 import { AuthClient, CallerToken } from "./auth.ts";
-import { Database, FRONT_PORT } from "./cluster.ts";
 import { Counters } from "./counter.ts";
 import { Greeters } from "./greeter.ts";
-import { Tally } from "./legacy.ts";
+import type { tallyOn } from "./legacy.ts";
 import { workflowApp } from "./workflows/app.ts";
 import { Greet } from "./workflows/workflows.ts";
 
-export default class Front extends Docker.Service<Front>()(
-  "ClusterFront",
-  Effect.gen(function* () {
-    const database = yield* Cluster.Database.Database;
-    return {
-      main: import.meta.url,
-      port: 3000,
-      ports: [{ external: FRONT_PORT, internal: 3000 }],
-      networks: database.network?.kind === "docker" ? [{ name: database.network.name }] : [],
-    };
-  }).pipe(Effect.provide(Database)),
+/** The front, given the external program's entity as its host deploys it. */
+export const frontApp = <R>(Tally: ReturnType<typeof tallyOn<R>>) =>
   Effect.gen(function* () {
     const counters = yield* Counters;
     const greeters = yield* Greeters;
@@ -83,5 +75,4 @@ export default class Front extends Docker.Service<Front>()(
         }
       }).pipe(Effect.provide(AuthClient), Effect.orDie),
     };
-  }).pipe(Effect.provide(Cluster.WorkflowEngine(Greet))),
-) {}
+  }).pipe(Effect.provide(Cluster.WorkflowEngine(Greet)));

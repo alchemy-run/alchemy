@@ -9,3 +9,6 @@ export const Database = ClusterDocker.Database("Cluster");
 export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
+
+/** Runners of their own for the external program. */
+export const Legacy = ClusterDocker.Runners("Legacy").pipe(Layer.provide(Database));

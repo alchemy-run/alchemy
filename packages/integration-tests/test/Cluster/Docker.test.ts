@@ -7,11 +7,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformanceTests, waitForReady } from "./conformance.ts";
-import { FRONT_PORT } from "./fixtures/cluster.ts";
-import CountersLive from "./fixtures/counter-live.ts";
-import Front from "./fixtures/front.ts";
-import GreetersLive from "./fixtures/greeter-live.ts";
-import { WorkflowsLive } from "./fixtures/workflows/index.ts";
+import { FRONT_PORT } from "./fixtures/docker/cluster.ts";
+import Front from "./fixtures/docker/front.ts";
+import { Lives } from "./fixtures/docker/index.ts";
 import { scheduledConformanceTests } from "./scheduled-conformance.ts";
 import { workflowConformanceTests } from "./workflow-conformance.ts";
 
@@ -36,7 +34,7 @@ describe.skipIf(!!process.env.FAST)(
           Effect.gen(function* () {
             const front = yield* Front;
             return { front: front.name };
-          }).pipe(Effect.provide(Layer.mergeAll(CountersLive, GreetersLive, WorkflowsLive))),
+          }).pipe(Effect.provide(Lives)),
         );
         expect(outputs.front).toBeTruthy();
         yield* waitForReady(baseUrl);
