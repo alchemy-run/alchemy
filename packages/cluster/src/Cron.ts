@@ -23,28 +23,26 @@ import type { Providers } from "./Providers.ts";
 export const CronTypeId = "Cluster.Cron";
 export type CronTypeId = typeof CronTypeId;
 
-export type CronProps = HostedProps;
-
-export interface ClusterCronResource extends HostedResource<CronTypeId> {}
-
-/** When a cron runs: its declaration, like Effect's `ClusterCron.make`. */
-export interface CronOptions {
+/** When a cron runs: its Layer's props, like Effect's `ClusterCron.make` options. */
+export interface CronProps extends HostedProps {
   /**
-   * The schedule: a cron expression, with an optional leading seconds
-   * field (`"0 3 * * *"`, `"*\/10 * * * * *"`), or a parsed `Cron`.
+   * The schedule, as a cron expression with an optional leading seconds
+   * field: `"0 3 * * *"`, `"*\/10 * * * * *"`.
    */
-  readonly cron: string | Cron_.Cron;
-  /** The time zone a cron expression is read in. @default UTC */
-  readonly timeZone?: string;
+  cron: string;
+  /** The time zone the expression is read in. @default UTC */
+  timeZone?: string;
   /**
    * Compute each run from the previous run's scheduled time rather than
    * from when it finished.
    * @default false
    */
-  readonly calculateNextRunFromPrevious?: boolean;
+  calculateNextRunFromPrevious?: boolean;
   /** Skip a run that is due longer ago than this, as after an outage. */
-  readonly skipIfOlderThan?: Duration.Input;
+  skipIfOlderThan?: Duration.Input;
 }
+
+export interface ClusterCronResource extends HostedResource<CronTypeId, CronProps> {}
 
 /**
  * A cron as a runner runs it: its schedule, the job its Construction phase
@@ -55,7 +53,7 @@ export interface HostedCron {
   readonly kind: "cron";
   readonly name: string;
   readonly cron: Cron_.Cron;
-  readonly options: Pick<CronOptions, "calculateNextRunFromPrevious" | "skipIfOlderThan">;
+  readonly options: Pick<CronProps, "calculateNextRunFromPrevious" | "skipIfOlderThan">;
   readonly run: Effect.Effect<void, unknown, Scope | ClusterCron.CurrentScheduledTime>;
   readonly context: Context.Context<never>;
 }
@@ -72,32 +70,23 @@ type CronServices =
   | Self
   | Self<ClusterCronResource>;
 
-/** Every declared cron's schedule, parsed, by name. */
-const schedules = new Map<
-  string,
-  { readonly options: CronOptions; readonly cron: Result.Result<Cron_.Cron, Cron_.CronParseError> }
->();
-
-const { platform, provider, declare } = makeHostedPlatform(
+const { platform, provider, declare } = makeHostedPlatform<CronTypeId, HostedCron, CronProps>(
   CronTypeId,
-  (id, run, context): HostedCron => {
-    const { options, cron } = schedules.get(id)!;
-    return {
-      kind: "cron",
-      name: id,
-      // Checked while deploying, so it parsed.
-      cron: (cron as Result.Success<Cron_.Cron, never>).success,
-      options: {
-        calculateNextRunFromPrevious: options.calculateNextRunFromPrevious,
-        skipIfOlderThan: options.skipIfOlderThan,
-      },
-      run: run as HostedCron["run"],
-      context,
-    };
-  },
+  (id, run, context, props) => ({
+    kind: "cron",
+    name: id,
+    // Checked while deploying, so it parses.
+    cron: (Cron_.parse(props.cron, props.timeZone) as Result.Success<Cron_.Cron, never>).success,
+    options: {
+      calculateNextRunFromPrevious: props.calculateNextRunFromPrevious,
+      skipIfOlderThan: props.skipIfOlderThan,
+    },
+    run: run as HostedCron["run"],
+    context,
+  }),
   // A schedule that doesn't parse fails the deploy, not the runner.
-  (id) => {
-    const { cron } = schedules.get(id)!;
+  (id, _context, props) => {
+    const cron = Cron_.parse(props.cron, props.timeZone);
     return Result.isSuccess(cron)
       ? Effect.void
       : Effect.die(new InvalidCron({ message: `Cluster.Cron '${id}': ${cron.failure.message}` }));
@@ -111,11 +100,9 @@ export const CronProvider = provider;
 /** A declared cron, implemented by `.make(props, impl)`. */
 export type CronTag<Self, Name extends string> = Named<Name> &
   PlatformIdentity<Name> & {
-    /** Its schedule. */
-    readonly options: CronOptions;
     /**
-     * The cron's implementation, as a Layer: an Effect that resolves
-     * bindings once per runner and returns the job to run on schedule.
+     * The cron's implementation, as a Layer: its schedule, and an Effect
+     * that resolves bindings once per runner and returns the job to run.
      * Provide a runners Layer to `impl` to deploy it; provide the returned
      * Layer to the Stack.
      */
@@ -133,7 +120,7 @@ export type CronTag<Self, Name extends string> = Named<Name> &
 /** The class surface of {@link Cron}. */
 export interface CronClass {
   // `Self` names the class (`extends Cluster.Cron<Nightly>()`).
-  <Self>(): <const Name extends string>(name: Name, options: CronOptions) => CronTag<Self, Name>;
+  <Self>(): <const Name extends string>(name: Name) => CronTag<Self, Name>;
 }
 
 /**
@@ -142,9 +129,9 @@ export interface CronClass {
  * is a persisted message, so a run due while its runner restarts still
  * happens.
  *
- * Declare it with its schedule, like Effect's `ClusterCron.make`.
- * `.make(props, impl)` is its implementation, as a Layer: an Effect that
- * resolves bindings once per runner and returns the job. The job can read
+ * Declare it by name. `.make(props, impl)` is its implementation, as a
+ * Layer: its schedule, as Effect's `ClusterCron.make` takes it, and an
+ * Effect that resolves bindings once per runner and returns the job. The job can read
  * the time it was scheduled for with `ClusterCron.CurrentScheduledTime`.
  * Providing a runners Layer to the implementation is what deploys it.
  *
@@ -152,14 +139,11 @@ export interface CronClass {
  * **Example:** A nightly job
  * ```typescript
  * // src/Nightly.ts
- * export class Nightly extends Cluster.Cron<Nightly>()("Nightly", {
- *   cron: "0 3 * * *",
- *   skipIfOlderThan: "1 hour",
- * }) {}
+ * export class Nightly extends Cluster.Cron<Nightly>()("Nightly") {}
  *
  * // src/NightlyLive.ts
  * export default Nightly.make(
- *   { main: import.meta.url },
+ *   { main: import.meta.url, cron: "0 3 * * *", skipIfOlderThan: "1 hour" },
  *   Effect.gen(function* () {
  *     const counters = yield* Counter;
  *     return Effect.gen(function* () {
@@ -172,13 +156,4 @@ export interface CronClass {
  *
  * @resource
  */
-export const Cron: CronClass = (() => (name: string, options: CronOptions) => {
-  schedules.set(name, {
-    options,
-    cron:
-      typeof options.cron === "string"
-        ? Cron_.parse(options.cron, options.timeZone)
-        : Result.succeed(options.cron),
-  });
-  return declare(name, { options });
-}) as unknown as CronClass;
+export const Cron: CronClass = (() => (name: string) => declare(name, {})) as unknown as CronClass;

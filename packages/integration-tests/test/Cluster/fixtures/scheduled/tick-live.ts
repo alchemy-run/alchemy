@@ -6,7 +6,7 @@ import { Journal } from "../workflows/journal.ts";
 import { Tick } from "./tick.ts";
 
 export default Tick.make(
-  { main: import.meta.url },
+  { main: import.meta.url, cron: "*/2 * * * * *" },
   Effect.gen(function* () {
     const journals = yield* Journal;
     return Effect.gen(function* () {

@@ -26,22 +26,28 @@ export interface HostedAttributes {
   runners: string | undefined;
 }
 
-export interface HostedResource<Type extends string> extends Resource<
-  Type,
-  HostedProps,
-  HostedAttributes,
-  EntityBindingContract,
-  Providers
-> {}
+export interface HostedResource<
+  Type extends string,
+  Props extends HostedProps = HostedProps,
+> extends Resource<Type, Props, HostedAttributes, EntityBindingContract, Providers> {}
 
-export const makeHostedPlatform = <Type extends string, Hosted>(
+export const makeHostedPlatform = <
+  Type extends string,
+  Hosted,
+  Props extends HostedProps = HostedProps,
+>(
   typeId: Type,
-  build: (id: string, returned: unknown, context: Context.Context<never>) => Hosted,
-  check?: (id: string, context: Context.Context<never>) => Effect.Effect<void>,
+  build: (id: string, returned: unknown, context: Context.Context<never>, props: Props) => Hosted,
+  check?: (id: string, context: Context.Context<never>, props: Props) => Effect.Effect<void>,
 ) => {
   const platform = Platform(typeId, {
     createRuntimeContext: makeHostedRuntimeContext<Hosted>(typeId, build, check),
-  }) as unknown as Platform<HostedResource<Type>, any, unknown, HostedRuntimeContext<Hosted>>;
+  }) as unknown as Platform<
+    HostedResource<Type, Props>,
+    any,
+    unknown,
+    HostedRuntimeContext<Hosted>
+  >;
 
   const provider = () =>
     Provider.succeed(platform, {
@@ -60,7 +66,7 @@ export const makeHostedPlatform = <Type extends string, Hosted>(
     const tag = (platform as any)()(id);
     return Object.assign(class {}, members, {
       LogicalId: id,
-      make: (props: InputProps<HostedProps>, impl: unknown) =>
+      make: (props: InputProps<Props>, impl: unknown) =>
         tag.make(props, impl) as Layer.Layer<never, never, any>,
     });
   };

@@ -1,4 +1,4 @@
-/** A cron: every two seconds, once across the cluster. */
+/** A cron: once per scheduled time across the cluster. */
 import * as Cluster from "@alchemy.run/cluster";
 
-export class Tick extends Cluster.Cron<Tick>()("Tick", { cron: "*/2 * * * * *" }) {}
+export class Tick extends Cluster.Cron<Tick>()("Tick") {}

@@ -59,7 +59,7 @@ export const makeHostedRuntimeContext =
   <Hosted>(
     typeId: string,
     build: (id: string, returned: unknown, context: Context.Context<never>, props: any) => Hosted,
-    check?: (id: string, context: Context.Context<never>) => Effect.Effect<void>,
+    check?: (id: string, context: Context.Context<never>, props: any) => Effect.Effect<void>,
   ) =>
   (id: string): HostedRuntimeContext<Hosted> => {
     const base = createHostRuntimeContext(typeId)(id);
@@ -92,13 +92,10 @@ export const makeHostedRuntimeContext =
             yield* host.host(self as unknown as HostedClass);
           }
           const context = Context.merge(services, yield* Effect.context<never>());
+          // The props are on the resource, which `Self` is.
+          const props = (self as { Props?: unknown } | undefined)?.Props;
           if (globalThis.__ALCHEMY_RUNTIME__) {
-            hosted = build(
-              id,
-              options?.shape,
-              context,
-              (ctx as unknown as { Props?: unknown }).Props,
-            );
+            hosted = build(id, options?.shape, context, props);
             return;
           }
           if (deploy === undefined) {
@@ -110,7 +107,9 @@ export const makeHostedRuntimeContext =
               }),
             );
           }
-          if (check !== undefined) yield* check(id, context);
+          if (check !== undefined) {
+            yield* check(id, context, props);
+          }
           // The Construction phase has run, so every Config value it read is in `env`.
           yield* deploy(base.env);
         }),
