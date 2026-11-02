@@ -107,6 +107,35 @@ export const conformanceTests = (test: TestFn, { baseUrl }: { baseUrl: () => str
   );
 
   test(
+    "RPC middleware sees the caller's headers and provides the current user",
+    Effect.gen(function* () {
+      expect((yield* get(`${baseUrl()}/secret/conf-secret`)).tag).toBe("Unauthorized");
+      expect((yield* get(`${baseUrl()}/secret/conf-secret/user:sam`)).value).toBe(
+        "conf-secret belongs to sam",
+      );
+    }),
+    options,
+  );
+
+  test(
+    "a discarded message is delivered without waiting for its reply",
+    Effect.gen(function* () {
+      const id = `conf-discard-${Date.now()}`;
+      expect((yield* get(`${baseUrl()}/forget/${id}/4`)).value).toBe("sent");
+      const value = yield* get(`${baseUrl()}/get/${id}`).pipe(
+        Effect.map((body) => body.value as number),
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (n) => n === 4,
+          times: 20,
+        }),
+      );
+      expect(value).toBe(4);
+    }),
+    options,
+  );
+
+  test(
     "one entity calls another by name",
     Effect.gen(function* () {
       const first: string = (yield* get(`${baseUrl()}/greet/conf-sam`)).value;

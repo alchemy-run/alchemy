@@ -8,8 +8,9 @@ import * as Layer from "effect/Layer";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformanceTests, waitForReady } from "./conformance.ts";
 import { FRONT_PORT } from "./fixtures/cluster.ts";
+import CountersLive from "./fixtures/counter-live.ts";
 import Front from "./fixtures/front.ts";
-import GreetersLive from "./fixtures/greeter.ts";
+import GreetersLive from "./fixtures/greeter-live.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -32,7 +33,7 @@ describe.skipIf(!!process.env.FAST)(
           Effect.gen(function* () {
             const front = yield* Front;
             return { front: front.name };
-          }).pipe(Effect.provide(GreetersLive)),
+          }).pipe(Effect.provide(Layer.mergeAll(CountersLive, GreetersLive))),
         );
         expect(outputs.front).toBeTruthy();
         yield* waitForReady(baseUrl);

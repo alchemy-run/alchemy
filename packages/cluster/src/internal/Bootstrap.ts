@@ -194,14 +194,17 @@ export const bootstrap = (
       entity: entry.entity.annotate(ClusterSchema.ShardGroup, () => group),
     }));
     const entityLayers = placed.map((entry) =>
-      entry.entity.toLayer(
-        // The instance phase runs with the services its Construction phase had.
-        Effect.provide(entry.instance, entry.context) as Effect.Effect<any, never, any>,
-        {
-          maxIdleTime: entry.options.maxIdleTime,
-          concurrency: entry.options.concurrency,
-        },
-      ),
+      entry.entity
+        .toLayer(
+          // The instance phase runs with the services its Construction phase had.
+          Effect.provide(entry.instance, entry.context) as Effect.Effect<any, never, any>,
+          {
+            maxIdleTime: entry.options.maxIdleTime,
+            concurrency: entry.options.concurrency,
+          },
+        )
+        // So does the entity itself: its RPCs' middleware is provided to its Layer.
+        .pipe(Layer.provide(Layer.succeedContext(entry.context))),
     );
     const cluster = NodeClusterHttp.layer({
       transport: "http",
