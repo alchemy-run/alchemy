@@ -34,7 +34,7 @@ export interface RunnersAttributes {
 }
 
 export interface Runners extends Resource<
-  "EffectCluster.Runners",
+  "Cluster.Runners",
   RunnersProps,
   RunnersAttributes,
   RunnersBindingContract,
@@ -43,13 +43,13 @@ export interface Runners extends Resource<
 
 /**
  * The set of entity classes one group of runners hosts, collected from the
- * entities that were given it. Runners Layers (`EffectClusterDocker.Runners`,
+ * entities that were given it. Runners Layers (`ClusterDocker.Runners`,
  * …) declare one and build their program from it; it owns nothing in the
  * cloud.
  *
  * @internal
  */
-export const Runners = Resource<Runners>("EffectCluster.Runners");
+export const Runners = Resource<Runners>("Cluster.Runners");
 
 export const RunnersProvider = () =>
   Provider.succeed(Runners, {

@@ -115,7 +115,7 @@
       "path": "./packages/rivet/tsconfig.json"
     },
     {
-      "path": "./packages/effect-cluster/tsconfig.json"
+      "path": "./packages/cluster/tsconfig.json"
     },
     {
       "path": "./packages/planetscale/tsconfig.json"

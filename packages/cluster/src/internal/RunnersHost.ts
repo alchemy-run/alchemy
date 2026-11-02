@@ -27,7 +27,7 @@ import type { Providers } from "../Providers.ts";
 import { Runners, type RunnersEntity } from "../Runners.ts";
 import { GATEWAY_PORT, RUNNER_PORT } from "./Gateway.ts";
 
-const VIRTUAL = "virtual:effect-cluster-entities";
+const VIRTUAL = "virtual:cluster-entities";
 
 /** Resolve {@link VIRTUAL} to a module that imports every class the runners host. */
 const entitiesPlugin = (entities: ReadonlyArray<RunnersEntity>) => {
@@ -42,7 +42,7 @@ const entitiesPlugin = (entities: ReadonlyArray<RunnersEntity>) => {
   ].join("\n");
   return [
     {
-      name: "effect-cluster-entities",
+      name: "cluster-entities",
       resolveId: (id: string) => (id === VIRTUAL ? `\0${VIRTUAL}` : null),
       load: (id: string) => (id === `\0${VIRTUAL}` ? source : null),
     },
@@ -67,14 +67,12 @@ export const stackDnsLabel = Effect.fn(function* (id: string, max = 63) {
 });
 
 /** A runners Layer was provided to something other than an entity's Effect. */
-export class RunnersOutsideEntity extends Data.TaggedError("EffectCluster.RunnersOutsideEntity")<{
+export class RunnersOutsideEntity extends Data.TaggedError("Cluster.RunnersOutsideEntity")<{
   readonly message: string;
 }> {}
 
 /** The runners were given a database whose network they cannot join. */
-export class DatabaseNetworkMismatch extends Data.TaggedError(
-  "EffectCluster.DatabaseNetworkMismatch",
-)<{
+export class DatabaseNetworkMismatch extends Data.TaggedError("Cluster.DatabaseNetworkMismatch")<{
   readonly message: string;
 }> {}
 
@@ -138,7 +136,7 @@ export const makeRunnersLayer = <Network, Req>(options: {
       if (self.Type !== EntityTypeId) {
         return yield* Effect.die(
           new RunnersOutsideEntity({
-            message: `${options.label}("${options.id}") was provided to ${self.Type} '${self.LogicalId}', not an EffectCluster.Entity.`,
+            message: `${options.label}("${options.id}") was provided to ${self.Type} '${self.LogicalId}', not an Cluster.Entity.`,
           }),
         );
       }
@@ -190,9 +188,9 @@ export const makeRunnersLayer = <Network, Req>(options: {
                 ALCHEMY_STACK_NAME: stack.name,
                 ALCHEMY_STAGE: stack.stage,
                 ALCHEMY_PHASE: "runtime",
-                EFFECT_CLUSTER_DATABASE_URL: Redacted.value(url),
-                EFFECT_CLUSTER_GATEWAY_TOKEN: Redacted.value(tokenText),
-                EFFECT_CLUSTER_RUNNERS: name,
+                CLUSTER_DATABASE_URL: Redacted.value(url),
+                CLUSTER_GATEWAY_TOKEN: Redacted.value(tokenText),
+                CLUSTER_RUNNERS: name,
               })),
             ),
           });
@@ -214,7 +212,7 @@ const runnerEntry = () =>
 const bundleRunners = Effect.fn(function* (id: string, runners: Runners) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const dir = path.resolve(yield* dotAlchemyDirectory, "effect-cluster", yield* stackDnsLabel(id));
+  const dir = path.resolve(yield* dotAlchemyDirectory, "cluster", yield* stackDnsLabel(id));
   return Output.mapEffect((entities: RunnersEntity[]) =>
     Effect.gen(function* () {
       yield* fs.remove(dir, { recursive: true, force: true });

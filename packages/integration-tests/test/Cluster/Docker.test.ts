@@ -1,5 +1,5 @@
+import * as Cluster from "@alchemy.run/cluster";
 import * as Docker from "@alchemy.run/docker";
-import * as EffectCluster from "@alchemy.run/effect-cluster";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
@@ -9,10 +9,11 @@ import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformanceTests, waitForReady } from "./conformance.ts";
 import { FRONT_PORT } from "./fixtures/cluster.ts";
 import Front from "./fixtures/front.ts";
+import { GreetersLive } from "./fixtures/greeter.ts";
 
-const testOptions = { providers: Layer.mergeAll(Docker.providers(), EffectCluster.providers()) };
+const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(testOptions, "EffectClusterDocker", import.meta.url);
+const sharedStack = Core.scratchStack(testOptions, "ClusterDocker", import.meta.url);
 
 const baseUrl = `http://localhost:${FRONT_PORT}`;
 
@@ -21,7 +22,7 @@ const baseUrl = `http://localhost:${FRONT_PORT}`;
 // the gateway.
 describe.skipIf(!!process.env.FAST)(
   "Effect Cluster on Docker",
-  { tags: ["provider:effect-cluster", "provider:docker", "local"] },
+  { tags: ["provider:cluster", "provider:docker", "local"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
@@ -31,7 +32,7 @@ describe.skipIf(!!process.env.FAST)(
           Effect.gen(function* () {
             const front = yield* Front;
             return { front: front.name };
-          }),
+          }).pipe(Effect.provide(GreetersLive)),
         );
         expect(outputs.front).toBeTruthy();
         yield* waitForReady(baseUrl);

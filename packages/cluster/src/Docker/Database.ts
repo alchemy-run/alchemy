@@ -7,7 +7,7 @@ import * as Redacted from "effect/Redacted";
 import { Database as ClusterDatabase } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
 
-/** The Postgres release `EffectClusterDocker.Database` runs by default. */
+/** The Postgres release `ClusterDocker.Database` runs by default. */
 export const DEFAULT_POSTGRES_IMAGE = "postgres:17-alpine";
 
 export interface DatabaseProps {
@@ -31,7 +31,7 @@ export interface DatabaseProps {
 
 /**
  * The database an Effect Cluster coordinates through, on a Docker swarm, as
- * an `EffectCluster.Database` Layer: Postgres as a one-replica swarm service
+ * an `Cluster.Database` Layer: Postgres as a one-replica swarm service
  * with its data on a named volume, on an overlay network the runners join.
  * The Docker engine must be in swarm mode (`docker swarm init`).
  *
@@ -40,7 +40,7 @@ export interface DatabaseProps {
  * ### Running a local database
  * **Example:** Postgres for local entities
  * ```typescript
- * export const Database = EffectClusterDocker.Database("Cluster");
+ * export const Database = ClusterDocker.Database("Cluster");
  * ```
  *
  * @primitive
@@ -67,7 +67,7 @@ export const Database = (
         `${id}Data`,
         volumeContext === undefined ? {} : { context: volumeContext },
       );
-      const alias = "effect-cluster-db";
+      const alias = "cluster-db";
       const db = yield* Docker.Service(`${id}Postgres`, {
         image: props.image ?? DEFAULT_POSTGRES_IMAGE,
         ...context,

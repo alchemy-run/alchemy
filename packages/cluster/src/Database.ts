@@ -32,9 +32,7 @@ export interface DatabaseShape {
  * it, lock their shards in it, and keep persisted messages in it. Each
  * host's `Database` Layer provides it.
  */
-export class Database extends Context.Service<Database, DatabaseShape>()(
-  "EffectCluster.Database",
-) {}
+export class Database extends Context.Service<Database, DatabaseShape>()("Cluster.Database") {}
 
 export interface DatabaseProps {
   /** A Postgres connection URL. */
@@ -48,7 +46,7 @@ export interface DatabaseProps {
  * ### Using an existing database
  * **Example:** A Postgres URL from config
  * ```typescript
- * export const Database = EffectCluster.Database.fromUrl({
+ * export const Database = Cluster.Database.fromUrl({
  *   url: Config.Redacted("CLUSTER_DATABASE_URL"),
  * });
  * ```

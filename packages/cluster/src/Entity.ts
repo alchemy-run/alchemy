@@ -12,7 +12,7 @@ import type { Resource } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
 import type { Self } from "alchemy/Self";
-import type { Entity as EffectEntity } from "effect/cluster";
+import { Entity as EffectEntity } from "effect/cluster";
 import type {
   AlreadyProcessingMessage,
   EntityNotAssignedToRunner,
@@ -33,7 +33,7 @@ import type { Scope } from "effect/Scope";
 import { makeGatewayClient } from "./internal/Gateway.ts";
 import type { Providers } from "./Providers.ts";
 
-export const EntityTypeId = "EffectCluster.Entity";
+export const EntityTypeId = "Cluster.Entity";
 export type EntityTypeId = typeof EntityTypeId;
 
 export interface EntityProps extends PlatformProps {
@@ -113,38 +113,91 @@ type ClassProps<PropsReq> =
 
 type ClassRequirements<Req> = Providers | Exclude<Req, EntityServices | PlatformServices>;
 
+/**
+ * An entity's implementation: an Effect whose result is the instance phase,
+ * which returns the handlers. It may be a function of the entity, so
+ * `entity.of({...})` types the handlers against its RPCs.
+ */
+export type Impl<Type extends string, Rpcs extends Rpc.Any, InitReq> =
+  | ImplEffect<Rpcs, InitReq>
+  | ((entity: EffectEntity.Entity<Type, Rpcs>) => ImplEffect<Rpcs, InitReq>);
+
+type ImplEffect<Rpcs extends Rpc.Any, InitReq> = Effect.Effect<
+  Effect.Effect<EffectEntity.HandlersFrom<Rpcs>, never, InstanceServices>,
+  ConfigError.ConfigError,
+  InitReq
+>;
+
+/** What every declared class carries, whatever its form. */
+type ClassMembers<Type extends string, Rpcs extends Rpc.Any> = Named<Type> &
+  PlatformIdentity<Type> & {
+    /**
+     * The Effect Cluster entity behind the class, for Effect Cluster's own
+     * APIs: `Counter.entity.client` inside runners, `EntityProxy`,
+     * `Entity.makeTestClient`.
+     */
+    readonly entity: EffectEntity.Entity<Type, Rpcs>;
+    /** Type an instance's handlers against the entity's RPCs. */
+    of<const Handlers extends EffectEntity.HandlersFrom<Rpcs>>(handlers: Handlers): Handlers;
+    new (_: never): EntityClient<Rpcs>;
+  };
+
 /** The class surface of {@link Entity}. */
 export interface EntityClass {
-  // `Self` names the class (`extends EffectCluster.Entity<Counters>()`).
-  <_Self>(): <
-    const Type extends string,
-    Rpcs extends Rpc.Any,
-    Handlers extends EffectEntity.HandlersFrom<Rpcs>,
-    PropsReq = never,
-    InitReq = never,
-  >(
-    entity: EffectEntity.Entity<Type, Rpcs>,
+  // `Self` names the class (`extends Cluster.Entity<Counter>()`).
+  <Self>(): {
+    /** Declared with its RPCs, implemented inline. */
+    <
+      const Type extends string,
+      const Rpcs extends ReadonlyArray<Rpc.Any>,
+      PropsReq = never,
+      InitReq = never,
+    >(
+      type: Type,
+      rpcs: Rpcs,
+      props: ClassProps<PropsReq>,
+      impl: Impl<Type, Rpcs[number], InitReq>,
+    ): Effect.Effect<EntityClient<Rpcs[number]>, never, ClassRequirements<PropsReq | InitReq>> &
+      ClassMembers<Type, Rpcs[number]>;
+    /** An existing Effect Cluster entity, implemented inline. */
+    <const Type extends string, Rpcs extends Rpc.Any, PropsReq = never, InitReq = never>(
+      entity: EffectEntity.Entity<Type, Rpcs>,
+      props: ClassProps<PropsReq>,
+      impl: Impl<Type, Rpcs, InitReq>,
+    ): Effect.Effect<EntityClient<Rpcs>, never, ClassRequirements<PropsReq | InitReq>> &
+      ClassMembers<Type, Rpcs>;
+    /** Declared with its RPCs, implemented by `.make(props, impl)`. */
+    <const Type extends string, const Rpcs extends ReadonlyArray<Rpc.Any>>(
+      type: Type,
+      rpcs: Rpcs,
+    ): Effect.Effect<EntityClient<Rpcs[number]>, never, Providers> &
+      ClassMembers<Type, Rpcs[number]> &
+      TagMake<Self, Rpcs[number]>;
+    /** An existing Effect Cluster entity, implemented by `.make(props, impl)`. */
+    <const Type extends string, Rpcs extends Rpc.Any>(
+      entity: EffectEntity.Entity<Type, Rpcs>,
+    ): Effect.Effect<EntityClient<Rpcs>, never, Providers> &
+      ClassMembers<Type, Rpcs> &
+      TagMake<Self, Rpcs>;
+  };
+}
+
+/** The `.make` of a declared tag: its implementation, as a Layer. */
+export interface TagMake<Self, Rpcs extends Rpc.Any> {
+  make<PropsReq = never, InitReq = never>(
     props: ClassProps<PropsReq>,
-    impl: Effect.Effect<
-      Effect.Effect<Handlers, never, InstanceServices>,
-      ConfigError.ConfigError,
-      InitReq
-    >,
-  ) => Effect.Effect<EntityClient<Rpcs>, never, ClassRequirements<PropsReq | InitReq>> &
-    Named<Type> &
-    PlatformIdentity<Type> & {
-      new (_: never): EntityClient<Rpcs>;
-    };
+    impl: ImplEffect<Rpcs, InitReq>,
+  ): Layer.Layer<Self, never, ClassRequirements<PropsReq | InitReq>>;
 }
 
 /** The entity was deployed without a runners Layer, so nothing would host it. */
-export class EntityHasNoRunners extends Data.TaggedError("EffectCluster.EntityHasNoRunners")<{
+export class EntityHasNoRunners extends Data.TaggedError("Cluster.EntityHasNoRunners")<{
   readonly message: string;
 }> {}
 
 /** A class yielded outside any runtime was called. */
 export class EntityCalledOutsideRuntime extends Data.TaggedError(
-  "EffectCluster.EntityCalledOutsideRuntime",
+  "Cluster.EntityCalledOutsideRuntime",
 )<{
   readonly message: string;
 }> {}
@@ -219,8 +272,8 @@ const createRuntimeContext = (id: string): EntityRuntimeContext => {
           return yield* Effect.die(
             new EntityHasNoRunners({
               message:
-                `EffectCluster.Entity '${id}' has no runners. Provide a runners Layer to its Effect, ` +
-                `for example EffectClusterDocker.Runners("Default").`,
+                `Cluster.Entity '${id}' has no runners. Provide a runners Layer to its Effect, ` +
+                `for example ClusterDocker.Runners("Default").`,
             }),
           );
         }
@@ -239,10 +292,10 @@ const platform = Platform(EntityTypeId, { createRuntimeContext }) as EntityPlatf
 export const EntityResource = platform;
 
 /** The Platform declaration behind a class, which a runner builds. @internal */
-export const PlatformDeclaration = Symbol.for("alchemy/EffectCluster/Entity/Platform");
+export const PlatformDeclaration = Symbol.for("alchemy/Cluster/Entity/Platform");
 
 /** The Effect entity a class hosts, which a runner reads. @internal */
-export const EntityDefinition = Symbol.for("alchemy/EffectCluster/Entity/Definition");
+export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
 
 /**
  * An **Entity** in an Effect Cluster: a stateful, addressable instance per
@@ -255,7 +308,7 @@ export const EntityDefinition = Symbol.for("alchemy/EffectCluster/Entity/Definit
  * first message, and returns its handlers.
  *
  * Where it runs is a runners Layer provided to the outer Effect —
- * `EffectClusterDocker.Runners("Default")` — given the database the
+ * `ClusterDocker.Runners("Default")` — given the database the
  * runners coordinate through.
  *
  * `yield* Counter` from any runtime returns a client with the same shape as
@@ -264,17 +317,16 @@ export const EntityDefinition = Symbol.for("alchemy/EffectCluster/Entity/Definit
  * database access and no route to the runners.
  *
  * ### Declaring an entity
- * **Example:** A counter on local runners
+ * **Example:** A counter, implemented inline
  * ```typescript
  * export const Increment = Rpc.make("Increment", {
  *   payload: { amount: Schema.Int },
  *   success: Schema.Int,
  * });
  *
- * export const Counter = Entity.make("Counter", [Increment]);
- *
- * export default class Counters extends EffectCluster.Entity<Counters>()(
- *   Counter,
+ * export default class Counter extends Cluster.Entity<Counter>()(
+ *   "Counter",
+ *   [Increment],
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     return Effect.gen(function* () {
@@ -287,17 +339,52 @@ export const EntityDefinition = Symbol.for("alchemy/EffectCluster/Entity/Definit
  * ) {}
  * ```
  *
- * ### Calling an entity
- * **Example:** From a Cloudflare Worker
+ * **Example:** A declaration callers import, and its implementation as a Layer
  * ```typescript
- * const counters = yield* Counters;
+ * export class Counter extends Cluster.Entity<Counter>()("Counter", [Increment]) {}
+ *
+ * export const CounterLive = Counter.make(
+ *   { main: import.meta.url, handler: "CounterLive" },
+ *   Effect.gen(function* () {
+ *     return Effect.gen(function* () {
+ *       const count = yield* Ref.make(0);
+ *       return {
+ *         Increment: ({ payload }) => Ref.updateAndGet(count, (n) => n + payload.amount),
+ *       };
+ *     });
+ *   }).pipe(Effect.provide(Default)),
+ * );
+ * ```
+ *
+ * **Example:** An existing Effect Cluster entity
+ * ```typescript
+ * import { Counter as CounterEntity } from "./entities/counter.ts";
+ *
+ * export default class Counter extends Cluster.Entity<Counter>()(
+ *   CounterEntity,
+ *   { main: import.meta.url },
+ *   CounterImpl.pipe(Effect.provide(Default)),
+ * ) {}
+ * ```
+ *
+ * ### Calling an entity
+ * **Example:** From any runtime
+ * ```typescript
+ * const counters = yield* Counter;
  * const count = yield* counters("visits").Increment({ amount: 1 });
  * ```
  *
  * @resource
  */
 export const Entity: EntityClass = (() =>
-  (entity: EffectEntity.Entity<string, Rpc.Any>, props?: unknown, impl?: unknown) => {
+  (...args: ReadonlyArray<unknown>) => {
+    // `(type, rpcs, …)` declares the entity; `(entity, …)` takes an existing one.
+    const declared = typeof args[0] === "string";
+    const entity = declared
+      ? EffectEntity.make(args[0] as string, args[1] as ReadonlyArray<Rpc.Any>)
+      : (args[0] as EffectEntity.Entity<string, Rpc.Any>);
+    const [props, given] = declared ? args.slice(2) : args.slice(1);
+    const impl = typeof given === "function" ? (given as (e: unknown) => unknown)(entity) : given;
     entities.set(entity.type, entity);
     return declare(entity, (platform as any)()(entity.type, props, impl));
   }) as unknown as EntityClass;
@@ -311,7 +398,14 @@ export const Entity: EntityClass = (() =>
 const declare = (entity: EffectEntity.Entity<string, Rpc.Any>, declaration: any) =>
   Object.assign(
     class {},
-    { LogicalId: entity.type, [PlatformDeclaration]: declaration, [EntityDefinition]: entity },
+    declaration.make === undefined ? {} : { make: declaration.make },
+    {
+      LogicalId: entity.type,
+      entity,
+      of: (handlers: unknown) => handlers,
+      [PlatformDeclaration]: declaration,
+      [EntityDefinition]: entity,
+    },
     Effectable.Prototype({
       label: `${EntityTypeId}<${entity.type}>`,
       evaluate: () => clientOf(entity, declaration),
@@ -336,7 +430,7 @@ const clientOf = (
     const bind = <T>(key: string, value: unknown) =>
       ctx
         .set(
-          sanitizeKey(`EFFECT_CLUSTER_${entity.type}_${key}`),
+          sanitizeKey(`CLUSTER_${entity.type}_${key}`),
           Output.isOutput(value) ? value : Output.literal(value),
         )
         .pipe(Effect.flatMap((bound) => ctx.get<T>(bound)));
@@ -353,7 +447,7 @@ const outsideRuntime = (entity: EffectEntity.Entity<string, Rpc.Any>) =>
     const fail = () =>
       Effect.die(
         new EntityCalledOutsideRuntime({
-          message: `EffectCluster.Entity '${entity.type}/${entityId}' can only be called inside a runtime.`,
+          message: `Cluster.Entity '${entity.type}/${entityId}' can only be called inside a runtime.`,
         }),
       );
     return new Proxy({}, { get: () => fail });

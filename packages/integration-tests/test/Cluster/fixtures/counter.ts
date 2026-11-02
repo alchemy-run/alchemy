@@ -1,5 +1,5 @@
 /** A counter entity: volatile and persisted messages, a typed failure, and a stream. */
-import * as EffectCluster from "@alchemy.run/effect-cluster";
+import * as Cluster from "@alchemy.run/cluster";
 import { ClusterSchema, Entity } from "effect/cluster";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
@@ -12,7 +12,7 @@ export class CounterBoom extends Schema.TaggedError<CounterBoom>()("CounterBoom"
   reason: Schema.String,
 }) {}
 
-export const Counter = Entity.make("Counter", [
+export const CounterRpcs = [
   Rpc.make("Increment", { payload: { amount: Schema.Int }, success: Schema.Int }),
   Rpc.make("Get", { success: Schema.Int }),
   Rpc.make("Add", {
@@ -23,23 +23,26 @@ export const Counter = Entity.make("Counter", [
   Rpc.make("Boom", { error: CounterBoom }),
   Rpc.make("Tick", { payload: { n: Schema.Int }, success: Schema.Int, stream: true }),
   Rpc.make("Whoami", { success: Schema.String }),
-]);
+] as const;
 
-export default class Counters extends EffectCluster.Entity<Counters>()(
-  Counter,
+// Declared with its RPCs and implemented inline.
+export default class Counters extends Cluster.Entity<Counters>()(
+  "Counter",
+  CounterRpcs,
   { main: import.meta.url },
-  Effect.gen(function* () {
-    return Effect.gen(function* () {
-      const { entityId } = yield* Entity.CurrentAddress;
-      const count = yield* Ref.make(0);
-      return Counter.of({
-        Increment: ({ payload }) => Ref.updateAndGet(count, (n) => n + payload.amount),
-        Get: () => Ref.get(count),
-        Add: ({ payload }) => Ref.updateAndGet(count, (n) => n + payload.amount),
-        Boom: () => Effect.fail(new CounterBoom({ reason: "expected" })),
-        Tick: ({ payload }) => Stream.range(1, payload.n),
-        Whoami: () => Effect.succeed(entityId),
+  (counter) =>
+    Effect.gen(function* () {
+      return Effect.gen(function* () {
+        const { entityId } = yield* Entity.CurrentAddress;
+        const count = yield* Ref.make(0);
+        return counter.of({
+          Increment: ({ payload }) => Ref.updateAndGet(count, (n) => n + payload.amount),
+          Get: () => Ref.get(count),
+          Add: ({ payload }) => Ref.updateAndGet(count, (n) => n + payload.amount),
+          Boom: () => Effect.fail(new CounterBoom({ reason: "expected" })),
+          Tick: ({ payload }) => Stream.range(1, payload.n),
+          Whoami: () => Effect.succeed(entityId),
+        });
       });
-    });
-  }).pipe(Effect.provide(Default)),
+    }).pipe(Effect.provide(Default)),
 ) {}

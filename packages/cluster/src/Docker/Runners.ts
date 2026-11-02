@@ -25,11 +25,11 @@ export interface RunnersOptions extends RunnersSettings {
 
 /**
  * Run an Effect Cluster's runners on a Docker swarm: a swarm service whose
- * tasks host every `EffectCluster.Entity` given these runners, on the
+ * tasks host every `Cluster.Entity` given these runners, on the
  * database's overlay network. Runners find each other through the
  * database and talk on the network; the gateway is served on the same
- * network. Requires an `EffectCluster.Database` on a Docker network —
- * `EffectClusterDocker.Database`.
+ * network. Requires an `Cluster.Database` on a Docker network —
+ * `ClusterDocker.Database`.
  *
  * Every entity given the same runners shares them: declare the runners once
  * and provide them to each class.
@@ -37,8 +37,8 @@ export interface RunnersOptions extends RunnersSettings {
  * ### Running entities on Docker
  * **Example:** Two runners on the local swarm
  * ```typescript
- * export const Database = EffectClusterDocker.Database("Cluster");
- * export const Default = EffectClusterDocker.Runners("Default", { replicas: 2 }).pipe(
+ * export const Database = ClusterDocker.Database("Cluster");
+ * export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Database),
  * );
  * ```
@@ -50,10 +50,10 @@ export const Runners = (
   options: RunnersOptions = {},
 ): Layer.Layer<never, never, Database | Self | Stack | Providers | Docker.Providers> =>
   makeRunnersLayer({
-    label: "EffectClusterDocker.Runners",
+    label: "ClusterDocker.Runners",
     id,
     settings: options,
-    expected: "a Docker network (EffectClusterDocker.Database)",
+    expected: "a Docker network (ClusterDocker.Database)",
     network: (database) => (database.network?.kind === "docker" ? database.network : undefined),
     // Callers on the swarm reach the gateway by the service's name.
     gateway: (name) => ({ url: `http://${name}:${GATEWAY_PORT}` }),
@@ -74,7 +74,7 @@ export const Runners = (
               : [{ external: options.gatewayPort, internal: GATEWAY_PORT }],
           // Each runner finds its own address among the service's tasks.
           environment: environment.pipe(
-            Output.map((env) => ({ ...env, EFFECT_CLUSTER_PEERS: `tasks.${name}` })),
+            Output.map((env) => ({ ...env, CLUSTER_PEERS: `tasks.${name}` })),
           ) as unknown as Record<string, string>,
         });
       }),

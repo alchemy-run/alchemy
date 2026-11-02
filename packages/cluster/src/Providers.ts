@@ -5,7 +5,7 @@ import { EntityProvider, EntityResource } from "./Entity.ts";
 import { Runners, RunnersProvider } from "./Runners.ts";
 
 /** Service tag bundling every Effect Cluster provider. */
-export class Providers extends Provider.ProviderCollection<Providers>()("EffectCluster") {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Cluster") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
@@ -15,7 +15,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  *
  * @example
  * ```ts
- * Alchemy.Stack("App", { providers: Layer.mergeAll(Docker.providers(), EffectCluster.providers()) }, ...)
+ * Alchemy.Stack("App", { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) }, ...)
  * ```
  */
 export const providers = () =>

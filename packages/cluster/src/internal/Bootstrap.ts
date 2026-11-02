@@ -39,18 +39,18 @@ const env = (name: string) => process.env[name];
 
 /**
  * The address other runners reach this one at: an explicit
- * `EFFECT_CLUSTER_RUNNER_HOST`, else the local address that
- * `EFFECT_CLUSTER_PEERS` (a DNS name every runner resolves to) lists,
+ * `CLUSTER_RUNNER_HOST`, else the local address that
+ * `CLUSTER_PEERS` (a DNS name every runner resolves to) lists,
  * else the first non-internal IPv4 address.
  */
 const runnerHost = Effect.gen(function* () {
-  const explicit = env("EFFECT_CLUSTER_RUNNER_HOST");
+  const explicit = env("CLUSTER_RUNNER_HOST");
   if (explicit) return explicit;
   const local = Object.values(networkInterfaces())
     .flat()
     .filter((iface) => iface !== undefined && !iface.internal)
     .map((iface) => iface!.address);
-  const peers = env("EFFECT_CLUSTER_PEERS");
+  const peers = env("CLUSTER_PEERS");
   if (peers) {
     const resolved = yield* Effect.tryPromise(() => lookup(peers, { all: true })).pipe(
       Effect.map((addresses) => addresses.map((address) => address.address)),
@@ -90,7 +90,7 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
       if (built === undefined) {
         return yield* Effect.die(
           new EntityHasNoRunners({
-            message: `EffectCluster.Entity '${runtime.id}' did not finish its Construction phase.`,
+            message: `Cluster.Entity '${runtime.id}' did not finish its Construction phase.`,
           }),
         );
       }
@@ -115,12 +115,10 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
         runnerAddress: Option.some(RunnerAddress.make(host, RUNNER_PORT)),
         runnerListenAddress: Option.some(RunnerAddress.make("0.0.0.0", RUNNER_PORT)),
       },
-    }).pipe(
-      Layer.provide(PgClient.layer({ url: Redacted.make(env("EFFECT_CLUSTER_DATABASE_URL")!) })),
-    );
+    }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
     const gateway = gatewayLayer(
       hosted.map((entry) => entry.entity),
-      env("EFFECT_CLUSTER_GATEWAY_TOKEN") ?? "",
+      env("CLUSTER_GATEWAY_TOKEN") ?? "",
     ).pipe(Layer.provide(NodeHttpServer.layer(createServer, { port: GATEWAY_PORT })));
 
     yield* Effect.logInfo(
