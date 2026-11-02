@@ -373,6 +373,38 @@ export function make<A>(stack: StackSpec<A>, options: FilteredPlanOptions = {}) 
   return makePlan(stack, options);
 }
 
+/**
+ * Bind every ref to a resource this program declares in its own stack and
+ * stage, so the ref is a dependency like a direct reference: the target is
+ * created first and deleted last, and the ref resolves to the target's fresh
+ * attributes (see `Output.bindRef`). A ref is matched by its id against the
+ * declared resource's FQN, which is what the ref reads from state. A
+ * resource's ref to itself stays unbound: it reads its own persisted state.
+ */
+const bindSameStackRefs = (
+  stack: StackSpec<any>,
+  resources: ReadonlyArray<ResourceLike>,
+  actions: ReadonlyArray<ActionLike>,
+) => {
+  const byFqn = new Map(resources.map((resource) => [resource.FQN, resource]));
+  const bind = (owner: string, value: unknown) => {
+    for (const ref of Output.collectRefs(value)) {
+      if ((ref.stack ?? stack.name) !== stack.name) continue;
+      if ((ref.stage ?? stack.stage) !== stack.stage) continue;
+      if (ref.resourceId === owner) continue;
+      const target = byFqn.get(ref.resourceId);
+      if (target !== undefined) Output.bindRef(ref, target);
+    }
+  };
+  for (const resource of resources) {
+    bind(resource.FQN, resource.Props);
+    bind(resource.FQN, stack.bindings[resource.FQN] ?? []);
+  }
+  for (const action of actions) {
+    bind(action.FQN, [action.Input, action.Captures]);
+  }
+};
+
 const makePlan = <A>(
   stack: StackSpec<A>,
   options: FilteredPlanOptions = {},
@@ -386,6 +418,7 @@ const makePlan = <A>(
     const declaredResources = Object.values(stack.resources);
     const declaredActions = Object.values(stack.actions ?? {});
     const declared = [...declaredResources, ...declaredActions];
+    bindSameStackRefs(stack, declaredResources, declaredActions);
     const upstream = (node: ResourceLike | ActionLike) =>
       Object.keys(
         Output.upstreamAny(
@@ -1013,6 +1046,14 @@ const makePlan = <A>(
         } else if (Output.isLiteralExpr(expr)) {
           return expr.value;
         } else if (Output.isRefExpr(expr)) {
+          // A ref bound to a declared resource resolves like a direct
+          // reference: unknown while that resource is being created.
+          const target = Output.refTarget(expr);
+          if (target !== undefined) {
+            return yield* resolveResource(
+              Output.of(target as any) as Output.ResourceExpr<any, any>,
+            );
+          }
           const refStack = expr.stack ?? stackName;
           const refStage = expr.stage ?? stage;
           const refState = yield* state
