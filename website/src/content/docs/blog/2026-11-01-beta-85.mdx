@@ -6,6 +6,7 @@ excerpt: Effect 4.1, Alchemy Domain deploys that backfill and rebuild views and 
 ---
 
 import BackfillFanout from "../../../components/blog/BackfillFanout.astro";
+import BoundedContext from "../../../components/blog/BoundedContext.astro";
 
 beta.85 is 249 pull requests from 39 contributors: 84 features and 95 bug
 fixes.
@@ -267,6 +268,8 @@ export class BankApi extends Domain.Api("BankApi", {
   views: ["AccountSummary"],
 }) {}
 ```
+
+<BoundedContext />
 
 The same Api can now be served to whoever needs it, through the same
 middleware and rejections, so an agent can do exactly what a signed-in
