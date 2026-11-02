@@ -16,7 +16,7 @@ every model change** by replaying history, and one Domain model can be served
 **over HTTP, MCP or the CLI**, so people and agents reach it however they
 prefer. GCP gets **redesigned Cloud Run services and containers** and **connects to AWS
 without keys**. Custom domains work with **any DNS provider**, the
-**Cloudflare state store** runs as many stores per account as you need, **AWS
+**Cloudflare state store** takes its Worker name, account and domain, **AWS
 state uses DynamoDB** and plans 270× faster, **Alchemist** exposes the whole CLI
 as a programmatic API, and Alchemy's test runner ships as
 **`@alchemy.run/test`**.
@@ -34,6 +34,7 @@ which nothing can recover. Upgrade every machine and CI job together
 **Breaking changes**
 
 - **Effect 4.1**: bump `effect` and `@effect/*` to `^4.1.0` ([below](#effect-41)).
+- **`Cloudflare.state({ name })` is `workerName`**, the store's full Worker name, and `--name` takes the Worker name too: `name: "team-a"` becomes `workerName: "alchemy-state-store-team-a"`, the same Worker and secrets ([below](#choose-the-worker-name)).
 - **`AWS.state()` uses DynamoDB**: run `alchemy state migrate`, or keep S3 with `AWS.state({ backend: "s3" })` ([below](#aws-state-now-uses-dynamodb-and-plans-270-faster)).
 - **Lambda event-source handlers take the Lambda event** instead of a `Stream`, and can return a partial batch response ([below](#lambda-aliases-streaming-and-partial-batch-failures)):
 
@@ -823,28 +824,38 @@ Docs: [DNS adapters](/infrastructure-as-code/dns-adapters).
 ## Cloudflare State Store v8
 
 The Cloudflare state store is now deployed with direct API calls instead of a
-stack, as state store v8, and you choose its account, Worker name and domain
+stack, as state store v8, and you choose its Worker name, account and domain
 ([#2385](https://github.com/alchemy-run/alchemy/pull/2385)).
 
-### Run more than one store
+### Choose the Worker name
 
-Name a store to run more than one per account. Without a name, you get the
-same default store as before:
-
-```typescript
-state: Cloudflare.state({ name: "team-a" }), // Worker alchemy-state-store-team-a
-```
-
-Pass `workerName` to choose the full Worker name yourself:
+`workerName` sets the store's Worker name. Without it, you get the same default
+store as before:
 
 ```typescript
-state: Cloudflare.state({ workerName: "acme-state" }),
+state: Cloudflare.state({ workerName: "team-a-state" }),
 ```
 
-The CLI reaches a named store with `--name`:
+It replaces `name`, which prefixed the Worker name with `alchemy-state-store-`.
+A store you named that way keeps its Worker and secrets when you pass the full
+name:
+
+```diff lang="typescript"
+Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
+-    state: Cloudflare.state({ name: "team-a" }),
++    state: Cloudflare.state({ workerName: "alchemy-state-store-team-a" }),
+  },
+  Effect.gen(function* () {}),
+);
+```
+
+`--name` takes the Worker name too:
 
 ```sh
-alchemy state list --backend cloudflare --name team-a
+alchemy state list --backend cloudflare --name alchemy-state-store-team-a
 ```
 
 ### Pin the account and serve it on your domain
