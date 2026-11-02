@@ -183,15 +183,15 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 - [Store Git Repos with Artifacts](https://alchemy.run/cloudflare/data/artifacts) — Use Cloudflare Artifacts to create Git repos at runtime and hand out clone tokens, all from a tiny Worker.
 - [Add Drizzle ORM](https://alchemy.run/cloudflare/data/drizzle) — Deploy a Cloudflare Worker with Drizzle queries, Hyperdrive connections, and reviewed, committed migrations on Neon or PlanetScale.
 - [Branch from a shared database](https://alchemy.run/cloudflare/data/branch-from-shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, cheap branches, no extra clusters.
-- [D1](https://alchemy.run/cloudflare/data/d1) — Cloudflare D1 is serverless SQLite — create a database, apply migrations on deploy, and query it from a Worker through a typed binding.
+- [D1](https://alchemy.run/cloudflare/data/d1) — How D1 runs a SQLite database for your app, where its primary and read replicas live, how migrations are applied on deploy, and how Workers query it through a binding or Effect SQL.
 - [Drizzle on D1](https://alchemy.run/cloudflare/data/d1-drizzle) — Deploy committed SQLite migrations to D1 and query the database from a Worker with Drizzle.
 - [Hyperdrive](https://alchemy.run/cloudflare/data/hyperdrive) — Cloudflare Hyperdrive pools connections to your external Postgres or MySQL database at the edge — provision a database (Neon or PlanetScale), front it with Hyperdrive, and bind the connection into your Worker.
 - [Iceberg tables](https://alchemy.run/cloudflare/data/iceberg-tables) — Turn an R2 bucket into an Apache Iceberg warehouse with Cloudflare's catalog, manage tables with schema evolution and maintenance, and query them from Spark, DuckDB, or PyIceberg.
-- [KV](https://alchemy.run/cloudflare/data/kv) — Cloudflare Workers KV is edge key-value storage — create a namespace, bind it into a Worker with read/write-scoped bindings, and get/put values with metadata.
+- [KV](https://alchemy.run/cloudflare/data/kv) — How Workers KV replicates values to every city for fast reads, what eventual consistency means for writes, and how Workers read, write, list and expire keys through access-scoped bindings.
 - [Pipelines](https://alchemy.run/cloudflare/data/pipelines) — Ingest events into R2 with Cloudflare Pipelines — a typed stream, a SQL pipeline, and a sink that writes JSON or Parquet files, or Apache Iceberg tables.
 - [Prisma ORM with Postgres](https://alchemy.run/cloudflare/data/prisma) — Deploy Prisma ORM v8 on Cloudflare Workers with Neon Postgres, Hyperdrive, controlled migrations, and Effect-native queries.
 - [Private database (Workers VPC)](https://alchemy.run/cloudflare/data/hyperdrive-private-database) — Connect Hyperdrive to a database inside a private network — such as Aurora in an AWS VPC — through a Cloudflare Tunnel and a Workers VPC Service, with no public endpoint.
-- [R2](https://alchemy.run/cloudflare/data/r2) — Cloudflare R2 is object storage — create a bucket, bind it into a Worker with read/write-scoped bindings, and stream objects in and out.
+- [R2](https://alchemy.run/cloudflare/data/r2) — How R2 Buckets store objects under keys with no egress fees, how Workers read and write them through access-scoped bindings, and how to share, serve, expire and delete what you store.
 - [R2 presigned URLs](https://alchemy.run/cloudflare/data/r2-presigned-urls) — Mint presigned R2 URLs so browsers upload and download objects directly, with the same code in alchemy dev and in production, from Effect-native or async Workers.
 - [Shared database across stages](https://alchemy.run/cloudflare/data/shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
 
@@ -200,7 +200,7 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 - [Scheduled jobs with Cron Triggers](https://alchemy.run/cloudflare/messaging/cron) — Run Worker code on a schedule — declare a cron expression with an Effect handler, deploy it, and prove the trigger fires with a bounded polling test.
 - [React to GitHub events from a Worker](https://alchemy.run/cloudflare/messaging/github-events) — Subscribe a Cloudflare Worker to GitHub repository webhooks with typed payloads — alchemy provisions the webhook and verifies delivery signatures.
 - [K2 streams](https://alchemy.run/cloudflare/messaging/k2) — Cloudflare K2 is a durable, replayable log. Produce records from Workers with the WriteStream binding, then consume them from a long-running host with consumeStreamRecords.
-- [Queues](https://alchemy.run/cloudflare/messaging/queues) — Cloudflare Queues give you reliable, at-least-once message delivery between Workers — a WriteQueue producer binding on one side and an Effect-style consumeQueueMessages handler with automatic ack/retry on the other.
+- [Queues](https://alchemy.run/cloudflare/messaging/queues) — How Cloudflare Queues carry messages from producer Workers to a consumer in batches, with retries and dead-letter queues, and how platform events like Workflow completions arrive on a Queue.
 
 ## Cloudflare — Email
 
@@ -238,7 +238,8 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 
 ## Prisma — start here
 
-- [Prisma](https://alchemy.run/prisma) — Prisma Postgres and Prisma Compute — projects, databases, connections, and deployed apps as Stack resources, with a zero-config local database in dev.
+- [Prisma](https://alchemy.run/prisma) — Declare Prisma Postgres databases, connections, branches and Compute apps as Stack resources with Alchemy, and run the same Stack against a local Postgres in dev.
+- [What is Prisma?](https://alchemy.run/prisma/what-is-prisma) — The concepts behind Prisma's data platform — workspaces, projects, Prisma Postgres, connections, branches, Compute apps, deployments and buckets — and how @alchemy.run/prisma models each of them.
 - [Setup](https://alchemy.run/prisma/setup) — Connect alchemy to Prisma — account, service tokens, and profiles.
 
 ## Prisma — tutorial
@@ -389,7 +390,8 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.
 
-- [GCP](https://alchemy.run/gcp) — Build Google Cloud applications with Alchemy — a runtime (usually Cloud Run) plus typed resources, wired together by bindings that grant least-privilege IAM.
+- [GCP](https://alchemy.run/gcp) — Build on Google Cloud with Alchemy. Declare Cloud Run services, jobs, Firestore, Cloud Storage and Pub/Sub in TypeScript, and let bindings grant each runtime's service account the roles its code uses.
+- [What is GCP?](https://alchemy.run/gcp/what-is-gcp) — The concepts behind Google Cloud — organizations, projects, APIs, regions, IAM principals, roles and service accounts, Cloud Run and the other runtimes, events, networks and logging — and how @alchemy.run/gcp models each of them.
 - [Setup](https://alchemy.run/gcp/setup) — Connect alchemy to Google Cloud — project, service-account key, the APIs to enable, and Docker.
 
 ## GCP — Tutorial
@@ -402,7 +404,7 @@ Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/
 
 ## GCP — Compute
 
-- [Choosing a runtime](https://alchemy.run/gcp/compute/choosing-a-runtime) — Cloud Run services vs jobs vs worker pools vs Cloud Functions vs GKE — what each one is for and what it costs to run.
+- [Choosing a runtime](https://alchemy.run/gcp/compute/choosing-a-runtime) — How Cloud Run services, jobs and worker pools, Cloud Functions and GKE differ in what triggers them, how they scale and what they cost, and how to choose one for each part of an app.
 - [Cloud Functions](https://alchemy.run/gcp/compute/cloud-functions) — Deploy an Effect fetch handler as a 2nd-gen Cloud Function — built by Google from an uploaded bundle, so no local Docker is needed.
 - [Cloud Run](https://alchemy.run/gcp/compute/cloud-run) — Run an Effect HTTP service on Cloud Run with GCP.Function — public or private URLs, environment, scaling, and bindings that grant IAM.
 - [Cloud Run jobs](https://alchemy.run/gcp/compute/jobs) — Run batch work to completion with GCP.Run.Job — trigger it from a service with RunJob, or nightly with Cloud Scheduler.
@@ -471,9 +473,10 @@ Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/
 
 ## Fly — start here
 
-The Fly hub: overview (Apps, Machines, Services, Sprites), setup (org, API token, profile), and networking.
+The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the proxy, private networking, Volumes, managed data and how Alchemy models each), setup (org, API token, profile), and networking.
 
-- [Fly](https://alchemy.run/fly) — Deploy Effect programs to Fly.io as Apps, Machines, Services, and Sprites.
+- [Fly](https://alchemy.run/fly) — Run Effect programs on Fly.io with Alchemy. Declare Services, Machines, Volumes, Postgres, Redis and Tigris in TypeScript, in the regions near your users.
+- [What is Fly?](https://alchemy.run/fly/what-is-fly) — The concepts behind Fly.io — organizations, Apps, Machines, regions, the Fly proxy, private networking, Volumes, managed data, secrets and certificates — and how @alchemy.run/fly models each of them.
 - [Setup](https://alchemy.run/fly/setup) — Create a Fly org, generate an API token, and store it in a profile.
 - [IPs & certificates](https://alchemy.run/fly/networking) — Public and private Fly Services, App addresses, and certificates for your own hostname.
 
@@ -523,9 +526,10 @@ The Fly hub: overview (Apps, Machines, Services, Sprites), setup (org, API token
 
 ## Hetzner — start here
 
-The Hetzner hub: overview (Servers and Services) and setup (project, API token, profile).
+The Hetzner hub: overview, What is Hetzner? (projects, locations, Servers, Services, Volumes, networks, firewalls, load balancers, DNS and how Alchemy models each), and setup (project, API token, profile).
 
-- [Hetzner](https://alchemy.run/hetzner) — Build applications on Hetzner Cloud with Alchemy — Servers running your Effect programs as Services, plus volumes, networks, firewalls, load balancers, and DNS, all in one typed program.
+- [Hetzner](https://alchemy.run/hetzner) — Run Effect programs on Hetzner Cloud Servers with Alchemy. Declare Servers, Services, Volumes, networks, firewalls, load balancers and DNS in one TypeScript program.
+- [What is Hetzner?](https://alchemy.run/hetzner/what-is-hetzner) — The concepts behind Hetzner Cloud — projects, locations, Servers, images, SSH keys, Volumes, private networks, firewalls, load balancers, IPs and DNS — and how @alchemy.run/hetzner models each of them.
 - [Setup](https://alchemy.run/hetzner/setup) — Install Alchemy and connect it to Hetzner Cloud — create a project, generate an API token, and store it in a profile.
 
 ## Hetzner — Tutorial
@@ -570,9 +574,10 @@ The Hetzner hub: overview (Servers and Services) and setup (project, API token, 
 
 ## Railway — start here
 
-The Railway hub: overview (Projects, Services, databases), setup (workspace, API token, profile), and networking.
+The Railway hub: overview, What is Railway? (workspaces, projects, environments, services, databases, volumes, variables, networking and how Alchemy models each), setup (workspace, API token, profile), and networking.
 
-- [Railway](https://alchemy.run/railway) — Deploy Effect programs to Railway as Projects, Services, databases, Volumes, and Buckets.
+- [Railway](https://alchemy.run/railway) — Run Effect programs on Railway with Alchemy. Declare Projects, Services, Functions, Postgres, MySQL, Redis, Volumes and Buckets in one TypeScript program.
+- [What is Railway?](https://alchemy.run/railway/what-is-railway) — The concepts behind Railway — workspaces, projects, environments, services, deployments, databases, volumes, variables, private networking and domains — and how @alchemy.run/railway models each of them.
 - [Setup](https://alchemy.run/railway/setup) — Create a Railway workspace, generate an account API token, and store it in a profile.
 - [Custom domains, TCP & private networks](https://alchemy.run/railway/networking) — Reach a Railway Service on your own hostname, expose databases over public TCP, and name private-mesh DNS.
 
@@ -625,7 +630,8 @@ The Railway hub: overview (Projects, Services, databases), setup (workspace, API
 
 Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.
 
-- [PlanetScale](https://alchemy.run/planetscale) — Serverless MySQL (Vitess) and Postgres with database branching — databases, branches, and credentials as Stack resources.
+- [PlanetScale](https://alchemy.run/planetscale) — Declare PlanetScale Postgres and MySQL databases, branches and credentials in your Stack with Alchemy, apply migrations on deploy, and give every preview stage its own branch.
+- [What is PlanetScale?](https://alchemy.run/planetscale/what-is-planetscale) — The concepts behind PlanetScale — organizations, databases, the Postgres and Vitess engines, cluster sizes, branches, credentials, connections, migrations and backups — and how @alchemy.run/planetscale models each of them.
 - [Setup](https://alchemy.run/planetscale/setup) — Connect alchemy to PlanetScale — account, credentials, and profiles.
 - [Postgres](https://alchemy.run/planetscale/data/postgres) — PlanetScale Postgres as Stack resources — databases, branches, roles with least-privilege inherited roles, and direct vs pooled connection origins.
 - [MySQL](https://alchemy.run/planetscale/data/mysql) — PlanetScale MySQL (Vitess) as Stack resources — databases, branches, and passwords, with SQL migrations per branch and a straight line into Cloudflare Hyperdrive.
@@ -639,8 +645,11 @@ Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdr
 
 Neon backend resources: Postgres branches, Functions, private object storage, managed Auth, Data API, AI Gateway and Website adapters. The upload tutorial combines native and Effect handlers with authenticated browser uploads.
 
-- [Neon](https://alchemy.run/neon) — Declare Neon Postgres, Functions, storage, Auth, AI Gateway and websites together in an Alchemy Stack.
+- [Neon](https://alchemy.run/neon) — Declare Neon Postgres projects, branches and roles, plus Functions, storage, Auth, the Data API and AI Gateway, in an Alchemy Stack, with a branch per preview stage.
+- [What is Neon?](https://alchemy.run/neon/what-is-neon) — The concepts behind Neon — organizations, projects, branches, computes, roles, connections, migrations, and the Functions, storage, Auth, Data API and AI Gateway around them — and how @alchemy.run/neon models each of them.
 - [Setup](https://alchemy.run/neon/setup) — Prepare Neon credentials, service access, regions, and external dependencies before deploying with Alchemy.
+- [Functions](https://alchemy.run/neon/functions) — How Neon Functions run Node.js Fetch handlers next to a branch's database, in native or Effect form, how they subscribe to uploads and schedules, and why every handler authenticates its callers.
+- [Storage](https://alchemy.run/neon/storage) — How Neon Buckets store files on a branch through an S3-compatible API, how typed Objects hold configuration as values, and how Functions read and write them through bindings.
 - [Organization governance](https://alchemy.run/neon/governance) — Manage existing Neon organization access, billing alerts, and private-network associations with explicit ownership and restoration.
 - [AI Gateway setup](https://alchemy.run/neon/guides/ai-gateway) — Buy Neon AI Gateway credits and use a model from an Effect Function.
 - [Production Auth](https://alchemy.run/neon/guides/production-auth) — Configure trusted origins, SMTP, OAuth callbacks, and verification before launching Managed Better Auth.
@@ -680,6 +689,7 @@ Neon backend resources: Postgres branches, Functions, private object storage, ma
 Turso SQLite databases as Stack resources: groups, databases, migrations, connections, a database per tenant, preview databases, and scoped tokens.
 
 - [Turso](https://alchemy.run/turso) — Create Turso SQLite databases and query them from your Workers.
+- [What is Turso?](https://alchemy.run/turso/what-is-turso) — The concepts behind Turso — organizations, groups, locations, SQLite databases, tokens, connections, migrations, copies and a database per tenant — and how @alchemy.run/turso models each of them.
 - [Setup](https://alchemy.run/turso/setup) — Give Alchemy a Turso API token.
 - [Part 1: Your First Database](https://alchemy.run/turso/tutorial/part-1) — Create a Turso group and a template database, migrated from a Drizzle schema.
 - [Part 2: Create Tenant Databases](https://alchemy.run/turso/tutorial/part-2) — Let a Worker create a database for each tenant.
@@ -924,4 +934,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~203 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~206 KB) — only fetch it when you need to locate a specific resource's reference page.
