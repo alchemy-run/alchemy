@@ -10,5 +10,4 @@ import type { Providers } from "../Providers.ts";
  * @internal
  */
 export const adminToken = (id: string) =>
-  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Rivet.providers() provides Random
   Random(`${id}AdminToken`, { bytes: 32 }) as unknown as Effect.Effect<Random, never, Providers>;
