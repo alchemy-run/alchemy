@@ -513,6 +513,60 @@ export const conformance = (engine: Engine) => {
   );
 
   test(
+    "a queued item is processed, once though the workflow replays, and resumes it",
+    Effect.gen(function* () {
+      const id = yield* freshId("queued");
+      const run = yield* start("Queued", id);
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "charged 42" });
+      // The sleep after the item replays the workflow, which offers it again.
+      expect(yield* journal(id)).toEqual([`charged:${id}-item`, "done:charged 42"]);
+    }),
+    { timeout },
+  );
+
+  test(
+    "a queue worker's typed failure reaches the workflow",
+    Effect.gen(function* () {
+      const id = yield* freshId("queued-declined");
+      const run = yield* start("Queued", id, "?outcome=decline");
+      expect(yield* awaitResult(run.status)).toEqual({
+        _tag: "Failed",
+        error: { _tag: "Declined", reason: "card declined" },
+      });
+      expect(yield* journal(id)).toEqual([`charged:${id}-item`]);
+    }),
+    { timeout },
+  );
+
+  test(
+    "a queue worker's defect reaches the workflow",
+    Effect.gen(function* () {
+      const id = yield* freshId("queued-crash");
+      const run = yield* start("Queued", id, "?outcome=crash");
+      expect(yield* awaitResult(run.status)).toEqual({
+        _tag: "Died",
+        defect: expect.stringContaining("card reader caught fire"),
+      });
+      expect(yield* journal(id)).toEqual([`charged:${id}-item`]);
+    }),
+    { timeout },
+  );
+
+  test(
+    "queued items are processed in parallel",
+    Effect.gen(function* () {
+      const id = yield* freshId("queued-pair");
+      const run = yield* start("QueuedPair", id);
+      expect(yield* awaitResult(run.status)).toEqual({
+        _tag: "Completed",
+        result: "charged 1, charged 2",
+      });
+      expect([...(yield* journal(id))].sort()).toEqual([`charged:${id}-1`, `charged:${id}-2`]);
+    }),
+    { timeout },
+  );
+
+  test(
     "runs a child workflow",
     Effect.gen(function* () {
       const id = yield* freshId("parent");

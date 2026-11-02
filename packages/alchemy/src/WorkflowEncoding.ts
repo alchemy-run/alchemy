@@ -14,6 +14,15 @@ import { Workflow } from "effect/workflow";
 const ExitJson = Schema.toCodecJson(Schema.Exit(Schema.Unknown, Schema.Unknown, Schema.Defect()));
 
 /**
+ * What an engine hands back stays encoded: `WorkflowEngine.makeUnsafe`
+ * decodes each step's and deferred's exit through that step's or deferred's
+ * own schema. So a stored defect comes back as its JSON, not an `Error`.
+ */
+const EncodedExitJson = Schema.toCodecJson(
+  Schema.Exit(Schema.Unknown, Schema.Unknown, Schema.Unknown),
+);
+
+/**
  * Activity and deferred exits arrive with their values already encoded; a
  * void value is stored as null, since undefined isn't JSON.
  */
@@ -24,7 +33,7 @@ export const encodeExit = (exit: Exit.Exit<unknown, unknown>) =>
   );
 
 export const decodeExit = (text: string) =>
-  Schema.decodeEffect(ExitJson)(JSON.parse(text)).pipe(Effect.orDie);
+  Schema.decodeEffect(EncodedExitJson)(JSON.parse(text)).pipe(Effect.orDie);
 
 /**
  * The schemas a workflow's payload and result are stored through. Concrete

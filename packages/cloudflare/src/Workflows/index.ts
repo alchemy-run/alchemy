@@ -5,3 +5,4 @@ export {
   type DurableObjectEngineOptions,
 } from "./DurableObjectEngine.ts";
 export { NativeEngine } from "./NativeEngine.ts";
+export { DurableQueueProducer, DurableQueueWorker } from "./DurableQueue.ts";
