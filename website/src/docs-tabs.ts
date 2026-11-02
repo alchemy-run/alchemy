@@ -31,6 +31,7 @@ export interface DocsTab {
 /** Hub categories, in header order. */
 export const DOCS_CATEGORIES = [
   "Clouds",
+  "Actors",
   "Containers",
   "Databases",
   "Auth",
@@ -66,7 +67,7 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "start",
   },
 
-  hub("Cloudflare", "cloudflare", "Clouds", "workers · durable objects · R2 · D1", [
+  hub("Cloudflare", "cloudflare", "Actors", "workers · durable objects · R2 · D1", [
     "/providers/cloudflare",
   ]),
   hub("AWS", "aws", "Clouds", "lambda · ECS · S3 · DynamoDB", ["/providers/aws"]),
@@ -101,7 +102,7 @@ export const DOCS_TABS: DocsTab[] = [
   hub("Kubernetes", "kubernetes", "Containers", "deployments · jobs · manifests · helm", [
     "/providers/kubernetes",
   ]),
-  hub("Rivet", "rivet", "Containers", "durable objects · control planes · pools", [
+  hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", [
     "/providers/rivet",
   ]),
   hub("Git", "git", "Source & CI", "self-hosted git · clone · push · pull requests", [
