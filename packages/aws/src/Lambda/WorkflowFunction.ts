@@ -348,6 +348,7 @@ const makeWorkflowRunner = <ROut, E, RIn>(
                 clocks: new Map(),
                 instance,
                 waited: new Map(),
+                offers: new Map(),
               }),
             ),
           ),
@@ -380,8 +381,12 @@ interface Registration {
   readonly execute: Execute;
 }
 
-/** The run in progress: its durable context, and the clocks it has scheduled. */
-class CurrentRun extends Context.Service<
+/**
+ * The run in progress: its durable context, and the clocks it has scheduled.
+ *
+ * @internal
+ */
+export class CurrentRun extends Context.Service<
   CurrentRun,
   {
     readonly durable: DurableStep["Service"];
@@ -390,6 +395,13 @@ class CurrentRun extends Context.Service<
     readonly instance: WorkflowEngine.WorkflowInstance["Service"];
     /** Waits run outside the activity that reached them, by deferred name. */
     readonly waited: Map<string, string>;
+    /**
+     * Work to send when the run starts waiting on a deferred, by its name: a
+     * `DurableQueue` item. Lambda numbers a run's operations in the order it
+     * starts them, so sending from the wait's submitter, not before it, keeps
+     * concurrent waits in the same order on every replay.
+     */
+    readonly offers: Map<string, Effect.Effect<void>>;
     /** Inside an activity's step, which can't wait: the wait it reached. */
     readonly step?: { pending?: Pending };
   }
@@ -426,7 +438,10 @@ const waitFor = (run: CurrentRun["Service"], pending: Pending) =>
     }
     const text = yield* interruptible(
       run,
-      run.durable.waitForCallback<string>({ name: pending.name, submitter: () => Effect.void }),
+      run.durable.waitForCallback<string>({
+        name: pending.name,
+        submitter: () => run.offers.get(pending.name) ?? Effect.void,
+      }),
     );
     return typeof text === "string" ? text : JSON.stringify(text);
   });

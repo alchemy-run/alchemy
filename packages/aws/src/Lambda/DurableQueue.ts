@@ -2,7 +2,9 @@ import * as DurableQueues from "alchemy/DurableQueues";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { PersistedQueueError, PersistedQueueFactory } from "effect/persistence/PersistedQueue";
+import * as Schedule from "effect/Schedule";
 import type { WorkflowEngine } from "effect/workflow";
 import { GetItem } from "../DynamoDB/GetItem.ts";
 import { GetItemHttp } from "../DynamoDB/GetItemHttp.ts";
@@ -16,6 +18,7 @@ import { consumeQueueMessages, type MessagesProps } from "../SQS/QueueEventSourc
 import { SendMessage } from "../SQS/SendMessage.ts";
 import { SendMessageHttp } from "../SQS/SendMessageHttp.ts";
 import { QueueEventSource } from "./QueueEventSource.ts";
+import { CurrentRun } from "./WorkflowFunction.ts";
 
 /**
  * Run Effect's `DurableQueue` items on an SQS queue: provide this to the
@@ -83,15 +86,39 @@ export const DurableQueueProducer = (queue: Queue) =>
     Effect.gen(function* () {
       const ledger = yield* makeLedger(queue);
       const send = yield* SendMessage(queue);
-      return DurableQueues.makeFactory(
-        DurableQueues.offerOnce(ledger, (envelope) =>
-          send({ MessageBody: JSON.stringify(envelope) }).pipe(
-            Effect.asVoid,
-            Effect.mapError((cause) =>
-              PersistedQueueError.make({ message: "Sending a DurableQueue item failed", cause }),
-            ),
+      const offer = DurableQueues.offerOnce(ledger, (envelope) =>
+        send({ MessageBody: JSON.stringify(envelope) }).pipe(
+          Effect.asVoid,
+          Effect.mapError((cause) =>
+            PersistedQueueError.make({ message: "Sending a DurableQueue item failed", cause }),
           ),
         ),
+      );
+      return DurableQueues.makeFactory((envelope) =>
+        Effect.gen(function* () {
+          // In a run, the item is sent when the run starts waiting for it.
+          // `DurableQueue.process` waits on the deferred named after the item.
+          const run = yield* Effect.serviceOption(CurrentRun);
+          if (Option.isNone(run)) return yield* offer(envelope);
+          // The submitter runs outside the run's fiber: send with its services.
+          const context = yield* Effect.context<never>();
+          run.value.offers.set(
+            DurableQueues.ledgerKey(envelope),
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the run's own context, captured here, provides RuntimeContext
+            offer(envelope).pipe(
+              // As `DurableQueue.process` retries an offer that fails.
+              Effect.retry({
+                schedule: Schedule.min([
+                  Schedule.exponential("200 millis"),
+                  Schedule.spaced("5 seconds"),
+                ]),
+                times: 8,
+              }),
+              Effect.orDie,
+              Effect.provide(context),
+            ) as Effect.Effect<void>,
+          );
+        }),
       );
     }),
   ).pipe(Layer.provide(Layer.mergeAll(LedgerHttp, SendMessageHttp)));
