@@ -534,7 +534,9 @@ export const DockerLive = Layer.effect(
     // Connect to the daemon on first use. Only Workers with containers ask for
     // the engine configuration, so every other runtime never touches Docker.
     // It runs in the layer's scope, so it outlives the caller that started it.
-    const context = yield* Effect.context<Scope.Scope | ChildProcessSpawner.ChildProcessSpawner>();
+    const context = yield* Effect.context<
+      Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | SecureRandom.SecureRandom
+    >();
     const startDocker = Effect.zipWith(
       DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),

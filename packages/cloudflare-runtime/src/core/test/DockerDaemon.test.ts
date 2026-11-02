@@ -38,14 +38,7 @@ it.live(
         ),
       ),
       Effect.provide(
-        Layer.provide(
-          DockerLive,
-          Layer.mergeAll(
-            NodeServices.layer,
-            SecureRandom.layerWebCrypto,
-            SecureRandom.layerWebCrypto,
-          ),
-        ),
+        Layer.provide(DockerLive, Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto)),
       ),
     );
   },
@@ -68,7 +61,9 @@ it.live(
       Effect.ensuring(
         Effect.ignore(docker("rmi", tag)).pipe(Effect.andThen(Effect.ignore(docker("rmi", image)))),
       ),
-      Effect.provide(Layer.provide(DockerLive, NodeServices.layer)),
+      Effect.provide(
+        Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SecureRandom.layerWebCrypto)),
+      ),
     );
   },
   60_000,

@@ -980,7 +980,8 @@ const viewObject = (
       // This key as a backfill consumer (it buffers and merges history) and source.
       let consumer: Backfill.Consumer | undefined;
       let source: Backfill.Source | undefined;
-      const runtime = yield* backfillRuntime(random, 
+      const runtime = yield* backfillRuntime(
+        random,
         (id): Effect.Effect<void, never, DurableObjectState | RuntimeContext> =>
           Effect.flatMap(state.storage.get<string>(ID_KEY), (key) => {
             if (id.startsWith("bf-scan:")) return scannerFor().run(id);
@@ -1926,7 +1927,10 @@ const durableObjectPlatform = (
                   consumers.set(named(cls), namespace);
                   consumers.set(
                     runClass(named(cls)),
-                    yield* object(runClass(cls), viewObject(kit, net, current, consumerPlans, random)),
+                    yield* object(
+                      runClass(cls),
+                      viewObject(kit, net, current, consumerPlans, random),
+                    ),
                   );
                   const target = kit.target;
                   // A lazy view's key reads its history from its one source the first
@@ -2041,7 +2045,10 @@ const durableObjectPlatform = (
                     projection.projectionName,
                     kit.generation,
                   );
-                  const namespace = yield* object(cls, projectionObject(kit, net, consumerPlans, random));
+                  const namespace = yield* object(
+                    cls,
+                    projectionObject(kit, net, consumerPlans, random),
+                  );
                   consumers.set(named(cls), namespace);
                   consumers.set(
                     runClass(named(cls)),

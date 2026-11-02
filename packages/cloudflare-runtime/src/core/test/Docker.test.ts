@@ -319,7 +319,10 @@ it.effect("interrupts Docker initialization when its owning scope closes", () =>
       yield* Effect.scoped(
         Effect.gen(function* () {
           const context = yield* Layer.build(
-            Layer.provide(DockerLive, Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, initialization.layer)),
+            Layer.provide(
+              DockerLive,
+              Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, initialization.layer),
+            ),
           );
           yield* Effect.forkChild(Context.get(context, Docker).getWorkerdDockerConfiguration);
           yield* Deferred.await(started);
@@ -546,28 +549,36 @@ const makePullStub = (pullExitCode: number, localId: string) => {
 const LOCAL_ONLY = "local-only/app:dev";
 
 const presentAndPullable = makePullStub(0, "sha256:deadbeef");
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, presentAndPullable.layer)))(
-  (it) => {
-    it.effect("pull refreshes an image that is already present locally", () =>
-      Effect.gen(function* () {
-        const docker = yield* Docker;
-        yield* docker.pull("alchemy-test:latest", { imageUri: "myorg/app:latest" });
-        // A mutable tag must pick up a newly pushed image, and the amd64
-        // variant must replace a native build under the same tag.
-        expect(presentAndPullable.spawned).toContainEqual([
-          "docker",
-          "pull",
-          "myorg/app:latest",
-          "--platform",
-          "linux/amd64",
-        ]);
-      }),
-    );
-  },
-);
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, presentAndPullable.layer),
+  ),
+)((it) => {
+  it.effect("pull refreshes an image that is already present locally", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.pull("alchemy-test:latest", { imageUri: "myorg/app:latest" });
+      // A mutable tag must pick up a newly pushed image, and the amd64
+      // variant must replace a native build under the same tag.
+      expect(presentAndPullable.spawned).toContainEqual([
+        "docker",
+        "pull",
+        "myorg/app:latest",
+        "--platform",
+        "linux/amd64",
+      ]);
+    }),
+  );
+});
 
 const localOnly = makePullStub(1, "sha256:deadbeef");
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, localOnly.layer)))((it) => {
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, localOnly.layer),
+  ),
+)((it) => {
   it.effect("pull uses the local image when the registry has none", () =>
     Effect.gen(function* () {
       const docker = yield* Docker;
@@ -583,7 +594,12 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, localOnly.layer)
 });
 
 const missing = makePullStub(1, "");
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, missing.layer)))((it) => {
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, missing.layer),
+  ),
+)((it) => {
   it.effect("pull fails when the image is neither pullable nor local", () =>
     Effect.gen(function* () {
       const docker = yield* Docker;
