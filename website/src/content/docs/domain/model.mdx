@@ -175,7 +175,7 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 
 On the next deploy every key is computed again from the history, with the new code, and so is every view and projection that reads this one. You don't choose how: the deploy picks the cheapest way that is correct.
 
-A view keyed by the one aggregate it reads, like this summary per account, is rebuilt in place. It keeps its storage, and the deploy waits for nothing. The first time a key is touched after the deploy, it reads its own account's events again before it answers, so even events it never received before (here, withdrawals) count. A view or projection that reads it gets each key's new rows, never a key still being rebuilt.
+A view keyed by the one aggregate it reads, like this summary per account, is rebuilt in place. It keeps its storage, and the deploy waits for nothing. The first time a key is touched after the deploy, it reads its own account's events again before it answers, so even events it never received before (here, withdrawals) count. A view or projection that reads it gets each key's new rows, never a key still being rebuilt. On Cloudflare, an object busy during the deploy keeps its old code until it is idle; until then the Worker computes that key's answers itself, from its account's events.
 
 Any other view, such as one fed by many accounts through `keyOf`, is rebuilt from the history: it starts over in new storage and receives every event again, and the deploy waits for it, the same way it does for a new view.
 

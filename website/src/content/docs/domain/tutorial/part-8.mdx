@@ -101,9 +101,9 @@ balance: 140, movements: 4
 
 The first line already counts the deposit and withdrawal you made in [Part 5](/domain/tutorial/part-5), which happened before `movements` existed. Your numbers depend on what you've done since.
 
-## Expect the old code for a moment
+## Read during the rollout
 
-A Durable Object that was busy when you deployed keeps running the code it started with until it goes idle, for up to 5 minutes by default. A summary on the old code can't rebuild, because that code doesn't know version 1, so reading it fails until it starts on the new code. Then it rebuilds from its account's events, including any it applied in between. To move every object onto new code as soon as the deploy finishes, set the Worker's `codeUpdateStrategy` to `immediate`, described in [Code updates](/cloudflare/compute/code-updates).
+A Durable Object that was busy when you deployed keeps running the code it started with until it goes idle, for up to 5 minutes by default; see [Code updates](/cloudflare/compute/code-updates). A summary on the old code can't rebuild for version 1, so until it moves, the Worker answers its reads itself: it reads the account's events and computes the summary with the new code, without storing it. Once the object starts on the new code, it rebuilds and answers again.
 
 ## Total deposits by day
 
