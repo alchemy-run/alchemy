@@ -598,8 +598,8 @@ catalogs:
       specifier: ^4.0.7
       version: 4.0.7
     portless:
-      specifier: file:vendor/portless-0.15.13.tgz
-      version: file:vendor/portless-0.15.13.tgz
+      specifier: 0.15.13
+      version: 0.15.13
     postal-mime:
       specifier: ^2.4.3
       version: 2.7.5
@@ -10716,7 +10716,7 @@ importers:
     dependencies:
       portless:
         specifier: 'catalog:'
-        version: file:vendor/portless-0.15.13.tgz
+        version: 0.15.13
     devDependencies:
       '@types/bun':
         specifier: 'catalog:'
@@ -25547,9 +25547,8 @@ packages:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
 
-  portless@file:vendor/portless-0.15.13.tgz:
-    resolution: {integrity: sha512-eTuzMEnOQTiPIVbYiAxWWu7X2LmfPG8ZPTv5dypDi0F+VxYlinGXO3OeIlej/v/rSW9C+xIv5ovyd00RH1Ig7g==, tarball: file:vendor/portless-0.15.13.tgz}
-    version: 0.15.13
+  portless@0.15.13:
+    resolution: {integrity: sha512-eqeJvpeZHfN72snOE1IOBPrgyOloH+L0ce5UEStMuG5Fq55byTELfUn4x7mil2EU029PQkHsayRpySiy0djPpA==}
     engines: {node: '>=24'}
     os: [darwin, linux, win32]
     hasBin: true
@@ -46758,7 +46757,7 @@ snapshots:
 
   pluralize@8.0.0: {}
 
-  portless@file:vendor/portless-0.15.13.tgz: {}
+  portless@0.15.13: {}
 
   postal-mime@2.7.5: {}
 
