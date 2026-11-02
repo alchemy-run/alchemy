@@ -71,6 +71,8 @@ export interface Delivery {
     readonly name: string;
     /** The consumer's generation (see `Kernel.generationOf`), when it has been rebuilt. */
     readonly generation?: number;
+    /** Rebuilt in the storage it had (see `Kernel.inPlace`): its id says `@` for `#`. */
+    readonly inPlace?: boolean;
   };
   /** The target partition: a key's id, or the source stream for an unkeyed policy. */
   readonly key: string;
@@ -367,12 +369,16 @@ export interface ViewKit {
    * (state, entries, input log and cursors) before it is read or applied to.
    */
   readonly generation: number;
+  /** The generation of the view's storage: its generation, unless it is rebuilt in place. */
+  readonly classGeneration: number;
+  /** The view's id, by `CatchUp.targetId`, in this code. */
+  readonly target: string;
   /**
-   * Set when the view fills lazily: no backfill runs at deploy, and each key
-   * reads its history from its one source (`source`, the instance with the
-   * key's own id) the first time it is read.
+   * Set for a view keyed by the one aggregate it reads (`source`): before a key
+   * answers a read, it reads its history from the instance with its own id, so
+   * every answer covers the whole history even when no backfill filled it.
    */
-  readonly lazy?: { readonly source: string };
+  readonly catchUp?: { readonly source: string };
   /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
   readonly singleSource: boolean;
   /**

@@ -111,21 +111,25 @@ describe("Domain lazy views", () => {
     }),
   );
 
-  it.live("an eager view has its history only once the deploy's backfill is delivered", () =>
-    Effect.gen(function* () {
-      const bank = platform();
-      yield* bank.deploy(Before, Effect.all(history));
-      const [before, after] = yield* bank.deploy(
-        WithDeposits,
-        Effect.gen(function* () {
-          const before = yield* amounts("a-1");
-          yield* bank.settle;
-          return [before, yield* amounts("a-1")] as const;
-        }),
-      );
-      expect(before).toBeUndefined();
-      expect(after).toEqual([1, 2]);
-    }),
+  it.live(
+    "an eager view is filled by the deploy: its history is complete once that is delivered",
+    () =>
+      Effect.gen(function* () {
+        const bank = platform();
+        yield* bank.deploy(Before, Effect.all(history));
+        const [before, after, amountsAfter] = yield* bank.deploy(
+          WithDeposits,
+          Effect.gen(function* () {
+            const view = yield* Deposits;
+            const before = (yield* view.history).complete;
+            yield* bank.settle;
+            return [before, (yield* view.history).complete, yield* amounts("a-1")] as const;
+          }),
+        );
+        expect(before).toBe(false);
+        expect(after).toBe(true);
+        expect(amountsAfter).toEqual([1, 2]);
+      }),
   );
 
   it.live("a view not keyed by its one source can't be lazy", () =>
