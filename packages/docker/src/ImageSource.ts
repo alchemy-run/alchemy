@@ -374,6 +374,80 @@ export const computeStaticSourceHash = Effect.fn(function* (
 });
 
 /**
+ * The exact rolldown input/output options `bundleMainProgram` hands to
+ * `Bundle.build` — shared with {@link watchMain} so a dev watcher's
+ * `Bundle.watch` observes the identical module graph.
+ */
+export const mainBundleOptions = (
+  source: BundledImageSource,
+  entry: string,
+  cwd: string,
+  plugins?: rolldown.RolldownPluginOption,
+): {
+  inputOptions: rolldown.InputOptions;
+  outputOptions: rolldown.OutputOptions;
+} => ({
+  inputOptions: {
+    ...source.build?.input,
+    input: entry,
+    cwd,
+    platform: "node",
+    // The container runs on `bun`; keep `bun`/`bun:*` external (the
+    // runtime provides them) and resolve the `bun` export condition
+    // so `@effect/platform-bun` picks its Bun implementations.
+    external: ["bun", "bun:*", ...((source.build?.input?.external as string[] | undefined) ?? [])],
+    resolve: {
+      conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+      ...source.build?.input?.resolve,
+    },
+    plugins: [source.build?.input?.plugins, plugins],
+  },
+  outputOptions: {
+    ...source.build?.output,
+    format: "esm",
+    sourcemap: source.build?.output?.sourcemap ?? false,
+    minify: source.build?.output?.minify ?? false,
+    entryFileNames: "index.mjs",
+  },
+});
+
+/**
+ * Bundle the Effect program behind a `main` source: every emitted file
+ * (entry + shared chunks) and the bundle hash. Needs no Docker engine, so
+ * builders that are not Docker (`BuildPlan`) share it.
+ */
+export const bundleMainProgram = Effect.fn(function* (options: {
+  source: BundledImageSource;
+  isExternal?: boolean;
+  bootstrap: (importPath: string) => string;
+}) {
+  const { source } = options;
+  const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+  const realMain = yield* resolveMainPath(source.main);
+  const cwd = yield* findCwdForBundle(realMain);
+
+  const buildBundle = Effect.fn(function* (entry: string, plugins?: rolldown.RolldownPluginOption) {
+    const opts = mainBundleOptions(source, entry, cwd, plugins);
+    return yield* Bundle.build(opts.inputOptions, opts.outputOptions, source.build);
+  });
+
+  const bundleOutput = options.isExternal
+    ? yield* buildBundle(realMain)
+    : yield* buildBundle(realMain, virtualEntryPlugin(options.bootstrap));
+
+  // Return every emitted file (entry + shared chunks). Dynamic imports in
+  // the Bun HTTP server / AWS SDK split into chunks; dropping any of them
+  // crashes the container with `Cannot find module './chunk-XXX.js'`.
+  const files = bundleOutput.files.map((file) => ({
+    path: file.path,
+    content:
+      typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
+  }));
+
+  return { files, hash: bundleOutput.hash };
+});
+
+/**
  * Init-time constructor for the image-source resolver. Resolves the services
  * that are only available at provider-layer construction (Docker, the
  * `.alchemy` directory, the rolldown virtual-entry plugin) and returns
@@ -384,82 +458,6 @@ export const makeContainerImageSource = Effect.gen(function* () {
   const docker = yield* Docker;
   const { dotAlchemy } = yield* AlchemyContext;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-
-  /**
-   * The exact rolldown input/output options `bundleProgram` hands to
-   * `Bundle.build` — shared with {@link watchMain} so a dev watcher's
-   * `Bundle.watch` observes the identical module graph.
-   */
-  const mainBundleOptions = (
-    source: BundledImageSource,
-    entry: string,
-    cwd: string,
-    plugins?: rolldown.RolldownPluginOption,
-  ): {
-    inputOptions: rolldown.InputOptions;
-    outputOptions: rolldown.OutputOptions;
-  } => ({
-    inputOptions: {
-      ...source.build?.input,
-      input: entry,
-      cwd,
-      platform: "node",
-      // The container runs on `bun`; keep `bun`/`bun:*` external (the
-      // runtime provides them) and resolve the `bun` export condition
-      // so `@effect/platform-bun` picks its Bun implementations.
-      external: [
-        "bun",
-        "bun:*",
-        ...((source.build?.input?.external as string[] | undefined) ?? []),
-      ],
-      resolve: {
-        conditionNames: [...Bundle.BUN_CONDITION_NAMES],
-        ...source.build?.input?.resolve,
-      },
-      plugins: [source.build?.input?.plugins, plugins],
-    },
-    outputOptions: {
-      ...source.build?.output,
-      format: "esm",
-      sourcemap: source.build?.output?.sourcemap ?? false,
-      minify: source.build?.output?.minify ?? false,
-      entryFileNames: "index.mjs",
-    },
-  });
-
-  /** Bundle the Effect program behind a `main` source. */
-  const bundleProgram = Effect.fn(function* (options: {
-    source: BundledImageSource;
-    isExternal?: boolean;
-    bootstrap: (importPath: string) => string;
-  }) {
-    const { source } = options;
-    const realMain = yield* resolveMainPath(source.main);
-    const cwd = yield* findCwdForBundle(realMain);
-
-    const buildBundle = Effect.fn(function* (
-      entry: string,
-      plugins?: rolldown.RolldownPluginOption,
-    ) {
-      const opts = mainBundleOptions(source, entry, cwd, plugins);
-      return yield* Bundle.build(opts.inputOptions, opts.outputOptions, source.build);
-    });
-
-    const bundleOutput = options.isExternal
-      ? yield* buildBundle(realMain)
-      : yield* buildBundle(realMain, virtualEntryPlugin(options.bootstrap));
-
-    // Return every emitted file (entry + shared chunks). Dynamic imports in
-    // the Bun HTTP server / AWS SDK split into chunks; dropping any of them
-    // crashes the container with `Cannot find module './chunk-XXX.js'`.
-    const files = bundleOutput.files.map((file) => ({
-      path: file.path,
-      content:
-        typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
-    }));
-
-    return { files, hash: bundleOutput.hash };
-  });
 
   /**
    * Bundle a `main` source and compute its content-addressed code hash.
@@ -477,7 +475,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
     port?: number;
     platform: string;
   }) {
-    const bundled = yield* bundleProgram({
+    const bundled = yield* bundleMainProgram({
       source: options.source,
       isExternal: options.isExternal,
       bootstrap: options.bootstrap,
