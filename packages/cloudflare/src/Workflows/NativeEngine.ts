@@ -7,6 +7,7 @@ import {
   makeCurrentActivity,
   payloadCodec,
 } from "alchemy/WorkflowEncoding";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -331,34 +332,48 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
             instance.executionId,
           );
           activityInstance.interrupted = instance.interrupted;
-          // The step never fails: its exit, failure or not, is its result.
-          const text = yield* run.step.do({
-            name: `${activity.name}/${attempt}`,
-            effect: activity.executeEncoded.pipe(
-              EffectWorkflow.intoResult,
-              Effect.flatMap((result) =>
-                result._tag === "Complete"
-                  ? encodeExit(result.exit)
-                  : Effect.die(new Error(`Activity ${activity.name} suspended inside a step`)),
-              ),
-              // The run's services, with the step's own instance.
-              Effect.provide(
-                Layer.succeedContext(
-                  run.context.pipe(
-                    Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
-                    Context.add(
-                      CurrentActivity,
-                      makeCurrentActivity(
-                        instance.workflow._tag,
-                        instance.executionId,
-                        activity.name,
+          // The step's exit, failure or not, is its result. A defect the
+          // workflow doesn't capture fails the step instead, so Cloudflare
+          // retries it, and is a defect again once retries run out.
+          const text = yield* run.step
+            .do({
+              name: `${activity.name}/${attempt}`,
+              effect: activity.executeEncoded.pipe(
+                EffectWorkflow.intoResult,
+                Effect.catchCause((cause) =>
+                  Cause.hasInterruptsOnly(cause)
+                    ? Effect.failCause(cause)
+                    : Effect.fail({ _tag: "ActivityDefect", message: Cause.pretty(cause) }),
+                ),
+                Effect.flatMap((result) =>
+                  result._tag === "Complete"
+                    ? encodeExit(result.exit)
+                    : Effect.die(new Error(`Activity ${activity.name} suspended inside a step`)),
+                ),
+                // The run's services, with the step's own instance.
+                Effect.provide(
+                  Layer.succeedContext(
+                    run.context.pipe(
+                      Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
+                      Context.add(
+                        CurrentActivity,
+                        makeCurrentActivity(
+                          instance.workflow._tag,
+                          instance.executionId,
+                          activity.name,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ) as Effect.Effect<string>,
-          });
+              ) as Effect.Effect<
+                string,
+                { readonly _tag: "ActivityDefect"; readonly message: string }
+              >,
+            })
+            .pipe(
+              Effect.catchTag("ActivityDefect", (defect) => Effect.die(new Error(defect.message))),
+            );
           return new EffectWorkflow.Complete({ exit: yield* decodeExit(text) });
         }),
 
@@ -366,32 +381,33 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
         Effect.gen(function* () {
           const run = yield* currentRun("DurableDeferred reads");
           const duration = run.clocks.get(deferred.name);
-          if (duration !== undefined) {
-            yield* run.step.sleep(deferred.name, Duration.toMillis(duration));
-            return Option.some(Exit.void);
-          }
-          const signal = yield* run.step
-            .waitForEvent<string>(deferred.name, {
-              type: nameOf(deferred.name),
+          // Every wait also waits for an interrupt.
+          const interrupt = run.step
+            .waitForEvent(`${deferred.name}/interrupt`, {
+              type: INTERRUPT,
               timeout: SIGNAL_TIMEOUT,
             })
-            .pipe(
-              Effect.map((event) => ({ interrupted: false, payload: event.payload })),
-              Effect.raceFirst(
-                run.step
-                  .waitForEvent(`${deferred.name}/interrupt`, {
-                    type: INTERRUPT,
+            .pipe(Effect.as({ interrupted: true, payload: "" }));
+          const signal = yield* (
+            duration !== undefined
+              ? run.step
+                  .sleep(deferred.name, Duration.toMillis(duration))
+                  .pipe(Effect.as({ interrupted: false, payload: "" }))
+              : run.step
+                  .waitForEvent<string>(deferred.name, {
+                    type: nameOf(deferred.name),
                     timeout: SIGNAL_TIMEOUT,
                   })
-                  .pipe(Effect.as({ interrupted: true, payload: "" })),
-              ),
-            );
+                  .pipe(Effect.map((event) => ({ interrupted: false, payload: event.payload })))
+          ).pipe(Effect.raceFirst(interrupt));
           if (signal.interrupted) {
             run.instance.interrupted = true;
             run.instance.suspended = false;
             return yield* Effect.interrupt;
           }
-          return Option.some(yield* decodeExit(signal.payload));
+          return Option.some(
+            duration !== undefined ? Exit.void : yield* decodeExit(signal.payload),
+          );
         }),
 
       deferredDone: (opts) =>
