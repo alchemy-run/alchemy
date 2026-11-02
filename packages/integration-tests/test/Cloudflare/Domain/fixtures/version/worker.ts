@@ -50,7 +50,12 @@ export const bankWorker = (
           return yield* HttpServerResponse.json(yield* accounts.state(id!));
         }
         return HttpServerResponse.text("Not Found", { status: 404 });
-      }),
+      }).pipe(
+        Effect.catchTag("ConsistencyTimeout", () =>
+          Effect.succeed(HttpServerResponse.text("not caught up", { status: 503 })),
+        ),
+        Effect.orDie,
+      ),
     };
   });
 
