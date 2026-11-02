@@ -100,6 +100,11 @@ release day (ask if it isn't today). Frontmatter `title`, `date`,
   `[CHANGELOG](https://github.com/alchemy-run/alchemy/blob/main/CHANGELOG.md#v200-betaNN)`
   and `[Compare v2.0.0-beta.N → v2.0.0-beta.N+1](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.N...v2.0.0-beta.N+1)`.
 
+Format every snippet the way oxfmt would at an 80-column print width (the
+blog's code column), and move trailing comments that overflow onto their own
+line. oxfmt reads a top-level `yield*` as multiplication, so format such
+snippets by hand or inside a temporary `function* () {}` wrapper.
+
 Style: plain, direct sentences; no marketing adjectives; no "X just
 happened" lists explaining a snippet. Every ```diff block needs a context line
 at column 0 (a comment, an import, the outer call), and `+`/`-` lines are the
