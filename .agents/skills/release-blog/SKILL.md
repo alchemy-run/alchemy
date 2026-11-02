@@ -1,6 +1,6 @@
 ---
 name: release-blog
-description: Write the next alchemy release blog post — find the last `chore(release)` commit on origin/main, read the description of every PR merged since, plan the headline sections (Effect upgrades, new providers, new features, major bug fixes, breaking changes) with DX-first code snippets, fold the rest into "Also in this release", credit contributors, and check every link and diff block. Use for "write the release blog", "prepare the next release post", "/release-blog", "blog for beta.N".
+description: Write the next alchemy release blog post — find the last `chore(release)` commit on origin/main, read the description of every PR merged since, plan the headline sections (Effect upgrades, new providers, new features, major bug fixes, breaking changes) with DX-first code snippets, fold the rest into "Also in this release", credit contributors, check every link and diff block, and (when asked) draft one tweet per category with a screenshot of its section. Use for "write the release blog", "prepare the next release post", "/release-blog", "blog for beta.N", "write tweets for the release".
 metadata:
   internal: true
 ---
@@ -127,3 +127,49 @@ Then hand the post to the user with the headline plan (sections and the PRs
 behind each), the breaking-change list, and anything you weren't sure about:
 a PR whose user impact was unclear, a section you cut, or the date. Don't
 commit, push or open a PR unless asked.
+
+## 6. Tweets (when asked)
+
+One tweet per major category, in the post's order: Effect, each headline
+Domain feature, each headline provider feature, state, CLI, and one for the
+bug fixes. Each tweet is one sentence plus a screenshot of its section.
+
+**The sentence** states the user-facing change and, when the post has one,
+its number: "a million accounts in 8 minutes", "plans are 270× faster".
+Plain words, no hype, no hashtags, no emoji. Take every claim from the post,
+not from memory.
+
+**The screenshot** is the section's heading plus its code, diagram or table,
+with the prose between them hidden. Run the docs dev server
+(`cd website && bunx astro dev --ignore-lock`), list each heading's blocks,
+then write a `shots.json` that picks them:
+
+```sh
+PW=$(ls -d node_modules/.pnpm/playwright-core@*/node_modules | tail -1)
+URL=http://localhost:4321/blog/<post-slug>/
+NODE_PATH=$PW bun .agents/skills/release-blog/scripts/screenshot-sections.mjs $URL --list
+NODE_PATH=$PW bun .agents/skills/release-blog/scripts/screenshot-sections.mjs $URL /tmp/tweets-<next> shots.json
+```
+
+```json
+{
+  "01-effect-41": [["effect-41", "h"], ["effect-41", 1], ["effect-41", 3]],
+  "02-domain-rollout": [
+    ["deploys-roll-out-every-change-to-a-model", "h"],
+    ["how-it-scales", 1],
+    ["how-it-scales", 5]
+  ]
+}
+```
+
+Each entry is `[heading id, "h" | n]`, where `n` is the block index `--list`
+prints under that heading; blocks can come from different headings. Images
+are dark mode at 2× resolution, and animated figures render their last frame.
+Pick the block that shows the change best: the diagram over the prose, the
+failure output over the test code, the before/after table over the setup.
+Open every image and check that no code line is cut off and no neighbouring
+text shows.
+
+Show each tweet inline with its image (`![](/tmp/tweets-<next>/NN-name.png)`),
+save the text to `/tmp/tweets-<next>/tweets.md`, and note that no tweet has a
+link yet. Never post them.
