@@ -100,16 +100,16 @@ export const WriteBucket = Binding.Service<WriteBucket>("Prisma.WriteBucket");
  * {@link ReadWriteBucket} so both levels run the same code.
  */
 export const writeBucketOperations = (access: BucketAccess): WriteBucketClient => ({
-  put: access.putObject,
+  put: access.put,
   // Deletes are issued one key at a time rather than through the batch
   // `DeleteObjects` operation, whose signed-payload digest requirement is not
   // uniformly supported by S3-compatible stores.
   delete: (keys: string | string[]) =>
-    Effect.forEach(typeof keys === "string" ? [keys] : keys, access.deleteObject, {
+    Effect.forEach(typeof keys === "string" ? [keys] : keys, access.deleteKey, {
       concurrency: 16,
       discard: true,
     }),
-  presignPut: access.presignPutObject,
+  presignPut: access.presignPut,
 });
 
 /**

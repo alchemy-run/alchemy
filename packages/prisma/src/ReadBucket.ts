@@ -100,10 +100,10 @@ export const ReadBucket = Binding.Service<ReadBucket>("Prisma.ReadBucket");
  * {@link ReadWriteBucket} so both levels run the same code.
  */
 export const readBucketOperations = (access: BucketAccess): ReadBucketClient => ({
-  head: access.headObject,
-  get: access.getObject,
-  list: access.listObjectsV2,
-  presignGet: access.presignGetObject,
+  head: access.head,
+  get: access.get,
+  list: access.list,
+  presignGet: access.presignGet,
 });
 
 /**

@@ -141,7 +141,25 @@ const put = (base: string, key: string, value: string | Uint8Array, options?: Pu
 const putResult = (base: string, key: string, value: string | Uint8Array, options?: PutQuery) =>
   put(base, key, value, options).pipe(
     Effect.flatMap((res) => res.json),
-    Effect.map((body) => body as { ok: boolean; error?: string }),
+    Effect.map(
+      (body) =>
+        body as {
+          ok: boolean;
+          key: string | null;
+          size?: number;
+          etag?: string;
+          contentType?: string;
+          metadata?: Record<string, string>;
+          error?: string;
+          cause?: string;
+        },
+    ),
+  );
+
+const getJson = (base: string, key: string) =>
+  untilOk(HttpClient.get(`${base}/get-json?${new URLSearchParams({ key })}`)).pipe(
+    Effect.flatMap((res) => res.json),
+    Effect.map((body) => body as { ok: boolean; value?: unknown; error?: string }),
   );
 
 const del = (base: string, key: string) =>
@@ -328,9 +346,31 @@ const exerciseEdgeCases = (base: string) =>
     expect(response.headers["content-disposition"]).toBe('attachment; filename="report.txt"');
     expect(response.headers["content-type"]).toBe("application/x-alchemy-test");
 
+    const described = yield* putResult(base, `${prefix}described.json`, '{"n":1}', {
+      as: "stream-sized",
+      contentType: "application/json",
+      metaKey: "owner",
+      metaValue: "edge",
+    });
+    expect(described).toMatchObject({
+      ok: true,
+      key: `${prefix}described.json`,
+      size: 7,
+      contentType: "application/json",
+      metadata: { owner: "edge" },
+    });
+    expect(described.etag).toBeTruthy();
+    expect(yield* getJson(base, `${prefix}described.json`)).toEqual({ ok: true, value: { n: 1 } });
+
+    yield* put(base, `${prefix}not-json`, "{nope");
+    const badJson = yield* getJson(base, `${prefix}not-json`);
+    expect(badJson.ok).toBe(false);
+    expect(badJson.error).toBe(`Object ${prefix}not-json is not valid JSON`);
+
     const escaping = yield* putResult(base, `${prefix}../escape`, "x");
     expect(escaping.ok).toBe(false);
     expect(escaping.error).toContain('"." or ".." segments');
+    expect(escaping.cause).toBe("Prisma::BucketObjects::InvalidInput");
 
     expect((yield* getObject(base, `${prefix}missing`)).value).toBeNull();
   });

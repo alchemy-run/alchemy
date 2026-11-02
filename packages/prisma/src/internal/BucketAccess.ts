@@ -1,13 +1,12 @@
 /**
- * Maps `@distilled.cloud/prisma/Bucket` onto the bindings' public types: Alchemy
+ * Maps `@distilled.cloud/prisma/BucketObjects` onto the bindings' public types: Alchemy
  * names for options and results, `BucketError`, and the buffering accessors on
  * a downloaded object.
  */
-import * as Bucket from "@distilled.cloud/prisma/Bucket";
+import * as BucketObjects from "@distilled.cloud/prisma/BucketObjects";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
-import type * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import {
   BucketError,
@@ -23,39 +22,30 @@ import {
   type PutOptions,
 } from "../BucketTypes.ts";
 
+/**
+ * Every operation the bindings expose, over one bucket key. `deleteKey` takes
+ * one key; the bindings' `delete` fans out over several.
+ */
 export interface BucketAccess {
-  /** Resolves `null` when the key does not exist. */
-  headObject: (key: string) => Effect.Effect<BucketObject | null, BucketError>;
-  /** Resolves `null` when the key does not exist. */
-  getObject: (
-    key: string,
-    options?: GetOptions,
-  ) => Effect.Effect<BucketObjectBody | null, BucketError>;
-  putObject: (
+  head: (key: string) => Effect.Effect<BucketObject | null, BucketError>;
+  get: (key: string, options?: GetOptions) => Effect.Effect<BucketObjectBody | null, BucketError>;
+  put: (
     key: string,
     value: BucketBody,
     options?: PutOptions,
   ) => Effect.Effect<BucketObject, BucketError>;
-  /** Deleting a key that does not exist succeeds. */
-  deleteObject: (key: string) => Effect.Effect<void, BucketError>;
-  /** One page. */
-  listObjectsV2: (options?: ListOptions) => Effect.Effect<ListResult, BucketError>;
-  presignGetObject: (
-    key: string,
-    options?: PresignGetOptions,
-  ) => Effect.Effect<string, BucketError>;
-  presignPutObject: (
-    key: string,
-    options?: PresignPutOptions,
-  ) => Effect.Effect<string, BucketError>;
+  deleteKey: (key: string) => Effect.Effect<void, BucketError>;
+  list: (options?: ListOptions) => Effect.Effect<ListResult, BucketError>;
+  presignGet: (key: string, options?: PresignGetOptions) => Effect.Effect<string, BucketError>;
+  presignPut: (key: string, options?: PresignPutOptions) => Effect.Effect<string, BucketError>;
 }
 
-const toBucketError = (error: Bucket.BucketClientError | BucketError): BucketError =>
+const toBucketError = (error: BucketObjects.ClientError | BucketError): BucketError =>
   error._tag === "BucketError"
     ? error
     : new BucketError({ message: error.message || error._tag, cause: error });
 
-const objectBodyFrom = (object: Bucket.ObjectWithBody): BucketObjectBody => {
+const objectBodyFrom = (object: BucketObjects.ObjectWithBody): BucketObjectBody => {
   const body = object.body.pipe(Stream.mapError(toBucketError));
   const bytes = () =>
     Stream.runCollect(body).pipe(
@@ -99,11 +89,7 @@ const objectBodyFrom = (object: Bucket.ObjectWithBody): BucketObjectBody => {
   };
 };
 
-/** `httpClient` replaces the fetch client, for tests. */
-export const makeBucketAccess = (
-  credentials: BucketCredentials,
-  httpClient: Layer.Layer<HttpClient.HttpClient> = FetchHttpClient.layer,
-): BucketAccess => {
+export const makeBucketAccess = (credentials: BucketCredentials): BucketAccess => {
   const bucket = Effect.all({
     endpoint: credentials.endpoint,
     bucket: credentials.bucketName,
@@ -111,28 +97,28 @@ export const makeBucketAccess = (
     secretAccessKey: credentials.secretAccessKey,
   }).pipe(
     Effect.map(({ endpoint, bucket, accessKeyId, secretAccessKey }) =>
-      Bucket.make({ endpoint, bucket, credentials: { accessKeyId, secretAccessKey } }),
+      BucketObjects.make({ endpoint, bucket, credentials: { accessKeyId, secretAccessKey } }),
     ),
   );
 
   const run = <A>(
     operation: (
-      bucket: Bucket.Bucket,
-    ) => Effect.Effect<A, Bucket.BucketClientError, HttpClient.HttpClient>,
+      bucket: BucketObjects.Client,
+    ) => Effect.Effect<A, BucketObjects.ClientError, HttpClient.HttpClient>,
   ) =>
     bucket.pipe(
       Effect.flatMap(operation),
-      Effect.provide(httpClient),
+      Effect.provide(FetchHttpClient.layer),
       Effect.mapError(toBucketError),
     );
 
   return {
-    headObject: (key) => run((b) => b.headObject(key)),
-    getObject: (key, options) =>
+    head: (key) => run((b) => b.headObject(key)),
+    get: (key, options) =>
       run((b) => b.getObject(key, { range: options?.range })).pipe(
         Effect.map((object) => (object === null ? null : objectBodyFrom(object))),
       ),
-    putObject: (key, value, options) =>
+    put: (key, value, options) =>
       run((b) => b.putObject(key, value, options)).pipe(
         Effect.map(({ etag }): BucketObject => ({
           key,
@@ -143,8 +129,8 @@ export const makeBucketAccess = (
           metadata: { ...options?.metadata },
         })),
       ),
-    deleteObject: (key) => run((b) => b.deleteObject(key)),
-    listObjectsV2: (options) =>
+    deleteKey: (key) => run((b) => b.deleteObject(key)),
+    list: (options) =>
       run((b) =>
         b.listObjectsV2({
           prefix: options?.prefix,
@@ -165,7 +151,7 @@ export const makeBucketAccess = (
             : { objects: page.contents, delimitedPrefixes: page.commonPrefixes, truncated: false },
         ),
       ),
-    presignGetObject: (key, options) =>
+    presignGet: (key, options) =>
       bucket.pipe(
         Effect.flatMap((b) =>
           b.presignGetObject(key, {
@@ -175,7 +161,7 @@ export const makeBucketAccess = (
         ),
         Effect.mapError(toBucketError),
       ),
-    presignPutObject: (key, options) =>
+    presignPut: (key, options) =>
       bucket.pipe(
         Effect.flatMap((b) => b.presignPutObject(key, options)),
         Effect.mapError(toBucketError),

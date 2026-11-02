@@ -8,8 +8,8 @@ import * as Stream from "effect/Stream";
  * Shared write-side routes so every method of {@link WriteBucketClient} is
  * driven over `fetch`:
  *
- * - `PUT /put?key=` — `put(key, body)` (returns the object key to prove the
- *   call resolved a `BucketObject`, or the `BucketError` message). `as`
+ * - `PUT /put?key=` — `put(key, body)` (returns the `BucketObject`, or the
+ *   `BucketError` message and its cause's tag). `as`
  *   picks the body kind (`bytes`, `stream`, `stream-sized`; text by default).
  *   `contentType`, `cacheControl`, `contentDisposition`, `metaKey` and
  *   `metaValue` travel as query params and are passed through as
@@ -50,9 +50,14 @@ export const writeRoutes = (
           metadata: metaKey ? { [metaKey]: url.searchParams.get("metaValue") ?? "" } : undefined,
         })
         .pipe(
-          Effect.map((object) => ({ ok: true, key: object.key })),
+          Effect.map((object) => ({ ok: true, ...object })),
           Effect.catchTag("BucketError", (error) =>
-            Effect.succeed({ ok: false, key: null, error: error.message }),
+            Effect.succeed({
+              ok: false,
+              key: null,
+              error: error.message,
+              cause: "_tag" in error.cause ? error.cause._tag : error.cause.name,
+            }),
           ),
           Effect.orDie,
         );
