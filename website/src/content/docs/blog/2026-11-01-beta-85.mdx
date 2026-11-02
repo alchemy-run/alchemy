@@ -835,6 +835,40 @@ $ alchemy state migrate --rollback   # back to S3, before downgrading
 Docs: [AWS state store](/state-store#aws-state-store) ·
 [Migrating from S3](/state-store#migrating-from-the-s3-store).
 
+## Alchemist: the Alchemy CLI as a programmatic API
+
+The `alchemy` CLI is now a thin layer over `alchemy/Alchemist`. Everything
+it does (plan, apply, drift, nuke, logs, state) is one call you can make from
+your own program, and every step is a typed event you can handle
+([#2765](https://github.com/alchemy-run/alchemy/pull/2765)):
+
+```typescript
+import * as Alchemist from "alchemy/Alchemist";
+
+const program = Effect.gen(function* () {
+  const plan = yield* Alchemist.plan({
+    stack: Stack,
+    operation: "deploy",
+    stage: "prod",
+  });
+  if (Alchemist.hasChanges(plan)) yield* Alchemist.apply(plan);
+
+  const scan = yield* Alchemist.Drift.scan({ stack: Stack, stage: "prod" });
+  if (Alchemist.Drift.hasDrift(scan)) yield* Alchemist.Drift.execute(scan);
+}).pipe(
+  Alchemist.onEvent((event) => Effect.log(event.type)),
+  Effect.provide(Alchemist.layer()),
+  Effect.scoped,
+);
+```
+
+Build your own CLI, a deploy bot or a CI step on the same API the `alchemy`
+command uses. Every run also writes one NDJSON log under `.alchemy/log/`,
+child processes and sidecars included. Thanks
+[Rahul Mishra](https://github.com/BlankParticle)!
+
+Docs: [CLI API](/cli/api).
+
 ## Lambda aliases, streaming and partial batch failures
 
 `alias` publishes a version on each deploy and routes every event source,
@@ -885,40 +919,6 @@ timeoutMargin: Duration.seconds(2), // Lambda configured for 32 s
 ```
 
 Docs: [Lambda](/aws/compute/lambda).
-
-## Alchemist: the Alchemy CLI as a programmatic API
-
-The `alchemy` CLI is now a thin layer over `alchemy/Alchemist`. Everything
-it does (plan, apply, drift, nuke, logs, state) is one call you can make from
-your own program, and every step is a typed event you can handle
-([#2765](https://github.com/alchemy-run/alchemy/pull/2765)):
-
-```typescript
-import * as Alchemist from "alchemy/Alchemist";
-
-const program = Effect.gen(function* () {
-  const plan = yield* Alchemist.plan({
-    stack: Stack,
-    operation: "deploy",
-    stage: "prod",
-  });
-  if (Alchemist.hasChanges(plan)) yield* Alchemist.apply(plan);
-
-  const scan = yield* Alchemist.Drift.scan({ stack: Stack, stage: "prod" });
-  if (Alchemist.Drift.hasDrift(scan)) yield* Alchemist.Drift.execute(scan);
-}).pipe(
-  Alchemist.onEvent((event) => Effect.log(event.type)),
-  Effect.provide(Alchemist.layer()),
-  Effect.scoped,
-);
-```
-
-Build your own CLI, a deploy bot or a CI step on the same API the `alchemy`
-command uses. Every run also writes one NDJSON log under `.alchemy/log/`,
-child processes and sidecars included. Thanks
-[Rahul Mishra](https://github.com/BlankParticle)!
-
-Docs: [CLI API](/cli/api).
 
 ## 95 bug fixes
 
