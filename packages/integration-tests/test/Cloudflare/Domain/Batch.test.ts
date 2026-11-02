@@ -27,8 +27,8 @@ const call = (request: HttpClientRequest.HttpClientRequest) =>
   );
 
 describe.concurrent.each([
-  { dev: true, stage: "domain-batches-local" },
-  { dev: false, stage: "domain-batches-live" },
+  { dev: true, stage: `${Test.defaultStage()}-domain-batches-local` },
+  { dev: false, stage: `${Test.defaultStage()}-domain-batches-live` },
 ] as const)("batched projections on Durable Objects (dev: $dev)", ({ dev, stage }) => {
   const state = dev ? inMemoryState() : Cloudflare.state();
   const Stack = makeStack(state);
