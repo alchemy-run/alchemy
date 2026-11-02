@@ -80,5 +80,6 @@ describe.concurrent.each([
     // step with its own policy.
     recoveryWithinMillis: engine === "native" ? undefined : 30_000,
     timeout: 90_000,
+    unsupported: engine === "native" ? { raceAll: "aren't supported on Cloudflare Workflows" } : {},
   });
 });

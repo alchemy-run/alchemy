@@ -1,4 +1,5 @@
 import * as Workflows from "alchemy/Workflows";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -46,9 +47,13 @@ export const Hold = Workflow.make("Hold", {
   idempotencyKey: ({ id }) => id,
 });
 
-/** Reserves, then charges; a declined charge releases the reservation. */
+/**
+ * Reserves, then charges; a declined charge releases the reservation. An
+ * abandoned checkout fails after reserving, without charging, and releases it
+ * too.
+ */
 export const Checkout = Workflow.make("Checkout", {
-  payload: { id: Schema.String, decline: Schema.Boolean },
+  payload: { id: Schema.String, decline: Schema.Boolean, abandon: Schema.Boolean },
   success: Schema.String,
   error: Declined,
   idempotencyKey: ({ id }) => id,
@@ -78,8 +83,85 @@ export const Crash = Workflow.make("Crash", {
   idempotencyKey: ({ id }) => id,
 });
 
+export class Flake extends Schema.TaggedError<Flake>()("Flake", { attempt: Schema.Number }) {}
+
+/** Its activity fails with a typed error twice, and `Activity.retry` runs it again. */
+export const Retry = Workflow.make("Retry", {
+  payload: { id: Schema.String },
+  success: Schema.String,
+  error: Flake,
+  idempotencyKey: ({ id }) => id,
+});
+
+/** Sleeps durably inside an activity, which returns a `DateTime` the workflow decodes. */
+export const WakeInStep = Workflow.make("WakeInStep", {
+  payload: { id: Schema.String, seconds: Schema.Number },
+  success: Schema.DateTimeUtc,
+  idempotencyKey: ({ id }) => id,
+});
+
+/**
+ * Reserves, then waits for approval inside `catchCause` and `ensuring`, with a
+ * finalizer. Suspending runs the finalizer and `ensuring`, never the
+ * compensation or `catchCause`.
+ */
+export const Guarded = Workflow.make("Guarded", {
+  payload: { id: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
+/** Races three activities, then waits for approval: a replay returns the same winner. */
+export const Race = Workflow.make("Race", {
+  payload: { id: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
+/** Runs Approve as a child, so the parent waits while the child waits for its signal. */
+export const ParentOfWaiting = Workflow.make("ParentOfWaiting", {
+  payload: { id: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
+/**
+ * Reserves, then its activity dies once, and the workflow suspends instead of
+ * failing. Resumed, the activity runs again and succeeds; interrupted, the
+ * reservation is released.
+ */
+export const Suspends = Workflow.make("Suspends", {
+  payload: { id: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+}).annotate(Workflow.SuspendOnFailure, true);
+
+/** Catches its dying activity's defect and carries on with another activity. */
+export const Recover = Workflow.make("Recover", {
+  payload: { id: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
 /** Every conformance workflow, for the engine that hosts them. */
-export const workflows = [Greet, Nap, Naps, Approve, Hold, Checkout, Parent, Flaky, Crash] as const;
+export const workflows = [
+  Greet,
+  Nap,
+  Naps,
+  Approve,
+  Hold,
+  Checkout,
+  Parent,
+  Flaky,
+  Crash,
+  Retry,
+  WakeInStep,
+  Guarded,
+  Race,
+  ParentOfWaiting,
+  Suspends,
+  Recover,
+] as const;
 
 export const GreetLive = Workflows.layer(
   Greet,
@@ -165,12 +247,13 @@ export const CheckoutLive = Workflows.layer(
   Checkout,
   Effect.gen(function* () {
     const journal = yield* Journal;
-    return Effect.fn(function* ({ id, decline }) {
+    return Effect.fn(function* ({ id, decline, abandon }) {
       yield* Activity.make({ name: "reserve", execute: journal.append(id, "reserve") }).pipe(
         Checkout.withCompensation(() =>
           Activity.make({ name: "release", execute: journal.append(id, "release") }),
         ),
       );
+      if (abandon) return yield* new Declined({ reason: "abandoned" });
       return yield* Activity.make({
         name: "charge",
         success: Schema.String,
@@ -228,9 +311,166 @@ export const CrashLive = Workflows.layer(
     return Effect.fn(function* ({ id }) {
       yield* Activity.make({
         name: "crash",
-        execute: journal.append(id, "crash").pipe(Effect.andThen(Effect.die("boom"))),
+        // An Error carrying a field JSON can't encode: the engine still reports it.
+        execute: journal
+          .append(id, "crash")
+          .pipe(
+            Effect.andThen(
+              Effect.die(Object.assign(new Error("boom: request timed out"), { code: 1n })),
+            ),
+          ),
       });
       return "unreachable";
+    });
+  }),
+);
+
+export const RetryLive = Workflows.layer(
+  Retry,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id }) {
+      const attempt = yield* Activity.make({
+        name: "flaky",
+        success: Schema.Number,
+        error: Flake,
+        execute: Effect.gen(function* () {
+          const attempt = yield* Activity.CurrentAttempt;
+          yield* journal.append(id, `attempt:${attempt}`);
+          if (attempt < 3) return yield* new Flake({ attempt });
+          return attempt;
+        }),
+      }).pipe(Activity.retry({ times: 5 }));
+      return `succeeded on attempt ${attempt}`;
+    });
+  }),
+);
+
+export const WakeInStepLive = Workflows.layer(
+  WakeInStep,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id, seconds }) {
+      const at = yield* Activity.make({
+        name: "nap-in-step",
+        success: Schema.DateTimeUtc,
+        execute: Effect.gen(function* () {
+          yield* DurableClock.sleep({
+            name: "inside",
+            duration: `${seconds} seconds`,
+            inMemoryThreshold: 0,
+          });
+          yield* journal.append(id, "woke");
+          return yield* DateTime.now;
+        }),
+      });
+      yield* Activity.make({
+        name: "decoded",
+        execute: journal.append(id, DateTime.isDateTime(at) ? "decoded" : "not decoded"),
+      });
+      return at;
+    });
+  }),
+);
+
+export const GuardedLive = Workflows.layer(
+  Guarded,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id }) {
+      yield* Effect.addFinalizer(() => journal.append(id, "finalized"));
+      yield* Activity.make({ name: "reserve", execute: journal.append(id, "reserve") }).pipe(
+        Guarded.withCompensation(() =>
+          Activity.make({ name: "release", execute: journal.append(id, "release") }),
+        ),
+      );
+      const by = yield* DurableDeferred.await(Approval).pipe(
+        Effect.catchCause(() => journal.append(id, "caught").pipe(Effect.as("nobody"))),
+        Effect.ensuring(journal.append(id, "ensured")),
+      );
+      yield* Activity.make({ name: "done", execute: journal.append(id, `done:${by}`) });
+      return `guarded for ${by}`;
+    });
+  }),
+);
+
+export const RaceLive = Workflows.layer(
+  Race,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    const runner = (name: string, millis: number) =>
+      Activity.make({
+        name,
+        success: Schema.String,
+        execute: Effect.sleep(`${millis} millis`).pipe(Effect.as(name)),
+      });
+    return Effect.fn(function* ({ id }) {
+      const winner = yield* Activity.raceAll("race", [
+        runner("slow", 3_000),
+        runner("medium", 1_500),
+        runner("fast", 100),
+      ]);
+      yield* Activity.make({ name: "raced", execute: journal.append(id, `raced:${winner}`) });
+      // Replayed after the signal: the race returns its recorded winner.
+      yield* DurableDeferred.await(Approval);
+      return winner;
+    });
+  }),
+);
+
+export const ParentOfWaitingLive = Workflows.layer(
+  ParentOfWaiting,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id }) {
+      const approved = yield* Approve.execute({ id: `${id}-child` });
+      yield* Activity.make({ name: "parent", execute: journal.append(id, `parent:${approved}`) });
+      return `parent got ${approved}`;
+    });
+  }),
+);
+
+export const SuspendsLive = Workflows.layer(
+  Suspends,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id }) {
+      yield* Activity.make({ name: "reserve", execute: journal.append(id, "reserve") }).pipe(
+        Suspends.withCompensation(() =>
+          Activity.make({ name: "release", execute: journal.append(id, "release") }),
+        ),
+      );
+      yield* Activity.make({
+        name: "flaky",
+        execute: Effect.gen(function* () {
+          yield* journal.append(id, "attempt");
+          const attempts = (yield* journal.list(id)).filter((entry) => entry === "attempt").length;
+          if (attempts < 2) return yield* Effect.die("boom");
+        }),
+      });
+      return "resumed";
+    });
+  }),
+);
+
+export const RecoverLive = Workflows.layer(
+  Recover,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id }) {
+      return yield* Activity.make({
+        name: "fail",
+        success: Schema.String,
+        execute: journal.append(id, "fail").pipe(Effect.andThen(Effect.die("boom"))),
+      }).pipe(
+        Effect.catchCause(() =>
+          Activity.make({
+            name: "recovered",
+            success: Schema.String,
+            execute: journal.append(id, "recovered").pipe(Effect.as("recovered")),
+          }),
+        ),
+      );
     });
   }),
 );
@@ -246,4 +486,11 @@ export const WorkflowsLive = Layer.mergeAll(
   ParentLive,
   FlakyLive,
   CrashLive,
+  RetryLive,
+  WakeInStepLive,
+  GuardedLive,
+  RaceLive,
+  ParentOfWaitingLive,
+  SuspendsLive,
+  RecoverLive,
 );

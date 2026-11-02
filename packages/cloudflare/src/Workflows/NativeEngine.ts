@@ -70,6 +70,12 @@ const nameOf = (...parts: ReadonlyArray<string>) => {
 /** Every wait for a signal also waits for this event, which interrupts the run. */
 const INTERRUPT = "alchemy-interrupt";
 
+/** A run suspended on a failure waits for this event, which resumes it. */
+const RESUME = "alchemy-resume";
+
+/** What an activity's step records when the activity suspends on a failure. */
+const SUSPENDED = "alchemy-suspended";
+
 /** How long a run waits for a signal; Cloudflare's limit for `waitForEvent`. */
 const SIGNAL_TIMEOUT = "365 days";
 
@@ -320,8 +326,9 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
             .pipe(Effect.flatMap((instance) => instance.terminate())),
         ),
 
-      // Every instance continues on its own; there's nothing to resume.
-      resume: () => Effect.void,
+      // Only a run suspended on a failure waits to be resumed.
+      resume: (workflow, executionId) =>
+        sendEvent(handle, nameOf(workflow._tag, executionId), { type: RESUME }),
 
       activityExecute: (activity, attempt) =>
         Effect.gen(function* () {
@@ -334,52 +341,93 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
           activityInstance.interrupted = instance.interrupted;
           // The step's exit, failure or not, is its result. A defect the
           // workflow doesn't capture fails the step instead, so Cloudflare
-          // retries it, and is a defect again once retries run out.
-          const text = yield* run.step
-            .do({
-              name: `${activity.name}/${attempt}`,
-              effect: activity.executeEncoded.pipe(
-                EffectWorkflow.intoResult,
-                Effect.catchCause((cause) =>
-                  Cause.hasInterruptsOnly(cause)
-                    ? Effect.failCause(cause)
-                    : Effect.fail({ _tag: "ActivityDefect", message: Cause.pretty(cause) }),
-                ),
-                Effect.flatMap((result) =>
-                  result._tag === "Complete"
-                    ? encodeExit(result.exit)
-                    : Effect.die(new Error(`Activity ${activity.name} suspended inside a step`)),
-                ),
-                // The run's services, with the step's own instance.
-                Effect.provide(
-                  Layer.succeedContext(
-                    run.context.pipe(
-                      Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
-                      Context.add(
-                        CurrentActivity,
-                        makeCurrentActivity(
-                          instance.workflow._tag,
-                          instance.executionId,
-                          activity.name,
+          // retries it, and is a defect again once retries run out. An
+          // activity that suspends on a failure records that, and a resume
+          // runs it again under a new step name.
+          for (let generation = 0; ; generation++) {
+            const text = yield* run.step
+              .do({
+                name:
+                  generation === 0
+                    ? `${activity.name}/${attempt}`
+                    : `${activity.name}/${attempt}/resumed-${generation}`,
+                effect: activity.executeEncoded.pipe(
+                  EffectWorkflow.intoResult,
+                  Effect.catchCause((cause) =>
+                    Cause.hasInterruptsOnly(cause)
+                      ? Effect.failCause(cause)
+                      : Effect.fail({ _tag: "ActivityDefect", message: Cause.pretty(cause) }),
+                  ),
+                  Effect.flatMap((result) =>
+                    result._tag === "Complete"
+                      ? encodeExit(result.exit)
+                      : Effect.succeed(SUSPENDED),
+                  ),
+                  // The run's services, with the step's own instance.
+                  Effect.provide(
+                    Layer.succeedContext(
+                      run.context.pipe(
+                        Context.add(WorkflowEngine.WorkflowInstance, activityInstance),
+                        Context.add(
+                          CurrentActivity,
+                          makeCurrentActivity(
+                            instance.workflow._tag,
+                            instance.executionId,
+                            activity.name,
+                          ),
                         ),
                       ),
                     ),
                   ),
+                ) as Effect.Effect<
+                  string,
+                  { readonly _tag: "ActivityDefect"; readonly message: string }
+                >,
+              })
+              .pipe(
+                Effect.catchTag("ActivityDefect", (defect) =>
+                  Effect.die(new Error(defect.message)),
                 ),
-              ) as Effect.Effect<
-                string,
-                { readonly _tag: "ActivityDefect"; readonly message: string }
-              >,
-            })
-            .pipe(
-              Effect.catchTag("ActivityDefect", (defect) => Effect.die(new Error(defect.message))),
-            );
-          return new EffectWorkflow.Complete({ exit: yield* decodeExit(text) });
+              );
+            if (text !== SUSPENDED) {
+              return new EffectWorkflow.Complete({ exit: yield* decodeExit(text) });
+            }
+            // Suspended on a failure: wait here for a resume, then run the
+            // activity again, or for an interrupt.
+            const waiting = `${activity.name}/${attempt}/suspended-${generation}`;
+            const resumed = yield* run.step
+              .waitForEvent(waiting, { type: RESUME, timeout: SIGNAL_TIMEOUT })
+              .pipe(
+                Effect.as(true),
+                Effect.raceFirst(
+                  run.step
+                    .waitForEvent(`${waiting}/interrupt`, {
+                      type: INTERRUPT,
+                      timeout: SIGNAL_TIMEOUT,
+                    })
+                    .pipe(Effect.as(false)),
+                ),
+              );
+            if (!resumed) {
+              run.instance.interrupted = true;
+              run.instance.suspended = false;
+              return yield* Effect.interrupt;
+            }
+          }
         }),
 
       deferredResult: (deferred) =>
         Effect.gen(function* () {
           const run = yield* currentRun("DurableDeferred reads");
+          // A race asks for its recorded winner before it runs. A step can only
+          // be replayed by running it, so a winner can't be looked up first.
+          if (deferred.name.startsWith("raceAll/")) {
+            return yield* Effect.die(
+              new Error(
+                "Activity.raceAll and DurableDeferred.raceAll aren't supported on Cloudflare Workflows: a step's result can't be looked up before the step runs. Use the Durable Object engine.",
+              ),
+            );
+          }
           const duration = run.clocks.get(deferred.name);
           // Every wait also waits for an interrupt.
           const interrupt = run.step
