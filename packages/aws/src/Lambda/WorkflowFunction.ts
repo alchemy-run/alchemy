@@ -118,6 +118,9 @@ export interface WorkflowFunctionClass<
  * The Layer must implement every workflow the function lists: leaving one out
  * is a type error.
  *
+ * Each invocation replays the run from its start, so `timeout` defaults to
+ * one minute rather than Lambda's three seconds.
+ *
  * @resource
  */
 export const WorkflowFunction =
@@ -137,8 +140,10 @@ export const WorkflowFunction =
       durable,
       {
         workflows: options.workflows,
-        make: (props: unknown, workflows: Layer.Layer<any, any, any>) =>
-          make(props, makeWorkflowRunner(workflows)),
+        // Every invocation replays the run from its start, which Lambda's
+        // three-second default timeout is too short for.
+        make: (props: Record<string, unknown>, workflows: Layer.Layer<any, any, any>) =>
+          make({ timeout: Duration.minutes(1), ...props }, makeWorkflowRunner(workflows)),
       },
       Effectable.Prototype({
         label: `AWS.Lambda.WorkflowFunction<${id}>`,
