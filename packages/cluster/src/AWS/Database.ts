@@ -118,7 +118,8 @@ export const Database = (id: string, props: DatabaseProps = {}) =>
         skipFinalSnapshot: true,
       });
       return {
-        // RDS requires TLS.
+        // RDS requires TLS. Runners verify the certificate against the RDS
+        // certificate authority their image trusts (`ClusterAWS.EcsRunners`).
         url: Output.all(instance.endpointAddress, instance.endpointPort, password.text).pipe(
           Output.map(([host, port, text]) =>
             Redacted.make(

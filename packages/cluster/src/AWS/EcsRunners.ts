@@ -2,7 +2,21 @@ import * as ECS from "@alchemy.run/aws/ECS";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { GATEWAY_PORT, RUNNER_PORT } from "../internal/Gateway.ts";
-import { makeRunnersLayer, type RunnersSettings } from "../internal/RunnersHost.ts";
+import {
+  makeRunnersLayer,
+  RUNNER_DOCKERFILE,
+  type RunnersSettings,
+} from "../internal/RunnersHost.ts";
+
+/** Where AWS publishes the certificate authorities of every RDS region. */
+const RDS_CA_BUNDLE = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
+
+const RDS_RUNNER_DOCKERFILE = RUNNER_DOCKERFILE.replace(
+  "ENV NODE_ENV=production",
+  `ENV NODE_ENV=production
+ADD ${RDS_CA_BUNDLE} /etc/ssl/rds-ca.pem
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/rds-ca.pem`,
+);
 import { awsNetworkOf, makeAwsGateway } from "./internal/Gateway.ts";
 
 export interface EcsRunnersOptions extends RunnersSettings {
@@ -65,6 +79,9 @@ export const EcsRunners = (id: string, options: EcsRunnersOptions = {}) =>
     id,
     settings: options,
     expected: "an AWS VPC (ClusterAWS.Database)",
+    // The runner image trusts the RDS certificate authority, so runners
+    // verify the database's certificate.
+    dockerfile: RDS_RUNNER_DOCKERFILE,
     network: awsNetworkOf,
     gateway: (_name, network) => makeAwsGateway(id, network, "ip"),
     nodes: ({ network, gateway, program, environment }) =>

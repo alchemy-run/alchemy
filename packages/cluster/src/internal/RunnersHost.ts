@@ -169,6 +169,8 @@ export const makeRunnersLayer = <
   readonly settings: RunnersSettings;
   readonly network: (database: DatabaseShape) => Network | undefined;
   readonly expected: string;
+  /** The runner image's Dockerfile, when the host needs more than {@link RUNNER_DOCKERFILE}. */
+  readonly dockerfile?: string;
   /** Where callers reach the gateway, declaring what it needs; before the runners' service. */
   readonly gateway: (name: string, network: Network) => Effect.Effect<Gateway, never, Req>;
   readonly nodes: (nodes: RunnersNodes<Network, Gateway>) => Effect.Effect<void, never, Req>;
@@ -238,7 +240,11 @@ export const makeRunnersLayer = <
             network,
             runners,
             name,
-            program: yield* bundleRunners(options.id, runners),
+            program: yield* bundleRunners(
+              options.id,
+              runners,
+              options.dockerfile ?? RUNNER_DOCKERFILE,
+            ),
             environment: Output.all(
               runners.env,
               output(database.url),
@@ -302,7 +308,7 @@ const runnerEntry = (name: "runner" | "external-runner") =>
  * Bundle the runner program and its Dockerfile into a directory of their
  * own, once the runners know their classes, and resolve to the directory.
  */
-const bundleRunners = Effect.fn(function* (id: string, runners: Runners) {
+const bundleRunners = Effect.fn(function* (id: string, runners: Runners, dockerfile: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = path.resolve(yield* dotAlchemyDirectory, "cluster", yield* stackDnsLabel(id));
@@ -334,8 +340,8 @@ const bundleRunners = Effect.fn(function* (id: string, runners: Runners) {
         },
         { dir, format: "esm", entryFileNames: "runner.mjs", codeSplitting: false },
       );
-      hashes.push(runner.hash, RUNNER_DOCKERFILE);
-      yield* fs.writeFileString(path.join(dir, "Dockerfile"), RUNNER_DOCKERFILE);
+      hashes.push(runner.hash, dockerfile);
+      yield* fs.writeFileString(path.join(dir, "Dockerfile"), dockerfile);
       const hash = yield* Effect.sync(() =>
         createHash("sha256").update(hashes.join("\n")).digest("hex").slice(0, 16),
       );
