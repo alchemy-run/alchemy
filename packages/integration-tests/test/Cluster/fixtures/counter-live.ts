@@ -28,6 +28,5 @@ export default Counters.make(
           }),
       });
     });
-  }).pipe(Effect.provide(Default)),
-  // Like Effect Cluster's `toLayer`, the entity's Layer requires its RPCs' middleware.
-).pipe(Layer.provide(AuthLive));
+  }).pipe(Effect.provide(Default.pipe(Layer.provide(AuthLive)))),
+);

@@ -153,14 +153,13 @@ export type EntityTag<Self, Type extends string, Rpcs extends Rpc.Any> = Effect.
     of<Handlers extends EffectEntity.HandlersFrom<Rpcs>>(handlers: Handlers): Handlers;
     /**
      * The entity's implementation, as a Layer. Provide a runners Layer to
-     * `impl` to deploy it. Like Effect Cluster's `Entity.toLayer`, the Layer
-     * requires its RPCs' middleware: provide it to the Layer, then the Layer
-     * to the Stack.
+     * `impl` to deploy it, with its RPCs' middleware provided to the runners;
+     * then provide the returned Layer to the Stack.
      */
     make<InitReq = never>(
       props: InputProps<EntityProps>,
       impl: EntityImpl<Rpcs, InitReq>,
-    ): Layer.Layer<Self, never, ClassRequirements<InitReq> | Rpc.Middleware<Rpcs>>;
+    ): Layer.Layer<Self, never, ClassRequirements<InitReq>>;
     new (_: never): EntityNamespace<Rpcs>;
   };
 
@@ -242,7 +241,29 @@ const createRuntimeContext = makeHostedRuntimeContext<HostedEntity>(
     context,
     options: { maxIdleTime: props?.maxIdleTime, concurrency: props?.concurrency },
   }),
+  // Every RPC's middleware must reach the runners with the entity.
+  (id, context) => {
+    const missing = [...entities.get(id)!.protocol.requests.values()].flatMap((rpc) =>
+      [...(rpc as unknown as Rpc.AnyWithProps).middlewares]
+        .filter((middleware) => !context.mapUnsafe.has(middleware.key))
+        .map((middleware) => `${rpc._tag} uses ${middleware.key}`),
+    );
+    return missing.length === 0
+      ? Effect.void
+      : Effect.die(
+          new EntityMiddlewareMissing({
+            message:
+              `Cluster.Entity '${id}' is missing RPC middleware (${missing.join(", ")}). ` +
+              `Provide its Layer with the runners: Effect.provide(Default.pipe(Layer.provide(AuthLive))).`,
+          }),
+        );
+  },
 );
+
+/** An entity's RPC uses middleware nothing provided to its runners. */
+export class EntityMiddlewareMissing extends Data.TaggedError("Cluster.EntityMiddlewareMissing")<{
+  readonly message: string;
+}> {}
 
 type EntityPlatform = Platform<Entity, EntityServices, unknown, EntityRuntimeContext>;
 
@@ -315,7 +336,7 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  * );
  * ```
  *
- * **Example:** Middleware, provided to the entity's Layer
+ * **Example:** Middleware, provided with the runners
  * ```typescript
  * export const Increment = Rpc.make("Increment", {
  *   payload: { amount: Schema.Int },
@@ -330,8 +351,8 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  *         Increment: () => Effect.map(CurrentUser, (user) => user.id.length),
  *       });
  *     });
- *   }).pipe(Effect.provide(Default)),
- * ).pipe(Layer.provide(AuthLive));
+ *   }).pipe(Effect.provide(Default.pipe(Layer.provide(AuthLive)))),
+ * );
  * ```
  *
  * **Example:** An existing Effect Cluster program, run as it is

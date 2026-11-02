@@ -160,11 +160,18 @@ export const makeRunnersLayer = <Network, Req>(options: {
     RunnersHost,
     Effect.gen(function* () {
       const database = yield* Database;
-      const noop: RunnersHost["Service"] = {
-        host: () => Effect.void,
-        deployExternal: () => Effect.void,
-      };
-      if (globalThis.__ALCHEMY_RUNTIME__) return noop;
+      // What was provided to the runners, like an entity's RPC middleware,
+      // goes with every class they host.
+      const services = yield* Effect.context<never>();
+      const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
+      const hostsSelf = self !== undefined && HOSTED_TYPES.has(self.Type);
+      if (globalThis.__ALCHEMY_RUNTIME__) {
+        if (hostsSelf) yield* (self as unknown as HostedClass).provideServices(services);
+        return {
+          host: (hosted) => hosted.provideServices(services),
+          deployExternal: () => Effect.void,
+        } satisfies RunnersHost["Service"];
+      }
       const network = options.network(database);
       if (network === undefined) {
         return yield* Effect.die(
@@ -238,21 +245,21 @@ export const makeRunnersLayer = <Network, Req>(options: {
         }).pipe(Effect.provide(context));
 
       const host = (hosted: HostedClass) =>
-        hosted.registerRunners((env) =>
-          deploy(
-            { name: hosted.LogicalId, module: hosted.Props.main, handler: "default" },
-            env,
-            hosted as unknown as Entity,
+        Effect.andThen(
+          hosted.provideServices(services),
+          hosted.registerRunners((env) =>
+            deploy(
+              { name: hosted.LogicalId, module: hosted.Props.main, handler: "default" },
+              env,
+              hosted as unknown as Entity,
+            ),
           ),
         );
 
       // The generic `Self` is the class whose phase is running. When it is
       // not hosted on runners, the runners were given an external entity,
       // which may be declared inside any runtime's Construction phase.
-      const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
-      if (self !== undefined && HOSTED_TYPES.has(self.Type)) {
-        yield* host(self as unknown as HostedClass);
-      }
+      if (hostsSelf) yield* host(self as unknown as HostedClass);
 
       return {
         host,
