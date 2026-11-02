@@ -417,7 +417,9 @@ const build = <A, E, R>(
         .map((view) => view.viewName),
     );
     for (const view of definitions.views) {
-      const source = kernel.inPlace("view", view.viewName)
+      // Only a view that fills itself reads its keys' history on first touch; any
+      // other view is filled by the deploy's backfill, and its keys apply live.
+      const source = selfFilled.has(view.viewName)
         ? kernel.sourcesOf(viewTarget(view.viewName))?.[0]
         : undefined;
       viewStores.set(
