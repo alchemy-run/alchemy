@@ -151,17 +151,50 @@ Each key of the new consumer pulls the history from every instance that feeds it
 
 Policies never receive history. They act on new events only, so adding a policy never acts on the past again.
 
-## Rebuild a view from the history
+## Change a view: bump its version
 
-A view's state is derived, so it can always be built again. When its `evolve` or routing changes what it should hold, or its state was lost, bump its version on the model's Layer:
+A view's state is derived, so it can always be computed again. Whenever you change what a view computes (its `evolve`, `emit`, `keyOf`, `state`, or the events and sources it reads), bump its `version`:
 
-```typescript title="src/Bank.live.ts"
-Bank.layer(BankHandlers, { versions: { AccountSummary: 1 } });
+```typescript title="src/AccountSummary.view.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Account } from "./Account.aggregate.ts";
+
+export class AccountSummary extends Domain.View("AccountSummary", {
+  from: [Account],
+  key: Account,
+  state: Schema.Struct({ net: Schema.Number }),
+  initial: { net: 0 },
+  evolve: {
+    MoneyDeposited: (v, e) => ({ net: v.net + e.amount }),
+    MoneyWithdrawn: (v, e) => ({ net: v.net - e.amount }),
+  },
+  version: 1,
+}) {}
 ```
 
-On the next deploy the view starts over and receives the whole history again, the same way a new view does. Every view and projection that reads it is rebuilt with it.
+On the next deploy every key is computed again from the history, with the new code, and so is every view and projection that reads this one. You don't choose how: the deploy picks the cheapest way that is correct.
 
-Bump the version too when you add back a view you removed earlier. Its stored state stopped following the history while it was gone, so it's rebuilt from the start.
+A view keyed by the one aggregate it reads, like this summary per account, is rebuilt in place. It keeps its storage, and the deploy waits for nothing. The first time a key is touched after the deploy, it reads its own account's events again before it answers, so even events it never received before (here, withdrawals) count. A view or projection that reads it gets each key's new rows, never a key still being rebuilt. On Cloudflare, an object busy during the deploy keeps its old code until it is idle; until then the Worker computes that key's answers itself, from its account's events.
+
+Any other view, such as one fed by many accounts through `keyOf`, is rebuilt from the history: it starts over in new storage and receives every event again, and the deploy waits for it, the same way it does for a new view.
+
+Only ever increase a version. To undo a change, change the code back and bump again. Bump it too when you add back a view you removed earlier: its stored state stopped following the history while it was gone.
+
+## Fill a view lazily
+
+A view keyed by the one aggregate it reads can skip the backfill when it is added, too. List it as lazy on the model's Layer:
+
+```typescript title="src/Bank.live.ts"
+import * as Layer from "effect/Layer";
+import { Bank } from "./Bank.model.ts";
+
+export const BankLive = Bank.layer(Layer.empty, { lazy: ["AccountSummary"] });
+```
+
+A deploy that adds it waits for nothing. Each key reads its own account's history the first time it's read, or when that account next changes, and every answer it gives covers the whole history. Keys nobody reads are never built.
+
+A view fed by many instances, like a total across every account, can't be lazy: one key doesn't know which instances feed it. The model fails to build if you try.
 
 ## Know when the history has arrived
 
