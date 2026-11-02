@@ -10,6 +10,8 @@ import { Database, FRONT_PORT } from "./cluster.ts";
 import { Counters } from "./counter.ts";
 import { Greeters } from "./greeter.ts";
 import { Tally } from "./legacy.ts";
+import { workflowApp } from "./workflows/app.ts";
+import { Approve, Checkout, Greet, Nap, Parent } from "./workflows/workflows.ts";
 
 export default class Front extends Docker.Service<Front>()(
   "ClusterFront",
@@ -26,11 +28,13 @@ export default class Front extends Docker.Service<Front>()(
     const counters = yield* Counters;
     const greeters = yield* Greeters;
     const tallies = yield* Tally;
+    const workflows = yield* workflowApp;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://front");
         const [route, id = "x", arg] = url.pathname.split("/").filter((s) => s.length > 0);
+        if (route === "wf") return yield* workflows(url);
         const counter = yield* counters.getByName(id);
         const json = (value: unknown) => HttpServerResponse.json(value);
         switch (route) {
@@ -79,5 +83,5 @@ export default class Front extends Docker.Service<Front>()(
         }
       }).pipe(Effect.provide(AuthClient), Effect.orDie),
     };
-  }),
+  }).pipe(Effect.provide(Cluster.WorkflowEngine(Greet, Nap, Approve, Checkout, Parent))),
 ) {}

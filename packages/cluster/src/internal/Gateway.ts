@@ -40,6 +40,8 @@ import {
 } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import type { Workflow, WorkflowEngine } from "effect/workflow";
+import { WorkflowRpcs, workflowHandlers } from "./WorkflowGateway.ts";
 
 /** The path every gateway serves its RPCs on. */
 export const GATEWAY_PATH = "/rpc";
@@ -236,11 +238,29 @@ const handlersOf = (entity: AnyEntity) =>
   );
 
 /** The gateway a runner serves: every hosted entity's RPCs, behind the token. */
-export const gatewayLayer = (entities: ReadonlyArray<AnyEntity>, token: string) => {
-  const [first, ...rest] = entities.map(groupOf);
-  const group = rest.reduce((all, next) => all.merge(next), first!);
+export function gatewayLayer(
+  entities: ReadonlyArray<AnyEntity>,
+  token: string,
+): Layer.Layer<never, never, Sharding.Sharding>;
+/** With the workflows the runner hosts, served on its own `WorkflowEngine`. */
+export function gatewayLayer(
+  entities: ReadonlyArray<AnyEntity>,
+  token: string,
+  workflows: ReadonlyMap<string, Workflow.Any>,
+): Layer.Layer<never, never, Sharding.Sharding | WorkflowEngine.WorkflowEngine>;
+export function gatewayLayer(
+  entities: ReadonlyArray<AnyEntity>,
+  token: string,
+  workflows: ReadonlyMap<string, Workflow.Any> = new Map(),
+): Layer.Layer<never, never, any> {
+  const groups = [...entities.map(groupOf), ...(workflows.size > 0 ? [WorkflowRpcs] : [])];
+  const [first, ...rest] = groups as [RpcGroup.RpcGroup<Rpc.Any>, ...RpcGroup.RpcGroup<Rpc.Any>[]];
+  const group = rest.reduce((all, next) => all.merge(next), first ?? RpcGroup.make());
   const handlers = Layer.mergeAll(
-    ...(entities.map(handlersOf) as [Layer.Layer<never, never, Sharding.Sharding>]),
+    ...([
+      ...entities.map(handlersOf),
+      ...(workflows.size > 0 ? [workflowHandlers(workflows)] : []),
+    ] as unknown as [Layer.Layer<never, never, Sharding.Sharding | WorkflowEngine.WorkflowEngine>]),
   );
   const expected = `Bearer ${token}`;
   return HttpRouter.serve(
@@ -259,4 +279,4 @@ export const gatewayLayer = (entities: ReadonlyArray<AnyEntity>, token: string) 
         }),
     },
   );
-};
+}

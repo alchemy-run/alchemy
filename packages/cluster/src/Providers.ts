@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import { EntityProvider, EntityResource } from "./Entity.ts";
 import { Runners, RunnersProvider } from "./Runners.ts";
 import { ShardGroups, ShardGroupsProvider } from "./ShardGroups.ts";
+import { WorkflowProvider, WorkflowResource } from "./Workflow.ts";
 
 /** Service tag bundling every Effect Cluster provider. */
 export class Providers extends Provider.ProviderCollection<Providers>()("Cluster") {}
@@ -20,8 +21,17 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([EntityResource, Runners, ShardGroups, Random])).pipe(
+  Layer.effect(
+    Providers,
+    Provider.collection([EntityResource, WorkflowResource, Runners, ShardGroups, Random]),
+  ).pipe(
     Layer.provide(
-      Layer.mergeAll(EntityProvider(), RunnersProvider(), ShardGroupsProvider(), RandomProvider()),
+      Layer.mergeAll(
+        EntityProvider(),
+        WorkflowProvider(),
+        RunnersProvider(),
+        ShardGroupsProvider(),
+        RandomProvider(),
+      ),
     ),
   );

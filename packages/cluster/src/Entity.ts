@@ -10,7 +10,6 @@ import {
 } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
 import type { Self } from "alchemy/Self";
 import { ClusterSchema, Entity as EffectEntity } from "effect/cluster";
@@ -32,6 +31,7 @@ import * as Redacted from "effect/Redacted";
 import type { Rpc, RpcClient, RpcClientError, RpcGroup } from "effect/rpc";
 import type { Scope } from "effect/Scope";
 import { makeNamespace } from "./internal/Gateway.ts";
+import { type HostedRuntimeContext, makeHostedRuntimeContext } from "./internal/HostedRuntime.ts";
 import { RunnersHost } from "./internal/RunnersHostService.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -207,11 +207,6 @@ export interface EntityClass {
   };
 }
 
-/** The entity was deployed without a runners Layer, so nothing would host it. */
-export class EntityHasNoRunners extends Data.TaggedError("Cluster.EntityHasNoRunners")<{
-  readonly message: string;
-}> {}
-
 /** A class yielded outside any runtime was called. */
 export class EntityCalledOutsideRuntime extends Data.TaggedError(
   "Cluster.EntityCalledOutsideRuntime",
@@ -226,80 +221,28 @@ export class EntityCalledOutsideRuntime extends Data.TaggedError(
  * @internal
  */
 export interface HostedEntity {
+  readonly kind: "entity";
   readonly entity: EffectEntity.Entity<string, Rpc.Any>;
   readonly instance: Effect.Effect<Record<string, unknown>, never, any>;
   readonly context: Context.Context<never>;
   readonly options: Pick<EntityProps, "maxIdleTime" | "concurrency">;
 }
 
-/** Declares the runners resources for one entity, given its collected env. @internal */
-export type DeployToRunners = (env: Record<string, unknown>) => Effect.Effect<void, never, any>;
-
-export interface EntityRuntimeContext extends HostRuntimeContext {
-  readonly Type: EntityTypeId;
-  readonly alwaysServe: true;
-  /** The Effect entity this class hosts. @internal */
-  readonly entity: EffectEntity.Entity<string, Rpc.Any>;
-  /**
-   * Called by a runners Layer while the Construction phase runs: `deploy`
-   * declares the runners that host this class, once its env is collected.
-   * @internal
-   */
-  readonly registerRunners: (deploy: DeployToRunners) => Effect.Effect<void>;
-  /** At runtime, the built class, once its Construction phase has run. @internal */
-  readonly hosted: () => HostedEntity | undefined;
-}
+export type EntityRuntimeContext = HostedRuntimeContext<HostedEntity>;
 
 /** The Effect entity behind each declared type, for the runtime context. */
 const entities = new Map<string, EffectEntity.Entity<string, Rpc.Any>>();
 
-const createRuntimeContext = (id: string): EntityRuntimeContext => {
-  const base = createHostRuntimeContext(EntityTypeId)(id);
-  let deploy: DeployToRunners | undefined;
-  let hosted: HostedEntity | undefined;
-
-  const ctx: EntityRuntimeContext = {
-    ...base,
-    Type: EntityTypeId,
-    // The Construction phase returns the instance constructor rather than a
-    // handler shape: always hand it to `serve`.
-    alwaysServe: true,
-    get entity() {
-      return entities.get(id)!;
-    },
-    registerRunners: (next) =>
-      Effect.sync(() => {
-        deploy = next;
-      }),
-    hosted: () => hosted,
-    serve: (_handler, options) =>
-      Effect.gen(function* () {
-        const instance = options?.shape as unknown as HostedEntity["instance"];
-        if (globalThis.__ALCHEMY_RUNTIME__) {
-          const props = (ctx as unknown as { Props?: EntityProps }).Props;
-          hosted = {
-            entity: ctx.entity,
-            instance,
-            context: yield* Effect.context<never>(),
-            options: { maxIdleTime: props?.maxIdleTime, concurrency: props?.concurrency },
-          };
-          return;
-        }
-        if (deploy === undefined) {
-          return yield* Effect.die(
-            new EntityHasNoRunners({
-              message:
-                `Cluster.Entity '${id}' has no runners. Provide a runners Layer to its implementation, ` +
-                `for example ClusterDocker.Runners("Default").`,
-            }),
-          );
-        }
-        // The Construction phase has run, so every Config value it read is in `env`.
-        yield* deploy(base.env);
-      }),
-  };
-  return ctx;
-};
+const createRuntimeContext = makeHostedRuntimeContext<HostedEntity>(
+  EntityTypeId,
+  (id, instance, context, props?: EntityProps) => ({
+    kind: "entity",
+    entity: entities.get(id)!,
+    instance: instance as HostedEntity["instance"],
+    context,
+    options: { maxIdleTime: props?.maxIdleTime, concurrency: props?.concurrency },
+  }),
+);
 
 type EntityPlatform = Platform<Entity, EntityServices, unknown, EntityRuntimeContext>;
 

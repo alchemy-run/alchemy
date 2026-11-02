@@ -23,7 +23,11 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { Database, type DatabaseShape } from "../Database.ts";
-import { EntityTypeId, shardGroupKey, type Entity, type EntityRuntimeContext } from "../Entity.ts";
+import { EntityTypeId, shardGroupKey, type Entity } from "../Entity.ts";
+import type { HostedClass } from "./HostedRuntime.ts";
+
+/** The resource types runners host. */
+const HOSTED_TYPES = new Set<string>([EntityTypeId, "Cluster.Workflow"]);
 import type { Providers } from "../Providers.ts";
 import { Runners, type RunnersEntity } from "../Runners.ts";
 import { GATEWAY_PORT, RUNNER_PORT } from "./Gateway.ts";
@@ -156,7 +160,10 @@ export const makeRunnersLayer = <Network, Req>(options: {
     RunnersHost,
     Effect.gen(function* () {
       const database = yield* Database;
-      const noop: RunnersHost["Service"] = { deployExternal: () => Effect.void };
+      const noop: RunnersHost["Service"] = {
+        host: () => Effect.void,
+        deployExternal: () => Effect.void,
+      };
       if (globalThis.__ALCHEMY_RUNTIME__) return noop;
       const network = options.network(database);
       if (network === undefined) {
@@ -230,26 +237,25 @@ export const makeRunnersLayer = <Network, Req>(options: {
           });
         }).pipe(Effect.provide(context));
 
-      // The generic `Self` is the class whose phase is running. When it is
-      // not an entity, the runners were given an external entity, which may
-      // be declared inside any runtime's Construction phase.
-      const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
-      if (self !== undefined && self.Type === EntityTypeId) {
-        const entity = self as unknown as Entity & EntityRuntimeContext;
-        yield* entity.registerRunners((env) =>
+      const host = (hosted: HostedClass) =>
+        hosted.registerRunners((env) =>
           deploy(
-            {
-              name: entity.LogicalId,
-              module: entity.Props.main,
-              handler: "default",
-            },
+            { name: hosted.LogicalId, module: hosted.Props.main, handler: "default" },
             env,
-            entity,
+            hosted as unknown as Entity,
           ),
         );
+
+      // The generic `Self` is the class whose phase is running. When it is
+      // not hosted on runners, the runners were given an external entity,
+      // which may be declared inside any runtime's Construction phase.
+      const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
+      if (self !== undefined && HOSTED_TYPES.has(self.Type)) {
+        yield* host(self as unknown as HostedClass);
       }
 
       return {
+        host,
         deployExternal: ({ type, main, handler, program, resource }) =>
           // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
           deploy(

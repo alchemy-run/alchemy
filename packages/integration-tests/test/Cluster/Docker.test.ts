@@ -11,6 +11,8 @@ import { FRONT_PORT } from "./fixtures/cluster.ts";
 import CountersLive from "./fixtures/counter-live.ts";
 import Front from "./fixtures/front.ts";
 import GreetersLive from "./fixtures/greeter-live.ts";
+import { WorkflowsLive } from "./fixtures/workflows/index.ts";
+import { workflowConformanceTests } from "./workflow-conformance.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -33,7 +35,7 @@ describe.skipIf(!!process.env.FAST)(
           Effect.gen(function* () {
             const front = yield* Front;
             return { front: front.name };
-          }).pipe(Effect.provide(Layer.mergeAll(CountersLive, GreetersLive))),
+          }).pipe(Effect.provide(Layer.mergeAll(CountersLive, GreetersLive, WorkflowsLive))),
         );
         expect(outputs.front).toBeTruthy();
         yield* waitForReady(baseUrl);
@@ -44,5 +46,6 @@ describe.skipIf(!!process.env.FAST)(
     afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 300_000 });
 
     conformanceTests(test as never, { baseUrl: () => baseUrl });
+    workflowConformanceTests(test as never, { baseUrl: () => baseUrl });
   },
 );

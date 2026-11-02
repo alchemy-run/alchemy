@@ -20,7 +20,12 @@ import {
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
-import { ClusterSchema, Entity as EffectEntity, RunnerAddress } from "effect/cluster";
+import {
+  ClusterSchema,
+  ClusterWorkflowEngine,
+  Entity as EffectEntity,
+  RunnerAddress,
+} from "effect/cluster";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -31,13 +36,11 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { Rpc, RpcGroup } from "effect/rpc";
-import {
-  EntityHasNoRunners,
-  PlatformDeclaration,
-  type EntityRuntimeContext,
-  type HostedEntity,
-} from "../Entity.ts";
+import type { Workflow as EffectWorkflow } from "effect/workflow";
+import { PlatformDeclaration, type HostedEntity } from "../Entity.ts";
+import type { HostedWorkflow } from "../Workflow.ts";
 import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
+import { HasNoRunners, type HostedRuntimeContext } from "./HostedRuntime.ts";
 
 const env = (name: string) => process.env[name];
 
@@ -168,18 +171,20 @@ export const bootstrap = (
   );
 
   const program = Effect.gen(function* () {
-    const hosted: HostedEntity[] = [];
+    const hosted: Array<HostedEntity | HostedWorkflow> = [];
     for (const entrypoint of entrypoints) {
       const declaration =
         (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
         entrypoint;
       const context = yield* Layer.build(entrypointLayer(declaration));
-      const runtime = Context.get(context, entrypointTag).RuntimeContext as EntityRuntimeContext;
+      const runtime = Context.get(context, entrypointTag).RuntimeContext as HostedRuntimeContext<
+        HostedEntity | HostedWorkflow
+      >;
       const built = runtime.hosted();
       if (built === undefined) {
         return yield* Effect.die(
-          new EntityHasNoRunners({
-            message: `Cluster.Entity '${runtime.id}' did not finish its Construction phase.`,
+          new HasNoRunners({
+            message: `${runtime.Type} '${runtime.id}' did not finish its Construction phase.`,
           }),
         );
       }
@@ -189,10 +194,24 @@ export const bootstrap = (
     const host = yield* runnerHost;
     const group = env("CLUSTER_SHARD_GROUPS") ?? "default";
     // Every hosted entity lives in these runners' own shard group.
-    const placed = hosted.map((entry) => ({
-      ...entry,
-      entity: entry.entity.annotate(ClusterSchema.ShardGroup, () => group),
-    }));
+    const placed = hosted
+      .filter((entry): entry is HostedEntity => entry.kind === "entity")
+      .map((entry) => ({
+        ...entry,
+        entity: entry.entity.annotate(ClusterSchema.ShardGroup, () => group),
+      }));
+    const workflows = hosted.filter((entry): entry is HostedWorkflow => entry.kind === "workflow");
+    // Each workflow runs its handler with the services its Construction phase had.
+    const workflowLayers = workflows.map((entry) =>
+      (entry.workflow as EffectWorkflow.Workflow<string, any, any, any>).toLayer(
+        (payload, executionId) =>
+          Effect.provide(entry.execute(payload, executionId), entry.context) as Effect.Effect<
+            any,
+            any,
+            never
+          >,
+      ),
+    );
     const entityLayers = placed.map((entry) =>
       entry.entity
         .toLayer(
@@ -218,13 +237,22 @@ export const bootstrap = (
     const gateway = gatewayLayer(
       placed.map((entry) => entry.entity),
       env("CLUSTER_GATEWAY_TOKEN") ?? "",
+      new Map(workflows.map((entry) => [entry.workflow._tag, entry.workflow])),
     ).pipe(Layer.provide(NodeHttpServer.layer(createServer, { port: GATEWAY_PORT })));
 
     yield* Effect.logInfo(
-      `Effect Cluster runner ${host}:${RUNNER_PORT}: ${hosted.map((entry) => entry.entity.type).join(", ")}`,
+      `Effect Cluster runner ${host}:${RUNNER_PORT}: ${hosted
+        .map((entry) => (entry.kind === "entity" ? entry.entity.type : entry.workflow._tag))
+        .join(", ")}`,
     );
     return yield* Layer.launch(
-      Layer.mergeAll(...(entityLayers as [Layer.Layer<never>]), gateway).pipe(
+      Layer.mergeAll(
+        ...(entityLayers as [Layer.Layer<never>]),
+        ...(workflowLayers as Layer.Layer<never, never, any>[]),
+        gateway,
+      ).pipe(
+        // Workflows run on Effect Cluster's own engine, over the cluster.
+        Layer.provide(ClusterWorkflowEngine.layer),
         Layer.provide(cluster),
       ),
     );
