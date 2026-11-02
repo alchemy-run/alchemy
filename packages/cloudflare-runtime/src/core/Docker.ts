@@ -650,7 +650,7 @@ export const DockerLive = Layer.effect(
           );
         }),
       pull: (tag, image) =>
-        pull({ ...image, platform: "linux/amd64" }).pipe(
+        pullIfMissing(image.imageUri, "linux/amd64").pipe(
           Effect.andThen(
             run(["tag", image.imageUri, tag]).pipe(
               Effect.mapError((cause) =>

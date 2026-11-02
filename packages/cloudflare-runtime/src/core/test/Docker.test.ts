@@ -334,6 +334,8 @@ it.effect("does not contact Docker when no Worker needs containers", () =>
   }),
 );
 
+const LOCAL_ONLY = "local-only/app:dev";
+
 const present = makeInspectStub("sha256:deadbeef");
 layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, present.layer)))((it) => {
   it.effect("skips the pull when the interceptor image is already present locally", () =>
@@ -349,6 +351,25 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, present.layer)))
         "{{.Id}}",
       ]);
       expect(present.spawned.filter(([, verb]) => verb === "pull")).toEqual([]);
+    }),
+  );
+
+  it.effect("starts a container image already present locally without pulling it", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.pull("alchemy-test:latest", { imageUri: LOCAL_ONLY });
+      expect(present.spawned).toContainEqual([
+        "docker",
+        "image",
+        "inspect",
+        LOCAL_ONLY,
+        "--format",
+        "{{.Id}}",
+      ]);
+      expect(present.spawned.filter((args) => args[1] === "pull" && args[2] === LOCAL_ONLY)).toEqual(
+        [],
+      );
+      expect(present.spawned).toContainEqual(["docker", "tag", LOCAL_ONLY, "alchemy-test:latest"]);
     }),
   );
 });
@@ -375,6 +396,20 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, absent.layer)))(
       // the user container.
       expect(absent.spawned.filter(([, verb]) => verb === "pull")).toEqual([
         ["docker", "pull", PINNED_WITHOUT_TAG],
+      ]);
+    }),
+  );
+
+  it.effect("pulls a container image that is not present locally", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.pull("alchemy-test:latest", { imageUri: LOCAL_ONLY });
+      expect(absent.spawned).toContainEqual([
+        "docker",
+        "pull",
+        LOCAL_ONLY,
+        "--platform",
+        "linux/amd64",
       ]);
     }),
   );
