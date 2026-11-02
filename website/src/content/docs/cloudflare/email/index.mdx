@@ -3,6 +3,8 @@ title: Email
 description: Cloudflare Email Routing turns a zone into a mail endpoint — enable routing, verify destinations, forward with rules and a catch-all, hand mail to a Worker, and send from Workers with the send_email binding.
 ---
 
+import DAG from "../../../../components/DAG.astro";
+
 Email Routing turns a zone you own into a mail endpoint: rules match
 inbound mail and forward it, drop it, or hand it to a Worker — and
 once routing is enabled, Workers can also *send* mail from the domain
@@ -13,6 +15,21 @@ Receiving needs a verified destination address (or a Worker); sending
 needs routing enabled on the sender's domain. The category also
 covers sending subdomains and the enterprise Email Security suite,
 both below.
+
+<DAG
+  nodes={[
+    { id: "in", label: "inbox@example.com", type: "inbound mail", layer: 0 },
+    { id: "routing", label: "Email Routing", type: "rules · catch-all", tone: "accent", layer: 1 },
+    { id: "fwd", label: "you@personal.example", type: "verified address", layer: 2 },
+    { id: "worker", label: "Worker", type: "email handler", layer: 2 },
+  ]}
+  edges={[
+    { from: "in", to: "routing" },
+    { from: "routing", to: "fwd", label: "forward" },
+    { from: "routing", to: "worker", label: "worker" },
+  ]}
+  caption="Rules match each inbound message and forward it, drop it, or hand it to a Worker."
+/>
 
 ## Enable routing on the zone
 
