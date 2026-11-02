@@ -33,6 +33,11 @@ const custom: Record<string, string> = {
   // silhouette above; brand-colored surfaces (landing marquee) use this one.
   prismaColor:
     '<path fill="#04D5E7" d="M5.2578 8.4091L0.0455 13.6308V4.8636L4.8828 0.0095V0H13.6385L5.2578 8.4091Z"/><path fill="#FE4352" d="M23.9545 8.3405L8.3231 24H0.0455V15.6572L15.6745 0H23.9545V8.3405Z"/><path fill="#FEBE29" d="M19.1078 24H10.3521L14.2685 20.0703L23.9546 10.3667V19.1364L19.1078 24Z"/>',
+  // The official Rivet mark (github.com/rivet-dev/rivet,
+  // .github/media/platforms/rivet-white.svg), used verbatim: its 68×68
+  // viewBox is scaled into the 24×24 box and white swapped for currentColor.
+  rivet:
+    '<g transform="scale(0.352941)"><rect x="3" y="3" width="62" height="62" rx="17.55" fill="none" stroke="currentColor" stroke-width="6"/><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M28.9979 19.7671C28.9979 19.3436 28.6541 19 28.2308 19H22.4809C20.5597 19 19 20.5597 19 22.4807V45.5125C19 47.4335 20.5597 48.9935 22.4809 48.9935H28.2308C28.6541 48.9935 28.9979 48.6496 28.9979 48.2263V19.7671ZM45.6293 38.7439C44.7861 37.231 42.8732 36.0028 41.3604 36.0028H32.5577C32.0922 36.0028 31.9249 36.3807 32.1843 36.8462L37.4298 46.2586C38.273 47.7717 40.1858 49 41.6987 49H50.5012C50.9667 49 51.1342 48.6221 50.8745 48.1563L45.6293 38.7439ZM45.9963 25.9983C45.9963 22.1359 42.8604 19 38.9977 19H32.8227C32.3682 19 31.9994 19.3688 31.9994 19.8233V32.1734C31.9994 32.6278 32.3682 32.9969 32.8227 32.9969H38.9977C42.8604 32.9969 45.9963 29.861 45.9963 25.9983Z"/></g>',
   // Stripe's 2025 rebrand mark (svgl.app/library/stripe.svg, viewBox
   // "100 100 312 312"), scaled into the 24×24 box. simple-icons still
   // ships the pre-rebrand "S" glyph.
@@ -67,7 +72,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Stripe: c("stripe"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
-  Rivet: l("boxes"),
+  Rivet: c("rivet"),
   Drizzle: b("drizzle"),
   SQL: l("database"),
   Command: l("square-terminal"),
@@ -137,7 +142,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Axiom: c("axiom"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
-  Rivet: l("boxes"),
+  Rivet: c("rivet"),
   Drizzle: b("drizzle"),
   "Prisma ORM": b("prisma"),
   SQL: l("database"),
