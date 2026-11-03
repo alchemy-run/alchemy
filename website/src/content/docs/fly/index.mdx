@@ -5,7 +5,7 @@ description: Run Effect programs on Fly.io with Alchemy. Declare Services, Machi
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/fly` runs your Effect programs on Fly.io: small virtual machines, in the regions you choose, behind a proxy that sends each request to the nearest one. A Service is a class that holds its own handler. The Volume, database and other Services it uses are declared next to it, in the same TypeScript program.
+Fly.io runs your programs as small virtual machines in data centers around the world. You choose the regions, Fly starts Machines there, and its proxy sends each request to the nearest one that's running. Each Machine is a whole server with its own disk if you want one, and Fly runs Postgres, Redis and object storage alongside your apps, all on one private network.
 
 <DAG
   nodes={[
@@ -15,8 +15,8 @@ import DAG from "../../../components/DAG.astro";
     { id: "vol", label: "Data", type: "Volume", col: 1, row: 1 },
   ]}
   edges={[
-    { from: "gateway", to: "users", label: "bindService" },
-    { from: "users", to: "pg", label: "ConnectPostgres" },
+    { from: "gateway", to: "users", label: "flycast" },
+    { from: "users", to: "pg", label: "private network" },
     { from: "gateway", to: "vol" },
   ]}
   caption="Services reach each other and their data over Fly's private network."

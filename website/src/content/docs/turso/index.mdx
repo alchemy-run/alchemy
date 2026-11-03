@@ -5,7 +5,7 @@ description: Create Turso SQLite databases and query them from your Workers.
 
 import DAG from "../../../components/DAG.astro";
 
-Turso hosts SQLite databases for you. Create them in the same Stack as your Workers, and query them with Effect SQL or Drizzle.
+Turso hosts SQLite databases for you. Each database is a whole SQLite file, run by Turso and reached over the network, and databases are cheap enough to have thousands: one per customer, one per pull request, one per user.
 
 <DAG
   nodes={[

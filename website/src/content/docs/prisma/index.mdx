@@ -5,7 +5,7 @@ description: Declare Prisma Postgres databases, connections, branches and Comput
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/prisma` puts Prisma's data platform in your Stack: Prisma Postgres for the database, and Prisma Compute for the app that uses it. A project, its databases, connections and branches are declarations, and Compute apps are built and deployed from the same program. Under `alchemy dev`, the Stack runs against a local Postgres with nothing to create.
+Prisma's data platform runs two things: Prisma Postgres, a serverless Postgres database, and Prisma Compute, a runtime for the apps that use it. A project holds both, so an app and its database run side by side and the app finds its database without any configuration.
 
 <DAG
   nodes={[
@@ -18,7 +18,7 @@ import DAG from "../../../components/DAG.astro";
     { from: "project", to: "db" },
     { from: "project", to: "app" },
     { from: "db", to: "app", label: "DATABASE_URL" },
-    { from: "db", to: "worker", label: "Prisma.Connect" },
+    { from: "db", to: "worker", label: "connection" },
   ]}
 />
 

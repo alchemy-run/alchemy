@@ -5,7 +5,7 @@ description: Sell subscriptions and onboard merchants from a Cloudflare Worker â
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/stripe` puts your billing in the same TypeScript program as the app that bills. The Product and Price are declared on the Worker that sells them. The Worker calls Stripe through bindings that each carry their own permission. A webhook is one call that creates the endpoint and hands your handler a typed event. `alchemy deploy` ships all of it, and `alchemy destroy` takes it down without leaving anything behind in the Dashboard.
+Stripe takes payments. It holds what you sell, products and their prices, who buys it, customers, and the record of every payment and subscription. Its hosted pages, Checkout and the Billing Portal, collect card details so you never touch them, Connect lets a platform pay other businesses, and webhooks tell your app what happened.
 
 <DAG
   nodes={[

@@ -5,7 +5,7 @@ description: Run containers and Effect programs on any Kubernetes cluster with A
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/kubernetes` runs your workloads on any Kubernetes cluster: kind on your laptop, k3s on a VM, an on-prem fleet, or EKS, GKE and AKS. Servers, jobs, raw objects and Helm charts are resources in TypeScript. Alchemy builds your programs into images, applies everything with server-side apply, tracks it in state and deletes it on destroy.
+Kubernetes runs containers on a group of machines and keeps them running. You describe what should exist, three copies of this server, a job every night, an address in front of them, and the cluster works continuously to make it so, restarting what crashes and moving what was on a machine that died. It runs anywhere: on your laptop, on your own servers, or as a managed service like EKS, GKE or AKS.
 
 <DAG
   nodes={[

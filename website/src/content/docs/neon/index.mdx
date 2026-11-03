@@ -5,7 +5,7 @@ description: Declare Neon Postgres projects, branches and roles, plus Functions,
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/neon` puts your Neon Postgres, and everything Neon runs around it, in the same Stack as your app. A project, its branches and roles are declarations, and migrations run on every deploy. Functions, buckets, Auth and the AI Gateway attach to a branch, so every preview stage can have its own copy of all of them.
+Neon is serverless Postgres. It keeps your data separate from the compute that queries it, so compute scales with load and stops when idle, and a whole database, data included, can be branched in a second. Around the database, Neon also runs Functions, object storage, user sign-in, an HTTP Data API and an AI gateway, each attached to a branch.
 
 <DAG
   nodes={[

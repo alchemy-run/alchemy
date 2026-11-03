@@ -5,9 +5,7 @@ description: Build on Cloudflare with Alchemy. Declare Workers, Durable Objects,
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/cloudflare` puts your Cloudflare app and its infrastructure in one TypeScript program. A Worker holds its own handler. The Bucket, database and Durable Objects it uses are declared next to it, and each one reaches the Worker as a typed binding.
-
-Deploy it to your account with `alchemy deploy`, or run it on your machine with `alchemy dev`, on the same runtime Cloudflare uses.
+Cloudflare runs one network in more than 300 cities, and runs your code in every one of them. A Worker answers each request in the city nearest the person who sent it, starting in milliseconds. Around Workers, Cloudflare offers storage for every shape of data, R2, KV and D1, stateful Durable Objects, queues, workflows and containers, all reached from a Worker through bindings, and it hosts your domains and their DNS.
 
 <DAG
   nodes={[
@@ -21,7 +19,7 @@ Deploy it to your account with `alchemy deploy`, or run it on your machine with 
     { from: "worker", to: "counter", label: "binding" },
     { from: "uploads", to: "jobs", dashed: true },
   ]}
-  caption="The Worker reaches every resource through a binding declared in its own code."
+  caption="A Worker reaches each resource through a binding. Dashed edges are messages delivered later."
 />
 
 ## A taste

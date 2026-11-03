@@ -5,9 +5,7 @@ description: Build on AWS with Alchemy. Declare Lambda Functions, containers, ta
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/aws` puts your AWS infrastructure and the code that runs on it in one TypeScript program. A Lambda Function is a class that holds its own handler. The Bucket and Queue it uses are declared next to it. Every call it makes to them is a binding, and the bindings write its IAM policy.
-
-Deploy it to your account with `alchemy deploy`, or run it on your machine with `alchemy dev`, against a local emulator, with no account at all.
+Amazon Web Services is the largest cloud: a few hundred services for running code, storing data, moving messages and serving traffic, in data centers around the world. Everything you create lives in an account and a region, and IAM decides what may call what. Most apps combine a handful of them: a place for code to run, like Lambda or ECS, and the S3 Buckets, DynamoDB Tables and SQS Queues it uses.
 
 <DAG
   nodes={[
@@ -21,7 +19,7 @@ Deploy it to your account with `alchemy deploy`, or run it on your machine with 
     { from: "api", to: "jobs", label: "sqs:SendMessage" },
     { from: "jobs", to: "worker", dashed: true },
   ]}
-  caption="Each edge is a binding in the code, and an IAM statement on the caller's role."
+  caption="Each edge is a permission in the caller's IAM role. Dashed edges are events AWS delivers."
 />
 
 ## A taste

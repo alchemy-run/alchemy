@@ -5,7 +5,7 @@ description: Images, containers, networks, volumes and Swarm services as Stack r
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/docker` manages images, containers, networks, volumes and Swarm services as resources in your Stack, next to your cloud resources. It drives the `docker` command's active context, so it works with Docker Desktop, a remote engine over SSH, or a CI daemon, and needs no credentials of its own.
+Docker packages a program with everything it needs, its runtime, libraries and files, into an image, and runs images as isolated containers. The same image runs the same way on your laptop, in CI and on a server, which is why images are what most platforms deploy. An engine on each machine builds images and runs containers, attached to networks and volumes.
 
 <DAG
   nodes={[

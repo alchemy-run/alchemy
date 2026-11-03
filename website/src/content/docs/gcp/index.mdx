@@ -5,9 +5,7 @@ description: Build on Google Cloud with Alchemy. Declare Cloud Run services, job
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/gcp` puts your Google Cloud infrastructure and the code that runs on it in one TypeScript program. A Cloud Run service is a class that holds its own handler. The database and topic it uses are declared next to it. Every call it makes to them is a binding, and each binding grants the service's own service account one role on one resource.
-
-Deploy it to your project with `alchemy deploy`.
+Google Cloud is a set of services for running code and keeping data: Cloud Run for containers that scale to zero, Firestore and Cloud SQL for data, Cloud Storage for files, Pub/Sub for messages, BigQuery for analytics. Everything lives in a project, and IAM grants each identity, including the service accounts your code runs as, a role on each resource.
 
 <DAG
   nodes={[
@@ -21,7 +19,7 @@ Deploy it to your project with `alchemy deploy`.
     { from: "api", to: "events", label: "pubsub.publisher" },
     { from: "events", to: "worker", dashed: true },
   ]}
-  caption="Each edge is a binding in the code, and a role on the resource for the caller's service account."
+  caption="Each edge is a role the caller's service account holds on the resource."
 />
 
 ## A taste

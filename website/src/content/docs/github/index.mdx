@@ -5,7 +5,7 @@ description: Repositories, Actions secrets, variables and environments, webhooks
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/github` manages repositories, Actions configuration, webhooks and pull request comments as resources. It's the glue for CI/CD: your Stack creates a scoped cloud credential and stores it as an Actions secret in the same deploy, so nobody pastes tokens into repository settings. Workers can subscribe to repository events directly.
+GitHub hosts your code, and it's part of how your code reaches production. Actions builds, tests and deploys on every push, using credentials kept in its secrets and variables. Environments guard production behind reviews. Webhooks tell other systems when something happens in a repository, and pull requests are where changes, and their previews, are discussed.
 
 <DAG
   nodes={[

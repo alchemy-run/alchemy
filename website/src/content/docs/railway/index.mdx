@@ -5,7 +5,7 @@ description: Run Effect programs on Railway with Alchemy. Declare Projects, Serv
 
 import DAG from "../../../components/DAG.astro";
 
-`@alchemy.run/railway` runs your Effect programs as Railway services. A Service is a class that holds its own handler. Alchemy bundles it, and Railway builds and runs it in a project, next to the databases, volumes and buckets it uses, all declared in the same TypeScript program.
+Railway runs containers for you. You put services in a project, your API, a worker, a Postgres database, and Railway builds each one, runs it, gives it a URL, and connects the services in a project over a private network. Databases, volumes and buckets sit beside them, and you pay for the CPU and memory you actually use.
 
 <DAG
   nodes={[
@@ -16,8 +16,8 @@ import DAG from "../../../components/DAG.astro";
   ]}
   edges={[
     { from: "project", to: "api" },
-    { from: "api", to: "pg", label: "ConnectPostgres" },
-    { from: "api", to: "vol", label: "MountVolume" },
+    { from: "api", to: "pg", label: "railway.internal" },
+    { from: "api", to: "vol", label: "mounted" },
   ]}
 />
 
