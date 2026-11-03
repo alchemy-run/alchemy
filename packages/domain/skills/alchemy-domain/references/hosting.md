@@ -137,7 +137,7 @@ More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#k
 
 ## Conveniences for internal tools
 
-`toHttpApi`, `toMcp` and `toCli` publish an Api as it is: every call it serves, with the domain's own payloads, replies and state as the wire format. That is quick for internal tooling (scripts, admin consoles, an agent working on your own data), but it decides what is exposed in one place (the Api's lists) and what each call returns in another (the aggregate, view or command). A reply or view that later gains a private field is published without anyone touching the exposure. Don't reach for them by default, and don't use them for a public or partner surface: write that API yourself (see [Public and partner APIs](#public-and-partner-apis)).
+`toHttpApi`, `toMcp` and `toCli` publish the calls their `expose` option lists, and nothing else: a command by its name (`"DepositMoney"`), a read as `<Name>.<operation>` (`"AccountSummary.get"`). A name the Api does not serve is a type error. They use the domain's own payloads, replies and state as the wire format. That is quick for internal tooling (scripts, admin consoles, an agent working on your own data), but what each call returns is decided elsewhere (the aggregate, view or command), so a reply or view that later gains a private field is published without anyone touching `expose`. Don't reach for them by default, and don't use them for a public or partner surface: write that API yourself (see [Public and partner APIs](#public-and-partner-apis)).
 
 ### Plain HTTP and OpenAPI
 
@@ -150,8 +150,10 @@ import * as Etag from "effect/http/Etag";
 import * as HttpPlatform from "effect/http/HttpPlatform";
 import * as HttpRouter from "effect/http/HttpRouter";
 
-// every call the Api serves; a typed failure answers at its `httpApiStatus`, else 422
-const BankHttp = DomainHttp.toHttpApi(CustomerApi);
+// only the listed calls; a typed failure answers at its `httpApiStatus`, else 422
+const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
+  expose: ["DepositMoney", "AccountSummary.get", "AccountSummary.snapshot", "AccountSummary.list", "AccountSummary.events"],
+});
 
 // in the Worker's init, inside `.pipe(Effect.provide(BankLive))`
 return {
@@ -193,18 +195,6 @@ export class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 
 // GET /AccountSummary/a-2 as someone else -> 403 { "_tag": "NotOwner" }
 ```
 
-What the Api serves is what is published, so give each audience its own Api:
-
-```ts
-export class OpsApi extends Domain.Api("OpsApi", {
-  model: Bank,
-  commands: ["DepositMoney"],
-  views: ["AccountSummary"],
-  streams: [],
-  aggregates: [],
-}) {}
-const OpsHttp = DomainHttp.toHttpApi(OpsApi);
-```
 
 To serve the group next to others or under a prefix, add it to your own `HttpApi`:
 
@@ -217,14 +207,16 @@ More: [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api).
 
 ### MCP
 
-`toMcp` from `@alchemy.run/domain/Ai` serves each call of an Api that returns once as an MCP tool, named `<api>_<name>_<operation>`:
+`toMcp` from `@alchemy.run/domain/Ai` serves each call `expose` lists (any call that returns once) as an MCP tool, named `<api>_<name>_<operation>`:
 
 ```ts
 import * as DomainAi from "@alchemy.run/domain/Ai";
 import { McpProtocol, McpServer } from "effect/ai";
 
 // packages/server/src/BankMcp.ts
-export const BankMcp = DomainAi.toMcp(AgentApi).pipe(
+export const BankMcp = DomainAi.toMcp(CustomerApi, {
+  expose: ["DepositMoney", "AccountSummary.get"],
+}).pipe(
   Layer.provide(
     McpServer.layerHttp({ name: "bank", version: "1.0.0", path: "/mcp", protocols: [McpProtocol.v2025_11_25] }),
   ),
@@ -237,7 +229,8 @@ On a Worker, use `McpServer.layerHttpRequestScoped` with `McpProtocol.v2026_07_2
 `toToolkit` gives the same tools to an agent in the app, acting for the headers you give it:
 
 ```ts
-const { toolkit, layer } = DomainAi.toToolkit(AgentApi, {
+const { toolkit, layer } = DomainAi.toToolkit(CustomerApi, {
+  expose: ["RequestTransfer", "AccountSummary.get"],
   headers: Effect.map(CurrentSession, (s) => ({ authorization: `Bearer ${s.token}` })),
 });
 const answer = LanguageModel.generateText({ prompt, toolkit }).pipe(Effect.provide(layer));
@@ -247,12 +240,13 @@ More: [MCP](https://alchemy.run/domain/mcp).
 
 ### CLI
 
-`toCli` from `@alchemy.run/domain/Cli` builds an Effect CLI command that calls the deployed Api over HTTP, one kebab-case subcommand per command, view, stream or aggregate:
+`toCli` from `@alchemy.run/domain/Cli` builds an Effect CLI command that calls the deployed Api over HTTP, one kebab-case subcommand per exposed call that returns once:
 
 ```ts
 // packages/cli/src/bank.ts
 const bank = toCli(CustomerApi, {
   name: "bank",
+  expose: ["DepositMoney", "AccountSummary.get"],
   headers: Config.redacted("BANK_TOKEN").pipe(
     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
   ),
