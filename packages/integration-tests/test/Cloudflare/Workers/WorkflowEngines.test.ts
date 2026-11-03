@@ -87,6 +87,7 @@ describe.concurrent.each([
     // 10 seconds, then the one-second sleep. Cloudflare Workflows retries a
     // step with its own policy.
     recoveryWithinMillis: engine === "native" ? undefined : 30_000,
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"],
     timeout: 90_000,
     unsupported: engine === "native" ? { raceAll: "aren't supported on Cloudflare Workflows" } : {},
   });

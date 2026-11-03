@@ -86,7 +86,7 @@ const amounts = (id: string) =>
 
 const history = [deposit("a-1", 1), deposit("a-1", 2), deposit("a-2", 5)];
 
-describe("Domain lazy views", () => {
+describe("Domain lazy views", { tags: ["unit", "local"] }, () => {
   it.live("a lazy view's key reads its history the first time it is read", () =>
     Effect.gen(function* () {
       const bank = platform();
