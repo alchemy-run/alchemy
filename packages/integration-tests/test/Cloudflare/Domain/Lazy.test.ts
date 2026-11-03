@@ -69,58 +69,62 @@ const deposits = (url: string, account: string) =>
   );
 
 for (const dev of [true, false]) {
-  describe(dev ? "local lazy views" : "live lazy views", () => {
-    const { test } = Test.make({ providers: Cloudflare.providers(), dev });
+  describe(
+    dev ? "local lazy views" : "live lazy views",
+    { tags: ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"] },
+    () => {
+      const { test } = Test.make({ providers: Cloudflare.providers(), dev });
 
-    test.provider(
-      `${dev ? "local" : "live"}: a lazy view added later fills each key when first read`,
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const { worker } = yield* stack.deploy(
-            Effect.gen(function* () {
-              return { worker: yield* WorkerV1 };
-            }),
-          );
-          const url = worker.url!.replace(/\/+$/, "");
-          yield* serving(url, "v1");
-          yield* deposit(url, "a-1", 10);
-          yield* deposit(url, "a-1", 20);
-          yield* deposit(url, "a-2", 5);
+      test.provider(
+        `${dev ? "local" : "live"}: a lazy view added later fills each key when first read`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const { worker } = yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV1 };
+              }),
+            );
+            const url = worker.url!.replace(/\/+$/, "");
+            yield* serving(url, "v1");
+            yield* deposit(url, "a-1", 10);
+            yield* deposit(url, "a-1", 20);
+            yield* deposit(url, "a-2", 5);
 
-          // Adding a lazy view starts no backfill: the deploy has nothing to wait for.
-          const plan = yield* stack.plan(
-            Effect.gen(function* () {
-              return { worker: yield* WorkerLazy };
-            }),
-          );
-          expect(plan.resources["Ledger.DomainBackfillRun"]).toBeUndefined();
-          yield* stack.deploy(
-            Effect.gen(function* () {
-              return { worker: yield* WorkerLazy };
-            }),
-          );
-          yield* serving(url, "v2-lazy");
+            // Adding a lazy view starts no backfill: the deploy has nothing to wait for.
+            const plan = yield* stack.plan(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerLazy };
+              }),
+            );
+            expect(plan.resources["Ledger.DomainBackfillRun"]).toBeUndefined();
+            yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerLazy };
+              }),
+            );
+            yield* serving(url, "v2-lazy");
 
-          // The first read of each key reads its account's history.
-          expect(yield* deposits(url, "a-1")).toEqual([10, 20]);
-          expect(yield* deposits(url, "a-2")).toEqual([5]);
-          expect(JSON.parse(yield* call(url, "GET", "/history"))).toEqual({ complete: true });
+            // The first read of each key reads its account's history.
+            expect(yield* deposits(url, "a-1")).toEqual([10, 20]);
+            expect(yield* deposits(url, "a-2")).toEqual([5]);
+            expect(JSON.parse(yield* call(url, "GET", "/history"))).toEqual({ complete: true });
 
-          // After that, new deposits arrive live.
-          yield* deposit(url, "a-1", 30);
-          const after = yield* deposits(url, "a-1").pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("1 second"),
-              until: (amounts) => amounts?.length === 3,
-              times: 30,
-            }),
-          );
-          expect(after).toEqual([10, 20, 30]);
+            // After that, new deposits arrive live.
+            yield* deposit(url, "a-1", 30);
+            const after = yield* deposits(url, "a-1").pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (amounts) => amounts?.length === 3,
+                times: 30,
+              }),
+            );
+            expect(after).toEqual([10, 20, 30]);
 
-          yield* stack.destroy();
-        }),
-      { timeout: 600_000 },
-    );
-  });
+            yield* stack.destroy();
+          }),
+        { timeout: 600_000 },
+      );
+    },
+  );
 }

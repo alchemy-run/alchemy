@@ -190,18 +190,23 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
     { timeout: 30_000 },
   );
 
-  // Miniflare's outbound interceptor: outbound fetches carry `CF-Worker`
-  // with the Worker's zone and drop `CF-Connecting-IP`.
+  // The outbound interceptor drops `CF-Connecting-IP`. Unlike Miniflare it
+  // adds no `CF-Worker`: Cloudflare-fronted sites answer 403 to one sent
+  // from a developer machine (#2965).
   it.effect(
-    "outbound fetches carry CF-Worker and drop CF-Connecting-IP",
+    "outbound fetches drop CF-Connecting-IP and add no CF-Worker",
     () =>
       Effect.gen(function* () {
         const seen: Array<{ cfWorker?: string; connectingIp?: string }> = [];
+        // Only the Worker's own requests count: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with `GET /`.
         const echo = NodeHttp.createServer((req, res) => {
-          seen.push({
-            cfWorker: req.headers["cf-worker"] as string | undefined,
-            connectingIp: req.headers["cf-connecting-ip"] as string | undefined,
-          });
+          if (req.url === "/echo") {
+            seen.push({
+              cfWorker: req.headers["cf-worker"] as string | undefined,
+              connectingIp: req.headers["cf-connecting-ip"] as string | undefined,
+            });
+          }
           res.end("ok");
         });
         yield* Effect.acquireRelease(
@@ -210,33 +215,28 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
           ),
           () => Effect.promise(() => new Promise<void>((resolve) => echo.close(() => resolve()))),
         );
-        const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/`;
+        const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/echo`;
         const runtime = yield* Runtime.Runtime;
-        const start = (name: string, zone?: string) =>
-          runtime.start({
-            name,
-            zone,
-            compatibilityDate: "2026-03-10",
-            compatibilityFlags: [],
-            bindings: [],
-            modules: [
-              {
-                name: "main.js",
-                type: "ESModule",
-                content: `export default {
-  fetch: () => fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } }),
+        const url = yield* runtime.start({
+          name: "outbound",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default {
+  fetch: (request) =>
+    new URL(request.url).pathname === "/outbound"
+      ? fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } })
+      : new Response("Not Found", { status: 404 }),
 };`,
-              },
-            ],
-          });
-        const defaultZone = yield* start("outbound-default");
-        yield* Effect.promise(() => fetch(defaultZone).then((r) => r.text()));
-        const customZone = yield* start("outbound-zone", "example.com");
-        yield* Effect.promise(() => fetch(customZone).then((r) => r.text()));
-        expect(seen).toEqual([
-          { cfWorker: "outbound-default.example.com", connectingIp: undefined },
-          { cfWorker: "example.com", connectingIp: undefined },
-        ]);
+            },
+          ],
+        });
+        yield* Effect.promise(() => fetch(new URL("/outbound", url)).then((r) => r.text()));
+        expect(seen).toEqual([{ cfWorker: undefined, connectingIp: undefined }]);
       }).pipe(Effect.scoped),
     { timeout: 30_000 },
   );
@@ -306,8 +306,10 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
             .toBuffer(),
         );
         const via: Array<string | undefined> = [];
+        // Only the Worker's own requests count: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with `GET /`.
         const origin = NodeHttp.createServer((req, res) => {
-          via.push(req.headers.via as string | undefined);
+          if (req.url === "/image.png") via.push(req.headers.via as string | undefined);
           res.setHeader("content-type", "image/png");
           res.end(png);
         });
@@ -329,12 +331,15 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
               name: "main.js",
               type: "ESModule",
               content: `export default {
-  fetch: () => fetch(${JSON.stringify(target)}, { cf: { image: { width: 4, format: "png" } } }),
+  fetch: (request) =>
+    new URL(request.url).pathname === "/image"
+      ? fetch(${JSON.stringify(target)}, { cf: { image: { width: 4, format: "png" } } })
+      : new Response("Not Found", { status: 404 }),
 };`,
             },
           ],
         });
-        const response = yield* Effect.promise(() => fetch(url));
+        const response = yield* Effect.promise(() => fetch(new URL("/image", url)));
         const body = Buffer.from(yield* Effect.promise(() => response.arrayBuffer()));
         const metadata = yield* Effect.promise(() => sharp(body).metadata());
         expect({

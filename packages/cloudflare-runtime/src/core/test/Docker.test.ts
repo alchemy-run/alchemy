@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -200,7 +201,12 @@ const SpawnerStub = Layer.succeed(
   }),
 );
 
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))((it) => {
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, SpawnerStub),
+  ),
+)((it) => {
   it.effect("pull strips the tag from digest-pinned refs", () =>
     Effect.gen(function* () {
       spawned.length = 0;
@@ -313,7 +319,10 @@ it.effect("interrupts Docker initialization when its owning scope closes", () =>
       yield* Effect.scoped(
         Effect.gen(function* () {
           const context = yield* Layer.build(
-            Layer.provide(DockerLive, Layer.merge(NodeServices.layer, initialization.layer)),
+            Layer.provide(
+              DockerLive,
+              Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, initialization.layer),
+            ),
           );
           yield* Effect.forkChild(Context.get(context, Docker).getWorkerdDockerConfiguration);
           yield* Deferred.await(started);
@@ -328,14 +337,24 @@ it.effect("does not contact Docker when no Worker needs containers", () =>
   Effect.gen(function* () {
     const idle = makeInspectStub("sha256:deadbeef");
     yield* Effect.scoped(
-      Layer.build(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, idle.layer))),
+      Layer.build(
+        Layer.provide(
+          DockerLive,
+          Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, idle.layer),
+        ),
+      ),
     );
     expect(idle.spawned).toEqual([]);
   }),
 );
 
 const present = makeInspectStub("sha256:deadbeef");
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, present.layer)))((it) => {
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, present.layer),
+  ),
+)((it) => {
   it.effect("skips the pull when the interceptor image is already present locally", () =>
     Effect.gen(function* () {
       const docker = yield* Docker;
@@ -354,7 +373,12 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, present.layer)))
 });
 
 const absent = makeInspectStub("");
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, absent.layer)))((it) => {
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, absent.layer),
+  ),
+)((it) => {
   it.effect("pulls the interceptor image when it is not present locally", () =>
     Effect.gen(function* () {
       const docker = yield* Docker;
@@ -428,7 +452,11 @@ describe("buildFailureHint", () => {
 layer(
   Layer.provide(
     DockerLive,
-    Layer.merge(NodeServices.layer, makeFailingStub("build", "unknown flag: --load")),
+    Layer.mergeAll(
+      NodeServices.layer,
+      SecureRandom.layerWebCrypto,
+      makeFailingStub("build", "unknown flag: --load"),
+    ),
   ),
 )((it) => {
   it.effect("build fails when docker build exits non-zero", () =>
@@ -458,8 +486,9 @@ layer(
 layer(
   Layer.provide(
     DockerLive,
-    Layer.merge(
+    Layer.mergeAll(
       NodeServices.layer,
+      SecureRandom.layerWebCrypto,
       makeFailingStub("tag", "Error response from daemon: no such image"),
     ),
   ),
@@ -520,28 +549,36 @@ const makePullStub = (pullExitCode: number, localId: string) => {
 const LOCAL_ONLY = "local-only/app:dev";
 
 const presentAndPullable = makePullStub(0, "sha256:deadbeef");
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, presentAndPullable.layer)))(
-  (it) => {
-    it.effect("pull refreshes an image that is already present locally", () =>
-      Effect.gen(function* () {
-        const docker = yield* Docker;
-        yield* docker.pull("alchemy-test:latest", { imageUri: "myorg/app:latest" });
-        // A mutable tag must pick up a newly pushed image, and the amd64
-        // variant must replace a native build under the same tag.
-        expect(presentAndPullable.spawned).toContainEqual([
-          "docker",
-          "pull",
-          "myorg/app:latest",
-          "--platform",
-          "linux/amd64",
-        ]);
-      }),
-    );
-  },
-);
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, presentAndPullable.layer),
+  ),
+)((it) => {
+  it.effect("pull refreshes an image that is already present locally", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.pull("alchemy-test:latest", { imageUri: "myorg/app:latest" });
+      // A mutable tag must pick up a newly pushed image, and the amd64
+      // variant must replace a native build under the same tag.
+      expect(presentAndPullable.spawned).toContainEqual([
+        "docker",
+        "pull",
+        "myorg/app:latest",
+        "--platform",
+        "linux/amd64",
+      ]);
+    }),
+  );
+});
 
 const localOnly = makePullStub(1, "sha256:deadbeef");
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, localOnly.layer)))((it) => {
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, localOnly.layer),
+  ),
+)((it) => {
   it.effect("pull uses the local image when the registry has none", () =>
     Effect.gen(function* () {
       const docker = yield* Docker;
@@ -557,7 +594,12 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, localOnly.layer)
 });
 
 const missing = makePullStub(1, "");
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, missing.layer)))((it) => {
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, missing.layer),
+  ),
+)((it) => {
   it.effect("pull fails when the image is neither pullable nor local", () =>
     Effect.gen(function* () {
       const docker = yield* Docker;

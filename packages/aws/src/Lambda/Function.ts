@@ -27,6 +27,7 @@ import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -1401,6 +1402,7 @@ export const Function: Platform<
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
         // straight from `process.env` — see `unpackEnvValue` for why this
         // must never resolve through `Config.String`.
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read the raw env, Config would unwrap packed values and recurse (see unpackEnvValue)
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         ctx.listen(
@@ -2215,7 +2217,7 @@ export const FunctionProvider = () =>
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
-        const waitStartedAt = Date.now();
+        const waitStartedAt = yield* Clock.currentTimeMillis;
 
         // A just-created role (or its freshly attached policies, KMS grant
         // principal, or security group) isn't visible to Lambda yet.
@@ -2233,8 +2235,12 @@ export const FunctionProvider = () =>
           e._tag === "SecurityGroupNotFound";
 
         const noteCreateDependencyWait = () =>
-          session.note(
-            `Waiting for Lambda creation dependencies to propagate: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
+          Clock.currentTimeMillis.pipe(
+            Effect.flatMap((now) =>
+              session.note(
+                `Waiting for Lambda creation dependencies to propagate: ${functionName} (${Math.ceil((now - waitStartedAt) / 1000)}s)`,
+              ),
+            ),
           );
 
         const tags = yield* createInternalTags(id);

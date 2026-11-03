@@ -21,6 +21,8 @@ import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
 const bank = toCli(CustomerApi, {
   name: "bank",
+  // Only these calls get a subcommand.
+  expose: ["DepositMoney", "WithdrawMoney", "AccountSummary.get", "Statement.list"],
   // The session middleware runs on the server; the CLI sends its token.
   headers: Config.redacted("BANK_TOKEN").pipe(
     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
@@ -115,4 +117,4 @@ class Reserved extends Domain.Command("Reserved", {
 // bank reserved ... -> DefinitionError: field `json` would be the flag --json, which the CLI reserves
 ```
 
-To give a terminal fewer calls, give it its own Api, as in [Give each kind of client its own Api](/domain/api#give-each-kind-of-client-its-own-api).
+A call that `expose` leaves out has no subcommand.

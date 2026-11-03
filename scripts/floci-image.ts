@@ -34,6 +34,7 @@ export const preferLocalFlociImage = Effect.fn(function* (label: string) {
     .pipe(Effect.orElseSucceed(() => 1));
   if (exitCode === 0) {
     yield* Effect.sync(() => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes the real env so child test processes inherit it
       process.env.ALCHEMY_FLOCI_IMAGE = "floci:dev";
     });
     yield* Console.log(`${label}: using locally built floci:dev image`);

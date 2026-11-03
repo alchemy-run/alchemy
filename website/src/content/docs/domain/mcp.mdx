@@ -3,11 +3,11 @@ title: MCP
 description: Give an agent the commands and reads of an Api as tools, inside the app with Effect AI, or outside it over MCP.
 ---
 
-An Api already lists what one kind of client may do. `@alchemy.run/domain/Ai` turns that list into tools for an agent: an Effect AI `Toolkit` for an agent inside your app, and an MCP server for agents outside it. You declare nothing twice. Each tool calls the Api, so its middleware, its `decide` and `validate` checks and its rejections work for an agent as they do for every other client.
+`@alchemy.run/domain/Ai` turns the calls of an Api you list into tools for an agent: an Effect AI `Toolkit` for an agent inside your app, and an MCP server for agents outside it. Each tool calls the Api, so its middleware, its `decide` and `validate` checks and its rejections work for an agent as they do for every other client.
 
 ## Tools from an Api
 
-`DomainAi.toToolkit` makes one tool for each call of the Api that returns once:
+`DomainAi.toToolkit` makes one tool for each call you list in `expose`, and none you don't. Any call that returns once can be a tool:
 
 | Served    | Tools                 | Kind of tool |
 | --------- | --------------------- | ------------ |
@@ -21,9 +21,11 @@ An Api already lists what one kind of client may do. `@alchemy.run/domain/Ai` tu
 ```typescript
 import * as DomainAi from "@alchemy.run/domain/Ai";
 
-const { toolkit, layer } = DomainAi.toToolkit(CustomerApi);
+const { toolkit, layer } = DomainAi.toToolkit(CustomerApi, {
+  expose: ["DepositMoney", "AccountSummary.get", "AccountSummary.list"],
+});
 Object.keys(toolkit.tools);
-// ["CustomerApi_DepositMoney_send", "CustomerApi_AccountSummary_get", "CustomerApi_AccountSummary_list", ...]
+// ["CustomerApi_DepositMoney_send", "CustomerApi_AccountSummary_get", "CustomerApi_AccountSummary_list"]
 ```
 
 A tool is named `<api>_<name>_<operation>`, with any character other than a letter, a digit, `_` or `-` turned into `_`, since model providers and MCP clients accept only those:
@@ -63,6 +65,7 @@ import { LanguageModel } from "effect/ai";
 import * as Effect from "effect/Effect";
 
 const { toolkit, layer } = DomainAi.toToolkit(CustomerApi, {
+  expose: ["RequestTransfer", "AccountSummary.get"],
   // Who the agent acts for: the signed-in customer's session.
   headers: Effect.map(CurrentSession, (session) => ({ authorization: `Bearer ${session.token}` })),
 });
@@ -85,7 +88,9 @@ import { McpProtocol, McpServer } from "effect/ai";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
 
-const BankMcp = DomainAi.toMcp(CustomerApi).pipe(
+const BankMcp = DomainAi.toMcp(CustomerApi, {
+  expose: ["DepositMoney", "AccountSummary.get"],
+}).pipe(
   Layer.provide(
     McpServer.layerHttp({
       name: "bank",
@@ -130,16 +135,4 @@ A call with no session fails as it does for any client:
 
 Nothing asks a person before a dangerous write. `LanguageModel` can ask when a tool sets `needsApproval`, and an MCP server can ask with elicitation, but neither is set from the Api yet.
 
-Every call the Api serves is a tool, so give agents their own Api with only what they may reach:
-
-```typescript
-export class AgentApi extends Domain.Api("AgentApi", {
-  model: Bank,
-  commands: ["DepositMoney", "RequestTransfer"],
-  views: ["AccountSummary"],
-  streams: [],
-  aggregates: [],
-}) {}
-
-const BankMcp = DomainAi.toMcp(AgentApi);
-```
+A tool's result is the call's own reply or state, so a field one of them gains later reaches the agent too. These tools suit agents working on your own data. For an agent outside your organization, write tools of your own with their own result schemas.

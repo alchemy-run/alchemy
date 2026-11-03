@@ -42,6 +42,7 @@ export default defineConfig({
     "effecttsgo/catch-to-or-else-succeed": "error",
     "effecttsgo/catch-unfailable-effect": "error",
     "effecttsgo/class-self-mismatch": "error",
+    "effecttsgo/crypto-random-uuid-in-effect": "error",
     "effecttsgo/duplicate-package": "error",
     "effecttsgo/effect-do-notation": "error",
     "effecttsgo/effect-fn-iife": "error",
@@ -64,8 +65,13 @@ export default defineConfig({
     "effecttsgo/floating-effect": "error",
     "effecttsgo/floating-effect-in-vitest": "error",
     "effecttsgo/generic-effect-services": "error",
+    "effecttsgo/global-console-in-effect": "error",
+    "effecttsgo/global-date-in-effect": "error",
     "effecttsgo/global-error-in-effect-catch": "error",
     "effecttsgo/global-error-in-effect-failure": "error",
+    "effecttsgo/global-fetch-in-effect": "error",
+    "effecttsgo/global-random-in-effect": "error",
+    "effecttsgo/global-timers-in-effect": "error",
     "effecttsgo/instance-of-schema": "error",
     "effecttsgo/layer-merge-all-with-dependencies": "off",
     // `XProvider()`, `providers()` and other Layer factories stay functions: they
@@ -93,10 +99,13 @@ export default defineConfig({
     "effecttsgo/option-match-to-from-option": "error",
     "effecttsgo/outdated-api": "error",
     "effecttsgo/overridden-schema-constructor": "error",
+    "effecttsgo/prefer-barrel-import": "error",
+    "effecttsgo/prefer-namespace-import": "error",
     "effecttsgo/prefer-schema-type-property": "error",
     "effecttsgo/prefer-succeed-some-or-none": "error",
     "effecttsgo/prefer-typed-schema-decoder": "error",
     "effecttsgo/prefer-unsafe-constructor": "error",
+    "effecttsgo/process-env-in-effect": "error",
     "effecttsgo/promise-in-effect-success": "error",
     "effecttsgo/provide-layer-succeed-to-provide-service": "error",
     "effecttsgo/race-first-with-sleep-to-timeout": "error",
@@ -117,6 +126,11 @@ export default defineConfig({
     "effecttsgo/schema-union-of-literals": "error",
     "effecttsgo/scope-in-layer-effect": "error",
     "effecttsgo/service-not-as-class": "error",
+    // Most `Effect.provide(layer)` sites are deliberate: runtime bridges and CLI
+    // entry points, plus credential/client layers that can only be built per
+    // call from runtime data (e.g. `accountLayer(creds)`, `fromApiKey(token)`).
+    // Moving those to an entry point would mean ~170 disable comments.
+    "effecttsgo/strict-effect-provide": "off",
     "effecttsgo/sync-to-succeed": "error",
     "effecttsgo/timeout-catch-tag-to-timeout-or-else": "error",
     "effecttsgo/try-catch-in-effect-gen": "error",
