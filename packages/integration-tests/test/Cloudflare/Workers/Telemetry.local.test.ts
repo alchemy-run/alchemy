@@ -57,6 +57,18 @@ const ownBatches = (batches: OtlpCollector["requests"], traceId: string) =>
     ),
   ).pipe(Effect.map((decoded) => decoded.filter(({ spans }) => spans.length > 0)));
 
+/** Every batch's span names, whatever trace they belong to. */
+const allBatches = (batches: OtlpCollector["requests"]) =>
+  Effect.forEach(batches, (batch) =>
+    Schema.decodeUnknownEffect(TraceExport)(batch.body).pipe(
+      Effect.map(({ resourceSpans }) => ({
+        spans: resourceSpans.flatMap((resource) =>
+          resource.scopeSpans.flatMap((scope) => scope.spans.map((span) => span.name)),
+        ),
+      })),
+    ),
+  );
+
 test.provider(
   "delivers Worker and Durable Object OTLP batches without delaying the Worker response",
   (stack) =>
@@ -200,6 +212,15 @@ test.provider(
             times: 10,
           }),
         );
+      // A streamed body runs outside the handler's span, so look in every trace.
+      const exportedAnywhere = (name: string) =>
+        Effect.suspend(() => allBatches(collector.requests)).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            until: (batches) => batches.some(({ spans }) => spans.includes(name)),
+            times: 10,
+          }),
+        );
       const client = yield* HttpClient.HttpClient;
 
       // Worker: `Cloudflare.waitUntil`, and background work that starts more.
@@ -233,6 +254,16 @@ test.provider(
           "otel-event-flush.worker",
         );
       }
+
+      // A span that ends while the response body is still streaming.
+      const streamed = yield* client
+        .get(`${deployment.url}/stream-span`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(yield* streamed.text).toBe("streamed");
+      const chunkBatches = yield* exportedAnywhere("otel-event-flush.stream.chunk");
+      expect(
+        chunkBatches.some(({ spans }) => spans.includes("otel-event-flush.stream.chunk")),
+      ).toBe(true);
 
       // Durable Object: `DurableObjectState.waitUntil` in an RPC call.
       const rpcResponse = yield* client

@@ -3,9 +3,11 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/wait-until/stack.ts";
@@ -140,6 +142,63 @@ describe.skipIf(!!process.env.FAST)(
       }).pipe(logLevel),
       { timeout: 120_000 },
     );
+  },
+);
+
+/**
+ * Read a streamed body line by line, stopping after `take` lines when given.
+ * A body that ends with an error keeps the lines read before it.
+ */
+const readLines = Effect.fn(function* (url: string, take?: number) {
+  const lines: string[] = [];
+  const response = yield* requestWorker(
+    HttpClientRequest.get(`${url}?cb=${Date.now()}-${bust++}`).pipe(
+      HttpClientRequest.setHeader("cache-control", "no-cache"),
+      HttpClientRequest.setHeader("connection", "close"),
+    ),
+  );
+  const body = response.stream.pipe(Stream.decodeText, Stream.splitLines);
+  const exit = yield* (take === undefined ? body : body.pipe(Stream.take(take))).pipe(
+    Stream.runForEach((line) => Effect.sync(() => void lines.push(line))),
+    Effect.timeout("10 seconds"),
+    Effect.exit,
+  );
+  return { status: response.status, lines, failed: Exit.isFailure(exit) };
+});
+
+describe.skipIf(!!process.env.FAST)(
+  "a streamed result keeps the event's scope open until it ends",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
+  () => {
+    // Each body reads a resource bound to the event's scope as it streams.
+    // The resource must be open for every line, and released once the
+    // stream ends however it ends: drained, failing, or cancelled by the
+    // client.
+    for (const target of ["worker", "do-fetch", "do-rpc"] as const) {
+      for (const mode of ["complete", "fail", "cancel"] as const) {
+        test(
+          `${target} stream: ${mode}`,
+          Effect.gen(function* () {
+            const { url } = yield* stack;
+            yield* expectUrlContains(`${url}/raw`, "ok", {
+              label: "wait-until worker propagation",
+            });
+            const label = `stream-${target}-${mode}-${run}`;
+            const { status, lines } = yield* readLines(
+              `${url}/stream/${target}/${mode}/${label}`,
+              mode === "cancel" ? 2 : undefined,
+            );
+            expect(status).toBe(200);
+            // A failing Web stream drops the chunks still queued when it errors.
+            if (mode === "fail") expect(lines.length).toBeGreaterThan(0);
+            else expect(lines).toHaveLength(mode === "complete" ? 3 : 2);
+            expect(lines.every((line) => line === "open")).toBe(true);
+            expect(yield* journalEntries(url, label, 1)).toEqual([`${label}:released`]);
+          }).pipe(logLevel),
+          { timeout: 120_000 },
+        );
+      }
+    }
   },
 );
 

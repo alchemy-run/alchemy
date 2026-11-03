@@ -67,6 +67,17 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
           const pong = yield* targetNamespace.getByName("target").ping();
           return HttpServerResponse.text(`worker-saw:${pong}`);
         }
+        if (request.url.startsWith("/stream-span")) {
+          // A span that ends while the body is still streaming.
+          return HttpServerResponse.stream(
+            Stream.fromEffect(
+              Effect.sleep("300 millis").pipe(
+                Effect.as("streamed"),
+                Effect.withSpan("otel-event-flush.stream.chunk"),
+              ),
+            ).pipe(Stream.encodeText),
+          );
+        }
         if (request.url.startsWith("/wait-until-stream")) {
           // A streamed body takes over the request scope from the bridge.
           yield* Cloudflare.waitUntil(

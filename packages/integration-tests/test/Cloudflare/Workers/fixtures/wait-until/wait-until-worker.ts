@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Http from "alchemy/Http";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
@@ -39,6 +40,31 @@ const useLater = <R>(record: RecordEntry<R>, resource: { released: boolean }, la
     ),
   );
 
+/** How a `resourceLines` body ends: drained, failing partway, or never. */
+export type StreamMode = "complete" | "fail" | "cancel";
+
+const streamModes: ReadonlyArray<string> = ["complete", "fail", "cancel"];
+const isStreamMode = (mode: string | undefined): mode is StreamMode =>
+  mode !== undefined && streamModes.includes(mode);
+
+export class StreamFailure extends Data.TaggedError("StreamFailure")<{}> {}
+
+/**
+ * A streamed body that reports, one line every 200ms, whether `resource` is
+ * still open: three lines, two lines and a failure, or lines until the
+ * client cancels.
+ */
+const resourceLines = (resource: { released: boolean }, mode: StreamMode) =>
+  (mode === "cancel" ? Stream.iterate(1, (n) => n + 1) : Stream.range(1, 3)).pipe(
+    Stream.mapEffect((n) =>
+      mode === "fail" && n === 3
+        ? Effect.fail(new StreamFailure())
+        : Effect.sleep("200 millis").pipe(
+            Effect.andThen(Effect.sync(() => `${resource.released ? "released" : "open"}\n`)),
+          ),
+    ),
+  );
+
 /** Slow background work: journals `<label>:done` after 3 seconds. */
 const doneLater = <R>(record: RecordEntry<R>, label: string) =>
   Effect.sleep("3 seconds").pipe(Effect.andThen(record(`${label}:done`)));
@@ -69,7 +95,16 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
         // `/hold/<label>`: `holdLater` over the Durable Object's HTTP path.
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest;
-          const label = new URL(request.url, "http://x").pathname.split("/")[2] ?? "";
+          const path = new URL(request.url, "http://x").pathname.split("/");
+          // `/stream/<mode>/<label>`: a streamed body over a call-scoped resource.
+          if (path[1] === "stream" && isStreamMode(path[2])) {
+            const label = path[3] ?? "";
+            const resource = yield* acquireResource(append, label);
+            return HttpServerResponse.stream(
+              resourceLines(resource, path[2]).pipe(Stream.encodeText),
+            );
+          }
+          const label = path[2] ?? "";
           const resource = yield* acquireResource(append, label);
           yield* state.waitUntil(useLater(append, resource, label));
           return HttpServerResponse.text("scheduled");
@@ -132,6 +167,12 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
             const resource = yield* acquireResource(append, label);
             yield* state.waitUntil(useLater(append, resource, label));
             return Stream.make("a", "b");
+          }),
+        // A Stream result over a call-scoped resource.
+        streamResource: (label: string, mode: StreamMode) =>
+          Effect.gen(function* () {
+            const resource = yield* acquireResource(append, label);
+            return resourceLines(resource, mode);
           }),
         // A Stream result whose `waitUntil` work outlasts it.
         streamSlow: (label: string) =>
@@ -242,6 +283,30 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
 
         if (url.pathname.startsWith("/api/")) {
           return yield* api;
+        }
+
+        // `/stream/<target>/<mode>/<label>`: a streamed body over a resource
+        // bound to the event's scope, from this Worker or a Durable Object.
+        if (url.pathname.startsWith("/stream/")) {
+          const [, , target, mode, label = ""] = url.pathname.split("/");
+          if (!isStreamMode(mode)) return HttpServerResponse.text("Not Found", { status: 404 });
+          const journal = journals.getByName(label);
+          if (target === "worker") {
+            const record = (entry: string) => journal.record(entry).pipe(Effect.orDie);
+            const resource = yield* acquireResource(record, label);
+            return HttpServerResponse.stream(resourceLines(resource, mode).pipe(Stream.encodeText));
+          }
+          if (target === "do-fetch") {
+            const response = yield* Cloudflare.toHttpClient(journal)
+              .execute(HttpClientRequest.get(`http://journal/stream/${mode}/${label}`))
+              .pipe(Effect.orDie);
+            return HttpServerResponse.stream(response.stream);
+          }
+          if (target === "do-rpc") {
+            const lines = yield* journal.streamResource(label, mode);
+            return HttpServerResponse.stream(lines.pipe(Stream.encodeText));
+          }
+          return HttpServerResponse.text("Not Found", { status: 404 });
         }
 
         // `/lifetime/<case>/<label>`: `waitUntil` work that uses a resource
