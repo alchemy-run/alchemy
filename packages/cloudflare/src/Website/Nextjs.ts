@@ -31,7 +31,7 @@ export interface NextjsProps<Bindings extends WorkerBindingProps = {}> extends O
   /**
    * The Next.js project root. Defaults to the process working directory.
    */
-  rootDir?: string;
+  rootDir?: string | undefined;
   /**
    * Controls which files are content-hashed to decide whether the OpenNext
    * build needs to re-run. By default every project file outside build
@@ -57,17 +57,19 @@ export interface NextjsProps<Bindings extends WorkerBindingProps = {}> extends O
     tagCache: Namespace;
   };
   /** Build controls, separate from the optional native `open-next.config.ts`. */
-  openNext?: {
-    /**
-     * Overrides the native config's `buildCommand` when set. If neither sets
-     * a command, defaults to `npx next build`.
-     */
-    buildCommand?: string;
-    /** Minify the generated Worker. Defaults to false. */
-    minify?: boolean;
-    /** Enable OpenNext build diagnostics. Defaults to false. */
-    debug?: boolean;
-  };
+  openNext?:
+    | {
+        /**
+         * Overrides the native config's `buildCommand` when set. If neither sets
+         * a command, defaults to `npx next build`.
+         */
+        buildCommand?: string;
+        /** Minify the generated Worker. Defaults to false. */
+        minify?: boolean;
+        /** Enable OpenNext build diagnostics. Defaults to false. */
+        debug?: boolean;
+      }
+    | undefined;
   /**
    * Local dev (`alchemy dev`) behavior.
    */

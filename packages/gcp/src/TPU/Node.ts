@@ -38,36 +38,36 @@ export type NetworkConfig = {
    * subnetwork must have Private Google Access.
    * @default true
    */
-  enableExternalIps?: boolean;
+  enableExternalIps?: boolean | undefined;
   /**
    * Subnetwork name or path. Defaults to `default`.
    */
-  subnetwork?: string;
+  subnetwork?: string | undefined;
   /**
    * VPC network name or path. Defaults to `default`.
    * @default "default"
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Allow the TPU to send/receive packets with non-matching IPs (required
    * to forward routes).
    */
-  canIpForward?: boolean;
+  canIpForward?: boolean | undefined;
   /**
    * Networking queue count for the TPU VM NIC.
    */
-  queueCount?: number;
+  queueCount?: number | undefined;
 };
 
 export type AcceleratorConfig = {
   /**
    * TPU generation (`V2`, `V3`, `V4`, `V5LITE_POD`, `V5P`, `V6E`).
    */
-  type?: tpu.AcceleratorConfigTypeEnum | (string & {});
+  type?: tpu.AcceleratorConfigTypeEnum | (string & {}) | undefined;
   /**
    * Chip topology (e.g. `2x2` for v2-8).
    */
-  topology?: string;
+  topology?: string | undefined;
 };
 
 export type ServiceAccount = {
@@ -75,20 +75,20 @@ export type ServiceAccount = {
    * Service account email. Omit to use the default Compute service
    * account.
    */
-  email?: string;
+  email?: string | undefined;
   /**
    * OAuth scopes. Omit to allow all Cloud APIs.
    */
-  scope?: string[];
+  scope?: string[] | undefined;
 };
 
 export type SchedulingConfig = {
   /** Provision under a reservation. */
-  reserved?: boolean;
+  reserved?: boolean | undefined;
   /** Provision as a Spot VM. Immutable. */
-  spot?: boolean;
+  spot?: boolean | undefined;
   /** Provision as preemptible. Immutable. */
-  preemptible?: boolean;
+  preemptible?: boolean | undefined;
 };
 
 export type AttachedDisk = {
@@ -96,24 +96,26 @@ export type AttachedDisk = {
    * Existing disk path
    * (`projects/{project}/zones/{zone}/disks/{disk}`).
    */
-  sourceDisk?: string;
+  sourceDisk?: string | undefined;
   /**
    * Attach mode. Defaults to `READ_WRITE`.
    */
-  mode?: tpu.AttachedDiskModeEnum | (string & {});
+  mode?: tpu.AttachedDiskModeEnum | (string & {}) | undefined;
 };
 
 export type BootDiskConfig = {
   /** Customer-managed KMS key for the boot disk. */
-  customerEncryptionKey?: {
-    /** Cloud KMS crypto key resource name. */
-    kmsKeyName?: string;
-  };
+  customerEncryptionKey?:
+    | {
+        /** Cloud KMS crypto key resource name. */
+        kmsKeyName?: string | undefined;
+      }
+    | undefined;
 };
 
 export type ShieldedInstanceConfig = {
   /** Enable Secure Boot. */
-  enableSecureBoot?: boolean;
+  enableSecureBoot?: boolean | undefined;
 };
 
 export type NodeProps = {
@@ -137,69 +139,69 @@ export type NodeProps = {
    * Immutable — changing it replaces the node.
    * @default "tpu-ubuntu2204-base"
    */
-  runtimeVersion?: string;
+  runtimeVersion?: string | undefined;
   /**
    * Accelerator type (`v2-8`, `v3-8`, `v5litepod-8`, …). Mutually
    * exclusive with `acceleratorConfig`. Immutable. If neither is set,
    * defaults to `v2-8`.
    */
-  acceleratorType?: string;
+  acceleratorType?: string | undefined;
   /**
    * Accelerator generation and chip topology. Mutually exclusive with
    * `acceleratorType`. Immutable.
    */
-  acceleratorConfig?: AcceleratorConfig;
+  acceleratorConfig?: AcceleratorConfig | undefined;
   /**
    * Human-readable description (512 characters or less).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Custom VM metadata (`startup-script`, `shutdown-script`, …).
    */
-  metadata?: Record<string, string>;
+  metadata?: Record<string, string> | undefined;
   /**
    * Network tags applied to the TPU VM (firewall source/target tags).
    */
-  networkTags?: string[];
+  networkTags?: string[] | undefined;
   /**
    * CIDR `/29` the node uses when picking an IP. Immutable.
    */
-  cidrBlock?: string;
+  cidrBlock?: string | undefined;
   /**
    * Service account the TPU VMs run as. Immutable.
    */
-  serviceAccount?: ServiceAccount;
+  serviceAccount?: ServiceAccount | undefined;
   /**
    * Single-NIC network configuration. Mutually exclusive with
    * `networkConfigs`. `enableExternalIps` updates in place; the rest is
    * immutable.
    */
-  networkConfig?: NetworkConfig;
+  networkConfig?: NetworkConfig | undefined;
   /**
    * Multi-NIC network configurations. Mutually exclusive with
    * `networkConfig`. Immutable.
    */
-  networkConfigs?: NetworkConfig[];
+  networkConfigs?: NetworkConfig[] | undefined;
   /**
    * Boot disk encryption. Immutable.
    */
-  bootDiskConfig?: BootDiskConfig;
+  bootDiskConfig?: BootDiskConfig | undefined;
   /**
    * Additional data disks. Immutable.
    */
-  dataDisks?: AttachedDisk[];
+  dataDisks?: AttachedDisk[] | undefined;
   /**
    * Scheduling (reservation, Spot, preemptible). Immutable.
    */
-  schedulingConfig?: SchedulingConfig;
+  schedulingConfig?: SchedulingConfig | undefined;
   /**
    * Shielded VM options. Immutable.
    */
-  shieldedInstanceConfig?: ShieldedInstanceConfig;
+  shieldedInstanceConfig?: ShieldedInstanceConfig | undefined;
 };
 
 export type Node = Resource<

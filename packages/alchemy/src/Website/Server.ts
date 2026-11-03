@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { hashDirectory, type MemoOptions } from "../Command/Memo.ts";
 import { havePropsChanged, isResolved } from "../Diff.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
@@ -121,7 +123,7 @@ export interface ServerProps {
    * relative to the process working directory.
    * @default "."
    */
-  root?: string;
+  root?: string | undefined;
   /**
    * The deploy target the build is produced for: a module specifier
    * resolved from your project's `node_modules`
@@ -133,12 +135,12 @@ export interface ServerProps {
    * (e.g. `{ nuxt: { ... } }` config overrides). Must be JSON-serializable —
    * the value participates in the memo hash and is persisted in state.
    */
-  options?: Record<string, unknown>;
+  options?: Record<string, unknown> | undefined;
   /**
    * Options for the local dev server that runs this site under
    * `alchemy dev`. See {@link ServerDevProps}.
    */
-  dev?: ServerDevProps;
+  dev?: ServerDevProps | undefined;
   /**
    * Environment variables for the framework server. On deploy the
    * composite sets these on the Lambda; during `alchemy dev` they are
@@ -150,14 +152,14 @@ export interface ServerProps {
    * composites forward optional values (e.g. an `Output` service URL that
    * resolves to `undefined`) without filtering first.
    */
-  env?: Record<string, string | undefined>;
+  env?: Record<string, string | undefined> | undefined;
   /**
    * Controls which files are hashed to decide whether the build should
    * re-run. By default every non-gitignored file in the root is hashed,
    * plus the nearest lockfile. Set `false` to rebuild on every deploy.
    * @default true
    */
-  memo?: MemoOptions | boolean;
+  memo?: MemoOptions | boolean | undefined;
 }
 
 export interface Server extends Resource<
@@ -293,7 +295,13 @@ export const ServerProviderLive = () =>
         const root = path.resolve(initialCwd, props.root ?? ".");
         const service = yield* makeFramework(props, root);
         return yield* Effect.mapError(
-          service.build({ root, env: definedEnv(props.env) }),
+          service.build({
+            root,
+            ...Record.filterMap(
+              { env: definedEnv(props.env) },
+              Result.fromNullishOr(() => undefined),
+            ),
+          }),
           (cause) =>
             new FrameworkServerError({
               framework: props.framework,
@@ -538,7 +546,13 @@ export const ServerProviderLocal = () =>
           // LocalProvider helper provides and is torn down on
           // restart/delete. It resolves at readiness with the local URL.
           const { url } = yield* Effect.mapError(
-            service.dev({ root, port, host: dev?.host }),
+            service.dev({
+              root,
+              ...Record.filterMap(
+                { port, host: dev?.host },
+                Result.fromNullishOr(() => undefined),
+              ),
+            }),
             (cause) =>
               new FrameworkServerError({
                 framework: props.framework,

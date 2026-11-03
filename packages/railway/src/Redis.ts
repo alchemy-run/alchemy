@@ -75,7 +75,7 @@ export interface RedisProps {
    * Defaults to the project's primary environment. Changing it replaces
    * Redis.
    */
-  environment?: Ref<RedisEnvironment>;
+  environment?: Ref<RedisEnvironment> | undefined;
   /**
    * Service name. Unique per Project. If omitted, a unique name is
    * generated from the stack, stage and logical ID. Changing it updates

@@ -37,16 +37,16 @@ export type RolloutKindUpdateUnitKindStrategy =
 
 export type RolloutKindErrorBudget = {
   /** Max percent of units in a location allowed to fail without pausing. */
-  allowedPercentage?: number;
+  allowedPercentage?: number | undefined;
   /** Max number of failed units in a location without pausing. */
-  allowedCount?: number;
+  allowedCount?: number | undefined;
 };
 
 export type RolloutKindUnitUpdatePacing = {
   /** Max percent of units that may be in-flight in a region. */
-  maxConcurrentOperationsPercent?: { value?: string };
+  maxConcurrentOperationsPercent?: { value?: string | undefined } | undefined;
   /** Absolute cap on concurrent unit operations. */
-  maxConcurrentOperationsCount?: number;
+  maxConcurrentOperationsCount?: number | undefined;
 };
 
 export type RolloutKindProps = {
@@ -83,7 +83,7 @@ export type RolloutKindProps = {
   /**
    * Pause the rollout if failures exceed this budget.
    */
-  errorBudget?: RolloutKindErrorBudget;
+  errorBudget?: RolloutKindErrorBudget | undefined;
   /**
    * CEL filter reducing the eligible unit population.
    */

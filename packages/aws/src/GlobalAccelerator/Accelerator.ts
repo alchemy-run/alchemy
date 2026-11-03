@@ -49,7 +49,7 @@ export interface AcceleratorProps {
    * disabled.
    * @default disabled
    */
-  flowLogs?: FlowLogs;
+  flowLogs?: FlowLogs | undefined;
   /**
    * Tags to apply to the accelerator. Merged with internal Alchemy tags.
    */

@@ -69,7 +69,7 @@ export declare namespace VpcService {
     tunnelId: string;
   }
   export interface ResolverNetwork extends Network {
-    resolverIps?: string[];
+    resolverIps?: string[] | undefined;
   }
 }
 
@@ -290,15 +290,15 @@ export const VpcServiceProvider = () =>
 
 export const formatVpcService = (
   service: {
-    serviceId?: string | null;
+    serviceId?: string | null | undefined;
     name: string;
     // Distilled widened generated string enums to open unions (`string & {}`);
     // the API only ever returns the known variants here.
     type: string;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    httpPort?: number | null;
-    httpsPort?: number | null;
+    createdAt?: string | null | undefined;
+    updatedAt?: string | null | undefined;
+    httpPort?: number | null | undefined;
+    httpsPort?: number | null | undefined;
     host: connectivity.GetDirectoryServiceResponse["host"];
   },
   accountId: string,

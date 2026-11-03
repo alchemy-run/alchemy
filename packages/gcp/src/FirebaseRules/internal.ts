@@ -13,7 +13,7 @@ export type RulesetFile = {
   /** Textual rules content. */
   content: string;
   /** Optional fingerprint (git SHA, etag, …) associated with the file. */
-  fingerprint?: string;
+  fingerprint?: string | undefined;
 };
 
 export type RulesetSource = {

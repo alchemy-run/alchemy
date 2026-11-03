@@ -30,33 +30,33 @@ export type Aggregation = {
    * Alignment window (for example `"60s"`). Required when a per-series
    * aligner other than `ALIGN_NONE` is set. Minimum 60 seconds.
    */
-  alignmentPeriod?: string;
+  alignmentPeriod?: string | undefined;
   /**
    * Per-series aligner (`ALIGN_MEAN`, `ALIGN_RATE`, `ALIGN_MAX`, …).
    */
-  perSeriesAligner?: string;
+  perSeriesAligner?: string | undefined;
   /**
    * Cross-series reducer (`REDUCE_MEAN`, `REDUCE_SUM`, …).
    */
-  crossSeriesReducer?: string;
+  crossSeriesReducer?: string | undefined;
   /**
    * Fields to preserve when reducing. `resource.type` is always kept.
    */
-  groupByFields?: string[];
+  groupByFields?: string[] | undefined;
 };
 
 export type Trigger = {
   /** Absolute number of time series that must fail. */
-  count?: number;
+  count?: number | undefined;
   /** Percentage of time series that must fail. */
-  percent?: number;
+  percent?: number | undefined;
 };
 
 export type ForecastOptions = {
   /**
    * How far ahead to forecast a threshold violation (1h–60h).
    */
-  forecastHorizon?: string;
+  forecastHorizon?: string | undefined;
 };
 
 export type MetricThreshold = {
@@ -64,134 +64,138 @@ export type MetricThreshold = {
    * Monitoring filter identifying the time series (must include metric
    * type and resource type).
    */
-  filter?: string;
+  filter?: string | undefined;
   /**
    * Alignments applied in order to the time series selected by `filter`.
    */
-  aggregations?: Aggregation[];
+  aggregations?: Aggregation[] | undefined;
   /**
    * Denominator filter when comparing a ratio against the threshold.
    */
-  denominatorFilter?: string;
+  denominatorFilter?: string | undefined;
   /**
    * Alignments applied to the denominator time series.
    */
-  denominatorAggregations?: Aggregation[];
+  denominatorAggregations?: Aggregation[] | undefined;
   /**
    * Comparison (`COMPARISON_GT` or `COMPARISON_LT`).
    */
-  comparison?: string;
+  comparison?: string | undefined;
   /**
    * Threshold the time series is compared against.
    */
-  thresholdValue?: number;
+  thresholdValue?: number | undefined;
   /**
    * How long the series must violate the threshold. Must be a multiple
    * of 60 seconds.
    */
-  duration?: string;
+  duration?: string | undefined;
   /**
    * How many (or what percent of) series must fail. Defaults to count 1.
    */
-  trigger?: Trigger;
+  trigger?: Trigger | undefined;
   /**
    * Behavior when data stops arriving (`EVALUATION_MISSING_DATA_INACTIVE`,
    * `EVALUATION_MISSING_DATA_ACTIVE`, `EVALUATION_MISSING_DATA_NO_OP`).
    */
-  evaluationMissingData?: string;
+  evaluationMissingData?: string | undefined;
   /**
    * When set, the condition forecasts whether the series will violate
    * the threshold within `forecastHorizon`.
    */
-  forecastOptions?: ForecastOptions;
+  forecastOptions?: ForecastOptions | undefined;
 };
 
 export type MetricAbsence = {
   /**
    * Monitoring filter identifying the time series.
    */
-  filter?: string;
+  filter?: string | undefined;
   /**
    * Alignments applied in order.
    */
-  aggregations?: Aggregation[];
+  aggregations?: Aggregation[] | undefined;
   /**
    * How long the series must fail to report data. Minimum 120 seconds.
    */
-  duration?: string;
+  duration?: string | undefined;
   /**
    * How many (or what percent of) series must fail. Defaults to count 1.
    */
-  trigger?: Trigger;
+  trigger?: Trigger | undefined;
 };
 
 export type LogMatch = {
   /**
    * Advanced logs filter. Only logs in the scoping project are evaluated.
    */
-  filter?: string;
+  filter?: string | undefined;
   /**
    * Map from label key to an extractor expression.
    */
-  labelExtractors?: Record<string, string>;
+  labelExtractors?: Record<string, string> | undefined;
 };
 
 export type MonitoringQueryLanguageCondition = {
   /** MQL query that outputs a boolean stream. */
-  query?: string;
+  query?: string | undefined;
   /**
    * How long the series must violate the condition. Multiple of 60s.
    */
-  duration?: string;
+  duration?: string | undefined;
   /**
    * Behavior when data stops arriving.
    */
-  evaluationMissingData?: string;
+  evaluationMissingData?: string | undefined;
   /** How many (or what percent of) series must fail. */
-  trigger?: Trigger;
+  trigger?: Trigger | undefined;
 };
 
 export type PrometheusQueryLanguageCondition = {
   /** PromQL expression. Required. */
-  query?: string;
+  query?: string | undefined;
   /** How long the expression must be true before firing. */
-  duration?: string;
+  duration?: string | undefined;
   /** Evaluation interval. Multiple of 30 seconds. Defaults to 30s. */
-  evaluationInterval?: string;
+  evaluationInterval?: string | undefined;
   /** Labels added to or overwriting the PromQL result. */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /** Rule group name from the originating Prometheus config. */
-  ruleGroup?: string;
+  ruleGroup?: string | undefined;
   /** Alerting rule name from the originating Prometheus config. */
-  alertRule?: string;
+  alertRule?: string | undefined;
   /**
    * When true, skip metric-existence validation so policies can be
    * created before the metric exists.
    */
-  disableMetricValidation?: boolean;
+  disableMetricValidation?: boolean | undefined;
 };
 
 export type SqlCondition = {
   /** Log Analytics GoogleSQL query. */
-  query?: string;
+  query?: string | undefined;
   /** Run every N minutes (5–1440). */
-  minutes?: { periodicity?: number };
+  minutes?: { periodicity?: number | undefined } | undefined;
   /** Run every N hours (1–48). */
-  hourly?: { periodicity?: number; minuteOffset?: number };
+  hourly?: { periodicity?: number | undefined; minuteOffset?: number | undefined } | undefined;
   /** Run every N days (1–31). */
-  daily?: {
-    periodicity?: number;
-    executionTime?: {
-      hours?: number;
-      minutes?: number;
-      seconds?: number;
-      nanos?: number;
-    };
-  };
+  daily?:
+    | {
+        periodicity?: number | undefined;
+        executionTime?:
+          | {
+              hours?: number | undefined;
+              minutes?: number | undefined;
+              seconds?: number | undefined;
+              nanos?: number | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
   /** Compare the result row count against a threshold. */
-  rowCountTest?: { comparison?: string; threshold?: string };
+  rowCountTest?: { comparison?: string | undefined; threshold?: string | undefined } | undefined;
   /** Test a boolean column. */
-  booleanTest?: { column?: string };
+  booleanTest?: { column?: string | undefined } | undefined;
 };
 
 export type AlertCondition = {
@@ -204,57 +208,59 @@ export type AlertCondition = {
    * Server-assigned condition name. Omit on create. On update, Alchemy
    * preserves observed names so GCP does not recreate conditions.
    */
-  name?: string;
+  name?: string | undefined;
   /** Compare a time series against a threshold. */
-  conditionThreshold?: MetricThreshold;
+  conditionThreshold?: MetricThreshold | undefined;
   /** Fire when a time series stops reporting data. */
-  conditionAbsent?: MetricAbsence;
+  conditionAbsent?: MetricAbsence | undefined;
   /** Fire when a log entry matches `filter`. Exclusive of other kinds. */
-  conditionMatchedLog?: LogMatch;
+  conditionMatchedLog?: LogMatch | undefined;
   /** MQL boolean-stream condition. */
-  conditionMonitoringQueryLanguage?: MonitoringQueryLanguageCondition;
+  conditionMonitoringQueryLanguage?: MonitoringQueryLanguageCondition | undefined;
   /** PromQL alerting rule. */
-  conditionPrometheusQueryLanguage?: PrometheusQueryLanguageCondition;
+  conditionPrometheusQueryLanguage?: PrometheusQueryLanguageCondition | undefined;
   /** Log Analytics SQL condition. */
-  conditionSql?: SqlCondition;
+  conditionSql?: SqlCondition | undefined;
 };
 
 export type DocumentationLink = {
   /** Short link title (max 63 characters). */
-  displayName?: string;
+  displayName?: string | undefined;
   /** URL. May include alert template variables. */
-  url?: string;
+  url?: string | undefined;
 };
 
 export type Documentation = {
   /** Body included in notifications. Markdown. Max 8192 characters. */
-  content?: string;
+  content?: string | undefined;
   /**
    * MIME type of `content`.
    * @default "text/markdown"
    */
-  mimeType?: string;
+  mimeType?: string | undefined;
   /** Notification subject line. */
-  subject?: string;
+  subject?: string | undefined;
   /** Up to 3 documentation links. */
-  links?: DocumentationLink[];
+  links?: DocumentationLink[] | undefined;
 };
 
 export type AlertStrategy = {
   /** Close open incidents after this much missing data. */
-  autoClose?: string;
+  autoClose?: string | undefined;
   /** Log-based policies only. At most one notification per period. */
-  notificationRateLimit?: { period?: string };
+  notificationRateLimit?: { period?: string | undefined } | undefined;
   /**
    * When to notify (`OPENED`, `CLOSED`). Log-based policies are always
    * `OPENED`.
    */
-  notificationPrompts?: string[];
+  notificationPrompts?: string[] | undefined;
   /** Per-channel reminder settings. */
-  notificationChannelStrategy?: {
-    renotifyInterval?: string;
-    notificationChannelNames?: string[];
-  }[];
+  notificationChannelStrategy?:
+    | {
+        renotifyInterval?: string | undefined;
+        notificationChannelNames?: string[] | undefined;
+      }[]
+    | undefined;
 };
 
 export type AlertPolicyProps = {
@@ -263,12 +269,12 @@ export type AlertPolicyProps = {
    * from the stack, stage, and logical id. Limited to 512 Unicode
    * characters.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * How to combine conditions when more than one is set.
    * @default "OR"
    */
-  combiner?: AlertPolicyCombiner;
+  combiner?: AlertPolicyCombiner | undefined;
   /**
    * Conditions that open an incident. A policy has 1–6 conditions.
    */
@@ -277,28 +283,28 @@ export type AlertPolicyProps = {
    * Notification channel resource names
    * (`projects/{project}/notificationChannels/{channel}`).
    */
-  notificationChannels?: string[];
+  notificationChannels?: string[] | undefined;
   /**
    * Markdown documentation included in notifications and incidents.
    */
-  documentation?: Documentation;
+  documentation?: Documentation | undefined;
   /**
    * Whether the policy is evaluated.
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Incident severity shown in the console and notifications.
    */
-  severity?: AlertPolicySeverity;
+  severity?: AlertPolicySeverity | undefined;
   /**
    * Notification strategy (auto-close, rate limits, prompts).
    */
-  alertStrategy?: AlertStrategy;
+  alertStrategy?: AlertStrategy | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 };
 
 export type AlertPolicy = Resource<

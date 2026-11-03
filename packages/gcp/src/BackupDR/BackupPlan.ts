@@ -33,59 +33,59 @@ export type BackupWindow = {
   /**
    * Hour of day (`0`–`23`) when the window starts.
    */
-  startHourOfDay?: number;
+  startHourOfDay?: number | undefined;
   /**
    * Hour of day (`1`–`24`) when the window ends. Must be greater than
    * `startHourOfDay`. The end hour is exclusive.
    */
-  endHourOfDay?: number;
+  endHourOfDay?: number | undefined;
 };
 
 export type WeekDayOfMonth = {
   /**
    * Day of week.
    */
-  dayOfWeek?: backupdr.WeekDayOfMonthDayOfWeekEnum | (string & {});
+  dayOfWeek?: backupdr.WeekDayOfMonthDayOfWeekEnum | (string & {}) | undefined;
   /**
    * Week of month (`FIRST`, `SECOND`, `THIRD`, `FOURTH`, `LAST`).
    */
-  weekOfMonth?: backupdr.WeekDayOfMonthWeekOfMonthEnum | (string & {});
+  weekOfMonth?: backupdr.WeekDayOfMonthWeekOfMonthEnum | (string & {}) | undefined;
 };
 
 export type StandardSchedule = {
   /**
    * Recurrence (`HOURLY`, `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`).
    */
-  recurrenceType?: backupdr.StandardScheduleRecurrenceTypeEnum | (string & {});
+  recurrenceType?: backupdr.StandardScheduleRecurrenceTypeEnum | (string & {}) | undefined;
   /**
    * Days of month (`1`–`31`). `MONTHLY` and `YEARLY` only.
    */
-  daysOfMonth?: number[];
+  daysOfMonth?: number[] | undefined;
   /**
    * Hourly frequency. Required for `HOURLY`. Workload-specific min/max
    * apply (Compute Instance: 4–23).
    */
-  hourlyFrequency?: number;
+  hourlyFrequency?: number | undefined;
   /**
    * Days of week. Required for `WEEKLY`.
    */
-  daysOfWeek?: Array<backupdr.StandardScheduleDaysOfWeekItemEnum | (string & {})>;
+  daysOfWeek?: Array<backupdr.StandardScheduleDaysOfWeekItemEnum | (string & {})> | undefined;
   /**
    * IANA time zone used to interpret the schedule (`UTC`, `America/New_York`).
    */
-  timeZone?: string;
+  timeZone?: string | undefined;
   /**
    * Week day of the month. `MONTHLY` and `YEARLY` only.
    */
-  weekDayOfMonth?: WeekDayOfMonth;
+  weekDayOfMonth?: WeekDayOfMonth | undefined;
   /**
    * Months of year. `YEARLY` only.
    */
-  months?: Array<backupdr.StandardScheduleMonthsItemEnum | (string & {})>;
+  months?: Array<backupdr.StandardScheduleMonthsItemEnum | (string & {})> | undefined;
   /**
    * Window of day during which backup jobs may start.
    */
-  backupWindow?: BackupWindow;
+  backupWindow?: BackupWindow | undefined;
 };
 
 export type BackupRule = {
@@ -93,16 +93,16 @@ export type BackupRule = {
    * Unique id of this rule within the plan. RFC1035: lowercase letter
    * followed by up to 62 letters, digits, or hyphens. Immutable.
    */
-  ruleId?: string;
+  ruleId?: string | undefined;
   /**
    * Retention in days. Must be at least the vault's minimum enforced
    * retention. Minimum 1.
    */
-  backupRetentionDays?: number;
+  backupRetentionDays?: number | undefined;
   /**
    * Schedule that runs inside a backup window.
    */
-  standardSchedule?: StandardSchedule;
+  standardSchedule?: StandardSchedule | undefined;
 };
 
 export type DiskBackupPlanProperties = {
@@ -111,7 +111,7 @@ export type DiskBackupPlanProperties = {
    * crash-consistent backup.
    * @default false
    */
-  guestFlush?: boolean;
+  guestFlush?: boolean | undefined;
 };
 
 export type ComputeInstanceBackupPlanProperties = {
@@ -120,7 +120,7 @@ export type ComputeInstanceBackupPlanProperties = {
    * crash-consistent backup.
    * @default false
    */
-  guestFlush?: boolean;
+  guestFlush?: boolean | undefined;
 };
 
 export type BackupPlanProps = {
@@ -169,7 +169,7 @@ export type BackupPlanProps = {
   /**
    * Disk-specific options (`compute.googleapis.com/Disk`).
    */
-  diskBackupPlanProperties?: DiskBackupPlanProperties;
+  diskBackupPlanProperties?: DiskBackupPlanProperties | undefined;
   /**
    * Compute instance-specific options (`compute.googleapis.com/Instance`).
    */

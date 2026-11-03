@@ -29,11 +29,11 @@ import {
 
 export type ReplicaInfo = {
   /** Replica location (e.g. `us-central1`). */
-  location?: string;
+  location?: string | undefined;
   /** Replica type (`READ_WRITE`, `READ_ONLY`, `WITNESS`). */
-  type?: spanner.ReplicaInfoTypeEnum | (string & {});
+  type?: spanner.ReplicaInfoTypeEnum | (string & {}) | undefined;
   /** Whether this location is the default leader. */
-  defaultLeaderLocation?: boolean;
+  defaultLeaderLocation?: boolean | undefined;
 };
 
 export type InstanceConfigProps = {

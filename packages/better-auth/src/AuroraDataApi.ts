@@ -21,17 +21,17 @@ export interface DataApiExecutor {
     sql: string;
     parameters?: rdsdata.SqlParameter[];
     includeResultMetadata?: boolean;
-    transactionId?: string;
+    transactionId?: string | undefined;
   }) => Promise<DataApiResponse>;
-  readonly begin: () => Promise<{ transactionId?: string }>;
+  readonly begin: () => Promise<{ transactionId?: string | undefined }>;
   readonly commit: (transactionId: string) => Promise<unknown>;
   readonly rollback: (transactionId: string) => Promise<unknown>;
 }
 
 interface DataApiResponse {
-  records?: rdsdata.Field[][];
-  columnMetadata?: rdsdata.ColumnMetadata[];
-  numberOfRecordsUpdated?: number;
+  records?: rdsdata.Field[][] | undefined;
+  columnMetadata?: rdsdata.ColumnMetadata[] | undefined;
+  numberOfRecordsUpdated?: number | undefined;
 }
 
 /**

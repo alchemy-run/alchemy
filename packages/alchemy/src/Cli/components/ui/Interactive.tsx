@@ -10,6 +10,9 @@ import {
 } from "@alchemy.run/sigil";
 import { stringWidth } from "@alchemy.run/sigil/ansi";
 import { useEffect, useLayoutEffect, useRef, useState } from "@alchemy.run/sigil/react";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { JSX, ReactNode } from "react";
 import { copyToClipboard } from "../../../Util/Terminal.ts";
 import { theme } from "../../../Util/Theme.ts";
@@ -188,7 +191,7 @@ export interface MenuProps<Value> {
   readonly selected?: ReadonlySet<number>;
   readonly visibleCount?: number;
   readonly empty?: string;
-  readonly descriptionPlacement?: "below" | "inline";
+  readonly descriptionPlacement?: "below" | "inline" | undefined;
 }
 
 /** Pure menu presentation used by select prompts and custom applications. */
@@ -251,7 +254,10 @@ export function Menu<Value>({
               aria-label={choice.label}
               aria-state={{
                 disabled,
-                selected: selected === undefined ? focused : checked,
+                ...Record.filterMap(
+                  { selected: selected === undefined ? focused : checked },
+                  Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+                ),
               }}
             >
               <Pointer focused={focused} />
@@ -265,9 +271,18 @@ export function Menu<Value>({
                 flexGrow={1}
                 gap={descriptionPlacement === "inline" ? 1 : 0}
               >
-                <Box width={choice.sticky ? undefined : labelWidth} flexShrink={0}>
+                <Box
+                  {...Record.filterMap(
+                    { width: choice.sticky ? undefined : labelWidth },
+                    Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+                  )}
+                  flexShrink={0}
+                >
                   <Text
-                    bold={focused || choice.sticky || checked}
+                    {...Record.filterMap(
+                      { bold: focused || choice.sticky || checked },
+                      Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+                    )}
                     color={
                       focusedLabelColor(focused) ??
                       (choice.tone === "info" ? theme.color.info : undefined)
@@ -296,12 +311,12 @@ export function Menu<Value>({
 }
 
 export interface TextFieldProps {
-  readonly placeholder?: string;
+  readonly placeholder?: string | undefined;
   /** Text Tab fills into the empty field, e.g. the prompt's default. */
-  readonly completion?: string;
-  readonly initialValue?: string;
+  readonly completion?: string | undefined;
+  readonly initialValue?: string | undefined;
   readonly value?: string;
-  readonly mask?: string;
+  readonly mask?: string | undefined;
   readonly onSubmit: (value: string) => void;
   readonly onChange?: (value: string) => void;
   readonly onCancel?: () => void;
@@ -507,7 +522,14 @@ export function TextField({
     );
   });
   return (
-    <Box ref={fieldRef} aria-role="textbox" aria-label={ariaLabel}>
+    <Box
+      ref={fieldRef}
+      aria-role="textbox"
+      {...Record.filterMap(
+        { "aria-label": ariaLabel },
+        Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+      )}
+    >
       <Text tone={shownChars.length === 0 ? "muted" : "default"} wrap="truncate-end">
         {display}
       </Text>
@@ -598,15 +620,15 @@ export interface BrowserLoginWaitProps {
   readonly waitingLabel: string;
   readonly url: string;
   /** Short code the user confirms on the login page. */
-  readonly code?: string;
+  readonly code?: string | undefined;
   readonly openFailed?: boolean;
   /** Open the login URL again from the waiting screen. */
   readonly onOpen?: () => Promise<void>;
   /** Allow Enter to switch to manual code entry. */
   readonly allowManualInput: boolean;
   readonly inputLabel?: string;
-  readonly placeholder?: string;
-  readonly validate?: (value: string) => string | Error | undefined;
+  readonly placeholder?: string | undefined;
+  readonly validate?: ((value: string) => string | Error | undefined) | undefined;
   readonly onSubmit: (value: string) => void;
   readonly onCancel: () => void;
 }
@@ -622,9 +644,9 @@ export const useConfirmKeys = ({
   onCancel,
 }: {
   readonly initialValue?: boolean;
-  readonly active?: boolean;
+  readonly active?: boolean | undefined;
   readonly onSubmit: (value: boolean) => void;
-  readonly onCancel?: () => void;
+  readonly onCancel?: (() => void) | undefined;
 }): boolean => {
   const [value, setValue] = useState(initialValue);
   useTerminalInput(
@@ -736,7 +758,7 @@ export function ChoiceGroup<Value>({
           <Box
             key={choice.label}
             paddingX={1}
-            backgroundColor={selected ? theme.paint.interactive : undefined}
+            {...(selected && { backgroundColor: theme.paint.interactive })}
             aria-role="radio"
             aria-label={choice.label}
             aria-state={{ checked: selected }}
@@ -875,7 +897,7 @@ export type PromptFrameProps = {
   readonly description?: ReactNode;
   readonly children: JSX.Element;
   readonly layout?: "inline" | "stacked";
-  readonly error?: string;
+  readonly error?: string | undefined;
   readonly keys?: ReadonlyArray<readonly [string, string]>;
 };
 

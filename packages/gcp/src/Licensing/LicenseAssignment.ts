@@ -45,7 +45,7 @@ export type LicenseAssignmentProps = {
    * up an existing assignment after a SKU change and by `list` when
    * matching env vars are set. Not sent on insert.
    */
-  customerId?: string;
+  customerId?: string | undefined;
 };
 
 export type LicenseAssignment = Resource<
@@ -148,8 +148,8 @@ const observeAssignment = (input: {
   productId: string;
   skuId: string;
   userId: string;
-  customerId?: string;
-  previousSkuId?: string;
+  customerId?: string | undefined;
+  previousSkuId?: string | undefined;
 }) =>
   Effect.gen(function* () {
     const bySku = yield* getAssignment(input.productId, input.skuId, input.userId);

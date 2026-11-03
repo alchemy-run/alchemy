@@ -28,9 +28,9 @@ import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from ".
 
 export type InboundOidcSsoProfileIdpConfig = {
   /** IdP issuer URL. Discovery is derived from this URI. */
-  issuerUri?: string;
+  issuerUri?: string | undefined;
   /** HTTPS change-password URL. */
-  changePasswordUri?: string;
+  changePasswordUri?: string | undefined;
 };
 
 export type InboundOidcSsoProfileRpConfig = {
@@ -55,7 +55,7 @@ export type InboundOidcSsoProfileProps = {
   /**
    * OIDC identity provider configuration.
    */
-  idpConfig?: InboundOidcSsoProfileIdpConfig;
+  idpConfig?: InboundOidcSsoProfileIdpConfig | undefined;
   /**
    * OIDC relying-party configuration. `clientSecret` is input-only.
    */
@@ -79,8 +79,8 @@ export type InboundOidcSsoProfile = Resource<
     /** RP configuration (secret omitted). */
     rpConfig:
       | {
-          clientId?: string;
-          redirectUris?: string[];
+          clientId?: string | undefined;
+          redirectUris?: string[] | undefined;
         }
       | undefined;
   },
@@ -143,7 +143,7 @@ const toAttrs = (profile: cloudidentity.InboundOidcSsoProfile) => {
   };
 };
 
-const observeProfile = (input: { id: string; name?: string }) =>
+const observeProfile = (input: { id: string; name?: string | undefined }) =>
   Effect.gen(function* () {
     const byName = yield* getOidcProfile(input.name ?? "");
     if (byName !== undefined) return byName;

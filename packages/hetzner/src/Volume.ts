@@ -72,7 +72,7 @@ export interface VolumeProps {
    * omitted, a unique name is generated from the stack, stage and logical
    * ID.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * User-defined labels. Alchemy ownership labels (`alchemy.stack` /
    * `alchemy.stage` / `alchemy.id`) are always merged in.
@@ -254,8 +254,8 @@ const observe = Effect.fn(function* ({
   outputId,
 }: {
   id: string;
-  name?: string;
-  outputId?: number;
+  name?: string | undefined;
+  outputId?: number | undefined;
 }) {
   if (outputId !== undefined) {
     const byId = yield* getById(outputId);

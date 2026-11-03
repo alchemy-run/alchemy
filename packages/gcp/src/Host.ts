@@ -53,7 +53,7 @@ export type GcpIamGrant = {
    * policy: an IAM Condition narrowing the role to one resource, e.g.
    * `resource.name == "projects/p/databases/d"`.
    */
-  condition?: IamCondition;
+  condition?: IamCondition | undefined;
 };
 
 /**
@@ -87,7 +87,7 @@ export type AppliedIamGrant = {
   name: string;
   role: string;
   /** IAM Condition the role is bound under, if any. */
-  condition?: IamCondition;
+  condition?: IamCondition | undefined;
 };
 
 /** Merge the env and IAM grants of every binding attached to a host. */
@@ -394,8 +394,11 @@ export const syncHostIam = Effect.fn(function* (options: {
 
   // Unconditional project grants of a minted account are synced against
   // the observed policy below; conditional ones only via the record.
-  const isHostProject = (grant: { kind: string; name: string; condition?: IamCondition }) =>
-    grant.kind === "project" && grant.name === options.project && grant.condition === undefined;
+  const isHostProject = (grant: {
+    kind: string;
+    name: string;
+    condition?: IamCondition | undefined;
+  }) => grant.kind === "project" && grant.name === options.project && grant.condition === undefined;
 
   if (options.managed) {
     const wanted = new Set(desired.filter(isHostProject).map((grant) => grant.role));

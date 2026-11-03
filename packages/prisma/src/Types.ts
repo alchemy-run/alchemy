@@ -634,10 +634,10 @@ export interface BucketKeyCreateInput {
 }
 
 export interface PrismaSecretConnection {
-  directConnectionString?: Redacted.Redacted<string>;
-  pooledConnectionString?: Redacted.Redacted<string>;
-  accelerateConnectionString?: Redacted.Redacted<string>;
-  host?: string | null;
-  user?: string | null;
-  password?: Redacted.Redacted<string>;
+  directConnectionString?: Redacted.Redacted<string> | undefined;
+  pooledConnectionString?: Redacted.Redacted<string> | undefined;
+  accelerateConnectionString?: Redacted.Redacted<string> | undefined;
+  host?: string | null | undefined;
+  user?: string | null | undefined;
+  password?: Redacted.Redacted<string> | undefined;
 }

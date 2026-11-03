@@ -25,7 +25,7 @@ export class DurableObjectState extends Context.Service<
   {
     readonly id: cf.DurableObjectId;
     readonly storage: DurableObjectStorage;
-    container?: cf.Container;
+    container?: cf.Container | undefined;
     /**
      * Run an Effect in the background without blocking the current event,
      * keeping the Durable Object alive until it settles. The Effect runs with

@@ -69,7 +69,7 @@ export class CommandFailed extends Data.TaggedError("CommandFailed")<{
 /** `x.y.z` with an optional `-<channel>.N`. */
 interface Version {
   readonly core: readonly [number, number, number];
-  readonly pre?: { readonly channel: PrereleaseChannel; readonly n: number };
+  readonly pre?: { readonly channel: PrereleaseChannel; readonly n: number } | undefined;
 }
 
 const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?$/;

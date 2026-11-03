@@ -27,7 +27,7 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 export const makeOmicsResourceHttpBinding = <
   Res extends ResourceLike,
   K extends string,
-  I extends { [P in K]?: string },
+  I extends { [P in K]?: string | undefined },
   A,
   E,
   R,

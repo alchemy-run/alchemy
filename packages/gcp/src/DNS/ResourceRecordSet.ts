@@ -27,7 +27,7 @@ export type ResourceRecordSetProps = {
    * DNS name. If omitted entirely, a unique subdomain of the zone is
    * generated. Immutable — changing it replaces the record set.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * DNS record type (`A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`, …).
    * Immutable — changing it replaces the record set.
@@ -37,18 +37,18 @@ export type ResourceRecordSetProps = {
    * TTL in seconds.
    * @default 300
    */
-  ttl?: number;
+  ttl?: number | undefined;
   /**
    * Resource-record data. For `A` records this is a list of IPv4
    * addresses; for `TXT`, quoted strings. Mutually exclusive with
    * `routingPolicy`.
    */
-  rrdatas?: string[];
+  rrdatas?: string[] | undefined;
   /**
    * Dynamic routing policy (geo / weighted-round-robin / primary-backup).
    * A record set has either `rrdatas` or `routingPolicy`, not both.
    */
-  routingPolicy?: ResourceRecordSetRoutingPolicy;
+  routingPolicy?: ResourceRecordSetRoutingPolicy | undefined;
 };
 
 export type ResourceRecordSet = Resource<
@@ -200,8 +200,8 @@ const toBody = (props: {
   name: string;
   type: string;
   ttl: number;
-  rrdatas?: string[];
-  routingPolicy?: ResourceRecordSetRoutingPolicy;
+  rrdatas?: string[] | undefined;
+  routingPolicy?: ResourceRecordSetRoutingPolicy | undefined;
 }): dns.ResourceRecordSet =>
   props.routingPolicy !== undefined
     ? {

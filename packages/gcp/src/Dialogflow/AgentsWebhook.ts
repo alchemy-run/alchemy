@@ -50,49 +50,51 @@ export type WebhookServiceAgentAuth =
 
 export type WebhookOAuthConfig = {
   /** OAuth token endpoint. */
-  tokenEndpoint?: string;
+  tokenEndpoint?: string | undefined;
   /** OAuth client id. */
-  clientId?: string;
+  clientId?: string | undefined;
   /** OAuth client secret. Prefer `secretVersionForClientSecret`. */
-  clientSecret?: string;
+  clientSecret?: string | undefined;
   /** Secret Manager version holding the client secret. */
-  secretVersionForClientSecret?: string;
+  secretVersionForClientSecret?: string | undefined;
   /** OAuth scopes. */
-  scopes?: string[];
+  scopes?: string[] | undefined;
 };
 
 export type WebhookGenericWebService = {
   /** HTTPS URI of the webhook. Required for generic web service. */
-  uri?: string;
+  uri?: string | undefined;
   /** HTTP method. Defaults to POST for STANDARD webhooks. */
-  httpMethod?: WebhookHttpMethod | (string & {});
+  httpMethod?: WebhookHttpMethod | (string & {}) | undefined;
   /** Webhook type. */
-  webhookType?: WebhookType | (string & {});
+  webhookType?: WebhookType | (string & {}) | undefined;
   /** Request headers. */
-  requestHeaders?: Record<string, string>;
+  requestHeaders?: Record<string, string> | undefined;
   /** Secret Manager versions used as request headers. */
-  secretVersionsForRequestHeaders?: Record<string, { secretVersion?: string } | undefined>;
+  secretVersionsForRequestHeaders?:
+    | Record<string, { secretVersion?: string | undefined } | undefined>
+    | undefined;
   /** Allowed CA certificates (DER, base64). */
-  allowedCaCerts?: string[];
+  allowedCaCerts?: string[] | undefined;
   /** OAuth client-credentials config. */
-  oauthConfig?: WebhookOAuthConfig;
+  oauthConfig?: WebhookOAuthConfig | undefined;
   /** Auth token minted from the Dialogflow service agent. */
-  serviceAgentAuth?: WebhookServiceAgentAuth | (string & {});
+  serviceAgentAuth?: WebhookServiceAgentAuth | (string & {}) | undefined;
   /** Service account used to generate ID tokens. */
-  serviceAccountAuthConfig?: { serviceAccount?: string };
+  serviceAccountAuthConfig?: { serviceAccount?: string | undefined } | undefined;
   /** Custom request body (FLEXIBLE webhooks). */
-  requestBody?: string;
+  requestBody?: string | undefined;
   /** Map webhook response fields onto session parameters (FLEXIBLE). */
-  parameterMapping?: Record<string, string>;
+  parameterMapping?: Record<string, string> | undefined;
   /** Secret Manager version holding username:password. */
-  secretVersionForUsernamePassword?: string;
+  secretVersionForUsernamePassword?: string | undefined;
 };
 
 export type WebhookServiceDirectoryConfig = {
   /** Service Directory service resource name. */
-  service?: string;
+  service?: string | undefined;
   /** Generic web service settings used with Service Directory. */
-  genericWebService?: WebhookGenericWebService;
+  genericWebService?: WebhookGenericWebService | undefined;
 };
 
 export type AgentsWebhookProps = {
@@ -107,38 +109,38 @@ export type AgentsWebhookProps = {
    * Webhook id (the `{webhook}` segment). Server-assigned on create.
    * Immutable — changing it replaces the webhook.
    */
-  webhookId?: string;
+  webhookId?: string | undefined;
   /**
    * Location used when `agent` is a bare id.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Human-readable name, unique within the agent. Webhooks have no
    * labels field, so Alchemy stamps ownership into this field for
    * `list` / nuke.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Webhook execution timeout (e.g. `"5s"`). Execution fails if
    * Dialogflow does not receive a response before the timeout.
    */
-  timeout?: string;
+  timeout?: string | undefined;
   /**
    * When true, the webhook is not called.
    * @default false
    */
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   /**
    * Generic HTTPS webhook configuration. Mutually exclusive with
    * `serviceDirectory`.
    */
-  genericWebService?: WebhookGenericWebService;
+  genericWebService?: WebhookGenericWebService | undefined;
   /**
    * Service Directory webhook configuration. Mutually exclusive with
    * `genericWebService`.
    */
-  serviceDirectory?: WebhookServiceDirectoryConfig;
+  serviceDirectory?: WebhookServiceDirectoryConfig | undefined;
 };
 
 export type AgentsWebhook = Resource<

@@ -29,7 +29,7 @@ const SYNC_WAIT = Duration.seconds(3);
 interface VersionCheckCache {
   checkedAt: number;
   /** Absent when the last check attempt failed (offline, timeout, …). */
-  distTags?: Record<string, string>;
+  distTags?: Record<string, string> | undefined;
 }
 
 /**

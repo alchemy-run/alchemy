@@ -23,16 +23,16 @@ import {
 
 export type BoundingVertex = {
   /** X coordinate. */
-  x?: number;
+  x?: number | undefined;
   /** Y coordinate. */
-  y?: number;
+  y?: number | undefined;
 };
 
 export type BoundingPoly = {
   /** Vertices in original image coordinates. */
-  vertices?: BoundingVertex[];
+  vertices?: BoundingVertex[] | undefined;
   /** Vertices normalized to `[0, 1]`. */
-  normalizedVertices?: BoundingVertex[];
+  normalizedVertices?: BoundingVertex[] | undefined;
 };
 
 export type ProductsReferenceImageProps = {

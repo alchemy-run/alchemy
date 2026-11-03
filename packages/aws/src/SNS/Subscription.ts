@@ -26,7 +26,7 @@ export interface SubscriptionProps {
   /**
    * Raw SNS subscription attributes keyed by AWS attribute name.
    */
-  attributes?: Record<string, string>;
+  attributes?: Record<string, string> | undefined;
   /**
    * Whether SNS should return the subscription ARN immediately, even while pending confirmation.
    * @default true
@@ -353,9 +353,9 @@ const readSubscription = Effect.fn(function* ({
   protocol,
   endpoint,
 }: {
-  subscriptionArn?: string;
-  topicArn?: string;
-  protocol?: string;
+  subscriptionArn?: string | undefined;
+  topicArn?: string | undefined;
+  protocol?: string | undefined;
   endpoint: string | undefined;
 }) {
   let resolvedSubscriptionArn: string | undefined;

@@ -28,7 +28,7 @@ export type UsersSshPublicKeyProps = {
    * `UserCredentialMismatch`). Immutable — changing it replaces the key.
    * @default "me"
    */
-  user?: string;
+  user?: string | undefined;
   /**
    * Public key text in SSH format (RFC4253). The fingerprint covers the
    * whole text (comment included), so any change replaces the key.

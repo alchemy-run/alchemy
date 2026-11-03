@@ -54,7 +54,7 @@ export interface ScalableTargetProps {
   /**
    * User-defined tags to apply to the scalable target.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface ScalableTarget extends Resource<

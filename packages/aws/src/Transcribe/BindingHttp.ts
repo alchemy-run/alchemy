@@ -63,7 +63,7 @@ export const makeTranscribeHttpBinding = <I, A, E, R>(options: {
  * with an AccessDenied.
  */
 export const makeTranscribeRoleHttpBinding = <
-  I extends { DataAccessRoleArn?: string },
+  I extends { DataAccessRoleArn?: string | undefined },
   A,
   E,
   R,
@@ -106,7 +106,7 @@ export const makeTranscribeRoleHttpBinding = <
       }
       return Effect.fn(`${options.tag}(${dataAccessRole.LogicalId})`)(function* (
         request: Omit<I, "DataAccessRoleArn"> & {
-          DataAccessRoleArn?: string;
+          DataAccessRoleArn?: string | undefined;
         },
       ) {
         return yield* op({

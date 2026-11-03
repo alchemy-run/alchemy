@@ -38,7 +38,7 @@ export interface McpPortalProps {
    * Allow remote code execution in Dynamic Workers (beta). When omitted,
    * the server-side default applies (observed: `true`).
    */
-  allowCodeMode?: boolean;
+  allowCodeMode?: boolean | undefined;
   /**
    * Route outbound MCP traffic through the Zero Trust Secure Web
    * Gateway.
@@ -220,10 +220,10 @@ type ObservedPortal = {
   id: string;
   hostname: string;
   name: string;
-  allowCodeMode?: boolean | null;
-  createdAt?: string | null;
-  description?: string | null;
-  secureWebGateway?: boolean | null;
+  allowCodeMode?: boolean | null | undefined;
+  createdAt?: string | null | undefined;
+  description?: string | null | undefined;
+  secureWebGateway?: boolean | null | undefined;
 };
 
 /**

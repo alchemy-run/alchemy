@@ -153,7 +153,7 @@ export const makeScenario = (stack: ScratchStack) =>
     const deploy = (
       options: WorkerOptions & {
         raw?: boolean;
-        rawSignal?: "SIGQUIT" | "SIGTERM";
+        rawSignal?: "SIGQUIT" | "SIGTERM" | undefined;
         gatewayOnly?: boolean;
       },
     ) =>

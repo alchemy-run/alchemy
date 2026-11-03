@@ -8,7 +8,7 @@ import type { Workspace } from "./Workspace.ts";
 
 export interface GetMetricMetadataRequest {
   /** Restrict metadata to one metric name. */
-  metric?: string;
+  metric?: string | undefined;
   /** Maximum number of metrics to return. */
   limit?: number;
 }

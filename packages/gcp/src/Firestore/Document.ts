@@ -14,17 +14,17 @@ const DEFAULT_COLLECTION = "_alchemy";
 
 export type DocumentFieldValue = {
   /** UTF-8 string. */
-  stringValue?: string;
+  stringValue?: string | undefined;
   /** Integer encoded as a decimal string. */
-  integerValue?: string;
+  integerValue?: string | undefined;
   /** Boolean. */
-  booleanValue?: boolean;
+  booleanValue?: boolean | undefined;
   /** IEEE 754 double. */
-  doubleValue?: number;
+  doubleValue?: number | undefined;
   /** RFC3339 timestamp. */
-  timestampValue?: string;
+  timestampValue?: string | undefined;
   /** Null sentinel (`NULL_VALUE`). */
-  nullValue?: string;
+  nullValue?: string | undefined;
 };
 
 export type DocumentProps = {

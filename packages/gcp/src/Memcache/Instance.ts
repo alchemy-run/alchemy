@@ -27,29 +27,29 @@ const MAX_NAME_LENGTH = 40;
 
 export type TimeOfDay = {
   /** Hours of day in 24-hour format (`0`–`23`). */
-  hours?: number;
+  hours?: number | undefined;
   /** Minutes of hour (`0`–`59`). */
-  minutes?: number;
+  minutes?: number | undefined;
   /** Seconds of minute (`0`–`59`). */
-  seconds?: number;
+  seconds?: number | undefined;
   /** Fractional seconds, in nanoseconds. */
-  nanos?: number;
+  nanos?: number | undefined;
 };
 
 export type WeeklyMaintenanceWindow = {
   /** Day of week that maintenance occurs (`MONDAY` … `SUNDAY`). */
-  day?: memcache.WeeklyMaintenanceWindowDayEnum | (string & {});
+  day?: memcache.WeeklyMaintenanceWindowDayEnum | (string & {}) | undefined;
   /** Start time of the window in UTC. */
-  startTime?: TimeOfDay;
+  startTime?: TimeOfDay | undefined;
   /** Window length as a duration string (e.g. `"10800s"` for 3 hours). */
-  duration?: string;
+  duration?: string | undefined;
 };
 
 export type MaintenancePolicy = {
   /** Description of the policy. Max 512 characters. */
-  description?: string;
+  description?: string | undefined;
   /** Weekly windows. Current API maximum is one window. */
-  weeklyMaintenanceWindow?: WeeklyMaintenanceWindow[];
+  weeklyMaintenanceWindow?: WeeklyMaintenanceWindow[] | undefined;
 };
 
 export type NodeConfig = {
@@ -57,12 +57,12 @@ export type NodeConfig = {
    * vCPUs per Memcached node.
    * @default 1
    */
-  cpuCount?: number;
+  cpuCount?: number | undefined;
   /**
    * Memory per node in MiB.
    * @default 1024
    */
-  memorySizeMb?: number;
+  memorySizeMb?: number | undefined;
 };
 
 export type InstanceProps = {

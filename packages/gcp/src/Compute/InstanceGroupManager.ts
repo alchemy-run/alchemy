@@ -31,7 +31,7 @@ export type InstanceGroupManagerAutoHealingPolicy = {
    * (`0`–`3600`).
    * @default 0
    */
-  initialDelaySec?: number;
+  initialDelaySec?: number | undefined;
 };
 
 export type InstanceGroupManagerUpdatePolicy = compute.InstanceGroupManagerUpdatePolicy;
@@ -327,10 +327,16 @@ const fromApiHealing = (
     }));
 
 const sameHealing = (
-  left: readonly { healthCheck?: string; initialDelaySec?: number }[] | undefined,
-  right: readonly { healthCheck?: string; initialDelaySec?: number }[] | undefined,
+  left:
+    | readonly { healthCheck?: string | undefined; initialDelaySec?: number | undefined }[]
+    | undefined,
+  right:
+    | readonly { healthCheck?: string | undefined; initialDelaySec?: number | undefined }[]
+    | undefined,
 ) => {
-  const canon = (policies: readonly { healthCheck?: string; initialDelaySec?: number }[]) =>
+  const canon = (
+    policies: readonly { healthCheck?: string | undefined; initialDelaySec?: number | undefined }[],
+  ) =>
     [...policies]
       .map((policy) => ({
         healthCheck: lastSegment(policy.healthCheck ?? ""),

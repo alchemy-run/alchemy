@@ -43,7 +43,7 @@ export interface PlatformProps {
    * @internal type used to signal when this is an effect-native implementation
    * @default false
    */
-  isExternal?: boolean;
+  isExternal?: boolean | undefined;
 }
 
 /**

@@ -71,7 +71,7 @@ export const makeStorageClient = Effect.fn(function* (config: StorageConfig, buc
       options: {
         prefix?: string;
         delimiter?: string;
-        cursor?: string;
+        cursor?: string | undefined;
         limit?: number;
       } = {},
     ) =>

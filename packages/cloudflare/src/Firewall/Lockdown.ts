@@ -341,11 +341,13 @@ const findByUrls = (zoneId: string, urls: readonly string[]) =>
 const sameStringSet = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
 
-const configurationKey = (c: { target?: string | null; value?: string | null }) =>
-  `${c.target ?? ""}=${c.value ?? ""}`;
+const configurationKey = (c: {
+  target?: string | null | undefined;
+  value?: string | null | undefined;
+}) => `${c.target ?? ""}=${c.value ?? ""}`;
 
 const sameConfigurationSet = (
-  a: readonly { target?: string | null; value?: string | null }[],
+  a: readonly { target?: string | null | undefined; value?: string | null | undefined }[],
   b: readonly LockdownConfiguration[],
 ) =>
   a.length === b.length &&

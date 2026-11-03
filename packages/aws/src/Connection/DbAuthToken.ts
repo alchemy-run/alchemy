@@ -3,7 +3,9 @@ import * as Presign from "@distilled.cloud/aws/Presign";
 import type * as Region from "@distilled.cloud/aws/Region";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 
 export interface GenerateDbAuthTokenOptions {
   /**
@@ -31,7 +33,7 @@ export interface GenerateDbAuthTokenOptions {
    */
   expiresIn?: Duration.Input;
   /** SigV4 signing region. Defaults to the ambient `Region` service. */
-  region?: string;
+  region?: string | undefined;
 }
 
 /**
@@ -72,7 +74,10 @@ export const generateDbAuthToken: (
     method: "GET",
     url: url.toString(),
     service: options.service,
-    region: options.region,
+    ...Record.filterMap(
+      { region: options.region },
+      Result.fromNullishOr(() => undefined),
+    ),
     expiresIn:
       options.expiresIn !== undefined ? Math.floor(Duration.toSeconds(options.expiresIn)) : 900,
   });

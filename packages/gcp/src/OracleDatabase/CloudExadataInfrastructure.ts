@@ -55,17 +55,17 @@ export type MaintenanceWindow = {
 
 export type CloudExadataInfrastructurePropertiesInput = {
   /** Shape (e.g. `Exadata.X9M`). Immutable. */
-  shape?: string;
+  shape?: string | undefined;
   /** Number of compute servers. */
-  computeCount?: number;
+  computeCount?: number | undefined;
   /** Number of storage servers. */
-  storageCount?: number;
+  storageCount?: number | undefined;
   /** Total storage size in GB. */
-  totalStorageSizeGb?: number;
+  totalStorageSizeGb?: number | undefined;
   /** Maintenance window. */
-  maintenanceWindow?: MaintenanceWindow;
+  maintenanceWindow?: MaintenanceWindow | undefined;
   /** Customer contacts. */
-  customerContacts?: CustomerContact[];
+  customerContacts?: CustomerContact[] | undefined;
 };
 
 export type CloudExadataInfrastructureProps = {
@@ -73,35 +73,35 @@ export type CloudExadataInfrastructureProps = {
    * Exadata Infrastructure id (the `{cloud_exadata_infrastructure}`
    * segment). If omitted, a unique RFC1035 name is generated. Immutable.
    */
-  cloudExadataInfrastructureId?: string;
+  cloudExadataInfrastructureId?: string | undefined;
   /**
    * Region. Immutable.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * User-friendly display name.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * GCP Oracle zone (e.g. `us-east4-b-r2`). Immutable. If omitted the
    * service picks a zone.
    */
-  gcpOracleZone?: string;
+  gcpOracleZone?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Infrastructure properties. `shape` is required on create.
    */
-  properties?: CloudExadataInfrastructurePropertiesInput;
+  properties?: CloudExadataInfrastructurePropertiesInput | undefined;
   /** Shape. Convenience alias for `properties.shape`. */
-  shape?: string;
+  shape?: string | undefined;
   /** Compute server count. Convenience alias for `properties.computeCount`. */
-  computeCount?: number;
+  computeCount?: number | undefined;
   /** Storage server count. Convenience alias for `properties.storageCount`. */
-  storageCount?: number;
+  storageCount?: number | undefined;
 };
 
 export type CloudExadataInfrastructure = Resource<

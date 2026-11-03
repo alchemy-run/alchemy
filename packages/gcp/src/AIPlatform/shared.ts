@@ -23,15 +23,15 @@ export type EncryptionSpec = {
 
 export type MachineSpec = {
   /** Machine type (e.g. `e2-standard-4`, `n1-standard-4`). Immutable. */
-  machineType?: string;
+  machineType?: string | undefined;
   /** Accelerator type (`NVIDIA_TESLA_T4`, …). Immutable. */
-  acceleratorType?: string;
+  acceleratorType?: string | undefined;
   /** Number of accelerators to attach. */
-  acceleratorCount?: number;
+  acceleratorCount?: number | undefined;
   /** Nvidia GPU partition size (MIG). Immutable. */
-  gpuPartitionSize?: string;
+  gpuPartitionSize?: string | undefined;
   /** TPU topology (e.g. `2x2x1`). Immutable. */
-  tpuTopology?: string;
+  tpuTopology?: string | undefined;
 };
 
 export type NetworkSpec = {

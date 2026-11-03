@@ -9,7 +9,6 @@ import { kvAdapter } from "../cache/kv.ts";
 import { makeVinextCachePlugin } from "../cache/plugin.ts";
 import { redisAdapter } from "../cache/redis.ts";
 import { s3Adapter } from "../cache/s3.ts";
-import { seedPrerenderTo, type SeedSink } from "../cache/seed.ts";
 import {
   keySpace,
   readEnvString,
@@ -210,23 +209,5 @@ describe("vinext cache adapters", () => {
         VINEXT_KV_CACHE: { namespaceId: "ns", accountId: "acct" },
       }),
     ).toEqual({ namespaceId: "ns", accountId: "acct" });
-  });
-
-  it("seedPrerenderTo writes through putText regardless of backend", async () => {
-    const written: Array<{ key: string; value: string; ttlMs?: number }> = [];
-    const sink: SeedSink = {
-      putText: (key, value, ttlMs) =>
-        Effect.sync(() => {
-          written.push({ key, value, ttlMs });
-        }),
-    };
-    const result = await Effect.runPromise(
-      seedPrerenderTo(sink, {
-        rootDir: "/tmp/vinext-cache-missing",
-        label: "memory",
-      }),
-    );
-    expect(result).toEqual({ count: 0, routeCount: 0 });
-    expect(written).toEqual([]);
   });
 });

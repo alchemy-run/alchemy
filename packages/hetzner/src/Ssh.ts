@@ -14,7 +14,7 @@ import type { Server } from "./Server.ts";
 export class SshError extends Data.TaggedError("Hetzner.SshError")<{
   message: string;
   host?: string;
-  command?: string;
+  command?: string | undefined;
   code?: number;
   stderr?: string;
 }> {}
@@ -27,9 +27,9 @@ export interface SshExecResult {
 
 export interface SshOptions {
   /** SSH user. @default "root" */
-  user?: string;
+  user?: string | undefined;
   /** PKCS8 PEM private key. Defaults to the Server's deploy key. */
-  privateKey?: string | Redacted.Redacted<string>;
+  privateKey?: string | Redacted.Redacted<string> | undefined;
 }
 
 export type SshServices =
@@ -110,7 +110,7 @@ const runCommand = Effect.fn(function* (input: {
   bin: string;
   args: string[];
   host: string;
-  command?: string;
+  command?: string | undefined;
 }) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const result = yield* ChildProcess.make(input.bin, input.args, {
@@ -153,7 +153,7 @@ const runCommand = Effect.fn(function* (input: {
 export const openSshClient = Effect.fn(function* (input: {
   host: string;
   privateKey: string;
-  user?: string;
+  user?: string | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

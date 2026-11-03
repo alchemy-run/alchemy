@@ -27,12 +27,12 @@ import {
 
 export type LabelingCondition = {
   /** CEL expression evaluated as the label value. */
-  value?: string;
+  value?: string | undefined;
   /**
    * Optional CEL predicate. When true (or empty), `value` is used. The
    * first matching condition wins.
    */
-  condition?: string;
+  condition?: string | undefined;
 };
 
 export type AutoLabelingRuleProps = {

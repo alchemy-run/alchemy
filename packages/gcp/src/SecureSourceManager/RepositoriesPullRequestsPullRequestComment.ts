@@ -33,23 +33,25 @@ export type PullRequestCommentReview = {
   /**
    * Review action (`COMMENT`, `CHANGE_REQUESTED`, `APPROVED`).
    */
-  actionType?: ssm.ReviewActionTypeEnum | (string & {});
+  actionType?: ssm.ReviewActionTypeEnum | (string & {}) | undefined;
   /** Optional review summary body. */
-  body?: string;
+  body?: string | undefined;
 };
 
 export type PullRequestCommentCode = {
   /** Comment body. */
-  body?: string;
+  body?: string | undefined;
   /** Parent code-comment name this comment replies to. */
-  reply?: string;
+  reply?: string | undefined;
   /** File path of the comment. */
-  position?: {
-    /** Path of the file. */
-    path?: string;
-    /** Line number (positive = new side, negative = old side). */
-    line?: string;
-  };
+  position?:
+    | {
+        /** Path of the file. */
+        path?: string | undefined;
+        /** Line number (positive = new side, negative = old side). */
+        line?: string | undefined;
+      }
+    | undefined;
 };
 
 export type RepositoriesPullRequestsPullRequestCommentProps = {
@@ -83,7 +85,7 @@ export type RepositoriesPullRequestsPullRequestCommentProps = {
   /**
    * Review summary comment. Mutually exclusive with `comment` and `code`.
    */
-  review?: PullRequestCommentReview;
+  review?: PullRequestCommentReview | undefined;
   /**
    * Line-level code comment. Mutually exclusive with `comment` and
    * `review`. Creating a root code comment requires

@@ -51,7 +51,7 @@ export interface KeyProps {
    * Whether the KMS key is enabled.
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Whether automatic key rotation is enabled.
    * @default false
@@ -578,7 +578,7 @@ const toAttrs = ({
 }: {
   metadata: kms.KeyMetadata;
   tags: Record<string, string>;
-  rotation: { enabled?: boolean; periodInDays?: number } | undefined;
+  rotation: { enabled?: boolean | undefined; periodInDays?: number | undefined } | undefined;
   policy: string | undefined;
   deletionWindowInDays: number;
 }): Key["Attributes"] => ({

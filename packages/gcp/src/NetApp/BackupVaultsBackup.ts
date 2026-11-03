@@ -30,11 +30,11 @@ import {
 
 export type OntapSource = {
   /** Storage pool that hosts the ONTAP volume. */
-  storagePool?: string;
+  storagePool?: string | undefined;
   /** ONTAP source volume UUID. */
-  volumeUuid?: string;
+  volumeUuid?: string | undefined;
   /** ONTAP source snapshot UUID. */
-  snapshotUuid?: string;
+  snapshotUuid?: string | undefined;
 };
 
 export type BackupVaultsBackupProps = {

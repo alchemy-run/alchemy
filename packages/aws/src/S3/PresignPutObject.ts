@@ -12,13 +12,13 @@ export interface PresignPutObjectRequest {
    * Number of seconds the URL remains valid.
    * @default 900
    */
-  expiresIn?: number;
+  expiresIn?: number | undefined;
   /**
    * Content-Type signed into the URL. The uploader must send exactly this
    * `Content-Type` header or S3 rejects the upload with a signature
    * mismatch. Omit to leave the Content-Type unconstrained.
    */
-  contentType?: string;
+  contentType?: string | undefined;
 }
 
 /**

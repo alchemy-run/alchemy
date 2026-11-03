@@ -119,10 +119,10 @@ export interface WebACL extends Resource<
      */
     configuration?: {
       defaultAction?: unknown;
-      description?: string;
+      description?: string | undefined;
       rules: unknown[];
       visibilityConfig?: unknown;
-      tokenDomains?: string[];
+      tokenDomains?: string[] | undefined;
       customResponseBodies?: unknown;
       captchaConfig?: unknown;
       challengeConfig?: unknown;

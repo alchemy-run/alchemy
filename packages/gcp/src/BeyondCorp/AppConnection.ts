@@ -40,9 +40,9 @@ const COLLECTION = "appConnections";
 
 export type AppConnectionApplicationEndpoint = {
   /** Hostname or IP of the remote application. */
-  host?: string;
+  host?: string | undefined;
   /** Port of the remote application. */
-  port?: number;
+  port?: number | undefined;
 };
 
 export type AppConnectionGateway = {
@@ -52,19 +52,20 @@ export type AppConnectionGateway = {
    */
   type?:
     | beyondcorp.GoogleCloudBeyondcorpAppconnectionsV1AppConnectionGatewayTypeEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
   /**
    * AppGateway resource name
    * (`projects/{project}/locations/{location}/appGateways/{appGateway}`)
    * or gateway id.
    */
-  appGateway?: string;
+  appGateway?: string | undefined;
   /** Ingress port reserved on the gateway. Output only. */
-  ingressPort?: number;
+  ingressPort?: number | undefined;
   /** Server-defined URI. Output only. */
-  uri?: string;
+  uri?: string | undefined;
   /** L7 private service connection. Output only. */
-  l7psc?: string;
+  l7psc?: string | undefined;
 };
 
 export type AppConnectionProps = {
@@ -87,7 +88,10 @@ export type AppConnectionProps = {
    * connection.
    * @default "TCP_PROXY"
    */
-  type?: beyondcorp.GoogleCloudBeyondcorpAppconnectionsV1AppConnectionTypeEnum | (string & {});
+  type?:
+    | beyondcorp.GoogleCloudBeyondcorpAppconnectionsV1AppConnectionTypeEnum
+    | (string & {})
+    | undefined;
   /**
    * Remote application endpoint. Host and port are required.
    */

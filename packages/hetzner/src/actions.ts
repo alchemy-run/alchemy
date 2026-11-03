@@ -13,7 +13,7 @@ export class ActionPending extends Data.TaggedError("ActionPending")<{
 export class ActionFailed extends Data.TaggedError("ActionFailed")<{
   actionId: number;
   command: string;
-  code?: string;
+  code?: string | undefined;
   message: string;
 }> {}
 

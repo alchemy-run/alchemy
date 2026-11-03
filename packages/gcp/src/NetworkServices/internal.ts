@@ -268,7 +268,7 @@ const PENDING_STATES = new Set([
 
 const FAILED_STATES = new Set(["FAILED", "DELETE_FAILED", "UPDATE_FAILED", "OBSOLETE"]);
 
-export const waitUntilReady = <A extends { state?: string }, E, R>(
+export const waitUntilReady = <A extends { state?: string | undefined }, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
   name: string,
 ) =>

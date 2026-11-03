@@ -100,10 +100,10 @@ export const DiscovererProvider = () =>
           .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       const toAttrs = (d: {
-        DiscovererId?: string;
-        DiscovererArn?: string;
-        SourceArn?: string;
-        State?: string;
+        DiscovererId?: string | undefined;
+        DiscovererArn?: string | undefined;
+        SourceArn?: string | undefined;
+        State?: string | undefined;
       }) => ({
         discovererId: d.DiscovererId!,
         discovererArn: d.DiscovererArn!,
@@ -168,12 +168,12 @@ export const DiscovererProvider = () =>
           // OBSERVE — output.discovererId is only an id cache.
           let live:
             | {
-                Description?: string;
-                DiscovererArn?: string;
-                DiscovererId?: string;
-                SourceArn?: string;
-                State?: string;
-                CrossAccount?: boolean;
+                Description?: string | undefined;
+                DiscovererArn?: string | undefined;
+                DiscovererId?: string | undefined;
+                SourceArn?: string | undefined;
+                State?: string | undefined;
+                CrossAccount?: boolean | undefined;
               }
             | undefined;
           if (output?.discovererId) {

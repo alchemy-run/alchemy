@@ -21,11 +21,13 @@ import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from ".
 
 export type GroupsMembershipRole = {
   /** Role name: `OWNER`, `MANAGER`, or `MEMBER`. */
-  name?: string;
+  name?: string | undefined;
   /** Expiry, only valid when `name` is `MEMBER`. */
-  expiryDetail?: {
-    expireTime?: string;
-  };
+  expiryDetail?:
+    | {
+        expireTime?: string | undefined;
+      }
+    | undefined;
 };
 
 export type GroupsMembershipProps = {
@@ -42,7 +44,7 @@ export type GroupsMembershipProps = {
   /**
    * Member entity-key namespace for external identities.
    */
-  memberKeyNamespace?: string;
+  memberKeyNamespace?: string | undefined;
   /**
    * Roles for the membership. Defaults to a single `MEMBER` role.
    * `MEMBER` cannot be removed; drop `MANAGER` / `OWNER` in place.
@@ -159,10 +161,10 @@ const toAttrs = (membership: cloudidentity.Membership, parent: string) => {
 };
 
 const observeMembership = (input: {
-  name?: string;
+  name?: string | undefined;
   parent: string;
   memberKeyId: string;
-  memberKeyNamespace?: string;
+  memberKeyNamespace?: string | undefined;
 }) =>
   Effect.gen(function* () {
     const byName = yield* getMembership(input.name ?? "");

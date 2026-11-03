@@ -244,7 +244,9 @@ const editCommand = Command.make(
   )(
     Effect.fn(function* ({ profile, add, reconfigure, remove, method, set, envFile, main }) {
       const selectedProfile = yield* resolveProfileName(envFile, profile);
-      let configureInput: { method?: string; values: Record<string, string> } | undefined;
+      let configureInput:
+        | { method?: string | undefined; values: Record<string, string> }
+        | undefined;
       if (method !== undefined || set.length > 0) {
         if (add.length + reconfigure.length !== 1 || remove.length > 0) {
           return yield* new UserInputError({

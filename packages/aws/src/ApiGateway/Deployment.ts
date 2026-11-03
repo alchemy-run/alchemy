@@ -238,8 +238,8 @@ export const DeploymentProvider = () =>
           }),
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
-          const news = newsIn as Input.ResolveProps<DeploymentProps>;
-          const oldsP = olds as Input.ResolveProps<DeploymentProps>;
+          const news = newsIn;
+          const oldsP = olds;
           if (news.restApiId !== oldsP.restApiId) {
             return { action: "replace" } as const;
           }
@@ -280,7 +280,7 @@ export const DeploymentProvider = () =>
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Deployment props were not resolved");
           }
-          const news = newsIn as Input.ResolveProps<DeploymentProps>;
+          const news = newsIn;
           const description = yield* embedTriggers(
             news.description,
             news.triggers as Record<string, string> | undefined,

@@ -56,7 +56,7 @@ export const toPhysicalId = (
   explicit: string | undefined,
   existing: string | undefined,
   prefix: string,
-  options?: { delimiter?: string; underscores?: boolean },
+  options?: { delimiter?: string | undefined; underscores?: boolean },
 ) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
@@ -184,7 +184,7 @@ export const canonIndexConfigs = (
 export type SinkExclusion = {
   name: string;
   filter: string;
-  description?: string;
+  description?: string | undefined;
   disabled?: boolean;
 };
 

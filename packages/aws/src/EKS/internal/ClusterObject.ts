@@ -23,7 +23,7 @@ export interface ClusterObjectProps {
   kind: string;
   /** Object metadata. `name` defaults to the logical id. */
   metadata?: Omit<KubernetesObjectMetadata, "name"> & {
-    name?: string;
+    name?: string | undefined;
   };
   /** Extra top-level fields merged into the final Kubernetes object. */
   body?: Record<string, unknown>;
@@ -81,9 +81,9 @@ export const clusterServiceAccount = (
   props: {
     cluster: Cluster;
     namespace: string | { name: string } | ClusterObjectRef;
-    name?: string;
-    labels?: Record<string, string>;
-    annotations?: Record<string, string>;
+    name?: string | undefined;
+    labels?: Record<string, string> | undefined;
+    annotations?: Record<string, string> | undefined;
   },
 ) =>
   ClusterObject(id, {

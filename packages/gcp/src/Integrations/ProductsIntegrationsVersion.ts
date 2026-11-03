@@ -66,7 +66,7 @@ export type ProductsIntegrationsVersionProps = {
   /**
    * Trigger configurations.
    */
-  triggerConfigs?: TriggerConfig[];
+  triggerConfigs?: TriggerConfig[] | undefined;
   /**
    * When true, create a new integration if `integrationId` does not
    * exist. Ignored on update.

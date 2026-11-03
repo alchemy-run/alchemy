@@ -134,10 +134,12 @@ class ServiceNotReady extends Data.TaggedError("ServiceNotReady")<{
 
 const membersOf = (
   policy: {
-    bindings?: ReadonlyArray<{
-      role?: string;
-      members?: ReadonlyArray<string>;
-    }>;
+    bindings?:
+      | ReadonlyArray<{
+          role?: string | undefined;
+          members?: ReadonlyArray<string> | undefined;
+        }>
+      | undefined;
   },
   member: string,
 ) =>

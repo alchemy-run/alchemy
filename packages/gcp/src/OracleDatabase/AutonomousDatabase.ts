@@ -55,51 +55,52 @@ export type SourceConfig = {
 
 export type AutonomousDatabasePropertiesInput = {
   /** License type. Immutable. */
-  licenseType?: oracle.AutonomousDatabasePropertiesLicenseTypeEnum | (string & {});
+  licenseType?: oracle.AutonomousDatabasePropertiesLicenseTypeEnum | (string & {}) | undefined;
   /** Workload type (`OLTP`, `DW`, `AJD`, `APEX`). Immutable. */
-  dbWorkload?: oracle.AutonomousDatabasePropertiesDbWorkloadEnum | (string & {});
+  dbWorkload?: oracle.AutonomousDatabasePropertiesDbWorkloadEnum | (string & {}) | undefined;
   /** Database edition. Immutable. */
-  dbEdition?: oracle.AutonomousDatabasePropertiesDbEditionEnum | (string & {});
+  dbEdition?: oracle.AutonomousDatabasePropertiesDbEditionEnum | (string & {}) | undefined;
   /** Oracle Database version. Immutable. */
-  dbVersion?: string;
+  dbVersion?: string | undefined;
   /** CPU cores. */
-  cpuCoreCount?: number;
+  cpuCoreCount?: number | undefined;
   /** Compute count (ECPU). */
-  computeCount?: number;
+  computeCount?: number | undefined;
   /** Data storage in GB. */
-  dataStorageSizeGb?: number;
+  dataStorageSizeGb?: number | undefined;
   /** Data storage in TB. */
-  dataStorageSizeTb?: number;
+  dataStorageSizeTb?: number | undefined;
   /** Enable compute auto scaling. */
-  isAutoScalingEnabled?: boolean;
+  isAutoScalingEnabled?: boolean | undefined;
   /** Enable storage auto scaling. */
-  isStorageAutoScalingEnabled?: boolean;
+  isStorageAutoScalingEnabled?: boolean | undefined;
   /** Require mTLS. Immutable. */
-  mtlsConnectionRequired?: boolean;
+  mtlsConnectionRequired?: boolean | undefined;
   /** Backup retention in days (1-60). Immutable. */
-  backupRetentionPeriodDays?: number;
+  backupRetentionPeriodDays?: number | undefined;
   /** Character set. Immutable. */
-  characterSet?: string;
+  characterSet?: string | undefined;
   /** National character set. Immutable. */
-  nCharacterSet?: string;
+  nCharacterSet?: string | undefined;
   /** Maintenance schedule (`EARLY`, `REGULAR`). Immutable. */
   maintenanceScheduleType?:
     | oracle.AutonomousDatabasePropertiesMaintenanceScheduleTypeEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
   /** Allowlisted IP addresses. Immutable. */
-  allowlistedIps?: string[];
+  allowlistedIps?: string[] | undefined;
   /** Customer contacts. Immutable. */
-  customerContacts?: CustomerContact[];
+  customerContacts?: CustomerContact[] | undefined;
   /** Encryption key. Updating appends a history entry. */
-  encryptionKey?: EncryptionKey;
+  encryptionKey?: EncryptionKey | undefined;
   /** Enable in-region Data Guard. */
-  localDataGuardEnabled?: boolean;
+  localDataGuardEnabled?: boolean | undefined;
   /** Private endpoint label. Immutable. */
-  privateEndpointLabel?: string;
+  privateEndpointLabel?: string | undefined;
   /** Private endpoint IP. Immutable. */
-  privateEndpointIp?: string;
+  privateEndpointIp?: string | undefined;
   /** Maximum Data Guard failover data-loss limit, in seconds. */
-  localAdgAutoFailoverMaxDataLossLimitDuration?: number;
+  localAdgAutoFailoverMaxDataLossLimitDuration?: number | undefined;
 };
 
 export type AutonomousDatabaseProps = {
@@ -109,91 +110,91 @@ export type AutonomousDatabaseProps = {
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Immutable — changing it replaces the database.
    */
-  autonomousDatabaseId?: string;
+  autonomousDatabaseId?: string | undefined;
   /**
    * Region (`us-central1`, `us-east4`, …). Immutable — changing it
    * replaces the database. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Oracle database name (1-30 alphanumeric, unique in the project).
    * Immutable.
    */
-  database?: string;
+  database?: string | undefined;
   /**
    * Display name. Immutable.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * VPC network (`projects/{project}/global/networks/{network}` or a
    * bare network id). Immutable. Required unless `odbSubnet` is set.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Subnet CIDR for the database. Immutable. Required unless
    * `odbSubnet` is set.
    */
-  cidr?: string;
+  cidr?: string | undefined;
   /**
    * ODB Network
    * (`projects/{project}/locations/{location}/odbNetworks/{odb_network}`).
    * Immutable.
    */
-  odbNetwork?: string;
+  odbNetwork?: string | undefined;
   /**
    * ODB Subnet
    * (`projects/{project}/locations/{location}/odbNetworks/{odb_network}/odbSubnets/{odb_subnet}`).
    * Immutable.
    */
-  odbSubnet?: string;
+  odbSubnet?: string | undefined;
   /**
    * ADMIN user password. Create-only. Mutually exclusive with
    * `adminPasswordSecretVersion`.
    */
-  adminPassword?: string;
+  adminPassword?: string | undefined;
   /**
    * Secret Manager version holding the ADMIN password
    * (`projects/{project}/secrets/{secret}/versions/{version}`).
    * Create-only.
    */
-  adminPasswordSecretVersion?: string;
+  adminPasswordSecretVersion?: string | undefined;
   /**
    * Source Autonomous Database when creating a Data Guard peer.
    * Immutable.
    */
-  sourceConfig?: SourceConfig;
+  sourceConfig?: SourceConfig | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Database properties. Flattened aliases (`licenseType`,
    * `dbWorkload`, …) are also accepted on the resource and win over
    * this nested object when both are set.
    */
-  properties?: AutonomousDatabasePropertiesInput;
+  properties?: AutonomousDatabasePropertiesInput | undefined;
   /** License type. Immutable. Convenience alias for `properties.licenseType`. */
-  licenseType?: oracle.AutonomousDatabasePropertiesLicenseTypeEnum | (string & {});
+  licenseType?: oracle.AutonomousDatabasePropertiesLicenseTypeEnum | (string & {}) | undefined;
   /** Workload type. Immutable. Convenience alias for `properties.dbWorkload`. */
-  dbWorkload?: oracle.AutonomousDatabasePropertiesDbWorkloadEnum | (string & {});
+  dbWorkload?: oracle.AutonomousDatabasePropertiesDbWorkloadEnum | (string & {}) | undefined;
   /** CPU cores. Convenience alias for `properties.cpuCoreCount`. */
-  cpuCoreCount?: number;
+  cpuCoreCount?: number | undefined;
   /** Compute count. Convenience alias for `properties.computeCount`. */
-  computeCount?: number;
+  computeCount?: number | undefined;
   /** Data storage in GB. Convenience alias for `properties.dataStorageSizeGb`. */
-  dataStorageSizeGb?: number;
+  dataStorageSizeGb?: number | undefined;
   /** Data storage in TB. Convenience alias for `properties.dataStorageSizeTb`. */
-  dataStorageSizeTb?: number;
+  dataStorageSizeTb?: number | undefined;
   /** Compute auto scaling. Convenience alias for `properties.isAutoScalingEnabled`. */
-  isAutoScalingEnabled?: boolean;
+  isAutoScalingEnabled?: boolean | undefined;
   /** Storage auto scaling. Convenience alias for `properties.isStorageAutoScalingEnabled`. */
-  isStorageAutoScalingEnabled?: boolean;
+  isStorageAutoScalingEnabled?: boolean | undefined;
   /** Oracle Database version. Immutable. */
-  dbVersion?: string;
+  dbVersion?: string | undefined;
   /** Database edition. Immutable. */
-  dbEdition?: oracle.AutonomousDatabasePropertiesDbEditionEnum | (string & {});
+  dbEdition?: oracle.AutonomousDatabasePropertiesDbEditionEnum | (string & {}) | undefined;
 };
 
 export type AutonomousDatabase = Resource<

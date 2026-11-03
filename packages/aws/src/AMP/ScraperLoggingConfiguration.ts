@@ -16,7 +16,7 @@ export interface ScraperComponentConfig {
   /**
    * Component-specific options (e.g. `{ loggingLevel: "DEBUG" }`).
    */
-  options?: Record<string, string>;
+  options?: Record<string, string> | undefined;
 }
 
 export interface ScraperLoggingConfigurationProps {
@@ -96,7 +96,7 @@ export const ScraperLoggingConfigurationProvider = () =>
       const canonicalComponents = (
         components: {
           type: string;
-          config?: { options?: Record<string, string | undefined> };
+          config?: { options?: Record<string, string | undefined> | undefined } | undefined;
         }[],
       ) =>
         JSON.stringify(

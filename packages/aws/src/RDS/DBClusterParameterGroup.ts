@@ -20,7 +20,7 @@ export interface DBClusterParameterGroupProps {
   /**
    * Name of the parameter group. If omitted, Alchemy generates one.
    */
-  dbClusterParameterGroupName?: string;
+  dbClusterParameterGroupName?: string | undefined;
   /**
    * Parameter group family, for example `aurora-postgresql16`.
    */
@@ -28,7 +28,7 @@ export interface DBClusterParameterGroupProps {
   /**
    * Human-readable description.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * User-defined tags.
    */

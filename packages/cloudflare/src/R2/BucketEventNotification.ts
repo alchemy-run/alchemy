@@ -43,17 +43,17 @@ export interface BucketEventNotificationRule {
    * Only notify for objects whose key starts with this prefix.
    * @default "" (match all objects)
    */
-  prefix?: string;
+  prefix?: string | undefined;
   /**
    * Only notify for objects whose key ends with this suffix.
    * @default "" (match all objects)
    */
-  suffix?: string;
+  suffix?: string | undefined;
   /**
    * Human-readable description of the rule. Cloudflare auto-generates one
    * when omitted.
    */
-  description?: string;
+  description?: string | undefined;
 }
 
 export interface BucketEventNotificationProps {
@@ -517,8 +517,8 @@ const toAttributes = (
  */
 const ruleIdentity = (rule: {
   actions: readonly string[];
-  prefix?: string | null;
-  suffix?: string | null;
+  prefix?: string | null | undefined;
+  suffix?: string | null | undefined;
 }) =>
   JSON.stringify({
     actions: [...rule.actions].sort(),

@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { Plugin } from "vite";
 import { runBuildChild } from "../core/BuildChild.ts";
 import type { BuildOutput } from "../core/BuildOutput.ts";
@@ -146,8 +148,10 @@ export const make = Effect.fn(function* (options: VocsNodeFrameworkOptions = {})
                 configFile: false,
                 plugins: [react.default(), vocs.vocs()],
                 server: {
-                  host: devOptions?.host,
-                  port: devOptions?.port,
+                  ...Record.filterMap(
+                    { host: devOptions?.host, port: devOptions?.port },
+                    Result.fromNullishOr(() => undefined),
+                  ),
                   strictPort: devOptions?.port !== undefined,
                 },
               }),

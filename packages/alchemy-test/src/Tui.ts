@@ -126,11 +126,11 @@ interface Entry {
   readonly meta: TestMeta;
   readonly file: FileNode;
   status: Status;
-  result?: TestResult;
+  result?: TestResult | undefined;
   /** Set on TestStart; drives the live elapsed timer on running rows. */
   startedAt?: number;
   /** LIVE captured-output buffer while running (runner appends in place). */
-  liveLogs?: ReadonlyArray<LogEntry>;
+  liveLogs?: ReadonlyArray<LogEntry> | undefined;
   /** Cached plain-text row label — recomputed only on status/result change. */
   label: string;
 }

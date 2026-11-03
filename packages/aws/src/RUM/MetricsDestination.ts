@@ -67,7 +67,7 @@ export interface MetricsDestinationProps {
    * Required when `destination` is `"Evidently"`; changing it replaces the
    * destination.
    */
-  destinationArn?: string;
+  destinationArn?: string | undefined;
   /**
    * ARN of the IAM role RUM assumes to write to the Evidently experiment.
    * Required when `destination` is `"Evidently"`.

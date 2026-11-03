@@ -35,22 +35,24 @@ const COLLECTION = "applications";
 
 export type SecurityGatewaysApplicationEndpointMatcher = {
   /** Hostname pattern (`example.com`, `*.example.com`). */
-  hostname?: string;
+  hostname?: string | undefined;
   /** Ports that match this hostname. */
-  ports?: number[];
+  ports?: number[] | undefined;
 };
 
 export type SecurityGatewaysApplicationUpstream = {
   /** VPC network to forward traffic to. */
-  network?: { name?: string };
+  network?: { name?: string | undefined } | undefined;
   /** External endpoints to forward traffic to. */
-  external?: {
-    endpoints?: Array<{ hostname?: string; port?: number }>;
-  };
+  external?:
+    | {
+        endpoints?: Array<{ hostname?: string | undefined; port?: number | undefined }> | undefined;
+      }
+    | undefined;
   /** Optional proxy-protocol configuration for the upstream. */
-  proxyProtocol?: beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ProxyProtocolConfig;
+  proxyProtocol?: beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ProxyProtocolConfig | undefined;
   /** Regions where the application sends traffic. */
-  egressPolicy?: { regions?: string[] };
+  egressPolicy?: { regions?: string[] | undefined } | undefined;
 };
 
 export type SecurityGatewaysApplicationProps = {

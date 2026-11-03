@@ -20,7 +20,7 @@ interface SyncArgs {
   main: string;
   stage: string;
   envFile: Option.Option<string>;
-  profile?: string;
+  profile?: string | undefined;
   repair?: boolean;
 }
 

@@ -47,44 +47,48 @@ export type SecurityHealthAnalyticsSeverity =
 
 export type Expr = {
   /** CEL expression. */
-  expression?: string;
+  expression?: string | undefined;
   /** Short title. */
-  title?: string;
+  title?: string | undefined;
   /** Human-readable description. */
-  description?: string;
+  description?: string | undefined;
   /** Source location of the expression. */
-  location?: string;
+  location?: string | undefined;
 };
 
 export type CustomOutputProperty = {
   /** Property name. */
-  name?: string;
+  name?: string | undefined;
   /** CEL expression that produces the property value. */
-  valueExpression?: Expr;
+  valueExpression?: Expr | undefined;
 };
 
 export type CustomConfig = {
   /** CEL predicate that selects resources. */
-  predicate?: Expr;
+  predicate?: Expr | undefined;
   /** Resource types this module inspects. */
-  resourceSelector?: {
-    /** Fully-qualified resource type names. */
-    resourceTypes?: string[];
-  };
+  resourceSelector?:
+    | {
+        /** Fully-qualified resource type names. */
+        resourceTypes?: string[] | undefined;
+      }
+    | undefined;
   /** Finding severity. */
-  severity?: SecurityHealthAnalyticsSeverity;
+  severity?: SecurityHealthAnalyticsSeverity | undefined;
   /**
    * Finding description. Alchemy ownership is stored in a `[alchemy …]`
    * prefix here (custom modules have no labels) and stripped from
    * attributes.
    */
-  description?: string;
+  description?: string | undefined;
   /** Recommended next steps. */
-  recommendation?: string;
+  recommendation?: string | undefined;
   /** Extra properties written onto findings. */
-  customOutput?: {
-    properties?: CustomOutputProperty[];
-  };
+  customOutput?:
+    | {
+        properties?: CustomOutputProperty[] | undefined;
+      }
+    | undefined;
 };
 
 export type SecurityHealthAnalyticsSettingsCustomModuleProps = {

@@ -37,7 +37,7 @@ export type PscConfig = {
    * Consumer service project for the Private Service Connect endpoint
    * (Shared VPC). Defaults to the VPC host project.
    */
-  endpointProject?: string;
+  endpointProject?: string | undefined;
 };
 
 export type NetworkConfig = {
@@ -46,28 +46,28 @@ export type NetworkConfig = {
    * (`projects/{project}/global/networks/{network}`). Immutable.
    * @default "default"
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Internet protocol versions assigned to the instance.
    * @default ["MODE_IPV4"]
    */
-  modes?: Array<file.NetworkConfigModesItemEnum | (string & {})>;
+  modes?: Array<file.NetworkConfigModesItemEnum | (string & {})> | undefined;
   /**
    * Reserved IP CIDR (`DIRECT_PEERING`) or allocated range name
    * (`PRIVATE_SERVICE_ACCESS`). Immutable. BASIC uses a /29, Enterprise a
    * /26, High Scale a /24. If omitted, Filestore picks a free block.
    */
-  reservedIpRange?: string;
+  reservedIpRange?: string | undefined;
   /**
    * Network connect mode. Immutable.
    * @default "DIRECT_PEERING"
    */
-  connectMode?: file.NetworkConfigConnectModeEnum | (string & {});
+  connectMode?: file.NetworkConfigConnectModeEnum | (string & {}) | undefined;
   /**
    * Private Service Connect configuration. Set only when `connectMode` is
    * `PRIVATE_SERVICE_CONNECT`.
    */
-  pscConfig?: PscConfig;
+  pscConfig?: PscConfig | undefined;
 };
 
 export type NfsExportOptions = {
@@ -75,29 +75,29 @@ export type NfsExportOptions = {
    * Root squash. `NO_ROOT_SQUASH` (default) allows root; `ROOT_SQUASH`
    * maps root to `anonUid`/`anonGid`.
    */
-  squashMode?: file.NfsExportOptionsSquashModeEnum | (string & {});
+  squashMode?: file.NfsExportOptionsSquashModeEnum | (string & {}) | undefined;
   /**
    * Source VPC for `ipRanges`. Required for Private Service Connect.
    * Must match `NetworkConfig.network` when set.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Anonymous group id used with `ROOT_SQUASH`. Default 65534.
    */
-  anonGid?: number;
+  anonGid?: number | undefined;
   /**
    * IPv4 addresses or CIDR ranges allowed to mount the share. Max 64
    * across all export options on a share. Overlaps are rejected.
    */
-  ipRanges?: string[];
+  ipRanges?: string[] | undefined;
   /**
    * Mount access. `READ_WRITE` (default) or `READ_ONLY`.
    */
-  accessMode?: file.NfsExportOptionsAccessModeEnum | (string & {});
+  accessMode?: file.NfsExportOptionsAccessModeEnum | (string & {}) | undefined;
   /**
    * Anonymous user id used with `ROOT_SQUASH`. Default 65534.
    */
-  anonUid?: number;
+  anonUid?: number | undefined;
 };
 
 export type FileShareConfig = {
@@ -107,37 +107,37 @@ export type FileShareConfig = {
    * Immutable — changing it replaces the instance.
    * @default "share1"
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Capacity in GiB (1024^3 bytes). BASIC_HDD minimum is 1024, BASIC_SSD
    * 2560, HIGH_SCALE_SSD 10240. Omit to use the tier minimum.
    */
-  capacityGb?: number;
+  capacityGb?: number | undefined;
   /**
    * NFS export options. Max 10 per share. Omit to allow all clients with
    * `READ_WRITE` and `NO_ROOT_SQUASH`.
    */
-  nfsExportOptions?: NfsExportOptions[];
+  nfsExportOptions?: NfsExportOptions[] | undefined;
   /**
    * Filestore backup to restore
    * (`projects/{project}/locations/{location}/backups/{backup}`).
    * Immutable.
    */
-  sourceBackup?: string;
+  sourceBackup?: string | undefined;
   /**
    * BackupDR backup to restore. Immutable.
    */
-  sourceBackupdrBackup?: string;
+  sourceBackupdrBackup?: string | undefined;
 };
 
 export type IopsPerTb = {
   /** Maximum IOPS per TiB of capacity. */
-  maxIopsPerTb?: number;
+  maxIopsPerTb?: number | undefined;
 };
 
 export type FixedIops = {
   /** Fixed provisioned IOPS. Must be a multiple of 1000. */
-  maxIops?: number;
+  maxIops?: number | undefined;
 };
 
 export type PerformanceConfig = {
@@ -145,23 +145,23 @@ export type PerformanceConfig = {
    * Provision IOPS as `capacityTiB * maxIopsPerTb`. Mutually exclusive
    * with `fixedIops`.
    */
-  iopsPerTb?: IopsPerTb;
+  iopsPerTb?: IopsPerTb | undefined;
   /**
    * Fixed provisioned IOPS, independent of capacity. Mutually exclusive
    * with `iopsPerTb`.
    */
-  fixedIops?: FixedIops;
+  fixedIops?: FixedIops | undefined;
 };
 
 export type LdapConfig = {
   /** LDAP servers as DNS names or IP addresses (one format, not mixed). */
-  servers?: string[];
+  servers?: string[] | undefined;
   /** LDAP domain (`example.com`). */
-  domain?: string;
+  domain?: string | undefined;
   /** Optional groups OU to speed LDAP lookups. */
-  groupsOu?: string;
+  groupsOu?: string | undefined;
   /** Optional users OU to speed LDAP lookups. */
-  usersOu?: string;
+  usersOu?: string | undefined;
 };
 
 export type DirectoryServicesConfig = {
@@ -175,14 +175,14 @@ export type ReplicaConfig = {
    * (`projects/{project}/locations/{location}/instances/{instance}`).
    * Required when creating a standby replica.
    */
-  peerInstance?: string;
+  peerInstance?: string | undefined;
 };
 
 export type Replication = {
   /** Replication role. New replicas must set `STANDBY`. */
-  role?: file.ReplicationRoleEnum | (string & {});
+  role?: file.ReplicationRoleEnum | (string & {}) | undefined;
   /** Replica peers. The API supports a single replica. */
-  replicas?: ReplicaConfig[];
+  replicas?: ReplicaConfig[] | undefined;
 };
 
 export type PerformanceLimits = {

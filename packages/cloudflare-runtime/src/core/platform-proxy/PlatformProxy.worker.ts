@@ -5,6 +5,9 @@
  */
 /** The request type `ExportedHandler["fetch"]` receives (ambient workers-types globals). */
 type WorkerRequest = Request<unknown, IncomingRequestCfProperties<unknown>>;
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type {
   CallRequest,
   EncodedChainSegment,
@@ -344,7 +347,10 @@ const handleProxyFetch = async (request: WorkerRequest, env: Env): Promise<Respo
   const forwarded = new Request(targetUrl, {
     method: request.method,
     headers,
-    body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+    ...Record.filterMap(
+      { body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body },
+      Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+    ),
     redirect: "manual",
   });
   return await target.fetch(forwarded);

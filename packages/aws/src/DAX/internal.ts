@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
  * entry missing a key or value.
  */
 export const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: Array<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

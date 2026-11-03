@@ -51,9 +51,7 @@ export default {
       headers: request.headers,
       method: request.method,
       body:
-        request.method === "GET" || request.method === "HEAD"
-          ? undefined
-          : await request.arrayBuffer(),
+        request.method === "GET" || request.method === "HEAD" ? null : await request.arrayBuffer(),
     });
   },
 } satisfies ExportedHandler<BrokerEnv>;
@@ -75,7 +73,7 @@ type MessageBody =
 interface QueueIncomingMessage {
   readonly contentType: QueueContentType;
   readonly body: string;
-  readonly delaySecs?: number;
+  readonly delaySecs?: number | undefined;
   readonly id?: string;
   readonly timestamp?: number;
 }
@@ -102,10 +100,12 @@ const exceptionQueueResult: FetcherQueueResult = {
  */
 export class QueueBroker extends DurableObject<BrokerEnv> {
   private messages: Array<QueueMessage> = [];
-  private pendingFlush?: {
-    immediate: boolean;
-    timeout: ReturnType<typeof setTimeout>;
-  };
+  private pendingFlush:
+    | {
+        immediate: boolean;
+        timeout: ReturnType<typeof setTimeout>;
+      }
+    | undefined;
   private backlogBytes = 0;
 
   private get queueName(): string {

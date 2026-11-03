@@ -63,7 +63,7 @@ export interface RuleProps {
    * generated from the app/stage/logical-id. Used during adoption to locate
    * an existing rule by name when no `ruleId` is cached.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Action Cloudflare Gateway takes when the rule matches. Stable across
    * reconciles; changing it triggers a replacement so a rule never silently
@@ -81,17 +81,17 @@ export interface RuleProps {
    * and sanitises this server-side — to avoid perpetual diffs, prefer the
    * formatted form (e.g. `'any(dns.domains[*] == "internal.example")'`).
    */
-  traffic?: string;
+  traffic?: string | undefined;
   /**
    * Wirefilter expression used for identity matching (group memberships,
    * email, IdP attrs). Combined with `traffic` and `devicePosture` via
    * logical AND.
    */
-  identity?: string;
+  identity?: string | undefined;
   /**
    * Wirefilter expression used for device-posture matching (WARP, MDM, etc).
    */
-  devicePosture?: string;
+  devicePosture?: string | undefined;
   /**
    * Per-action settings applied when the rule matches. The most common
    * private-app use case sets `overrideHost` to a `${tunnelId}.cfargotunnel.com`
@@ -104,30 +104,30 @@ export interface RuleProps {
    * }
    * ```
    */
-  ruleSettings?: RuleSettings;
+  ruleSettings?: RuleSettings | undefined;
   /**
    * Rule precedence — lower values evaluate first. When unset, Cloudflare
    * picks one server-side; we then echo whatever it assigned back through
    * the output attributes.
    */
-  precedence?: number;
+  precedence?: number | undefined;
   /**
    * Whether the rule is enabled.
    *
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Free-form description.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Adopt an existing rule with the same name (matched during the list-scan
    * fallback when no `ruleId` is cached) instead of failing on conflict.
    *
    * @default false
    */
-  adopt?: boolean;
+  adopt?: boolean | undefined;
 }
 
 export interface RuleAttributes {
@@ -222,7 +222,9 @@ export const RuleProvider = () =>
         listRules.items({ accountId }).pipe(
           Stream.runCollect,
           Effect.map((chunk) =>
-            Array.from(chunk).find((r) => (r as { name?: string | null }).name === name),
+            Array.from(chunk).find(
+              (r) => (r as { name?: string | null | undefined }).name === name,
+            ),
           ),
           Effect.map((found) =>
             found === undefined ? undefined : narrowRule(found as Parameters<typeof narrowRule>[0]),
@@ -412,19 +414,19 @@ export const RuleProvider = () =>
   );
 
 interface ObservedRule {
-  readonly id?: string;
-  readonly name?: string;
-  readonly action?: RuleAction;
-  readonly filters?: ReadonlyArray<RuleFilter>;
-  readonly traffic?: string;
-  readonly identity?: string;
-  readonly devicePosture?: string;
-  readonly precedence?: number;
-  readonly enabled?: boolean;
-  readonly description?: string;
-  readonly ruleSettings?: Record<string, unknown>;
-  readonly createdAt?: string;
-  readonly updatedAt?: string;
+  readonly id?: string | undefined;
+  readonly name?: string | undefined;
+  readonly action?: RuleAction | undefined;
+  readonly filters?: ReadonlyArray<RuleFilter> | undefined;
+  readonly traffic?: string | undefined;
+  readonly identity?: string | undefined;
+  readonly devicePosture?: string | undefined;
+  readonly precedence?: number | undefined;
+  readonly enabled?: boolean | undefined;
+  readonly description?: string | undefined;
+  readonly ruleSettings?: Record<string, unknown> | undefined;
+  readonly createdAt?: string | undefined;
+  readonly updatedAt?: string | undefined;
 }
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
@@ -435,19 +437,19 @@ const undefArr = <T>(
   v == null ? undefined : (v.filter((x) => x != null) as ReadonlyArray<T>);
 
 const narrowRule = (raw: {
-  id?: string | null;
-  name?: string | null;
-  action?: string | null;
-  filters?: ReadonlyArray<RuleFilter | null> | null;
-  traffic?: string | null;
-  identity?: string | null;
-  devicePosture?: string | null;
-  precedence?: number | null;
-  enabled?: boolean | null;
-  description?: string | null;
-  ruleSettings?: Record<string, unknown> | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  action?: string | null | undefined;
+  filters?: ReadonlyArray<RuleFilter | null> | null | undefined;
+  traffic?: string | null | undefined;
+  identity?: string | null | undefined;
+  devicePosture?: string | null | undefined;
+  precedence?: number | null | undefined;
+  enabled?: boolean | null | undefined;
+  description?: string | null | undefined;
+  ruleSettings?: Record<string, unknown> | null | undefined;
+  createdAt?: string | null | undefined;
+  updatedAt?: string | null | undefined;
 }): ObservedRule => ({
   id: undef(raw.id),
   name: undef(raw.name),

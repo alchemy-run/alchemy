@@ -25,7 +25,7 @@ export interface Engine {
    * take, for an engine whose retry timing it owns. Unset, only the outcome
    * is checked.
    */
-  readonly recoveryWithinMillis?: number;
+  readonly recoveryWithinMillis?: number | undefined;
   /** Each case's timeout. */
   readonly timeout: number;
   /**

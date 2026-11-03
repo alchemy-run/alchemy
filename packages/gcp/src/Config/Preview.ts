@@ -35,7 +35,7 @@ export type PreviewProps = {
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Immutable — changing it replaces the preview.
    */
-  previewId?: string;
+  previewId?: string | undefined;
   /**
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the preview. `US-CENTRAL1` is accepted and normalized to
@@ -43,24 +43,24 @@ export type PreviewProps = {
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Terraform blueprint to preview. Required unless `deployment` is set.
    * There is no update API — changing the blueprint replaces the preview.
    */
-  terraformBlueprint?: config.TerraformBlueprint;
+  terraformBlueprint?: config.TerraformBlueprint | undefined;
   /**
    * Existing deployment whose current state is used as the preview
    * baseline, as
    * `projects/{project}/locations/{location}/deployments/{deployment}`
    * or a deployment id. Changing it replaces the preview.
    */
-  deployment?: string;
+  deployment?: string | undefined;
   /**
    * Preview mode (`DEFAULT` or `DELETE`). Changing it replaces the
    * preview.
    */
-  previewMode?: config.PreviewPreviewModeEnum | (string & {});
+  previewMode?: config.PreviewPreviewModeEnum | (string & {}) | undefined;
   /**
    * Service account used to preview resources. Format
    * `projects/{project}/serviceAccounts/{email}`, or an email / account
@@ -72,32 +72,32 @@ export type PreviewProps = {
    * GCS prefix for Cloud Build logs and artifacts (`gs://{bucket}/{folder}`).
    * Changing it replaces the preview.
    */
-  artifactsGcsBucket?: string;
+  artifactsGcsBucket?: string | undefined;
   /**
    * Cloud Build worker pool
    * `projects/{project}/locations/{location}/workerPools/{workerPoolId}`.
    * Changing it replaces the preview.
    */
-  workerPool?: string;
+  workerPool?: string | undefined;
   /**
    * Terraform version constraint (e.g. `"=1.5.7"`). Changing it replaces
    * the preview.
    */
-  tfVersionConstraint?: string;
+  tfVersionConstraint?: string | undefined;
   /**
    * Terraform provider source configuration. Changing it replaces the
    * preview.
    */
-  providerConfig?: config.ProviderConfig;
+  providerConfig?: config.ProviderConfig | undefined;
   /**
    * User annotations. Changing them replaces the preview (no patch API).
    */
-  annotations?: Record<string, string>;
+  annotations?: Record<string, string> | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    * Changing them replaces the preview (no patch API).
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 };
 
 export type Preview = Resource<
@@ -224,16 +224,16 @@ const toAttrs = (item: config.Preview, project: string, region: string) => {
 };
 
 const snapshotOf = (input: {
-  terraformBlueprint?: config.TerraformBlueprint;
-  deployment?: string;
-  previewMode?: string;
-  serviceAccount?: string;
-  artifactsGcsBucket?: string;
-  workerPool?: string;
-  tfVersionConstraint?: string;
-  providerConfig?: config.ProviderConfig;
-  annotations?: Record<string, string>;
-  labels?: Record<string, string>;
+  terraformBlueprint?: config.TerraformBlueprint | undefined;
+  deployment?: string | undefined;
+  previewMode?: string | undefined;
+  serviceAccount?: string | undefined;
+  artifactsGcsBucket?: string | undefined;
+  workerPool?: string | undefined;
+  tfVersionConstraint?: string | undefined;
+  providerConfig?: config.ProviderConfig | undefined;
+  annotations?: Record<string, string> | undefined;
+  labels?: Record<string, string> | undefined;
 }) => ({
   terraformBlueprint: input.terraformBlueprint,
   deployment: input.deployment,

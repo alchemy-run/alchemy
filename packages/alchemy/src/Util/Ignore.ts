@@ -332,7 +332,7 @@ export interface WalkIgnoringOptions<E, R> {
     relativeDirectory: string,
   ) => Effect.Effect<ReadonlyArray<{ readonly name: string; readonly type: WalkEntryType }>, E, R>;
   /** @default no rules */
-  readonly rules?: IgnoreRules;
+  readonly rules?: IgnoreRules | undefined;
   /**
    * Paths always listed even when excluded (Docker always sends the
    * Dockerfile and its ignore file). Their parent directories are never

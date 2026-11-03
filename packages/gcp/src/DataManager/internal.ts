@@ -20,48 +20,51 @@ export type UploadKeyType = datamanager.IngestedUserListInfoUploadKeyTypesItemEn
 
 export type TargetNetworkInfoProps = {
   /** Whether the list is eligible for the Google Display Network. */
-  eligibleForDisplay?: boolean;
+  eligibleForDisplay?: boolean | undefined;
   /** Whether the list is eligible for Google Search. */
-  eligibleForSearch?: boolean;
+  eligibleForSearch?: boolean | undefined;
 };
 
 export type PartnerAudienceInfoProps = {
   /** Immutable source of the partner audience. */
-  partnerAudienceSource?: datamanager.PartnerAudienceInfoPartnerAudienceSourceEnum | (string & {});
+  partnerAudienceSource?:
+    | datamanager.PartnerAudienceInfoPartnerAudienceSourceEnum
+    | (string & {})
+    | undefined;
   /** Commerce partner name. Only for `COMMERCE_AUDIENCE`. */
-  commercePartner?: string;
+  commercePartner?: string | undefined;
 };
 
 export type MobileIdInfoProps = {
   /** Immutable mobile ID key space (`IOS` or `ANDROID`). */
-  keySpace?: datamanager.MobileIdInfoKeySpaceEnum | (string & {});
+  keySpace?: datamanager.MobileIdInfoKeySpaceEnum | (string & {}) | undefined;
   /** Immutable app id the mobile IDs were collected from. */
-  appId?: string;
+  appId?: string | undefined;
   /** Immutable source of the upload data. */
-  dataSourceType?: datamanager.MobileIdInfoDataSourceTypeEnum | (string & {});
+  dataSourceType?: datamanager.MobileIdInfoDataSourceTypeEnum | (string & {}) | undefined;
 };
 
 export type PairIdInfoProps = {
   /** Immutable publisher id in the clean room. */
-  publisherId?: string;
+  publisherId?: string | undefined;
   /** Membership match percentage (0-100). */
-  matchRatePercentage?: number;
+  matchRatePercentage?: number | undefined;
   /** Publisher display name. */
-  publisherName?: string;
+  publisherName?: string | undefined;
   /** Count of advertiser first-party records uploaded. */
-  advertiserIdentifierCount?: string;
+  advertiserIdentifierCount?: string | undefined;
   /** Immutable advertiser-to-publisher clean room identifier. */
-  cleanRoomIdentifier?: string;
+  cleanRoomIdentifier?: string | undefined;
 };
 
 export type ContactIdInfoProps = {
   /** Immutable source of the upload data. */
-  dataSourceType?: datamanager.ContactIdInfoDataSourceTypeEnum | (string & {});
+  dataSourceType?: datamanager.ContactIdInfoDataSourceTypeEnum | (string & {}) | undefined;
 };
 
 export type UserIdInfoProps = {
   /** Immutable source of the upload data. */
-  dataSourceType?: datamanager.UserIdInfoDataSourceTypeEnum | (string & {});
+  dataSourceType?: datamanager.UserIdInfoDataSourceTypeEnum | (string & {}) | undefined;
 };
 
 export type IngestedUserListInfoProps = {
@@ -70,17 +73,17 @@ export type IngestedUserListInfoProps = {
    * `PAIR_ID`, `PSEUDONYMOUS_ID`).
    * @default ["CONTACT_ID"]
    */
-  uploadKeyTypes?: UploadKeyType[];
+  uploadKeyTypes?: UploadKeyType[] | undefined;
   /** Partner-audience metadata. Data partners only. */
-  partnerAudienceInfo?: PartnerAudienceInfoProps;
+  partnerAudienceInfo?: PartnerAudienceInfoProps | undefined;
   /** Extra fields when `MOBILE_ID` is an upload key type. */
-  mobileIdInfo?: MobileIdInfoProps;
+  mobileIdInfo?: MobileIdInfoProps | undefined;
   /** Extra fields when `PAIR_ID` is an upload key type. Data partners only. */
-  pairIdInfo?: PairIdInfoProps;
+  pairIdInfo?: PairIdInfoProps | undefined;
   /** Extra fields when `CONTACT_ID` is an upload key type. */
-  contactIdInfo?: ContactIdInfoProps;
+  contactIdInfo?: ContactIdInfoProps | undefined;
   /** Extra fields when `USER_ID` is an upload key type. */
-  userIdInfo?: UserIdInfoProps;
+  userIdInfo?: UserIdInfoProps | undefined;
 };
 
 export const lastSegment = (value: string) => {
@@ -133,9 +136,9 @@ export const parentName = (accountType: string, account: string) => {
 };
 
 export const resolveParent = (input: {
-  parent?: string;
-  accountType?: string;
-  account?: string;
+  parent?: string | undefined;
+  accountType?: string | undefined;
+  account?: string | undefined;
 }) => {
   if (input.parent && input.parent.length > 0) {
     return normalizeResourceName(input.parent);
@@ -147,10 +150,10 @@ export const resolveParent = (input: {
 };
 
 export const replaceOnIdentity = (input: {
-  previousParent?: string;
+  previousParent?: string | undefined;
   nextParent: string;
-  previousId?: string;
-  nextId?: string;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
   previousIngested?: unknown;
   nextIngested?: unknown;
 }) => {

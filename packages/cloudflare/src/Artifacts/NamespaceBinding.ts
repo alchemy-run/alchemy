@@ -1,4 +1,6 @@
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { Namespace } from "./Namespace.ts";
 import {
   ArtifactsError,
@@ -56,7 +58,17 @@ export const makeArtifactsRepoClient = (raw: RepoHandle): RepoClient => ({
   raw,
   info: () => tryPromise(() => raw.info()),
   listTokens: () => tryPromise(() => raw.listTokens()),
-  log: (opts) => tryPromise(() => raw.log(opts)),
+  log: (opts) =>
+    tryPromise(() =>
+      raw.log(
+        opts === undefined
+          ? undefined
+          : Record.filterMap(
+              { ref: opts.ref, limit: opts.limit, offset: opts.offset },
+              Result.fromNullishOr(() => undefined),
+            ),
+      ),
+    ),
   readCommit: (hash) => tryPromise(() => raw.readCommit(hash)),
   readTree: (hash) => tryPromise(() => raw.readTree(hash)),
   readBlob: (hash) => tryPromise(() => raw.readBlob(hash)),
@@ -102,6 +114,18 @@ export const makeArtifactsNamespaceClient = (
       ),
     list: (opts) => use((raw) => raw.list(opts)),
     delete: (name) => use((raw) => raw.delete(name)),
-    import: (opts) => use((raw) => raw.import(opts)),
+    import: (opts) =>
+      use((raw) =>
+        raw.import({
+          ...opts,
+          source: {
+            url: opts.source.url,
+            ...Record.filterMap(
+              { branch: opts.source.branch, depth: opts.source.depth },
+              Result.fromNullishOr(() => undefined),
+            ),
+          },
+        }),
+      ),
   };
 };

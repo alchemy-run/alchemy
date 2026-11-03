@@ -170,7 +170,7 @@ export const Vocs: {
         id: string,
         propsEff?: VocsInput<Bindings> | Effect.Effect<VocsInput<Bindings>, never, Req>,
       ) => effectClass(Vocs(id, propsEff))
-    : Worker(
+    : Worker<Bindings, WorkerAssetsConfig, Req>(
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,

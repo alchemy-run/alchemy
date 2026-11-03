@@ -23,13 +23,13 @@ export type CryptoKeyVersionExternalProtectionLevelOptions = {
    * URI of the external key this version represents. EXTERNAL
    * protection level only.
    */
-  externalKeyUri?: string;
+  externalKeyUri?: string | undefined;
   /**
    * Path to the external key material on the EKM when using an
    * EkmConnection (e.g. `"v0/my/key"`). EXTERNAL_VPC protection level
    * only.
    */
-  ekmConnectionKeyPath?: string;
+  ekmConnectionKeyPath?: string | undefined;
 };
 
 export type CryptoKeyVersionProps = {
@@ -293,7 +293,7 @@ const getByName = (name: string) =>
 const paginate = <A, E, R>(
   fetch: (
     pageToken: string | undefined,
-  ) => Effect.Effect<{ items: A[]; nextPageToken?: string }, E, R>,
+  ) => Effect.Effect<{ items: A[]; nextPageToken?: string | undefined }, E, R>,
 ) =>
   Effect.gen(function* () {
     const found: A[] = [];

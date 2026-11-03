@@ -8,7 +8,7 @@ export interface SendOptions {
 /** A single message handed to {@link WriteQueueClient.sendBatch}. */
 export interface SendMessage {
   body: unknown;
-  contentType?: "json" | "text";
+  contentType?: "json" | "text" | undefined;
 }
 
 export class SendError extends Data.TaggedError("SendError")<{

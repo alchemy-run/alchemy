@@ -90,14 +90,14 @@ export interface TemplateProps {
    * (serialized `createProject`) and deploys into it. Changing it
    * replaces the deployment.
    */
-  project?: Ref<TemplateProject>;
+  project?: Ref<TemplateProject> | undefined;
   /**
    * Environment to deploy into. Accepts a `Railway.Project` (primary
    * environment), a `Railway.Environment`, or `{ environmentId }`.
    * Defaults to the project's primary environment. Changing it
    * replaces the deployment.
    */
-  environment?: Ref<TemplateEnvironment>;
+  environment?: Ref<TemplateEnvironment> | undefined;
   /**
    * Serialized template config passed to `templateDeployV2`. If omitted,
    * Alchemy fetches it from the marketplace template. Variables without

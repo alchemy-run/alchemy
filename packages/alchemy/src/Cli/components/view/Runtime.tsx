@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import {
   type BrowserLoginOptions,
   type Interaction,
+  type MessageOptions,
   type NonInteractiveTerminal,
   openUrl,
   type SessionOptions,
@@ -61,7 +62,7 @@ interface StoreState {
   readonly staticItems: Item[];
   readonly transcript: ReadonlyArray<Item>;
   readonly live: ReadonlyArray<Item>;
-  readonly active?: Item;
+  readonly active?: Item | undefined;
 }
 
 /**
@@ -216,7 +217,7 @@ function TerminalRoot({ store }: TerminalRootProps) {
 /** Progress rows are ordinary live views over a runtime-owned store. */
 interface ProgressState {
   readonly options: ProgressOptions;
-  readonly final?: { readonly variant: "success" | "error"; readonly message?: string };
+  readonly final?: { readonly variant: "success" | "error"; readonly message?: string | undefined };
 }
 
 type ProgressViewProps = { readonly store: LiveStore<ProgressState> };
@@ -262,7 +263,7 @@ export const makeRuntime = (
      * instance because it closes over this mount's capture buffers and must
      * die with it.
      */
-    readonly flushDirectStdio?: () => void;
+    readonly flushDirectStdio: (() => void) | undefined;
   }
   // Lifecycle state. `mounted` and `unmounting` deliberately overlap: during
   // teardown the instance stays in `mounted` until re-validation passes, so
@@ -316,7 +317,7 @@ export const makeRuntime = (
     // appear only when the process exits. One timer PER STREAM: a chatty
     // stdout must not keep resetting the deadline of a parked stderr tail.
     const partialFlushTimers: {
-      [Stream in keyof typeof buffers]?: ReturnType<typeof setTimeout>;
+      [Stream in keyof typeof buffers]?: ReturnType<typeof setTimeout> | undefined;
     } = {};
     const clearPartialFlush = (stream: keyof typeof buffers) => {
       const timer = partialFlushTimers[stream];
@@ -492,12 +493,11 @@ export const makeRuntime = (
       }
     });
 
-  const messageOptions = (message: string | { message: string; detail?: string }) =>
+  const messageOptions = (message: string | MessageOptions) =>
     typeof message === "string" ? { message } : message;
 
   const log =
-    (variant: "info" | "success" | "warning" | "error") =>
-    (message: string | { message: string; detail?: string }) => {
+    (variant: "info" | "success" | "warning" | "error") => (message: string | MessageOptions) => {
       const options = messageOptions(message);
       return print(
         <Status variant={variant} detail={options.detail}>

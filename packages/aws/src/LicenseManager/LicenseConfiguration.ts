@@ -186,10 +186,10 @@ export const LicenseConfigurationProvider = () =>
       };
 
       const toAttributes = (observed: {
-        LicenseConfigurationId?: string;
-        LicenseConfigurationArn?: string;
-        Name?: string;
-        LicenseCountingType?: string;
+        LicenseConfigurationId?: string | undefined;
+        LicenseConfigurationArn?: string | undefined;
+        Name?: string | undefined;
+        LicenseCountingType?: string | undefined;
       }) => ({
         licenseConfigurationId: observed.LicenseConfigurationId!,
         licenseConfigurationArn: observed.LicenseConfigurationArn!,

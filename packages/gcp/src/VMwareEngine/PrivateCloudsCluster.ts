@@ -37,61 +37,61 @@ const DEFAULT_NODE_COUNT = 3;
 
 export type Thresholds = {
   /** Utilization percent that triggers scale-out. */
-  scaleOut?: number;
+  scaleOut?: number | undefined;
   /** Utilization percent that triggers scale-in. */
-  scaleIn?: number;
+  scaleIn?: number | undefined;
 };
 
 export type AutoscalingPolicy = {
   /** Canonical node type id this policy scales. */
-  nodeTypeId?: string;
+  nodeTypeId?: string | undefined;
   /** Storage utilization thresholds. */
-  storageThresholds?: Thresholds;
+  storageThresholds?: Thresholds | undefined;
   /** CPU utilization thresholds. */
-  cpuThresholds?: Thresholds;
+  cpuThresholds?: Thresholds | undefined;
   /** Granted-memory utilization thresholds. */
-  grantedMemoryThresholds?: Thresholds;
+  grantedMemoryThresholds?: Thresholds | undefined;
   /** Consumed-memory utilization thresholds. */
-  consumedMemoryThresholds?: Thresholds;
+  consumedMemoryThresholds?: Thresholds | undefined;
   /** Nodes added per scale-out. Must be even for stretched clusters. */
-  scaleOutSize?: number;
+  scaleOutSize?: number | undefined;
 };
 
 export type AutoscalingSettings = {
   /** Minimum nodes of any type. */
-  minClusterNodeCount?: number;
+  minClusterNodeCount?: number | undefined;
   /** Cool-down between autoscale operations (duration string). */
-  coolDownPeriod?: string;
+  coolDownPeriod?: string | undefined;
   /** Map of policy id to autoscaling policy. */
-  autoscalingPolicies?: Record<string, AutoscalingPolicy | undefined>;
+  autoscalingPolicies?: Record<string, AutoscalingPolicy | undefined> | undefined;
   /** Maximum nodes of any type. */
-  maxClusterNodeCount?: number;
+  maxClusterNodeCount?: number | undefined;
 };
 
 export type DatastoreNetwork = {
   /** Output-only network peering used to reach the file share. */
-  networkPeering?: string;
+  networkPeering?: string | undefined;
   /** NFS connections from each ESXi host (`1`–`4`). */
-  connectionCount?: number;
+  connectionCount?: number | undefined;
   /** Subnet resource name. */
-  subnet?: string;
+  subnet?: string | undefined;
   /** VMKernel adapter MTU. */
-  mtu?: number;
+  mtu?: number | undefined;
 };
 
 export type DatastoreMountConfig = {
   /** Output-only file share name. */
-  fileShare?: string;
+  fileShare?: string | undefined;
   /** NFS protocol. Default `NFS_V3`. */
-  nfsVersion?: vmwareengine.DatastoreMountConfigNfsVersionEnum | (string & {});
+  nfsVersion?: vmwareengine.DatastoreMountConfigNfsVersionEnum | (string & {}) | undefined;
   /** Datastore resource name to mount. */
-  datastore?: string;
+  datastore?: string | undefined;
   /** Access mode. Default `READ_WRITE`. */
-  accessMode?: vmwareengine.DatastoreMountConfigAccessModeEnum | (string & {});
+  accessMode?: vmwareengine.DatastoreMountConfigAccessModeEnum | (string & {}) | undefined;
   /** Network configuration for the mount. */
-  datastoreNetwork?: DatastoreNetwork;
+  datastoreNetwork?: DatastoreNetwork | undefined;
   /** Output-only NFS server addresses. */
-  servers?: string[];
+  servers?: string[] | undefined;
 };
 
 export type PrivateCloudsClusterProps = {

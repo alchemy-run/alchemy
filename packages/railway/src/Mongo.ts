@@ -172,7 +172,7 @@ export interface MongoProps {
    * Defaults to the project's primary environment. Changing it replaces
    * Mongo.
    */
-  environment?: Ref<MongoEnvironment>;
+  environment?: Ref<MongoEnvironment> | undefined;
   /**
    * Service name. Unique per Project. If omitted, a unique name is
    * generated from the stack, stage and logical ID. Used as the private

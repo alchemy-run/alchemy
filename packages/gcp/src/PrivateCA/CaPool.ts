@@ -44,7 +44,7 @@ export type PublishingOptions = {
    * Encoding of published CA certificates and CRLs. `PEM` or `DER`.
    * Defaults to `PEM` when omitted.
    */
-  encodingFormat?: PublishingOptionsEncodingFormat;
+  encodingFormat?: PublishingOptionsEncodingFormat | undefined;
 };
 
 export type EncryptionSpec = {
@@ -71,7 +71,7 @@ export type CaPoolProps = {
    * logical id. Must match `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it
    * replaces the pool.
    */
-  caPoolId?: string;
+  caPoolId?: string | undefined;
   /**
    * Certificate Authority Service location (`us-central1`, `us-east1`,
    * …). Immutable — changing it replaces the pool. `US-CENTRAL1` is

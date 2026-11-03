@@ -21,7 +21,7 @@ export type RoleProps = BranchScope & {
    * objects and is granted to login roles with SQL. Changes replace the role.
    * @default false
    */
-  noLogin?: boolean;
+  noLogin?: boolean | undefined;
 };
 
 export interface RoleAttributes extends ResolvedBranchScope {

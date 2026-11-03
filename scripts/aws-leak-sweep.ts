@@ -58,6 +58,7 @@ import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
@@ -88,7 +89,7 @@ interface Leak {
   createdAt: Date | undefined;
   hourly: boolean;
   reportOnly: boolean;
-  reportOnlyReason?: string;
+  reportOnlyReason?: string | undefined;
   /** deletion ordering: lower phases first */
   phase: number;
 }
@@ -154,7 +155,7 @@ interface Classified {
   name: string;
   hourly: boolean;
   reportOnly: boolean;
-  reportOnlyReason?: string;
+  reportOnlyReason?: string | undefined;
   phase: number;
 }
 
@@ -478,7 +479,13 @@ const emptyBucket = (bucket: string) =>
       const listing = yield* S3.listObjectVersions({ Bucket: bucket });
       const objects = [...(listing.Versions ?? []), ...(listing.DeleteMarkers ?? [])]
         .filter((o) => o.Key !== undefined)
-        .map((o) => ({ Key: o.Key as string, VersionId: o.VersionId }));
+        .map((o) => ({
+          Key: o.Key as string,
+          ...Record.filterMap(
+            { VersionId: o.VersionId },
+            Result.fromNullishOr(() => undefined),
+          ),
+        }));
       if (objects.length === 0) return;
       yield* S3.deleteObjects({
         Bucket: bucket,

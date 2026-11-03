@@ -23,27 +23,27 @@ export interface FunctionProps {
    * omitted, a deterministic name is generated (dashes sanitized to
    * underscores). Names are mutable.
    */
-  name?: string;
+  name?: string | undefined;
   /** Description of the function. */
-  description?: string;
+  description?: string | undefined;
   /** Name of the data source this function targets. */
   dataSourceName: string;
   /**
    * `APPSYNC_JS` function code exporting `request(ctx)` and
    * `response(ctx)`. When set, the runtime defaults to APPSYNC_JS 1.0.0.
    */
-  code?: string;
+  code?: string | undefined;
   /** VTL request mapping template (legacy alternative to `code`). */
-  requestMappingTemplate?: string;
+  requestMappingTemplate?: string | undefined;
   /** VTL response mapping template (legacy alternative to `code`). */
-  responseMappingTemplate?: string;
+  responseMappingTemplate?: string | undefined;
   /**
    * The VTL function version — only used with mapping templates.
    * @default "2018-05-29" (when templates are used)
    */
-  functionVersion?: string;
+  functionVersion?: string | undefined;
   /** Maximum batch size for batched Lambda invocations (0–2000). */
-  maxBatchSize?: number;
+  maxBatchSize?: number | undefined;
 }
 
 export interface AppSyncFunction extends Resource<
@@ -101,14 +101,14 @@ export interface FunctionInputProps extends Omit<
    * The `GraphqlApi` this function belongs to (preferred). Alternatively
    * pass a raw `apiId`.
    */
-  api?: GraphqlApi;
-  apiId?: Input<string>;
+  api?: GraphqlApi | undefined;
+  apiId?: Input<string> | undefined;
   /**
    * The data source this function targets (preferred). Alternatively pass
    * a raw `dataSourceName`.
    */
-  dataSource?: AppSyncDataSource;
-  dataSourceName?: Input<string>;
+  dataSource?: AppSyncDataSource | undefined;
+  dataSourceName?: Input<string> | undefined;
 }
 
 /**
@@ -176,14 +176,14 @@ export const FunctionProvider = () =>
       });
 
       const surface = (fn: {
-        name?: string;
-        description?: string;
-        dataSourceName?: string;
-        code?: string;
-        runtime?: appsync.AppSyncRuntime;
-        requestMappingTemplate?: string;
-        responseMappingTemplate?: string;
-        maxBatchSize?: number;
+        name?: string | undefined;
+        description?: string | undefined;
+        dataSourceName?: string | undefined;
+        code?: string | undefined;
+        runtime?: appsync.AppSyncRuntime | undefined;
+        requestMappingTemplate?: string | undefined;
+        responseMappingTemplate?: string | undefined;
+        maxBatchSize?: number | undefined;
       }) =>
         JSON.parse(
           JSON.stringify({

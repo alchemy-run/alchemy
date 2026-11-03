@@ -94,7 +94,7 @@ declare module "@alchemy.run/kubernetes/Connection" {
        * GCP project id.
        * @default the ambient GCP project
        */
-      project?: string;
+      project?: string | undefined;
     };
   }
 }
@@ -110,21 +110,21 @@ declare module "@alchemy.run/kubernetes/ClusterAdapter" {
       /** Workload Identity pool (`{project}.svc.id.goog`). */
       workloadPool: string;
       /** Project the grants and workload pool belong to. */
-      project?: string;
+      project?: string | undefined;
       /**
        * The IAM member binding grants were applied to — the KSA's
        * `principal://…` identifier, or `serviceAccount:{gsa}`.
        */
-      member?: string;
+      member?: string | undefined;
       /** Grants applied to `member`, revoked once no binding asks for them. */
-      iamGrants?: AppliedIamGrant[];
+      iamGrants?: AppliedIamGrant[] | undefined;
       /** Existing GSA email stamped on the KSA annotation, if any. */
-      gcpServiceAccount?: string;
+      gcpServiceAccount?: string | undefined;
       /**
        * The KSA principal granted `roles/iam.workloadIdentityUser` on
        * `gcpServiceAccount`, if any.
        */
-      impersonator?: string;
+      impersonator?: string | undefined;
     };
   }
   interface RegistryStateRegistry {

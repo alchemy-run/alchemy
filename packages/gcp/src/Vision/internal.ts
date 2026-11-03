@@ -79,11 +79,11 @@ export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   if (input.extra === true) {
     return { action: "replace" as const, deleteFirst: false };
@@ -203,7 +203,7 @@ export const listProductsInSet = (name: string) =>
       );
 
 export const productLabelsOf = (
-  labels: ReadonlyArray<{ key?: string; value?: string }> | undefined,
+  labels: ReadonlyArray<{ key?: string | undefined; value?: string | undefined }> | undefined,
 ): Array<{ key: string; value: string }> =>
   (labels ?? []).flatMap((item) => (item.key ? [{ key: item.key, value: item.value ?? "" }] : []));
 

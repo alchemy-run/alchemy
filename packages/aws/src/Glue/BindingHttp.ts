@@ -113,7 +113,7 @@ export const makeGlueCrawlerHttpBinding = <I extends { Name: string }, A, E, R>(
  * against all three).
  */
 export const makeGlueDatabaseHttpBinding = <
-  I extends { DatabaseName: string; CatalogId?: string },
+  I extends { DatabaseName: string; CatalogId?: string | undefined },
   A,
   E,
   R,
@@ -176,7 +176,7 @@ export const makeGlueDatabaseHttpBinding = <
  */
 export const makeGlueTableHttpBinding = <
   K extends "TableName" | "Name",
-  I extends { DatabaseName: string; CatalogId?: string } & {
+  I extends { DatabaseName: string; CatalogId?: string | undefined } & {
     [key in K]: string;
   },
   A,

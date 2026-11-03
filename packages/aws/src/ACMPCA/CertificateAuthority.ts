@@ -21,62 +21,62 @@ export interface CertificateAuthoritySubject {
    * Fully qualified domain name (FQDN) associated with the certificate
    * subject, e.g. `corp.example.com`.
    */
-  commonName?: string;
+  commonName?: string | undefined;
   /**
    * Legal name of the organization with which the certificate subject is
    * affiliated.
    */
-  organization?: string;
+  organization?: string | undefined;
   /**
    * A subdivision or unit of the organization with which the certificate
    * subject is affiliated.
    */
-  organizationalUnit?: string;
+  organizationalUnit?: string | undefined;
   /**
    * Two-digit ISO 3166-1 country code, e.g. `US`.
    */
-  country?: string;
+  country?: string | undefined;
   /**
    * State in which the subject of the certificate is located.
    */
-  state?: string;
+  state?: string | undefined;
   /**
    * The locality (city) in which the certificate subject is located.
    */
-  locality?: string;
+  locality?: string | undefined;
   /**
    * The certificate serial number.
    */
-  serialNumber?: string;
+  serialNumber?: string | undefined;
   /**
    * A title such as Mr. or Ms., assigned to the certificate subject.
    */
-  title?: string;
+  title?: string | undefined;
   /**
    * Family name of the certificate subject.
    */
-  surname?: string;
+  surname?: string | undefined;
   /**
    * First name of the certificate subject.
    */
-  givenName?: string;
+  givenName?: string | undefined;
   /**
    * Concatenation of first letters of the subject's first name, middle
    * name(s) and last name.
    */
-  initials?: string;
+  initials?: string | undefined;
   /**
    * Shortened version of a longer given name.
    */
-  pseudonym?: string;
+  pseudonym?: string | undefined;
   /**
    * Disambiguating information for the certificate subject.
    */
-  distinguishedNameQualifier?: string;
+  distinguishedNameQualifier?: string | undefined;
   /**
    * A qualifier appended to the subject's name, e.g. `Jr.` or `III`.
    */
-  generationQualifier?: string;
+  generationQualifier?: string | undefined;
 }
 
 /**
@@ -92,28 +92,28 @@ export interface CrlConfigurationProps {
    * Rounded to whole days on the wire (`ExpirationInDays`).
    * @default 7 days (service default when enabled)
    */
-  expiration?: Duration.Input;
+  expiration?: Duration.Input | undefined;
   /**
    * Alias to conceal the S3 bucket name inside issued certificates.
    */
-  customCname?: string;
+  customCname?: string | undefined;
   /**
    * Name of the S3 bucket that receives the CRL. The bucket policy must
    * grant write access to Amazon Web Services Private CA.
    */
-  s3BucketName?: string;
+  s3BucketName?: string | undefined;
   /**
    * ACL applied to the CRL objects written to S3.
    */
-  s3ObjectAcl?: "PUBLIC_READ" | "BUCKET_OWNER_FULL_CONTROL";
+  s3ObjectAcl?: "PUBLIC_READ" | "BUCKET_OWNER_FULL_CONTROL" | undefined;
   /**
    * Whether to generate a complete or partitioned CRL.
    */
-  crlType?: "COMPLETE" | "PARTITIONED";
+  crlType?: "COMPLETE" | "PARTITIONED" | undefined;
   /**
    * Custom path inside the S3 bucket under which the CRL is stored.
    */
-  customPath?: string;
+  customPath?: string | undefined;
 }
 
 /**
@@ -127,7 +127,7 @@ export interface OcspConfigurationProps {
   /**
    * Custom CNAME for the OCSP responder endpoint.
    */
-  ocspCustomCname?: string;
+  ocspCustomCname?: string | undefined;
 }
 
 export interface CertificateAuthorityProps {
@@ -178,11 +178,11 @@ export interface CertificateAuthorityProps {
     /**
      * Certificate revocation list (CRL) settings.
      */
-    crlConfiguration?: CrlConfigurationProps;
+    crlConfiguration?: CrlConfigurationProps | undefined;
     /**
      * Online Certificate Status Protocol (OCSP) settings.
      */
-    ocspConfiguration?: OcspConfigurationProps;
+    ocspConfiguration?: OcspConfigurationProps | undefined;
   };
   /**
    * How long (7-30 days, e.g. `"7 days"`) the CA remains restorable after

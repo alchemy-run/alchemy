@@ -311,8 +311,10 @@ export const internalLabels = (id: string) => createInternalLabels(id);
 
 export const ownershipLabels = (id: string) => createInternalLabels(id);
 
-export const ownershipText = (resource: { displayName?: string; description?: string }) =>
-  hasOwnershipMarker(resource.description) ? resource.description : resource.displayName;
+export const ownershipText = (resource: {
+  displayName?: string | undefined;
+  description?: string | undefined;
+}) => (hasOwnershipMarker(resource.description) ? resource.description : resource.displayName);
 
 export const getByName = <A, E>(name: string, get: (name: string) => Effect.Effect<A, E, never>) =>
   name.length === 0

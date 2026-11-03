@@ -20,7 +20,7 @@ export interface LocalDurableObjectNamespaceProps {
    * routed through the dev-registry proxy. This enables service-binding
    * style cross-process Durable Object access during local development.
    */
-  readonly scriptName?: string;
+  readonly scriptName?: string | undefined;
   /**
    * If set and the referenced worker isn't the current one, the binding is
    * routed through the dev-registry proxy. This enables service-binding

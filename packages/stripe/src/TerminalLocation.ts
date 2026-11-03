@@ -39,7 +39,7 @@ export interface TerminalLocationAddress {
   /**
    * City, district, suburb, town, or village. Required in most countries.
    */
-  city?: string;
+  city?: string | undefined;
   /**
    * Two-letter ISO 3166-1 alpha-2 country code. Create-only — changing
    * it replaces the location.
@@ -48,51 +48,51 @@ export interface TerminalLocationAddress {
   /**
    * Address line 1 (street, PO Box, or company name).
    */
-  line1?: string;
+  line1?: string | undefined;
   /**
    * Address line 2 (apartment, suite, unit, or building).
    */
-  line2?: string;
+  line2?: string | undefined;
   /**
    * ZIP or postal code. Required in most countries.
    */
-  postalCode?: string;
+  postalCode?: string | undefined;
   /**
    * State, county, province, or region (ISO 3166-2). Required in the US
    * and Canada.
    */
-  state?: string;
+  state?: string | undefined;
 }
 
 export interface TerminalLocationJapanAddress {
   /**
    * City or ward.
    */
-  city?: string;
+  city?: string | undefined;
   /**
    * Two-letter ISO 3166-1 alpha-2 country code.
    */
-  country?: string;
+  country?: string | undefined;
   /**
    * Block or building number.
    */
-  line1?: string;
+  line1?: string | undefined;
   /**
    * Building details.
    */
-  line2?: string;
+  line2?: string | undefined;
   /**
    * Postal code.
    */
-  postalCode?: string;
+  postalCode?: string | undefined;
   /**
    * Prefecture.
    */
-  state?: string;
+  state?: string | undefined;
   /**
    * Town or cho-me.
    */
-  town?: string;
+  town?: string | undefined;
 }
 
 export interface TerminalLocationProps {
@@ -393,7 +393,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
+const observe = Effect.fn(function* (input: { id?: string | undefined; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

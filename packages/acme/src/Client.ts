@@ -134,9 +134,9 @@ const problemsOf = (
   authorizations: ReadonlyArray<acme.Authorization>,
 ) => {
   const problems: Array<{
-    identifier?: string;
-    type?: string;
-    detail?: string;
+    identifier?: string | undefined;
+    type?: string | undefined;
+    detail?: string | undefined;
   }> = [];
   if (order.error) {
     problems.push({ type: order.error.type, detail: order.error.detail });
@@ -211,7 +211,7 @@ const solveAuthorization = <R>(
   });
 
 const chooseChain = (
-  downloaded: { chain: string; alternates?: ReadonlyArray<string> },
+  downloaded: { chain: string; alternates?: ReadonlyArray<string> | undefined },
   preferredChain: string | undefined,
 ) =>
   Effect.gen(function* () {

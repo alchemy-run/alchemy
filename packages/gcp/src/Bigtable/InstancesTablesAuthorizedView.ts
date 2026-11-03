@@ -23,12 +23,12 @@ import {
 
 export type FamilySubsets = {
   /** Exact column qualifiers included in the view (base64 bytes). */
-  qualifiers?: string[];
+  qualifiers?: string[] | undefined;
   /**
    * Qualifier prefixes included in the view. The empty string includes
    * every qualifier in the family.
    */
-  qualifierPrefixes?: string[];
+  qualifierPrefixes?: string[] | undefined;
 };
 
 export type SubsetView = {
@@ -36,9 +36,9 @@ export type SubsetView = {
    * Row-key prefixes included in the view (base64 bytes). The empty
    * string includes every row.
    */
-  rowPrefixes?: string[];
+  rowPrefixes?: string[] | undefined;
   /** Column families included in the view, keyed by family id. */
-  familySubsets?: Record<string, FamilySubsets>;
+  familySubsets?: Record<string, FamilySubsets> | undefined;
 };
 
 export type InstancesTablesAuthorizedViewProps = {

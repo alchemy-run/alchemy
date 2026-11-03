@@ -13,17 +13,17 @@ export interface PresignGetObjectRequest {
    * parameter. If omitted, downloads the current version when the URL is used.
    * Use the string `"null"` to select an existing null version.
    */
-  versionId?: string;
+  versionId?: string | undefined;
   /**
    * Number of seconds the URL remains valid.
    * @default 900
    */
-  expiresIn?: number;
+  expiresIn?: number | undefined;
   /**
    * Override the `Content-Type` S3 responds with (signed as the
    * `response-content-type` query parameter).
    */
-  contentType?: string;
+  contentType?: string | undefined;
 }
 
 /**

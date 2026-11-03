@@ -32,7 +32,7 @@ export interface DestinationProps {
    * against this destination, either as a JSON string or a structured
    * document. Required before another account can subscribe.
    */
-  accessPolicy?: PolicyDocument | string;
+  accessPolicy?: PolicyDocument | string | undefined;
 }
 
 export interface Destination extends Resource<
@@ -43,7 +43,7 @@ export interface Destination extends Resource<
     destinationArn: string;
     targetArn: string;
     roleArn: string;
-    accessPolicy?: string;
+    accessPolicy?: string | undefined;
   },
   never,
   Providers

@@ -33,22 +33,28 @@ import {
 
 type TransitionRoute = {
   /** Intent that triggers this route. */
-  intent?: string;
+  intent?: string | undefined;
   /** Condition expression. At least one of `intent` or `condition` is required. */
-  condition?: string;
+  condition?: string | undefined;
   /** Target flow resource name. */
-  targetFlow?: string;
+  targetFlow?: string | undefined;
   /** Target page resource name. */
-  targetPage?: string;
+  targetPage?: string | undefined;
   /** Description of the route (max 500 characters). */
-  description?: string;
+  description?: string | undefined;
   /** Fulfillment run when the route matches. */
-  triggerFulfillment?: {
-    messages?: Array<{
-      text?: { text?: string[]; allowPlaybackInterruption?: boolean };
-    }>;
-    tag?: string;
-  };
+  triggerFulfillment?:
+    | {
+        messages?:
+          | Array<{
+              text?:
+                | { text?: string[] | undefined; allowPlaybackInterruption?: boolean | undefined }
+                | undefined;
+            }>
+          | undefined;
+        tag?: string | undefined;
+      }
+    | undefined;
 };
 
 export type AgentsTransitionRouteGroupProps = {

@@ -30,7 +30,7 @@ import type { RuleGroup } from "./RuleGroup.ts";
  * firewall ARN.
  */
 export const makeNetworkFirewallFirewallHttpBinding = <
-  I extends { FirewallArn?: string },
+  I extends { FirewallArn?: string | undefined },
   A,
   E,
   R,
@@ -77,7 +77,7 @@ export const makeNetworkFirewallFirewallHttpBinding = <
  * on the policy ARN.
  */
 export const makeNetworkFirewallFirewallPolicyHttpBinding = <
-  I extends { FirewallPolicyArn?: string },
+  I extends { FirewallPolicyArn?: string | undefined },
   A,
   E,
   R,
@@ -124,7 +124,7 @@ export const makeNetworkFirewallFirewallPolicyHttpBinding = <
  * rule group ARN.
  */
 export const makeNetworkFirewallRuleGroupHttpBinding = <
-  I extends { RuleGroupArn?: string },
+  I extends { RuleGroupArn?: string | undefined },
   A,
   E,
   R,

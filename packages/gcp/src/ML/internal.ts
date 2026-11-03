@@ -244,11 +244,11 @@ export const versionHasOwnership = (version: ml.GoogleCloudMlV1__Version) =>
   hasAlchemyLabelMap(version.labels) || hasOwnershipMarker(version.description);
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   const idChanged =
     input.previousId !== undefined &&

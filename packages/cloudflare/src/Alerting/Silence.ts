@@ -268,22 +268,22 @@ class SilencePending extends Data.TaggedError("SilencePending") {}
 
 interface ObservedSilence {
   readonly id: string;
-  readonly policyId?: string;
-  readonly startTime?: string;
-  readonly endTime?: string;
-  readonly createdAt?: string;
-  readonly updatedAt?: string;
+  readonly policyId?: string | undefined;
+  readonly startTime?: string | undefined;
+  readonly endTime?: string | undefined;
+  readonly createdAt?: string | undefined;
+  readonly updatedAt?: string | undefined;
 }
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowSilence = (raw: {
-  id?: string | null;
-  policyId?: string | null;
-  startTime?: string | null;
-  endTime?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
+  id?: string | null | undefined;
+  policyId?: string | null | undefined;
+  startTime?: string | null | undefined;
+  endTime?: string | null | undefined;
+  createdAt?: string | null | undefined;
+  updatedAt?: string | null | undefined;
 }): ObservedSilence | undefined =>
   raw.id == null
     ? undefined

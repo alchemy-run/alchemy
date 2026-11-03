@@ -37,7 +37,7 @@ export type MulticastLogConfig = {
    * Export multicast group-consumer activity to Cloud Logging.
    * @default false
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 };
 
 export type MulticastGroupConsumerActivationProps = {

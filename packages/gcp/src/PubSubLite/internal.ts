@@ -195,11 +195,11 @@ export const toResourceId = (
   });
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousLocation?: string;
-  nextLocation?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousLocation?: string | undefined;
+  nextLocation?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   const previousId =
     input.previousId !== undefined ? stripOwnershipId(lastSegment(input.previousId)) : undefined;
@@ -241,8 +241,8 @@ export const partitionBody = (input: {
 });
 
 export const retentionBody = (input: {
-  perPartitionBytes?: string;
-  period?: string;
+  perPartitionBytes?: string | undefined;
+  period?: string | undefined;
 }): pubsublite.RetentionConfig => {
   const body: pubsublite.RetentionConfig = {
     perPartitionBytes: input.perPartitionBytes ?? DEFAULT_PER_PARTITION_BYTES,

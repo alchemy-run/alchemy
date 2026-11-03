@@ -26,7 +26,7 @@ export interface NoopDiff {
 export interface UpdateDiff {
   action: "update";
   /** properties that won't change as part of this update */
-  stables?: string[];
+  stables?: string[] | undefined;
 }
 
 export interface ReplaceDiff {

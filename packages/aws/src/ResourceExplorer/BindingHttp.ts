@@ -18,7 +18,7 @@ import type { View } from "./View.ts";
  * request.
  */
 export const makeResourceExplorerViewHttpBinding = <
-  I extends { ViewArn?: string },
+  I extends { ViewArn?: string | undefined },
   A,
   E,
   R,

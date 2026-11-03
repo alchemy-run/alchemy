@@ -4,12 +4,12 @@ export interface BasePluginOptions {
    * Defaults to the one from your Rolldown configuration.
    * @default undefined
    */
-  main?: string;
+  main?: string | undefined;
   /**
    * The compatibility date to use. This is optional, but should be defined to avoid unexpected behavior.
    * @default undefined
    */
-  compatibilityDate?: string;
+  compatibilityDate?: string | undefined;
   /**
    * The compatibility flags to enable.
    * @default []
@@ -18,7 +18,7 @@ export interface BasePluginOptions {
    * cloudflare({ compatibilityDate: "2026-08-31" });
    * ```
    */
-  compatibilityFlags?: Array<string>;
+  compatibilityFlags?: Array<string> | undefined;
   /**
    * Whether external CommonJS `require()` calls should be rewritten as ESM.
    * Internal single-module Workers disable this because they cannot carry the
@@ -47,10 +47,12 @@ export interface BasePluginOptions {
    *
    * @default { entry: "ssr", children: [] }
    */
-  viteEnvironments?: {
-    entry?: string;
-    children?: Array<string>;
-  };
+  viteEnvironments?:
+    | {
+        entry?: string | undefined;
+        children?: Array<string> | undefined;
+      }
+    | undefined;
   /**
    * Vite environment names that must be left untouched by the Cloudflare
    * plugins. Frameworks can add Node-side server environments to the same dev
@@ -79,7 +81,7 @@ export interface BasePluginOptions {
    * cloudflare({ moduleRules: [{ type: "Text", test: (path) => path.endsWith(".md") }] });
    * ```
    */
-  moduleRules?: Array<AdditionalModuleRule>;
+  moduleRules?: Array<AdditionalModuleRule> | undefined;
 }
 
 /** A rule that emits matching imports as a separate Worker module. */

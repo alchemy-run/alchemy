@@ -172,14 +172,14 @@ const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 interface KxEnvironmentView {
-  environmentId?: string;
-  environmentArn?: string;
-  name?: string;
-  status?: KxEnvironmentStatus;
-  kmsKeyId?: string;
-  description?: string;
-  transitGatewayConfiguration?: TransitGatewayConfiguration;
-  customDNSConfiguration?: CustomDNSServer[];
+  environmentId?: string | undefined;
+  environmentArn?: string | undefined;
+  name?: string | undefined;
+  status?: KxEnvironmentStatus | undefined;
+  kmsKeyId?: string | undefined;
+  description?: string | undefined;
+  transitGatewayConfiguration?: TransitGatewayConfiguration | undefined;
+  customDNSConfiguration?: CustomDNSServer[] | undefined;
 }
 
 const toKxAttributes = Effect.fn(function* (env: KxEnvironmentView, fallbackId: string) {

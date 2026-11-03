@@ -39,7 +39,7 @@ export interface TargetGroupTarget {
   /**
    * Port the target listens on. Not applicable to `LAMBDA` targets.
    */
-  port?: number;
+  port?: number | undefined;
 }
 
 /**
@@ -49,50 +49,50 @@ export interface TargetGroupHealthCheck {
   /**
    * Whether health checking is enabled.
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Protocol used for health check requests (`HTTP` or `HTTPS`).
    */
-  protocol?: string;
+  protocol?: string | undefined;
   /**
    * Protocol version used for health check requests (`HTTP1` or `HTTP2`).
    */
-  protocolVersion?: string;
+  protocolVersion?: string | undefined;
   /**
    * Port used for health checks. Defaults to the target's port.
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Destination path for health check requests.
    * @default "/"
    */
-  path?: string;
+  path?: string | undefined;
   /**
    * Approximate time between health checks of an individual target, e.g.
    * `"30 seconds"` (a bare number is milliseconds). Rounded to whole seconds
    * on the wire.
    */
-  healthCheckInterval?: Duration.Input;
+  healthCheckInterval?: Duration.Input | undefined;
   /**
    * Time to wait before a health check request is considered failed, e.g.
    * `"5 seconds"` (a bare number is milliseconds). Rounded to whole seconds
    * on the wire.
    */
-  healthCheckTimeout?: Duration.Input;
+  healthCheckTimeout?: Duration.Input | undefined;
   /**
    * Consecutive successful checks required before an unhealthy target is
    * considered healthy.
    */
-  healthyThresholdCount?: number;
+  healthyThresholdCount?: number | undefined;
   /**
    * Consecutive failed checks required before a healthy target is considered
    * unhealthy.
    */
-  unhealthyThresholdCount?: number;
+  unhealthyThresholdCount?: number | undefined;
   /**
    * HTTP status codes counted as a healthy response, e.g. `{ httpCode: "200-299" }`.
    */
-  matcher?: { httpCode: string };
+  matcher?: { httpCode: string } | undefined;
 }
 
 export interface TargetGroupProps {
@@ -100,7 +100,7 @@ export interface TargetGroupProps {
    * Name of the target group. If omitted, a unique name is generated.
    * Immutable — changing it replaces the resource.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The kind of targets the group routes to. Immutable — changing it replaces
    * the resource.
@@ -110,51 +110,51 @@ export interface TargetGroupProps {
    * Port the targets listen on. Required for every type except `LAMBDA`.
    * Immutable — changing it replaces the resource.
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Protocol used to route traffic to the targets (`HTTP`, `HTTPS`, or
    * `TCP`). Not applicable to `LAMBDA`. Immutable — changing it replaces the
    * resource.
    */
-  protocol?: string;
+  protocol?: string | undefined;
   /**
    * Protocol version (`HTTP1`, `HTTP2`, or `GRPC`). Not applicable to
    * `LAMBDA`. Immutable — changing it replaces the resource.
    * @default "HTTP1"
    */
-  protocolVersion?: string;
+  protocolVersion?: string | undefined;
   /**
    * IP address type of the targets (`IPV4` or `IPV6`). `IP` type only.
    * Immutable — changing it replaces the resource.
    * @default "IPV4"
    */
-  ipAddressType?: string;
+  ipAddressType?: string | undefined;
   /**
    * ID of the VPC the targets live in. Required for every type except
    * `LAMBDA`. Immutable — changing it replaces the resource.
    */
-  vpcIdentifier?: string;
+  vpcIdentifier?: string | undefined;
   /**
    * Version of the event structure a `LAMBDA` target receives (`V1` or
    * `V2`). Immutable — changing it replaces the resource.
    * @default "V1"
    */
-  lambdaEventStructureVersion?: string;
+  lambdaEventStructureVersion?: string | undefined;
   /**
    * Health check configuration. Mutable for `IP` and `INSTANCE` groups; not
    * applicable to `LAMBDA` and `ALB`.
    */
-  healthCheck?: TargetGroupHealthCheck;
+  healthCheck?: TargetGroupHealthCheck | undefined;
   /**
    * Targets to keep registered with the group. Reconciled against the
    * observed registrations: missing targets are registered and extra ones
    * are deregistered.
    */
-  targets?: TargetGroupTarget[];
+  targets?: TargetGroupTarget[] | undefined;
   /**
    * User-defined tags to apply to the target group.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface TargetGroup extends Resource<
@@ -238,7 +238,8 @@ const toWireHealthCheck = (healthCheck: TargetGroupHealthCheck): vpclattice.Heal
   matcher: healthCheck.matcher,
 });
 
-const targetKey = (t: { id?: string; port?: number }) => `${t.id ?? ""}#${t.port ?? ""}`;
+const targetKey = (t: { id?: string | undefined; port?: number | undefined }) =>
+  `${t.id ?? ""}#${t.port ?? ""}`;
 
 /**
  * RegisterTargets reports per-target failures in `unsuccessful` instead of
@@ -258,7 +259,7 @@ export const TargetGroupProvider = () =>
   Provider.effect(
     TargetGroup,
     Effect.gen(function* () {
-      const toName = (id: string, props: { name?: string } = {}) =>
+      const toName = (id: string, props: { name?: string | undefined } = {}) =>
         props.name
           ? Effect.succeed(props.name)
           : createPhysicalName({ id, maxLength: 63, lowercase: true });

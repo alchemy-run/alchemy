@@ -58,7 +58,7 @@ export type ContactCenterProps = {
    * instance subdomain. Immutable — changing it replaces the instance.
    * If omitted, a unique prefix is generated.
    */
-  customerDomainPrefix?: string;
+  customerDomainPrefix?: string | undefined;
   /**
    * Instance size (`DEV_SMALL`, `STANDARD_SMALL`, `TRIAL_SMALL`, …).
    * Immutable — changing it replaces the instance.

@@ -71,7 +71,7 @@ export interface ScraperProps {
    * A human-readable alias for the scraper. Aliases are not unique.
    * Updating the alias is an in-place update.
    */
-  alias?: string;
+  alias?: string | undefined;
   /**
    * The scraper's configuration as Prometheus scrape-configuration YAML
    * text. It is base64-blob encoded on the wire automatically. Use the
@@ -184,7 +184,7 @@ export const ScraperProvider = () =>
         scraperId: string;
         arn: string;
         roleArn: string;
-        alias?: string;
+        alias?: string | undefined;
         status: amp.ScraperStatus;
       }) => ({
         scraperId: scraper.scraperId,

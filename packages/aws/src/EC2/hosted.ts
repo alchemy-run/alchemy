@@ -50,24 +50,24 @@ export interface InstanceMetadataOptions {
    * `required` enforces IMDSv2 (session tokens); `optional` also allows
    * IMDSv1.
    */
-  httpTokens?: "required" | "optional";
+  httpTokens?: "required" | "optional" | undefined;
   /**
    * Maximum hops for the IMDS PUT response, 1-64. `1` keeps containers on
    * the host from reaching the instance role's credentials.
    */
-  httpPutResponseHopLimit?: number;
+  httpPutResponseHopLimit?: number | undefined;
   /**
    * Whether the metadata endpoint is reachable at all.
    */
-  httpEndpoint?: "enabled" | "disabled";
+  httpEndpoint?: "enabled" | "disabled" | undefined;
   /**
    * Whether the IPv6 metadata endpoint is enabled.
    */
-  httpProtocolIpv6?: "enabled" | "disabled";
+  httpProtocolIpv6?: "enabled" | "disabled" | undefined;
   /**
    * Whether instance tags are readable from the metadata service.
    */
-  instanceMetadataTags?: "enabled" | "disabled";
+  instanceMetadataTags?: "enabled" | "disabled" | undefined;
 }
 
 /**
@@ -80,65 +80,67 @@ export interface Ec2HostedProps extends PlatformProps {
   /** EC2 instance type, e.g. `t3.micro`. */
   instanceType: string;
   /** Name of an EC2 key pair for SSH access. */
-  keyName?: Input<string>;
+  keyName?: Input<string> | undefined;
   /** Existing instance profile to attach instead of a managed one. */
-  instanceProfileName?: string;
+  instanceProfileName?: string | undefined;
   /** Additional user-data script prepended to the runtime bootstrap. */
-  userData?: string;
+  userData?: string | undefined;
   /** Subnet to launch the instance into. */
   subnetId?: any;
   /** Security groups attached to the instance. */
-  securityGroupIds?: readonly any[];
+  securityGroupIds?: readonly any[] | undefined;
   /** Whether to associate a public IP address. */
-  associatePublicIpAddress?: boolean;
+  associatePublicIpAddress?: boolean | undefined;
   /** Static private IP address within the subnet. */
-  privateIpAddress?: string;
+  privateIpAddress?: string | undefined;
   /** Availability Zone to launch into. */
-  availabilityZone?: string;
+  availabilityZone?: string | undefined;
   /** Tags applied to the instance. */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
   /** Instance Metadata Service options applied at launch. */
-  metadataOptions?: InstanceMetadataOptions;
+  metadataOptions?: InstanceMetadataOptions | undefined;
   /** Path to the application entrypoint to bundle and run on the instance. */
-  main?: string;
+  main?: string | undefined;
   /** Named export of the handler within `main`. */
-  handler?: string;
+  handler?: string | undefined;
   /** Port the hosted HTTP server listens on. */
-  port?: number;
+  port?: number | undefined;
   /** Environment variables injected into the hosted runtime. */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Overrides for the rolldown bundling of `main`. Unused code is
    * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
    * pure so unused parts prune more aggressively. List extra packages
    * with `pure.packages`, or disable with `pure: false`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig | undefined;
   /** Managed policy ARNs attached to the instance role. */
-  roleManagedPolicyArns?: string[];
+  roleManagedPolicyArns?: string[] | undefined;
 }
 
 export interface Ec2HostedRuntimeState {
-  userData?: string;
-  roleName?: string;
-  roleArn?: string;
-  policyName?: string;
-  instanceProfileName?: string;
-  instanceProfileArn?: string;
-  managedIam?: boolean;
-  runtimeUnitName?: string;
-  assetPrefix?: string;
-  code?: {
-    hash: string;
-  };
+  userData?: string | undefined;
+  roleName?: string | undefined;
+  roleArn?: string | undefined;
+  policyName?: string | undefined;
+  instanceProfileName?: string | undefined;
+  instanceProfileArn?: string | undefined;
+  managedIam?: boolean | undefined;
+  runtimeUnitName?: string | undefined;
+  assetPrefix?: string | undefined;
+  code?:
+    | {
+        hash: string;
+      }
+    | undefined;
 }
 
 export interface Ec2HostedCleanupState {
-  roleName?: string;
-  policyName?: string;
-  instanceProfileName?: string;
-  managedIam?: boolean;
-  assetPrefix?: string;
+  roleName?: string | undefined;
+  policyName?: string | undefined;
+  instanceProfileName?: string | undefined;
+  managedIam?: boolean | undefined;
+  assetPrefix?: string | undefined;
 }
 
 /**
@@ -588,7 +590,7 @@ systemctl enable --now ${unitName}.service
     id: string;
     news: Ec2HostedProps;
     bindings: ResourceBinding<Ec2HostedBinding>[];
-    output?: Ec2HostedRuntimeState;
+    output?: Ec2HostedRuntimeState | undefined;
   }) {
     if (!news.main) {
       return {

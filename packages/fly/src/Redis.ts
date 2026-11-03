@@ -50,7 +50,7 @@ export interface RedisProps {
    * Organization slug. Defaults to the current token's org. Changing it
    * replaces the database.
    */
-  orgSlug?: string;
+  orgSlug?: string | undefined;
   /**
    * Add-on plan id, name, or display name from `addOnPlans`. Default is
    * the cheapest listed plan (free or pay-as-you-go). Fixed plans are
@@ -226,7 +226,7 @@ export const Redis = Resource<Redis>("Fly.Redis");
 
 export class RedisNotCreated extends Data.TaggedError("Fly.RedisNotCreated")<{
   resourceName: string;
-  errorMessage?: string;
+  errorMessage?: string | undefined;
 }> {}
 
 export class RedisPlanNotFound extends Data.TaggedError("Fly.RedisPlanNotFound")<{
@@ -340,9 +340,9 @@ const toAttrs = (
   fallback: {
     name: string;
     primaryRegion: string;
-    orgSlug?: string;
+    orgSlug?: string | undefined;
     planId?: string;
-    url?: Redacted.Redacted<string>;
+    url?: Redacted.Redacted<string> | undefined;
   },
 ): Redis["Attributes"] => ({
   redisId: row.id,
@@ -352,7 +352,7 @@ const toAttrs = (
   status: row.status ?? undefined,
   planId:
     "addOnPlan" in row
-      ? ((row.addOnPlan as { id?: string } | null | undefined)?.id ?? fallback.planId)
+      ? ((row.addOnPlan as { id?: string | undefined } | null | undefined)?.id ?? fallback.planId)
       : fallback.planId,
   planName: row.addOnPlanName ?? undefined,
   privateIp: row.privateIp ?? undefined,
@@ -402,7 +402,7 @@ export const listRedisPlans = Effect.fn(function* () {
   return rows;
 });
 
-export const findRedisAddOn = (input: { id?: string; name?: string }) =>
+export const findRedisAddOn = (input: { id?: string | undefined; name?: string }) =>
   listRedisAddOns().pipe(
     Effect.map((rows) =>
       rows.find((row) => {
@@ -562,7 +562,7 @@ const redisSecretVersion = (
  */
 export const attachRedisSecrets = Effect.fn(function* (
   appName: string,
-  attached: readonly { name: string; id?: string }[],
+  attached: readonly { name: string; id?: string | undefined }[],
 ) {
   if (appName.length === 0 || attached.length === 0) return undefined;
   const versions: number[] = [];

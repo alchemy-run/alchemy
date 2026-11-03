@@ -177,12 +177,14 @@ export interface TenantRootResult {
   accounts: Record<string, Account>;
   policies: Record<string, Policy>;
   policyAttachments: PolicyAttachment[];
-  identityCenter?: {
-    instance: IdentityCenter.Instance;
-    groups: Record<string, IdentityCenter.Group>;
-    permissionSets: Record<string, IdentityCenter.PermissionSet>;
-    assignments: Record<string, IdentityCenter.AccountAssignment>;
-  };
+  identityCenter?:
+    | {
+        instance: IdentityCenter.Instance;
+        groups: Record<string, IdentityCenter.Group>;
+        permissionSets: Record<string, IdentityCenter.PermissionSet>;
+        assignments: Record<string, IdentityCenter.AccountAssignment>;
+      }
+    | undefined;
 }
 
 const defaultTenantOrganizationalUnits = (): TenantOrganizationalUnitSpec[] => [

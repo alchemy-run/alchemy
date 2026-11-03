@@ -1881,7 +1881,7 @@ export const makeRelay = (net: Network) => {
             if (result === undefined) return chunk.map(() => false);
             tally.refused += result.refused;
             tally.instances += result.instances ?? 0;
-            tally.failure ??= result.failure;
+            if (result.failure !== undefined) tally.failure ??= result.failure;
             return result.done;
           },
         );

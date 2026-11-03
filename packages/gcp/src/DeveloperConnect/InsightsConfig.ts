@@ -32,27 +32,31 @@ export type ArtifactConfig = {
    * URI of the artifact that is deployed (without tag or digest), e.g.
    * `us-docker.pkg.dev/{project}/{repo}/image`. Immutable per entry.
    */
-  uri?: string;
+  uri?: string | undefined;
   /**
    * Artifact Analysis project that stores provenance.
    */
-  googleArtifactAnalysis?: {
-    projectId?: string;
-  };
+  googleArtifactAnalysis?:
+    | {
+        projectId?: string | undefined;
+      }
+    | undefined;
   /**
    * Artifact Registry package that stores the artifact.
    */
-  googleArtifactRegistry?: {
-    artifactRegistryPackage?: string;
-    projectId?: string;
-  };
+  googleArtifactRegistry?:
+    | {
+        artifactRegistryPackage?: string | undefined;
+        projectId?: string | undefined;
+      }
+    | undefined;
 };
 
 export type InsightsConfigProjects = {
   /**
    * Project ids to track with this InsightsConfig.
    */
-  projectIds?: string[];
+  projectIds?: string[] | undefined;
 };
 
 export type InsightsConfigProps = {
@@ -80,7 +84,7 @@ export type InsightsConfigProps = {
   /**
    * Projects to track with this InsightsConfig.
    */
-  projects?: InsightsConfigProjects;
+  projects?: InsightsConfigProjects | undefined;
   /**
    * Artifact configurations of the artifacts that are deployed.
    */

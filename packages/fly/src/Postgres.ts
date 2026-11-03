@@ -326,7 +326,7 @@ export const unwrapSensitive = (
 
 type AttrFallback = {
   name?: string;
-  orgSlug?: string;
+  orgSlug?: string | undefined;
   connectionUri?: string;
   pooledConnectionUri?: string;
   migrationsDir?: string | undefined;
@@ -482,8 +482,9 @@ export const directUri = (
   }
 };
 
-const secretVersion = (res: { version?: number; Version?: number } | undefined) =>
-  res?.version ?? res?.Version;
+const secretVersion = (
+  res: { version?: number | undefined; Version?: number | undefined } | undefined,
+) => res?.version ?? res?.Version;
 
 const putSecret = (appName: string, name: string, value: string) =>
   machines

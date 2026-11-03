@@ -135,10 +135,12 @@ export interface BaseBranchAttributes {
 // which contain plain values for `name` / `organization`. The static
 // Database type has those fields as `Output<...>`, so we cast through a
 // structural shape here.
-type DatabaseRef = string | { name: string; organization?: string };
+type DatabaseRef = string | { name: string; organization?: string | undefined };
 type BranchRef = string | { name: string };
 
-const resolveDatabase = (database: unknown): { name: string; organization?: string } => {
+const resolveDatabase = (
+  database: unknown,
+): { name: string; organization?: string | undefined } => {
   const ref = database as DatabaseRef | undefined;
   if (!ref) return { name: "" };
   return typeof ref === "string"

@@ -119,32 +119,32 @@ export interface WebFunctionProps extends PlatformProps {
    * on `AWS_LAMBDA_HTTP_ENDPOINT`.
    * @default true
    */
-  bundle?: false;
+  bundle?: false | undefined;
   /**
    * Name of the Web Function. If omitted, a unique name is generated from
    * the stack, stage, and logical ID. Changing it replaces the function.
    */
-  functionName?: string;
+  functionName?: string | undefined;
   /**
    * Description recorded on each revision.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Node.js runtime of the revision. Web Functions run on Arm64.
    * @default "nodejs24.x"
    */
-  runtime?: "nodejs24.x";
+  runtime?: "nodejs24.x" | undefined;
   /**
    * Environment variables available to the server. Each change creates a
    * new revision.
    */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Maximum time a single HTTP request can run, rounded up to whole
    * seconds. Valid range: 3 seconds to 15 minutes.
    * @default 30 seconds
    */
-  timeout?: Duration.Duration;
+  timeout?: Duration.Duration | undefined;
   /**
    * Upper bound on concurrent HTTP requests per execution environment.
    * Lambda manages a dynamic per-environment limit that can be lower, but
@@ -154,7 +154,7 @@ export interface WebFunctionProps extends PlatformProps {
    * fixed 2 GB of memory and 2 vCPUs. Changing it creates a new revision.
    * @default 64
    */
-  maxConcurrencyPerEnvironment?: number;
+  maxConcurrencyPerEnvironment?: number | undefined;
   /**
    * Who may call the built-in endpoint. `"ApplicationManaged"` forwards
    * every request (a public endpoint; authenticate in your application).
@@ -169,25 +169,25 @@ export interface WebFunctionProps extends PlatformProps {
    * endpoint, which gets a new URL.
    * @default "default"
    */
-  endpointName?: string;
+  endpointName?: string | undefined;
   /**
    * Additional AWS Regions the built-in endpoint serves from. When set, the
    * endpoint is `MultiRegion`: one global domain with latency-based routing
    * across the home Region and these Regions. Changing it recreates the
    * endpoint, which gets a new URL.
    */
-  regions?: string[];
+  regions?: string[] | undefined;
   /**
    * Maximum number of execution environments the built-in endpoint uses per
    * Region (2–10,000). Changes apply in place.
    */
-  maxEnvironments?: number;
+  maxEnvironments?: number | undefined;
   /**
    * Maximum requests per second the built-in endpoint accepts, enforced per
    * Region. Excess requests receive HTTP 429; `0` disables the endpoint.
    * Changes apply in place.
    */
-  rateLimit?: number;
+  rateLimit?: number | undefined;
   /**
    * Roll out deploys gradually on the built-in endpoint: the revision a
    * deploy publishes gets `weight` percent of traffic and the revision it
@@ -195,7 +195,7 @@ export interface WebFunctionProps extends PlatformProps {
    * set it to `100` (or remove `canary`) to promote, or `0` to roll back.
    * Each endpoint has its own split.
    */
-  canary?: WebFunctionCanary;
+  canary?: WebFunctionCanary | undefined;
   /**
    * Route the server's outbound traffic through your VPC so it can reach
    * private resources such as RDS. Alchemy creates a Lambda network
@@ -210,23 +210,23 @@ export interface WebFunctionProps extends PlatformProps {
    * it deletes the connector and its operator role once no endpoint serves
    * a revision that uses them.
    */
-  vpc?: WebFunctionVpc;
+  vpc?: WebFunctionVpc | undefined;
   /**
    * Tags applied to the Web Function.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
   /**
    * Bundler configuration for {@link main}: rolldown input options,
    * `output` overrides, `install` for native packages (built for Linux
    * Arm64), `pure`, and the bundle analyzer.
    */
-  build?: FunctionBuildOptions;
+  build?: FunctionBuildOptions | undefined;
   /**
    * Ship source maps with the bundle and enable `--enable-source-maps`.
    * @default true
    */
-  uploadSourceMap?: boolean;
-  exports?: string[];
+  uploadSourceMap?: boolean | undefined;
+  exports?: string[] | undefined;
 }
 
 export interface WebFunction extends Resource<
@@ -273,23 +273,23 @@ export interface WebFunction extends Resource<
      * Requests per second the built-in endpoint allows, as observed. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    rateLimit?: number;
+    rateLimit?: number | undefined;
     /**
      * Cap on the built-in endpoint's execution environments, as observed.
      * Lets `alchemy drift` detect out-of-band changes.
      */
-    maxEnvironments?: number;
+    maxEnvironments?: number | undefined;
     /**
      * Tags on the web function, as observed. Lets `alchemy drift` detect
      * out-of-band changes.
      */
-    tags?: Record<string, string>;
+    tags?: Record<string, string> | undefined;
     /**
      * Inline policies Alchemy writes on the execution role (binding grants
      * and the log-group guard), as observed. Lets `alchemy drift` detect
      * out-of-band edits.
      */
-    executionRolePolicies?: Record<string, unknown>;
+    executionRolePolicies?: Record<string, unknown> | undefined;
   },
   {
     env?: Record<string, any>;

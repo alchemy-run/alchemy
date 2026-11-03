@@ -51,7 +51,9 @@ export const sameImageSet = (
 };
 
 /** Protocol-2 metadata and the authoritative readback config must describe exactly the same set. */
-export const validObservedImageSet = (machine: { config?: FlyMachineConfig }): boolean => {
+export const validObservedImageSet = (machine: {
+  config?: FlyMachineConfig | undefined;
+}): boolean => {
   const metadata = machine.config?.metadata;
   if (metadata?.[keys.protocol] !== "2" || metadata[keys.image] !== undefined) return false;
   return sameImageSet(

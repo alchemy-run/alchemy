@@ -93,10 +93,10 @@ export type FunctionTypeId = typeof FunctionTypeId;
 
 class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
   functionName: string;
-  state?: string;
-  stateReason?: string;
-  lastUpdateStatus?: string;
-  lastUpdateStatusReason?: string;
+  state?: string | undefined;
+  stateReason?: string | undefined;
+  lastUpdateStatus?: string | undefined;
+  lastUpdateStatusReason?: string | undefined;
 }> {
   override get message() {
     return `Lambda function ${this.functionName} is not ready: state=${this.state ?? "unknown"} (${this.stateReason ?? "no reason"}), update=${this.lastUpdateStatus ?? "unknown"} (${this.lastUpdateStatusReason ?? "no reason"})`;
@@ -105,9 +105,9 @@ class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
 
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
-  reason?: string;
+  reason?: string | undefined;
   /** `LastUpdateStatusReasonCode` (or `StateReasonCode` for a failed create). */
-  reasonCode?: string;
+  reasonCode?: string | undefined;
 }> {
   override get message() {
     return `Lambda function ${this.functionName} update failed: ${this.reason ?? "unknown reason"}`;
@@ -203,18 +203,18 @@ export interface FunctionUrlConfig {
    * `NONE` creates a public endpoint. `AWS_IAM` requires SigV4-signed callers.
    * @default "NONE"
    */
-  authType?: Lambda.FunctionUrlAuthType;
+  authType?: Lambda.FunctionUrlAuthType | undefined;
   /**
    * Cross-origin resource sharing configuration for the function URL.
    */
-  cors?: Lambda.Cors;
+  cors?: Lambda.Cors | undefined;
   /**
    * Invocation mode for the function URL. `RESPONSE_STREAM` streams an
    * Effect handler's `HttpServerResponse` body to the client as it is
    * produced; `BUFFERED` returns it once complete (up to 6 MB).
    * @default "BUFFERED"
    */
-  invokeMode?: Lambda.InvokeMode;
+  invokeMode?: Lambda.InvokeMode | undefined;
 }
 
 export interface FunctionCommonProps extends PlatformProps {
@@ -245,7 +245,7 @@ export interface FunctionCommonProps extends PlatformProps {
    * Adding or removing `alias` moves the function URL to a new address
    * (qualified and unqualified URLs differ).
    */
-  alias?: string;
+  alias?: string | undefined;
   /**
    * Serve the Function on a custom domain. Function URLs cannot take custom
    * hostnames, so this composes an API Gateway v2 HTTP API in front of the
@@ -267,14 +267,14 @@ export interface FunctionCommonProps extends PlatformProps {
   /**
    * Instruction set architecture for the Lambda function.
    */
-  architecture?: FunctionArchitecture;
+  architecture?: FunctionArchitecture | undefined;
   /**
    * Memory allocated to the function, in MB.
    *
    * @default 128
    */
   memorySize?: number;
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Attach the function to a VPC for private AWS connectivity such as Aurora.
    */
@@ -297,24 +297,26 @@ export interface FunctionCommonProps extends PlatformProps {
    * config plus least-privilege IAM through the binding channel and also
    * works on ECS.
    */
-  fileSystemConfigs?: {
-    /**
-     * The EFS access point to mount — an `AWS.EFS.AccessPoint` resource or
-     * its ARN. Exactly one of `accessPoint` or `arn` is required.
-     */
-    accessPoint?: AccessPointRef;
-    /**
-     * ARN of the EFS access point to mount
-     * (e.g. `accessPoint.accessPointArn`). Alias of {@link accessPoint} for
-     * raw-string configs.
-     */
-    arn?: string;
-    /**
-     * Local mount path inside the function. Must begin with `/mnt/`
-     * (e.g. `/mnt/files`).
-     */
-    localMountPath: string;
-  }[];
+  fileSystemConfigs?:
+    | {
+        /**
+         * The EFS access point to mount — an `AWS.EFS.AccessPoint` resource or
+         * its ARN. Exactly one of `accessPoint` or `arn` is required.
+         */
+        accessPoint?: AccessPointRef;
+        /**
+         * ARN of the EFS access point to mount
+         * (e.g. `accessPoint.accessPointArn`). Alias of {@link accessPoint} for
+         * raw-string configs.
+         */
+        arn?: string;
+        /**
+         * Local mount path inside the function. Must begin with `/mnt/`
+         * (e.g. `/mnt/files`).
+         */
+        localMountPath: string;
+      }[]
+    | undefined;
   /**
    * Maximum execution time of an invocation.
    *
@@ -359,7 +361,7 @@ export interface FunctionCommonProps extends PlatformProps {
    * Maximum number of concurrent executions reserved for this function.
    * Omit to remove the function-level reserved concurrency limit.
    */
-  reservedConcurrentExecutions?: number;
+  reservedConcurrentExecutions?: number | undefined;
   /**
    * AWS X-Ray tracing mode for the function.
    *
@@ -378,7 +380,7 @@ export interface FunctionCommonProps extends PlatformProps {
    * destinations). Use {@link AliasProps.eventInvokeConfig} to scope the
    * config to an alias instead.
    */
-  eventInvokeConfig?: EventInvokeConfig;
+  eventInvokeConfig?: EventInvokeConfig | undefined;
   /**
    * Retention for the function's CloudWatch log group
    * (`/aws/lambda/<functionName>`), e.g. `{ retention: "2 weeks" }` or
@@ -387,7 +389,7 @@ export interface FunctionCommonProps extends PlatformProps {
    * deletes it with the function. When omitted the log group is left to
    * Lambda, which creates it on first invoke with no expiry.
    */
-  logging?: LogRetentionConfig;
+  logging?: LogRetentionConfig | undefined;
 }
 
 export interface FunctionZipProps extends FunctionCommonProps {
@@ -406,7 +408,7 @@ export interface FunctionZipProps extends FunctionCommonProps {
    * derived from `main`'s basename (e.g. `index.mjs` → `index.default`).
    * @default true
    */
-  bundle?: false;
+  bundle?: false | undefined;
   image?: never;
   /**
    * Name of the export in `main` that Lambda invokes. Only applies to async
@@ -414,7 +416,7 @@ export interface FunctionZipProps extends FunctionCommonProps {
    * wrapped in a generated entry and ignore it.
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
   /**
@@ -443,7 +445,7 @@ export interface FunctionZipProps extends FunctionCommonProps {
    * The base Function is otherwise durability-agnostic; author durable
    * orchestrators with `AWS.Lambda.DurableFunction`.
    */
-  durableConfig?: Lambda.DurableConfig;
+  durableConfig?: Lambda.DurableConfig | undefined;
 }
 
 export interface FunctionImageProps extends FunctionCommonProps {
@@ -620,125 +622,135 @@ export interface Function extends Resource<
     /**
      * Name of the alias every consumer invokes, when `alias` is set.
      */
-    aliasName?: string;
+    aliasName?: string | undefined;
     /**
      * Version the alias points at, when `alias` is set.
      */
-    version?: string;
+    version?: string | undefined;
     functionUrl: string | undefined;
     /**
      * `https://{domain.name}` when the Function has a custom `domain`.
      */
-    domainUrl?: string;
+    domainUrl?: string | undefined;
     roleName: string;
     roleArn: string;
     code: {
       hash: string;
-      image?: Omit<FunctionImageAttributes, "hash">;
+      image?: Omit<FunctionImageAttributes, "hash"> | undefined;
     };
-    reservedConcurrentExecutions?: number;
+    reservedConcurrentExecutions?: number | undefined;
     /**
      * Memory allocated to the function, in MB, as observed on the deployed
      * function. Lets `alchemy drift` detect out-of-band changes.
      */
-    memorySize?: number;
+    memorySize?: number | undefined;
     /**
      * Timeout of the function, in seconds, as observed on the deployed
      * function. Lets `alchemy drift` detect out-of-band changes.
      */
-    timeoutSeconds?: number;
+    timeoutSeconds?: number | undefined;
     /**
      * Runtime of the function (ZIP packages only), as observed on the
      * deployed function. Lets `alchemy drift` detect out-of-band changes.
      */
-    runtime?: string;
+    runtime?: string | undefined;
     /**
      * Handler string of the function (ZIP packages only), as observed on the
      * deployed function. Lets `alchemy drift` detect out-of-band changes.
      */
-    handler?: string;
+    handler?: string | undefined;
     /**
      * Instruction set architecture, as observed on the deployed function.
      * Lets `alchemy drift` detect out-of-band changes.
      */
-    architecture?: string;
+    architecture?: string | undefined;
     /**
      * ARNs of the attached layer versions, in order, as observed on the
      * deployed function. Lets `alchemy drift` detect out-of-band changes.
      */
-    layers?: string[];
+    layers?: string[] | undefined;
     /**
      * Environment variables of the deployed function, each value replaced by
      * a SHA-256 fingerprint so secrets never reach state. Lets
      * `alchemy drift` detect out-of-band additions, removals and edits.
      */
-    environment?: Record<string, string>;
+    environment?: Record<string, string> | undefined;
     /**
      * VPC attachment, as observed on the deployed function. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    vpcConfig?: {
-      subnetIds: string[];
-      securityGroupIds: string[];
-    };
+    vpcConfig?:
+      | {
+          subnetIds: string[];
+          securityGroupIds: string[];
+        }
+      | undefined;
     /**
      * EFS mounts, as observed on the deployed function. Lets `alchemy drift`
      * detect out-of-band changes.
      */
-    fileSystemConfigs?: {
-      arn: string;
-      localMountPath: string;
-    }[];
+    fileSystemConfigs?:
+      | {
+          arn: string;
+          localMountPath: string;
+        }[]
+      | undefined;
     /**
      * X-Ray tracing mode, as observed on the deployed function. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    tracing?: string;
+    tracing?: string | undefined;
     /**
      * SHA-256 of the deployed code package, as reported by Lambda. Lets
      * `alchemy drift` detect code replaced out-of-band.
      */
-    codeSha256?: string;
+    codeSha256?: string | undefined;
     /**
      * Function URL settings, as observed on the deployed URL. Lets
      * `alchemy drift` detect out-of-band authentication or CORS changes.
      */
-    functionUrlConfig?: {
-      authType?: string;
-      invokeMode?: string;
-      cors?: Lambda.Cors;
-    };
+    functionUrlConfig?:
+      | {
+          authType?: string | undefined;
+          invokeMode?: string | undefined;
+          cors?: Lambda.Cors | undefined;
+        }
+      | undefined;
     /**
      * Retention of the function's log group in days (`undefined` when logs
      * never expire), observed when `logging.retention` is set. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    logRetentionInDays?: number;
+    logRetentionInDays?: number | undefined;
     /**
      * Policies Alchemy manages on the execution role, as observed: the AWS
      * managed policies Alchemy attaches, and the inline policy documents it
      * writes (binding statements and the log-group guard). Lets
      * `alchemy drift` detect out-of-band detaches and edits.
      */
-    executionRole?: {
-      managedPolicyArns: string[];
-      inlinePolicies: Record<string, unknown>;
-    };
+    executionRole?:
+      | {
+          managedPolicyArns: string[];
+          inlinePolicies: Record<string, unknown>;
+        }
+      | undefined;
     /**
      * Asynchronous invocation config (retries, maximum event age,
      * destinations) of the function, or of its alias when `alias` is set,
      * as observed. Lets `alchemy drift` detect out-of-band changes.
      */
-    eventInvokeConfig?: ObservedEventInvokeConfig;
+    eventInvokeConfig?: ObservedEventInvokeConfig | undefined;
     /**
      * Durable execution settings (execution timeout and history retention),
      * as observed on durable functions. Lets `alchemy drift` detect
      * out-of-band changes.
      */
-    durableConfig?: {
-      executionTimeout?: number;
-      retentionPeriodInDays?: number;
-    };
+    durableConfig?:
+      | {
+          executionTimeout?: number | undefined;
+          retentionPeriodInDays?: number | undefined;
+        }
+      | undefined;
   },
   {
     env?: Record<string, any>;
@@ -758,12 +770,14 @@ export interface Function extends Resource<
      * Merged (deduped by `localMountPath`) with the Function's own
      * `fileSystemConfigs` prop.
      */
-    fileSystemConfigs?: {
-      /** ARN of the EFS access point to mount. */
-      arn: string;
-      /** Local mount path inside the function (must begin with `/mnt/`). */
-      localMountPath: string;
-    }[];
+    fileSystemConfigs?:
+      | {
+          /** ARN of the EFS access point to mount. */
+          arn: string;
+          /** Local mount path inside the function (must begin with `/mnt/`). */
+          localMountPath: string;
+        }[]
+      | undefined;
   },
   Providers
 > {}
@@ -817,7 +831,7 @@ export type FunctionShape = Main<FunctionServices>;
 
 export interface NormalizedFunctionUrlConfig {
   authType: Lambda.FunctionUrlAuthType;
-  cors?: Lambda.Cors;
+  cors?: Lambda.Cors | undefined;
   invokeMode: Lambda.InvokeMode;
 }
 
@@ -2087,7 +2101,7 @@ export const FunctionProvider = () =>
       }: {
         id: string;
         props: FunctionImageProps;
-        previousImage?: Omit<FunctionImageAttributes, "hash">;
+        previousImage?: Omit<FunctionImageAttributes, "hash"> | undefined;
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         const { hash, ...image } = yield* functionImage.resolve({
@@ -2145,7 +2159,7 @@ export const FunctionProvider = () =>
       }: {
         id: string;
         props: FunctionProps;
-        previousImage?: Omit<FunctionImageAttributes, "hash">;
+        previousImage?: Omit<FunctionImageAttributes, "hash"> | undefined;
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         if (isFunctionImageProps(props)) {
@@ -2179,7 +2193,7 @@ export const FunctionProvider = () =>
         preferUpdate?: boolean;
         // Resolved EFS mounts. `undefined` leaves the function's existing
         // config untouched (precreate stub); `[]` explicitly clears mounts.
-        fileSystemConfigs?: Lambda.FileSystemConfig[];
+        fileSystemConfigs?: Lambda.FileSystemConfig[] | undefined;
         // Effective VPC attachment (prop ∪ binding-channel requests).
         // Omitted for the precreate stub: `news` is UNRESOLVED at precreate
         // (Output-valued subnet/security-group ids would fail to serialize),
@@ -2210,7 +2224,7 @@ export const FunctionProvider = () =>
         env: Record<string, string> | undefined;
         functionName: string;
         preferUpdate?: boolean;
-        fileSystemConfigs?: Lambda.FileSystemConfig[];
+        fileSystemConfigs?: Lambda.FileSystemConfig[] | undefined;
         vpc?: FunctionProps["vpc"];
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
@@ -2529,7 +2543,7 @@ export const FunctionProvider = () =>
         previousQualifier: string | undefined;
         url: FunctionProps["functionUrl"];
         oldUrl?: FunctionProps["functionUrl"];
-        currentFunctionUrl?: string;
+        currentFunctionUrl?: string | undefined;
       }) {
         const desired = normalizeFunctionUrl(url);
         const previous = normalizeFunctionUrl(oldUrl);
@@ -2678,8 +2692,8 @@ export const FunctionProvider = () =>
         packageType: Lambda.PackageType | undefined;
         observed:
           | {
-              ImageUri?: string;
-              ResolvedImageUri?: string;
+              ImageUri?: string | undefined;
+              ResolvedImageUri?: string | undefined;
             }
           | undefined;
       }): Function["Attributes"]["code"] => {
@@ -2949,7 +2963,7 @@ export const FunctionProvider = () =>
                 }),
               { concurrency: 10 },
             );
-            return rows.filter((row): row is Function["Attributes"] => row !== undefined);
+            return rows.filter((row) => row !== undefined);
           }),
 
         observe: Effect.fn(function* ({ id, news }) {

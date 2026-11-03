@@ -67,7 +67,7 @@ export interface EndpointGroupProps {
    * group (`0` - `100`), applied after location-based routing.
    * @default 100
    */
-  trafficDialPercentage?: number;
+  trafficDialPercentage?: number | undefined;
   /**
    * The port used for health checks.
    * @default the first port of the listener's port ranges

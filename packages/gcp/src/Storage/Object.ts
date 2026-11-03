@@ -46,7 +46,7 @@ export type ObjectProps = {
    * `Cache-Control` served with the object. When omitted, Cloud Storage
    * serves publicly readable objects with `public, max-age=3600`.
    */
-  cacheControl?: string;
+  cacheControl?: string | undefined;
 };
 
 export type Object = Resource<

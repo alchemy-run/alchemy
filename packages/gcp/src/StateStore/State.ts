@@ -27,7 +27,7 @@ export interface GcsStateOptions {
    *
    * @default the project's default store, `alchemy-state-<project>`
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * A full bucket name instead of one derived from {@link GcsStateOptions.name},
    * e.g. an existing bucket. Created on first use if it does not exist.
@@ -39,7 +39,7 @@ export interface GcsStateOptions {
    *
    * @default "" (bucket root)
    */
-  prefix?: string;
+  prefix?: string | undefined;
   /**
    * Location of a bucket the store creates, e.g. `"us-central1"` or the
    * multi-region `"US"`. An existing bucket keeps its location.

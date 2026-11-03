@@ -26,11 +26,11 @@ import {
 
 export type SchemaReference = {
   /** Name of the referenced schema. */
-  name?: string;
+  name?: string | undefined;
   /** Subject of the referenced schema. */
-  subject?: string;
+  subject?: string | undefined;
   /** Version of the referenced schema. */
-  version?: number;
+  version?: number | undefined;
 };
 
 export type SchemaRegistriesSubjectsVersionProps = {
@@ -45,17 +45,17 @@ export type SchemaRegistriesSubjectsVersionProps = {
    * Region used when `schemaRegistry` is a bare id.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Subject name. If omitted, a unique name is generated. Immutable —
    * changing it replaces the version.
    */
-  subject?: string;
+  subject?: string | undefined;
   /**
    * Version number. If omitted, the server assigns the next id.
    * Immutable — changing it replaces the version.
    */
-  version?: number;
+  version?: number | undefined;
   /**
    * Schema payload. Immutable — changing it replaces the version.
    */
@@ -64,20 +64,20 @@ export type SchemaRegistriesSubjectsVersionProps = {
    * Schema type.
    * @default "AVRO"
    */
-  schemaType?: kafka.CreateVersionRequestSchemaTypeEnum | (string & {});
+  schemaType?: kafka.CreateVersionRequestSchemaTypeEnum | (string & {}) | undefined;
   /**
    * Normalize the schema before storing.
    * @default false
    */
-  normalize?: boolean;
+  normalize?: boolean | undefined;
   /**
    * Explicit schema id. Must not collide with a different schema.
    */
-  id?: number;
+  id?: number | undefined;
   /**
    * Schema references.
    */
-  references?: SchemaReference[];
+  references?: SchemaReference[] | undefined;
 };
 
 export type SchemaRegistriesSubjectsVersion = Resource<

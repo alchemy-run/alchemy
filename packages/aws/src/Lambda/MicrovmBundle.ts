@@ -84,10 +84,10 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   main: string;
   runtime: "bun" | "node";
   handler?: string | undefined;
-  isExternal?: boolean;
-  external?: string[];
+  isExternal?: boolean | undefined;
+  external?: string[] | undefined;
   port: number;
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const stack = yield* Stack;

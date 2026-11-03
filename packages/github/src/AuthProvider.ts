@@ -47,7 +47,7 @@ export const GitHubAuthConfigSchema = Schema.Union([
   Schema.Struct({
     method: Schema.Literal("stored"),
     token: Schema.String,
-    baseUrl: Schema.optionalKey(Schema.String),
+    baseUrl: Schema.optional(Schema.String),
   }),
   Schema.Struct({
     method: Schema.Literal("gh-cli"),
@@ -55,7 +55,7 @@ export const GitHubAuthConfigSchema = Schema.Union([
     // Keep that migration state readable; the first credential resolution
     // captures the token inline through updateConfig.
     token: Schema.optionalKey(Schema.String),
-    baseUrl: Schema.optionalKey(Schema.String),
+    baseUrl: Schema.optional(Schema.String),
   }),
 ]);
 export type GitHubAuthConfig = typeof GitHubAuthConfigSchema.Type;
@@ -68,7 +68,7 @@ export interface GitHubResolvedCredentials {
    * `https://github.example.com/api/v3` or `https://api.acme.ghe.com`).
    * `undefined` means github.com.
    */
-  baseUrl?: string;
+  baseUrl?: string | undefined;
   source: { type: GitHubAuthConfig["method"] | "env"; details?: string };
 }
 
@@ -140,7 +140,7 @@ export interface GitHubAuthOptions {
    * method authenticates against this host. `GitHub.providers({ baseUrl })`
    * threads its option here.
    */
-  readonly baseUrl?: string;
+  readonly baseUrl?: string | undefined;
 }
 
 export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>

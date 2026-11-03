@@ -460,7 +460,9 @@ export const LocalWorkerProvider = () =>
           }
           durableObjectNamespaces[className].container = dev;
         }
-        const dev: DevServerOptions | { readonly mode: "external"; readonly url?: string } =
+        const dev:
+          | DevServerOptions
+          | { readonly mode: "external"; readonly url?: string | undefined } =
           props.dev?.mode === "external"
             ? props.dev
             : {

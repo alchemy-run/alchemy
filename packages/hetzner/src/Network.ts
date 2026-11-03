@@ -40,7 +40,7 @@ export interface NetworkSubnet {
    * destinations. Minimum size is `/30`. If omitted on create, Hetzner
    * allocates the first free `/24`.
    */
-  ipRange?: string;
+  ipRange?: string | undefined;
   /**
    * Network zone this subnet lives in (`eu-central`, `us-east`, `us-west`,
    * `ap-southeast`). `nbg1` / `fsn1` / `hel1` are in `eu-central`.
@@ -49,7 +49,7 @@ export interface NetworkSubnet {
   /**
    * Robot vSwitch id. Required when `type` is `vswitch`.
    */
-  vswitchId?: number;
+  vswitchId?: number | undefined;
 }
 
 export interface NetworkRoute {
@@ -81,7 +81,7 @@ export interface NetworkProps {
    * Subnets allocated in this Network. Synced via `add_subnet` /
    * `delete_subnet` — they are not their own resources.
    */
-  subnets?: NetworkSubnet[];
+  subnets?: NetworkSubnet[] | undefined;
   /**
    * Static routes in this Network. Synced via `add_route` / `delete_route`.
    */
@@ -199,14 +199,14 @@ type ObservedNetwork = {
   ip_range: string;
   subnets: ReadonlyArray<{
     type: string;
-    ip_range?: string;
+    ip_range?: string | undefined;
     network_zone: string;
     gateway: string;
-    vswitch_id?: number | null;
+    vswitch_id?: number | null | undefined;
   }>;
   routes: ReadonlyArray<{ destination: string; gateway: string }>;
   servers: ReadonlyArray<number>;
-  load_balancers?: ReadonlyArray<number>;
+  load_balancers?: ReadonlyArray<number> | undefined;
   protection: { delete: boolean };
   labels: Record<string, string | undefined>;
   created: string;
@@ -255,9 +255,9 @@ const desiredLabelsOf = Effect.fn(function* (
 
 const subnetKey = (subnet: {
   type: string;
-  ipRange?: string;
+  ipRange?: string | undefined;
   networkZone: string;
-  vswitchId?: number | null;
+  vswitchId?: number | null | undefined;
 }): string =>
   `${subnet.type}|${subnet.ipRange ?? ""}|${subnet.networkZone}|${subnet.vswitchId ?? ""}`;
 

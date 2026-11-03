@@ -17,9 +17,9 @@ export type SslCertificateType = "SELF_MANAGED" | "MANAGED";
 
 export type SslCertificateSelfManaged = {
   /** PEM-encoded certificate chain. Leaf first, then intermediates. */
-  certificate?: string;
+  certificate?: string | undefined;
   /** PEM-encoded private key. Write-only on insert. */
-  privateKey?: string;
+  privateKey?: string | undefined;
 };
 
 export type SslCertificateManaged = {
@@ -27,7 +27,7 @@ export type SslCertificateManaged = {
    * Domains for a Google-managed certificate. Each certificate supports
    * up to the project quota (typically 100).
    */
-  domains?: string[];
+  domains?: string[] | undefined;
 };
 
 export type SslCertificateProps = {
@@ -36,40 +36,40 @@ export type SslCertificateProps = {
    * generated from the stack, stage, and logical id. Changing it replaces
    * the resource.
    */
-  sslCertificateName?: string;
+  sslCertificateName?: string | undefined;
   /**
    * Optional description. Compute SSL certificates have no labels field
    * and no update API, so Alchemy ownership is stored in a `[alchemy …]`
    * prefix and any description change replaces the certificate.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * `SELF_MANAGED` (upload PEM) or `MANAGED` (Google provisions). Inferred
    * from `managed.domains` vs `certificate` / `selfManaged` when omitted.
    * Immutable — changing it replaces the certificate.
    * @default "SELF_MANAGED"
    */
-  type?: SslCertificateType;
+  type?: SslCertificateType | undefined;
   /**
    * PEM certificate chain for a self-managed certificate. Immutable —
    * changing it replaces the certificate.
    */
-  certificate?: string;
+  certificate?: string | undefined;
   /**
    * PEM private key for a self-managed certificate. Write-only; not
    * returned by the API. Immutable — changing it replaces the certificate.
    */
-  privateKey?: string;
+  privateKey?: string | undefined;
   /**
    * Nested self-managed payload. `certificate` / `privateKey` on the
    * resource take precedence when both are set.
    */
-  selfManaged?: SslCertificateSelfManaged;
+  selfManaged?: SslCertificateSelfManaged | undefined;
   /**
    * Google-managed certificate configuration. Immutable — changing domains
    * replaces the certificate.
    */
-  managed?: SslCertificateManaged;
+  managed?: SslCertificateManaged | undefined;
 };
 
 export type SslCertificate = Resource<
@@ -218,10 +218,10 @@ const hasOwnershipMarker = (description: string | undefined): boolean =>
   (description ?? "").startsWith("[alchemy ");
 
 const typeOf = (props: {
-  type?: string;
-  managed?: SslCertificateManaged;
-  certificate?: string;
-  selfManaged?: SslCertificateSelfManaged;
+  type?: string | undefined;
+  managed?: SslCertificateManaged | undefined;
+  certificate?: string | undefined;
+  selfManaged?: SslCertificateSelfManaged | undefined;
 }): SslCertificateType => {
   if (props.type === "MANAGED" || props.type === "SELF_MANAGED") {
     return props.type;
@@ -234,9 +234,9 @@ const asType = (type: string | undefined): SslCertificateType =>
   type === "MANAGED" ? "MANAGED" : "SELF_MANAGED";
 
 const selfManagedOf = (props: {
-  certificate?: string;
-  privateKey?: string;
-  selfManaged?: SslCertificateSelfManaged;
+  certificate?: string | undefined;
+  privateKey?: string | undefined;
+  selfManaged?: SslCertificateSelfManaged | undefined;
 }) => ({
   certificate: props.certificate ?? props.selfManaged?.certificate,
   privateKey: props.privateKey ?? props.selfManaged?.privateKey,

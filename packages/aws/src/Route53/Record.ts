@@ -54,15 +54,15 @@ export interface RecordGeoLocation {
    * Two-letter continent code (e.g. `"NA"`, `"EU"`). Mutually exclusive with
    * `countryCode`.
    */
-  continentCode?: string;
+  continentCode?: string | undefined;
   /**
    * Two-letter country code, or `"*"` for the default (catch-all) record.
    */
-  countryCode?: string;
+  countryCode?: string | undefined;
   /**
    * Subdivision code (e.g. a US state). Requires `countryCode`.
    */
-  subdivisionCode?: string;
+  subdivisionCode?: string | undefined;
 }
 
 export interface RecordGeoProximityCoordinates {
@@ -74,13 +74,13 @@ export interface RecordGeoProximityCoordinates {
 
 export interface RecordGeoProximityLocation {
   /** AWS Region for the endpoint. Mutually exclusive with `coordinates`. */
-  awsRegion?: string;
+  awsRegion?: string | undefined;
   /** Local Zone Group for the endpoint. */
-  localZoneGroup?: string;
+  localZoneGroup?: string | undefined;
   /** Explicit latitude/longitude of the endpoint. */
-  coordinates?: RecordGeoProximityCoordinates;
+  coordinates?: RecordGeoProximityCoordinates | undefined;
   /** Bias (-99 to 99) that expands or shrinks the geographic region. */
-  bias?: number;
+  bias?: number | undefined;
 }
 
 export interface RecordCidrRoutingConfig {
@@ -98,7 +98,7 @@ export interface RecordProps {
    * `api.example.com` → `example.com`); the deploy fails actionably when
    * no zone matches.
    */
-  hostedZoneId?: string;
+  hostedZoneId?: string | undefined;
   /**
    * Record name.
    */
@@ -111,54 +111,54 @@ export interface RecordProps {
    * TTL for non-alias records, e.g. `"60 seconds"` or `Duration.minutes(5)`
    * (a bare number is milliseconds). Rounded to whole seconds on the wire.
    */
-  ttl?: Duration.Input;
+  ttl?: Duration.Input | undefined;
   /**
    * Record values for non-alias records.
    */
-  records?: string[];
+  records?: string[] | undefined;
   /**
    * Alias target for alias records.
    */
-  aliasTarget?: RecordAliasTarget;
+  aliasTarget?: RecordAliasTarget | undefined;
   /**
    * Optional set identifier for weighted, latency, failover, and other routing
    * policies that require unique record identities.
    */
-  setIdentifier?: string;
+  setIdentifier?: string | undefined;
   /**
    * Weight (0-255) for weighted routing. Requires `setIdentifier`.
    */
-  weight?: number;
+  weight?: number | undefined;
   /**
    * AWS Region for latency-based routing. Requires `setIdentifier`.
    */
-  region?: route53.ResourceRecordSetRegion;
+  region?: route53.ResourceRecordSetRegion | undefined;
   /**
    * Failover role for failover routing. Requires `setIdentifier`.
    */
-  failover?: "PRIMARY" | "SECONDARY";
+  failover?: "PRIMARY" | "SECONDARY" | undefined;
   /**
    * Geolocation routing rule. Requires `setIdentifier`.
    */
-  geoLocation?: RecordGeoLocation;
+  geoLocation?: RecordGeoLocation | undefined;
   /**
    * Geoproximity routing rule. Requires `setIdentifier`.
    */
-  geoProximityLocation?: RecordGeoProximityLocation;
+  geoProximityLocation?: RecordGeoProximityLocation | undefined;
   /**
    * Whether this record participates in multivalue answer routing. Requires
    * `setIdentifier`.
    */
-  multiValueAnswer?: boolean;
+  multiValueAnswer?: boolean | undefined;
   /**
    * IP-based (CIDR) routing rule. Requires `setIdentifier`.
    */
-  cidrRoutingConfig?: RecordCidrRoutingConfig;
+  cidrRoutingConfig?: RecordCidrRoutingConfig | undefined;
   /**
    * Health check that gates whether Route 53 returns this record. Typically a
    * `HealthCheck.id`.
    */
-  healthCheckId?: string;
+  healthCheckId?: string | undefined;
 }
 
 export interface Record extends Resource<
@@ -454,7 +454,7 @@ export const toRecordSet = (
     | "healthCheckId"
   > & {
     /** TTL already converted to wire seconds. */
-    ttl?: number;
+    ttl?: number | undefined;
   },
 ): route53.ResourceRecordSet => ({
   Name: normalizeName(props.name),

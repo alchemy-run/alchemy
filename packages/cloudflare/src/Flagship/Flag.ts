@@ -106,7 +106,7 @@ export type FlagRule = {
   /**
    * Optional percentage rollout applied after the conditions match.
    */
-  rollout?: FlagRollout;
+  rollout?: FlagRollout | undefined;
 };
 
 /**
@@ -126,13 +126,13 @@ export type FlagProps = {
    * generated from the app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
    */
-  key?: string;
+  key?: string | undefined;
   /**
    * When false, the flag bypasses all rules and always serves
    * `defaultVariation`.
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Variation served when no rule matches or the flag is disabled. Must be a
    * key in `variations`.
@@ -150,16 +150,16 @@ export type FlagProps = {
    * `defaultVariation`.
    * @default []
    */
-  rules?: FlagRule[];
+  rules?: FlagRule[] | undefined;
   /**
    * Human readable description of the flag.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Value type of the flag's variations. Inferred from the variation values
    * on write, so it can usually be omitted.
    */
-  type?: FlagType;
+  type?: FlagType | undefined;
 };
 
 export type FlagAttributes = {
@@ -597,7 +597,7 @@ type WireRule = {
   conditions: readonly unknown[];
   priority: number;
   serveVariation: string;
-  rollout?: { percentage: number; attribute?: string | null } | null;
+  rollout?: { percentage: number; attribute?: string | null | undefined } | null | undefined;
 };
 
 const normalizeConditions = (conditions: readonly unknown[]): FlagCondition[] =>

@@ -46,7 +46,7 @@ export interface ProjectProps {
    * The sample shown in the interactive session.
    * @default 500 rows, FIRST_N
    */
-  sample?: ProjectSample;
+  sample?: ProjectSample | undefined;
   /**
    * The IAM role ARN DataBrew assumes for the project's interactive
    * sessions (needs read access to the dataset's source).

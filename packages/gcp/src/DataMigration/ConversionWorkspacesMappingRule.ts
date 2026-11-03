@@ -53,12 +53,12 @@ export type ConversionWorkspacesMappingRuleProps = {
    * Region used when `conversionWorkspace` is a bare id.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Mapping rule id (the `{mappingRule}` segment). If omitted, a unique
    * RFC1035 name is generated. Immutable — changing it replaces the rule.
    */
-  mappingRuleId?: string;
+  mappingRuleId?: string | undefined;
   /**
    * Rule scope (`DATABASE_ENTITY_TYPE_SCHEMA`,
    * `DATABASE_ENTITY_TYPE_TABLE`, …). The API has no patch method —
@@ -68,46 +68,46 @@ export type ConversionWorkspacesMappingRuleProps = {
   /**
    * Entities the rule applies to.
    */
-  filter?: MappingRuleFilter;
+  filter?: MappingRuleFilter | undefined;
   /**
    * Application order. Lower values run first.
    * @default "1"
    */
-  ruleOrder?: string;
+  ruleOrder?: string | undefined;
   /**
    * User-friendly display name. Mapping rules have no labels field, so
    * ownership is stored in a `[alchemy …]` prefix and stripped from
    * attributes. The API has no patch method — changing display name
    * replaces the rule.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Mapping rule state (`ENABLED` or `DISABLED`).
    * @default "ENABLED"
    */
-  state?: MappingRuleState;
+  state?: MappingRuleState | undefined;
   /** Rename a single entity. */
-  singleEntityRename?: SingleEntityRename;
+  singleEntityRename?: SingleEntityRename | undefined;
   /** Rename multiple entities. */
-  multiEntityRename?: MultiEntityRename;
+  multiEntityRename?: MultiEntityRename | undefined;
   /** Move entities into another schema. */
-  entityMove?: EntityMove;
+  entityMove?: EntityMove | undefined;
   /** Change SQL for a function or procedure. */
-  sourceSqlChange?: SourceSqlChange;
+  sourceSqlChange?: SourceSqlChange | undefined;
   /** Change a single package. */
-  singlePackageChange?: SinglePackageChange;
+  singlePackageChange?: SinglePackageChange | undefined;
   /** Set a table primary key. */
-  setTablePrimaryKey?: SetTablePrimaryKey;
+  setTablePrimaryKey?: SetTablePrimaryKey | undefined;
   /** Filter table columns. */
-  filterTableColumns?: FilterTableColumns;
+  filterTableColumns?: FilterTableColumns | undefined;
   /** Change multiple column data types. */
-  multiColumnDataTypeChange?: MultiColumnDatatypeChange;
+  multiColumnDataTypeChange?: MultiColumnDatatypeChange | undefined;
   /** Convert ROWID to a column. */
-  convertRowidColumn?: ConvertRowIdToColumn;
+  convertRowidColumn?: ConvertRowIdToColumn | undefined;
   /** Change a single column. */
-  singleColumnChange?: SingleColumnChange;
+  singleColumnChange?: SingleColumnChange | undefined;
   /** Conditionally transform column values. */
-  conditionalColumnSetValue?: ConditionalColumnSetValue;
+  conditionalColumnSetValue?: ConditionalColumnSetValue | undefined;
 };
 
 export type ConversionWorkspacesMappingRule = Resource<
@@ -235,22 +235,22 @@ const toAttrs = (item: dm.MappingRule, project: string, knownName?: string) => {
 };
 
 const ruleBody = (item: {
-  ruleScope?: string;
-  filter?: MappingRuleFilter;
-  ruleOrder?: string;
-  displayName?: string;
-  state?: string;
-  singleEntityRename?: SingleEntityRename;
-  multiEntityRename?: MultiEntityRename;
-  entityMove?: EntityMove;
-  sourceSqlChange?: SourceSqlChange;
-  singlePackageChange?: SinglePackageChange;
-  setTablePrimaryKey?: SetTablePrimaryKey;
-  filterTableColumns?: FilterTableColumns;
-  multiColumnDataTypeChange?: MultiColumnDatatypeChange;
-  convertRowidColumn?: ConvertRowIdToColumn;
-  singleColumnChange?: SingleColumnChange;
-  conditionalColumnSetValue?: ConditionalColumnSetValue;
+  ruleScope?: string | undefined;
+  filter?: MappingRuleFilter | undefined;
+  ruleOrder?: string | undefined;
+  displayName?: string | undefined;
+  state?: string | undefined;
+  singleEntityRename?: SingleEntityRename | undefined;
+  multiEntityRename?: MultiEntityRename | undefined;
+  entityMove?: EntityMove | undefined;
+  sourceSqlChange?: SourceSqlChange | undefined;
+  singlePackageChange?: SinglePackageChange | undefined;
+  setTablePrimaryKey?: SetTablePrimaryKey | undefined;
+  filterTableColumns?: FilterTableColumns | undefined;
+  multiColumnDataTypeChange?: MultiColumnDatatypeChange | undefined;
+  convertRowidColumn?: ConvertRowIdToColumn | undefined;
+  singleColumnChange?: SingleColumnChange | undefined;
+  conditionalColumnSetValue?: ConditionalColumnSetValue | undefined;
 }) =>
   fingerprint({
     ruleScope: item.ruleScope,

@@ -257,7 +257,7 @@ const observe = Effect.fn(function* (input: {
   environmentId: string;
   serviceId: string;
   applicationPort?: number;
-  id?: string;
+  id?: string | undefined;
 }) {
   if (input.id !== undefined && input.id.length > 0) {
     const byId = yield* findById(input.environmentId, input.serviceId, input.id);

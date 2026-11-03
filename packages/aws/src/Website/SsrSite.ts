@@ -89,34 +89,36 @@ export interface SsrSiteProps {
   /**
    * Optional static asset bundle to serve from S3.
    */
-  assets?: {
-    /**
-     * Local build output directory to upload.
-     */
-    sourcePath: Input<string>;
-    /**
-     * Optional deterministic S3 bucket name.
-     */
-    bucketName?: string;
-    /**
-     * Optional asset key prefix.
-     */
-    prefix?: string;
-    /**
-     * Path pattern that should be served from the asset bucket.
-     * @default "/_assets/*"
-     */
-    pathPattern?: string;
-    /**
-     * Remove stale files under the prefix.
-     * @default false
-     */
-    purge?: boolean;
-    /**
-     * Optional file overrides.
-     */
-    fileOptions?: AssetFileOption[];
-  };
+  assets?:
+    | {
+        /**
+         * Local build output directory to upload.
+         */
+        sourcePath: Input<string>;
+        /**
+         * Optional deterministic S3 bucket name.
+         */
+        bucketName?: string;
+        /**
+         * Optional asset key prefix.
+         */
+        prefix?: string;
+        /**
+         * Path pattern that should be served from the asset bucket.
+         * @default "/_assets/*"
+         */
+        pathPattern?: string;
+        /**
+         * Remove stale files under the prefix.
+         * @default false
+         */
+        purge?: boolean;
+        /**
+         * Optional file overrides.
+         */
+        fileOptions?: AssetFileOption[];
+      }
+    | undefined;
   /**
    * CloudFront cache policy ID for the dynamic server route.
    * @default CloudFront managed CachingDisabled

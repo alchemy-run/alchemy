@@ -125,7 +125,7 @@ const logUnreportedCause = (cause: Cause.Cause<unknown>) => {
     : Effect.logError("HTTP handler failed", Cause.fromReasons(failures));
 };
 
-export const resolvePort = (options: { port?: number } | undefined) =>
+export const resolvePort = (options: { port?: number | undefined } | undefined) =>
   options?.port !== undefined
     ? Effect.succeed(options.port)
     : Config.Number("PORT").pipe(Config.withDefault(3000));

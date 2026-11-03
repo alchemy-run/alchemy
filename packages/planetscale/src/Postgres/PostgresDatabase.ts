@@ -58,7 +58,7 @@ export interface PostgresDatabaseProps extends BaseDatabaseProps {
    * CPU architecture. Cannot be changed after creation.
    * @default "x86"
    */
-  arch?: "x86" | "arm";
+  arch?: "x86" | "arm" | undefined;
 }
 
 /**

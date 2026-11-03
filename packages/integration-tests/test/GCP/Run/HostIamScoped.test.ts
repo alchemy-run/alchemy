@@ -47,8 +47,8 @@ class ScopedService extends GCP.Function<ScopedService>()(
 
 const rolesOf = (
   bindings: ReadonlyArray<{
-    role?: string;
-    members?: ReadonlyArray<string>;
+    role?: string | undefined;
+    members?: ReadonlyArray<string> | undefined;
     condition?: unknown;
   }>,
   member: string,

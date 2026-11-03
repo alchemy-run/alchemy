@@ -34,11 +34,11 @@ export type EntryLinkReference = {
   /**
    * Path in the Entry. Empty means the Entry itself. Immutable.
    */
-  path?: string;
+  path?: string | undefined;
   /**
    * Reference type (`SOURCE` or `TARGET`). Immutable.
    */
-  type?: dataplex.GoogleCloudDataplexV1EntryLinkEntryReferenceTypeEnum | (string & {});
+  type?: dataplex.GoogleCloudDataplexV1EntryLinkEntryReferenceTypeEnum | (string & {}) | undefined;
 };
 
 export type EntryGroupsEntryLinkProps = {

@@ -533,8 +533,8 @@ const mapClusterState = (
   tags: Record<string, string>,
   kubernetesObjects: KubernetesObjectRef[],
   managedRoles: {
-    managedClusterRoleName?: string;
-    managedNodeRoleName?: string;
+    managedClusterRoleName?: string | undefined;
+    managedNodeRoleName?: string | undefined;
   } = {},
 ): Cluster["Attributes"] => ({
   managedClusterRoleName: managedRoles.managedClusterRoleName,
@@ -704,11 +704,13 @@ export const ClusterProvider = () =>
         managedRoles,
       }: {
         clusterName: string;
-        kubernetesObjects?: KubernetesObjectRef[];
-        managedRoles?: {
-          managedClusterRoleName?: string;
-          managedNodeRoleName?: string;
-        };
+        kubernetesObjects?: KubernetesObjectRef[] | undefined;
+        managedRoles?:
+          | {
+              managedClusterRoleName?: string | undefined;
+              managedNodeRoleName?: string | undefined;
+            }
+          | undefined;
       }) {
         const described = yield* eks
           .describeCluster({
@@ -732,8 +734,8 @@ export const ClusterProvider = () =>
         clusterName: string,
         kubernetesObjects: KubernetesObjectRef[] = [],
         managedRoles?: {
-          managedClusterRoleName?: string;
-          managedNodeRoleName?: string;
+          managedClusterRoleName?: string | undefined;
+          managedNodeRoleName?: string | undefined;
         },
       ) =>
         readCluster({

@@ -54,7 +54,7 @@ export interface Any extends Context.Key<unknown, unknown> {
   readonly definition: {
     readonly from: ReadonlyArray<Aggregate.Any | Any>;
     readonly key: Key.Any;
-    readonly state?: Schema.Top;
+    readonly state?: Schema.Top | undefined;
     readonly initial?: unknown;
     readonly keyOf?: Handlers;
     readonly evolve?: Handlers;
@@ -320,7 +320,7 @@ export interface Host<S, Key extends Key.Any, E> {
     key: Key.RefOf<Key>,
     options?: {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly atLeast?: { readonly stream: string; readonly version: number } | undefined;
       readonly timeout?: Duration.Input;
     },
   ) => Effect.Effect<Option.Option<S>, ConsistencyTimeout>;
@@ -333,7 +333,7 @@ export interface Host<S, Key extends Key.Any, E> {
     key: Key.RefOf<Key>,
     options?: {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly atLeast?: { readonly stream: string; readonly version: number } | undefined;
       readonly timeout?: Duration.Input;
     },
   ) => Effect.Effect<Read.Snapshot<S | null>, ConsistencyTimeout>;
@@ -370,10 +370,10 @@ export interface Host<S, Key extends Key.Any, E> {
   readonly list: (
     key: Key.RefOf<Key>,
     options?: {
-      readonly where?: Filter<E>;
-      readonly order?: "asc" | "desc";
-      readonly take?: number;
-      readonly after?: number;
+      readonly where?: Filter<E> | undefined;
+      readonly order?: "asc" | "desc" | undefined;
+      readonly take?: number | undefined;
+      readonly after?: number | undefined;
     },
   ) => Effect.Effect<Page<Entry<S, E, Key.IdOf<Key>>>>;
 }

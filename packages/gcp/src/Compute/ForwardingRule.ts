@@ -75,13 +75,13 @@ export type ForwardingRuleProps = {
    * proxy, target VPN gateway, or a PSC service attachment / Google API
    * bundle). Updated in place via `setTarget`.
    */
-  target?: string;
+  target?: string | undefined;
   /**
    * Backend service URL. Required for internal and external passthrough
    * Network Load Balancers; omitted for other products. Immutable —
    * changing it replaces the rule.
    */
-  backendService?: string;
+  backendService?: string | undefined;
   /**
    * Forwarding rule type (`EXTERNAL`, `EXTERNAL_MANAGED`, `INTERNAL`,
    * `INTERNAL_MANAGED`). Use `""` for some PSC endpoints. Immutable —
@@ -98,7 +98,7 @@ export type ForwardingRuleProps = {
    * Subnetwork URL or name. Required for custom-mode VPCs and IPv6
    * external rules. Immutable — changing it replaces the rule.
    */
-  subnetwork?: string;
+  subnetwork?: string | undefined;
   /**
    * Networking tier (`PREMIUM` or `STANDARD`). Immutable — changing it
    * replaces the rule.

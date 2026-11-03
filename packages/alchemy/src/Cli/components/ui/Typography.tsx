@@ -1,6 +1,9 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { Hyperlink as SigilHyperlink, Text as SigilText } from "@alchemy.run/sigil";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { ComponentProps } from "react";
 import { theme } from "../../../Util/Theme.ts";
 import { useCliEnvironment } from "./Environment.tsx";
@@ -38,18 +41,21 @@ export function Text({
   return (
     <SigilText
       {...props}
-      color={
-        colors
-          ? (color ?? (tone === "default" || tone === "muted" ? undefined : theme.color[tone]))
-          : undefined
-      }
-      backgroundColor={colors ? backgroundColor : undefined}
-      bold={colors ? bold : undefined}
-      dimColor={colors ? (dimColor ?? tone === "muted") : undefined}
-      italic={colors ? italic : undefined}
-      underline={colors ? underline : undefined}
-      strikethrough={colors ? strikethrough : undefined}
-      inverse={colors ? inverse : undefined}
+      {...Record.filterMap(
+        {
+          color: colors
+            ? (color ?? (tone === "default" || tone === "muted" ? undefined : theme.color[tone]))
+            : undefined,
+          backgroundColor: colors ? backgroundColor : undefined,
+          bold: colors ? bold : undefined,
+          dimColor: colors ? (dimColor ?? tone === "muted") : undefined,
+          italic: colors ? italic : undefined,
+          underline: colors ? underline : undefined,
+          strikethrough: colors ? strikethrough : undefined,
+          inverse: colors ? inverse : undefined,
+        },
+        Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+      )}
     />
   );
 }
@@ -66,8 +72,7 @@ export function Link({ href, children }: LinkProps) {
     <SigilHyperlink
       url={href}
       fallback={label !== href}
-      color={colors ? theme.color.info : undefined}
-      underline={colors || undefined}
+      {...(colors && { color: theme.color.info, underline: true })}
     >
       {label}
     </SigilHyperlink>

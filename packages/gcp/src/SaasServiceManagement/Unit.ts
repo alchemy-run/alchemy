@@ -35,18 +35,18 @@ export type UnitManagementMode = saasservicemgmt.UnitManagementModeEnum | (strin
 
 export type UnitMaintenanceSettings = {
   /** Pin the unit to its current release until this RFC3339 timestamp. */
-  pinnedUntilTime?: string;
+  pinnedUntilTime?: string | undefined;
 };
 
 export type UnitVariable = {
-  type?: saasservicemgmt.UnitVariableTypeEnum | (string & {});
-  value?: string;
-  variable?: string;
+  type?: saasservicemgmt.UnitVariableTypeEnum | (string & {}) | undefined;
+  value?: string | undefined;
+  variable?: string | undefined;
 };
 
 export type UnitDependency = {
-  unit?: string;
-  alias?: string;
+  unit?: string | undefined;
+  alias?: string | undefined;
 };
 
 export type UnitCondition = {
@@ -90,7 +90,7 @@ export type UnitProps = {
   /**
    * Maintenance pin. Updates in place.
    */
-  maintenance?: UnitMaintenanceSettings;
+  maintenance?: UnitMaintenanceSettings | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */

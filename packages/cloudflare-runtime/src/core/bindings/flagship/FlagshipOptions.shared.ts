@@ -39,10 +39,12 @@ export interface FlagshipRule {
   readonly conditions: ReadonlyArray<FlagshipCondition>;
   readonly priority: number;
   readonly serveVariation: string;
-  readonly rollout?: {
-    readonly percentage: number;
-    readonly attribute?: string;
-  };
+  readonly rollout?:
+    | {
+        readonly percentage: number;
+        readonly attribute?: string | undefined;
+      }
+    | undefined;
 }
 
 export type FlagshipCondition =

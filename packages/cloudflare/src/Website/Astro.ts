@@ -22,7 +22,7 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
    * Astro project root directory.
    * Defaults to the current working directory (`process.cwd()`).
    */
-  rootDir?: string;
+  rootDir?: string | undefined;
   /**
    * A custom Worker entry that wraps Astro's handler and adds exports of its
    * own (Durable Object classes, a `scheduled` handler, ...). Import the Astro

@@ -61,7 +61,7 @@ export interface WikiPageProps {
    * By default, wiki pages are never deleted to preserve documentation history.
    * @default false
    */
-  allowDelete?: boolean;
+  allowDelete?: boolean | undefined;
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -71,7 +71,7 @@ export interface WikiPageProps {
    * different GitHub instance is a different physical resource. Authenticated
    * wiki Git operations require HTTPS.
    */
-  baseUrl?: string;
+  baseUrl?: string | undefined;
 }
 
 export interface WikiPage extends Resource<

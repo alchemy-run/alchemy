@@ -321,7 +321,7 @@ const sameItems = (observed: ReadonlyArray<ListItem>, desired: ReadonlyArray<Lis
   );
 
 const toAttributes = (
-  list: ObservedList & { count?: number | null },
+  list: ObservedList & { count?: number | null | undefined },
   accountId: string,
 ): ListAttributes => ({
   listId: list.id ?? "",

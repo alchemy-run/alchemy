@@ -16,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 import * as Result from "effect/Result";
 import * as S from "effect/Schema";
 
@@ -657,7 +658,17 @@ test.provider(
       const path = yield* Path.Path;
       const ws = yield* stageWorkspace(SCHEMA_SOURCE);
       const kitGenerate = (schema: string, out: string, hints?: GenerateOptions["hints"]) =>
-        Effect.promise(() => generate({ dialect: "postgresql", schema, out, hints }));
+        Effect.promise(() =>
+          generate({
+            dialect: "postgresql",
+            schema,
+            out,
+            ...Record.filterMap(
+              { hints },
+              Result.fromNullishOr(() => undefined),
+            ),
+          }),
+        );
       const rename = (source: string, to: string) =>
         source.replace('name: text("name")', `name: text("${to}")`);
       const posts = `\nexport const posts = pgTable("posts", {\n  id: serial("id").primaryKey(),\n});\n`;

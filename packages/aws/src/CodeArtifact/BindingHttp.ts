@@ -17,7 +17,7 @@ import type { Repository } from "./Repository.ts";
 /** The repository-scoping fields every CodeArtifact package operation takes. */
 interface RepositoryScopedRequest {
   domain: string;
-  domainOwner?: string;
+  domainOwner?: string | undefined;
   repository: string;
 }
 
@@ -64,7 +64,7 @@ export const domainWideArns = (repository: Repository): OutputType<string>[] =>
  * `{Op}Http.ts` and reuse just the ARN helpers above.
  */
 export const makeRepositoryHttpBinding = <
-  I extends { domain: string; domainOwner?: string },
+  I extends { domain: string; domainOwner?: string | undefined },
   A,
   E,
   R,

@@ -67,20 +67,20 @@ export interface Settings {
   /**
    * Policy for AI search crawlers.
    */
-  aiSearch?: AiCrawlerPolicy;
+  aiSearch?: AiCrawlerPolicy | undefined;
   /**
    * Policy for AI assistant and agent crawlers.
    */
-  aiUser?: AiCrawlerPolicy;
+  aiUser?: AiCrawlerPolicy | undefined;
   /**
    * Policy for AI model-training crawlers.
    */
-  aiTraining?: AiTrainingPolicy;
+  aiTraining?: AiTrainingPolicy | undefined;
   /**
    * Let Cloudflare serve robots.txt content derived from the zone's
    * `aiSearch`, `aiUser` and `aiTraining` preferences.
    */
-  botPreferenceSyncEnabled?: boolean;
+  botPreferenceSyncEnabled?: boolean | undefined;
   /**
    * Action for AI scrapers and crawlers ("block AI bots"). Note
    * `only_on_ad_pages` is not available for Enterprise zones.
@@ -88,25 +88,25 @@ export interface Settings {
    * Cloudflare deprecated this setting in favour of the per-class
    * `aiSearch`, `aiUser`, and `aiTraining` policies.
    */
-  aiBotsProtection?: AiBotsProtection;
+  aiBotsProtection?: AiBotsProtection | undefined;
   /**
    * Punish AI scrapers and crawlers via a link maze (AI Labyrinth).
    */
-  crawlerProtection?: "enabled" | "disabled";
+  crawlerProtection?: "enabled" | "disabled" | undefined;
   /**
    * Block content bots — automated traffic with low bot scores, excluding
    * safe verified bot categories.
    */
-  contentBotsProtection?: "block" | "disabled";
+  contentBotsProtection?: "block" | "disabled" | undefined;
   /**
    * Robots Access Control License variant to use.
    */
-  cfRobotsVariant?: CfRobotsVariant;
+  cfRobotsVariant?: CfRobotsVariant | undefined;
   /**
    * Use lightweight, invisible JavaScript detections to improve Bot
    * Management.
    */
-  enableJs?: boolean;
+  enableJs?: boolean | undefined;
   /**
    * Serve a Cloudflare-managed robots.txt. If the origin already serves
    * one, the managed file is prepended to it.
@@ -114,53 +114,53 @@ export interface Settings {
    * Cloudflare deprecated this setting in favour of
    * `botPreferenceSyncEnabled`.
    */
-  isRobotsTxtManaged?: boolean;
+  isRobotsTxtManaged?: boolean | undefined;
   /**
    * Bot Fight Mode (Free-plan zones). Mutually exclusive with the SBFM
    * fields below.
    */
-  fightMode?: boolean;
+  fightMode?: boolean | undefined;
   /**
    * Super Bot Fight Mode action for definitely automated requests
    * (Pro and above).
    */
-  sbfmDefinitelyAutomated?: SbfmAction;
+  sbfmDefinitelyAutomated?: SbfmAction | undefined;
   /**
    * Super Bot Fight Mode action for likely automated requests
    * (Business and above).
    */
-  sbfmLikelyAutomated?: SbfmAction;
+  sbfmLikelyAutomated?: SbfmAction | undefined;
   /**
    * Super Bot Fight Mode action for verified bot requests (Pro and above).
    */
-  sbfmVerifiedBots?: SbfmVerifiedBotsAction;
+  sbfmVerifiedBots?: SbfmVerifiedBotsAction | undefined;
   /**
    * Super Bot Fight Mode static resource protection (Pro and above).
    * Enabling can challenge legitimate static-asset consumers.
    */
-  sbfmStaticResourceProtection?: boolean;
+  sbfmStaticResourceProtection?: boolean | undefined;
   /**
    * Optimize Super Bot Fight Mode protections for WordPress
    * (Pro and above).
    */
-  optimizeWordpress?: boolean;
+  optimizeWordpress?: boolean | undefined;
   /**
    * Automatically update to the newest bot detection model (Enterprise
    * Bot Management add-on).
    */
-  autoUpdateModel?: boolean;
+  autoUpdateModel?: boolean | undefined;
   /**
    * Whether the bot management cookie may be placed on end-user devices
    * (Enterprise Bot Management add-on).
    * @default true
    */
-  bmCookieEnabled?: boolean;
+  bmCookieEnabled?: boolean | undefined;
   /**
    * Disable tracking the highest bot score for a session in the Bot
    * Management cookie (Enterprise Bot Management add-on).
    * @default false
    */
-  suppressSessionScore?: boolean;
+  suppressSessionScore?: boolean | undefined;
 }
 
 export interface Props extends Settings {
@@ -407,26 +407,26 @@ export const BotManagementProvider = () =>
  * narrowing on the plan.
  */
 interface ObservedBotManagement {
-  readonly aiSearch?: string | null;
-  readonly aiUser?: string | null;
-  readonly aiTraining?: string | null;
-  readonly botPreferenceSyncEnabled?: boolean | null;
-  readonly aiBotsProtection?: string | null;
-  readonly crawlerProtection?: string | null;
-  readonly contentBotsProtection?: string | null;
-  readonly cfRobotsVariant?: string | null;
-  readonly enableJs?: boolean | null;
-  readonly isRobotsTxtManaged?: boolean | null;
-  readonly fightMode?: boolean | null;
-  readonly sbfmDefinitelyAutomated?: string | null;
-  readonly sbfmLikelyAutomated?: string | null;
-  readonly sbfmVerifiedBots?: string | null;
-  readonly sbfmStaticResourceProtection?: boolean | null;
-  readonly optimizeWordpress?: boolean | null;
-  readonly autoUpdateModel?: boolean | null;
-  readonly bmCookieEnabled?: boolean | null;
-  readonly suppressSessionScore?: boolean | null;
-  readonly usingLatestModel?: boolean | null;
+  readonly aiSearch?: string | null | undefined;
+  readonly aiUser?: string | null | undefined;
+  readonly aiTraining?: string | null | undefined;
+  readonly botPreferenceSyncEnabled?: boolean | null | undefined;
+  readonly aiBotsProtection?: string | null | undefined;
+  readonly crawlerProtection?: string | null | undefined;
+  readonly contentBotsProtection?: string | null | undefined;
+  readonly cfRobotsVariant?: string | null | undefined;
+  readonly enableJs?: boolean | null | undefined;
+  readonly isRobotsTxtManaged?: boolean | null | undefined;
+  readonly fightMode?: boolean | null | undefined;
+  readonly sbfmDefinitelyAutomated?: string | null | undefined;
+  readonly sbfmLikelyAutomated?: string | null | undefined;
+  readonly sbfmVerifiedBots?: string | null | undefined;
+  readonly sbfmStaticResourceProtection?: boolean | null | undefined;
+  readonly optimizeWordpress?: boolean | null | undefined;
+  readonly autoUpdateModel?: boolean | null | undefined;
+  readonly bmCookieEnabled?: boolean | null | undefined;
+  readonly suppressSessionScore?: boolean | null | undefined;
+  readonly usingLatestModel?: boolean | null | undefined;
 }
 
 /**

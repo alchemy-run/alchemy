@@ -14,15 +14,15 @@ const MAX_QUEUE_ID_LENGTH = 100;
 
 export type QueueRetryConfig = {
   /** Attempts per task, including the first. `-1` means unlimited. */
-  maxAttempts?: number;
+  maxAttempts?: number | undefined;
   /** Time limit for retrying a failed task, e.g. `"3600s"`. `"0s"` is unlimited. */
-  maxRetryDuration?: string;
+  maxRetryDuration?: string | undefined;
   /** Minimum backoff after a failed attempt, e.g. `"0.1s"`. */
-  minBackoff?: string;
+  minBackoff?: string | undefined;
   /** Maximum backoff after a failed attempt, e.g. `"3600s"`. */
-  maxBackoff?: string;
+  maxBackoff?: string | undefined;
   /** Times the retry interval doubles before increasing linearly. */
-  maxDoublings?: number;
+  maxDoublings?: number | undefined;
 };
 
 export type QueueRateLimits = {
@@ -34,7 +34,7 @@ export type QueueRateLimits = {
 
 export type QueueStackdriverLoggingConfig = {
   /** Fraction of operations to log, in `[0.0, 1.0]`. `0` logs nothing. */
-  samplingRatio?: number;
+  samplingRatio?: number | undefined;
 };
 
 export type QueueHttpTarget = cloudtasks.HttpTarget;

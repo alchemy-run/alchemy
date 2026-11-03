@@ -39,7 +39,7 @@ export interface ApiKeyRestrictions {
    * Optional HTTP referer patterns the key may be used from, e.g.
    * `["https://example.com/*"]`.
    */
-  allowReferers?: string[];
+  allowReferers?: string[] | undefined;
 }
 
 export interface ApiKeyProps {

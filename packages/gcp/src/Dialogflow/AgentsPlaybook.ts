@@ -34,16 +34,16 @@ export type PlaybookType = "PLAYBOOK_TYPE_UNSPECIFIED" | "TASK" | "ROUTINE";
 
 export type PlaybookStep = {
   /** Instruction text for this step. */
-  text?: string;
+  text?: string | undefined;
   /** Nested steps. */
-  steps?: PlaybookStep[];
+  steps?: PlaybookStep[] | undefined;
 };
 
 export type PlaybookInstruction = {
   /** Free-form guidelines. */
-  guidelines?: string;
+  guidelines?: string | undefined;
   /** Ordered steps. */
-  steps?: PlaybookStep[];
+  steps?: PlaybookStep[] | undefined;
 };
 
 export type PlaybookParameterDefinition = {
@@ -57,9 +57,9 @@ export type PlaybookParameterDefinition = {
 
 export type PlaybookLlmModelSettings = {
   /** LLM model id. */
-  model?: string;
+  model?: string | undefined;
   /** Model prompt text. */
-  promptText?: string;
+  promptText?: string | undefined;
 };
 
 export type AgentsPlaybookProps = {
@@ -104,7 +104,7 @@ export type AgentsPlaybookProps = {
   /** Referenced flow resource names. */
   referencedFlows?: string[];
   /** LLM model settings. */
-  llmModelSettings?: PlaybookLlmModelSettings;
+  llmModelSettings?: PlaybookLlmModelSettings | undefined;
   /** Inline code block. */
   codeBlock?: { code?: string };
   /** Input parameter definitions. */

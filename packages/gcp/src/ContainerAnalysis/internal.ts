@@ -127,11 +127,11 @@ export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   if (input.extra === true) {
     return { action: "replace" as const, deleteFirst: false };
@@ -205,7 +205,7 @@ export type NoteNews = {
   expirationTime?: string;
   relatedUrl?: containeranalysis.RelatedUrlList;
   relatedNoteNames?: string[];
-  attestation?: containeranalysis.AttestationNote;
+  attestation?: containeranalysis.AttestationNote | undefined;
   build?: containeranalysis.BuildNote;
   discovery?: containeranalysis.DiscoveryNote;
   image?: containeranalysis.ImageNote;
@@ -226,7 +226,7 @@ export type OccurrenceNews = {
   resourceUri: string;
   remediation?: string;
   envelope?: containeranalysis.Envelope;
-  attestation?: containeranalysis.AttestationOccurrence;
+  attestation?: containeranalysis.AttestationOccurrence | undefined;
   build?: containeranalysis.BuildOccurrence;
   discovery?: containeranalysis.DiscoveryOccurrence;
   image?: containeranalysis.ImageOccurrence;

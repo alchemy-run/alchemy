@@ -54,14 +54,14 @@ export interface MakeOptions<ROut = any> {
   /** State store for top-level `deploy(Stack)` / `destroy(Stack)`; defaults to {@link State.localState}. */
   state?: Layer.Layer<State.State, never, StackServices>;
   /** Override the current profile; otherwise resolved from env or the built-in `default`. */
-  profile?: string;
+  profile?: string | undefined;
   /**
    * Default stage for deploy/destroy. Defaults to `test_$USER` (or
    * `test_$USERNAME` on Windows, `test_unknown` if neither is set) so two
    * people running the same suite against one account don't collide.
    * Does **not** read `$ALCHEMY_STAGE` — that is the CLI deploy/dev stage.
    */
-  stage?: string;
+  stage?: string | undefined;
   /**
    * Engine-level adoption policy for this test run. When `true`, resources
    * without prior state will be adopted from the cloud via `provider.read`
@@ -123,7 +123,10 @@ export interface SidecarOptions {
  * process-local layer: an {@link RpcSpawner} HTTP server that forks sidecar
  * processes on demand, and an {@link RpcProviderProxy} pointed at it.
  */
-export const sidecarProxy = (options: { profile?: string; omitEnv?: ReadonlyArray<string> }) =>
+export const sidecarProxy = (options: {
+  profile?: string | undefined;
+  omitEnv?: ReadonlyArray<string> | undefined;
+}) =>
   Layer.unwrap(
     Effect.map(RpcSpawner.RpcSpawner, (spawner) => RpcProviderProxy.layer(spawner.url)),
   ).pipe(
@@ -175,7 +178,7 @@ export const defaultStage = (): string =>
   process.env.ALCHEMY_TEST_STAGE || Effect.runSync(userStage("test"));
 
 /** File-level stage: a string override, otherwise {@link defaultStage}. */
-export const resolveStage = (options: { stage?: string }): string =>
+export const resolveStage = (options: { stage?: string | undefined }): string =>
   // Configured stacks carry a cross-stack reference proxy, not a stage override.
   typeof options.stage === "string" ? options.stage : defaultStage();
 
@@ -209,7 +212,7 @@ interface SidecarSingleton {
   readonly real: ReturnType<typeof sidecarProxy>;
   readonly memoMap: Layer.MemoMap;
   readonly scope: Scope.Closeable;
-  proxy?: RpcProviderProxy.RpcProviderProxy["Service"];
+  proxy?: RpcProviderProxy.RpcProviderProxy["Service"] | undefined;
   refs: number;
 }
 
@@ -258,7 +261,7 @@ export const makeSidecarHandle = <ROut = any>(
     | {
         instance: SidecarSingleton;
         owner: RpcProviderProxy.SessionOwner;
-        contexts: Set<{ ambient?: Context.Context<any> }>;
+        contexts: Set<{ ambient: Context.Context<any> | undefined }>;
       }
     | undefined = {
     instance: singleton,
@@ -690,11 +693,15 @@ export const makeDeploy = (options: MakeOptions, scope: Scope.Scope): Deploy => 
 export const destroy = <ROut>(
   options: MakeOptions,
   stack: StackDefinition<ROut>,
-  callOptions?: { stage?: string; scope?: Scope.Scope; include?: never; exclude?: never },
+  callOptions?: {
+    stage?: string;
+    scope?: Scope.Scope | undefined;
+    include?: never;
+    exclude?: never;
+  },
 ) =>
   AlchemyDestroy.destroy({
-    include: callOptions?.include,
-    exclude: callOptions?.exclude,
+    ...callOptions,
     stack,
     stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),

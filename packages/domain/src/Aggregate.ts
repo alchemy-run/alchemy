@@ -178,7 +178,7 @@ export interface Definition<
    * (`get`, `watch`, `events`): its middleware, rejections, and `validate`,
    * which judges each read against the instance's current state.
    */
-  readonly read?: Read.Contract<{ readonly id: Id["Type"] }, S["Type"], Ms, Rejects>;
+  readonly read?: Read.Contract<{ readonly id: Id["Type"] }, S["Type"], Ms, Rejects> | undefined;
 }
 
 /**
@@ -193,7 +193,7 @@ export interface Key<Name extends string> {
  */
 export interface SendOptions {
   /** Idempotency key. A command with an already-seen id returns the original receipt. */
-  readonly commandId?: string;
+  readonly commandId?: string | undefined;
 }
 
 /**
@@ -265,7 +265,7 @@ export interface AnyDefinition {
   readonly decide: AnyHandlers;
   readonly evolve: AnyHandlers;
   readonly reply?: AnyHandlers;
-  readonly read?: Read.AnyContract;
+  readonly read?: Read.AnyContract | undefined;
 }
 
 /** An aggregate instance to address: its id, or a ref carrying it. */

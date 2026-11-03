@@ -32,32 +32,32 @@ export type NetworkConfig = {
    * VPC network the management server is connected to. Full name
    * `projects/{project}/global/networks/{network}` or a network id.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Peering mode. Only `PRIVATE_SERVICE_ACCESS` is supported.
    */
-  peeringMode?: backupdr.NetworkConfigPeeringModeEnum | (string & {});
+  peeringMode?: backupdr.NetworkConfigPeeringModeEnum | (string & {}) | undefined;
 };
 
 export type ManagementURI = {
   /** AGM/RD Web UI URL. */
-  webUi?: string;
+  webUi?: string | undefined;
   /** AGM/RD API URL. */
-  api?: string;
+  api?: string | undefined;
 };
 
 export type WorkforceIdentityBasedManagementURI = {
   /** Third-party management URI. */
-  thirdPartyManagementUri?: string;
+  thirdPartyManagementUri?: string | undefined;
   /** First-party management URI. */
-  firstPartyManagementUri?: string;
+  firstPartyManagementUri?: string | undefined;
 };
 
 export type WorkforceIdentityBasedOAuth2ClientID = {
   /** First-party OAuth client id. */
-  firstPartyOauth2ClientId?: string;
+  firstPartyOauth2ClientId?: string | undefined;
   /** Third-party OAuth client id. */
-  thirdPartyOauth2ClientId?: string;
+  thirdPartyOauth2ClientId?: string | undefined;
 };
 
 export type ManagementServerProps = {

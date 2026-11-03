@@ -29,21 +29,23 @@ const COLLECTION = "destinations";
 
 export type DestinationEndpoint = {
   /** ASN of the remote IP prefix. */
-  asn?: string;
+  asn?: string | undefined;
   /** Cloud service provider of the remote IP prefix. */
-  csp?: string;
+  csp?: string | undefined;
   /** Server-reported endpoint state (`VALID`, `INVALID`). */
-  state?: string;
+  state?: string | undefined;
   /** RFC3339 last-update timestamp. */
-  updateTime?: string;
+  updateTime?: string | undefined;
 };
 
 export type DestinationStateTimeline = {
   /** Ordered state/activation entries. */
-  states?: Array<{
-    state?: string;
-    effectiveTime?: string;
-  }>;
+  states?:
+    | Array<{
+        state?: string | undefined;
+        effectiveTime?: string | undefined;
+      }>
+    | undefined;
 };
 
 export type MulticloudDataTransferConfigsDestinationProps = {

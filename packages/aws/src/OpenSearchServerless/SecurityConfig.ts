@@ -86,7 +86,7 @@ export interface SecurityConfigProps {
   /**
    * A human-readable description of the configuration.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * SAML options — required when `type` is `saml`.
    */
@@ -127,7 +127,7 @@ export interface SecurityConfig extends Resource<
     /**
      * Description of the security configuration.
      */
-    description?: string;
+    description?: string | undefined;
   },
   {},
   Providers
@@ -235,7 +235,7 @@ export const SecurityConfigProvider = () =>
               configName: string;
               type: string;
               configVersion: string;
-              description?: string;
+              description?: string | undefined;
             }[] = [];
             for (const type of types) {
               const pages = yield* aoss.listSecurityConfigs.pages({ type }).pipe(Stream.runCollect);

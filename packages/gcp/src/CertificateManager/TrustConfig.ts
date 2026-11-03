@@ -25,7 +25,7 @@ const MAX_NAME_LENGTH = 63;
 
 export type TrustConfigTrustAnchor = {
   /** PEM-encoded root certificate used as a trust anchor. Up to 5kB. */
-  pemCertificate?: string;
+  pemCertificate?: string | undefined;
 };
 
 export type TrustConfigIntermediateCA = {
@@ -34,17 +34,17 @@ export type TrustConfigIntermediateCA = {
    * Up to 5kB. Not supported for the workload-certificate / SPIFFE
    * feature.
    */
-  pemCertificate?: string;
+  pemCertificate?: string | undefined;
 };
 
 export type TrustConfigTrustStore = {
   /** Trust anchors used when validating client certificates. */
-  trustAnchors?: TrustConfigTrustAnchor[];
+  trustAnchors?: TrustConfigTrustAnchor[] | undefined;
   /**
    * Intermediate CAs used during path building. Currently unsupported
    * when the TrustConfig is used for SPIFFE / workload certificates.
    */
-  intermediateCas?: TrustConfigIntermediateCA[];
+  intermediateCas?: TrustConfigIntermediateCA[] | undefined;
 };
 
 export type TrustConfigAllowlistedCertificate = {
@@ -53,7 +53,7 @@ export type TrustConfigAllowlistedCertificate = {
    * parses, proof of private-key possession is established, and SAN
    * constraints are met. Up to 5kB.
    */
-  pemCertificate?: string;
+  pemCertificate?: string | undefined;
 };
 
 export type TrustConfigProps = {
@@ -265,8 +265,8 @@ const toId = (id: string, trustConfigId: string | undefined, existing?: string) 
 const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\s+/g, "");
 
 const pemEntries = (
-  entries: { pemCertificate?: string }[] | undefined,
-): { pemCertificate?: string }[] =>
+  entries: { pemCertificate?: string | undefined }[] | undefined,
+): { pemCertificate?: string | undefined }[] =>
   (entries ?? [])
     .map((entry) => ({ pemCertificate: entry.pemCertificate }))
     .filter((entry) => (entry.pemCertificate ?? "").length > 0);
@@ -297,7 +297,7 @@ const toSpiffeStores = (
       .map(([domain, store]) => [domain, toStore(store)]),
   );
 
-const pemFingerprint = (entries?: { pemCertificate?: string }[]) =>
+const pemFingerprint = (entries?: { pemCertificate?: string | undefined }[]) =>
   pemEntries(entries)
     .map((entry) => normalizePem(entry.pemCertificate))
     .sort()

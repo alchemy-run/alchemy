@@ -34,7 +34,7 @@ export interface S3StateOptions {
    *
    * @default the account's default store, `alchemy-state-<accountId>-<region>-an`
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * A full bucket name instead of one derived from {@link S3StateOptions.name},
    * e.g. an existing bucket. Created on first use like a named store's, in the
@@ -43,14 +43,14 @@ export interface S3StateOptions {
    *
    * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html#account-regional-gp-buckets
    */
-  bucketName?: string;
+  bucketName?: string | undefined;
   /**
    * Key prefix within the bucket under which all state objects are
    * stored, e.g. `"alchemy"`. A trailing `/` is appended automatically.
    *
    * @default "" (bucket root)
    */
-  prefix?: string;
+  prefix?: string | undefined;
   /**
    * Default encryption enforced on every fresh state-service initialization.
    * Omission restores AES256, no KMS key, bucket keys disabled, and no blocked
@@ -59,7 +59,7 @@ export interface S3StateOptions {
    *
    * @default `{ sseAlgorithm: "AES256", bucketKeyEnabled: false, blockedEncryptionTypes: [] }`
    */
-  encryption?: BucketEncryption;
+  encryption?: BucketEncryption | undefined;
 }
 
 /** Whether a state bucket exists. */

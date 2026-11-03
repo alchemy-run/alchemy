@@ -19,31 +19,31 @@ export interface ClusterProps {
   /**
    * Cluster name. If omitted, a unique name is generated.
    */
-  clusterName?: string;
+  clusterName?: string | undefined;
   /**
    * ECS cluster settings such as container insights.
    */
-  settings?: ecs.ClusterSetting[];
+  settings?: ecs.ClusterSetting[] | undefined;
   /**
    * Cluster configuration such as execute command logging.
    */
-  configuration?: ecs.ClusterConfiguration;
+  configuration?: ecs.ClusterConfiguration | undefined;
   /**
    * Optional capacity providers associated with the cluster.
    */
-  capacityProviders?: string[];
+  capacityProviders?: string[] | undefined;
   /**
    * Default capacity provider strategy for the cluster.
    */
-  defaultCapacityProviderStrategy?: ecs.CapacityProviderStrategyItem[];
+  defaultCapacityProviderStrategy?: ecs.CapacityProviderStrategyItem[] | undefined;
   /**
    * Optional Service Connect defaults for the cluster.
    */
-  serviceConnectDefaults?: ecs.ClusterServiceConnectDefaultsRequest;
+  serviceConnectDefaults?: ecs.ClusterServiceConnectDefaultsRequest | undefined;
   /**
    * User-defined tags to apply to the cluster.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Cluster extends Resource<
@@ -59,13 +59,13 @@ export interface Cluster extends Resource<
     /** The cluster settings, e.g. Container Insights. */
     settings: ecs.ClusterSetting[];
     /** The execute-command configuration of the cluster. */
-    configuration?: ecs.ClusterConfiguration;
+    configuration?: ecs.ClusterConfiguration | undefined;
     /** The capacity providers associated with the cluster. */
     capacityProviders: string[];
     /** The default capacity provider strategy for the cluster. */
     defaultCapacityProviderStrategy: ecs.CapacityProviderStrategyItem[];
     /** The default Service Connect namespace. */
-    serviceConnectDefaults?: ecs.ClusterServiceConnectDefaultsRequest;
+    serviceConnectDefaults?: ecs.ClusterServiceConnectDefaultsRequest | undefined;
     /** The tags attached to the cluster. */
     tags: Record<string, string>;
   },
@@ -121,7 +121,7 @@ export const ClusterProvider = () =>
         tags,
       });
 
-      const toClusterName = (id: string, props: { clusterName?: string } = {}) =>
+      const toClusterName = (id: string, props: { clusterName?: string | undefined } = {}) =>
         props.clusterName
           ? Effect.succeed(props.clusterName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
@@ -132,8 +132,8 @@ export const ClusterProvider = () =>
         defaultCapacityProviderStrategy,
       }: {
         cluster: string;
-        capacityProviders?: string[];
-        defaultCapacityProviderStrategy?: ecs.CapacityProviderStrategyItem[];
+        capacityProviders?: string[] | undefined;
+        defaultCapacityProviderStrategy?: ecs.CapacityProviderStrategyItem[] | undefined;
       }) {
         if (capacityProviders !== undefined || defaultCapacityProviderStrategy !== undefined) {
           yield* ecs

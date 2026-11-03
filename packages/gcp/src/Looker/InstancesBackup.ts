@@ -18,11 +18,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export type EncryptionConfig = {
   /** CMEK key resource name. */
-  kmsKeyName?: string;
+  kmsKeyName?: string | undefined;
   /** Full CMEK key version currently in use. */
-  kmsKeyNameVersion?: string;
+  kmsKeyNameVersion?: string | undefined;
   /** CMEK key status (`VALID`, `REVOKED`, …). */
-  kmsKeyState?: string;
+  kmsKeyState?: string | undefined;
 };
 
 export type InstancesBackupProps = {

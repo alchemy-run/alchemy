@@ -44,7 +44,7 @@ export interface ViteProps extends Omit<
    * Only `VITE_*` variables reach the client bundle (`import.meta.env`).
    * Changing a value restarts the dev server.
    */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Deploy-time Vite overrides merged over your `vite.config.*`. The
    * config file is the primary home for Vite configuration (it loads
@@ -52,12 +52,12 @@ export interface ViteProps extends Omit<
    * decided by the deployment rather than the project, since config
    * files cannot consume alchemy `Output`s.
    */
-  vite?: ViteBuildConfig;
+  vite?: ViteBuildConfig | undefined;
   /**
    * Alternate Vite config file to load instead of the auto-discovered
    * `vite.config.*`, relative to {@link FrameworkSiteProps.rootDir | rootDir}.
    */
-  config?: string;
+  config?: string | undefined;
   /**
    * Answer misses with the index page (200) instead of a 404, so
    * client-side routes deep-link correctly. Plain Vite apps are typically
@@ -66,13 +66,13 @@ export interface ViteProps extends Omit<
    * {@link errorPage}.
    * @default true unless `errorPage` is set
    */
-  spa?: boolean;
+  spa?: boolean | undefined;
   /**
    * Serve the built error page (e.g. `404.html`) with a real `404` status
    * for requests that match no uploaded file. Mutually exclusive with
    * {@link spa}.
    */
-  errorPage?: string;
+  errorPage?: string | undefined;
 }
 
 /**

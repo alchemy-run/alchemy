@@ -33,23 +33,23 @@ export type BackupRetentionPolicy = {
   /**
    * Minimum retention duration in days for backups in the vault.
    */
-  backupMinimumEnforcedRetentionDays?: number;
+  backupMinimumEnforcedRetentionDays?: number | undefined;
   /**
    * Whether daily backups are immutable.
    */
-  dailyBackupImmutable?: boolean;
+  dailyBackupImmutable?: boolean | undefined;
   /**
    * Whether weekly backups are immutable.
    */
-  weeklyBackupImmutable?: boolean;
+  weeklyBackupImmutable?: boolean | undefined;
   /**
    * Whether monthly backups are immutable.
    */
-  monthlyBackupImmutable?: boolean;
+  monthlyBackupImmutable?: boolean | undefined;
   /**
    * Whether manual backups are immutable.
    */
-  manualBackupImmutable?: boolean;
+  manualBackupImmutable?: boolean | undefined;
 };
 
 export type BackupVaultProps = {

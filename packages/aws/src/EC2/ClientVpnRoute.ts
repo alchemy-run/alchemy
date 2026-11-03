@@ -24,7 +24,7 @@ export interface ClientVpnRouteProps {
    */
   targetVpcSubnetId: SubnetId;
   /** A description of the route. Changing this replaces the route. */
-  description?: string;
+  description?: string | undefined;
 }
 
 /** A manually added route in a Client VPN endpoint's route table. */

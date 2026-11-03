@@ -50,14 +50,14 @@ export interface ComputeAutoBuildOptions {
   /**
    * Entrypoint used by the Bun fallback strategy.
    */
-  entrypoint?: string;
+  entrypoint?: string | undefined;
   /**
    * Framework to build. `auto` tries Next.js, Nuxt, Astro, TanStack Start,
    * Vite, then Bun.
    *
    * @default "auto"
    */
-  framework?: ComputeAutoBuildFramework;
+  framework?: ComputeAutoBuildFramework | undefined;
   /**
    * Environment variables supplied to the build command.
    * Ambient `PRISMA_SERVICE_TOKEN` and `PRISMA_API_TOKEN` credentials are not
@@ -71,19 +71,19 @@ export interface ComputeAutoBuildOptions {
    * env: { NPM_TOKEN: Redacted.make(process.env.NPM_TOKEN!) }
    * ```
    */
-  env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+  env?: Record<string, string | Redacted.Redacted<string> | undefined> | undefined;
   /**
    * Maximum bytes retained from each build output stream.
    *
    * @default 1048576 (1 MiB)
    */
-  outputLimitBytes?: number;
+  outputLimitBytes?: number | undefined;
   /**
    * Maximum wall-clock time for the framework build command.
    *
    * @default 900 (15 minutes)
    */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
 }
 
 export interface ComputeBuildArtifact {
@@ -122,13 +122,13 @@ export interface ComputeStaticBuildOptions {
   /**
    * Optional shell command that creates the static output directory.
    */
-  command?: string;
+  command?: string | undefined;
   /**
    * Working directory for the build command and static output.
    *
    * @default appPath
    */
-  cwd?: string;
+  cwd?: string | undefined;
   /**
    * Static output directory, relative to `cwd`.
    */
@@ -138,29 +138,29 @@ export interface ComputeStaticBuildOptions {
    *
    * @default "index.html"
    */
-  indexPage?: string;
+  indexPage?: string | undefined;
   /**
    * Serve the index page when no static file matches the request.
    *
    * @default false
    */
-  spa?: boolean;
+  spa?: boolean | undefined;
   /**
    * Environment variables supplied to the build command.
    */
-  env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+  env?: Record<string, string | Redacted.Redacted<string> | undefined> | undefined;
   /**
    * Maximum bytes retained from each build output stream.
    *
    * @default 1048576 (1 MiB)
    */
-  outputLimitBytes?: number;
+  outputLimitBytes?: number | undefined;
   /**
    * Maximum wall-clock time for the build command.
    *
    * @default 900 (15 minutes)
    */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
 }
 
 interface BuildStrategy {
@@ -181,26 +181,26 @@ type BuildServices = ChildProcessSpawner | FileSystem.FileSystem | Path.Path | S
 
 export interface RunBuildCommandOptions {
   command: string;
-  cwd?: string;
+  cwd?: string | undefined;
   /**
    * Explicit environment variables supplied to the build command. Ambient
    * Prisma Management API credentials are withheld unless they are provided
    * here intentionally.
    */
-  env?: Record<string, string>;
+  env?: Record<string, string> | undefined;
   /**
    * Maximum bytes retained from each output stream before the build is
    * interrupted. This prevents noisy build tools from exhausting memory.
    *
    * @default 1048576 (1 MiB)
    */
-  outputLimitBytes?: number;
+  outputLimitBytes?: number | undefined;
   /**
    * Maximum wall-clock time for the build command.
    *
    * @default 900 (15 minutes)
    */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
 }
 
 const DEFAULT_BUILD_OUTPUT_LIMIT_BYTES = 1024 * 1024;
@@ -695,9 +695,9 @@ const staticSiteServerSource = (options: { indexPage: string; spa: boolean }) =>
 
 const buildFramework = Effect.fn(function* (options: {
   appPath: string;
-  env?: Record<string, string | Redacted.Redacted<string> | undefined>;
-  outputLimitBytes?: number;
-  timeoutSeconds?: number;
+  env?: Record<string, string | Redacted.Redacted<string> | undefined> | undefined;
+  outputLimitBytes?: number | undefined;
+  timeoutSeconds?: number | undefined;
   cliName: string;
   args: string[];
   failurePrefix: string;
@@ -705,11 +705,11 @@ const buildFramework = Effect.fn(function* (options: {
   sourceDir: string;
   entrypoint: string;
   defaultPort: number;
-  allowNestedEntrypoint?: boolean;
-  requiredFile?: string;
+  allowNestedEntrypoint?: boolean | undefined;
+  requiredFile?: string | undefined;
   missingOutputMessage: string;
-  extrasRelativeToEntrypoint?: boolean;
-  extras?: ReadonlyArray<{ from: string; to: string }>;
+  extrasRelativeToEntrypoint?: boolean | undefined;
+  extras?: ReadonlyArray<{ from: string; to: string }> | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

@@ -29,17 +29,17 @@ export type QaQuestionType = "QA_QUESTION_TYPE_UNSPECIFIED" | "CUSTOMIZABLE" | "
 
 export type QaQuestionAnswerChoice = {
   /** String answer value. */
-  strValue?: string;
+  strValue?: string | undefined;
   /** Short identifier for the choice. */
-  key?: string;
+  key?: string | undefined;
   /** Numerical answer value. */
-  numValue?: number;
+  numValue?: number | undefined;
   /** Boolean answer value. */
-  boolValue?: boolean;
+  boolValue?: boolean | undefined;
   /** When true, the answer is N/A and excluded from scoring. */
-  naValue?: boolean;
+  naValue?: boolean | undefined;
   /** Numerical score contributed by this choice. */
-  score?: number;
+  score?: number | undefined;
 };
 
 export type QaQuestionPredefinedQuestionConfig = {
@@ -48,15 +48,18 @@ export type QaQuestionPredefinedQuestionConfig = {
     | "PREDEFINED_QUESTION_TYPE_UNSPECIFIED"
     | "CONVERSATION_OUTCOME"
     | "CONVERSATION_OUTCOME_ESCALATION_INITIATOR_ROLE"
-    | (string & {});
+    | (string & {})
+    | undefined;
 };
 
 export type QaQuestionDataOptions = {
   /** Conversation transcript options used to generate the question. */
-  conversationDataOptions?: {
-    /** Include per-turn Dialogflow interaction data. */
-    includeDialogflowInteractionData?: boolean;
-  };
+  conversationDataOptions?:
+    | {
+        /** Include per-turn Dialogflow interaction data. */
+        includeDialogflowInteractionData?: boolean | undefined;
+      }
+    | undefined;
 };
 
 export type QaScorecardsRevisionsQaQuestionProps = {
@@ -71,46 +74,46 @@ export type QaScorecardsRevisionsQaQuestionProps = {
    * generated. Must match `^[a-z0-9-]{4,64}$`. Immutable — changing it
    * replaces the question.
    */
-  qaQuestionId?: string;
+  qaQuestionId?: string | undefined;
   /**
    * Full question text, e.g. "Did the agent greet the customer?"
    */
-  questionBody?: string;
+  questionBody?: string | undefined;
   /**
    * Short UI label, e.g. "Greeting".
    */
-  abbreviation?: string;
+  abbreviation?: string | undefined;
   /**
    * Question type.
    */
-  questionType?: QaQuestionType;
+  questionType?: QaQuestionType | undefined;
   /**
    * Instructions describing how to determine the answer. Questions have
    * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
    * prefix and stripped from attributes.
    */
-  answerInstructions?: string;
+  answerInstructions?: string | undefined;
   /**
    * Order of the question within its parent revision.
    */
-  order?: number;
+  order?: number | undefined;
   /**
    * Valid answers the model must choose from.
    */
-  answerChoices?: QaQuestionAnswerChoice[];
+  answerChoices?: QaQuestionAnswerChoice[] | undefined;
   /**
    * Default or custom tags used to group and score the question.
    */
-  tags?: string[];
+  tags?: string[] | undefined;
   /**
    * Configuration for a predefined question. Set when `questionType` is
    * `PREDEFINED`.
    */
-  predefinedQuestionConfig?: QaQuestionPredefinedQuestionConfig;
+  predefinedQuestionConfig?: QaQuestionPredefinedQuestionConfig | undefined;
   /**
    * Options for conversation data used to generate the question.
    */
-  qaQuestionDataOptions?: QaQuestionDataOptions;
+  qaQuestionDataOptions?: QaQuestionDataOptions | undefined;
 };
 
 export type QaScorecardsRevisionsQaQuestion = Resource<

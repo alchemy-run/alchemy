@@ -27,6 +27,8 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import { fromMetadataServer } from "../MetadataCredentials.ts";
 
@@ -61,7 +63,10 @@ const toWebRequest = (req: FrameworkRequest): Request => {
   return new Request(url, {
     method: req.method,
     headers,
-    body: hasBody && req.rawBody ? new Uint8Array(req.rawBody) : undefined,
+    ...Record.filterMap(
+      { body: hasBody && req.rawBody ? new Uint8Array(req.rawBody) : undefined },
+      Result.fromNullishOr(() => undefined),
+    ),
   });
 };
 

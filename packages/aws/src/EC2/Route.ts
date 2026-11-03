@@ -22,80 +22,80 @@ export interface RouteProps {
    * Either destinationCidrBlock, destinationIpv6CidrBlock, or destinationPrefixListId is required.
    * @example "0.0.0.0/0"
    */
-  destinationCidrBlock?: string;
+  destinationCidrBlock?: string | undefined;
 
   /**
    * The IPv6 CIDR block used for the destination match.
    * Either destinationCidrBlock, destinationIpv6CidrBlock, or destinationPrefixListId is required.
    * @example "::/0"
    */
-  destinationIpv6CidrBlock?: string;
+  destinationIpv6CidrBlock?: string | undefined;
 
   /**
    * The ID of a prefix list used for the destination match.
    * Either destinationCidrBlock, destinationIpv6CidrBlock, or destinationPrefixListId is required.
    */
-  destinationPrefixListId?: string;
+  destinationPrefixListId?: string | undefined;
 
   // ---- Target properties (exactly one required) ----
 
   /**
    * The ID of an internet gateway or virtual private gateway.
    */
-  gatewayId?: string;
+  gatewayId?: string | undefined;
 
   /**
    * The ID of a NAT gateway.
    */
-  natGatewayId?: string;
+  natGatewayId?: string | undefined;
 
   /**
    * The ID of a NAT instance in your VPC.
    * This operation fails unless exactly one network interface is attached.
    */
-  instanceId?: string;
+  instanceId?: string | undefined;
 
   /**
    * The ID of a network interface.
    */
-  networkInterfaceId?: string;
+  networkInterfaceId?: string | undefined;
 
   /**
    * The ID of a VPC peering connection.
    */
-  vpcPeeringConnectionId?: string;
+  vpcPeeringConnectionId?: string | undefined;
 
   /**
    * The ID of a transit gateway.
    */
-  transitGatewayId?: string;
+  transitGatewayId?: string | undefined;
 
   /**
    * The ID of a local gateway.
    */
-  localGatewayId?: string;
+  localGatewayId?: string | undefined;
 
   /**
    * The ID of a carrier gateway.
    * Use for Wavelength Zones only.
    */
-  carrierGatewayId?: string;
+  carrierGatewayId?: string | undefined;
 
   /**
    * The ID of an egress-only internet gateway.
    * IPv6 traffic only.
    */
-  egressOnlyInternetGatewayId?: string;
+  egressOnlyInternetGatewayId?: string | undefined;
 
   /**
    * The Amazon Resource Name (ARN) of the core network.
    */
-  coreNetworkArn?: string;
+  coreNetworkArn?: string | undefined;
 
   /**
    * The ID of a VPC endpoint for Gateway Load Balancer.
    */
-  vpcEndpointId?: string;
+  vpcEndpointId?: string | undefined;
 }
 
 export interface Route extends Resource<
@@ -129,43 +129,43 @@ export interface Route extends Resource<
     /**
      * The ID of the internet gateway or virtual private gateway the route targets.
      */
-    gatewayId?: string;
+    gatewayId?: string | undefined;
     /**
      * The ID of the NAT gateway the route targets.
      */
-    natGatewayId?: string;
+    natGatewayId?: string | undefined;
     /**
      * The ID of the NAT instance the route targets.
      */
-    instanceId?: string;
+    instanceId?: string | undefined;
     /**
      * The ID of the network interface the route targets.
      */
-    networkInterfaceId?: string;
+    networkInterfaceId?: string | undefined;
     /**
      * The ID of the VPC peering connection the route targets.
      */
-    vpcPeeringConnectionId?: string;
+    vpcPeeringConnectionId?: string | undefined;
     /**
      * The ID of the transit gateway the route targets.
      */
-    transitGatewayId?: string;
+    transitGatewayId?: string | undefined;
     /**
      * The ID of the local gateway the route targets.
      */
-    localGatewayId?: string;
+    localGatewayId?: string | undefined;
     /**
      * The ID of the carrier gateway the route targets.
      */
-    carrierGatewayId?: string;
+    carrierGatewayId?: string | undefined;
     /**
      * The ID of the egress-only internet gateway the route targets (IPv6 only).
      */
-    egressOnlyInternetGatewayId?: string;
+    egressOnlyInternetGatewayId?: string | undefined;
     /**
      * The Amazon Resource Name (ARN) of the core network the route targets.
      */
-    coreNetworkArn?: string;
+    coreNetworkArn?: string | undefined;
   },
   never,
   Providers

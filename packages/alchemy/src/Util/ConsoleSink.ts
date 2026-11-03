@@ -40,7 +40,7 @@ export const prettyLine = (options: {
   readonly date: Date;
   readonly level: LogLevel.Severity;
   readonly text: string;
-  readonly resource?: string;
+  readonly resource?: string | undefined;
   readonly colors?: boolean;
 }): string => {
   const colors = options.colors ?? colorsEnabled();

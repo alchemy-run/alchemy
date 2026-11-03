@@ -57,11 +57,11 @@ export interface ServiceNetworkVpcAssociation extends Resource<
     /**
      * ID of the associated service network.
      */
-    serviceNetworkId?: string;
+    serviceNetworkId?: string | undefined;
     /**
      * ID of the associated VPC.
      */
-    vpcId?: string;
+    vpcId?: string | undefined;
     /**
      * Current tags reported for the association.
      */

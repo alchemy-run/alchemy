@@ -81,7 +81,7 @@ export type OrganizationProps = {
    *
    * @see https://developers.cloudflare.com/cloudflare-one/policies/access/custom-pages/
    */
-  customPages?: Organization.CustomPages;
+  customPages?: Organization.CustomPages | undefined;
   /**
    * When `true`, Access denies requests to hostnames on the account's zones
    * that no Access application matches.

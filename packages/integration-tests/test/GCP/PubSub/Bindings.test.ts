@@ -45,7 +45,12 @@ let names: {
 const decode = (data: string | undefined) => Buffer.from(data ?? "", "base64").toString("utf8");
 
 /** Roles `member` holds on a resource's IAM policy. */
-const rolesOf = (policy: { bindings?: { role?: string; members?: string[] }[] }, member: string) =>
+const rolesOf = (
+  policy: {
+    bindings?: { role?: string | undefined; members?: string[] | undefined }[] | undefined;
+  },
+  member: string,
+) =>
   (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(member))
     .map((binding) => binding.role)

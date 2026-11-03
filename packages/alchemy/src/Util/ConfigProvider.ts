@@ -20,9 +20,9 @@ export interface StackConfigOverrides {
    * `.env`. A stack that declares its own `secrets` cannot be combined with
    * it; the list is the single place that decides what loads.
    */
-  readonly envFile?: string;
+  readonly envFile?: string | undefined;
   /** The `--profile` flag. */
-  readonly profile?: string;
+  readonly profile?: string | undefined;
 }
 
 /** @internal */

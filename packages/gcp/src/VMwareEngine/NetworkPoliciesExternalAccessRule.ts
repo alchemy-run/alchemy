@@ -36,14 +36,14 @@ const PARENT_COLLECTION = "networkPolicies";
 
 export type IpRange = {
   /** A single IP address (`10.0.0.5`). */
-  ipAddress?: string;
+  ipAddress?: string | undefined;
   /** A CIDR range (`10.0.0.0/24`). */
-  ipAddressRange?: string;
+  ipAddressRange?: string | undefined;
   /**
    * ExternalAddress resource name reserved in the parent network policy
    * scope.
    */
-  externalAddress?: string;
+  externalAddress?: string | undefined;
 };
 
 export type ExternalAccessRuleAction = vmwareengine.ExternalAccessRuleActionEnum | (string & {});

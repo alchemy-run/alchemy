@@ -34,7 +34,7 @@ export interface EventRuleProps {
    * match. Provided as a JSON string or a plain pattern object. When
    * omitted, all events of `source`/`eventType` match.
    */
-  eventPattern?: string | Record<string, any>;
+  eventPattern?: string | Record<string, any> | undefined;
 
   /**
    * The AWS regions whose events this rule captures. User Notifications

@@ -47,7 +47,7 @@ export type AgentsFlowsPageProps = {
    */
   pageId?: string;
   /** Human-readable name, unique within the flow. */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Description. Pages have no labels field, so Alchemy stamps ownership
    * into this field for `list` / nuke.

@@ -175,7 +175,7 @@ export const environmentIdOf = (project: {
 
 const toAttrs = (
   project: CloudProject,
-  fallback?: { name?: string; workspaceId?: string; environmentId?: string },
+  fallback?: { name?: string; workspaceId?: string; environmentId?: string | undefined },
 ): Project["Attributes"] => {
   const name = project.name || fallback?.name || "";
   return {

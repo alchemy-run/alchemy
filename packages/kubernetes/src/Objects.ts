@@ -7,9 +7,9 @@
 
 export interface KubernetesObjectMetadata {
   name: string;
-  namespace?: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
+  namespace?: string | undefined;
+  labels?: Record<string, string> | undefined;
+  annotations?: Record<string, string> | undefined;
 }
 
 export type KubernetesObjectDefinition = {
@@ -22,7 +22,7 @@ export interface KubernetesObjectRef {
   apiVersion: string;
   kind: string;
   name: string;
-  namespace?: string;
+  namespace?: string | undefined;
   /**
    * Fingerprint of the declared fields last applied. Reads compare a GET
    * projected through {@link driftMask} to this.

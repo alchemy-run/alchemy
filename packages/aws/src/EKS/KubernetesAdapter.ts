@@ -107,7 +107,7 @@ declare module "@alchemy.run/kubernetes/ClusterAdapter" {
      * Managed policy ARNs attached to the generated pod-identity role in
      * addition to the inline policy synthesized from bindings (EKS only).
      */
-    managedPolicyArns?: string[];
+    managedPolicyArns?: string[] | undefined;
   }
   interface WorkloadBindingContract {
     /**

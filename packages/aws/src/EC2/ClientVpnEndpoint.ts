@@ -54,14 +54,16 @@ export interface ClientVpnEndpointProps {
   /** One or two authentication methods. Changing these replaces the endpoint. */
   authenticationOptions: ClientVpnAuthenticationOptions[];
   /** Connection logging configuration. Omission disables logging. */
-  connectionLogOptions?: {
-    /** Whether connection logging is enabled. */
-    enabled: boolean;
-    /** CloudWatch Logs group receiving connection logs. Required when enabled. */
-    cloudwatchLogGroup?: string;
-    /** Optional stream receiving connection logs. */
-    cloudwatchLogStream?: string;
-  };
+  connectionLogOptions?:
+    | {
+        /** Whether connection logging is enabled. */
+        enabled: boolean;
+        /** CloudWatch Logs group receiving connection logs. Required when enabled. */
+        cloudwatchLogGroup?: string | undefined;
+        /** Optional stream receiving connection logs. */
+        cloudwatchLogStream?: string | undefined;
+      }
+    | undefined;
   /** Endpoint description. Omission clears the description. */
   description?: string;
   /** Up to two custom DNS servers. Omission or an empty array disables custom DNS. */
@@ -87,14 +89,14 @@ export interface ClientVpnEndpointProps {
     /** Whether to invoke the connection handler. */
     enabled: boolean;
     /** ARN of the Lambda connection handler. Required when enabled. */
-    lambdaFunctionArn?: string;
+    lambdaFunctionArn?: string | undefined;
   };
   /** Client login banner. Omission disables the banner. */
   clientLoginBannerOptions?: {
     /** Whether the banner is enabled. */
     enabled: boolean;
     /** Text displayed to connecting clients. Required when enabled. */
-    bannerText?: string;
+    bannerText?: string | undefined;
   };
   /** Enforce endpoint routes on clients. @default false */
   clientRouteEnforcement?: boolean;

@@ -132,7 +132,11 @@ const findByFingerprint = (fingerprint: string) =>
     .listSshKeys({ fingerprint, per_page: 50 })
     .pipe(Effect.map(({ ssh_keys }) => ssh_keys[0]));
 
-const observe = Effect.fn(function* (input: { id?: number; name: string; publicKey: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: number | undefined;
+  name: string;
+  publicKey: string;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

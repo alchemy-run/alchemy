@@ -13,6 +13,8 @@ import * as Effect from "effect/Effect";
 import * as Sse from "effect/encoding/Sse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
@@ -300,11 +302,15 @@ const prepareTool = (tool: Tool.Any): WorkersAiToolDef => {
     // if the runtime client mutates request input, without recompiling it.
     parameters = structuredClone(cached.json);
   }
+  const description = Tool.getDescription(tool);
   return {
     type: "function",
     function: {
       name: tool.name,
-      description: Tool.getDescription(tool),
+      ...Record.filterMap(
+        { description },
+        Result.fromNullishOr(() => undefined),
+      ),
       parameters,
     },
   };

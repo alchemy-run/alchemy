@@ -87,20 +87,20 @@ export type TriggerType =
 
 export type TriggerConfig = {
   /** User-created label. */
-  label?: string;
+  label?: string | undefined;
   /** Trigger type. */
-  triggerType?: TriggerType;
+  triggerType?: TriggerType | undefined;
   /** Unique number within the integration UI. */
-  triggerNumber?: string;
+  triggerNumber?: string | undefined;
   /**
    * Trigger id. For API triggers this is `api_trigger/{name}` when
    * `properties` contains `Trigger name`.
    */
-  triggerId?: string;
+  triggerId?: string | undefined;
   /** Configurable trigger properties (`Trigger name`, …). */
-  properties?: Record<string, string | undefined>;
+  properties?: Record<string, string | undefined> | undefined;
   /** Human-readable description. */
-  description?: string;
+  description?: string | undefined;
 };
 
 export type ClientCertificate = {

@@ -29,14 +29,16 @@ export type RegionInstanceGroupManagerVersion = {
    * Instance template URL or name used for this version. The group
    * creates VMs from this template until `targetSize` is reached.
    */
-  instanceTemplate?: string;
+  instanceTemplate?: string | undefined;
   /** Version name unique within this manager. */
-  name?: string;
+  name?: string | undefined;
   /** Fixed count or percent of the group's `targetSize` for this version. */
-  targetSize?: {
-    fixed?: number;
-    percent?: number;
-  };
+  targetSize?:
+    | {
+        fixed?: number | undefined;
+        percent?: number | undefined;
+      }
+    | undefined;
 };
 
 export type RegionInstanceGroupManagerProps = {

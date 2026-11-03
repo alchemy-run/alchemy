@@ -30,35 +30,38 @@ export type DeviceProps = {
    * device.
    * @default "customers/my_customer"
    */
-  customer?: string;
+  customer?: string | undefined;
   /**
    * Serial number. If omitted, a unique value is generated. Immutable
    * — changing it replaces the device. Only company-owned devices can
    * be created.
    */
-  serialNumber?: string;
+  serialNumber?: string | undefined;
   /**
    * Device type. Immutable — changing it replaces the device.
    * @default "LINUX"
    */
-  deviceType?: cloudidentity.GoogleAppsCloudidentityDevicesV1DeviceDeviceTypeEnum | (string & {});
+  deviceType?:
+    | cloudidentity.GoogleAppsCloudidentityDevicesV1DeviceDeviceTypeEnum
+    | (string & {})
+    | undefined;
   /**
    * Asset tag. Devices have no labels field, so Alchemy stores
    * ownership in a `[alchemy …]` prefix and strips it from attributes.
    */
-  assetTag?: string;
+  assetTag?: string | undefined;
   /**
    * Host name.
    */
-  hostname?: string;
+  hostname?: string | undefined;
   /**
    * WiFi MAC addresses.
    */
-  wifiMacAddresses?: string[];
+  wifiMacAddresses?: string[] | undefined;
   /**
    * Partner-specified unique device identifier.
    */
-  deviceId?: string;
+  deviceId?: string | undefined;
 };
 
 export type Device = Resource<
@@ -163,8 +166,8 @@ const toAttrs = (
 
 const observeDevice = (input: {
   id: string;
-  name?: string;
-  serialNumber?: string;
+  name?: string | undefined;
+  serialNumber?: string | undefined;
   customer: string;
 }) =>
   Effect.gen(function* () {

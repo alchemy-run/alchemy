@@ -74,12 +74,12 @@ export const nativeDiagnosticFetch = (request: Request) =>
         },
       });
       return new Response(stream, {
-        headers: url.searchParams.has("sse")
-          ? {
-              "content-type": "text/event-stream",
-              "cache-control": "no-cache, no-transform",
-            }
-          : undefined,
+        ...(url.searchParams.has("sse") && {
+          headers: {
+            "content-type": "text/event-stream",
+            "cache-control": "no-cache, no-transform",
+          },
+        }),
       });
     });
   }).pipe(Effect.scoped, Effect.runPromise);

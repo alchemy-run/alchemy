@@ -288,7 +288,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   );
 
 export const waitUntilReady = <
-  A extends { readonly state?: string; readonly statusMessage?: string },
+  A extends { readonly state?: string | undefined; readonly statusMessage?: string | undefined },
   E extends { readonly _tag: string },
   R,
 >(

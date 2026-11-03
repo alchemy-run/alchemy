@@ -48,7 +48,7 @@ export type AccessPolicyProps = {
    * creates the organization-wide default policy (one per organization).
    * Immutable — changing scopes replaces the policy.
    */
-  scopes?: string[];
+  scopes?: string[] | undefined;
 };
 
 export type AccessPolicy = Resource<

@@ -39,7 +39,11 @@ export const makeK2HttpAuth = Effect.gen(function* () {
   const self = yield* Self;
 
   return Effect.fn(function* (
-    resource: { readonly Type: string; readonly LogicalId: string; readonly Mode?: ProviderMode },
+    resource: {
+      readonly Type: string;
+      readonly LogicalId: string;
+      readonly Mode?: ProviderMode | undefined;
+    },
     permissionGroup: K2PermissionGroup,
   ) {
     if (!globalThis.__ALCHEMY_RUNTIME__) yield* requireLiveResource(resource);

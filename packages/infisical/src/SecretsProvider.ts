@@ -50,7 +50,7 @@ export interface InfisicalOptions {
 
 interface InfisicalCredentials extends InfisicalResolvedCredentials {
   /** Set when the credentials came from a stored Alchemy profile. */
-  readonly profileName?: string;
+  readonly profileName?: string | undefined;
 }
 
 /** Human description of which secrets were asked for, for error messages. */

@@ -24,7 +24,7 @@ export interface AuthenticationCriteria {
    * HTTP status codes from the origin that satisfy this criterion
    * (e.g. `[200]` for success, `[401, 403]` for failure).
    */
-  statusCodes?: number[];
+  statusCodes?: number[] | undefined;
 }
 
 /**
@@ -298,7 +298,10 @@ const observe = (zoneId: string) =>
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const normalizeCriteria = (
-  criteria: { kind: "status_code"; statusCodes?: readonly number[] | null } | null | undefined,
+  criteria:
+    | { kind: "status_code"; statusCodes?: readonly number[] | null | undefined }
+    | null
+    | undefined,
 ): AuthenticationCriteria | undefined => {
   if (criteria == null) return undefined;
   const statusCodes = undef(criteria.statusCodes);

@@ -62,21 +62,21 @@ export interface NatGatewayProps {
    * supports public connectivity. Changing the mode replaces the gateway.
    * @default "zonal"
    */
-  availabilityMode?: ec2.AvailabilityMode;
+  availabilityMode?: ec2.AvailabilityMode | undefined;
 
   /**
    * The subnet in which to create the NAT gateway.
    * Required for zonal NAT gateways. For public NAT gateways, this must be a
    * public subnet.
    */
-  subnetId?: SubnetId;
+  subnetId?: SubnetId | undefined;
 
   /**
    * The VPC in which to create a regional NAT gateway.
    * Required when `availabilityMode` is `"regional"`. The VPC must have an
    * internet gateway attached.
    */
-  vpcId?: VpcId;
+  vpcId?: VpcId | undefined;
 
   /**
    * Elastic IP addresses to use per Availability Zone for a regional NAT
@@ -88,7 +88,7 @@ export interface NatGatewayProps {
    * addresses are associated and disassociated in place as this list changes.
    * Switching between automatic and manual mode replaces the gateway.
    */
-  availabilityZoneAddresses?: NatGatewayAvailabilityZoneAddress[];
+  availabilityZoneAddresses?: NatGatewayAvailabilityZoneAddress[] | undefined;
 
   /**
    * How long (in seconds) to let in-flight connections drain before an Elastic
@@ -96,48 +96,48 @@ export interface NatGatewayProps {
    * Between 1 and 4000. Changing it never replaces the gateway.
    * @default 350
    */
-  maxDrainDurationSeconds?: number;
+  maxDrainDurationSeconds?: number | undefined;
 
   /**
    * The allocation ID of the Elastic IP address for the gateway.
    * Required for public NAT gateways.
    */
-  allocationId?: AllocationId;
+  allocationId?: AllocationId | undefined;
 
   /**
    * Indicates whether the NAT gateway supports public or private connectivity.
    * @default "public"
    */
-  connectivityType?: ec2.ConnectivityType;
+  connectivityType?: ec2.ConnectivityType | undefined;
 
   /**
    * The private IPv4 address to assign to the NAT gateway.
    * If you don't provide an address, a private IPv4 address will be automatically assigned.
    */
-  privateIpAddress?: string;
+  privateIpAddress?: string | undefined;
 
   /**
    * Secondary allocation IDs for additional private IP addresses.
    * Only valid for private NAT gateways.
    */
-  secondaryAllocationIds?: AllocationId[];
+  secondaryAllocationIds?: AllocationId[] | undefined;
 
   /**
    * Secondary private IPv4 addresses.
    * Only valid for private NAT gateways.
    */
-  secondaryPrivateIpAddresses?: string[];
+  secondaryPrivateIpAddresses?: string[] | undefined;
 
   /**
    * The number of secondary private IPv4 addresses to assign.
    * Only valid for private NAT gateways.
    */
-  secondaryPrivateIpAddressCount?: number;
+  secondaryPrivateIpAddressCount?: number | undefined;
 
   /**
    * Tags to assign to the NAT gateway.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface NatGateway extends Resource<
@@ -170,17 +170,17 @@ export interface NatGateway extends Resource<
      * Zones with workloads (`"enabled"` in automatic mode, `"disabled"` in
      * manual mode).
      */
-    autoProvisionZones?: ec2.AutoProvisionZonesState;
+    autoProvisionZones?: ec2.AutoProvisionZonesState | undefined;
 
     /**
      * Whether a regional NAT gateway automatically scales its IP addresses.
      */
-    autoScalingIps?: ec2.AutoScalingIpsState;
+    autoScalingIps?: ec2.AutoScalingIpsState | undefined;
 
     /**
      * The ID of the route table AWS creates for a regional NAT gateway.
      */
-    routeTableId?: string;
+    routeTableId?: string | undefined;
 
     /**
      * The ID of the VPC in which the NAT gateway is located.
@@ -200,48 +200,50 @@ export interface NatGateway extends Resource<
     /**
      * The Elastic IP address associated with the NAT gateway (for public NAT gateways).
      */
-    publicIp?: string;
+    publicIp?: string | undefined;
 
     /**
      * The private IP address associated with the NAT gateway.
      */
-    privateIp?: string;
+    privateIp?: string | undefined;
 
     /**
      * Information about the IP addresses and network interface associated with the NAT gateway.
      */
-    natGatewayAddresses?: Array<{
-      allocationId?: string;
-      networkInterfaceId?: string;
-      privateIp?: string;
-      publicIp?: string;
-      associationId?: string;
-      isPrimary?: boolean;
-      failureMessage?: string;
-      status?: ec2.NatGatewayAddressStatus;
-      availabilityZone?: string;
-      availabilityZoneId?: string;
-    }>;
+    natGatewayAddresses?:
+      | Array<{
+          allocationId?: string | undefined;
+          networkInterfaceId?: string | undefined;
+          privateIp?: string | undefined;
+          publicIp?: string | undefined;
+          associationId?: string | undefined;
+          isPrimary?: boolean | undefined;
+          failureMessage?: string | undefined;
+          status?: ec2.NatGatewayAddressStatus | undefined;
+          availabilityZone?: string | undefined;
+          availabilityZoneId?: string | undefined;
+        }>
+      | undefined;
 
     /**
      * If the NAT gateway could not be created, specifies the error code for the failure.
      */
-    failureCode?: string;
+    failureCode?: string | undefined;
 
     /**
      * If the NAT gateway could not be created, specifies the error message for the failure.
      */
-    failureMessage?: string;
+    failureMessage?: string | undefined;
 
     /**
      * The date and time the NAT gateway was created.
      */
-    createTime?: string;
+    createTime?: string | undefined;
 
     /**
      * The date and time the NAT gateway was deleted, if applicable.
      */
-    deleteTime?: string;
+    deleteTime?: string | undefined;
   },
   never,
   Providers
@@ -694,8 +696,8 @@ class NatGatewayPending extends Data.TaggedError("NatGatewayPending")<{
 // Terminal error: NAT Gateway creation failed
 class NatGatewayFailed extends Data.TaggedError("NatGatewayFailed")<{
   natGatewayId: string;
-  failureCode?: string;
-  failureMessage?: string;
+  failureCode?: string | undefined;
+  failureMessage?: string | undefined;
 }> {}
 
 // Terminal error: NAT Gateway not found
@@ -784,7 +786,7 @@ const waitForNatGatewayDeleted = (natGatewayId: string, session: ScopedPlanStatu
 class NatGatewayAddressFailed extends Data.TaggedError("NatGatewayAddressFailed")<{
   natGatewayId: string;
   allocationId: string;
-  failureMessage?: string;
+  failureMessage?: string | undefined;
 }> {}
 
 // Retryable error: NAT Gateway addresses are still transitioning

@@ -19,7 +19,7 @@ export interface SlotTypeValueSpec {
   /** The canonical value, e.g. `small`. */
   value: string;
   /** Synonyms that resolve to the canonical value, e.g. `["tiny"]`. */
-  synonyms?: string[];
+  synonyms?: string[] | undefined;
 }
 
 export interface SlotTypeProps {

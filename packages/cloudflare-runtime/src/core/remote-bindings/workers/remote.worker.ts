@@ -7,7 +7,7 @@ interface Env extends Record<string, unknown> {}
 
 // oxlint-disable-next-line effecttsgo/extends-native-error -- plain workerd script (no Effect); thrown and caught with try/catch
 class BindingNotFoundError extends Error {
-  readonly bindingName?: string;
+  readonly bindingName: string | undefined;
   constructor(name?: string) {
     super(
       name

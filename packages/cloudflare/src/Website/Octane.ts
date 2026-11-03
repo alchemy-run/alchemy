@@ -29,7 +29,7 @@ export interface OctaneProps<Bindings extends WorkerBindingProps = {}> extends O
    * directory.
    * @default process.cwd()
    */
-  rootDir?: string;
+  rootDir?: string | undefined;
   /**
    * Controls which files are content-hashed to decide whether a rebuild is
    * needed. By default every non-gitignored file under `rootDir` (plus the
@@ -231,7 +231,7 @@ export const Octane: {
           | InputProps<OctaneProps<Bindings>>
           | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
       ) => effectClass(Octane(id, propsEff))
-    : Worker(
+    : Worker<Bindings, WorkerAssetsConfig, Req>(
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,

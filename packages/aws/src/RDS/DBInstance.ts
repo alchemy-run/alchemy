@@ -34,13 +34,13 @@ export interface DBInstanceProps {
   /**
    * Instance identifier. If omitted, Alchemy generates one.
    */
-  dbInstanceIdentifier?: string;
+  dbInstanceIdentifier?: string | undefined;
   /**
    * Aurora cluster the instance belongs to. When set, the instance is a
    * cluster member and most storage/backup props are managed by the cluster.
    * Replacing this forces a new instance.
    */
-  dbClusterIdentifier?: string;
+  dbClusterIdentifier?: string | undefined;
   /**
    * Instance class such as `db.serverless` or `db.t3.micro`.
    */
@@ -53,7 +53,7 @@ export interface DBInstanceProps {
   /**
    * Optional engine version. Changed in place via `modifyDBInstance`.
    */
-  engineVersion?: string;
+  engineVersion?: string | undefined;
   /**
    * Standalone (non-Aurora) database name created with the instance.
    * Immutable — forces replacement.
@@ -108,7 +108,7 @@ export interface DBInstanceProps {
   /**
    * Master password (standalone instances). In-place modify.
    */
-  masterUserPassword?: Redacted.Redacted<string>;
+  masterUserPassword?: Redacted.Redacted<string> | undefined;
   /**
    * Let RDS manage the master user password in Secrets Manager.
    */
@@ -130,7 +130,7 @@ export interface DBInstanceProps {
    * are validated even on no-op plans; writes also use BlockPublicPolicy.
    * Cluster-owned secrets and RDS Custom are not supported by this property.
    */
-  masterUserSecretResourcePolicy?: PolicyDocument;
+  masterUserSecretResourcePolicy?: PolicyDocument | undefined;
   /**
    * Standalone listener port. Omission/removal restores the engine default:
    * PostgreSQL 5432, MySQL/MariaDB 3306, Oracle 1521, SQL Server 1433, Db2 50000.
@@ -160,7 +160,7 @@ export interface DBInstanceProps {
   /**
    * Weekly maintenance window, e.g. `Mon:00:00-Mon:03:00`. In-place modify.
    */
-  preferredMaintenanceWindow?: string;
+  preferredMaintenanceWindow?: string | undefined;
   /**
    * Optional DB subnet group. Effectively immutable for an in-VPC instance.
    */
@@ -173,7 +173,7 @@ export interface DBInstanceProps {
    * automatically rebooting. Unsupported on RDS Custom; Db2 BYOL requires
    * an explicit group with IBM licensing IDs.
    */
-  dbParameterGroupName?: string;
+  dbParameterGroupName?: string | undefined;
   /**
    * VPC security groups attached to the instance, compared as a set.
    * Omission/removal restores the default group in the effective instance VPC:
@@ -217,7 +217,7 @@ export interface DBInstanceProps {
   /**
    * Enable Performance Insights. In-place modify.
    */
-  enablePerformanceInsights?: boolean;
+  enablePerformanceInsights?: boolean | undefined;
   /**
    * KMS key for Performance Insights. In-place modify.
    */
@@ -231,11 +231,11 @@ export interface DBInstanceProps {
    * Enhanced-monitoring granularity (e.g. `"60 seconds"`). Sent to the API
    * in whole seconds (valid: 0, 1, 5, 10, 15, 30, 60).
    */
-  monitoringInterval?: Duration.Input;
+  monitoringInterval?: Duration.Input | undefined;
   /**
    * IAM role ARN for enhanced monitoring. In-place modify.
    */
-  monitoringRoleArn?: string;
+  monitoringRoleArn?: string | undefined;
   /**
    * Log types to export to CloudWatch Logs, compared as a set. Omission/removal
    * disables all exports. Changes apply immediately without flushing unrelated
@@ -277,7 +277,7 @@ export interface DBInstanceProps {
   /**
    * Auto minor version upgrades.
    */
-  autoMinorVersionUpgrade?: boolean;
+  autoMinorVersionUpgrade?: boolean | undefined;
   /**
    * Copy tags to snapshots.
    */
@@ -314,7 +314,7 @@ export interface DBInstanceProps {
    * implicitly, so their DDL is not rolled back if a later statement fails.
    * Deleting the instance never touches the database.
    */
-  migrations?: MigrationsInput;
+  migrations?: MigrationsInput | undefined;
   /**
    * How `migrations` reach the database: `"data-api"` (Aurora clusters with
    * `enableHttpEndpoint: true`; the Data API runs one statement per call, so
@@ -323,13 +323,13 @@ export interface DBInstanceProps {
    * the endpoint), or an `AWS.RDS.MigrationRunner` Lambda inside the VPC.
    * @default "data-api" when the instance's Aurora cluster has the Data API enabled, otherwise "direct"
    */
-  migrationsTransport?: MigrationsTransport;
+  migrationsTransport?: MigrationsTransport | undefined;
   /**
    * ARN of the Secrets Manager secret (JSON with `username` and `password`)
    * that `migrations` authenticate with.
    * @default `masterUsername` + `masterUserPassword` when set (direct and Lambda transports), otherwise the RDS-managed master user secret
    */
-  migrationsSecretArn?: string;
+  migrationsSecretArn?: string | undefined;
 }
 
 export interface DBInstance extends Resource<
@@ -489,7 +489,7 @@ export interface DBInstance extends Resource<
      * Whether minor engine upgrades are applied automatically, as observed.
      * Lets `alchemy drift` detect out-of-band changes.
      */
-    autoMinorVersionUpgrade?: boolean;
+    autoMinorVersionUpgrade?: boolean | undefined;
     /**
      * Immutable region-unique instance resource ID (used in IAM auth ARNs).
      */
@@ -977,7 +977,7 @@ export interface DBInstance extends Resource<
 export const DBInstance = Resource<DBInstance>("AWS.RDS.DBInstance");
 
 const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: Array<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
@@ -1014,10 +1014,9 @@ const toAttrs = ({
   finalDBSnapshotIdentifier?: string | undefined;
   masterUserPasswordFingerprint?: Redacted.Redacted<string> | undefined;
   masterUserSecretResourcePolicy?: string | undefined;
-  migrations?: Pick<
-    DBInstance["Attributes"],
-    "migrationsDir" | "migrationsTable" | "migrationsHashes"
-  >;
+  migrations?:
+    | Pick<DBInstance["Attributes"], "migrationsDir" | "migrationsTable" | "migrationsHashes">
+    | undefined;
 }): DBInstance["Attributes"] => ({
   migrationsDir: migrations?.migrationsDir,
   migrationsTable: migrations?.migrationsTable,
@@ -1367,10 +1366,9 @@ class InvalidDBInstanceStorage extends Data.TaggedError("InvalidDBInstanceStorag
   message: string;
 }> {}
 
-type StorageRequest = Required<
-  Pick<rds.CreateDBInstanceMessage, "AllocatedStorage" | "StorageType">
-> &
-  Pick<rds.CreateDBInstanceMessage, "Iops" | "StorageThroughput">;
+type StorageRequest = {
+  [K in "AllocatedStorage" | "StorageType"]-?: Exclude<rds.CreateDBInstanceMessage[K], undefined>;
+} & Pick<rds.CreateDBInstanceMessage, "Iops" | "StorageThroughput">;
 
 interface DesiredStorage {
   request: StorageRequest;

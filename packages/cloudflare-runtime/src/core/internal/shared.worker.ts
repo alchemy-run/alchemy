@@ -51,7 +51,7 @@ export function maybeApply<From, To>(
  */
 export class Timers {
   /** Fake unix time in milliseconds. If defined, fake timers are enabled. */
-  #fakeTimestamp?: number;
+  #fakeTimestamp: number | undefined;
   #fakeRunningTasks = new Set<Promise<unknown>>();
 
   now = () => this.#fakeTimestamp ?? Date.now();
@@ -218,7 +218,7 @@ function generateBlobId(): BlobId {
 }
 
 export interface MultipartOptions {
-  contentType?: string;
+  contentType?: string | undefined;
 }
 export interface MultipartReadableStream {
   multipartContentType: string;
@@ -396,8 +396,8 @@ export class BlobStore {
 export interface KeyEntry<Metadata = unknown> {
   key: string;
   /** Milliseconds since unix epoch. */
-  expiration?: number;
-  metadata?: Metadata;
+  expiration?: number | undefined;
+  metadata?: Metadata | undefined;
 }
 export interface KeyValueEntry<Metadata = unknown> extends KeyEntry<Metadata> {
   value: ReadableStream<Uint8Array>;
@@ -406,13 +406,13 @@ export interface KeyMultipartValueEntry<Metadata = unknown> extends KeyEntry<Met
   value: MultipartReadableStream;
 }
 export interface KeyEntriesQuery {
-  prefix?: string;
-  cursor?: string;
+  prefix?: string | undefined;
+  cursor?: string | undefined;
   limit: number;
 }
 export interface KeyEntries<Metadata = unknown> {
   keys: Array<KeyEntry<Metadata>>;
-  cursor?: string;
+  cursor?: string | undefined;
 }
 
 type Row = {
@@ -444,7 +444,7 @@ function rowEntry<Metadata>(entry: Omit<Row, "blob_id">): KeyEntry<Metadata> {
 
 export type KeyValueRangesFactory<Metadata> = (
   metadata: Metadata,
-) => { ranges?: Array<InclusiveRange> } & MultipartOptions;
+) => { ranges?: Array<InclusiveRange> | undefined } & MultipartOptions;
 
 /**
  * SQLite-metadata + blob-store key/value storage shared by the KV and Cache

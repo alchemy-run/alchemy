@@ -31,27 +31,27 @@ export type TestingOptions = {
    * Score returned for every assessment of this key. Must be between 0
    * and 1 inclusive.
    */
-  testingScore?: number;
+  testingScore?: number | undefined;
   /**
    * Challenge outcome for CHECKBOX / INVISIBLE keys: `NOCAPTCHA` or
    * `UNSOLVABLE_CHALLENGE`.
    */
-  testingChallenge?: string;
+  testingChallenge?: string | undefined;
 };
 
 export type AppleDeveloperId = {
   /**
    * Input-only Apple DeviceCheck private key (`.p8` contents).
    */
-  privateKey?: string;
+  privateKey?: string | undefined;
   /**
    * Apple team id (10 characters).
    */
-  teamId?: string;
+  teamId?: string | undefined;
   /**
    * Apple developer key id (10 characters).
    */
-  keyId?: string;
+  keyId?: string | undefined;
 };
 
 export type IOSKeySettings = {
@@ -62,44 +62,44 @@ export type IOSKeySettings = {
   /**
    * When true, `allowedBundleIds` are not enforced.
    */
-  allowAllBundleIds?: boolean;
+  allowAllBundleIds?: boolean | undefined;
   /**
    * Apple Developer account used for App Attest / DeviceCheck.
    */
-  appleDeveloperId?: AppleDeveloperId;
+  appleDeveloperId?: AppleDeveloperId | undefined;
 };
 
 export type AndroidKeySettings = {
   /**
    * Android package names allowed to use the key.
    */
-  allowedPackageNames?: string[];
+  allowedPackageNames?: string[] | undefined;
   /**
    * When true, the key may be used by apps distributed outside Play.
    */
-  supportNonGoogleAppStoreDistribution?: boolean;
+  supportNonGoogleAppStoreDistribution?: boolean | undefined;
   /**
    * When true, `allowedPackageNames` are not enforced.
    */
-  allowAllPackageNames?: boolean;
+  allowAllPackageNames?: boolean | undefined;
 };
 
 export type WebActionSettings = {
   /**
    * Challenge is triggered when the score is below this threshold (0–1).
    */
-  scoreThreshold?: number;
+  scoreThreshold?: number | undefined;
 };
 
 export type WebChallengeSettings = {
   /**
    * Default action threshold.
    */
-  defaultSettings?: WebActionSettings;
+  defaultSettings?: WebActionSettings | undefined;
   /**
    * Per-action score thresholds. Action names match `data-action`.
    */
-  actionSettings?: Record<string, WebActionSettings | undefined>;
+  actionSettings?: Record<string, WebActionSettings | undefined> | undefined;
 };
 
 export type WebKeySettings = {
@@ -112,26 +112,26 @@ export type WebKeySettings = {
    * replaces the key.
    * @default "SCORE"
    */
-  integrationType?: string;
+  integrationType?: string | undefined;
   /**
    * Challenge frequency / difficulty for CHECKBOX, INVISIBLE, and
    * POLICY_BASED_CHALLENGE keys.
    */
-  challengeSecurityPreference?: string;
+  challengeSecurityPreference?: string | undefined;
   /**
    * When true, `allowedDomains` are not enforced.
    * @default true
    */
-  allowAllDomains?: boolean;
+  allowAllDomains?: boolean | undefined;
   /**
    * Allow AMP pages. SCORE keys only. Immutable — changing it replaces
    * the key.
    */
-  allowAmpTraffic?: boolean;
+  allowAmpTraffic?: boolean | undefined;
   /**
    * POLICY_BASED_CHALLENGE thresholds.
    */
-  challengeSettings?: WebChallengeSettings;
+  challengeSettings?: WebChallengeSettings | undefined;
 };
 
 export type WafSettings = {
@@ -139,12 +139,12 @@ export type WafSettings = {
    * WAF service that uses this key (`CA`, `FASTLY`, `CLOUDFLARE`,
    * `AKAMAI`). Immutable — changing it replaces the key.
    */
-  wafService?: string;
+  wafService?: string | undefined;
   /**
    * WAF feature (`CHALLENGE_PAGE`, `SESSION_TOKEN`, `ACTION_TOKEN`,
    * `EXPRESS`). Immutable — changing it replaces the key.
    */
-  wafFeature?: string;
+  wafFeature?: string | undefined;
 };
 
 export type KeyProps = {

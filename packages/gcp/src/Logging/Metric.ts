@@ -25,12 +25,12 @@ export interface MetricLabel {
   /**
    * Human-readable description of the label.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Label value type.
    * @default "STRING"
    */
-  valueType?: "STRING" | "BOOL" | "INT64";
+  valueType?: "STRING" | "BOOL" | "INT64" | undefined;
 }
 
 export interface MetricDescriptorProps {
@@ -39,59 +39,59 @@ export interface MetricDescriptorProps {
    * Immutable after create — changing it replaces the metric.
    * @default "DELTA"
    */
-  metricKind?: "GAUGE" | "DELTA" | "CUMULATIVE";
+  metricKind?: "GAUGE" | "DELTA" | "CUMULATIVE" | undefined;
   /**
    * Measurement type. Immutable after create — changing it replaces the
    * metric. `DISTRIBUTION` requires `valueExtractor` and `bucketOptions`.
    * @default "INT64"
    */
-  valueType?: "BOOL" | "INT64" | "DOUBLE" | "STRING" | "DISTRIBUTION" | "MONEY";
+  valueType?: "BOOL" | "INT64" | "DOUBLE" | "STRING" | "DISTRIBUTION" | "MONEY" | undefined;
   /**
    * Unit of the metric value (e.g. `"1"`, `"s"`, `"By"`).
    * @default "1"
    */
-  unit?: string;
+  unit?: string | undefined;
   /**
    * Concise display name shown in Monitoring.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Time-series labels. New labels may be added; existing keys cannot be
    * renamed or have their value type changed.
    */
-  labels?: MetricLabel[];
+  labels?: MetricLabel[] | undefined;
 }
 
 export interface LinearBuckets {
   /** Number of finite buckets. Must be greater than 0. */
-  numFiniteBuckets?: number;
+  numFiniteBuckets?: number | undefined;
   /** Width of each finite bucket. Must be greater than 0. */
-  width?: number;
+  width?: number | undefined;
   /** Lower bound of the first finite bucket. */
-  offset?: number;
+  offset?: number | undefined;
 }
 
 export interface ExponentialBuckets {
   /** Number of finite buckets. Must be greater than 0. */
-  numFiniteBuckets?: number;
+  numFiniteBuckets?: number | undefined;
   /** Growth factor between buckets. Must be greater than 1. */
-  growthFactor?: number;
+  growthFactor?: number | undefined;
   /** Scale of the first bucket. Must be greater than 0. */
-  scale?: number;
+  scale?: number | undefined;
 }
 
 export interface ExplicitBuckets {
   /** Monotonically increasing bucket bounds. */
-  bounds?: number[];
+  bounds?: number[] | undefined;
 }
 
 export interface MetricBucketOptions {
   /** Linear histogram buckets. */
-  linearBuckets?: LinearBuckets;
+  linearBuckets?: LinearBuckets | undefined;
   /** Exponential histogram buckets. */
-  exponentialBuckets?: ExponentialBuckets;
+  exponentialBuckets?: ExponentialBuckets | undefined;
   /** Explicit histogram bucket bounds. */
-  explicitBuckets?: ExplicitBuckets;
+  explicitBuckets?: ExplicitBuckets | undefined;
 }
 
 export type MetricProps = {
@@ -113,7 +113,7 @@ export type MetricProps = {
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
    * is stored in a `[alchemy …]` prefix for `list` / nuke.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * When true, the metric exists but does not generate time series.
    * @default false

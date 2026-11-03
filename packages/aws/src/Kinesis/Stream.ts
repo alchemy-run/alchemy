@@ -50,11 +50,11 @@ export type WarmThroughput = {
   /**
    * Requested warm throughput in MiBps.
    */
-  targetMiBps?: number;
+  targetMiBps?: number | undefined;
   /**
    * Warm throughput currently provisioned by AWS, in MiBps.
    */
-  currentMiBps?: number;
+  currentMiBps?: number | undefined;
 };
 
 export type StreamProps = {
@@ -108,7 +108,7 @@ export type StreamProps = {
   /**
    * Resource policy attached to the stream.
    */
-  resourcePolicy?: string;
+  resourcePolicy?: string | undefined;
   /**
    * Tags to associate with the stream.
    */
@@ -303,7 +303,7 @@ const assertProvisionedProps = (props: StreamProps) =>
       )
     : Effect.void;
 
-const toTagRecord = (tags: Array<{ Key: string; Value?: string }> | undefined) =>
+const toTagRecord = (tags: Array<{ Key: string; Value?: string | undefined }> | undefined) =>
   Object.fromEntries(
     (tags ?? [])
       .filter((tag): tag is { Key: string; Value: string } => typeof tag.Value === "string")
@@ -334,7 +334,7 @@ const toAttrs = ({
 }: {
   summary: kinesis.StreamDescriptionSummary;
   tags: Record<string, string>;
-  resourcePolicy?: string;
+  resourcePolicy?: string | undefined;
 }): Stream["Attributes"] => ({
   streamName: summary.StreamName,
   streamArn: summary.StreamARN as StreamArn,
@@ -358,7 +358,7 @@ const readStream = Effect.fn(function* ({
   streamArn,
 }: {
   streamName?: string;
-  streamArn?: string;
+  streamArn?: string | undefined;
 }) {
   const response = yield* kinesis
     .describeStreamSummary({

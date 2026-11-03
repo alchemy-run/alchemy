@@ -22,7 +22,7 @@ export interface CloudflareTargetOptions {
    * {@link Options.framework} (they read the same shape for their cloudflare
    * plugin options). Optional so assets-only fixtures can omit it.
    */
-  readonly worker?: CloudflareVitePluginOptions;
+  readonly worker?: CloudflareVitePluginOptions | undefined;
   /**
    * Miniflare options for the preview server (`e2e preview` / the Playwright
    * `live` mode) — the cloudflare target's serving story for built output.

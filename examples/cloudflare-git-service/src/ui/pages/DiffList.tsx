@@ -16,6 +16,8 @@
  */
 import { parseDiffFromFile, type FileContents, type FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { useEffect, useState, type ReactNode } from "react";
 import { getBlob, type DiffEntry, type FileStatus } from "../client.ts";
 import { Button, ErrorBox } from "../components.tsx";
@@ -99,7 +101,16 @@ export const FileDiffCard = ({ context, entry }: { context: RepoContext; entry: 
         text: string | null,
         oid: string | null | undefined,
       ): FileContents | null =>
-        text === null ? null : { name: entry.path, contents: text, cacheKey: oid ?? undefined };
+        text === null
+          ? null
+          : {
+              name: entry.path,
+              contents: text,
+              ...Record.filterMap(
+                { cacheKey: oid },
+                Result.fromNullishOr(() => undefined),
+              ),
+            };
       // The server guarantees ≥ 1 side, so this never sees (null, null).
       const fileDiff = parseDiffFromFile(
         contents(oldText, entry.oldOid),

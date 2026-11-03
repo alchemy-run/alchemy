@@ -246,7 +246,7 @@ export interface ExperimentTemplateProps {
    * Experiment options. `accountTargeting` is create-only — changing it
    * replaces the template.
    */
-  experimentOptions?: ExperimentTemplateExperimentOptions;
+  experimentOptions?: ExperimentTemplateExperimentOptions | undefined;
   /**
    * Experiment report configuration.
    */

@@ -78,7 +78,7 @@ export type VmwareClusterProps = {
   /**
    * Control plane node configuration (CPU, memory, replica count).
    */
-  controlPlaneNode?: VmwareControlPlaneNodeConfig;
+  controlPlaneNode?: VmwareControlPlaneNodeConfig | undefined;
   /**
    * Cluster network configuration (pod/service CIDRs, DHCP or static IP).
    */

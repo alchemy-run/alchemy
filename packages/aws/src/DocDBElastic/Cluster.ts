@@ -71,13 +71,13 @@ export interface ClusterProps {
    * endpoint.
    * @default the VPC's default security group
    */
-  vpcSecurityGroupIds?: string[];
+  vpcSecurityGroupIds?: string[] | undefined;
   /**
    * VPC subnet IDs the cluster spans. Must cover at least two Availability
    * Zones (three for production workloads).
    * @default the default VPC's subnets
    */
-  subnetIds?: string[];
+  subnetIds?: string[] | undefined;
   /**
    * Customer-managed KMS key for encryption at rest. Changing the key
    * replaces the cluster.

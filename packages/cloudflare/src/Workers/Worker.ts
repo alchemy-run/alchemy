@@ -463,7 +463,7 @@ export interface WorkerVersionOptions {
    * itself, at the default 100) resets traffic to 100% of its own new
    * version.
    */
-  traffic?: number;
+  traffic?: number | undefined;
   /**
    * Preview-URL alias for the uploaded version. Aliased preview URLs
    * (`<alias>-<name>.<subdomain>.workers.dev`) are stable — each upload
@@ -499,7 +499,7 @@ export interface WorkerVersionOptions {
    * parent's zones, pinning users across the canary split. See
    * {@link WorkerVersionAffinity}.
    */
-  affinity?: WorkerVersionAffinity;
+  affinity?: WorkerVersionAffinity | undefined;
   /**
    * Human-readable annotation attached to the uploaded version, shown in
    * the Cloudflare dashboard and `wrangler versions list`.
@@ -609,7 +609,7 @@ export interface WorkerProps<
    * and pull-request testing, use {@link preview} instead. See
    * {@link WorkerVersionOptions}.
    */
-  version?: WorkerVersionOptions;
+  version?: WorkerVersionOptions | undefined;
   /**
    * Opt into Cloudflare's [Worker Previews](https://developers.cloudflare.com/workers/previews/)
    * (private beta). Unset, this Worker deploys as a normal script and none
@@ -690,7 +690,7 @@ export interface WorkerProps<
    * asset layer serves every request, applying `htmlHandling` /
    * `notFoundHandling` (including single-page-application fallback) itself.
    */
-  assets?: Assets;
+  assets?: Assets | undefined;
   /** @internal used by Cloudflare.Website.Vite resource */
   vite?: ViteOptions;
   /**
@@ -708,7 +708,7 @@ export interface WorkerProps<
    * {@link main} — a source is self-contained; a provider that needs a
    * custom entry takes it in its own `options`.
    */
-  source?: WorkerSourceDescriptor;
+  source?: WorkerSourceDescriptor | undefined;
   logpush?: boolean;
   /**
    * Cloudflare Workers Observability settings. Controls Workers Logs
@@ -737,14 +737,14 @@ export interface WorkerProps<
    * versions (by default the cache is scoped to a single version, so every
    * deploy starts cold).
    *
-   * If omitted, Workers Cache is disabled — unless the Worker's init phase
+   * If omitted or `undefined`, Workers Cache is disabled — unless the Worker's init phase
    * enables it via `yield* Cloudflare.cache()`, which is the preferred way
    * for Effect-native Workers (and also returns the runtime purge client).
    * When both are set, this prop takes precedence.
    *
    * @see https://blog.cloudflare.com/workers-cache/
    */
-  cache?: WorkerCache;
+  cache?: WorkerCache | undefined;
   /**
    * Per-entrypoint settings, keyed by export name: `default` for the
    * default export, or the class name of a named `WorkerEntrypoint`.
@@ -775,7 +775,7 @@ export interface WorkerProps<
    * `pyproject.toml` (or a prebuilt `python_modules/` directory) are
    * vendored alongside. See the Python Workers section above.
    */
-  main?: string;
+  main?: string | undefined;
   /**
    * Raw module source for the Worker. When provided, bundling is bypassed
    * entirely and this string is uploaded as a single ESM module
@@ -783,46 +783,50 @@ export interface WorkerProps<
    * one-offs) and any case where you've already produced the final
    * bundle elsewhere. Mutually exclusive with {@link main}.
    */
-  script?: string;
-  compatibility?: {
-    date?: string;
-    /**
-     * Cloudflare runtime compatibility flags.
-     *
-     * For external Workers with `bundle: false`, an explicitly provided array
-     * is used exactly as declared, including `[]`. Omit this field to apply
-     * Alchemy's defaults.
-     *
-     * For all other Workers, supplied flags extend Alchemy's defaults:
-     * - `new_module_registry` is added unless `legacy_module_registry` is set.
-     * - `nodejs_compat` is added for dates before `2026-08-04` unless
-     *   `no_nodejs_compat` is set. External Workers also require a date on or
-     *   after `2024-09-23` for this default.
-     * - Effect Workers get `handle_cross_request_promise_resolution` for dates
-     *   before `2024-10-14`; explicitly disabling it is rejected.
-     * - Python Workers get `python_workers` instead of the JavaScript defaults.
-     *
-     * Duplicate flags are removed when defaults are applied.
-     *
-     * Add `enable_request_signal` to interrupt an Effect `fetch` handler when
-     * the client disconnects: the handler's finalizers run as an interruption
-     * and the Worker stays alive until they finish. Without the flag,
-     * Cloudflare cancels the request and its finalizers never run. `alchemy
-     * dev` does not report client disconnects.
-     */
-    flags?: (
-      | "nodejs_compat"
-      | "nodejs_compat_v2"
-      | "no_nodejs_compat"
-      | "nodejs_als"
-      | "new_module_registry"
-      | "legacy_module_registry"
-      | "handle_cross_request_promise_resolution"
-      | "no_handle_cross_request_promise_resolution"
-      | "python_workers"
-      | (string & {})
-    )[];
-  };
+  script?: string | undefined;
+  compatibility?:
+    | {
+        date?: string | undefined;
+        /**
+         * Cloudflare runtime compatibility flags.
+         *
+         * For external Workers with `bundle: false`, an explicitly provided array
+         * is used exactly as declared, including `[]`. Omit this field to apply
+         * Alchemy's defaults.
+         *
+         * For all other Workers, supplied flags extend Alchemy's defaults:
+         * - `new_module_registry` is added unless `legacy_module_registry` is set.
+         * - `nodejs_compat` is added for dates before `2026-08-04` unless
+         *   `no_nodejs_compat` is set. External Workers also require a date on or
+         *   after `2024-09-23` for this default.
+         * - Effect Workers get `handle_cross_request_promise_resolution` for dates
+         *   before `2024-10-14`; explicitly disabling it is rejected.
+         * - Python Workers get `python_workers` instead of the JavaScript defaults.
+         *
+         * Duplicate flags are removed when defaults are applied.
+         *
+         * Add `enable_request_signal` to interrupt an Effect `fetch` handler when
+         * the client disconnects: the handler's finalizers run as an interruption
+         * and the Worker stays alive until they finish. Without the flag,
+         * Cloudflare cancels the request and its finalizers never run. `alchemy
+         * dev` does not report client disconnects.
+         */
+        flags?:
+          | (
+              | "nodejs_compat"
+              | "nodejs_compat_v2"
+              | "no_nodejs_compat"
+              | "nodejs_als"
+              | "new_module_registry"
+              | "legacy_module_registry"
+              | "handle_cross_request_promise_resolution"
+              | "no_handle_cross_request_promise_resolution"
+              | "python_workers"
+              | (string & {})
+            )[]
+          | undefined;
+      }
+    | undefined;
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
   /**
@@ -876,7 +880,7 @@ export interface WorkerProps<
    * `ALCHEMY_STAGE` and `ALCHEMY_CLOUDFLARE_ACCOUNT_ID`. They appear in
    * `env` and, when `process.env` is populated, in `process.env`.
    */
-  env?: Bindings;
+  env?: Bindings | undefined;
   /**
    * Cron expressions that trigger the Worker's scheduled handler.
    *
@@ -997,7 +1001,7 @@ export interface WorkerProps<
    *
    * @default true
    */
-  bundle?: boolean;
+  bundle?: boolean | undefined;
   /**
    * Module rules selecting files uploaded as their own Worker modules,
    * mirroring Wrangler's `rules`. Globs match POSIX-style paths relative to
@@ -1038,7 +1042,7 @@ export interface WorkerProps<
    *
    * @default none when bundling; {@link defaultModuleRules} with `bundle: false`
    */
-  rules?: ModuleRule[];
+  rules?: ModuleRule[] | undefined;
   /**
    * Options for the local dev server that runs this Worker under `alchemy dev`.
    * Each Worker is served on its own port.
@@ -1048,6 +1052,7 @@ export interface WorkerProps<
    * is serving the content this Worker would otherwise host.
    */
   dev?:
+    | undefined
     | {
         /**
          * Run this Worker in `workerd` locally (the default).
@@ -1058,19 +1063,19 @@ export interface WorkerProps<
          * Host the local dev server binds to.
          * @default "localhost"
          */
-        host?: string;
+        host?: string | undefined;
         /**
          * Port the local dev server listens on. If the port is unavailable,
          * the next free port is used unless {@link strictPort} is `true`.
          * @default 1337
          */
-        port?: number;
+        port?: number | undefined;
         /**
          * When `true`, fail instead of falling back to another port if
          * {@link port} is already in use.
          * @default false
          */
-        strictPort?: boolean;
+        strictPort?: boolean | undefined;
         /**
          * Whether the local runtime's Cache API simulator
          * (`caches.default` / `caches.open()`) stores responses. Set
@@ -1142,7 +1147,7 @@ export interface WorkerProps<
          * URL the external dev server is reachable at, if applicable.
          * This will be returned as the `url` attribute of the Worker resource.
          */
-        url?: string;
+        url?: string | undefined;
       };
 }
 
@@ -1173,7 +1178,7 @@ export interface WorkerSourceDescriptor {
    * resolve against the engine's working directory. Defaults to the
    * engine's working directory.
    */
-  readonly rootDir?: string;
+  readonly rootDir?: string | undefined;
   /**
    * The JS runtime the server-mode dev child must run under. Some framework
    * dev servers are runtime-sensitive — `next dev` (Turbopack) silently 404s
@@ -1197,7 +1202,7 @@ export interface ViteOptions {
    * Set by `Website.Foldkit` to derive asset routing from its manifest.
    * @internal
    */
-  framework?: "foldkit";
+  framework?: "foldkit" | undefined;
 
   /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
@@ -1217,12 +1222,12 @@ export interface ViteOptions {
    * vite: { main: "worker/index.ts" }
    * ```
    */
-  main?: string;
+  main?: string | undefined;
   /**
    * Root directory passed to Vite's `root` option.
    * Defaults to the current working directory (`process.cwd()`).
    */
-  rootDir?: string;
+  rootDir?: string | undefined;
   /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file in `cwd` is hashed, plus the nearest
@@ -1230,24 +1235,26 @@ export interface ViteOptions {
    *
    * @see {@link MemoOptions}
    */
-  memo?: MemoOptions & {
-    /**
-     * Configure additional workspaces to hash.
-     * By default, auto-detects workspaces during Vite build, then hashes all
-     * non-gitignored files in the workspace plus the nearest lockfile.
-     * @default "auto"
-     */
-    workspaces?:
-      | "auto"
-      | Array<
-          MemoOptions & {
-            /**
-             * The working directory to hash, relative to the Vite root.
-             */
-            cwd: string;
-          }
-        >;
-  };
+  memo?:
+    | (MemoOptions & {
+        /**
+         * Configure additional workspaces to hash.
+         * By default, auto-detects workspaces during Vite build, then hashes all
+         * non-gitignored files in the workspace plus the nearest lockfile.
+         * @default "auto"
+         */
+        workspaces?:
+          | "auto"
+          | Array<
+              MemoOptions & {
+                /**
+                 * The working directory to hash, relative to the Vite root.
+                 */
+                cwd: string;
+              }
+            >;
+      })
+    | undefined;
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
@@ -1265,10 +1272,12 @@ export interface ViteOptions {
    *
    * @default { entry: "ssr", children: [] }
    */
-  viteEnvironments?: {
-    entry?: string;
-    children?: string[];
-  };
+  viteEnvironments?:
+    | {
+        entry?: string | undefined;
+        children?: string[] | undefined;
+      }
+    | undefined;
 }
 
 // PERF: deliberately NOT `Bindings extends WorkerBindings`. The constraint
@@ -1342,7 +1351,7 @@ export type Worker<Bindings = any> = Resource<
      * the route's hostname — `https://<host>` when deployed, the local edge
      * listener under `alchemy dev` — and `undefined` for a wildcard host.
      */
-    routes: { id: string; pattern: string; zoneId: string; url?: string }[];
+    routes: { id: string; pattern: string; zoneId: string; url?: string | undefined }[];
     crons: string[];
     /**
      * The tail consumers attached to this Worker's script — each entry the
@@ -1437,21 +1446,23 @@ export type Worker<Bindings = any> = Resource<
      * Alchemy are never listed, and never deleted.
      */
     secretNames?: string[] | undefined;
-    hash?: {
-      assets: string | undefined;
-      bundle: string | undefined;
-      input: string | undefined;
-      additionalWorkspaces: string[] | undefined;
-      // Hash of the deploy-time metadata surface (compatibility, env,
-      // bindings, asset config, limits, observability, ...) so metadata-only
-      // edits trigger an update (#745). Optional: state written before this
-      // field existed has no `metadata`, which reads as a one-time update on
-      // the first diff after upgrading (the apply backfills it).
-      metadata?: string | undefined;
-    };
+    hash?:
+      | {
+          assets: string | undefined;
+          bundle: string | undefined;
+          input: string | undefined;
+          additionalWorkspaces: string[] | undefined;
+          // Hash of the deploy-time metadata surface (compatibility, env,
+          // bindings, asset config, limits, observability, ...) so metadata-only
+          // edits trigger an update (#745). Optional: state written before this
+          // field existed has no `metadata`, which reads as a one-time update on
+          // the first diff after upgrading (the apply backfills it).
+          metadata?: string | undefined;
+        }
+      | undefined;
   },
   {
-    bindings?: WorkerBinding[];
+    bindings?: WorkerBinding[] | undefined;
     /**
      * Extra env vars merged into the Worker at reconcile. `Redacted`
      * values deploy as `secret_text`. Used by later resources (e.g. a
@@ -1473,24 +1484,26 @@ export type Worker<Bindings = any> = Resource<
      * `observability.traces` object wins.
      */
     observability?: Pick<WorkerObservability, "traces">;
-    containers?: {
-      className: string;
-      /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
-      attachedBy?: "binding";
-      /** Application name and prepared images for the native container API. */
-      name?: string;
-      images?: Record<string, string>;
-      /** Named image sources for local workerd. An empty map enables managed images. */
-      devImages?: Record<string, DevContainerImage>;
-      dev: DevContainerImage | undefined;
-      /**
-       * Content hash of the image (bundle/Dockerfile/context). Part of the
-       * local worker's restart config: `dev` only carries stable PATHS, so
-       * without the hash an image content change would never restart the
-       * instance and the running container would serve stale code.
-       */
-      hash: string | undefined;
-    }[];
+    containers?:
+      | {
+          className: string;
+          /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
+          attachedBy?: "binding";
+          /** Application name and prepared images for the native container API. */
+          name?: string;
+          images?: Record<string, string>;
+          /** Named image sources for local workerd. An empty map enables managed images. */
+          devImages?: Record<string, DevContainerImage>;
+          dev: DevContainerImage | undefined;
+          /**
+           * Content hash of the image (bundle/Dockerfile/context). Part of the
+           * local worker's restart config: `dev` only carries stable PATHS, so
+           * without the hash an image content change would never restart the
+           * instance and the running container would serve stale code.
+           */
+          hash: string | undefined;
+        }[]
+      | undefined;
     crons?: string[];
     /**
      * Durable Object classes a Domain model hosts, with the names they had in
@@ -1498,7 +1511,7 @@ export type Worker<Bindings = any> = Resource<
      * version's names. See `Domain/Version.ts`.
      */
     domainClasses?: DomainClass[];
-    hyperdrives?: Record<string, Required<DevOrigin>>;
+    hyperdrives?: Record<string, Required<DevOrigin>> | undefined;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local
      * emulation in `alchemy dev` (the binding was piped through `Alchemy.remote()`
@@ -1509,7 +1522,7 @@ export type Worker<Bindings = any> = Resource<
      * / `send_email` bindings to their local or remote runtime hooks. The
      * live provider ignores it.
      */
-    devRemote?: Record<string, boolean>;
+    devRemote?: Record<string, boolean> | undefined;
   },
   Providers
 >;

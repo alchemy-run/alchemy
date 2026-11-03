@@ -53,7 +53,7 @@ export interface JobQueueProps {
   /**
    * User-defined tags to apply to the job queue.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface JobQueue extends Resource<
@@ -109,7 +109,7 @@ const toAttributes = (q: batch.JobQueueDetail, tags: Record<string, string>) => 
   tags,
 });
 
-const observedTagsOf = (q: { tags?: { [key: string]: string | undefined } }) =>
+const observedTagsOf = (q: { tags?: { [key: string]: string | undefined } | undefined }) =>
   Object.fromEntries(
     Object.entries(q.tags ?? {}).filter((e): e is [string, string] => typeof e[1] === "string"),
   );

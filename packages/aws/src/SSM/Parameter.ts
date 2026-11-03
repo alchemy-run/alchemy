@@ -102,10 +102,10 @@ export interface Parameter extends Resource<
      * changes.
      */
     configuration?: {
-      description?: string;
-      tier?: string;
-      allowedPattern?: string;
-      dataType?: string;
+      description?: string | undefined;
+      tier?: string | undefined;
+      allowedPattern?: string | undefined;
+      dataType?: string | undefined;
       tags: Record<string, string>;
     };
   },

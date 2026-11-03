@@ -34,10 +34,10 @@ const QUERY_WAIT_MS = 10_000;
 const QUERY_POLLS = 12;
 
 interface QueryPage {
-  jobComplete?: boolean;
-  schema?: bigquery.TableSchema;
-  rows?: bigquery.TableRow[];
-  pageToken?: string;
+  jobComplete?: boolean | undefined;
+  schema?: bigquery.TableSchema | undefined;
+  rows?: bigquery.TableRow[] | undefined;
+  pageToken?: string | undefined;
 }
 
 /** Fetch every result page after `pageToken`. */

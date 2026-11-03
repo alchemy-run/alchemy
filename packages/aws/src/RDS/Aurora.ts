@@ -298,18 +298,20 @@ export interface AuroraProps {
 export interface AuroraDatabase {
   secret: SecretResource;
   subnetGroup: DBSubnetGroupResource;
-  clusterParameterGroup?: DBClusterParameterGroupResource;
-  parameterGroup?: DBParameterGroupResource;
+  clusterParameterGroup?: DBClusterParameterGroupResource | undefined;
+  parameterGroup?: DBParameterGroupResource | undefined;
   cluster: DBClusterResource;
   writer: DBInstanceResource;
   readers: DBInstanceResource[];
   instances: [DBInstanceResource, ...DBInstanceResource[]];
-  proxy?: {
-    role: IAM.Role;
-    proxy: DBProxyResource;
-    targetGroup: DBProxyTargetGroupResource;
-    endpoint?: DBProxyEndpointResource;
-  };
+  proxy?:
+    | {
+        role: IAM.Role;
+        proxy: DBProxyResource;
+        targetGroup: DBProxyTargetGroupResource;
+        endpoint?: DBProxyEndpointResource | undefined;
+      }
+    | undefined;
 }
 
 const mergeTags = (

@@ -42,7 +42,7 @@ export type IndexProps = {
    * replaces the index.
    * @default "NONE"
    */
-  ancestor?: IndexAncestor;
+  ancestor?: IndexAncestor | undefined;
   /**
    * Ordered indexed properties. Composite indexes need 2–100
    * properties; single-property indexes are built automatically and

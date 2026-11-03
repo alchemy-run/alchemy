@@ -25,13 +25,13 @@ export interface MagicSiteAclLan {
   /** The LAN identifier this side of the ACL applies to. */
   lanId: string;
   /** Display name of the LAN (informational). */
-  lanName?: string;
+  lanName?: string | undefined;
   /** Specific ports to match. */
-  ports?: number[];
+  ports?: number[] | undefined;
   /** Port ranges to match, e.g. `"8080-8090"`. */
-  portRanges?: string[];
+  portRanges?: string[] | undefined;
   /** Subnets to match (IPv4 CIDR or address). */
-  subnets?: string[];
+  subnets?: string[] | undefined;
 }
 
 export interface MagicSiteAclProps {
@@ -304,29 +304,29 @@ export const MagicSiteAclProvider = () =>
 
 interface ObservedAclLan {
   lanId: string;
-  lanName?: string | null;
-  ports?: number[] | null;
-  portRanges?: string[] | null;
-  subnets?: string[] | null;
+  lanName?: string | null | undefined;
+  ports?: number[] | null | undefined;
+  portRanges?: string[] | null | undefined;
+  subnets?: string[] | null | undefined;
 }
 
 interface ObservedAcl {
-  id?: string | null;
-  name?: string | null;
-  description?: string | null;
-  forwardLocally?: boolean | null;
-  protocols?: string[] | null;
-  unidirectional?: boolean | null;
-  lan_1?: ObservedAclLan | null;
-  lan_2?: ObservedAclLan | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  description?: string | null | undefined;
+  forwardLocally?: boolean | null | undefined;
+  protocols?: string[] | null | undefined;
+  unidirectional?: boolean | null | undefined;
+  lan_1?: ObservedAclLan | null | undefined;
+  lan_2?: ObservedAclLan | null | undefined;
 }
 
 interface AclLanRequest {
   lanId: string;
-  lanName?: string;
-  ports?: number[];
-  portRanges?: string[];
-  subnets?: string[];
+  lanName?: string | undefined;
+  ports?: number[] | undefined;
+  portRanges?: string[] | undefined;
+  subnets?: string[] | undefined;
 }
 
 /**

@@ -131,13 +131,13 @@ export interface StateStoreImpl {
 /** The options every state store's `state(...)` takes. */
 export interface StateStoreOptions {
   /** A store other than the account's default, by logical name. */
-  readonly name?: string;
+  readonly name?: string | undefined;
 }
 
 /** Which store a lifecycle operation acts on, under the profile core resolved. */
 export interface StateStoreTarget {
   /** A store other than the account's default, by logical name. */
-  readonly name?: string;
+  readonly name?: string | undefined;
 }
 
 export interface StateStoreLifecycle {
@@ -145,7 +145,7 @@ export interface StateStoreLifecycle {
   readonly bootstrap?: (
     input: StateStoreTarget & {
       /** Redeploy an existing store instead of adopting it. */
-      readonly force?: boolean;
+      readonly force?: boolean | undefined;
     },
   ) => Effect.Effect<StateStoreBootstrap, ContributionFailure, ContributionServices>;
   /** Delete the store and its backing resources. Idempotent. */
@@ -154,7 +154,10 @@ export interface StateStoreLifecycle {
   ) => Effect.Effect<StateStoreTeardown, ContributionFailure, ContributionServices>;
   /** The store's past log entries, oldest first. */
   readonly logs?: (
-    input: StateStoreTarget & { readonly limit?: number; readonly since?: Date },
+    input: StateStoreTarget & {
+      readonly limit?: number | undefined;
+      readonly since?: Date | undefined;
+    },
   ) => Effect.Effect<ReadonlyArray<StateStoreLogEntry>, ContributionFailure, ContributionServices>;
   /** The store's log entries as they happen. */
   readonly tailLogs?: (

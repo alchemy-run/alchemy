@@ -28,13 +28,13 @@ import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from ".
 
 export type InboundSamlSsoProfileIdpConfig = {
   /** HTTPS SingleSignOnService URL (HTTP-Redirect binding). */
-  singleSignOnServiceUri?: string;
+  singleSignOnServiceUri?: string | undefined;
   /** SAML Entity ID of the identity provider. */
-  entityId?: string;
+  entityId?: string | undefined;
   /** HTTPS logout redirect URL. */
-  logoutRedirectUri?: string;
+  logoutRedirectUri?: string | undefined;
   /** HTTPS change-password URL. */
-  changePasswordUri?: string;
+  changePasswordUri?: string | undefined;
 };
 
 export type InboundSamlSsoProfileProps = {
@@ -52,7 +52,7 @@ export type InboundSamlSsoProfileProps = {
   /**
    * SAML identity provider configuration.
    */
-  idpConfig?: InboundSamlSsoProfileIdpConfig;
+  idpConfig?: InboundSamlSsoProfileIdpConfig | undefined;
 };
 
 export type InboundSamlSsoProfile = Resource<
@@ -130,7 +130,7 @@ const toAttrs = (profile: cloudidentity.InboundSamlSsoProfile) => {
   };
 };
 
-const observeProfile = (input: { id: string; name?: string }) =>
+const observeProfile = (input: { id: string; name?: string | undefined }) =>
   Effect.gen(function* () {
     const byName = yield* getSamlProfile(input.name ?? "");
     if (byName !== undefined) return byName;

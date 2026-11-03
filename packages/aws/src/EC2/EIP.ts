@@ -27,31 +27,31 @@ export interface EIPProps {
    * Indicates whether the Elastic IP address is for use with instances in a VPC or EC2-Classic.
    * @default "vpc"
    */
-  domain?: "vpc" | "standard";
+  domain?: "vpc" | "standard" | undefined;
 
   /**
    * The ID of an address pool that you own.
    * Use this parameter to let Amazon EC2 select an address from the address pool.
    */
-  publicIpv4Pool?: string;
+  publicIpv4Pool?: string | undefined;
 
   /**
    * A unique set of Availability Zones, Local Zones, or Wavelength Zones
    * from which AWS advertises IP addresses.
    */
-  networkBorderGroup?: string;
+  networkBorderGroup?: string | undefined;
 
   /**
    * The ID of a customer-owned address pool.
    * Use this parameter to let Amazon EC2 select an address from the address pool.
    */
-  customerOwnedIpv4Pool?: string;
+  customerOwnedIpv4Pool?: string | undefined;
 
   /**
    * Tags to assign to the Elastic IP.
    * These will be merged with alchemy auto-tags.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface EIP extends Resource<
@@ -76,7 +76,7 @@ export interface EIP extends Resource<
     /**
      * The ID of an address pool.
      */
-    publicIpv4Pool?: string;
+    publicIpv4Pool?: string | undefined;
 
     /**
      * Indicates whether the Elastic IP address is for use with instances in a VPC or EC2-Classic.
@@ -86,22 +86,22 @@ export interface EIP extends Resource<
     /**
      * The network border group.
      */
-    networkBorderGroup?: string;
+    networkBorderGroup?: string | undefined;
 
     /**
      * The customer-owned IP address.
      */
-    customerOwnedIp?: string;
+    customerOwnedIp?: string | undefined;
 
     /**
      * The ID of the customer-owned address pool.
      */
-    customerOwnedIpv4Pool?: string;
+    customerOwnedIpv4Pool?: string | undefined;
 
     /**
      * The carrier IP address associated with the network interface.
      */
-    carrierIp?: string;
+    carrierIp?: string | undefined;
   },
   never,
   Providers

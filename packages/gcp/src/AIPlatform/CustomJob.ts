@@ -85,7 +85,7 @@ export type CustomJob = Resource<
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
     /** Failure/cancel status, if any. */
-    error: { code?: number; message?: string } | undefined;
+    error: { code?: number | undefined; message?: string | undefined } | undefined;
   },
   never,
   Providers

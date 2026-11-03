@@ -21,7 +21,7 @@ export const withDefaultFlags = (
     date?: string;
     python?: boolean;
     isExternal?: boolean;
-    bundle?: boolean;
+    bundle?: boolean | undefined;
   } = {},
 ): Array<string> => {
   // Prebuilt external Workers own their runtime configuration. In particular,

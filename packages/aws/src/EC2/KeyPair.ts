@@ -66,7 +66,7 @@ export interface KeyPair extends Resource<
      * was imported). AWS returns this exactly once, at create time; it is then
      * persisted as a secret in alchemy state.
      */
-    privateKey?: Redacted.Redacted<string>;
+    privateKey?: Redacted.Redacted<string> | undefined;
   },
   never,
   Providers

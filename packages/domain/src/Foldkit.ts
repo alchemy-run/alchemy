@@ -3,6 +3,8 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Headers from "effect/http/Headers";
 import * as Option from "effect/Option";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -411,7 +413,10 @@ function readEvents(
     modelToDependencies: (model: unknown): Dependencies => ({
       key: options.key(model),
       cursor: options.cursor(model),
-      restartKey: options.restartKey?.(model),
+      ...Record.filterMap(
+        { restartKey: options.restartKey?.(model) },
+        Result.fromNullishOr(() => undefined),
+      ),
       isEnabled: options.isEnabled?.(model) ?? true,
     }),
     keepAliveEquivalence: (left: Dependencies, right: Dependencies) =>

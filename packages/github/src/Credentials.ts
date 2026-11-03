@@ -47,7 +47,7 @@ export const config = (
  */
 export const fromToken = (
   token: string | Redacted.Redacted<string>,
-  options?: { readonly baseUrl?: string },
+  options?: { readonly baseUrl?: string | undefined },
 ) =>
   Layer.succeed(
     Credentials,
@@ -85,7 +85,7 @@ export const fromEnv = () =>
  * whatever host the auth provider resolved from the profile config or
  * environment. `GitHub.providers({ baseUrl })` threads its option here.
  */
-export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
+export const fromAuthProvider = (options?: { readonly baseUrl?: string | undefined }) =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {

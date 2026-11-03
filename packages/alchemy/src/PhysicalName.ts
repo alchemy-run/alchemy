@@ -44,7 +44,7 @@ export const createPhysicalName = Effect.fn(function* ({
    */
   maxLength?: number;
   /** @default - "-" */
-  delimiter?: string;
+  delimiter?: string | undefined;
   /** Whether to lowercase the physical name. @default false */
   lowercase?: boolean;
   /**

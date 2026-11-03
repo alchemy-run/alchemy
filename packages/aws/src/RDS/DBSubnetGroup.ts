@@ -21,12 +21,12 @@ export interface DBSubnetGroupProps {
   /**
    * Name of the DB subnet group. If omitted, a deterministic name is generated.
    */
-  dbSubnetGroupName?: string;
+  dbSubnetGroupName?: string | undefined;
   /**
    * Description for the subnet group.
    * @default "Managed by Alchemy"
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Subnets that the database resources may use.
    */

@@ -106,7 +106,7 @@ export type CreateOptions = {
 };
 
 export type ImportOptions = {
-  source: { url: string; branch?: string; depth?: number };
+  source: { url: string; branch?: string | undefined; depth?: number };
   target: {
     name: string;
     opts?: { description?: string; readOnly?: boolean };
@@ -129,12 +129,12 @@ export type LogOptions = {
    * Branch, tag, or commit ID to walk from.
    * @default "HEAD"
    */
-  ref?: string;
+  ref?: string | undefined;
   /**
    * Maximum number of commits to return (capped at 1000 by the platform).
    * @default 50
    */
-  limit?: number;
+  limit?: number | undefined;
   /**
    * Number of matching commits to skip.
    * @default 0

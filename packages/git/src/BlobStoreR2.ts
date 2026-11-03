@@ -8,6 +8,8 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import {
   BlobStore,
@@ -90,19 +92,28 @@ export const makeBlobStoreR2 = (bucket: ReadWriteBucketClient): BlobStoreShape =
       .pipe(Effect.mapError(r2Error("delete")), Effect.asVoid),
   list: (prefix) =>
     Stream.paginate(undefined as string | undefined, (cursor) =>
-      bucket.list({ prefix, limit: 1000, cursor }).pipe(
-        Effect.mapError(r2Error(`list ${prefix}`)),
-        Effect.map((page) => {
-          const metas = page.objects.map((object): BlobMeta => ({
-            key: object.key,
-            size: object.size,
-          }));
-          return [
-            metas,
-            page.truncated ? Option.some(page.cursor) : Option.none<string>(),
-          ] as const;
-        }),
-      ),
+      bucket
+        .list({
+          prefix,
+          limit: 1000,
+          ...Rec.filterMap(
+            { cursor },
+            Result.fromNullishOr(() => undefined),
+          ),
+        })
+        .pipe(
+          Effect.mapError(r2Error(`list ${prefix}`)),
+          Effect.map((page) => {
+            const metas = page.objects.map((object): BlobMeta => ({
+              key: object.key,
+              size: object.size,
+            }));
+            return [
+              metas,
+              page.truncated ? Option.some(page.cursor) : Option.none<string>(),
+            ] as const;
+          }),
+        ),
     ),
 });
 

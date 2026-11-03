@@ -30,26 +30,26 @@ import {
 
 export type EntrySource = {
   /** Name of the resource in the source system. */
-  resource?: string;
+  resource?: string | undefined;
   /** Name of the source system. */
-  system?: string;
+  system?: string | undefined;
   /** Platform containing the source system. */
-  platform?: string;
+  platform?: string | undefined;
   /** User-friendly display name. */
-  displayName?: string;
+  displayName?: string | undefined;
   /** Description of the data resource. */
-  description?: string;
+  description?: string | undefined;
   /**
    * User-defined source labels. Alchemy ownership labels are merged in
    * automatically — Entries have no top-level labels field.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /** Ancestor entries in the source system. */
-  ancestors?: Array<{ name?: string; type?: string }>;
+  ancestors?: Array<{ name?: string | undefined; type?: string | undefined }> | undefined;
   /** Time the resource was created in the source system. */
-  createTime?: string;
+  createTime?: string | undefined;
   /** Time the resource was last updated in the source system. */
-  updateTime?: string;
+  updateTime?: string | undefined;
 };
 
 export type EntryGroupsEntryProps = {

@@ -26,11 +26,11 @@ export type IssueModelInputDataConfig = {
    * Medium of training conversations (`PHONE_CALL` or `CHAT`). Deprecated
    * in favor of `filter`.
    */
-  medium?: "MEDIUM_UNSPECIFIED" | "PHONE_CALL" | "CHAT";
+  medium?: "MEDIUM_UNSPECIFIED" | "PHONE_CALL" | "CHAT" | undefined;
   /**
    * Filter reducing conversations used to train the model.
    */
-  filter?: string;
+  filter?: string | undefined;
 };
 
 export type IssueModelProps = {
@@ -56,7 +56,7 @@ export type IssueModelProps = {
   /**
    * Training-data configuration.
    */
-  inputDataConfig?: IssueModelInputDataConfig;
+  inputDataConfig?: IssueModelInputDataConfig | undefined;
 };
 
 export type IssueModel = Resource<

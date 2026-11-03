@@ -42,7 +42,7 @@ export interface SecurityPolicyProps {
   /**
    * A human-readable description of the policy.
    */
-  description?: string;
+  description?: string | undefined;
 }
 
 export interface SecurityPolicy extends Resource<
@@ -64,7 +64,7 @@ export interface SecurityPolicy extends Resource<
     /**
      * Description of the security policy.
      */
-    description?: string;
+    description?: string | undefined;
   },
   {},
   Providers
@@ -149,7 +149,7 @@ export const SecurityPolicyProvider = () =>
               policyName: string;
               type: string;
               policyVersion: string;
-              description?: string;
+              description?: string | undefined;
             }[] = [];
             for (const type of types) {
               const pages = yield* aoss.listSecurityPolicies

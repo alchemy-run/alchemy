@@ -139,7 +139,7 @@ export class PrivateNetworkNameUnsupported extends Data.TaggedError(
  */
 export type PrivateNetworkEnvironment = {
   readonly environmentId: string;
-  readonly projectId?: string;
+  readonly projectId?: string | undefined;
 };
 
 export interface PrivateNetworkProps {
@@ -163,7 +163,7 @@ export type PrivateNetwork = Resource<
     /** Railway public network id (string identity used by endpoint APIs). */
     publicId: string;
     /** Private-networking setting to restore when this resource is removed. */
-    previousPrivateNetworkDisabled?: boolean;
+    previousPrivateNetworkDisabled?: boolean | undefined;
     /** Numeric WireGuard network id, as a decimal string. */
     networkId: string;
     /** Physical network name (unique per environment). */
@@ -295,7 +295,7 @@ const isGoneNetwork = (network: CloudNetwork | undefined) =>
 
 const toNetworkAttrs = (
   network: CloudNetwork,
-  fallback?: { name?: string; projectId?: string },
+  fallback?: { name?: string; projectId?: string | undefined },
 ): PrivateNetwork["Attributes"] => ({
   publicId: network.publicId,
   networkId: String(network.networkId),
@@ -325,7 +325,7 @@ const findNetwork = (environmentId: string, match: (network: CloudNetwork) => bo
 
 const observeNetwork = Effect.fn(function* (input: {
   environmentId: string;
-  publicId?: string;
+  publicId?: string | undefined;
   name?: string;
 }) {
   if (input.publicId !== undefined && input.publicId.length > 0) {
@@ -499,7 +499,7 @@ export const PrivateNetworkProvider = () =>
 export type PrivateNetworkEndpointNetwork = {
   readonly publicId: string;
   readonly environmentId?: string;
-  readonly projectId?: string;
+  readonly projectId?: string | undefined;
   readonly dnsName?: string;
 };
 
@@ -542,7 +542,7 @@ export type PrivateNetworkEndpoint = Resource<
     /** Service instance the endpoint is bound to. */
     serviceInstanceId: string;
     /** Previous DNS override to restore on removal; null restores the platform default. */
-    previousDnsPrefix?: string | null;
+    previousDnsPrefix?: string | null | undefined;
     /** Parent service id. */
     serviceId: string;
     /** Parent network public id. */
@@ -641,9 +641,9 @@ export class PrivateNetworkEndpointNotCreated extends Data.TaggedError(
 )<{
   privateNetworkId: string;
   serviceId: string;
-  expectedPrefix?: string;
-  observedPrefix?: string;
-  pendingPrefix?: string;
+  expectedPrefix?: string | undefined;
+  observedPrefix?: string | undefined;
+  pendingPrefix?: string | undefined;
 }> {
   override get message() {
     return `Private endpoint for ${this.serviceId} is not ready: expected ${this.expectedPrefix ?? "an endpoint"}, observed ${this.observedPrefix ?? "missing"}, pending ${this.pendingPrefix ?? "none"}`;
@@ -695,7 +695,7 @@ const toEndpointAttrs = (
     serviceId: string;
     privateNetworkId: string;
     environmentId: string;
-    projectId?: string;
+    projectId?: string | undefined;
   },
 ): PrivateNetworkEndpoint["Attributes"] => ({
   publicId: endpoint.publicId,

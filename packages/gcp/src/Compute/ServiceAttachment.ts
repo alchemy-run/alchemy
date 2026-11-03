@@ -28,13 +28,13 @@ export type ServiceAttachmentConnectionPreference =
 
 export type ServiceAttachmentConsumerAccept = {
   /** Consumer project id or number allowed to connect. */
-  projectIdOrNum?: string;
+  projectIdOrNum?: string | undefined;
   /** Consumer network URL allowed to connect. */
-  networkUrl?: string;
+  networkUrl?: string | undefined;
   /** Consumer endpoint URL allowed to connect. */
-  endpointUrl?: string;
+  endpointUrl?: string | undefined;
   /** Max consumer forwarding rules (or 1 for an endpoint). */
-  connectionLimit?: number;
+  connectionLimit?: number | undefined;
 };
 
 export type ServiceAttachmentConnectedEndpoint = {

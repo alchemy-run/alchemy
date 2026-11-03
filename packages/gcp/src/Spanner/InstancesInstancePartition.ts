@@ -28,29 +28,29 @@ import {
 
 export type PartitionAutoscalingLimits = {
   /** Minimum nodes. Mutually exclusive with processing-unit limits. */
-  minNodes?: number;
+  minNodes?: number | undefined;
   /** Minimum processing units (multiples of 1000). */
-  minProcessingUnits?: number;
+  minProcessingUnits?: number | undefined;
   /** Maximum nodes. */
-  maxNodes?: number;
+  maxNodes?: number | undefined;
   /** Maximum processing units (multiples of 1000). */
-  maxProcessingUnits?: number;
+  maxProcessingUnits?: number | undefined;
 };
 
 export type PartitionAutoscalingTargets = {
   /** Target high-priority CPU percent (`10`–`90`). */
-  highPriorityCpuUtilizationPercent?: number;
+  highPriorityCpuUtilizationPercent?: number | undefined;
   /** Target total CPU percent (`10`–`90`). */
-  totalCpuUtilizationPercent?: number;
+  totalCpuUtilizationPercent?: number | undefined;
   /** Target storage percent (`10`–`99`). */
-  storageUtilizationPercent?: number;
+  storageUtilizationPercent?: number | undefined;
 };
 
 export type PartitionAutoscalingConfig = {
   /** Min/max compute capacity. */
-  autoscalingLimits?: PartitionAutoscalingLimits;
+  autoscalingLimits?: PartitionAutoscalingLimits | undefined;
   /** CPU and storage targets. */
-  autoscalingTargets?: PartitionAutoscalingTargets;
+  autoscalingTargets?: PartitionAutoscalingTargets | undefined;
 };
 
 export type InstancesInstancePartitionProps = {

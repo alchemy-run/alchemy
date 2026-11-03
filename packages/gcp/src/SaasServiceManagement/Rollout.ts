@@ -34,13 +34,13 @@ const COLLECTION = "rollouts";
 export type RolloutControlAction = saasservicemgmt.RolloutControlActionEnum | (string & {});
 
 export type RolloutControl = {
-  action?: RolloutControlAction;
-  runParams?: { retryFailedOperations?: boolean };
+  action?: RolloutControlAction | undefined;
+  runParams?: { retryFailedOperations?: boolean | undefined } | undefined;
 };
 
 export type RolloutStats = {
-  operationsByState?: Array<{ count?: number; group?: string }>;
-  estimatedTotalUnitCount?: string;
+  operationsByState?: Array<{ count?: number | undefined; group?: string | undefined }> | undefined;
+  estimatedTotalUnitCount?: string | undefined;
 };
 
 export type RolloutProps = {
@@ -86,7 +86,7 @@ export type RolloutProps = {
    * Requested execution change (`ROLLOUT_ACTION_RUN`,
    * `ROLLOUT_ACTION_PAUSE`, `ROLLOUT_ACTION_CANCEL`).
    */
-  control?: RolloutControl;
+  control?: RolloutControl | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */

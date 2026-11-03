@@ -9,7 +9,7 @@ import * as AWSBindings from "../AWSBindings.ts";
 export interface AppFlowHttpBindingOptions<
   R extends { readonly LogicalId: string },
   K extends string,
-  I extends { [P in K]?: string },
+  I extends { [P in K]?: string | undefined },
   A,
   E,
   OpR,
@@ -48,7 +48,7 @@ export interface AppFlowHttpBindingOptions<
 export const makeAppFlowHttpBinding = <
   R extends { readonly LogicalId: string },
   K extends string,
-  I extends { [P in K]?: string },
+  I extends { [P in K]?: string | undefined },
   A,
   E,
   OpR,

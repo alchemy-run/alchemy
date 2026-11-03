@@ -16,7 +16,7 @@ export interface ReferenceStoreProps {
    * from the app, stage, and logical ID. Changing the name replaces the
    * store. Must match `[\w -.]+` and be 1-127 characters.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * A description for the reference store. Changing the description replaces
    * the store (HealthOmics has no update-store API).
@@ -110,7 +110,12 @@ export const ReferenceStoreProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 96 }));
       });
 
-      const toAttrs = (store: { id: string; arn: string; name?: string; creationTime: Date }) => ({
+      const toAttrs = (store: {
+        id: string;
+        arn: string;
+        name?: string | undefined;
+        creationTime: Date;
+      }) => ({
         referenceStoreId: store.id,
         referenceStoreArn: store.arn,
         name: store.name ?? "",

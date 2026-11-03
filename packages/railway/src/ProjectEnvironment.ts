@@ -188,7 +188,7 @@ export class EnvironmentProjectRequired extends Data.TaggedError(
 
 const toAttrs = (
   env: CloudEnvironment,
-  fallback?: { name?: string; projectId?: string },
+  fallback?: { name?: string; projectId?: string | undefined },
 ): Environment["Attributes"] => {
   const name = env.name || fallback?.name || "";
   const projectId = env.projectId || fallback?.projectId || "";

@@ -25,18 +25,18 @@ import type { EncryptionSpec } from "./shared.ts";
 
 export type MachineSpec = {
   /** Machine type, for example `n1-standard-4`. Immutable. */
-  machineType?: string;
+  machineType?: string | undefined;
   /** Accelerator type. Immutable. */
-  acceleratorType?: string;
+  acceleratorType?: string | undefined;
   /** Accelerators per replica. Immutable. */
-  acceleratorCount?: number;
+  acceleratorCount?: number | undefined;
 };
 
 export type AutoscalingMetricSpec = {
   /** Resource metric name. */
-  metricName?: string;
+  metricName?: string | undefined;
   /** Target utilization percent (1–100). Defaults to 60. */
-  target?: number;
+  target?: number | undefined;
 };
 
 export type DedicatedResources = {
@@ -44,28 +44,28 @@ export type DedicatedResources = {
    * Minimum always-on replicas. Must be >= 1.
    * @default 1
    */
-  minReplicaCount?: number;
+  minReplicaCount?: number | undefined;
   /**
    * Maximum replicas under load. Defaults to `minReplicaCount`.
    */
-  maxReplicaCount?: number;
+  maxReplicaCount?: number | undefined;
   /**
    * Replicas required for the deploy to succeed.
    */
-  requiredReplicaCount?: number;
+  requiredReplicaCount?: number | undefined;
   /**
    * Schedule the workload on spot VMs.
    */
-  spot?: boolean;
+  spot?: boolean | undefined;
   /**
    * Metric specs that override the default 60% CPU/accelerator targets.
    */
-  autoscalingMetricSpecs?: AutoscalingMetricSpec[];
+  autoscalingMetricSpecs?: AutoscalingMetricSpec[] | undefined;
   /**
    * Single-machine spec. Immutable — changing it replaces the pool.
    * @default { machineType: "n1-standard-2" }
    */
-  machineSpec?: MachineSpec;
+  machineSpec?: MachineSpec | undefined;
 };
 
 export type DeploymentResourcePoolProps = {

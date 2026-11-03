@@ -38,19 +38,19 @@ export interface DefaultSecurityGroupRuleAttributes<IsEgress extends boolean> {
   /** The IP protocol name or number returned by AWS. */
   ipProtocol: string;
   /** The first port, or ICMP type. */
-  fromPort?: number;
+  fromPort?: number | undefined;
   /** The last port, or ICMP code. */
-  toPort?: number;
+  toPort?: number | undefined;
   /** The canonical IPv4 source or destination CIDR. */
-  cidrIpv4?: string;
+  cidrIpv4?: string | undefined;
   /** The canonical IPv6 source or destination CIDR. */
-  cidrIpv6?: string;
+  cidrIpv6?: string | undefined;
   /** The source or destination security group ID. */
-  referencedGroupId?: string;
+  referencedGroupId?: string | undefined;
   /** The source or destination managed prefix list ID. */
-  prefixListId?: string;
+  prefixListId?: string | undefined;
   /** The description observed in AWS. */
-  description?: string;
+  description?: string | undefined;
   /** Whether the rule controls outbound rather than inbound traffic. */
   isEgress: IsEgress;
 }
@@ -66,7 +66,7 @@ export interface DefaultSecurityGroupProps {
    * rules owned by current declarations in this stack and stage are preserved.
    * @default []
    */
-  ingress?: SecurityGroupRuleData[];
+  ingress?: SecurityGroupRuleData[] | undefined;
 
   /**
    * Desired inline outbound rules. Omitted or undefined restores IPv4
@@ -74,7 +74,7 @@ export interface DefaultSecurityGroupProps {
    * owned by current declarations in this stack and stage are preserved.
    * @default [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }]
    */
-  egress?: SecurityGroupRuleData[];
+  egress?: SecurityGroupRuleData[] | undefined;
 }
 
 export interface DefaultSecurityGroup extends Resource<

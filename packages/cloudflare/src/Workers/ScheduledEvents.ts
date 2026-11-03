@@ -24,7 +24,7 @@ const inTransaction = <A, R>(effect: Effect.Effect<A, never, R>) =>
 export interface ScheduledEvent {
   id: string;
   runAt: Date;
-  repeatMs?: number;
+  repeatMs?: number | undefined;
   payload: unknown;
 }
 

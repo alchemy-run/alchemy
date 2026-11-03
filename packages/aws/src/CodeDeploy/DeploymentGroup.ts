@@ -226,7 +226,7 @@ const retryThroughRolePropagation = <A, E extends { _tag: string }, R>(
 
 /** Convert a CodeDeploy wire tag list into a plain record. */
 const toTagRecord = (
-  tags: ReadonlyArray<{ Key?: string; Value?: string }> | undefined,
+  tags: ReadonlyArray<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

@@ -53,18 +53,18 @@ export type InteractionError = TerminalCancelled | NonInteractiveTerminal;
 
 export interface MessageOptions {
   readonly message: string;
-  readonly detail?: string;
+  readonly detail?: string | undefined;
 }
 
 export interface TextInputOptions {
   readonly message: string;
   /** Secondary guidance rendered beneath the field in muted text. */
-  readonly description?: string;
+  readonly description?: string | undefined;
   /** Place the editable field beside the message or beneath it. @default "inline" */
   readonly layout?: "inline" | "stacked";
-  readonly placeholder?: string;
+  readonly placeholder?: string | undefined;
   readonly initialValue?: string;
-  readonly defaultValue?: string;
+  readonly defaultValue?: string | undefined;
   readonly validate?: (value: string) => string | Error | undefined;
 }
 
@@ -76,17 +76,17 @@ export interface PasswordInputOptions extends Omit<
 export interface ConfirmOptions {
   readonly message: string;
   readonly initialValue?: boolean;
-  readonly confirmLabel?: string;
-  readonly cancelLabel?: string;
+  readonly confirmLabel?: string | undefined;
+  readonly cancelLabel?: string | undefined;
 }
 
 export interface Choice<Value> {
   readonly value: Value;
   readonly label: string;
   /** Optional section heading shared by adjacent choices. */
-  readonly group?: string;
+  readonly group?: string | undefined;
   /** Indent the entire rendered row, including its selection indicator. */
-  readonly indent?: number;
+  readonly indent?: number | undefined;
   /** Keep this row visible as the heading for following rows while scrolling. */
   readonly sticky?: boolean;
   /** Visually distinguish structural rows from ordinary choices. */
@@ -117,9 +117,9 @@ export interface BrowserLoginOptions<A, E, R, E2 = never, R2 = never> {
   /** The page the user logs in on. Opened in their browser for them. */
   readonly url: string;
   /** Short code the user confirms on the login page (device flows). */
-  readonly code?: string;
+  readonly code?: string | undefined;
   /** @default "waiting for browser authorization (up to 5 minutes)…" */
-  readonly waitingLabel?: string;
+  readonly waitingLabel?: string | undefined;
   /** Completes the login: a token poll, a CLI process, an OAuth callback. */
   readonly waitFor: Effect.Effect<A, E, R>;
   /** Let the user paste a code instead, exchanged for the same result. */
@@ -133,9 +133,9 @@ export interface BrowserLoginOptions<A, E, R, E2 = never, R2 = never> {
 
 export interface ProgressOptions {
   readonly label: string;
-  readonly detail?: string;
+  readonly detail?: string | undefined;
   /** Terminal window title while this progress view is active. */
-  readonly title?: string;
+  readonly title?: string | undefined;
   /** Animate the leading status glyph. @default true */
   readonly spinning?: boolean;
 }
@@ -375,8 +375,8 @@ const loadSigilRuntime = importOnce(() => import("./Cli/components/view/Runtime.
 const loadCapabilities = importOnce(() => import("./Cli/components/capabilities.ts"));
 
 export interface TerminalOptions {
-  readonly stdin?: NodeJS.ReadStream;
-  readonly stdout?: NodeJS.WriteStream;
+  readonly stdin?: NodeJS.ReadStream | undefined;
+  readonly stdout?: NodeJS.WriteStream | undefined;
   readonly stderr?: NodeJS.WriteStream;
   /** Override automatic TTY input detection. Primarily useful for tests. */
   readonly input?: boolean;

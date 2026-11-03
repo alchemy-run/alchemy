@@ -23,17 +23,17 @@ import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from ".
 
 export type InboundSsoAssignmentSamlSsoInfo = {
   /** `inboundSamlSsoProfiles/{id}` to use when `ssoMode` is `SAML_SSO`. */
-  inboundSamlSsoProfile?: string;
+  inboundSamlSsoProfile?: string | undefined;
 };
 
 export type InboundSsoAssignmentOidcSsoInfo = {
   /** `inboundOidcSsoProfiles/{id}` to use when `ssoMode` is `OIDC_SSO`. */
-  inboundOidcSsoProfile?: string;
+  inboundOidcSsoProfile?: string | undefined;
 };
 
 export type InboundSsoAssignmentSignInBehavior = {
   /** When to redirect sign-ins to the IdP. */
-  redirectCondition?: cloudidentity.SignInBehaviorRedirectConditionEnum | (string & {});
+  redirectCondition?: cloudidentity.SignInBehaviorRedirectConditionEnum | (string & {}) | undefined;
 };
 
 export type InboundSsoAssignmentProps = {
@@ -42,38 +42,38 @@ export type InboundSsoAssignmentProps = {
    * Immutable — changing it replaces the assignment.
    * @default "customers/my_customer"
    */
-  customer?: string;
+  customer?: string | undefined;
   /**
    * Target group (`groups/{group}`). Immutable — changing it
    * replaces the assignment. Rank must be ≥ 1 when set.
    */
-  targetGroup?: string;
+  targetGroup?: string | undefined;
   /**
    * Target org unit (`orgUnits/{org_unit}`). Immutable — changing
    * it replaces the assignment. Rank must be 0 (the default).
    */
-  targetOrgUnit?: string;
+  targetOrgUnit?: string | undefined;
   /**
    * Inbound SSO behavior.
    */
-  ssoMode?: cloudidentity.InboundSsoAssignmentSsoModeEnum | (string & {});
+  ssoMode?: cloudidentity.InboundSsoAssignmentSsoModeEnum | (string & {}) | undefined;
   /**
    * Priority among group-targeted assignments. Zero for org units;
    * ≥ 1 for groups.
    */
-  rank?: number;
+  rank?: number | undefined;
   /**
    * SAML profile, required when `ssoMode` is `SAML_SSO`.
    */
-  samlSsoInfo?: InboundSsoAssignmentSamlSsoInfo;
+  samlSsoInfo?: InboundSsoAssignmentSamlSsoInfo | undefined;
   /**
    * OIDC profile, required when `ssoMode` is `OIDC_SSO`.
    */
-  oidcSsoInfo?: InboundSsoAssignmentOidcSsoInfo;
+  oidcSsoInfo?: InboundSsoAssignmentOidcSsoInfo | undefined;
   /**
    * Sign-in redirect behavior.
    */
-  signInBehavior?: InboundSsoAssignmentSignInBehavior;
+  signInBehavior?: InboundSsoAssignmentSignInBehavior | undefined;
 };
 
 export type InboundSsoAssignment = Resource<
@@ -166,10 +166,10 @@ const expandTargetGroup = (value: string | undefined) =>
   value !== undefined && value.length > 0 ? expandGroup(value) : undefined;
 
 const observeAssignment = (input: {
-  name?: string;
-  targetGroup?: string;
-  targetOrgUnit?: string;
-  ssoMode?: string;
+  name?: string | undefined;
+  targetGroup?: string | undefined;
+  targetOrgUnit?: string | undefined;
+  ssoMode?: string | undefined;
 }) =>
   findSsoAssignment({
     name: input.name,

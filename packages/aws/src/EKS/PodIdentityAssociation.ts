@@ -38,19 +38,19 @@ export interface PodIdentityAssociationProps {
   /**
    * Disable session tags for the issued credentials.
    */
-  disableSessionTags?: boolean;
+  disableSessionTags?: boolean | undefined;
   /**
    * Optional target role ARN for chained role assumption.
    */
-  targetRoleArn?: Input<string>;
+  targetRoleArn?: Input<string> | undefined;
   /**
    * Optional inline session policy JSON.
    */
-  policy?: string;
+  policy?: string | undefined;
   /**
    * User-defined tags to apply to the association.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface PodIdentityAssociation extends Resource<

@@ -36,7 +36,7 @@ export interface ProviderKeyProps {
    * alias renames the backing secret, replacing it and the provider config.
    * @default "default"
    */
-  alias?: string;
+  alias?: string | undefined;
   /**
    * Optional free-form description on the Secrets Store secret.
    */

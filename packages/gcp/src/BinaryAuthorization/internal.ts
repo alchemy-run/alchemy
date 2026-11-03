@@ -140,11 +140,11 @@ export const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
   deleteFirst?: boolean;
 }) => {
   if (input.extra === true) {

@@ -44,7 +44,7 @@ export const ensurePodRole = Effect.fn(function* ({
 }: {
   id: string;
   roleName: string;
-  managedPolicyArns?: string[];
+  managedPolicyArns?: string[] | undefined;
 }) {
   const tags = yield* createInternalTags(id);
   const role = yield* iam

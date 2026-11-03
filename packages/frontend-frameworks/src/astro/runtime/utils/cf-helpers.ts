@@ -14,7 +14,7 @@ export interface Runtime {
 /** Minimal manifest shape needed by the Cloudflare helpers. */
 export interface ManifestLike {
   assets: Set<string>;
-  sessionConfig?: { options?: Record<string, unknown> } | undefined;
+  sessionConfig?: { options?: Record<string, unknown> | undefined } | undefined;
 }
 
 /**

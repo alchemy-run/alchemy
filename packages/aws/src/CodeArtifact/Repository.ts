@@ -24,7 +24,7 @@ export interface RepositoryProps {
    * Name of the repository (2-100 chars). If omitted a deterministic physical
    * name is generated. Changing the name replaces the repository.
    */
-  repositoryName?: string;
+  repositoryName?: string | undefined;
   /**
    * Human-readable description of the repository.
    */
@@ -119,12 +119,12 @@ const toTagRecord = (
   );
 
 const upstreamNames = (
-  upstreams: ReadonlyArray<{ repositoryName?: string }> | undefined,
+  upstreams: ReadonlyArray<{ repositoryName?: string | undefined }> | undefined,
 ): string[] =>
   (upstreams ?? []).map((u) => u.repositoryName).filter((n): n is string => typeof n === "string");
 
 const externalConnectionNames = (
-  connections: ReadonlyArray<{ externalConnectionName?: string }> | undefined,
+  connections: ReadonlyArray<{ externalConnectionName?: string | undefined }> | undefined,
 ): string[] =>
   (connections ?? [])
     .map((c) => c.externalConnectionName)

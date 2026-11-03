@@ -20,45 +20,45 @@ export type FirewallActionSetHeader = {
   /**
    * Header name to set on the request.
    */
-  key?: string;
+  key?: string | undefined;
   /**
    * Header value to set on the request.
    */
-  value?: string;
+  value?: string | undefined;
 };
 
 export type FirewallActionSubstitute = {
   /**
    * Relative path to serve instead of the original request path.
    */
-  path?: string;
+  path?: string | undefined;
 };
 
 export type FirewallAction = {
   /**
    * Allow the request. Terminal.
    */
-  allow?: Record<string, never> | {};
+  allow?: Record<string, never> | {} | undefined;
   /**
    * Deny the request. Terminal.
    */
-  block?: Record<string, never> | {};
+  block?: Record<string, never> | {} | undefined;
   /**
    * Include the reCAPTCHA JavaScript on the page. Non-terminal.
    */
-  includeRecaptchaScript?: Record<string, never> | {};
+  includeRecaptchaScript?: Record<string, never> | {} | undefined;
   /**
    * Redirect to a reCAPTCHA challenge page. Terminal.
    */
-  redirect?: Record<string, never> | {};
+  redirect?: Record<string, never> | {} | undefined;
   /**
    * Attach a request header. Non-terminal.
    */
-  setHeader?: FirewallActionSetHeader;
+  setHeader?: FirewallActionSetHeader | undefined;
   /**
    * Serve a different path. Terminal.
    */
-  substitute?: FirewallActionSubstitute;
+  substitute?: FirewallActionSubstitute | undefined;
 };
 
 export type FirewallpolicyProps = {
@@ -67,27 +67,27 @@ export type FirewallpolicyProps = {
    * `projects/{project}/firewallpolicies/{firewallpolicy}`). Immutable —
    * changing it replaces the policy.
    */
-  firewallpolicyId?: string;
+  firewallpolicyId?: string | undefined;
   /**
    * Request path glob this policy matches (max 200 characters). If
    * omitted, a unique `/alc/{name}` path is generated.
    */
-  path?: string;
+  path?: string | undefined;
   /**
    * Human-readable description (max 256 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * CEL condition. The policy applies when this evaluates to true and
    * the path matches. Max 500 characters.
    */
-  condition?: string;
+  condition?: string | undefined;
   /**
    * Actions to take. At most one terminal action (`allow`, `block`,
    * `redirect`, `substitute`). Up to 16 actions.
    * @default [{ allow: {} }]
    */
-  actions?: FirewallAction[];
+  actions?: FirewallAction[] | undefined;
 };
 
 export type Firewallpolicy = Resource<

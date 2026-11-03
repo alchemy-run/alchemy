@@ -40,11 +40,11 @@ export interface WaitForDeploymentStatusOptions {
   /**
    * Maximum time to wait for a deployment to reach the requested status.
    */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
   /**
    * Poll interval used while waiting for Prisma deployment status changes.
    */
-  pollIntervalMs?: number;
+  pollIntervalMs?: number | undefined;
 }
 
 /**

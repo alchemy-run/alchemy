@@ -26,10 +26,12 @@ export interface VinextPluginOptionsInputs {
   readonly main?: string | undefined;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: ReadonlyArray<string>;
-  readonly viteEnvironments?: {
-    readonly entry?: string;
-    readonly children?: ReadonlyArray<string>;
-  };
+  readonly viteEnvironments?:
+    | {
+        readonly entry?: string | undefined;
+        readonly children?: ReadonlyArray<string> | undefined;
+      }
+    | undefined;
   readonly worker?: CloudflareVitePluginOptions["worker"];
   readonly context?: CloudflareVitePluginOptions["context"];
 }

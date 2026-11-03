@@ -20,7 +20,7 @@ export const destroy = <ROut>({
   stage: string;
   dev?: boolean;
   /** See {@link evalStack} — when set, scoped resources outlive `destroy`. */
-  scope?: Scope.Scope;
+  scope?: Scope.Scope | undefined;
   /** Destroy always operates on the full stack. */
   include?: never;
   exclude?: never;

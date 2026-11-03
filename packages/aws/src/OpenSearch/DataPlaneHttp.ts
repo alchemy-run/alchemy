@@ -17,7 +17,9 @@ import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Output from "alchemy/Output";
 import type { SourceError } from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as AWSBindings from "../AWSBindings.ts";
 import type {
   BulkResponse,
@@ -39,7 +41,7 @@ export interface OpenSearchHttpRequest {
   /** Path relative to the domain endpoint, e.g. `"songs/_search"`. */
   path: string;
   /** Query-string parameters (undefined values are skipped). */
-  query?: Record<string, string | undefined>;
+  query?: Record<string, string | undefined> | undefined;
   /** JSON body (sent as `application/json`). */
   json?: unknown;
   /** Raw NDJSON body (used by `_bulk`; sent as `application/x-ndjson`). */
@@ -165,7 +167,10 @@ export const makeOpenSearchDataPlaneBinding = <Client>(options: {
               fetch(signed.url, {
                 method: signed.method,
                 headers: signed.headers,
-                body,
+                ...Record.filterMap(
+                  { body },
+                  Result.fromNullishOr(() => undefined),
+                ),
               }),
             catch: toError(0),
           });

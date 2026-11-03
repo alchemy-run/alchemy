@@ -78,7 +78,11 @@ export const OrganizationSettingsProvider = () =>
           .pipe(Effect.map(({ organization }) => toSettings(organization)));
 
       // `restore_enabled` must be updated on its own (per the API).
-      const apply = (slug: string, observed: Settings, desired: Partial<Settings>) =>
+      const apply = (
+        slug: string,
+        observed: Settings,
+        desired: { [K in keyof Settings]?: Settings[K] | undefined },
+      ) =>
         Effect.gen(function* () {
           const patch: { overages?: boolean; require_mfa?: boolean } = {};
           if (desired.overages !== undefined && desired.overages !== observed.overages) {

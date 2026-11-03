@@ -36,9 +36,9 @@ const COLLECTION = "customRanges";
 
 export type CustomRangeAttribute = {
   /** Attribute key. */
-  key?: string;
+  key?: string | undefined;
   /** Attribute value. */
-  value?: string;
+  value?: string | undefined;
 };
 
 export type CustomRangeProps = {

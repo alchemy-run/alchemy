@@ -73,7 +73,7 @@ export const makeServiceImage = Effect.gen(function* () {
   /** Bundle the Effect program behind a `main` source. */
   const bundleProgram = Effect.fn(function* (options: {
     source: BundledServiceSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
   }) {
     const { source } = options;
     const realMain = yield* resolveMainPath(source.main);
@@ -161,7 +161,7 @@ export const makeServiceImage = Effect.gen(function* () {
    */
   const computeCodeHash = Effect.fn(function* (options: {
     source: BundledServiceSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
   }) {
     const bundled = yield* bundleProgram(options);
     const dockerfile = generateDockerfile(options.source);
@@ -192,7 +192,7 @@ export const makeServiceImage = Effect.gen(function* () {
     name: string;
     /** Docker context the swarm service is deployed to. */
     context: string | undefined;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
     /** Plan-status session used to emit build progress notes. */
     session: { note: (message: string) => Effect.Effect<void> };
   }) {
@@ -239,7 +239,7 @@ export const makeServiceImage = Effect.gen(function* () {
    */
   const hash = Effect.fn(function* (options: {
     source: BundledServiceSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
   }) {
     const { codeHash } = yield* computeCodeHash(options);
     return codeHash;

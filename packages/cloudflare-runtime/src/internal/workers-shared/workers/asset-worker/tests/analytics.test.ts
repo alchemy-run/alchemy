@@ -1,5 +1,7 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { describe, it, vi } from "vitest";
 import { Analytics, EntrypointType, getRequestKind } from "../src/analytics.ts";
 import type { ReadyAnalyticsEvent } from "../src/types.ts";
@@ -107,7 +109,13 @@ describe("[Asset Worker] `getRequestKind`", () => {
 
   it.for(cases)("classifies $0 as $3", ([, path, destination, expected], { expect }) => {
     const headers = destination ? { "Sec-Fetch-Dest": destination } : undefined;
-    const request = new Request(`https://example.com${path}`, { headers });
+    const request = new Request(
+      `https://example.com${path}`,
+      Record.filterMap(
+        { headers },
+        Result.fromNullishOr(() => undefined),
+      ),
+    );
 
     expect(getRequestKind(request)).toBe(expected);
   });

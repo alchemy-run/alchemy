@@ -30,23 +30,23 @@ import {
 
 export type WorkstationPersistentDirectory = {
   /** Mount path of the persistent directory. */
-  mountPath?: string;
+  mountPath?: string | undefined;
   /** Desired size of the directory in GB. */
-  sizeGb?: number;
+  sizeGb?: number | undefined;
 };
 
 export type GceInstanceHost = {
   /** Compute Engine instance id. */
-  id?: string;
+  id?: string | undefined;
   /** Compute Engine instance name. */
-  name?: string;
+  name?: string | undefined;
   /** Compute Engine zone. */
-  zone?: string;
+  zone?: string | undefined;
 };
 
 export type RuntimeHost = {
   /** Compute Engine instance host while the workstation is running. */
-  gceInstanceHost?: GceInstanceHost;
+  gceInstanceHost?: GceInstanceHost | undefined;
 };
 
 export type WorkstationClustersWorkstationConfigsWorkstationProps = {

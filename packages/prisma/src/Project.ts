@@ -52,7 +52,7 @@ export interface ProjectProps {
   /**
    * Project display name. If omitted, Alchemy generates a stable physical name.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Whether to create a default Prisma Postgres database with the project.
    *
@@ -67,7 +67,7 @@ export interface ProjectProps {
    *
    * @default "us-east-1" when a default database is created
    */
-  region?: PrismaRegionId;
+  region?: PrismaRegionId | undefined;
   /**
    * Opaque project settings passed through to the Management API.
    */

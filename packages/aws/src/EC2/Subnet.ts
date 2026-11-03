@@ -45,85 +45,85 @@ export interface SubnetProps {
    * Required unless using IPAM.
    * @example "10.0.1.0/24"
    */
-  cidrBlock?: string;
+  cidrBlock?: string | undefined;
 
   /**
    * The IPv6 network range for the subnet, in CIDR notation.
    */
-  ipv6CidrBlock?: string;
+  ipv6CidrBlock?: string | undefined;
 
   /**
    * The Availability Zone for the subnet.
    * @example "us-east-1a"
    */
-  availabilityZone?: string;
+  availabilityZone?: string | undefined;
 
   /**
    * The ID of the Availability Zone for the subnet.
    */
-  availabilityZoneId?: string;
+  availabilityZoneId?: string | undefined;
 
   /**
    * The ID of an IPv4 IPAM pool you want to use for allocating this subnet's CIDR.
    */
-  ipv4IpamPoolId?: string;
+  ipv4IpamPoolId?: string | undefined;
 
   /**
    * The netmask length of the IPv4 CIDR you want to allocate to this subnet from an IPAM pool.
    */
-  ipv4NetmaskLength?: number;
+  ipv4NetmaskLength?: number | undefined;
 
   /**
    * The ID of an IPv6 IPAM pool which will be used to allocate this subnet an IPv6 CIDR.
    */
-  ipv6IpamPoolId?: string;
+  ipv6IpamPoolId?: string | undefined;
 
   /**
    * The netmask length of the IPv6 CIDR you want to allocate to this subnet from an IPAM pool.
    */
-  ipv6NetmaskLength?: number;
+  ipv6NetmaskLength?: number | undefined;
 
   /**
    * Whether instances launched in the subnet get public IPv4 addresses.
    * @default false
    */
-  mapPublicIpOnLaunch?: boolean;
+  mapPublicIpOnLaunch?: boolean | undefined;
 
   /**
    * Whether instances launched in the subnet get IPv6 addresses.
    * @default false
    */
-  assignIpv6AddressOnCreation?: boolean;
+  assignIpv6AddressOnCreation?: boolean | undefined;
 
   /**
    * Whether DNS queries made to the Amazon-provided DNS Resolver in this subnet should return
    * synthetic IPv6 addresses for IPv4-only destinations.
    * @default false
    */
-  enableDns64?: boolean;
+  enableDns64?: boolean | undefined;
 
   /**
    * Whether to enable resource name DNS A record on launch.
    * @default false
    */
-  enableResourceNameDnsARecordOnLaunch?: boolean;
+  enableResourceNameDnsARecordOnLaunch?: boolean | undefined;
 
   /**
    * Whether to enable resource name DNS AAAA record on launch.
    * @default false
    */
-  enableResourceNameDnsAAAARecordOnLaunch?: boolean;
+  enableResourceNameDnsAAAARecordOnLaunch?: boolean | undefined;
 
   /**
    * The hostname type for EC2 instances launched into this subnet.
    */
-  hostnameType?: ec2.HostnameType;
+  hostnameType?: ec2.HostnameType | undefined;
 
   /**
    * Tags to assign to the subnet.
    * These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id).
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Subnet extends Resource<
@@ -158,7 +158,7 @@ export interface Subnet extends Resource<
     /**
      * The ID of the Availability Zone of the subnet.
      */
-    availabilityZoneId?: string;
+    availabilityZoneId?: string | undefined;
 
     /**
      * The current state of the subnet.
@@ -183,38 +183,42 @@ export interface Subnet extends Resource<
     /**
      * The ID of the AWS account that owns the subnet.
      */
-    ownerId?: string;
+    ownerId?: string | undefined;
 
     /**
      * Information about the IPv6 CIDR blocks associated with the subnet.
      */
-    ipv6CidrBlockAssociationSet?: Array<{
-      associationId: string;
-      ipv6CidrBlock: string;
-      ipv6CidrBlockState: {
-        state: ec2.SubnetCidrBlockStateCode;
-        statusMessage?: string;
-      };
-    }>;
+    ipv6CidrBlockAssociationSet?:
+      | Array<{
+          associationId: string;
+          ipv6CidrBlock: string;
+          ipv6CidrBlockState: {
+            state: ec2.SubnetCidrBlockStateCode;
+            statusMessage?: string | undefined;
+          };
+        }>
+      | undefined;
 
     /**
      * Whether DNS64 is enabled for the subnet.
      */
-    enableDns64?: boolean;
+    enableDns64?: boolean | undefined;
 
     /**
      * Whether this is an IPv6-only subnet.
      */
-    ipv6Native?: boolean;
+    ipv6Native?: boolean | undefined;
 
     /**
      * The private DNS name options on launch.
      */
-    privateDnsNameOptionsOnLaunch?: {
-      hostnameType?: ec2.HostnameType;
-      enableResourceNameDnsARecord?: boolean;
-      enableResourceNameDnsAAAARecord?: boolean;
-    };
+    privateDnsNameOptionsOnLaunch?:
+      | {
+          hostnameType?: ec2.HostnameType | undefined;
+          enableResourceNameDnsARecord?: boolean | undefined;
+          enableResourceNameDnsAAAARecord?: boolean | undefined;
+        }
+      | undefined;
 
     /**
      * Tags on the subnet, as observed. Lets `alchemy drift` detect

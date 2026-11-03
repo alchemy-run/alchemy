@@ -43,7 +43,7 @@ export interface FloatingIpProps {
    * omitted, a unique name is generated from the stack, stage, and
    * logical ID.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Free-form description shown in the Hetzner Cloud Console.
    */
@@ -215,8 +215,8 @@ const observe = Effect.fn(function* ({
   outputId,
 }: {
   id: string;
-  name?: string;
-  outputId?: number;
+  name?: string | undefined;
+  outputId?: number | undefined;
 }) {
   if (outputId !== undefined) {
     const byId = yield* getById(outputId);

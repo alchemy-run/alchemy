@@ -61,39 +61,43 @@ export interface SinkR2Config {
   /**
    * Key prefix under which output objects are written.
    */
-  path?: string;
+  path?: string | undefined;
   /**
    * Time-based partitioning of output object keys.
    */
-  partitioning?: {
-    /**
-     * strftime-style pattern, e.g. `year=%Y/month=%m/day=%d`.
-     */
-    timePattern?: string;
-  };
+  partitioning?:
+    | {
+        /**
+         * strftime-style pattern, e.g. `year=%Y/month=%m/day=%d`.
+         */
+        timePattern?: string | undefined;
+      }
+    | undefined;
   /**
    * Naming of output files within a partition.
    */
-  fileNaming?: {
-    /** Prefix prepended to each file name. */
-    prefix?: string;
-    /** Suffix appended to each file name. */
-    suffix?: string;
-    /**
-     * Strategy generating the unique part of each file name.
-     * @default "uuid_v7"
-     */
-    strategy?: "serial" | "uuid" | "uuid_v7" | "ulid";
-  };
+  fileNaming?:
+    | {
+        /** Prefix prepended to each file name. */
+        prefix?: string | undefined;
+        /** Suffix appended to each file name. */
+        suffix?: string | undefined;
+        /**
+         * Strategy generating the unique part of each file name.
+         * @default "uuid_v7"
+         */
+        strategy?: "serial" | "uuid" | "uuid_v7" | "ulid" | undefined;
+      }
+    | undefined;
   /**
    * When the sink rolls output files.
    */
-  rollingPolicy?: SinkRollingPolicy;
+  rollingPolicy?: SinkRollingPolicy | undefined;
   /**
    * Jurisdiction the bucket was created in (`eu`, `fedramp`), when not
    * the default.
    */
-  jurisdiction?: string;
+  jurisdiction?: string | undefined;
 }
 
 /**
@@ -202,7 +206,7 @@ interface SinkBaseProps {
    * Output file format. Catalog sinks require Parquet.
    * @default { type: "json" } for `r2` sinks, { type: "parquet" } for catalog sinks
    */
-  format?: SinkFormat;
+  format?: SinkFormat | undefined;
 }
 
 export type SinkProps =
@@ -513,10 +517,11 @@ interface ObservedSink {
   config?:
     | {
         bucket: string;
-        path?: string | null;
+        path?: string | null | undefined;
       }
     | { bucket: string; tableName: string; namespace?: string | null }
-    | null;
+    | null
+    | undefined;
   createdAt: string;
   modifiedAt: string;
 }

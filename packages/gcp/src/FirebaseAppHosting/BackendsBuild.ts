@@ -42,88 +42,90 @@ export type CodebaseSource = {
    * Branch to build from (latest commit). Mutually exclusive with
    * `commit`.
    */
-  branch?: string;
+  branch?: string | undefined;
   /**
    * Commit SHA to build from. Mutually exclusive with `branch`.
    */
-  commit?: string;
+  commit?: string | undefined;
   /**
    * Developer Connect gitRepositoryLink resource name used for this
    * build.
    */
-  repository?: string;
+  repository?: string | undefined;
 };
 
 export type ArchiveSource = {
   /** Signed URL of an archive in a storage bucket. */
-  externalSignedUri?: string;
+  externalSignedUri?: string | undefined;
   /**
    * Cloud Storage URI of a `.zip` or `.tar.gz` archive
    * (`gs://bucket/object`).
    */
-  userStorageUri?: string;
+  userStorageUri?: string | undefined;
   /**
    * Directory relative to the archive root used as the web app root.
    */
-  rootDirectory?: string;
+  rootDirectory?: string | undefined;
   /** Optional message describing this uploaded source. */
-  description?: string;
+  description?: string | undefined;
 };
 
 export type ContainerSource = {
   /**
    * Artifact Registry container image URI used as the build source.
    */
-  image?: string;
+  image?: string | undefined;
 };
 
 export type BuildSource = {
   /** Git codebase at a branch or commit. */
-  codebase?: CodebaseSource;
+  codebase?: CodebaseSource | undefined;
   /** Storage archive. */
-  archive?: ArchiveSource;
+  archive?: ArchiveSource | undefined;
   /** Artifact Registry container image. */
-  container?: ContainerSource;
+  container?: ContainerSource | undefined;
 };
 
 export type RunConfig = {
   /** Maximum Cloud Run instances per revision. */
-  maxInstances?: number;
+  maxInstances?: number | undefined;
   /** Memory per instance in MiB (`128`–`32768`). */
-  memoryMib?: number;
+  memoryMib?: number | undefined;
   /** Maximum concurrent requests per instance (`1`–`1000`). */
-  concurrency?: number;
+  concurrency?: number | undefined;
   /** Minimum Cloud Run instances. */
-  minInstances?: number;
+  minInstances?: number | undefined;
   /** CPUs per instance (`0.08`–`8`). */
-  cpu?: number;
+  cpu?: number | undefined;
 };
 
 export type EnvironmentVariable = {
   /** Variable name. Must not start with `X_FIREBASE_`. */
-  variable?: string;
+  variable?: string | undefined;
   /** Plaintext value. */
-  value?: string;
+  value?: string | undefined;
   /**
    * Secret Manager version resource name. The Cloud Build and Cloud Run
    * service accounts need `secretmanager.versions.access`.
    */
-  secret?: string;
+  secret?: string | undefined;
   /**
    * Where the variable is available (`BUILD`, `RUNTIME`). Unspecified
    * means both.
    */
-  availability?: Array<firebaseapphosting.EnvironmentVariableAvailabilityItemEnum | (string & {})>;
+  availability?:
+    | Array<firebaseapphosting.EnvironmentVariableAvailabilityItemEnum | (string & {})>
+    | undefined;
 };
 
 export type BuildConfig = {
   /** Cloud Run service configuration for this build. */
-  runConfig?: RunConfig;
+  runConfig?: RunConfig | undefined;
   /**
    * Environment variables supplied at create time. Immutable. Only
    * valid for container or archive sources.
    */
-  env?: EnvironmentVariable[];
+  env?: EnvironmentVariable[] | undefined;
 };
 
 export type BackendsBuildProps = {

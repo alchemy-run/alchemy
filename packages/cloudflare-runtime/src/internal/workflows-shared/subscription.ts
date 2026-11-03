@@ -2,6 +2,7 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 // Alchemy modifications: uses Effect Schema instead of Zod, preserving strict option validation.
 import { RpcTarget } from "cloudflare:workers";
+import * as Record from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { ms } from "itty-time";
@@ -36,9 +37,25 @@ const ResolvedStepConfigSchema = Schema.Struct({
  * @param value Persisted value to parse.
  * @returns The resolved config, or `undefined` when the value is invalid.
  */
-export function parseResolvedStepConfig(value: unknown) {
+export function parseResolvedStepConfig(value: unknown): ResolvedStepConfig | undefined {
   const result = Schema.decodeUnknownResult(ResolvedStepConfigSchema)(value);
-  return Result.isSuccess(result) ? result.success : undefined;
+  if (Result.isFailure(result)) return undefined;
+  const config = result.success;
+  return {
+    retries: {
+      limit: config.retries.limit,
+      delay: config.retries.delay,
+      ...Record.filterMap(
+        { backoff: config.retries.backoff },
+        Result.fromNullishOr(() => undefined),
+      ),
+    },
+    timeout: config.timeout,
+    ...Record.filterMap(
+      { sensitive: config.sensitive },
+      Result.fromNullishOr(() => undefined),
+    ),
+  };
 }
 const WorkflowSubscriptionEventSchema = Schema.Union([
   Schema.Struct({
@@ -195,7 +212,7 @@ const WorkflowSubscriptionEventSchema = Schema.Union([
   }),
 ]);
 
-export type WorkflowSubscriptionEvent = typeof WorkflowSubscriptionEventSchema.Type;
+export type WorkflowSubscriptionEvent = WorkflowInstanceEvent;
 
 const workflowSubscriptionEventTypeNames = new Set(
   WorkflowSubscriptionEventSchema.members.map((option) => option.fields.type.literal),
@@ -207,8 +224,8 @@ const WorkflowSubscriptionEventTypeSchema = Schema.declare<WorkflowSubscriptionE
 );
 
 export type WorkflowSubscriptionOptions = {
-  cursor?: number;
-  filter?: Array<WorkflowSubscriptionEvent["type"]>;
+  cursor?: number | undefined;
+  filter?: Array<WorkflowSubscriptionEvent["type"]> | undefined;
 };
 
 const WORKFLOW_SUBSCRIPTION_OPTIONS_SCHEMA = Schema.Struct({

@@ -60,7 +60,7 @@ export const makeSnsAccountHttpBinding = <I, A, E, R>(options: {
  */
 export const makeSnsTopicHttpBinding = <
   K extends "TopicArn" | "ResourceArn",
-  I extends { [P in K]?: string },
+  I extends { [P in K]?: string | undefined },
   A,
   E,
   R,
@@ -110,7 +110,7 @@ export const makeSnsTopicHttpBinding = <
  */
 export const makeSnsSubscriptionHttpBinding = <
   K extends "SubscriptionArn" | "TopicArn",
-  I extends { [P in K]?: string },
+  I extends { [P in K]?: string | undefined },
   A,
   E,
   R,

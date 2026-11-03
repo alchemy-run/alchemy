@@ -32,12 +32,12 @@ export interface PolicyProps {
   /**
    * Policy name. If omitted, Alchemy generates one.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Policy description.
    * @default ""
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Organizations policy type.
    */
@@ -348,7 +348,8 @@ const POLICY_TYPE_FILTERS = [
   "SECURITYHUB_POLICY",
 ] as const satisfies readonly organizations.PolicyType[];
 
-const toName = (id: string, props: { name?: string } = {}) => createName(id, props.name, 128);
+const toName = (id: string, props: { name?: string | undefined } = {}) =>
+  createName(id, props.name, 128);
 
 const readPolicyById = Effect.fn(function* (policyId: string) {
   const described = yield* retryOrganizations(

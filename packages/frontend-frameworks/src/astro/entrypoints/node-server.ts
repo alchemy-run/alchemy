@@ -11,14 +11,21 @@
  */
 import { createApp } from "astro/app/entrypoint";
 import { setGetEnv } from "astro/env/setup";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 
 // astro:env `getSecret` reads process.env on the Node runtime.
 setGetEnv((key) => process.env[key]);
 
 const app = createApp();
 
-export const handler = (request: Request) =>
-  app.render(request, {
+export const handler = (request: Request) => {
+  const clientAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined;
+  return app.render(request, {
     addCookieHeader: true,
-    clientAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined,
+    ...Record.filterMap(
+      { clientAddress },
+      Result.fromNullishOr(() => undefined),
+    ),
   });
+};

@@ -151,14 +151,14 @@ export interface DatabaseProps {
    * initial creation because the Management API creates the database before it
    * attaches the branch and exposes no idempotency key.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Region for the database. `"inherit"` uses the project's default region,
    * or the default database's region when the project has none.
    *
    * @default "us-east-1"
    */
-  region?: PrismaDatabaseRegionId;
+  region?: PrismaDatabaseRegionId | undefined;
   /**
    * Standalone Prisma.Database resources cannot be the project's default
    * database because the Management API cannot demote or promote an existing
@@ -167,24 +167,24 @@ export interface DatabaseProps {
    *
    * @default false
    */
-  isDefault?: false;
+  isDefault?: false | undefined;
   /**
    * Optional source database/backup descriptor for clone or restore creation.
    */
-  source?: DatabaseSourceInput;
+  source?: DatabaseSourceInput | undefined;
   /**
    * Branch ID to attach the database to. Mutually exclusive with
    * branchGitName. Every Prisma database belongs to a Branch: omit both
    * fields to let the Management API attach it to the project's default
    * Branch, which Alchemy then leaves unmanaged.
    */
-  branchId?: string;
+  branchId?: string | undefined;
   /**
    * Branch git name to attach the database to (the Branch is created when it
    * does not exist). Mutually exclusive with branchId. Omit both fields to
    * attach to the project's default Branch.
    */
-  branchGitName?: string;
+  branchGitName?: string | undefined;
   /**
    * Stable identity of this declaration on the Prisma platform, unique per
    * branch. A rename in the Console does not change it. After lost state, the
@@ -193,12 +193,12 @@ export interface DatabaseProps {
    * does not prove which stack owns it. Changing it updates the database in place.
    * @default the resource's fully qualified logical ID, e.g. `"db"` or `"App/Db"`
    */
-  logicalId?: string;
+  logicalId?: string | undefined;
   /**
    * Local database settings for `alchemy dev`. Set to `false` to keep only
    * placeholder IDs.
    */
-  dev?: false | DatabaseDev;
+  dev?: false | DatabaseDev | undefined;
   /**
    * Rotate the adopted database's default connection to recover its one-time
    * credentials. Prisma revokes the previous key on a best-effort basis and
@@ -207,7 +207,7 @@ export interface DatabaseProps {
    *
    * @default false
    */
-  rotateCredentialsOnAdopt?: boolean;
+  rotateCredentialsOnAdopt?: boolean | undefined;
 }
 
 export interface Database extends Resource<
@@ -343,7 +343,7 @@ const listProjectDatabases = (projectId: string) =>
   });
 
 const listAllDatabases = (
-  filter: { projectId?: string; logicalId?: string; branchId?: string } = {},
+  filter: { projectId?: string; logicalId?: string; branchId?: string | undefined } = {},
 ) =>
   Effect.gen(function* () {
     const databases: GetDatabasesResponse["data"][number][] = [];
@@ -381,7 +381,7 @@ const findDatabaseByName = (projectId: string, name: string) =>
 const findDatabaseByLogicalId = Effect.fn(function* (
   projectId: string,
   logicalId: string,
-  props: { branchId?: string; branchGitName?: string },
+  props: { branchId?: string | undefined; branchGitName?: string | undefined },
 ) {
   const branch = yield* desiredBranchId(projectId, props);
   if (!branch.resolved) return undefined;

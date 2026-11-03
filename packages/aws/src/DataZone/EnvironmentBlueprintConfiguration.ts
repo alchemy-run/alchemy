@@ -99,7 +99,7 @@ export interface EnvironmentBlueprintConfiguration extends Resource<
      * roles administrators when it deploys an environment; delete removes
      * these entries again.
      */
-    lakeFormationAdmins?: LakeFormationAdminEntry[];
+    lakeFormationAdmins?: LakeFormationAdminEntry[] | undefined;
   }
 > {}
 

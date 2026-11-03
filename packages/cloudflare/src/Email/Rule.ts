@@ -28,20 +28,20 @@ export type RuleProps = {
   /**
    * Display name for the rule.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Whether the rule is active. Disabled rules are evaluated last and
    * effectively skipped.
    *
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Lower priority numbers run first.
    *
    * @default 0
    */
-  priority?: number;
+  priority?: number | undefined;
   /**
    * Matchers that define which inbound emails trigger this rule.
    *
@@ -283,7 +283,7 @@ export const RuleProvider = () =>
  * via `/rules/catch_all` (the `CatchAll` resource), so it must be
  * excluded from the deletable `Rule` enumeration.
  */
-const isCatchAllRule = (rule: { matchers?: { type: string }[] | null }): boolean =>
+const isCatchAllRule = (rule: { matchers?: { type: string }[] | null | undefined }): boolean =>
   (rule.matchers ?? []).length === 1 && rule.matchers?.[0]?.type === "all";
 
 const isCatchAllMatchers = (matchers: Matcher[]): boolean =>
@@ -359,20 +359,21 @@ const sameRule = (
 
 const normalize = (
   rule: {
-    id?: string | null;
-    name?: string | null;
-    enabled?: boolean | null;
-    priority?: number | null;
+    id?: string | null | undefined;
+    name?: string | null | undefined;
+    enabled?: boolean | null | undefined;
+    priority?: number | null | undefined;
     // Distilled widened generated string enums to open unions (`string & {}`);
     // the runtime values are still the known variants, narrowed below.
     matchers?:
       | {
           type: string;
-          field?: string | null;
-          value?: string | null;
+          field?: string | null | undefined;
+          value?: string | null | undefined;
         }[]
-      | null;
-    actions?: { type: string; value?: string[] | null }[] | null;
+      | null
+      | undefined;
+    actions?: { type: string; value?: string[] | null | undefined }[] | null | undefined;
   },
   zoneId: string,
 ): RuleAttributes => ({

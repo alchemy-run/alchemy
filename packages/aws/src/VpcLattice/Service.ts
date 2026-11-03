@@ -76,7 +76,7 @@ export interface Service extends Resource<
     /**
      * Lattice-generated DNS name clients resolve the service by.
      */
-    dnsName?: string;
+    dnsName?: string | undefined;
     /**
      * Effective authorization type.
      */

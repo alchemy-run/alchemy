@@ -159,9 +159,9 @@ export const normalizeEnforcement = (value: string | undefined) =>
   (value ?? DEFAULT_ENFORCEMENT_MODE).toUpperCase();
 
 export const replaceOnIdentity = (input: {
-  previous?: string;
-  next?: string;
-  extra?: boolean;
+  previous?: string | undefined;
+  next?: string | undefined;
+  extra?: boolean | undefined;
   deleteFirst?: boolean;
 }) => {
   if (input.extra === true) {

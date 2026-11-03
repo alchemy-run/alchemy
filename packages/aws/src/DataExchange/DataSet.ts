@@ -145,11 +145,11 @@ export const DataSetProvider = () =>
       });
 
       const toAttrs = (dataSet: {
-        Id?: string;
-        Arn?: string;
-        Name?: string;
-        AssetType?: string;
-        Origin?: string;
+        Id?: string | undefined;
+        Arn?: string | undefined;
+        Name?: string | undefined;
+        AssetType?: string | undefined;
+        Origin?: string | undefined;
       }): DataSet["Attributes"] => ({
         dataSetId: dataSet.Id!,
         dataSetArn: dataSet.Arn!,

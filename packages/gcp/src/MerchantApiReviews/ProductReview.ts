@@ -34,78 +34,81 @@ import {
 
 export type ProductReviewAttributesProps = {
   /** GTINs associated with the product. */
-  gtins?: string[];
+  gtins?: string[] | undefined;
   /** Brand names associated with the product. */
-  brands?: string[];
+  brands?: string[] | undefined;
   /** Minimum possible rating (worst value, not "no rating"). */
-  minRating?: string;
+  minRating?: string | undefined;
   /** Name of the reviews aggregator, if any. */
-  aggregatorName?: string;
+  aggregatorName?: string | undefined;
   /** Descriptive product names. */
-  productNames?: string[];
+  productNames?: string[] | undefined;
   /** Maximum possible rating (must be greater than `minRating`). */
-  maxRating?: string;
+  maxRating?: string | undefined;
   /** Advantages from the reviewer. */
-  pros?: string[];
+  pros?: string[] | undefined;
   /** How the review was collected. */
-  collectionMethod?: reviews.ProductReviewAttributesCollectionMethodEnum | (string & {});
+  collectionMethod?:
+    | reviews.ProductReviewAttributesCollectionMethodEnum
+    | (string & {})
+    | undefined;
   /** Whether the review is marked as spam. */
-  isSpam?: boolean;
+  isSpam?: boolean | undefined;
   /** Reviewer's overall rating of the product. */
-  rating?: number;
+  rating?: number | undefined;
   /** SKUs associated with the product. */
-  skus?: string[];
+  skus?: string[] | undefined;
   /** URIs of reviewer-created product images. */
-  reviewerImageLinks?: string[];
+  reviewerImageLinks?: string[] | undefined;
   /** Publisher favicon URI. */
-  publisherFavicon?: string;
+  publisherFavicon?: string | undefined;
   /** Name of the publisher of the product reviews. */
-  publisherName?: string;
+  publisherName?: string | undefined;
   /** Name of the reviewer. */
-  reviewerUsername?: string;
+  reviewerUsername?: string | undefined;
   /** Publisher-system transaction id. */
-  transactionId?: string;
+  transactionId?: string | undefined;
   /**
    * Review body, sent verbatim.
    */
-  content?: string;
+  content?: string | undefined;
   /** Whether the reviewer's purchase is verified. */
-  isVerifiedPurchase?: boolean;
+  isVerifiedPurchase?: boolean | undefined;
   /**
    * ISO 3166-1 alpha-2 country of the review.
    * @default "US"
    */
-  reviewCountry?: string;
+  reviewCountry?: string | undefined;
   /** Disadvantages from the reviewer. */
-  cons?: string[];
+  cons?: string[] | undefined;
   /** URI of the review landing page. */
-  reviewLink?: ReviewLinkProps;
+  reviewLink?: ReviewLinkProps | undefined;
   /**
    * BCP-47 language of the review.
    * @default "en"
    */
-  reviewLanguage?: string;
+  reviewLanguage?: string | undefined;
   /** Subclient identifier of the review source. */
-  subclientName?: string;
+  subclientName?: string | undefined;
   /** Publisher-system identifier for the review author. */
-  reviewerId?: string;
+  reviewerId?: string | undefined;
   /** Title of the review. */
-  title?: string;
+  title?: string | undefined;
   /** Product landing-page URIs. */
-  productLinks?: string[];
+  productLinks?: string[] | undefined;
   /**
    * Timestamp when the review was written (RFC3339).
    * @default "2020-01-01T00:00:00Z"
    */
-  reviewTime?: string;
+  reviewTime?: string | undefined;
   /** ASINs associated with the product. */
-  asins?: string[];
+  asins?: string[] | undefined;
   /** When true, the reviewer remains anonymous. */
-  reviewerIsAnonymous?: boolean;
+  reviewerIsAnonymous?: boolean | undefined;
   /** MPNs associated with the product. */
-  mpns?: string[];
+  mpns?: string[] | undefined;
   /** Whether the review is incentivized. */
-  isIncentivizedReview?: boolean;
+  isIncentivizedReview?: boolean | undefined;
 };
 
 export type ProductReviewProps = {
@@ -135,7 +138,7 @@ export type ProductReviewProps = {
    * Custom (merchant-provided) attributes. Alchemy ownership keys are
    * merged in automatically.
    */
-  customAttributes?: ReviewCustomAttribute[];
+  customAttributes?: ReviewCustomAttribute[] | undefined;
 };
 
 export type ProductReview = Resource<

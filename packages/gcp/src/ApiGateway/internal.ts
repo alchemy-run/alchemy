@@ -162,9 +162,9 @@ export const fieldMask = (fields: Array<string | false | undefined>) =>
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
   nextId: string | undefined;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   const parentChanged =
     (input.previousParent ?? "") !== "" &&
@@ -367,7 +367,7 @@ export const listConfigs = (parent: string) =>
       ).pipe(Effect.catchTag("NotFound", () => emptyList<apigateway.ApigatewayApiConfig>()));
 
 export const listChildResources = <A, E, R>(
-  parents: readonly { name?: string }[],
+  parents: readonly { name?: string | undefined }[],
   list: (name: string) => Effect.Effect<A[], E, R>,
 ) =>
   Effect.forEach(

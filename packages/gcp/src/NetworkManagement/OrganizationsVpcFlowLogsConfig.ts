@@ -62,85 +62,85 @@ export type OrganizationsVpcFlowLogsConfigProps = {
    * If omitted, a unique RFC1035 name is generated. Immutable — changing
    * it replaces the config.
    */
-  vpcFlowLogsConfigId?: string;
+  vpcFlowLogsConfigId?: string | undefined;
   /**
    * Organization id or `organizations/{organization}`. If omitted,
    * Alchemy uses `GOOGLE_ORGANIZATION_ID` or the project's Resource
    * Manager parent. Immutable — changing it replaces the config.
    */
-  organization?: string;
+  organization?: string | undefined;
   /**
    * Location. Must be `global`. Immutable — changing it replaces the
    * config.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Human-readable description (max 512 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Whether log generation is enabled. Create requires `ENABLED`; a
    * subsequent update may set `DISABLED` to pause generation.
    * @default "ENABLED"
    */
-  state?: OrganizationsVpcFlowLogsConfigState;
+  state?: OrganizationsVpcFlowLogsConfigState | undefined;
   /**
    * Log aggregation interval.
    * @default "INTERVAL_5_SEC"
    */
-  aggregationInterval?: OrganizationsVpcFlowLogsConfigAggregationInterval;
+  aggregationInterval?: OrganizationsVpcFlowLogsConfigAggregationInterval | undefined;
   /**
    * Sampling rate in (0, 1]. Use `state` to disable logs rather than
    * setting this to 0.
    * @default 1
    */
-  flowSampling?: number;
+  flowSampling?: number | undefined;
   /**
    * Which metadata fields to include in reported logs.
    * @default "INCLUDE_ALL_METADATA"
    */
-  metadata?: OrganizationsVpcFlowLogsConfigMetadata;
+  metadata?: OrganizationsVpcFlowLogsConfigMetadata | undefined;
   /**
    * Custom metadata fields. Only valid when `metadata` is
    * `CUSTOM_METADATA`.
    */
-  metadataFields?: string[];
+  metadataFields?: string[] | undefined;
   /**
    * CEL export filter selecting which VPC Flow Logs are recorded.
    */
-  filterExpr?: string;
+  filterExpr?: string | undefined;
   /**
    * Whether to include cross-project annotations. Organization configs
    * only.
    * @default "CROSS_PROJECT_METADATA_ENABLED"
    */
-  crossProjectMetadata?: OrganizationsVpcFlowLogsConfigCrossProjectMetadata;
+  crossProjectMetadata?: OrganizationsVpcFlowLogsConfigCrossProjectMetadata | undefined;
   /**
    * Optional VPC network to log. Organization configs may omit every
    * target to apply across the organization. Changing the target
    * resource replaces the config.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Optional subnetwork to log. Changing the target resource replaces
    * the config.
    */
-  subnet?: string;
+  subnet?: string | undefined;
   /**
    * Optional interconnect attachment to log. Changing the target
    * resource replaces the config.
    */
-  interconnectAttachment?: string;
+  interconnectAttachment?: string | undefined;
   /**
    * Optional VPN tunnel to log. Changing the target resource replaces
    * the config.
    */
-  vpnTunnel?: string;
+  vpnTunnel?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 };
 
 export type OrganizationsVpcFlowLogsConfig = Resource<
@@ -247,10 +247,10 @@ const crossProjectOf = (value: string | undefined) =>
 const samplingOf = (value: number | undefined) => value ?? DEFAULT_SAMPLING;
 
 const targetKey = (props: {
-  network?: string;
-  subnet?: string;
-  interconnectAttachment?: string;
-  vpnTunnel?: string;
+  network?: string | undefined;
+  subnet?: string | undefined;
+  interconnectAttachment?: string | undefined;
+  vpnTunnel?: string | undefined;
 }) =>
   JSON.stringify({
     network: lastSegmentOf(props.network),
@@ -271,10 +271,10 @@ const toTarget = (
   project: string,
   region: string,
   news: {
-    network?: string;
-    subnet?: string;
-    interconnectAttachment?: string;
-    vpnTunnel?: string;
+    network?: string | undefined;
+    subnet?: string | undefined;
+    interconnectAttachment?: string | undefined;
+    vpnTunnel?: string | undefined;
   },
 ) => ({
   network: news.network !== undefined ? toNetworkResource(project, news.network) : undefined,

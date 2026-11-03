@@ -25,33 +25,33 @@ export interface PoolOrigin {
   /**
    * A human-identifiable name for the origin.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Whether to enable (the default) this origin within the pool.
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Relative weight of this origin (`0`–`1`) for traffic distribution.
    * @default 1
    */
-  weight?: number;
+  weight?: number | undefined;
   /**
    * The port to override the standard port for this origin.
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Request headers to send to this origin — typically a `Host` header.
    */
-  header?: { host?: ReadonlyArray<string> };
+  header?: { host?: ReadonlyArray<string> | undefined } | undefined;
   /**
    * Whether to flatten a CNAME `address` to its final IP.
    */
-  flattenCname?: boolean;
+  flattenCname?: boolean | undefined;
   /**
    * The virtual network subnet the origin belongs to (private origins).
    */
-  virtualNetworkId?: string;
+  virtualNetworkId?: string | undefined;
 }
 
 /**
@@ -84,7 +84,7 @@ export interface PoolProps {
    * from the app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The list of origins within this pool. Traffic directed at this pool is
    * balanced across all currently healthy origins.
@@ -93,61 +93,63 @@ export interface PoolProps {
   /**
    * A human-readable description of the pool.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Whether to enable (the default) or disable this pool. Disabled pools
    * receive no traffic and are excluded from health checks.
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * The ID of the Monitor to use for checking the health of origins within
    * this pool. Mutually exclusive with `monitorGroup`.
    */
-  monitor?: string;
+  monitor?: string | undefined;
   /**
    * The ID of the Monitor Group to use for checking the health of origins
    * within this pool. Mutually exclusive with `monitor`.
    */
-  monitorGroup?: string;
+  monitorGroup?: string | undefined;
   /**
    * The minimum number of origins that must be healthy for this pool to
    * serve traffic.
    * @default 1
    */
-  minimumOrigins?: number;
+  minimumOrigins?: number | undefined;
   /**
    * The latitude of the data center containing this pool's origins, in
    * decimal degrees. Must be set together with `longitude`.
    */
-  latitude?: number;
+  latitude?: number | undefined;
   /**
    * The longitude of the data center containing this pool's origins, in
    * decimal degrees. Must be set together with `latitude`.
    */
-  longitude?: number;
+  longitude?: number | undefined;
   /**
    * Load shedding policies and percentages for the pool.
    */
-  loadShedding?: PoolLoadShedding;
+  loadShedding?: PoolLoadShedding | undefined;
   /**
    * How origins are selected for new sessions / traffic without session
    * affinity.
    * @default { policy: "random" }
    */
-  originSteering?: {
-    policy?: "random" | "hash" | "least_outstanding_requests" | "least_connections";
-  };
+  originSteering?:
+    | {
+        policy?: "random" | "hash" | "least_outstanding_requests" | "least_connections" | undefined;
+      }
+    | undefined;
   /**
    * Filter pool and origin health notifications by resource type or health
    * status.
    */
-  notificationFilter?: PoolNotificationFilter;
+  notificationFilter?: PoolNotificationFilter | undefined;
   /**
    * Deprecated upstream — the email address to send health status
    * notifications to. Prefer Cloudflare's centralized notification service.
    */
-  notificationEmail?: string;
+  notificationEmail?: string | undefined;
 }
 
 export interface PoolAttributes {
@@ -449,13 +451,13 @@ const poolDirty = (observed: ObservedPool, body: ReturnType<typeof buildBody>): 
  */
 const normalizeOrigin = (o: {
   address: string;
-  name?: string;
-  enabled?: boolean;
-  weight?: number;
-  port?: number;
-  header?: { host?: string[] };
-  flattenCname?: boolean;
-  virtualNetworkId?: string;
+  name?: string | undefined;
+  enabled?: boolean | undefined;
+  weight?: number | undefined;
+  port?: number | undefined;
+  header?: { host?: string[] | undefined } | undefined;
+  flattenCname?: boolean | undefined;
+  virtualNetworkId?: string | undefined;
 }) => ({
   address: o.address,
   name: o.name ?? "",

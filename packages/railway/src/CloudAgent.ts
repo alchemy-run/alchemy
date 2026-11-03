@@ -41,7 +41,10 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  * `Railway.Project` (its primary environment), a `Railway.Environment`,
  * or an `{ environmentId }` stub.
  */
-export type CloudAgentEnvironment = { readonly environmentId: string; readonly projectId?: string };
+export type CloudAgentEnvironment = {
+  readonly environmentId: string;
+  readonly projectId?: string | undefined;
+};
 
 export interface CloudAgentProps {
   /**
@@ -187,7 +190,7 @@ export class CloudAgentEnvironmentRequired extends Data.TaggedError(
 
 const toAttrs = (
   agent: CloudRow,
-  fallback?: { name?: string; environmentId?: string; projectId?: string },
+  fallback?: { name?: string; environmentId?: string; projectId?: string | undefined },
 ): CloudAgent["Attributes"] => ({
   cloudAgentId: agent.id,
   name: agent.name || fallback?.name || "",

@@ -60,7 +60,7 @@ export type ProductsCertificateProps = {
   /**
    * Requestor id registered with trawler. Immutable.
    */
-  requestorId?: string;
+  requestorId?: string | undefined;
   /**
    * Raw client certificate (PEM). Write-only — never returned on
    * attributes. Changing it replaces the certificate.

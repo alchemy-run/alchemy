@@ -15,7 +15,7 @@ import type { Repository } from "./Repository.ts";
 
 /** The repository-scoping fields every repository-scoped ECR operation takes. */
 export interface RepositoryScopedRequest {
-  registryId?: string;
+  registryId?: string | undefined;
   repositoryName: string;
 }
 

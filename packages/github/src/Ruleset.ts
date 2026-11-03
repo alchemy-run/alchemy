@@ -665,10 +665,10 @@ const getRuleset = Effect.fn(
 
 const attrsOf = (ruleset: {
   id: number;
-  node_id?: string;
+  node_id?: string | undefined;
   name: string;
-  created_at?: string;
-  updated_at?: string;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
 }) => ({
   rulesetId: ruleset.id,
   nodeId: ruleset.node_id,

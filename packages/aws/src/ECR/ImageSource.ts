@@ -59,24 +59,24 @@ export interface ResolveImageOptions {
    * Known repository URI (from prior Attributes). When provided, repository
    * creation is skipped.
    */
-  repositoryUri?: string;
+  repositoryUri?: string | undefined;
   /** Tags applied to the auto-created repository. */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
   /**
    * Target image platform.
    * @default "linux/amd64"
    */
-  platform?: string;
+  platform?: string | undefined;
   /**
    * Port the generated Dockerfile should `ENV PORT=` + `EXPOSE`
    * (`main` source only).
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * True when the resource was declared without an inline Effect impl —
    * `main` is then bundled as-is without the virtual-entry bootstrap.
    */
-  isExternal?: boolean;
+  isExternal?: boolean | undefined;
   /**
    * The virtual-entry bootstrap wrapped around `main` for Effect-native
    * programs: receives the resolved entry import path and returns the
@@ -129,7 +129,7 @@ export const makeImageSource = Effect.gen(function* () {
    */
   const ensureRepository = Effect.fn(function* (options: {
     repositoryName: string;
-    tags?: Record<string, string>;
+    tags?: Record<string, string> | undefined;
   }) {
     const created = yield* ecr
       .createRepository({

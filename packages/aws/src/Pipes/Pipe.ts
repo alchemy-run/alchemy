@@ -25,16 +25,16 @@ export interface PipeProps {
    * Name of the pipe (1-64 characters). If omitted, a deterministic
    * physical name is generated from the app, stage, and logical ID.
    */
-  pipeName?: string;
+  pipeName?: string | undefined;
   /**
    * A description of the pipe.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * The state the pipe should be in.
    * @default "RUNNING"
    */
-  desiredState?: PipeDesiredState;
+  desiredState?: PipeDesiredState | undefined;
   /**
    * The ARN of the source resource (SQS queue, Kinesis stream, DynamoDB
    * stream, etc.). Changing the source triggers a **replacement** — the
@@ -47,16 +47,16 @@ export interface PipeProps {
    * that select which source events reach the enrichment/target.
    * Changing a stream source's `StartingPosition` triggers a replacement.
    */
-  sourceParameters?: pipes.PipeSourceParameters;
+  sourceParameters?: pipes.PipeSourceParameters | undefined;
   /**
    * The ARN of the enrichment resource (Lambda function, Step Functions
    * state machine, or API destination) invoked between source and target.
    */
-  enrichment?: string;
+  enrichment?: string | undefined;
   /**
    * Parameters for the enrichment step (input template, HTTP parameters).
    */
-  enrichmentParameters?: pipes.PipeEnrichmentParameters;
+  enrichmentParameters?: pipes.PipeEnrichmentParameters | undefined;
   /**
    * The ARN of the target resource (Lambda function, SQS queue, Kinesis
    * stream, EventBridge bus, CloudWatch Logs group, ECS task, etc.).

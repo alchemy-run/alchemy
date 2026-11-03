@@ -42,11 +42,11 @@ export interface CollectionGroupProps {
    * at creation time; changing it replaces the group.
    * @default "ENABLED"
    */
-  standbyReplicas?: "ENABLED" | "DISABLED";
+  standbyReplicas?: "ENABLED" | "DISABLED" | undefined;
   /**
    * A human-readable description of the collection group.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * OCU capacity limits shared by the collections in the group.
    */
@@ -77,15 +77,15 @@ export interface CollectionGroup extends Resource<
     /**
      * Whether standby replicas are enabled for the group's collections.
      */
-    standbyReplicas?: string;
+    standbyReplicas?: string | undefined;
     /**
      * Number of collections currently in the group.
      */
-    numberOfCollections?: number;
+    numberOfCollections?: number | undefined;
     /**
      * The capacity generation of the group.
      */
-    generation?: string;
+    generation?: string | undefined;
   },
   {},
   Providers

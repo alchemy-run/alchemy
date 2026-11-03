@@ -130,12 +130,12 @@ export interface GroupProps {
    * `{ environmentId }`. Defaults to the project's primary environment.
    * Changing it replaces the Group.
    */
-  environment?: Ref<GroupEnvironment>;
+  environment?: Ref<GroupEnvironment> | undefined;
   /**
    * Canvas group name. If omitted, a unique name is generated from the
    * stack, stage and logical ID. Updates in place.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Members to place in the group — services, databases, volumes, and
    * buckets. Service membership is persisted as `groupId`; volume ids
@@ -145,17 +145,17 @@ export interface GroupProps {
   /**
    * Optional canvas color. Updates in place.
    */
-  color?: string;
+  color?: string | undefined;
   /**
    * Optional canvas icon. Updates in place.
    */
-  icon?: string;
+  icon?: string | undefined;
   /**
    * Whether the group is collapsed on the canvas.
    *
    * @default false
    */
-  collapsed?: boolean;
+  collapsed?: boolean | undefined;
 }
 
 export type Group = Resource<
@@ -326,23 +326,23 @@ class GroupPending extends Data.TaggedError("Railway.GroupPending")<{
 }> {}
 
 type GroupConfig = {
-  name?: string | null;
-  color?: string | null;
-  icon?: string | null;
-  isCollapsed?: boolean | null;
-  isDeleted?: boolean | null;
-  isCreated?: boolean | null;
-  groupId?: string | null;
+  name?: string | null | undefined;
+  color?: string | null | undefined;
+  icon?: string | null | undefined;
+  isCollapsed?: boolean | null | undefined;
+  isDeleted?: boolean | null | undefined;
+  isCreated?: boolean | null | undefined;
+  groupId?: string | null | undefined;
 };
 
-type ServiceConfig = { groupId?: string | null; isDeleted?: boolean | null };
+type ServiceConfig = { groupId?: string | null | undefined; isDeleted?: boolean | null };
 
-type BucketConfig = { groupId?: string | null; isDeleted?: boolean | null };
+type BucketConfig = { groupId?: string | null | undefined; isDeleted?: boolean | null };
 
 type EnvironmentConfigShape = {
-  groups?: Record<string, GroupConfig | null> | null;
-  services?: Record<string, ServiceConfig | null> | null;
-  buckets?: Record<string, BucketConfig | null> | null;
+  groups?: Record<string, GroupConfig | null> | null | undefined;
+  services?: Record<string, ServiceConfig | null> | null | undefined;
+  buckets?: Record<string, BucketConfig | null> | null | undefined;
 };
 
 type CloudGroup = {
@@ -633,7 +633,7 @@ const projectBuckets = (project: ProjectResponse | undefined) => project?.bucket
 
 const matchProjectGroup = (
   groups: readonly ProjectResponseGroupsEdgesItemNode[],
-  match: { groupId?: string; name?: string },
+  match: { groupId?: string | undefined; name?: string },
 ) => {
   if (match.groupId !== undefined && match.groupId.length > 0) {
     const byId = groups.find((group) => group.id === match.groupId);
@@ -647,7 +647,7 @@ const matchProjectGroup = (
 
 const matchConfigGroup = (
   config: EnvironmentConfigShape,
-  match: { groupId?: string; name?: string },
+  match: { groupId?: string | undefined; name?: string },
 ): { groupId: string; row: GroupConfig } | undefined => {
   const groups = config.groups;
   if (groups === undefined || groups === null) return undefined;
@@ -667,9 +667,9 @@ const matchConfigGroup = (
 const observe = Effect.fn(function* (input: {
   projectId: string;
   environmentId: string;
-  groupId?: string;
+  groupId?: string | undefined;
   name?: string;
-  volumeIds?: readonly string[];
+  volumeIds?: readonly string[] | undefined;
 }) {
   const env = yield* getEnvironment(input.environmentId, input.projectId);
   if (env === undefined || env.deletedAt != null) return undefined;
@@ -730,7 +730,7 @@ const waitUntilPresent = (input: {
   environmentId: string;
   groupId: string;
   name: string;
-  volumeIds?: readonly string[];
+  volumeIds?: readonly string[] | undefined;
 }) =>
   observe({
     projectId: input.projectId,
@@ -782,11 +782,11 @@ const waitUntilGone = (input: {
 const groupPatch = (input: {
   groupId: string;
   name: string;
-  color?: string;
-  icon?: string;
+  color?: string | undefined;
+  icon?: string | undefined;
   collapsed: boolean;
   create: boolean;
-  remove?: boolean;
+  remove?: boolean | undefined;
 }): Record<string, GroupConfig> => ({
   [input.groupId]: input.remove
     ? { isDeleted: true }
@@ -822,13 +822,13 @@ const bucketPatch = (
 const membershipPatch = (input: {
   groupId: string;
   name: string;
-  color?: string;
-  icon?: string;
+  color?: string | undefined;
+  icon?: string | undefined;
   collapsed: boolean;
   create: boolean;
-  remove?: boolean;
-  services?: ReadonlyArray<{ serviceId: string; groupId: string | null }>;
-  buckets?: ReadonlyArray<{ bucketId: string; groupId: string | null }>;
+  remove?: boolean | undefined;
+  services?: ReadonlyArray<{ serviceId: string; groupId: string | null }> | undefined;
+  buckets?: ReadonlyArray<{ bucketId: string; groupId: string | null }> | undefined;
 }): Record<string, unknown> => {
   const patch: Record<string, unknown> = { groups: groupPatch(input) };
   if (input.services !== undefined && input.services.length > 0) {
@@ -843,8 +843,8 @@ const membershipPatch = (input: {
 const fallbackGroup = (input: {
   groupId: string;
   name: string;
-  color?: string;
-  icon?: string;
+  color?: string | undefined;
+  icon?: string | undefined;
   collapsed: boolean;
   serviceIds: readonly string[];
   volumeIds: readonly string[];

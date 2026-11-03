@@ -303,7 +303,7 @@ export const isList = (value: unknown): value is List =>
 export class ListBulkOperationError extends Data.TaggedError("ListBulkOperationError")<{
   readonly operationId: string;
   readonly status: string;
-  readonly message?: string;
+  readonly message?: string | undefined;
 }> {}
 
 export const ListProvider = () =>

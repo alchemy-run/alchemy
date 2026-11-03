@@ -257,7 +257,7 @@ const toAttrs = (observed: ObservedPage, accountId: string) => ({
 });
 
 type ObservedPage = {
-  uid?: string | null;
+  uid?: string | null | undefined;
   name?: string | null;
   type?: string | null;
   customHtml?: string | null;

@@ -90,7 +90,7 @@ export interface DistributionOrigin {
   /**
    * Optional origin path prefix.
    */
-  originPath?: Input<string>;
+  originPath?: Input<string> | undefined;
   /**
    * CloudFront Origin Access Control identifier.
    */
@@ -196,7 +196,7 @@ export interface DistributionBehavior {
    * Origin request policy ID controlling which viewer values CloudFront
    * forwards to the origin.
    */
-  originRequestPolicyId?: string;
+  originRequestPolicyId?: string | undefined;
   /**
    * Response headers policy ID applied to viewer responses.
    */
@@ -357,7 +357,7 @@ export interface DistributionProps {
   /**
    * Alternate domain names routed to this distribution.
    */
-  aliases?: string[];
+  aliases?: string[] | undefined;
   /**
    * Default root object served for `/`.
    */
@@ -373,17 +373,19 @@ export interface DistributionProps {
   /**
    * Ordered cache behaviors.
    */
-  orderedCacheBehaviors?: Input<
-    Array<
-      DistributionBehavior & {
-        pathPattern: string;
-      }
-    >
-  >;
+  orderedCacheBehaviors?:
+    | Input<
+        Array<
+          DistributionBehavior & {
+            pathPattern: string;
+          }
+        >
+      >
+    | undefined;
   /**
    * Custom error response rules.
    */
-  customErrorResponses?: Input<cloudfront.CustomErrorResponse[]>;
+  customErrorResponses?: Input<cloudfront.CustomErrorResponse[]> | undefined;
   /**
    * Human-readable distribution comment.
    * @default ""
@@ -397,7 +399,7 @@ export interface DistributionProps {
   /**
    * Viewer certificate configuration.
    */
-  viewerCertificate?: Input<DistributionViewerCertificate>;
+  viewerCertificate?: Input<DistributionViewerCertificate> | undefined;
   /**
    * CloudFront price class.
    */
@@ -444,7 +446,7 @@ export interface DistributionProps {
   /**
    * User-defined tags to apply to the distribution.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 /**
@@ -459,7 +461,7 @@ export type DistributionBinding = {
    * Additional alternate domain names (CNAMEs) attached to the
    * distribution.
    */
-  aliases?: string[];
+  aliases?: string[] | undefined;
 };
 
 /**

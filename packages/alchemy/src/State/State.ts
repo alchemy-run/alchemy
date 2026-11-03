@@ -19,12 +19,14 @@ export const isResourceState = (s: PersistedState | undefined): s is ResourceSta
 
 export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   message: string;
-  cause?: Error;
+  cause?: Error | undefined;
   /** HTTP failure metadata without the request, response body, or credentials. */
-  http?: {
-    /** Undefined when the HTTP client failed before receiving a response. */
-    status?: number;
-  };
+  http?:
+    | {
+        /** Undefined when the HTTP client failed before receiving a response. */
+        status?: number | undefined;
+      }
+    | undefined;
   /** Set when the store must be bootstrapped or upgraded first, as CI never does either. */
   requires?: { readonly action: "bootstrap" | "upgrade"; readonly command: string };
 }> {
@@ -144,9 +146,9 @@ export interface StateService {
 /** Which stages {@link StateService.migrate} moves. */
 export interface StateMigrationRequest {
   /** Only this stack's stages. */
-  readonly stack?: string;
+  readonly stack?: string | undefined;
   /** Only stages of this name. */
-  readonly stage?: string;
+  readonly stage?: string | undefined;
   /** Move stages back to the store this one replaces. */
   readonly rollback?: boolean;
 }

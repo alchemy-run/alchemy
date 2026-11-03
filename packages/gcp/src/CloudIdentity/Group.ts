@@ -25,9 +25,9 @@ import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from ".
 
 export type GroupEntityKey = {
   /** Email address (Google-managed) or identity-source id. */
-  id?: string;
+  id?: string | undefined;
   /** `identitysources/{identity_source}` for external-mapped groups. */
-  namespace?: string;
+  namespace?: string | undefined;
 };
 
 export type GroupDynamicGroupQuery = {
@@ -51,46 +51,46 @@ export type GroupProps = {
    * the group.
    * @default "customers/my_customer"
    */
-  parent?: string;
+  parent?: string | undefined;
   /**
    * Group email (`group@example.com`) or identity-source id. If
    * omitted, a unique local part is generated and combined with
    * `domain` when set. Immutable — changing it replaces the group.
    */
-  groupKeyId?: string;
+  groupKeyId?: string | undefined;
   /**
    * Entity-key namespace for external-identity-mapped groups
    * (`identitysources/{identity_source}`).
    */
-  groupKeyNamespace?: string;
+  groupKeyNamespace?: string | undefined;
   /**
    * Domain used to build `groupKeyId` when that prop is omitted
    * (`{generated}@{domain}`).
    */
-  domain?: string;
+  domain?: string | undefined;
   /**
    * Display name shown to members.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Extended description shown to members (max 4,096 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Cloud Identity type labels (empty values). Google Groups need
    * `cloudidentity.googleapis.com/groups.discussion_forum`. Adding
    * `cloudidentity.googleapis.com/groups.security` is immutable.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Initial membership config on create.
    * @default "EMPTY"
    */
-  initialGroupConfig?: cloudidentity.CreateGroupsInitialGroupConfigEnum | (string & {});
+  initialGroupConfig?: cloudidentity.CreateGroupsInitialGroupConfigEnum | (string & {}) | undefined;
   /**
    * Dynamic group queries. Sets the dynamic type label.
    */
-  dynamicGroupMetadata?: GroupDynamicGroupMetadata;
+  dynamicGroupMetadata?: GroupDynamicGroupMetadata | undefined;
 };
 
 export type Group = Resource<
@@ -192,10 +192,10 @@ const toAttrs = (group: cloudidentity.Group) => {
 
 const observeGroup = (input: {
   id: string;
-  name?: string;
-  groupKeyId?: string;
-  groupKeyNamespace?: string;
-  parent?: string;
+  name?: string | undefined;
+  groupKeyId?: string | undefined;
+  groupKeyNamespace?: string | undefined;
+  parent?: string | undefined;
 }) =>
   Effect.gen(function* () {
     const byName = yield* getGroup(input.name ?? "");

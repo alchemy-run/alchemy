@@ -47,7 +47,7 @@ export interface StaticSiteProps
      * Environment variables for {@link command}, merged on top of
      * `process.env`.
      */
-    env?: Record<string, string | Redacted.Redacted<string>>;
+    env?: Record<string, string | Redacted.Redacted<string>> | undefined;
     /**
      * Override for the `url` output if alchemy fails to detect it from
      * the stdout of the dev command.

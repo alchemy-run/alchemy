@@ -57,39 +57,39 @@ export type DataCollectionOptionsDbSystem = {
 
 export type DbSystemPropertiesInput = {
   /** Shape. Required on create. */
-  shape?: string;
+  shape?: string | undefined;
   /** SSH public keys. Required on create. */
-  sshPublicKeys?: string[];
+  sshPublicKeys?: string[] | undefined;
   /** Initial data storage size in GB. Required on create. */
-  initialDataStorageSizeGb?: number;
+  initialDataStorageSizeGb?: number | undefined;
   /** CPU cores. Required on create. */
-  computeCount?: number;
+  computeCount?: number | undefined;
   /** License model. Required on create. */
-  licenseModel?: oracle.DbSystemPropertiesLicenseModelEnum | (string & {});
+  licenseModel?: oracle.DbSystemPropertiesLicenseModelEnum | (string & {}) | undefined;
   /** Database edition. Required on create. */
-  databaseEdition?: oracle.DbSystemPropertiesDatabaseEditionEnum | (string & {});
+  databaseEdition?: oracle.DbSystemPropertiesDatabaseEditionEnum | (string & {}) | undefined;
   /** Hostname prefix. */
-  hostnamePrefix?: string;
+  hostnamePrefix?: string | undefined;
   /** Time zone. */
-  timeZone?: TimeZone;
+  timeZone?: TimeZone | undefined;
   /** Database Home. */
-  dbHome?: DbHome;
+  dbHome?: DbHome | undefined;
   /** Private IP. */
-  privateIp?: string;
+  privateIp?: string | undefined;
   /** DbSystem options. */
-  dbSystemOptions?: DbSystemOptions;
+  dbSystemOptions?: DbSystemOptions | undefined;
   /** Reco/redo storage size in GB. */
-  recoStorageSizeGb?: number;
+  recoStorageSizeGb?: number | undefined;
   /** Host domain. */
-  domain?: string;
+  domain?: string | undefined;
   /** Memory in GB. */
-  memorySizeGb?: number;
+  memorySizeGb?: number | undefined;
   /** Diagnostics collection. */
-  dataCollectionOptions?: DataCollectionOptionsDbSystem;
+  dataCollectionOptions?: DataCollectionOptionsDbSystem | undefined;
   /** Node count. */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
   /** Compute model (`ECPU`, `OCPU`). */
-  computeModel?: oracle.DbSystemPropertiesComputeModelEnum | (string & {});
+  computeModel?: oracle.DbSystemPropertiesComputeModelEnum | (string & {}) | undefined;
 };
 
 export type DbSystemProps = {
@@ -97,48 +97,48 @@ export type DbSystemProps = {
    * DbSystem id. If omitted, a unique RFC1035 name is generated.
    * Immutable.
    */
-  dbSystemId?: string;
+  dbSystemId?: string | undefined;
   /**
    * Region. Immutable.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Display name. Required on create.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * ODB Network. Immutable.
    */
-  odbNetwork?: string;
+  odbNetwork?: string | undefined;
   /**
    * ODB Subnet for IP allocation. Required on create. Immutable.
    */
-  odbSubnet?: string;
+  odbSubnet?: string | undefined;
   /**
    * GCP Oracle zone. Immutable.
    */
-  gcpOracleZone?: string;
+  gcpOracleZone?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * DbSystem properties.
    */
-  properties?: DbSystemPropertiesInput;
+  properties?: DbSystemPropertiesInput | undefined;
   /** Shape. Convenience alias for `properties.shape`. */
-  shape?: string;
+  shape?: string | undefined;
   /** SSH public keys. Convenience alias for `properties.sshPublicKeys`. */
-  sshPublicKeys?: string[];
+  sshPublicKeys?: string[] | undefined;
   /** CPU cores. Convenience alias for `properties.computeCount`. */
-  computeCount?: number;
+  computeCount?: number | undefined;
   /** License model. Convenience alias for `properties.licenseModel`. */
-  licenseModel?: oracle.DbSystemPropertiesLicenseModelEnum | (string & {});
+  licenseModel?: oracle.DbSystemPropertiesLicenseModelEnum | (string & {}) | undefined;
   /** Database edition. Convenience alias for `properties.databaseEdition`. */
-  databaseEdition?: oracle.DbSystemPropertiesDatabaseEditionEnum | (string & {});
+  databaseEdition?: oracle.DbSystemPropertiesDatabaseEditionEnum | (string & {}) | undefined;
   /** Initial data storage in GB. Convenience alias. */
-  initialDataStorageSizeGb?: number;
+  initialDataStorageSizeGb?: number | undefined;
 };
 
 export type DbSystem = Resource<

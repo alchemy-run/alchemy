@@ -58,14 +58,14 @@ export type ContainerImage = ContainerImage.Build | ContainerImage.Pull | Contai
 
 export declare namespace ContainerImage {
   interface Base {
-    readonly env?: Record<string, string>;
+    readonly env?: Record<string, string> | undefined;
   }
   export interface Build extends Base {
     readonly dockerfile: string;
-    readonly context?: string;
-    readonly buildArgs?: Record<string, string>;
+    readonly context?: string | undefined;
+    readonly buildArgs?: Record<string, string> | undefined;
     /** BuildKit secrets by id, handed to `docker build` through its environment. */
-    readonly buildSecrets?: Record<string, string>;
+    readonly buildSecrets?: Record<string, string> | undefined;
   }
   export interface Pull extends Base {
     readonly imageUri: string;
@@ -433,7 +433,10 @@ export const DockerLive = Layer.effect(
      * Deployable user images pass `linux/amd64` explicitly, because that is
      * the architecture Cloudflare's container runtime executes.
      */
-    const pull = ({ imageUri, platform }: ContainerImage.Pull & { readonly platform?: string }) =>
+    const pull = ({
+      imageUri,
+      platform,
+    }: ContainerImage.Pull & { readonly platform?: string | undefined }) =>
       run(["pull", toPullRef(imageUri), ...(platform ? ["--platform", platform] : [])]).pipe(
         Effect.mapError((cause) =>
           SystemError.make({

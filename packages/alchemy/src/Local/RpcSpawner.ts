@@ -84,7 +84,7 @@ export type RpcSpawnerOptions = Pick<RpcServerEnvironment, "profile" | "envFile"
    * through them, from their own children). Sidecars otherwise inherit this
    * process's entire environment.
    */
-  readonly omitEnv?: ReadonlyArray<string>;
+  readonly omitEnv?: ReadonlyArray<string> | undefined;
 };
 
 export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: RpcSpawnerOptions) {

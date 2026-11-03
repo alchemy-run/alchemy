@@ -171,12 +171,12 @@ export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  previousLocation?: string;
-  nextLocation?: string;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  previousLocation?: string | undefined;
+  nextLocation?: string | undefined;
 }) => {
   const idChanged =
     input.previousId !== undefined &&
@@ -299,11 +299,11 @@ export const listTables = (parent: string) =>
         (page) => page.tables,
       );
 
-export const namedOf = <T extends { name?: string }>(items: readonly T[]) =>
+export const namedOf = <T extends { name?: string | undefined }>(items: readonly T[]) =>
   items.filter((item) => (item.name ?? "").length > 0);
 
 export const listChildResources = <A, E, R>(
-  parents: readonly { name?: string }[],
+  parents: readonly { name?: string | undefined }[],
   list: (name: string) => Effect.Effect<A[], E, R>,
 ) =>
   Effect.forEach(namedOf(parents), (parent) => list(parent.name!), {

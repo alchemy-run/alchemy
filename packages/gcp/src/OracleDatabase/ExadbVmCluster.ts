@@ -49,33 +49,33 @@ export type DataCollectionOptionsCommon = {
 
 export type ExadbVmClusterPropertiesInput = {
   /** OCI cluster name. Immutable. */
-  clusterName?: string;
+  clusterName?: string | undefined;
   /** Grid image id. Immutable. Required on create. */
-  gridImageId?: string;
+  gridImageId?: string | undefined;
   /** License model. Immutable. */
-  licenseModel?: oracle.ExadbVmClusterPropertiesLicenseModelEnum | (string & {});
+  licenseModel?: oracle.ExadbVmClusterPropertiesLicenseModelEnum | (string & {}) | undefined;
   /** VM file system storage. Immutable. Required on create. */
-  vmFileSystemStorage?: ExadbVmClusterStorageDetails;
+  vmFileSystemStorage?: ExadbVmClusterStorageDetails | undefined;
   /** Additional ECPUs per node. Immutable. */
-  additionalEcpuCountPerNode?: number;
+  additionalEcpuCountPerNode?: number | undefined;
   /** Data collection options. Immutable. */
-  dataCollectionOptions?: DataCollectionOptionsCommon;
+  dataCollectionOptions?: DataCollectionOptionsCommon | undefined;
   /** Shape attribute (`SMART_STORAGE`, `BLOCK_STORAGE`). Immutable. */
-  shapeAttribute?: oracle.ExadbVmClusterPropertiesShapeAttributeEnum | (string & {});
+  shapeAttribute?: oracle.ExadbVmClusterPropertiesShapeAttributeEnum | (string & {}) | undefined;
   /** Node/VM count. Mutable via patch. */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
   /** Enabled ECPUs per node. Immutable. */
-  enabledEcpuCountPerNode?: number;
+  enabledEcpuCountPerNode?: number | undefined;
   /** SCAN listener TCP port. Immutable. */
-  scanListenerPortTcp?: number;
+  scanListenerPortTcp?: number | undefined;
   /** SSH public keys. Immutable. */
-  sshPublicKeys?: string[];
+  sshPublicKeys?: string[] | undefined;
   /** Time zone. Immutable. */
-  timeZone?: TimeZone;
+  timeZone?: TimeZone | undefined;
   /** Exascale storage vault. Immutable. */
-  exascaleDbStorageVault?: string;
+  exascaleDbStorageVault?: string | undefined;
   /** Hostname prefix. Immutable. */
-  hostnamePrefix?: string;
+  hostnamePrefix?: string | undefined;
 };
 
 export type ExadbVmClusterProps = {
@@ -83,48 +83,48 @@ export type ExadbVmClusterProps = {
    * Exadb VM Cluster id. If omitted, a unique RFC1035 name is generated.
    * Immutable.
    */
-  exadbVmClusterId?: string;
+  exadbVmClusterId?: string | undefined;
   /**
    * Region. Immutable.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Display name. Immutable.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Client ODB Subnet. Immutable.
    */
-  odbSubnet?: string;
+  odbSubnet?: string | undefined;
   /**
    * Backup ODB Subnet. Immutable.
    */
-  backupOdbSubnet?: string;
+  backupOdbSubnet?: string | undefined;
   /**
    * ODB Network. Immutable.
    */
-  odbNetwork?: string;
+  odbNetwork?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Cluster properties.
    */
-  properties?: ExadbVmClusterPropertiesInput;
+  properties?: ExadbVmClusterPropertiesInput | undefined;
   /** Node count. Convenience alias for `properties.nodeCount`. */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
   /** Grid image id. Convenience alias for `properties.gridImageId`. */
-  gridImageId?: string;
+  gridImageId?: string | undefined;
   /** Hostname prefix. Convenience alias for `properties.hostnamePrefix`. */
-  hostnamePrefix?: string;
+  hostnamePrefix?: string | undefined;
   /** SSH public keys. Convenience alias for `properties.sshPublicKeys`. */
-  sshPublicKeys?: string[];
+  sshPublicKeys?: string[] | undefined;
   /** Exascale vault. Convenience alias. */
-  exascaleDbStorageVault?: string;
+  exascaleDbStorageVault?: string | undefined;
   /** Enabled ECPUs per node. Convenience alias. */
-  enabledEcpuCountPerNode?: number;
+  enabledEcpuCountPerNode?: number | undefined;
 };
 
 export type ExadbVmCluster = Resource<

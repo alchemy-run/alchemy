@@ -44,8 +44,8 @@ export function getRequestKind(request: Request): RequestKind {
 // When adding new columns please update the schema
 type Data = {
   // -- Indexes --
-  accountId?: number;
-  scriptId?: number;
+  accountId?: number | undefined;
+  scriptId?: number | undefined;
 
   // -- Doubles --
   // double1 - The time it takes for the whole request to complete in milliseconds
@@ -97,7 +97,7 @@ const COMPATIBILITY_FLAG_MASKS: Record<ENABLEMENT_COMPATIBILITY_FLAGS, number> =
 
 export class Analytics {
   private data: Data = {};
-  private readyAnalytics?: ReadyAnalytics;
+  private readyAnalytics: ReadyAnalytics | undefined;
 
   constructor(readyAnalytics?: ReadyAnalytics) {
     this.readyAnalytics = readyAnalytics;

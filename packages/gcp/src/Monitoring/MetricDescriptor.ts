@@ -41,25 +41,25 @@ export type MetricLabelDescriptor = {
    * Label key. Must match `[a-zA-Z][a-zA-Z0-9_]*` and be at most 100
    * characters.
    */
-  key?: string;
+  key?: string | undefined;
   /** Human-readable description of the label. */
-  description?: string;
+  description?: string | undefined;
   /**
    * Label value type.
    * @default "STRING"
    */
-  valueType?: "STRING" | "BOOL" | "INT64" | (string & {});
+  valueType?: "STRING" | "BOOL" | "INT64" | (string & {}) | undefined;
 };
 
 export type MetricDescriptorMetadata = {
   /** Sampling period of written data points (for example `"60s"`). */
-  samplePeriod?: string;
+  samplePeriod?: string | undefined;
   /** Ingest delay after which points are guaranteed available. */
-  ingestDelay?: string;
+  ingestDelay?: string | undefined;
   /** Hierarchy levels that emit this metric (`PROJECT`, `FOLDER`, …). */
-  timeSeriesResourceHierarchyLevel?: string[];
+  timeSeriesResourceHierarchyLevel?: string[] | undefined;
   /** Deprecated launch stage; prefer the top-level `launchStage`. */
-  launchStage?: string;
+  launchStage?: string | undefined;
 };
 
 export type MetricDescriptorProps = {
@@ -69,7 +69,7 @@ export type MetricDescriptorProps = {
    * `custom.googleapis.com/` type is generated from the stack, stage,
    * and logical id. Immutable — changing it replaces the descriptor.
    */
-  type?: string;
+  type?: string | undefined;
   /**
    * Whether the metric records a point-in-time value or a change.
    * Custom metrics support `GAUGE` and `CUMULATIVE` (`DELTA` is
@@ -77,41 +77,41 @@ export type MetricDescriptorProps = {
    * descriptor.
    * @default "GAUGE"
    */
-  metricKind?: MetricKind;
+  metricKind?: MetricKind | undefined;
   /**
    * Measurement type. Immutable after create — changing it replaces
    * the descriptor.
    * @default "DOUBLE"
    */
-  valueType?: MetricValueType;
+  valueType?: MetricValueType | undefined;
   /**
    * Unit of the stored value (`"1"`, `"s"`, `"By"`, …).
    * @default "1"
    */
-  unit?: string;
+  unit?: string | undefined;
   /**
    * Concise display name shown in Monitoring UIs.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Detailed description. Metric descriptors have no resource labels,
    * so Alchemy stamps ownership into this field for `list` / nuke.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Time-series labels. New keys may be added; existing keys cannot be
    * removed or have their value type changed without replacing the
    * descriptor.
    */
-  labels?: MetricLabelDescriptor[];
+  labels?: MetricLabelDescriptor[] | undefined;
   /**
    * Optional launch stage of the metric definition.
    */
-  launchStage?: string;
+  launchStage?: string | undefined;
   /**
    * Optional usage metadata (sample period, ingest delay).
    */
-  metadata?: MetricDescriptorMetadata;
+  metadata?: MetricDescriptorMetadata | undefined;
 };
 
 export type MetricDescriptor = Resource<
@@ -317,7 +317,10 @@ const getByName = (name: string) =>
     .getProjectsMetricDescriptors({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const waitUntilSynced = (name: string, desired: { displayName?: string; description: string }) =>
+const waitUntilSynced = (
+  name: string,
+  desired: { displayName?: string | undefined; description: string },
+) =>
   getByName(name).pipe(
     Effect.flatMap((value) => {
       if (value === undefined) {

@@ -33,10 +33,12 @@ export interface PaymentMethodDomainPaymentMethodStatus {
    * Extra details when the payment method is inactive, including the
    * error message from Stripe.
    */
-  statusDetails?: {
-    /** Error message associated with the inactive status. */
-    errorMessage: string;
-  };
+  statusDetails?:
+    | {
+        /** Error message associated with the inactive status. */
+        errorMessage: string;
+      }
+    | undefined;
 }
 
 export interface PaymentMethodDomainProps {
@@ -47,14 +49,14 @@ export interface PaymentMethodDomainProps {
    * — changing it replaces the domain. Stripe domain names are unique per
    * account, including disabled domains.
    */
-  domainName?: string;
+  domainName?: string | undefined;
   /**
    * Whether this payment method domain is enabled. If disabled, payment
    * methods that require a registered domain do not appear in Elements or
    * Embedded Checkout. Destroy sets this to `false`.
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 }
 
 export type PaymentMethodDomain = Resource<
@@ -225,7 +227,10 @@ const findByDomainName = Effect.fn(function* (domainName: string) {
   return matches.find((domain) => domain.enabled) ?? matches[0];
 });
 
-const observe = Effect.fn(function* (input: { id?: string; domainName?: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: string | undefined;
+  domainName?: string | undefined;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

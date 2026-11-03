@@ -49,13 +49,13 @@ export interface RouteTableAssociationProps {
    * The ID of the subnet to associate with the route table.
    * Either subnetId or gatewayId is required, but not both.
    */
-  subnetId?: SubnetId;
+  subnetId?: SubnetId | undefined;
 
   /**
    * The ID of the gateway (internet gateway or virtual private gateway) to associate with the route table.
    * Either subnetId or gatewayId is required, but not both.
    */
-  gatewayId?: string;
+  gatewayId?: string | undefined;
 }
 
 export interface RouteTableAssociation extends Resource<
@@ -87,7 +87,7 @@ export interface RouteTableAssociation extends Resource<
      */
     associationState: {
       state: EC2.RouteTableAssociationStateCode;
-      statusMessage?: string;
+      statusMessage?: string | undefined;
     };
   },
   never,
@@ -261,10 +261,10 @@ export const RouteTableAssociationProvider = () =>
             | {
                 associationId: string;
                 routeTableId: string;
-                subnetId?: string;
-                gatewayId?: string;
-                state?: EC2.RouteTableAssociationStateCode;
-                statusMessage?: string;
+                subnetId?: string | undefined;
+                gatewayId?: string | undefined;
+                state?: EC2.RouteTableAssociationStateCode | undefined;
+                statusMessage?: string | undefined;
               }
             | undefined;
           if (output?.associationId) {

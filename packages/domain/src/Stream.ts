@@ -80,7 +80,7 @@ export interface Host<Key extends Key.Any, E> {
     key: Key.RefOf<Key>,
     options?: {
       /** Wait until the stream's writer has handled this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly atLeast?: { readonly stream: string; readonly version: number } | undefined;
       readonly timeout?: Duration.Input;
     },
   ) => Effect.Effect<Option.Option<Entry<E, Key.IdOf<Key>>>, ConsistencyTimeout>;
@@ -97,10 +97,10 @@ export interface Host<Key extends Key.Any, E> {
   readonly list: (
     key: Key.RefOf<Key>,
     options?: {
-      readonly where?: Filter<E>;
-      readonly order?: "asc" | "desc";
-      readonly take?: number;
-      readonly after?: number;
+      readonly where?: Filter<E> | undefined;
+      readonly order?: "asc" | "desc" | undefined;
+      readonly take?: number | undefined;
+      readonly after?: number | undefined;
     },
   ) => Effect.Effect<Page<Entry<E, Key.IdOf<Key>>>>;
   /**

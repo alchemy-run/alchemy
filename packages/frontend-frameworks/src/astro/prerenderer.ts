@@ -42,6 +42,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import { PlatformServices } from "../Platform.ts";
 import { readFramedPrerenderResponse } from "./prerender-response.ts";
@@ -154,9 +156,18 @@ export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): As
       const paths = data.paths.map(({ pathname, route, cacheKey }) => ({
         pathname,
         route: deserializeRouteData(route),
-        cacheKey,
+        ...Record.filterMap(
+          { cacheKey },
+          Result.fromNullishOr(() => undefined),
+        ),
       }));
-      return { paths, metadata: data.metadata };
+      return {
+        paths,
+        ...Record.filterMap(
+          { metadata: data.metadata },
+          Result.fromNullishOr(() => undefined),
+        ),
+      };
     },
 
     async render(request, { routeData }) {
@@ -179,7 +190,14 @@ export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): As
         throw new Error(`Failed to prerender ${request.url}: ${prerenderError}`);
       }
 
-      return readFramedPrerenderResponse(response);
+      const { response: renderedResponse, metadata } = await readFramedPrerenderResponse(response);
+      return {
+        response: renderedResponse,
+        ...Record.filterMap(
+          { metadata },
+          Result.fromNullishOr(() => undefined),
+        ),
+      };
     },
 
     async teardown() {

@@ -37,21 +37,21 @@ export interface CommandProps {
   /**
    * Working directory for the command. Defaults to `process.cwd()`.
    */
-  cwd?: string;
+  cwd?: string | undefined;
   /**
    * If set to true, runs the command inside of a shell, defaulting to /bin/sh on UNIX systems and cmd.exe on Windows.
    * It is generally discouraged to use this option, as it can lead to security vulnerabilities and is not portable.
    * If set to a string, runs the command inside of the specified shell.
    * @default false
    */
-  shell?: string | boolean;
+  shell?: string | boolean | undefined;
   /**
    * Extra environment variables passed to the command on top of `process.env`.
    * Entries whose value is `undefined` are dropped — this lets website
    * composites forward optional values (e.g. an `Output` service URL that
    * resolves to `undefined`) without filtering first.
    */
-  env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+  env?: Record<string, string | Redacted.Redacted<string> | undefined> | undefined;
 }
 
 /**
@@ -69,7 +69,7 @@ export interface CommandRunProps extends CommandProps {
    *
    * @example "5 minutes"
    */
-  timeout?: Duration.Input;
+  timeout?: Duration.Input | undefined;
 }
 
 export class CommandExecutor extends Context.Service<

@@ -30,18 +30,20 @@ export interface WebsiteArtifactProps {
   /** Dedicated output directory, or the application root for Next.js. */
   distDir: string;
   /** Fetch entrypoint relative to the initial working directory. */
-  serverEntry?: string;
+  serverEntry?: string | undefined;
   /** Static-file handler configuration, instead of a framework entrypoint. */
-  static?: {
-    /** Unmatched-path behavior. @default "none" */
-    notFoundHandling?: "none" | "spa" | "404-page";
-    /** Extensionless HTML behavior. @default "none" */
-    htmlHandling?: "none" | "drop-trailing-slash";
-    /** HTML file returned for misses, relative to output. @default "404.html" */
-    errorPage?: string;
-  };
+  static?:
+    | {
+        /** Unmatched-path behavior. @default "none" */
+        notFoundHandling?: "none" | "spa" | "404-page";
+        /** Extensionless HTML behavior. @default "none" */
+        htmlHandling?: "none" | "drop-trailing-slash" | undefined;
+        /** HTML file returned for misses, relative to output. @default "404.html" */
+        errorPage?: string | undefined;
+      }
+    | undefined;
   /** Next.js includes .next, public assets, and configuration. */
-  layout?: "output" | "next";
+  layout?: "output" | "next" | undefined;
   /** Build dependency fingerprint; traced dependencies are also hashed. */
   buildHash?: string;
 }

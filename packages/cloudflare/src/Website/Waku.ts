@@ -47,7 +47,7 @@ export interface WakuProps<Bindings extends WorkerBindingProps = {}> extends Omi
    * Root directory of the Waku project. Defaults to the process working
    * directory.
    */
-  rootDir?: string;
+  rootDir?: string | undefined;
   /**
    * Controls which files feed the content hash that decides whether a
    * rebuild is needed. By default every non-gitignored file under
@@ -267,7 +267,7 @@ export const Waku: {
         id: string,
         propsEff?: WakuInput<Bindings> | Effect.Effect<WakuInput<Bindings>, never, Req>,
       ) => effectClass(Waku(id, propsEff))
-    : Worker(
+    : Worker<Bindings, WorkerAssetsConfig, Req>(
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,

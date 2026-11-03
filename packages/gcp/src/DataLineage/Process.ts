@@ -31,12 +31,15 @@ export type ProcessOrigin = {
    * Google system. Non-`CUSTOM` sources may be restricted and billed.
    * @default "CUSTOM"
    */
-  sourceType?: datalineage.GoogleCloudDatacatalogLineageV1OriginSourceTypeEnum | (string & {});
+  sourceType?:
+    | datalineage.GoogleCloudDatacatalogLineageV1OriginSourceTypeEnum
+    | (string & {})
+    | undefined;
   /**
    * Origin name. For `CUSTOM`, any identifier. For Google systems, a
    * resource name in the same project and location.
    */
-  name?: string;
+  name?: string | undefined;
 };
 
 export type ProcessProps = {
@@ -62,7 +65,7 @@ export type ProcessProps = {
    * Origin of this process and its runs. Defaults to `{ sourceType:
    * "CUSTOM", name: "alchemy" }`.
    */
-  origin?: ProcessOrigin;
+  origin?: ProcessOrigin | undefined;
   /**
    * Non-semantic attributes (classifying or labeling the process). Max
    * 100 entries. Processes have no labels field, so Alchemy stamps

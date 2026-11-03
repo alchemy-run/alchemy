@@ -141,7 +141,9 @@ const toReturnMetadata = (
 ): "none" | "indexed" | "all" | undefined =>
   value === undefined ? undefined : typeof value === "boolean" ? (value ? "all" : "none") : value;
 
-const toMutation = (r: { mutationId?: string | null }): runtime.VectorizeAsyncMutation => ({
+const toMutation = (r: {
+  mutationId?: string | null | undefined;
+}): runtime.VectorizeAsyncMutation => ({
   mutationId: r.mutationId ?? "",
 });
 

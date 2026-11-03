@@ -30,12 +30,12 @@ export interface CognitoUserPoolConfiguration {
    * The user pool app client IDs to accept tokens from. When omitted, tokens
    * from any of the pool's app clients are accepted.
    */
-  clientIds?: string[];
+  clientIds?: string[] | undefined;
   /**
    * The Cedar entity type to map Cognito groups to (e.g.
    * `PhotoApp::UserGroup`). Enables group claims in policies.
    */
-  groupEntityType?: string;
+  groupEntityType?: string | undefined;
 }
 
 /**
@@ -53,17 +53,19 @@ export interface OpenIdConnectConfiguration {
    * A prefix prepended to the user ID taken from the token, producing entity
    * IDs like `MyOIDCProvider|user-id`.
    */
-  entityIdPrefix?: string;
+  entityIdPrefix?: string | undefined;
   /**
    * Map a token group claim onto a Cedar entity type so policies can match
    * on group membership.
    */
-  groupConfiguration?: {
-    /** The token claim that lists the user's groups, e.g. `groups`. */
-    groupClaim: string;
-    /** The Cedar entity type groups map to, e.g. `PhotoApp::UserGroup`. */
-    groupEntityType: string;
-  };
+  groupConfiguration?:
+    | {
+        /** The token claim that lists the user's groups, e.g. `groups`. */
+        groupClaim: string;
+        /** The Cedar entity type groups map to, e.g. `PhotoApp::UserGroup`. */
+        groupEntityType: string;
+      }
+    | undefined;
   /**
    * Which token type the identity source consumes — exactly one of
    * `accessTokenOnly` or `identityTokenOnly`.
@@ -73,9 +75,9 @@ export interface OpenIdConnectConfiguration {
         /** Consume OIDC access tokens. */
         accessTokenOnly: {
           /** The claim to derive the principal entity ID from. @default "sub" */
-          principalIdClaim?: string;
+          principalIdClaim?: string | undefined;
           /** The `aud` values to accept tokens for. */
-          audiences?: string[];
+          audiences?: string[] | undefined;
         };
         identityTokenOnly?: never;
       }
@@ -84,9 +86,9 @@ export interface OpenIdConnectConfiguration {
         /** Consume OIDC identity (ID) tokens. */
         identityTokenOnly: {
           /** The claim to derive the principal entity ID from. @default "sub" */
-          principalIdClaim?: string;
+          principalIdClaim?: string | undefined;
           /** The client IDs (`aud`) to accept tokens for. */
-          clientIds?: string[];
+          clientIds?: string[] | undefined;
         };
       };
 }

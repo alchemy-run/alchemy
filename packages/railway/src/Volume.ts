@@ -71,7 +71,7 @@ export interface VolumeProps {
    * `{ environmentId }`. Defaults to the project's primary environment.
    * Changing it replaces the Volume.
    */
-  environment?: Ref<VolumeEnvironment>;
+  environment?: Ref<VolumeEnvironment> | undefined;
   /**
    * Path in the container to mount the volume. Updates in place via
    * `volumeInstanceUpdate`.
@@ -81,14 +81,14 @@ export interface VolumeProps {
    * Region for the volume instance (`us-west2`, `us-east4`, …). If
    * omitted, Railway picks the default. Changing it replaces the Volume.
    */
-  region?: string;
+  region?: string | undefined;
   /**
    * Service to attach the volume to. If omitted, the volume is
    * disconnected — attach later with MountVolume. Accepts a
    * `Railway.Service` or `{ serviceId }`. Updating it attaches or moves
    * the volume in place.
    */
-  service?: Ref<VolumeService>;
+  service?: Ref<VolumeService> | undefined;
   /**
    * Requested provisioned size in megabytes (Railway IaC parity).
    *
@@ -98,7 +98,7 @@ export interface VolumeProps {
    * plan default on the observed `sizeMB` attribute. Changing it does
    * not call an API.
    */
-  sizeMB?: number;
+  sizeMB?: number | undefined;
 }
 
 export type Volume = Resource<
@@ -435,7 +435,7 @@ const assertAttachTarget = Effect.fn(function* (input: {
   environmentId: string;
   projectId: string;
   serviceId: string;
-  volumeId?: string;
+  volumeId?: string | undefined;
 }) {
   const others = (yield* listVolumeInstances(input.environmentId, input.projectId)).filter(
     (row) => {

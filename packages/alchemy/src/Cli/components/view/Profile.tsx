@@ -166,9 +166,9 @@ export interface ProviderBlockOptions {
   /** Muted hint appended to rows with `status: "reauth"`. */
   readonly reauthHint?: string;
   /** Provider whose detail rows are temporarily replaced by refresh status. */
-  readonly refreshingProvider?: string;
+  readonly refreshingProvider?: string | undefined;
   /** Provider currently focused by an interactive parent view. */
-  readonly focusedProvider?: string;
+  readonly focusedProvider?: string | undefined;
   /**
    * Reserve the list-cursor column (see `Pointer`) so an interactive parent
    * can mark the focused provider without shifting the table.

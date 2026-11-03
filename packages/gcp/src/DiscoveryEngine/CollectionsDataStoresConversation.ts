@@ -9,13 +9,17 @@ import type { Providers } from "../Providers.ts";
 import { parentOf, parseResourceName, sameJson } from "./internal.ts";
 
 export type ConversationMessage = {
-  userInput?: {
-    input?: string;
-    context?: {
-      contextDocuments?: string[];
-      activeDocument?: string;
-    };
-  };
+  userInput?:
+    | {
+        input?: string | undefined;
+        context?:
+          | {
+              contextDocuments?: string[] | undefined;
+              activeDocument?: string | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
 };
 
 export type CollectionsDataStoresConversationProps = {
@@ -36,7 +40,7 @@ export type CollectionsDataStoresConversationProps = {
   /**
    * Conversation messages.
    */
-  messages?: ConversationMessage[];
+  messages?: ConversationMessage[] | undefined;
 };
 
 export type CollectionsDataStoresConversation = Resource<

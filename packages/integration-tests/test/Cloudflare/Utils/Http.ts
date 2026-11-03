@@ -114,7 +114,7 @@ export const waitForDns = Effect.fn(function* (
 
 export interface ExpectUrlContainsOptions {
   /** Request headers, e.g. an explicit HTML Accept header for content negotiation. */
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | undefined;
   /** Maximum total time to retry before failing. Default 90s. */
   timeout?: Duration.Input;
   /** Initial backoff between attempts. Default 750ms. */

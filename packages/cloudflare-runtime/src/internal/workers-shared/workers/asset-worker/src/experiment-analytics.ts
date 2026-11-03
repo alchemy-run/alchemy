@@ -8,7 +8,7 @@ const VERSION = 1;
 // When adding new columns please update the schema
 type Data = {
   // -- Indexes --
-  accountId?: number;
+  accountId?: number | undefined;
   experimentName?: string;
 
   // -- Doubles --
@@ -22,7 +22,7 @@ type Data = {
 
 export class ExperimentAnalytics {
   private data: Data = {};
-  private readyAnalytics?: ReadyAnalytics;
+  private readyAnalytics: ReadyAnalytics | undefined;
 
   constructor(readyAnalytics?: ReadyAnalytics) {
     this.readyAnalytics = readyAnalytics;

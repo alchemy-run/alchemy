@@ -304,7 +304,7 @@ interface ObservedTransform {
   id: string;
   enabled: boolean;
   hasConflict: boolean;
-  conflictsWith?: string[] | null;
+  conflictsWith?: string[] | null | undefined;
 }
 
 interface ObservedTransforms {

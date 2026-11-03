@@ -76,7 +76,9 @@ export const deployedConfig = (parent: string) =>
     }),
   );
 
-export const namesFromConfig = (items: readonly { name?: string }[] | undefined): string[] =>
+export const namesFromConfig = (
+  items: readonly { name?: string | undefined }[] | undefined,
+): string[] =>
   (items ?? [])
     .map((item) => item.name)
     .filter((name): name is string => typeof name === "string" && name.length > 0)

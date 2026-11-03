@@ -27,11 +27,11 @@ export type OidcToken = {
    * Service account email used to mint the OIDC token. Must be in the same
    * project as the job. The caller needs `iam.serviceAccounts.actAs`.
    */
-  serviceAccountEmail?: string;
+  serviceAccountEmail?: string | undefined;
   /**
    * Audience claimed in the token. Defaults to the HTTP target URI.
    */
-  audience?: string;
+  audience?: string | undefined;
 };
 
 export type OAuthToken = {
@@ -39,11 +39,11 @@ export type OAuthToken = {
    * Service account email used to mint the OAuth token. Must be in the same
    * project as the job. The caller needs `iam.serviceAccounts.actAs`.
    */
-  serviceAccountEmail?: string;
+  serviceAccountEmail?: string | undefined;
   /**
    * OAuth scope. Defaults to `https://www.googleapis.com/auth/cloud-platform`.
    */
-  scope?: string;
+  scope?: string | undefined;
 };
 
 export type HttpTarget = {
@@ -66,7 +66,7 @@ export type HttpTarget = {
    * UTF-8 request body. Allowed for POST, PUT, and PATCH. Alchemy
    * base64-encodes this for the API.
    */
-  body?: string;
+  body?: string | undefined;
   /**
    * Attach an OIDC token as `Authorization`.
    */
@@ -134,27 +134,27 @@ export type RetryConfig = {
    * Retry attempts after a failed execution (0–5).
    * @default 0
    */
-  retryCount?: number;
+  retryCount?: number | undefined;
   /**
    * Time limit for retrying a failed job (e.g. `"3600s"`). Zero means
    * unlimited, unless `retryCount` is also 0.
    */
-  maxRetryDuration?: string;
+  maxRetryDuration?: string | undefined;
   /**
    * Times the backoff doubles before increasing linearly.
    * @default 5
    */
-  maxDoublings?: number;
+  maxDoublings?: number | undefined;
   /**
    * Maximum backoff between retries.
    * @default "3600s"
    */
-  maxBackoffDuration?: string;
+  maxBackoffDuration?: string | undefined;
   /**
    * Minimum backoff between retries.
    * @default "5s"
    */
-  minBackoffDuration?: string;
+  minBackoffDuration?: string | undefined;
 };
 
 export type JobProps = {
@@ -171,7 +171,7 @@ export type JobProps = {
    * to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Cron or english-like schedule (e.g. `"0 0 * * *"` or
    * `"every 24 hours"`). Required on create.
@@ -181,7 +181,7 @@ export type JobProps = {
    * tz-database time zone used to interpret `schedule`.
    * @default "UTC"
    */
-  timeZone?: string;
+  timeZone?: string | undefined;
   /**
    * Human-readable description (single line, max 499 characters).
    */
@@ -194,7 +194,7 @@ export type JobProps = {
   /**
    * Retry behavior after a failed attempt.
    */
-  retryConfig?: RetryConfig;
+  retryConfig?: RetryConfig | undefined;
   /**
    * HTTP/HTTPS target. Exactly one of `httpTarget`, `pubsubTarget`, or
    * `appEngineHttpTarget` must be set.
@@ -466,8 +466,20 @@ const headersMatch = (
 };
 
 const tokenEqual = (
-  observed: { serviceAccountEmail?: string; audience?: string; scope?: string } | undefined,
-  desired: { serviceAccountEmail?: string; audience?: string; scope?: string } | undefined,
+  observed:
+    | {
+        serviceAccountEmail?: string | undefined;
+        audience?: string | undefined;
+        scope?: string | undefined;
+      }
+    | undefined,
+  desired:
+    | {
+        serviceAccountEmail?: string | undefined;
+        audience?: string | undefined;
+        scope?: string | undefined;
+      }
+    | undefined,
 ) => {
   if (desired === undefined) return true;
   return (

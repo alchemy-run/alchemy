@@ -49,13 +49,13 @@ export type CryptoKeyVersionTemplate = {
    * Algorithm for new versions. Defaults to `GOOGLE_SYMMETRIC_ENCRYPTION`
    * when `purpose` is `ENCRYPT_DECRYPT`.
    */
-  algorithm?: kms.CryptoKeyVersionTemplateAlgorithmEnum | (string & {});
+  algorithm?: kms.CryptoKeyVersionTemplateAlgorithmEnum | (string & {}) | undefined;
   /**
    * Protection level for new versions. Immutable — changing it replaces
    * the key.
    * @default "SOFTWARE"
    */
-  protectionLevel?: kms.CryptoKeyVersionTemplateProtectionLevelEnum | (string & {});
+  protectionLevel?: kms.CryptoKeyVersionTemplateProtectionLevelEnum | (string & {}) | undefined;
 };
 
 export type CryptoKeyProps = {
@@ -391,7 +391,7 @@ const getByName = (name: string) =>
 const paginate = <A, E, R>(
   fetch: (
     pageToken: string | undefined,
-  ) => Effect.Effect<{ items: A[]; nextPageToken?: string }, E, R>,
+  ) => Effect.Effect<{ items: A[]; nextPageToken?: string | undefined }, E, R>,
 ) =>
   Effect.gen(function* () {
     const found: A[] = [];

@@ -67,7 +67,10 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
     Self: Self<R>;
     Provider: Provider<R>;
     Aliases: readonly string[] | undefined;
-    ref(id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R>;
+    ref(
+      id: string,
+      options?: { stage?: string | undefined; stack?: string | undefined },
+    ): Effect.Effect<R>;
   };
 
 export type ResourceClassWithMethods<
@@ -78,7 +81,10 @@ export type ResourceClassWithMethods<
     Self: Self<R>;
     Provider: Provider<R>;
     Aliases: readonly string[] | undefined;
-    ref(id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R>;
+    ref(
+      id: string,
+      options?: { stage?: string | undefined; stack?: string | undefined },
+    ): Effect.Effect<R>;
   } & Methods;
 
 export type LogicalId = string;
@@ -253,7 +259,7 @@ export interface ResourceOptions {
    * });
    * ```
    */
-  aliases?: string[];
+  aliases?: string[] | undefined;
   /**
    * Marks every registration of this type as requiring resolved props by
    * plan time. Set by `Platform(...)` on its resource class: every
@@ -530,8 +536,10 @@ export function Resource<R extends ResourceLike>(
      * (`ref.someAttr`) exactly the way it would for a locally-declared
      * resource.
      */
-    ref: (id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R> =>
-      Effect.succeed(Output.of(makeRef<R>(id, options, type)) as unknown as R),
+    ref: (
+      id: string,
+      options?: { stage?: string | undefined; stack?: string | undefined },
+    ): Effect.Effect<R> => Effect.succeed(Output.of(makeRef<R>(id, options, type)) as unknown as R),
 
     Type: type,
     Provider: ProviderTag,

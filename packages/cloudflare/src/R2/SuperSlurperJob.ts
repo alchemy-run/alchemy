@@ -32,7 +32,7 @@ export interface SuperSlurperSourceSelection {
   /** Object keys to migrate. Omit to migrate all matching objects. Immutable. */
   keys?: string[];
   /** Restrict migration to this object key prefix. Immutable. */
-  pathPrefix?: string;
+  pathPrefix?: string | undefined;
 }
 
 /** AWS S3 or another HTTPS S3-compatible source. */
@@ -94,14 +94,14 @@ export interface SuperSlurperJobProps {
   /** Destination R2 bucket and credentials. Any change replaces the job. */
   target: SuperSlurperTarget;
   /** Overwrite existing destination objects. Immutable. @default false */
-  overwrite?: boolean;
+  overwrite?: boolean | undefined;
   /**
    * Pause an active job, or resume it when false. Terminal jobs are never
    * restarted. A new job starts running before the pause request is applied,
    * so this is not a guarantee that no objects are transferred.
    * @default false
    */
-  paused?: boolean;
+  paused?: boolean | undefined;
 }
 
 export interface SuperSlurperJobAttributes {

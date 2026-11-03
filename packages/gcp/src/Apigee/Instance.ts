@@ -38,36 +38,42 @@ export type AccessLoggingConfig = {
    * CEL filter on `status_code` (for example
    * `status_code >= 200 && status_code < 300`).
    */
-  filter?: string;
+  filter?: string | undefined;
 };
 
 export type MaintenanceWindow = {
   /**
    * Preferred day of week for maintenance.
    */
-  day?: apigee.GoogleCloudApigeeV1MaintenanceUpdatePolicyMaintenanceWindowDayEnum | (string & {});
+  day?:
+    | apigee.GoogleCloudApigeeV1MaintenanceUpdatePolicyMaintenanceWindowDayEnum
+    | (string & {})
+    | undefined;
   /**
    * UTC start time of the window.
    */
-  startTime?: {
-    hours?: number;
-    minutes?: number;
-    seconds?: number;
-    nanos?: number;
-  };
+  startTime?:
+    | {
+        hours?: number | undefined;
+        minutes?: number | undefined;
+        seconds?: number | undefined;
+        nanos?: number | undefined;
+      }
+    | undefined;
 };
 
 export type MaintenanceUpdatePolicy = {
   /**
    * Preferred maintenance windows. The API currently accepts at most one.
    */
-  maintenanceWindows?: MaintenanceWindow[];
+  maintenanceWindows?: MaintenanceWindow[] | undefined;
   /**
    * Relative scheduling channel (`WEEK1` or `WEEK2`).
    */
   maintenanceChannel?:
     | apigee.GoogleCloudApigeeV1MaintenanceUpdatePolicyMaintenanceChannelEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
 };
 
 export type InstanceProps = {

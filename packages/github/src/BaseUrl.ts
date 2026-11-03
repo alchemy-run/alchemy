@@ -125,8 +125,8 @@ export const effectiveGitHubBaseUrl = (
  * provider host is correctly detected as a change.
  */
 export const gitHubBaseUrlChanged = (
-  olds: { baseUrl?: string },
-  news: { baseUrl?: string },
+  olds: { baseUrl?: string | undefined },
+  news: { baseUrl?: string | undefined },
 ): Effect.Effect<boolean, AuthError | ConfigError, Credentials> =>
   Effect.gen(function* () {
     const oldUrl = yield* effectiveGitHubBaseUrl(olds.baseUrl);

@@ -30,7 +30,7 @@ const COLLECTION = "clientTlsPolicies";
 
 export type GrpcEndpoint = {
   /** gRPC UDS target URI. Must start with `unix:`. */
-  targetUri?: string;
+  targetUri?: string | undefined;
 };
 
 export type CertificateProviderInstance = {
@@ -38,21 +38,21 @@ export type CertificateProviderInstance = {
    * Plugin instance name. Use `google_cloud_private_spiffe` for
    * Certificate Authority Service.
    */
-  pluginInstance?: string;
+  pluginInstance?: string | undefined;
 };
 
 export type ValidationCA = {
   /** gRPC endpoint used to obtain the CA certificate. */
-  grpcEndpoint?: GrpcEndpoint;
+  grpcEndpoint?: GrpcEndpoint | undefined;
   /** Certificate provider instance loaded by the data plane. */
-  certificateProviderInstance?: CertificateProviderInstance;
+  certificateProviderInstance?: CertificateProviderInstance | undefined;
 };
 
 export type CertificateProvider = {
   /** gRPC endpoint used to obtain the cert and private key. */
-  grpcEndpoint?: GrpcEndpoint;
+  grpcEndpoint?: GrpcEndpoint | undefined;
   /** Certificate provider instance loaded by the data plane. */
-  certificateProviderInstance?: CertificateProviderInstance;
+  certificateProviderInstance?: CertificateProviderInstance | undefined;
 };
 
 export type ClientTlsPolicyProps = {

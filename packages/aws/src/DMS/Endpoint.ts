@@ -179,7 +179,7 @@ export interface Endpoint extends Resource<
 export const Endpoint = Resource<Endpoint>("AWS.DMS.Endpoint");
 
 const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: Array<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

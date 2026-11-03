@@ -73,7 +73,7 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     /** Target platform, e.g. `"linux/amd64"`. */
     platform?: string;
     /** Docker build arguments. */
-    buildArgs?: Record<string, string>;
+    buildArgs?: Record<string, string> | undefined;
     /** Additional arguments appended to `docker image build`. */
     args?: string[];
   },
@@ -132,7 +132,7 @@ export interface ImageProps {
   /**
    * Docker build arguments (`--build-arg`).
    */
-  buildArgs?: Record<string, string>;
+  buildArgs?: Record<string, string> | undefined;
 }
 
 export interface Image extends Resource<

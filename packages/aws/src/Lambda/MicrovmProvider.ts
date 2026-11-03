@@ -500,7 +500,7 @@ class ImageBuilding extends Data.TaggedError("ImageBuilding")<{
 class ImageFailed extends Data.TaggedError("ImageFailed")<{
   imageArn: string;
   state: string;
-  reason?: string;
+  reason?: string | undefined;
 }> {}
 
 class MicrovmsActive extends Data.TaggedError("MicrovmsActive")<{ count: number }> {}

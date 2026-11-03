@@ -15,7 +15,7 @@ import * as Effect from "effect/Effect";
 export interface D1QueryResult {
   result: Array<{
     results?: unknown;
-    success?: boolean | null;
+    success?: boolean | null | undefined;
     meta?: unknown;
   }>;
 }

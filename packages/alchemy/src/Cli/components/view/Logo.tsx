@@ -321,7 +321,7 @@ const BRAILLE_BITS = [
 
 interface LogoRun {
   text: string;
-  color?: string;
+  color: string | undefined;
 }
 
 const rasterizeLogo = (cols: number): LogoRun[][] => {

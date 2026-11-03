@@ -55,7 +55,7 @@ export type SfdcInstanceProps = {
    * Salesforce org id (`00D…`). Stored on the instance; Application
    * Integration uses it when opening channels.
    */
-  sfdcOrgId?: string;
+  sfdcOrgId?: string | undefined;
   /**
    * AuthConfig resource names that can be tried to open a channel to
    * Salesforce.

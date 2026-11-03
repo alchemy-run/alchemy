@@ -26,20 +26,22 @@ export interface WebsiteArtifactProps {
   /** Build output directory, relative to the initial working directory. */
   distDir: string;
   /** Node serve entry, relative to the initial working directory. */
-  serverEntry?: string;
+  serverEntry?: string | undefined;
   /** Generate the shared static-file server instead of tracing a framework entry. */
-  static?: {
-    /** Unmatched-path behavior. @default "none" */
-    notFoundHandling?: "none" | "spa" | "404-page";
-    /** Extensionless HTML handling. @default "none" */
-    htmlHandling?: "none" | "drop-trailing-slash";
-    /** HTML file served for misses, relative to the static output. @default "404.html" */
-    errorPage?: string;
-  };
+  static?:
+    | {
+        /** Unmatched-path behavior. @default "none" */
+        notFoundHandling?: "none" | "spa" | "404-page" | undefined;
+        /** Extensionless HTML handling. @default "none" */
+        htmlHandling?: "none" | "drop-trailing-slash" | undefined;
+        /** HTML file served for misses, relative to the static output. @default "404.html" */
+        errorPage?: string | undefined;
+      }
+    | undefined;
   /** Next.js keeps its output and configuration beside the serve entry. */
-  layout?: "output" | "next";
+  layout?: "output" | "next" | undefined;
   /** Build output fingerprint; keeps the build dependency explicit. */
-  buildHash?: string;
+  buildHash?: string | undefined;
 }
 
 /** Internal, filesystem-only artifact lifecycle; never creates cloud resources. */

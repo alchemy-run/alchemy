@@ -47,7 +47,7 @@ export interface AppsSecretProps {
    * unique name is generated from the stack, stage, and logical id.
    * Changing it replaces the secret.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The plaintext secret value to be stored.
    */
@@ -57,11 +57,11 @@ export interface AppsSecretProps {
    * the secret.
    * @default { type: "account" }
    */
-  scope?: AppsSecretScope;
+  scope?: AppsSecretScope | undefined;
   /**
    * Unix timestamp after which the secret deletes.
    */
-  expiresAt?: number;
+  expiresAt?: number | undefined;
 }
 
 export type AppsSecret = Resource<
@@ -224,8 +224,8 @@ const listByScope = Effect.fn(function* (scope: AppsSecretScope) {
 });
 
 const observe = Effect.fn(function* (input: {
-  id?: string;
-  name?: string;
+  id?: string | undefined;
+  name?: string | undefined;
   scope: AppsSecretScope;
 }) {
   if (input.name !== undefined) {

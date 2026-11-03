@@ -31,7 +31,7 @@ export type LineageEntityReference = {
    * Optional nested field path within the entity. Empty for asset-level
    * lineage.
    */
-  field?: string[];
+  field?: string[] | undefined;
 };
 
 export type LineageEventLink = {
@@ -44,7 +44,8 @@ export type LineageEventLink = {
    */
   dependencyType?:
     | datalineage.GoogleCloudDatacatalogLineageV1DependencyInfoDependencyTypeEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
 };
 
 export type ProcessesRunsLineageEventProps = {
@@ -59,33 +60,33 @@ export type ProcessesRunsLineageEventProps = {
    * Parent process used when `run` is a bare id. Full process name or
    * process id combined with `location`.
    */
-  process?: string;
+  process?: string | undefined;
   /**
    * Event id (the `{lineage_event}` segment). If omitted, a unique name
    * is generated. Max 200 characters: letters, digits, underscores,
    * hyphens, colons, periods. Immutable — changing it replaces the event.
    */
-  lineageEventId?: string;
+  lineageEventId?: string | undefined;
   /**
    * Region used when `run` / `process` is a bare id.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * RFC3339 start of the transformation. Required by the API; Alchemy
    * reuses the observed value on subsequent reconciles when omitted.
    */
-  startTime?: string;
+  startTime?: string | undefined;
   /**
    * RFC3339 end of the transformation.
    */
-  endTime?: string;
+  endTime?: string | undefined;
   /**
    * Source-target links (max 100). Lineage events have no labels or
    * attributes field, so Alchemy lists events under alchemy-owned
    * parent processes for nuke.
    */
-  links?: LineageEventLink[];
+  links?: LineageEventLink[] | undefined;
 };
 
 export type ProcessesRunsLineageEvent = Resource<
@@ -240,9 +241,9 @@ const getProcess = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const identityFingerprint = (news: {
-  startTime?: string;
-  endTime?: string;
-  links?: LineageEventLink[];
+  startTime?: string | undefined;
+  endTime?: string | undefined;
+  links?: LineageEventLink[] | undefined;
 }) =>
   fingerprint({
     startTime: news.startTime,

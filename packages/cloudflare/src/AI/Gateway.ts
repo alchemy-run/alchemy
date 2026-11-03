@@ -126,7 +126,7 @@ export type GatewaySpendLimitRule = {
    *
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Arbitrary metadata attached to the rule.
    */
@@ -157,11 +157,11 @@ export type GatewaySpendLimits = {
   /**
    * Whether spend limiting is enabled for the gateway.
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * The cost-cap rules applied to requests routed through the gateway.
    */
-  rules?: GatewaySpendLimitRule[];
+  rules?: GatewaySpendLimitRule[] | undefined;
 };
 
 export type GatewayProps = {
@@ -685,20 +685,21 @@ const mapGateway = (
 const normalizeSpendLimits = (
   spendLimits:
     | {
-        enabled?: boolean | null;
+        enabled?: boolean | null | undefined;
         rules?:
           | {
               limit: number;
               limitType: "cost";
               window: number;
-              id?: string | null;
-              enabled?: boolean | null;
-              metadata?: Record<string, unknown> | null;
-              model?: { mode: "filter"; values: string[] } | null;
-              provider?: { mode: "filter"; values: string[] } | null;
-              technique?: string | null;
+              id?: string | null | undefined;
+              enabled?: boolean | null | undefined;
+              metadata?: Record<string, unknown> | null | undefined;
+              model?: { mode: "filter"; values: string[] } | null | undefined;
+              provider?: { mode: "filter"; values: string[] } | null | undefined;
+              technique?: string | null | undefined;
             }[]
-          | null;
+          | null
+          | undefined;
       }
     | null
     | undefined,

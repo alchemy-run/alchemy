@@ -114,10 +114,10 @@ export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousLocation?: string;
-  nextLocation?: string;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousLocation?: string | undefined;
+  nextLocation?: string | undefined;
 }) => {
   const previousLocation =
     input.previousLocation !== undefined ? normalizeLocation(input.previousLocation) : undefined;
@@ -177,17 +177,19 @@ export type ClassItem = {
 
 export type Phrase = {
   value: string;
-  boost?: number;
+  boost?: number | undefined;
 };
 
-export const markerFromItems = (items: readonly { value?: string }[] | null | undefined) =>
-  (items ?? []).find((item) => isOwnershipMarker(item.value))?.value;
+export const markerFromItems = (
+  items: readonly { value?: string | undefined }[] | null | undefined,
+) => (items ?? []).find((item) => isOwnershipMarker(item.value))?.value;
 
-export const markerFromPhrases = (phrases: readonly { value?: string }[] | null | undefined) =>
-  (phrases ?? []).find((phrase) => isOwnershipMarker(phrase.value))?.value;
+export const markerFromPhrases = (
+  phrases: readonly { value?: string | undefined }[] | null | undefined,
+) => (phrases ?? []).find((phrase) => isOwnershipMarker(phrase.value))?.value;
 
 export const stripOwnershipItems = (
-  items: readonly { value?: string }[] | null | undefined,
+  items: readonly { value?: string | undefined }[] | null | undefined,
 ): ClassItem[] =>
   (items ?? [])
     .filter((item) => !isOwnershipMarker(item.value))
@@ -195,7 +197,7 @@ export const stripOwnershipItems = (
     .filter((item) => item.value.length > 0);
 
 export const stripOwnershipPhrases = (
-  phrases: readonly { value?: string; boost?: number }[] | null | undefined,
+  phrases: readonly { value?: string | undefined; boost?: number | undefined }[] | null | undefined,
 ): Phrase[] =>
   (phrases ?? [])
     .filter((phrase) => !isOwnershipMarker(phrase.value))
@@ -206,8 +208,8 @@ export const stripOwnershipPhrases = (
     .filter((phrase) => phrase.value.length > 0);
 
 export const sameItems = (
-  left: readonly { value?: string }[] | undefined,
-  right: readonly { value?: string }[] | undefined,
+  left: readonly { value?: string | undefined }[] | undefined,
+  right: readonly { value?: string | undefined }[] | undefined,
 ) =>
   sameJson(
     stripOwnershipItems(left)
@@ -219,8 +221,8 @@ export const sameItems = (
   );
 
 export const samePhrases = (
-  left: readonly { value?: string; boost?: number }[] | undefined,
-  right: readonly { value?: string; boost?: number }[] | undefined,
+  left: readonly { value?: string | undefined; boost?: number | undefined }[] | undefined,
+  right: readonly { value?: string | undefined; boost?: number | undefined }[] | undefined,
 ) =>
   sameJson(
     stripOwnershipPhrases(left)

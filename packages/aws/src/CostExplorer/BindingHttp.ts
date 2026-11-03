@@ -78,7 +78,7 @@ export const makeCostExplorerHttpBinding = <
  * `iamActions` on the monitor's ARN.
  */
 export const makeAnomalyMonitorHttpBinding = <
-  I extends { MonitorArn?: string },
+  I extends { MonitorArn?: string | undefined },
   A,
   // See makeCostExplorerHttpBinding.
   E extends { _tag: string },
@@ -134,7 +134,7 @@ export const makeAnomalyMonitorHttpBinding = <
  * a grant scoped to the category ARN would never match.
  */
 export const makeCostCategoryHttpBinding = <
-  I extends { CostCategoryArn?: string },
+  I extends { CostCategoryArn?: string | undefined },
   A,
   // See makeCostExplorerHttpBinding.
   E extends { _tag: string },

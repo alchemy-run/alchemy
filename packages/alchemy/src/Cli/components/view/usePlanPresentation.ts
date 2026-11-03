@@ -21,7 +21,7 @@ export const usePlanPresentation = (options: {
     mode === "apply"
       ? {
           state: outcome === "failure" || failures > 0 ? "error" : busy ? "normal" : "inactive",
-          value: total === 0 ? undefined : (completed / total) * 100,
+          ...(total !== 0 && { value: (completed / total) * 100 }),
         }
       : { state: "inactive" },
   );

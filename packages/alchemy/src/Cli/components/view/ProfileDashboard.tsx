@@ -93,7 +93,7 @@ export interface ExecuteResult {
   readonly message: string;
   readonly entries: ReadonlyArray<DashboardEntry>;
   /** Profile to focus after the action (e.g. the new name of a rename). */
-  readonly selected?: string;
+  readonly selected?: string | undefined;
 }
 
 // --- store ------------------------------------------------------------------
@@ -111,7 +111,7 @@ interface Notice {
 interface Flow {
   readonly kind: FlowAction["kind"];
   readonly name: string;
-  readonly provider?: string;
+  readonly provider?: string | undefined;
   /** Inline flows render within the overview (refresh spinner). */
   readonly inline: boolean;
 }
@@ -195,7 +195,7 @@ export class DashStore extends LiveStore<DashState> {
 
 type DetailsPaneProps = {
   details: Details;
-  refreshingProvider?: string;
+  refreshingProvider?: string | undefined;
   /** Index into `details.providers` the up/down cursor rests on. */
   focusedIndex: number;
 };

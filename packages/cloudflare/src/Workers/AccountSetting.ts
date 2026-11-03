@@ -15,21 +15,21 @@ export type AccountSettingProps = {
    * `"standard"`). Mostly legacy since Workers Standard pricing — new
    * accounts only support `"standard"`.
    *
-   * Mutable — updated in place. When omitted, the account's current value
-   * is left untouched.
+   * Mutable — updated in place. When omitted or `undefined`, the account's
+   * current value is left untouched.
    * @default keep the account's current value
    */
-  defaultUsageModel?: string;
+  defaultUsageModel?: string | undefined;
   /**
    * Whether Green Compute is enabled for the account. When enabled,
    * scheduled (cron) Workers run only on hardware powered by renewable
    * energy.
    *
-   * Mutable — updated in place. When omitted, the account's current value
-   * is left untouched.
+   * Mutable — updated in place. When omitted or `undefined`, the account's
+   * current value is left untouched.
    * @default keep the account's current value
    */
-  greenCompute?: boolean;
+  greenCompute?: boolean | undefined;
 };
 
 export type AccountSettingAttributes = {

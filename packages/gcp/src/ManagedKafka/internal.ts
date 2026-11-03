@@ -194,13 +194,13 @@ export const asCountString = (value: number | string | undefined, fallback: numb
   String(asCount(value, fallback));
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousLocation?: string;
-  nextLocation?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousLocation?: string | undefined;
+  nextLocation?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   const parentChanged =
     (input.previousParent ?? "") !== "" &&

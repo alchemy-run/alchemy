@@ -38,7 +38,7 @@ export interface ScheduleProps {
   /**
    * Security groups attached to the scheduled task ENIs.
    */
-  securityGroups?: Input<string[]>;
+  securityGroups?: Input<string[]> | undefined;
 
   /**
    * Whether the scheduled task should receive a public IP.

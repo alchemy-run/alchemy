@@ -563,7 +563,7 @@ export async function writeStreamOutput(options: {
   stream: ReadableStream<unknown>;
   chunkSizeBytes?: number;
   signal?: AbortSignal;
-  timeoutTask?: Promise<never>;
+  timeoutTask?: Promise<never> | undefined;
   skipMetaWrite?: boolean;
 }): Promise<StreamOutputMeta> {
   const { storage, cacheKey, attempt, timeoutTask, ...writeOptions } = options;

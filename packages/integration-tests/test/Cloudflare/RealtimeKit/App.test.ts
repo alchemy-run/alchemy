@@ -46,9 +46,9 @@ const APP_NAME = "alchemy-rtk-test-app";
 // Cloudflare's side), the provider picks the oldest by createdAt.
 const oldestNamed = (
   apps: readonly ({
-    id?: string | null;
-    name?: string | null;
-    createdAt?: string | null;
+    id?: string | null | undefined;
+    name?: string | null | undefined;
+    createdAt?: string | null | undefined;
   } | null)[],
 ) =>
   apps

@@ -61,20 +61,20 @@ export interface InstanceProps extends PlatformProps {
   /**
    * Optional subnet to launch into.
    */
-  subnetId?: Input<SubnetId>;
+  subnetId?: Input<SubnetId> | undefined;
   /**
    * Security groups to attach to the primary network interface.
    */
-  securityGroupIds?: Input<SecurityGroupId>[];
+  securityGroupIds?: Input<SecurityGroupId>[] | undefined;
   /**
    * Optional EC2 key pair name for SSH access. Accepts a reference such as
    * `AWS.EC2.KeyPair(...).keyName`.
    */
-  keyName?: Input<string>;
+  keyName?: Input<string> | undefined;
   /**
    * Optional IAM instance profile name to attach at launch.
    */
-  instanceProfileName?: string;
+  instanceProfileName?: string | undefined;
   /**
    * User data script to provide at launch time.
    * Changes force replacement — EC2 does not re-run user data on an
@@ -84,65 +84,65 @@ export interface InstanceProps extends PlatformProps {
    * only when building the `RunInstances` request and compared by value,
    * so it never appears in plan output.
    */
-  userData?: string | Redacted.Redacted<string>;
+  userData?: string | Redacted.Redacted<string> | undefined;
   /**
    * Whether to associate a public IPv4 address on launch.
    */
-  associatePublicIpAddress?: boolean;
+  associatePublicIpAddress?: boolean | undefined;
   /**
    * Optional private IPv4 address for the primary interface.
    */
-  privateIpAddress?: string;
+  privateIpAddress?: string | undefined;
   /**
    * Optional availability zone override.
    */
-  availabilityZone?: string;
+  availabilityZone?: string | undefined;
   /**
    * Whether source/destination checking is enabled.
    * @default true
    */
-  sourceDestCheck?: boolean;
+  sourceDestCheck?: boolean | undefined;
   /**
    * Instance Metadata Service (IMDS) options, e.g. requiring IMDSv2 and
    * limiting the hop count. Applied at launch and updated in place. Unset
    * fields keep the AMI / account defaults.
    */
-  metadataOptions?: InstanceMetadataOptions;
+  metadataOptions?: InstanceMetadataOptions | undefined;
   /**
    * User-defined tags to apply to the instance.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
   /**
    * Module entrypoint for the bundled instance program.
    * When omitted, the instance behaves as a low-level EC2 resource.
    */
-  main?: string;
+  main?: string | undefined;
   /**
    * Named export to load from `main`.
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Port exposed by the process, if any.
    * @default 3000
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Additional environment variables for the hosted process.
    */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Bundler configuration for the hosted process entrypoint. Unused
    * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
    * marked pure so unused parts prune more aggressively. List extra
    * packages with `pure.packages`, or disable with `pure: false`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig | undefined;
   /**
    * Additional managed policy ARNs for the managed instance role.
    * This can only be used when Alchemy manages the instance profile.
    */
-  roleManagedPolicyArns?: string[];
+  roleManagedPolicyArns?: string[] | undefined;
 }
 
 export interface Instance extends Resource<
@@ -172,15 +172,15 @@ export interface Instance extends Resource<
     /**
      * The VPC the instance belongs to, if any.
      */
-    vpcId?: VpcId;
+    vpcId?: VpcId | undefined;
     /**
      * The subnet the instance belongs to, if any.
      */
-    subnetId?: SubnetId;
+    subnetId?: SubnetId | undefined;
     /**
      * The availability zone of the instance.
      */
-    availabilityZone?: string;
+    availabilityZone?: string | undefined;
     /**
      * The attached security group IDs.
      */
@@ -188,19 +188,19 @@ export interface Instance extends Resource<
     /**
      * The primary private IPv4 address.
      */
-    privateIpAddress?: string;
+    privateIpAddress?: string | undefined;
     /**
      * The public IPv4 address, if assigned.
      */
-    publicIpAddress?: string;
+    publicIpAddress?: string | undefined;
     /**
      * The private DNS name.
      */
-    privateDnsName?: string;
+    privateDnsName?: string | undefined;
     /**
      * The public DNS name, if assigned.
      */
-    publicDnsName?: string;
+    publicDnsName?: string | undefined;
     /**
      * HTTP URL of the hosted process
      * (`http://{publicDnsName|publicIpAddress}:{port}`).
@@ -213,35 +213,35 @@ export interface Instance extends Resource<
      * instance reachable from the host. On AWS this is the public
      * IP/DNS and the process port.
      */
-    url?: string;
+    url?: string | undefined;
     /**
      * The key pair name used for SSH access.
      */
-    keyName?: string;
+    keyName?: string | undefined;
     /**
      * The IAM instance profile ARN attached to the instance, if any.
      */
-    instanceProfileArn?: string;
+    instanceProfileArn?: string | undefined;
     /**
      * The IAM instance profile ID attached to the instance, if any.
      */
-    instanceProfileId?: string;
+    instanceProfileId?: string | undefined;
     /**
      * The IAM instance profile name attached to the instance, if known.
      */
-    instanceProfileName?: string;
+    instanceProfileName?: string | undefined;
     /**
      * Whether source/destination checking is enabled.
      */
-    sourceDestCheck?: boolean;
+    sourceDestCheck?: boolean | undefined;
     /**
      * The Instance Metadata Service options in effect on the instance.
      */
-    metadataOptions?: InstanceMetadataOptions;
+    metadataOptions?: InstanceMetadataOptions | undefined;
     /**
      * When the instance was launched.
      */
-    launchTime?: string;
+    launchTime?: string | undefined;
     /**
      * Current tags on the instance.
      */
@@ -249,33 +249,35 @@ export interface Instance extends Resource<
     /**
      * Role attached by the hosted runtime, if any.
      */
-    roleArn?: string;
+    roleArn?: string | undefined;
     /**
      * Role name attached by the hosted runtime, if any.
      */
-    roleName?: string;
+    roleName?: string | undefined;
     /**
      * Inline policy name used for bindings/runtime sync, if any.
      */
-    policyName?: string;
+    policyName?: string | undefined;
     /**
      * Whether the role/profile were created and owned by Alchemy.
      */
-    managedIam?: boolean;
+    managedIam?: boolean | undefined;
     /**
      * Deterministic runtime unit name for hosted instances.
      */
-    runtimeUnitName?: string;
+    runtimeUnitName?: string | undefined;
     /**
      * Asset prefix for hosted bundles and env files.
      */
-    assetPrefix?: string;
+    assetPrefix?: string | undefined;
     /**
      * Bundle hash for hosted instances.
      */
-    code?: {
-      hash: string;
-    };
+    code?:
+      | {
+          hash: string;
+        }
+      | undefined;
   },
   {
     /** Environment variables injected into the hosted instance runtime. */
@@ -429,7 +431,9 @@ export const InstanceProvider = () =>
         return error instanceof InstanceNotFound || tag === "InvalidInstanceID.NotFound";
       };
 
-      const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
+      const toTagRecord = (
+        tags?: Array<{ Key?: string | undefined; Value?: string | undefined }>,
+      ) =>
         Object.fromEntries(
           (tags ?? [])
             .filter((tag): tag is { Key: string; Value: string } =>
@@ -441,7 +445,7 @@ export const InstanceProvider = () =>
       const publicHost = (instance: ec2.Instance) =>
         instance.PublicDnsName || instance.PublicIpAddress;
 
-      const hostedListenPort = (props: { main?: unknown; port?: number }) =>
+      const hostedListenPort = (props: { main?: unknown; port?: number | undefined }) =>
         props.main !== undefined || props.port !== undefined ? (props.port ?? 3000) : undefined;
 
       const instanceUrl = (instance: ec2.Instance, port?: number) => {
@@ -641,8 +645,8 @@ export const InstanceProvider = () =>
       const buildRunInstancesRequest = (
         news: InstanceProps,
         runtime: {
-          userData?: string;
-          instanceProfileName?: string;
+          userData?: string | undefined;
+          instanceProfileName?: string | undefined;
         },
         tags: Record<string, string>,
         clientToken: string,

@@ -28,7 +28,7 @@ export interface AccountAssignmentProps {
    * Explicit Identity Center instance ARN.
    * If omitted, Alchemy adopts the only visible instance.
    */
-  instanceArn?: string;
+  instanceArn?: string | undefined;
   /**
    * Permission set ARN to assign.
    */

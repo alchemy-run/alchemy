@@ -20,15 +20,15 @@ export interface ClientVpnAuthorizationRuleProps {
    * The directory or federated identity group allowed to access the network.
    * Required unless authorizeAllGroups is true. Changing this replaces the rule.
    */
-  accessGroupId?: string;
+  accessGroupId?: string | undefined;
   /**
    * Authorize every authenticated client instead of one access group.
    * Cannot be combined with accessGroupId. Changing this replaces the rule.
    * @default false
    */
-  authorizeAllGroups?: boolean;
+  authorizeAllGroups?: boolean | undefined;
   /** A description of the rule. Changing this replaces the rule. */
-  description?: string;
+  description?: string | undefined;
 }
 
 /** An ingress authorization rule owned by a Client VPN endpoint. */

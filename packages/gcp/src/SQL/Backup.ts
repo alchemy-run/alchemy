@@ -259,7 +259,7 @@ const observe = (project: string, name: string | undefined, labels: Record<strin
 const waitForOperation = (
   project: string,
   operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
+  options?: { notFoundOk?: boolean | undefined },
 ) =>
   waitForSqlOperation(project, operation, {
     budget: "20 minutes",

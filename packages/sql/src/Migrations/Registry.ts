@@ -55,7 +55,7 @@ export const normalizeMigrationsInput = (input: MigrationsInput): NormalizedMigr
  * Shared by every SQL database resource.
  */
 export const migrationsInputOf = (props: {
-  migrations?: MigrationsInput;
+  migrations?: MigrationsInput | undefined;
 }): NormalizedMigrationsInput | undefined =>
   props.migrations ? normalizeMigrationsInput(props.migrations) : undefined;
 
@@ -202,7 +202,7 @@ export type MigrationHistoryChange =
  * - `rewritten` — an already-applied file was edited or removed
  */
 export const classifyMigrationHistory = (options: {
-  news: { migrations?: MigrationsInput };
+  news: { migrations?: MigrationsInput | undefined };
   output:
     | {
         migrationsTable: string | undefined;
@@ -237,7 +237,7 @@ export const classifyMigrationHistory = (options: {
  * should consult {@link classifyMigrationHistory} instead of this boolean.
  */
 export const diffMigrations = (options: {
-  news: { migrations?: MigrationsInput };
+  news: { migrations?: MigrationsInput | undefined };
   output:
     | {
         migrationsTable: string | undefined;

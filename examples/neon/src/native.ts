@@ -6,6 +6,8 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { neon } from "@neondatabase/serverless";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { makeAuthenticate } from "./authenticate.ts";
 import { corsHeaders, objectKey, parseUpload, UUID } from "./policy.ts";
 
@@ -137,7 +139,10 @@ export default {
       console.error("Upload API request failed");
       return new Response("Upload service unavailable. Retry the request.", {
         status: 500,
-        headers,
+        ...Record.filterMap(
+          { headers },
+          Result.fromNullishOr(() => undefined),
+        ),
       });
     }
   },

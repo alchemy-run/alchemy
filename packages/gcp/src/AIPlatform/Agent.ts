@@ -32,20 +32,20 @@ export type AgentTool = {
    * Tool type: `code_execution`, `filesystem`, `google_search`,
    * `mcp_server`, or `url_context`.
    */
-  type?: string;
+  type?: string | undefined;
   /**
    * MCP server name. Only when `type` is `mcp_server`.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * MCP server endpoint URL. Only when `type` is `mcp_server`.
    */
-  url?: string;
+  url?: string | undefined;
   /**
    * MCP server headers (for example authentication). Only when `type` is
    * `mcp_server`.
    */
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | undefined;
 };
 
 export type AgentProps = {

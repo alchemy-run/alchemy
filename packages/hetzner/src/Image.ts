@@ -314,7 +314,13 @@ const getByLabels = (labels: Record<string, string>) =>
     })
     .pipe(Effect.map(({ images }) => images[0]));
 
-const observe = Effect.fn(function* ({ id, outputId }: { id: string; outputId?: number }) {
+const observe = Effect.fn(function* ({
+  id,
+  outputId,
+}: {
+  id: string;
+  outputId?: number | undefined;
+}) {
   if (outputId !== undefined) {
     const byId = yield* getById(outputId);
     if (byId !== undefined) return byId;

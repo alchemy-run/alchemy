@@ -247,7 +247,7 @@ const make = Effect.gen(function* () {
     input: {
       readonly ref: string;
       readonly newOid: string;
-      readonly expectedOid?: string | null;
+      readonly expectedOid?: string | null | undefined;
     },
   ) =>
     Effect.gen(function* () {
@@ -275,7 +275,7 @@ const make = Effect.gen(function* () {
 
   const prepareRefRemoval = (
     repo: RepoMetaData,
-    input: { readonly ref: string; readonly expectedOid?: string },
+    input: { readonly ref: string; readonly expectedOid?: string | undefined },
   ) =>
     Effect.gen(function* () {
       const stub = repos.getByName(repo.repoId);

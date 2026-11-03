@@ -24,7 +24,7 @@ export interface DeviceDexTestData {
   /** The kind of synthetic test the WARP client runs. */
   kind: "http" | "traceroute";
   /** The HTTP method to use — only `GET` is supported. */
-  method?: "GET" | (string & {});
+  method?: "GET" | (string & {}) | undefined;
 }
 
 /**
@@ -45,7 +45,7 @@ export interface DeviceDexTestProps {
    * a unique name is generated from the app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The synthetic probe the WARP client runs.
    */
@@ -58,19 +58,19 @@ export interface DeviceDexTestProps {
    * Whether the test is active.
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Additional details about the test.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Device settings profiles (DEX rules) targeted by this test.
    */
-  targetPolicies?: DeviceDexTestTargetPolicy[];
+  targetPolicies?: DeviceDexTestTargetPolicy[] | undefined;
   /**
    * Whether the test only runs for devices matching `targetPolicies`.
    */
-  targeted?: boolean;
+  targeted?: boolean | undefined;
 }
 
 export type DeviceDexTestAttributes = {
@@ -248,13 +248,13 @@ type ObservedDexTest = {
   data: {
     host: string;
     kind: "http" | "traceroute" | (string & {});
-    method?: "GET" | (string & {}) | null;
+    method?: "GET" | (string & {}) | null | undefined;
   };
   enabled: boolean;
   interval: string;
   name: string;
-  description?: string | null;
-  testId?: string | null;
+  description?: string | null | undefined;
+  testId?: string | null | undefined;
 };
 
 /**
@@ -285,7 +285,7 @@ const encodeData = (
 ): {
   host: string;
   kind: "http" | "traceroute";
-  method?: "GET" | (string & {});
+  method?: "GET" | (string & {}) | undefined;
 } => ({
   host: data.host,
   kind: data.kind,

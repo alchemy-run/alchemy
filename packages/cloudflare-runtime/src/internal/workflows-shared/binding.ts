@@ -3,6 +3,7 @@
 // Alchemy modifications: uses Effect Schema instead of Zod and Array<T> syntax for non-tuple arrays,
 // and resolves Workflow storage paths from the Engine namespace uniqueKey used by cloudflare-runtime.
 import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
+import * as Record from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { ms } from "itty-time";
@@ -120,7 +121,7 @@ export function deleteWorkflowStorage({
   abort,
   abortOnlyIfPersisted = false,
 }: {
-  disk?: Fetcher;
+  disk?: Fetcher | undefined;
   workflowName: string;
   ctx: ExecutionContext;
   hexId: string;
@@ -573,8 +574,10 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
         }
         batch = Array.from({ length: options.count }, () => ({
           params: options.params,
-          retention: options.retention,
-          locationHint: options.locationHint,
+          ...Record.filterMap(
+            { retention: options.retention, locationHint: options.locationHint },
+            Result.fromNullishOr(() => undefined),
+          ),
         }));
       } else if ("instances" in options && Array.isArray(options.instances)) {
         batch = options.instances;
@@ -989,7 +992,10 @@ export class WorkflowHandle extends RpcTarget implements WorkflowInstance {
       status: instanceStatusName(result.status),
       __LOCAL_DEV_STEP_OUTPUTS: stepOutputs,
       output: workflowOutput,
-      error: workflowError,
+      ...Record.filterMap(
+        { error: workflowError },
+        Result.fromNullishOr(() => undefined),
+      ),
     };
   }
 

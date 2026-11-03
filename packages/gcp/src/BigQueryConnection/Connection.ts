@@ -19,7 +19,7 @@ export type SparkHistoryServerConfig = {
    * Existing Dataproc cluster used as a Spark History Server, as
    * `projects/{project}/regions/{region}/clusters/{cluster}`.
    */
-  dataprocCluster?: string;
+  dataprocCluster?: string | undefined;
 };
 
 export type MetastoreServiceConfig = {
@@ -27,34 +27,34 @@ export type MetastoreServiceConfig = {
    * Existing Dataproc Metastore service, as
    * `projects/{project}/locations/{location}/services/{service}`.
    */
-  metastoreService?: string;
+  metastoreService?: string | undefined;
 };
 
 export type SparkProperties = {
   /** Spark History Server configuration. */
-  sparkHistoryServerConfig?: SparkHistoryServerConfig;
+  sparkHistoryServerConfig?: SparkHistoryServerConfig | undefined;
   /** Dataproc Metastore service configuration. */
-  metastoreServiceConfig?: MetastoreServiceConfig;
+  metastoreServiceConfig?: MetastoreServiceConfig | undefined;
 };
 
 export type CloudSqlCredential = {
   /** Database username. */
-  username?: string;
+  username?: string | undefined;
   /** Database password. Input-only — omitted from attributes. */
-  password?: string;
+  password?: string | undefined;
 };
 
 export type CloudSqlProperties = {
   /**
    * Cloud SQL instance id in the form `project:location:instance`.
    */
-  instanceId?: string;
+  instanceId?: string | undefined;
   /** Database engine. */
-  type?: "DATABASE_TYPE_UNSPECIFIED" | "POSTGRES" | "MYSQL" | (string & {});
+  type?: "DATABASE_TYPE_UNSPECIFIED" | "POSTGRES" | "MYSQL" | (string & {}) | undefined;
   /** Database name. */
-  database?: string;
+  database?: string | undefined;
   /** Cloud SQL credential. Input-only password. */
-  credential?: CloudSqlCredential;
+  credential?: CloudSqlCredential | undefined;
 };
 
 export type CloudResourceProperties = {
@@ -62,52 +62,52 @@ export type CloudResourceProperties = {
    * Google-managed service account for this connection. Output-only —
    * ignored on create.
    */
-  serviceAccountId?: string;
+  serviceAccountId?: string | undefined;
 };
 
 export type AwsAccessRole = {
   /** Customer AWS IAM role that trusts the Google-owned AWS identity. */
-  iamRoleId?: string;
+  iamRoleId?: string | undefined;
 };
 
 export type AwsProperties = {
   /** AWS IAM role assumption. */
-  accessRole?: AwsAccessRole;
+  accessRole?: AwsAccessRole | undefined;
 };
 
 export type CloudSpannerProperties = {
   /**
    * Cloud Spanner database as `project/instance/database`.
    */
-  database?: string;
+  database?: string | undefined;
   /** Fine-grained access control database role. */
-  databaseRole?: string;
+  databaseRole?: string | undefined;
   /** Whether to read from Spanner in parallel. */
-  useParallelism?: boolean;
+  useParallelism?: boolean | undefined;
   /**
    * Deprecated. Prefer `useDataBoost`. Requires `useParallelism`.
    */
-  useServerlessAnalytics?: boolean;
+  useServerlessAnalytics?: boolean | undefined;
   /** Execute via Spanner independent compute. Requires `useParallelism`. */
-  useDataBoost?: boolean;
+  useDataBoost?: boolean | undefined;
   /** Max parallelism per query. Requires `useParallelism` and `useDataBoost`. */
-  maxParallelism?: number;
+  maxParallelism?: number | undefined;
 };
 
 export type SalesforceDataCloudProperties = {
   /** Salesforce DataCloud instance URL. */
-  instanceUri?: string;
+  instanceUri?: string | undefined;
   /** Salesforce tenant id. */
-  tenantId?: string;
+  tenantId?: string | undefined;
 };
 
 export type AzureProperties = {
   /** Customer Azure Active Directory tenant that hosts the data. */
-  customerTenantId?: string;
+  customerTenantId?: string | undefined;
   /** Redirect URL after consent during connection setup. */
-  redirectUri?: string;
+  redirectUri?: string | undefined;
   /** Customer Azure AD application client id for federated auth. */
-  federatedApplicationClientId?: string;
+  federatedApplicationClientId?: string | undefined;
 };
 
 export type ConnectorSecret = {
@@ -117,39 +117,41 @@ export type ConnectorSecret = {
 
 export type ConnectorUsernamePassword = {
   /** Username. */
-  username?: string;
+  username?: string | undefined;
   /** Password secret. */
-  password?: ConnectorSecret;
+  password?: ConnectorSecret | undefined;
 };
 
 export type ConnectorParameterValue = {
-  int32Value?: number;
-  stringValue?: string;
-  boolValue?: boolean;
-  doubleValue?: number;
-  secretValue?: ConnectorSecret;
+  int32Value?: number | undefined;
+  stringValue?: string | undefined;
+  boolValue?: boolean | undefined;
+  doubleValue?: number | undefined;
+  secretValue?: ConnectorSecret | undefined;
 };
 
 export type ConnectorAuthentication = {
-  usernamePassword?: ConnectorUsernamePassword;
-  parameters?: Record<string, ConnectorParameterValue | undefined>;
+  usernamePassword?: ConnectorUsernamePassword | undefined;
+  parameters?: Record<string, ConnectorParameterValue | undefined> | undefined;
 };
 
 export type ConnectorNetwork = {
   /** Private Service Connect network attachment. */
-  privateServiceConnect?: {
-    networkAttachment?: string;
-  };
+  privateServiceConnect?:
+    | {
+        networkAttachment?: string | undefined;
+      }
+    | undefined;
 };
 
 export type ConnectorAsset = {
-  database?: string;
-  googleCloudResource?: string;
+  database?: string | undefined;
+  googleCloudResource?: string | undefined;
 };
 
 export type ConnectorEndpoint = {
   /** Host and port as `hostname:port`. */
-  hostPort?: string;
+  hostPort?: string | undefined;
 };
 
 export type ConnectorConfiguration = {
@@ -157,12 +159,12 @@ export type ConnectorConfiguration = {
    * Connector id (for example `google-alloydb`). Immutable — changing it
    * replaces the connection.
    */
-  connectorId?: string;
-  authentication?: ConnectorAuthentication;
-  network?: ConnectorNetwork;
-  parameters?: Record<string, ConnectorParameterValue | undefined>;
-  asset?: ConnectorAsset;
-  endpoint?: ConnectorEndpoint;
+  connectorId?: string | undefined;
+  authentication?: ConnectorAuthentication | undefined;
+  network?: ConnectorNetwork | undefined;
+  parameters?: Record<string, ConnectorParameterValue | undefined> | undefined;
+  asset?: ConnectorAsset | undefined;
+  endpoint?: ConnectorEndpoint | undefined;
 };
 
 export type ConnectionKind =

@@ -33,8 +33,8 @@ export interface SessionInfo {
   wsEndpoint: string;
   sessionId: string;
   startTime: number;
-  connectionId?: string;
-  connectionStartTime?: number;
+  connectionId?: string | undefined;
+  connectionStartTime?: number | undefined;
 }
 
 /** The shared service hosting the Browser Rendering simulator. */

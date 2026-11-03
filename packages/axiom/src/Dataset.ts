@@ -37,7 +37,7 @@ export type DatasetProps = {
    *
    * Cannot be changed after creation — triggers a replacement.
    */
-  edgeDeployment?: string;
+  edgeDeployment?: string | undefined;
   /**
    * Dataset kind. Defaults to `axiom:events:v1`.
    *
@@ -50,7 +50,7 @@ export type DatasetProps = {
    */
   kind?: DatasetKind;
   /** Retention in days. Plan-dependent — see Axiom docs. */
-  retentionDays?: number;
+  retentionDays?: number | undefined;
   /** Whether to enforce the configured retention period. */
   useRetentionPeriod?: boolean;
 };

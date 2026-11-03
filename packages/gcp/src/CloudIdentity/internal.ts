@@ -46,11 +46,11 @@ export const expandName = (value: string, collection: string) => {
 export const expandGroup = (value: string) => expandName(value, "groups");
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   if (input.extra === true) {
     return { action: "replace" as const, deleteFirst: false };
@@ -448,10 +448,10 @@ export const listSsoAssignments = () =>
   );
 
 export const findSsoAssignment = (input: {
-  name?: string;
-  targetGroup?: string;
-  targetOrgUnit?: string;
-  ssoMode?: string;
+  name?: string | undefined;
+  targetGroup?: string | undefined;
+  targetOrgUnit?: string | undefined;
+  ssoMode?: string | undefined;
 }) =>
   Effect.gen(function* () {
     if (input.name !== undefined && input.name.length > 0) {

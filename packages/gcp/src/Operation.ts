@@ -13,16 +13,20 @@ import * as Schedule from "effect/Schedule";
 
 /** The subset of a long-running operation the waiter reads. */
 export interface LongRunningOperation {
-  name?: string;
-  done?: boolean;
+  name?: string | undefined;
+  done?: boolean | undefined;
   /** Compute operations report `status: "DONE"` instead of `done`. */
-  status?: string;
-  error?: {
-    code?: number;
-    message?: string;
-    /** Compute operations list their errors here. */
-    errors?: ReadonlyArray<{ code?: string; message?: string }>;
-  };
+  status?: string | undefined;
+  error?:
+    | {
+        code?: number | undefined;
+        message?: string | undefined;
+        /** Compute operations list their errors here. */
+        errors?:
+          | ReadonlyArray<{ code?: string | undefined; message?: string | undefined }>
+          | undefined;
+      }
+    | undefined;
 }
 
 /** The operation finished with an error. */

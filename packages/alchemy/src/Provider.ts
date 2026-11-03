@@ -87,8 +87,8 @@ export interface LogLine {
 }
 
 export interface LogsInput {
-  since?: Date;
-  limit?: number;
+  since?: Date | undefined;
+  limit?: number | undefined;
 }
 
 export interface ProviderService<
@@ -115,7 +115,7 @@ export interface ProviderService<
    * before the `"Cloudflare.Queues.Queue"` rename) still resolves to this
    * provider via {@link tryFindProviderByType}.
    */
-  aliases?: readonly string[];
+  aliases?: readonly string[] | undefined;
   /**
    * The {@link ProviderMode} this service operates in.
    *
@@ -152,7 +152,7 @@ export interface ProviderService<
    * routes to the emulator while an `Alchemy.remote()` resource keeps
    * hitting the real cloud. Pass a module-memoized layer reference.
    */
-  localDataPlane?: () => Layer.Layer<any, any, never>;
+  localDataPlane?: (() => Layer.Layer<any, any, never>) | undefined;
   /**
    * Data-plane override context for this provider's **live** mode: the
    * cloud environment captured at provider registration (credentials,
@@ -161,51 +161,53 @@ export interface ProviderService<
    * so `Alchemy.remote()` binding calls are provided the live chain
    * closest, the inverse of {@link localDataPlane}.
    */
-  liveDataPlane?: () => Layer.Layer<any, any, never>;
+  liveDataPlane?: (() => Layer.Layer<any, any, never>) | undefined;
   /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
    * report an endless "deleted but still there" loop. `read`/import are
    * unaffected.
    */
-  nuke?: {
-    /**
-     * The resource is an account/zone **singleton setting** — always-present
-     * configuration (e.g. Bot Management, Email Routing, a zone's SSL
-     * settings) whose `delete` only *resets* it to defaults rather than
-     * removing a discrete resource. Skipped by nuke, since `list` always
-     * re-enumerates it and "deleting" it just resets config the operator
-     * never created.
-     */
-    singleton?: boolean;
-    /**
-     * The resource is skipped by nuke for any other reason — typically because
-     * it can never actually be deleted (no delete API, like RealtimeKit Apps;
-     * or a registration that is never released, like Registrar Domains). Unlike
-     * {@link singleton}, these are ordinary multi-instance resources.
-     */
-    skip?: boolean;
-    /**
-     * Provider IDs (picomatch globs, e.g. `"AWS.IAM.Role"` or `"AWS.EC2.*"`)
-     * whose resources this type's **cloud-side teardown** consumes — they
-     * must still exist while this type is deleting. `alchemy unsafe nuke`
-     * topologically orders deletion so every resource of this type is fully
-     * gone before any matching type starts deleting; if this type's deletes
-     * fail, the matching types are held back rather than deleted out from
-     * under an in-flight teardown.
-     *
-     * Example: SageMaker HyperPod deletes node ENIs by assuming the
-     * instance group's execution role — deleting the role (or the VPC)
-     * mid-teardown wedges the cluster in `Deleting` permanently, so
-     * `AWS.SageMaker.Cluster` declares `dependsOn: ["AWS.IAM.Role", ...]`.
-     *
-     * The constraint only takes effect when resources of this type are
-     * actually present in the nuke target set; declaration cycles collapse
-     * into a single concurrent wave (with a logged warning) instead of
-     * failing.
-     */
-    dependsOn?: readonly string[];
-  };
+  nuke?:
+    | {
+        /**
+         * The resource is an account/zone **singleton setting** — always-present
+         * configuration (e.g. Bot Management, Email Routing, a zone's SSL
+         * settings) whose `delete` only *resets* it to defaults rather than
+         * removing a discrete resource. Skipped by nuke, since `list` always
+         * re-enumerates it and "deleting" it just resets config the operator
+         * never created.
+         */
+        singleton?: boolean;
+        /**
+         * The resource is skipped by nuke for any other reason — typically because
+         * it can never actually be deleted (no delete API, like RealtimeKit Apps;
+         * or a registration that is never released, like Registrar Domains). Unlike
+         * {@link singleton}, these are ordinary multi-instance resources.
+         */
+        skip?: boolean;
+        /**
+         * Provider IDs (picomatch globs, e.g. `"AWS.IAM.Role"` or `"AWS.EC2.*"`)
+         * whose resources this type's **cloud-side teardown** consumes — they
+         * must still exist while this type is deleting. `alchemy unsafe nuke`
+         * topologically orders deletion so every resource of this type is fully
+         * gone before any matching type starts deleting; if this type's deletes
+         * fail, the matching types are held back rather than deleted out from
+         * under an in-flight teardown.
+         *
+         * Example: SageMaker HyperPod deletes node ENIs by assuming the
+         * instance group's execution role — deleting the role (or the VPC)
+         * mid-teardown wedges the cluster in `Deleting` permanently, so
+         * `AWS.SageMaker.Cluster` declares `dependsOn: ["AWS.IAM.Role", ...]`.
+         *
+         * The constraint only takes effect when resources of this type are
+         * actually present in the nuke target set; declaration cycles collapse
+         * into a single concurrent wave (with a logged warning) instead of
+         * failing.
+         */
+        dependsOn?: readonly string[];
+      }
+    | undefined;
   /**
    * Enumerates every existing resource of this type in the ambient scope
    * (account / region / zone resolved from the environment services), and
@@ -405,7 +407,7 @@ export interface ProviderService<
      * bucket behind `forceDestroy`) may be performed when this is set.
      * Normal engine destroys never set it.
      */
-    force?: boolean;
+    force?: boolean | undefined;
   }): Effect.Effect<void, any, DeleteReq>;
 }
 

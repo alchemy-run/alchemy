@@ -27,13 +27,13 @@ import {
 
 export type RuleConfigInfo = {
   /** Backup rule id from the plan. */
-  ruleId?: string;
+  ruleId?: string | undefined;
   /** Last backup state for the rule. */
-  lastBackupState?: string;
+  lastBackupState?: string | undefined;
   /** Last backup error message. */
-  lastBackupError?: string;
+  lastBackupError?: string | undefined;
   /** Last successful backup consistency time. */
-  lastSuccessfulBackupConsistencyTime?: string;
+  lastSuccessfulBackupConsistencyTime?: string | undefined;
 };
 
 export type BackupPlanAssociationProps = {

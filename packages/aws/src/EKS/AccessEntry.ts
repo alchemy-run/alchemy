@@ -40,12 +40,12 @@ export interface AccessEntryProps {
   /**
    * Optional Kubernetes groups for the principal.
    */
-  kubernetesGroups?: string[];
+  kubernetesGroups?: string[] | undefined;
   /**
    * Optional username to map inside Kubernetes. If omitted, EKS generates one,
    * and removing a username you set resets it to the generated default.
    */
-  username?: string;
+  username?: string | undefined;
   /**
    * Entry type, such as `STANDARD`.
    */
@@ -53,7 +53,7 @@ export interface AccessEntryProps {
   /**
    * Exact set of EKS access policies associated with this entry.
    */
-  accessPolicies?: AccessPolicyAssociation[];
+  accessPolicies?: AccessPolicyAssociation[] | undefined;
   /**
    * User-defined tags to apply to the access entry.
    */

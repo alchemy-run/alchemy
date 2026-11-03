@@ -53,7 +53,7 @@ export interface PromotionCodeRestrictions {
   /**
    * Per-currency minimum amounts. Mutable on update.
    */
-  currencyOptions?: Record<string, PromotionCodeCurrencyOption>;
+  currencyOptions?: Record<string, PromotionCodeCurrencyOption> | undefined;
 }
 
 export interface PromotionCodeProps {
@@ -349,7 +349,7 @@ const listByActive = Effect.fn(function* (active: boolean) {
   return items;
 });
 
-const observe = Effect.fn(function* (input: { id?: string; code: string }) {
+const observe = Effect.fn(function* (input: { id?: string | undefined; code: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

@@ -2,9 +2,12 @@
  * Plain-fetch client of the git-service REST API (`/api/v1`).
  *
  * The types mirror `@alchemy.run/git`'s API schemas (`packages/git/src/Api/Schema.ts`)
- * by hand — the SPA deliberately ships no Effect runtime; it is an example
- * of consuming the service from any plain JS frontend.
+ * by hand — the SPA uses plain fetch rather than an Effect HTTP client to
+ * demonstrate consuming the service from any plain JS frontend.
  */
+
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 
 // ── configuration ───────────────────────────────────────────────────────────
 
@@ -37,11 +40,15 @@ const authRequest = async <T>(
   path: string,
   body?: unknown,
 ): Promise<T> => {
+  const payload = body !== undefined ? JSON.stringify(body) : undefined;
   const res = await fetch(`${c.url}/api/auth${path}`, {
     method,
     credentials: "include",
     headers: body !== undefined ? { "Content-Type": "application/json" } : {},
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    ...Record.filterMap(
+      { body: payload },
+      Result.fromNullishOr(() => undefined),
+    ),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -257,13 +264,17 @@ const request = async <T>(
   path: string,
   body?: unknown,
 ): Promise<T> => {
+  const payload = body !== undefined ? JSON.stringify(body) : undefined;
   const res = await fetch(`${connection.url}/api/v1${path}`, {
     method,
     // The Better Auth session cookie is the credential; anonymous
     // requests carry none and the policy confines them to public reads.
     credentials: "include",
     headers: body !== undefined ? { "Content-Type": "application/json" } : {},
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    ...Record.filterMap(
+      { body: payload },
+      Result.fromNullishOr(() => undefined),
+    ),
   });
   if (!res.ok) throw await parseError(res);
   if (res.status === 204) return undefined as T;
@@ -412,7 +423,7 @@ export const getBlob = async (
   owner: string,
   repo: string,
   oid: string,
-  options?: { size?: number },
+  options?: { size?: number | undefined },
 ): Promise<Uint8Array> => {
   if (options?.size !== undefined && options.size > MAX_JSON_BLOB) {
     return getBlobRaw(c, owner, repo, oid);

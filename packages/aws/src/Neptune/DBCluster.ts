@@ -267,7 +267,7 @@ export interface DBCluster extends Resource<
 export const DBCluster = Resource<DBCluster>("AWS.Neptune.DBCluster");
 
 const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: Array<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

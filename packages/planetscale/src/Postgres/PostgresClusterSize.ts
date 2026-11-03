@@ -169,8 +169,8 @@ export type PostgresClusterSize =
  */
 export function toPostgresClusterSku(input: {
   size: PostgresClusterSize;
-  arch?: "x86" | "arm";
-  region?: string;
+  arch?: "x86" | "arm" | undefined;
+  region?: string | undefined;
 }): string {
   const size = input.size.replaceAll("-", "_");
   if (!size.startsWith("PS_") || size.match(/(AWS|GCP)/)) return size;

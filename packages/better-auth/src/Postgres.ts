@@ -28,11 +28,11 @@ export interface SqlLayerOptions {
    */
   readonly migrate?: MigrateSource | false;
   /** Extra driver pool options (`max` defaults to 1 per execution). */
-  readonly pool?: Record<string, unknown>;
+  readonly pool?: Record<string, unknown> | undefined;
 }
 
 export interface PostgresOptions extends SqlLayerOptions {
-  readonly pool?: Omit<PoolConfig, "connectionString">;
+  readonly pool?: Omit<PoolConfig, "connectionString"> | undefined;
 }
 
 /**

@@ -7,6 +7,8 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
@@ -172,7 +174,14 @@ const program = Effect.scoped(
                 binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],
               ),
             },
-            { host: viteHost, port: vitePort, strictPort: false },
+            {
+              host: viteHost,
+              ...Record.filterMap(
+                { port: vitePort },
+                Result.fromNullishOr(() => undefined),
+              ),
+              strictPort: false,
+            },
           ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));
     if (!url) {
       return yield* Effect.die("Dev server child started without a local URL");

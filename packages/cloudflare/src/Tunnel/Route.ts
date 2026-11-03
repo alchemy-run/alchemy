@@ -341,13 +341,13 @@ const findRouteByNetwork = (
     );
 
 const toObserved = (r: {
-  id?: string | null;
-  network?: string | null;
-  tunnelId?: string | null;
-  virtualNetworkId?: string | null;
-  comment?: string | null;
-  createdAt?: string | null;
-  deletedAt?: string | null;
+  id?: string | null | undefined;
+  network?: string | null | undefined;
+  tunnelId?: string | null | undefined;
+  virtualNetworkId?: string | null | undefined;
+  comment?: string | null | undefined;
+  createdAt?: string | null | undefined;
+  deletedAt?: string | null | undefined;
 }): ObservedRoute | undefined =>
   r.id
     ? {

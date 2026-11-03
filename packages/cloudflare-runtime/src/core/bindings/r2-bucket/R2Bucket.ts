@@ -2,6 +2,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const R2BucketWorker = {
   worker: () =>
@@ -50,7 +52,7 @@ export class R2Bucket extends Plugin.Service<
      */
     readonly register: (
       props: R2ServiceProps,
-      options?: { readonly s3Credentials?: S3Credentials },
+      options?: { readonly s3Credentials?: S3Credentials | undefined },
     ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
   }
 >()("cloudflare-runtime/plugin/R2Bucket") {}
@@ -226,6 +228,15 @@ export const local = (props: R2BucketProps): BindingHook<R2Bucket> =>
 
 export const remote = (binding: string, bucketName: string, jurisdiction?: string) =>
   makeRemoteBinding(
-    { name: binding, type: "r2_bucket", bucketName, jurisdiction, raw: true },
+    {
+      name: binding,
+      type: "r2_bucket",
+      bucketName,
+      ...Record.filterMap(
+        { jurisdiction },
+        Result.fromNullishOr(() => undefined),
+      ),
+      raw: true,
+    },
     (service) => ({ name: binding, r2Bucket: service }),
   );

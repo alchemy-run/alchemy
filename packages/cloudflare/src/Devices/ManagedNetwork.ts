@@ -29,7 +29,7 @@ export interface DeviceManagedNetworkConfig {
    * certificate served at {@link tlsSockaddr}. When set, the client only
    * considers the network detected if the certificate matches.
    */
-  sha256?: string;
+  sha256?: string | undefined;
 }
 
 export interface DeviceManagedNetworkProps {
@@ -39,7 +39,7 @@ export interface DeviceManagedNetworkProps {
    * ID.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * TLS detection endpoint for the network. Mutable — updated in place.
    */
@@ -208,10 +208,10 @@ export const DeviceManagedNetworkProvider = () =>
  * Structural shape shared by get/list/create/update responses.
  */
 type ObservedNetwork = {
-  config?: { tlsSockaddr: string; sha256?: string | null } | null;
-  name?: string | null;
-  networkId?: string | null;
-  type?: "tls" | (string & {}) | null;
+  config?: { tlsSockaddr: string; sha256?: string | null | undefined } | null | undefined;
+  name?: string | null | undefined;
+  networkId?: string | null | undefined;
+  type?: "tls" | (string & {}) | null | undefined;
 };
 
 /**
@@ -239,8 +239,8 @@ const createNetworkName = (id: string, name: string | undefined) =>
 
 const encodeConfig = (
   config: DeviceManagedNetworkConfig,
-): { tlsSockaddr: string; sha256?: string } => {
-  const out: { tlsSockaddr: string; sha256?: string } = {
+): { tlsSockaddr: string; sha256?: string | undefined } => {
+  const out: { tlsSockaddr: string; sha256?: string | undefined } = {
     tlsSockaddr: config.tlsSockaddr,
   };
   if (config.sha256 !== undefined) out.sha256 = config.sha256;

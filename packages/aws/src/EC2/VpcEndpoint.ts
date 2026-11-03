@@ -51,56 +51,58 @@ export interface VpcEndpointProps {
    * - GatewayLoadBalancer: For Gateway Load Balancer endpoints
    * @default "Gateway"
    */
-  vpcEndpointType?: EC2.VpcEndpointType;
+  vpcEndpointType?: EC2.VpcEndpointType | undefined;
 
   /**
    * The IDs of route tables for a Gateway endpoint.
    * Required for Gateway endpoints.
    */
-  routeTableIds?: RouteTableId[];
+  routeTableIds?: RouteTableId[] | undefined;
 
   /**
    * The IDs of subnets for an Interface endpoint.
    * Required for Interface endpoints.
    */
-  subnetIds?: SubnetId[];
+  subnetIds?: SubnetId[] | undefined;
 
   /**
    * The IDs of security groups for an Interface endpoint.
    * Required for Interface endpoints.
    */
-  securityGroupIds?: SecurityGroupId[];
+  securityGroupIds?: SecurityGroupId[] | undefined;
 
   /**
    * Whether to associate a private hosted zone with the VPC.
    * Only applicable for Interface endpoints.
    * @default true
    */
-  privateDnsEnabled?: boolean;
+  privateDnsEnabled?: boolean | undefined;
 
   /**
    * A policy to attach to the endpoint that controls access to the service.
    * The policy document must be in JSON format.
    */
-  policyDocument?: string;
+  policyDocument?: string | undefined;
 
   /**
    * The IP address type for the endpoint.
    */
-  ipAddressType?: EC2.IpAddressType;
+  ipAddressType?: EC2.IpAddressType | undefined;
 
   /**
    * The DNS options for the endpoint.
    */
-  dnsOptions?: {
-    dnsRecordIpType?: EC2.DnsRecordIpType;
-    privateDnsOnlyForInboundResolverEndpoint?: boolean;
-  };
+  dnsOptions?:
+    | {
+        dnsRecordIpType?: EC2.DnsRecordIpType | undefined;
+        privateDnsOnlyForInboundResolverEndpoint?: boolean | undefined;
+      }
+    | undefined;
 
   /**
    * Tags to assign to the VPC endpoint.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface VpcEndpoint extends Resource<
@@ -140,79 +142,87 @@ export interface VpcEndpoint extends Resource<
     /**
      * The policy document associated with the endpoint.
      */
-    policyDocument?: string;
+    policyDocument?: string | undefined;
 
     /**
      * The IDs of the route tables associated with the endpoint.
      */
-    routeTableIds?: string[];
+    routeTableIds?: string[] | undefined;
 
     /**
      * The IDs of the subnets associated with the endpoint.
      */
-    subnetIds?: string[];
+    subnetIds?: string[] | undefined;
 
     /**
      * Information about the security groups associated with the network interfaces.
      */
-    groups?: Array<{
-      groupId: string;
-      groupName: string;
-    }>;
+    groups?:
+      | Array<{
+          groupId: string;
+          groupName: string;
+        }>
+      | undefined;
 
     /**
      * Whether private DNS is enabled.
      */
-    privateDnsEnabled?: boolean;
+    privateDnsEnabled?: boolean | undefined;
 
     /**
      * Whether the VPC endpoint is being managed by its service.
      */
-    requesterManaged?: boolean;
+    requesterManaged?: boolean | undefined;
 
     /**
      * The IDs of the network interfaces for the endpoint.
      */
-    networkInterfaceIds?: string[];
+    networkInterfaceIds?: string[] | undefined;
 
     /**
      * The DNS entries for the endpoint.
      */
-    dnsEntries?: Array<{
-      dnsName?: string;
-      hostedZoneId?: string;
-    }>;
+    dnsEntries?:
+      | Array<{
+          dnsName?: string | undefined;
+          hostedZoneId?: string | undefined;
+        }>
+      | undefined;
 
     /**
      * The date and time the VPC endpoint was created.
      */
-    creationTimestamp?: string;
+    creationTimestamp?: string | undefined;
 
     /**
      * The ID of the AWS account that owns the VPC endpoint.
      */
-    ownerId?: string;
+    ownerId?: string | undefined;
 
     /**
      * The IP address type for the endpoint.
      */
-    ipAddressType?: EC2.IpAddressType;
+    ipAddressType?: EC2.IpAddressType | undefined;
 
     /**
      * The DNS options for the endpoint.
      */
-    dnsOptions?: {
-      dnsRecordIpType?: EC2.DnsRecordIpType;
-      privateDnsOnlyForInboundResolverEndpoint?: boolean;
-    };
+    dnsOptions?:
+      | {
+          dnsRecordIpType?: EC2.DnsRecordIpType | undefined;
+          privateDnsOnlyForInboundResolverEndpoint?: boolean | undefined;
+        }
+      | undefined;
 
     /**
      * The last error that occurred for VPC endpoint.
      */
-    lastError?: {
-      code?: string;
-      message?: string;
-    };
+    lastError?:
+      | {
+          code?: string | undefined;
+          message?: string | undefined;
+        }
+      | undefined;
   },
   never,
   Providers
@@ -684,8 +694,8 @@ class VpcEndpointPending extends Data.TaggedError("VpcEndpointPending")<{
 // Terminal error: VPC Endpoint creation failed
 class VpcEndpointFailed extends Data.TaggedError("VpcEndpointFailed")<{
   vpcEndpointId: string;
-  errorCode?: string;
-  errorMessage?: string;
+  errorCode?: string | undefined;
+  errorMessage?: string | undefined;
 }> {}
 
 // Retryable error: VPC Endpoint is still deleting

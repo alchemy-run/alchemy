@@ -104,13 +104,13 @@ const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) 
 export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousLocation?: string;
-  nextLocation?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousLocation?: string | undefined;
+  nextLocation?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   const previousLocation =
     input.previousLocation !== undefined ? normalizeLocation(input.previousLocation) : undefined;

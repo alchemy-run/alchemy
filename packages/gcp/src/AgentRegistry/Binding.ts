@@ -41,12 +41,12 @@ export type AuthProviderBinding = {
   /**
    * OAuth2 scopes requested from the auth provider.
    */
-  scopes?: string[];
+  scopes?: string[] | undefined;
   /**
    * Continue URI used to reauthenticate the user and finalize the
    * managed OAuth flow.
    */
-  continueUri?: string;
+  continueUri?: string | undefined;
 };
 
 export type BindingProps = {

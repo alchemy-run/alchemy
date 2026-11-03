@@ -26,22 +26,22 @@ import {
 
 export type ProductPriceInfo = {
   /** ISO 4217 currency code, e.g. `USD`. */
-  currencyCode?: string;
+  currencyCode?: string | undefined;
   /** Sale price. */
-  price?: number;
+  price?: number | undefined;
   /** Price before discount. */
-  originalPrice?: number;
+  originalPrice?: number | undefined;
   /** Cost of goods sold. */
-  cost?: number;
+  cost?: number | undefined;
 };
 
 export type ProductImage = {
   /** Image URI. */
   uri: string;
   /** Height in pixels. */
-  height?: number;
+  height?: number | undefined;
   /** Width in pixels. */
-  width?: number;
+  width?: number | undefined;
 };
 
 export type CatalogsBranchesProductProps = {

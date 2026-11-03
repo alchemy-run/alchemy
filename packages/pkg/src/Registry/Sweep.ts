@@ -3,6 +3,8 @@ import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { Bucket, ORPHAN_GRACE, RegistryConfig, SWEEP_LOOKAHEAD, tarballKey } from "./Bindings.ts";
 import * as GitHub from "./GitHub.ts";
@@ -79,7 +81,13 @@ export const sweep = Effect.gen(function* () {
   // Uploads that never got tagged.
   const orphans = yield* Stream.paginate(undefined as string | undefined, (cursor) =>
     r2
-      .list({ cursor, limit: 500 })
+      .list({
+        limit: 500,
+        ...Rec.filterMap(
+          { cursor },
+          Result.fromNullishOr(() => undefined),
+        ),
+      })
       .pipe(
         Effect.map(
           (page) =>

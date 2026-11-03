@@ -39,13 +39,13 @@ export interface MemoOptions {
    * @example ["src/**", "package.json", "tsconfig.json"]
    * @example ["**\/*", "../env/src/**"] (also rebuild when a sibling workspace package changes)
    */
-  include?: string[];
+  include?: string[] | undefined;
   /**
    * Glob patterns to exclude from hashing. Paths are relative to the working directory.
    *
    * @default gitignore rules collected from the working directory up to the repo root
    */
-  exclude?: string[];
+  exclude?: string[] | undefined;
   /**
    * Whether to include the nearest package-manager lockfile (`bun.lock`,
    * `package-lock.json`, `pnpm-lock.yaml`, or `yarn.lock`) in the hash,
@@ -53,7 +53,7 @@ export interface MemoOptions {
    *
    * @default true when both `include` and `exclude` are unset; false otherwise
    */
-  lockfile?: boolean;
+  lockfile?: boolean | undefined;
 }
 
 interface ResolvedMemoOptions {
@@ -278,8 +278,8 @@ const Memo = Effect.gen(function* () {
  * files changes, making it suitable for cache-busting build outputs.
  */
 export const hashDirectory = Effect.fn(function* (props: {
-  cwd?: string;
-  memo?: MemoOptions;
+  cwd?: string | undefined;
+  memo?: MemoOptions | undefined;
 }): Effect.fn.Return<string, PlatformError, FileSystem.FileSystem | Path.Path> {
   const service = yield* Memo;
   const resolvedOptions = yield* service.resolveMemoOptions(props.cwd, props.memo ?? {});

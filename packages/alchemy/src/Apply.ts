@@ -8,6 +8,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
@@ -123,7 +125,7 @@ const track = (
 const propsIncomplete = (value: {
   attr?: unknown;
   props?: unknown;
-  propsIncomplete?: true;
+  propsIncomplete?: true | undefined;
 }): true | undefined =>
   value.attr === undefined && (value.propsIncomplete || !isResolved(stripEffects(value.props)))
     ? true
@@ -313,7 +315,7 @@ export const apply = <P extends Plan>(
         id: string;
         type: string;
         status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
-        providerMode?: ProviderMode;
+        providerMode?: ProviderMode | undefined;
       }
     >();
 
@@ -386,7 +388,10 @@ export const apply = <P extends Plan>(
           id,
           resourceType: type,
           status,
-          providerMode,
+          ...Record.filterMap(
+            { providerMode },
+            Result.fromNullishOr(() => undefined),
+          ),
         }),
       { concurrency: "unbounded" },
     );
@@ -456,7 +461,7 @@ const executePlan = Effect.fn(function* (
       id: string;
       type: string;
       status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
-      providerMode?: ProviderMode;
+      providerMode?: ProviderMode | undefined;
     }
   >,
   reportEvent: Reporter,
@@ -625,7 +630,7 @@ const executeNode = (
       id: string;
       type: string;
       status: Extract<ApplyStatus, "created" | "updated" | "adopted">;
-      providerMode?: ProviderMode;
+      providerMode?: ProviderMode | undefined;
     }
   >,
   reportEvent: Reporter,
@@ -695,8 +700,10 @@ const executeNode = (
         id: logicalId,
         resourceType: node.resource.Type,
         status,
-        providerMode: node.mode,
-        fromProviderMode,
+        ...Record.filterMap(
+          { providerMode: node.mode, fromProviderMode },
+          Result.fromNullishOr(() => undefined),
+        ),
       });
 
     const markTerminal = (status: "created" | "updated") =>
@@ -737,7 +744,10 @@ const executeNode = (
           id: logicalId,
           resourceType: node.resource.Type,
           status,
-          providerMode: node.mode,
+          ...Record.filterMap(
+            { providerMode: node.mode },
+            Result.fromNullishOr(() => undefined),
+          ),
         });
       });
 
@@ -1538,8 +1548,10 @@ const executeNode = (
           id: node.resource.LogicalId,
           resourceType: node.resource.Type,
           status: "fail",
-          message: failureMessage(cause),
-          providerMode: node.mode,
+          ...Record.filterMap(
+            { message: failureMessage(cause), providerMode: node.mode },
+            Result.fromNullishOr(() => undefined),
+          ),
         });
       }),
     ),
@@ -1593,7 +1605,7 @@ const executeActionNode = (
       id: string;
       type: string;
       status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
-      providerMode?: ProviderMode;
+      providerMode?: ProviderMode | undefined;
     }
   >,
   reportEvent: Reporter,
@@ -1722,7 +1734,10 @@ const executeActionNode = (
           id: node.def.LogicalId,
           resourceType: node.def.Type,
           status: "fail",
-          message: failureMessage(cause),
+          ...Record.filterMap(
+            { message: failureMessage(cause) },
+            Result.fromNullishOr(() => undefined),
+          ),
         });
       }),
     ),
@@ -1756,7 +1771,7 @@ const converge = Effect.fn(function* (
       id: string;
       type: string;
       status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
-      providerMode?: ProviderMode;
+      providerMode?: ProviderMode | undefined;
     }
   >,
   reportEvent: Reporter,
@@ -2169,7 +2184,10 @@ const collectGarbage = Effect.fn(function* (plan: Plan, reportEvent: Reporter) {
             id: logicalId,
             resourceType,
             status,
-            providerMode,
+            ...Record.filterMap(
+              { providerMode },
+              Result.fromNullishOr(() => undefined),
+            ),
           });
 
         const scopedSession = resourceSession(reportEvent, fqn, logicalId);

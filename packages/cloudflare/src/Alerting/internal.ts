@@ -9,30 +9,30 @@ import type { AlertType, NotificationPolicyMechanisms } from "./NotificationPoli
 
 export interface ObservedPolicy {
   readonly id: string;
-  readonly name?: string;
-  readonly alertType?: AlertType;
-  readonly enabled?: boolean;
-  readonly description?: string;
-  readonly alertInterval?: string;
+  readonly name?: string | undefined;
+  readonly alertType?: AlertType | undefined;
+  readonly enabled?: boolean | undefined;
+  readonly description?: string | undefined;
+  readonly alertInterval?: string | undefined;
   readonly mechanisms?: unknown;
   readonly filters?: unknown;
-  readonly created?: string;
-  readonly modified?: string;
+  readonly created?: string | undefined;
+  readonly modified?: string | undefined;
 }
 
 export const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 export const narrowPolicy = (raw: {
-  id?: string | null;
-  name?: string | null;
-  alertType?: string | null;
-  enabled?: boolean | null;
-  description?: string | null;
-  alertInterval?: string | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  alertType?: string | null | undefined;
+  enabled?: boolean | null | undefined;
+  description?: string | null | undefined;
+  alertInterval?: string | null | undefined;
   mechanisms?: unknown;
   filters?: unknown;
-  created?: string | null;
-  modified?: string | null;
+  created?: string | null | undefined;
+  modified?: string | null | undefined;
 }): ObservedPolicy | undefined =>
   raw.id == null
     ? undefined

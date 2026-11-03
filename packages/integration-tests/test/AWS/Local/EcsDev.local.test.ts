@@ -798,7 +798,11 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
          */
         const expectRecordedRevisionSettled = (outputs: {
           cluster: { clusterName: string };
-          service: { taskFamily?: string; taskDefinitionArn: string; serviceName: string };
+          service: {
+            taskFamily?: string | undefined;
+            taskDefinitionArn: string;
+            serviceName: string;
+          };
         }) =>
           Effect.gen(function* () {
             const { service } = outputs;

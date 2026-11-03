@@ -8,8 +8,8 @@ export declare namespace Subscriber {
   export interface Worker {
     readonly kind: "worker";
     readonly scriptName: string;
-    readonly entrypoint?: string;
-    readonly props?: Record<string, unknown>;
+    readonly entrypoint?: string | undefined;
+    readonly props?: Record<string, unknown> | undefined;
   }
   export interface DurableObject {
     readonly kind: "durable-object";
@@ -75,7 +75,7 @@ export type ResolvedTarget<T extends Subscriber = Subscriber> = Extract<
 > & {
   readonly scriptName: string;
   readonly debugPortAddress: string;
-  readonly instanceId?: string;
+  readonly instanceId?: string | undefined;
 };
 
 export const resolvedTargetKey = (entry: ResolvedTarget | Subscriber) => {

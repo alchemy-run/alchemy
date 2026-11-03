@@ -6,7 +6,7 @@ type DeploymentState = { protocol: "legacy" | "1" | "2" } | { protocol: "invalid
 
 /** Observation and reconciliation must agree before treating a Machine as legacy. */
 export const classifyDeploymentState = (machine: {
-  config?: FlyMachineConfig;
+  config?: FlyMachineConfig | undefined;
 }): DeploymentState => {
   const metadata = machine.config?.metadata;
   const protocol = metadata?.[keys.protocol];
@@ -46,7 +46,9 @@ export const classifyDeploymentState = (machine: {
 };
 
 /** Required recovery fields for a complete protocol-2 generation member. */
-const validProtocol2RecoveryMetadata = (machine: { config?: FlyMachineConfig }): boolean => {
+const validProtocol2RecoveryMetadata = (machine: {
+  config?: FlyMachineConfig | undefined;
+}): boolean => {
   if (!validObservedImageSet(machine)) return false;
   const recorded = machine.config?.metadata;
   const countText = recorded?.[keys.count] ?? "";
@@ -78,7 +80,7 @@ const validProtocol2RecoveryMetadata = (machine: { config?: FlyMachineConfig }):
 
 /** A partial protocol-2 generation is valid only when every member agrees on its identity. */
 export const validProtocol2Generation = (
-  group: readonly { config?: FlyMachineConfig }[],
+  group: readonly { config?: FlyMachineConfig | undefined }[],
 ): boolean => {
   const first = group[0]?.config?.metadata;
   if (!first || group.length === 0) return false;

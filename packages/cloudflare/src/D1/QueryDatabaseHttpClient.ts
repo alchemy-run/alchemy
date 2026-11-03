@@ -64,7 +64,9 @@ export const makeQueryDatabaseClientFrom = (
 const runQuery = (
   auth: D1Auth,
   databaseId: string,
-  body: { sql: string; params?: unknown[] } | { batch: { sql: string; params?: unknown[] }[] },
+  body:
+    | { sql: string; params?: unknown[] | undefined }
+    | { batch: { sql: string; params?: unknown[] | undefined }[] },
 ): Promise<d1.QueryDatabaseResponse> =>
   auth
     .authorize(
@@ -77,7 +79,7 @@ const runQuery = (
     .pipe(Effect.runPromise);
 
 const toResult = <T>(
-  r: { results?: unknown; success?: boolean | null; meta?: unknown } | undefined,
+  r: { results?: unknown; success?: boolean | null | undefined; meta?: unknown } | undefined,
 ): runtime.D1Result<T> =>
   ({
     results: (r?.results ?? []) as T[],
@@ -114,11 +116,13 @@ export const makeHttpD1Database = (auth: D1Auth, databaseId: string): runtime.D1
  * (`withLocalD1Query`).
  */
 export type D1QueryTransport = (
-  body: { sql: string; params?: unknown[] } | { batch: { sql: string; params?: unknown[] }[] },
+  body:
+    | { sql: string; params?: unknown[] | undefined }
+    | { batch: { sql: string; params?: unknown[] | undefined }[] },
 ) => Promise<{
   result: Array<{
     results?: unknown;
-    success?: boolean | null;
+    success?: boolean | null | undefined;
     meta?: unknown;
   }>;
 }>;

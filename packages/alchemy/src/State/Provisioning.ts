@@ -25,7 +25,7 @@ export const storeName = (name: string) =>
 
 export interface StoreRef {
   readonly backend: string;
-  readonly name?: string;
+  readonly name?: string | undefined;
   /** e.g. `Cloudflare State Store 'alchemy-state-store'`. */
   readonly label: string;
   /**

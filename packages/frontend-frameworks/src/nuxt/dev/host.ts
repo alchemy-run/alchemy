@@ -1,6 +1,9 @@
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
 /**
  * Cloudflare dev transport — HOST half.
@@ -89,14 +92,13 @@ export const openPlatformProxy: OpenDevProxy = async (options) => {
       : undefined),
     bindings: options.bindings as Parameters<typeof getPlatformProxy>[0]["bindings"],
     ...(options.assets !== undefined ? { assets: { ...options.assets } } : undefined),
-    ...(options.services !== undefined
-      ? {
-          services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
-        }
-      : undefined),
-    ...(options.workerd !== undefined
-      ? { workerd: options.workerd as Parameters<typeof getPlatformProxy>[0]["workerd"] }
-      : undefined),
+    ...Rec.filterMap(
+      {
+        services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
+        workerd: options.workerd as Parameters<typeof getPlatformProxy>[0]["workerd"],
+      },
+      Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+    ),
   });
   return {
     url: proxy.connectInfo.url,

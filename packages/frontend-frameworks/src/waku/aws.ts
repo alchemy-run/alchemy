@@ -30,7 +30,6 @@ import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type { Config as WakuConfig } from "waku/config";
 import { runBuildChild } from "../core/BuildChild.ts";
 import {
   DeployTargetError,
@@ -185,7 +184,7 @@ export interface WakuAwsBuildChildConfig {
    * (`WakuFrameworkOptions.waku`, carried through the build context). Only
    * JSON-serializable fields cross the process boundary.
    */
-  readonly waku: WakuConfig | undefined;
+  readonly waku: WakuTargetBuildContext["waku"];
 }
 
 export const buildInChild = (config: WakuAwsBuildChildConfig) =>

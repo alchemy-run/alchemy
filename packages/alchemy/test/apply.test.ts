@@ -6075,7 +6075,7 @@ describe(
 );
 
 describe("interrupted replacement destruction", { tags: ["unit", "local"] }, () => {
-  type Attributes = { physicalId: string; revision: string; dependency?: string };
+  type Attributes = { physicalId: string; revision: string; dependency?: string | undefined };
   interface Generation extends Resource<
     "Test.DestructionGeneration",
     { revision: string; dependency?: string },
@@ -6088,8 +6088,10 @@ describe("interrupted replacement destruction", { tags: ["unit", "local"] }, () 
     {
       physical: Map<string, Attributes>;
       calls: Array<{ op: "read" | "delete"; physicalId: string; mode: string }>;
-      reconcile?: (attrs: Attributes, create: Effect.Effect<void>) => Effect.Effect<void>;
-      remove?: (attrs: Attributes) => Effect.Effect<void, ResourceFailure>;
+      reconcile?:
+        | ((attrs: Attributes, create: Effect.Effect<void>) => Effect.Effect<void>)
+        | undefined;
+      remove?: ((attrs: Attributes) => Effect.Effect<void, ResourceFailure>) | undefined;
       unowned?: boolean;
     }
   >()("DestructionGeneration.Registry") {}
@@ -10246,7 +10248,7 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
    */
   const subject = (
     name: string,
-    opts: { tag?: string; resolved?: boolean; cycle?: boolean; adopt?: boolean } = {},
+    opts: { tag?: string; resolved?: boolean; cycle?: boolean; adopt?: boolean | undefined } = {},
   ) =>
     Effect.gen(function* () {
       const tag = opts.tag ?? name;
@@ -10540,17 +10542,27 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
         const observed = cloud.partial ? { name: news.name } : { name: news.name, physicalId: key };
         return owner === id ? observed : Unowned(observed);
       }),
-      read: withRead
-        ? Effect.fn(function* ({ id, olds, output }) {
-            const cloud = yield* Cloud;
-            const key = output?.physicalId || keyOf(olds);
-            cloud.events.push(`read ${key}`);
-            const owner = cloud.owners.get(key);
-            if (owner === undefined) return undefined;
-            const observed = { name: olds.name, physicalId: key };
-            return owner === id ? observed : Unowned(observed);
-          })
-        : undefined,
+      ...(withRead
+        ? {
+            read: Effect.fn(function* ({
+              id,
+              olds,
+              output,
+            }: {
+              id: string;
+              olds: Scoped["Props"];
+              output: Scoped["Attributes"] | undefined;
+            }) {
+              const cloud = yield* Cloud;
+              const key = output?.physicalId || keyOf(olds);
+              cloud.events.push(`read ${key}`);
+              const owner = cloud.owners.get(key);
+              if (owner === undefined) return undefined;
+              const observed = { name: olds.name, physicalId: key };
+              return owner === id ? observed : Unowned(observed);
+            }),
+          }
+        : {}),
       precreate: Effect.fn(function* ({ id, news }) {
         const cloud = yield* Cloud;
         // Like a dispatch-namespace Worker: nothing to claim until the scope resolves.
@@ -11007,7 +11019,12 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
   interface Scoped extends Resource<
     "Test.Scoped",
     // `wiring` stands in for runtime-only Effect props (e.g. a handler).
-    { name: string; namespace?: string; version?: number; wiring?: Effect.Effect<void> },
+    {
+      name: string;
+      namespace?: string;
+      version?: number | undefined;
+      wiring?: Effect.Effect<void>;
+    },
     { key: string },
     { self: string }
   > {}

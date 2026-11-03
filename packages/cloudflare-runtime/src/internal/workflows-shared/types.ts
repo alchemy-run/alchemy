@@ -21,8 +21,8 @@ export type WorkflowIntrospectionStreamResult = {
 };
 
 export type WorkflowIntrospectionOperation =
-  | { type: "disableSleeps"; steps?: Array<WorkflowStepSelector> }
-  | { type: "disableRetryDelays"; steps?: Array<WorkflowStepSelector> }
+  | { type: "disableSleeps"; steps?: Array<WorkflowStepSelector> | undefined }
+  | { type: "disableRetryDelays"; steps?: Array<WorkflowStepSelector> | undefined }
   | {
       type: "mockStepResult";
       step: WorkflowStepSelector;
@@ -32,9 +32,9 @@ export type WorkflowIntrospectionOperation =
       type: "mockStepError";
       step: WorkflowStepSelector;
       error: { name: string; message: string };
-      times?: number;
+      times?: number | undefined;
     }
-  | { type: "forceStepTimeout"; step: WorkflowStepSelector; times?: number }
+  | { type: "forceStepTimeout"; step: WorkflowStepSelector; times?: number | undefined }
   | { type: "mockEvent"; event: { type: string; payload: unknown } }
   | { type: "forceEventTimeout"; step: WorkflowStepSelector };
 

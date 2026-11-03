@@ -30,7 +30,7 @@ export interface SqlTokenProps {
    * Token lifetime, e.g. `"2w"`, `"7d"`, `"1h30m"`. Omit for a token that
    * never expires. An expired token is re-minted on the next deploy.
    */
-  expiration?: string;
+  expiration?: string | undefined;
   /**
    * Databases this token may `ATTACH` for reading (requires `allowAttach`
    * on those databases). Not supported on AWS-hosted databases.

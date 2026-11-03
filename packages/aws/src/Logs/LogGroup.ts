@@ -23,7 +23,7 @@ export interface LogGroupProps {
   /**
    * Name of the log group. If omitted, a unique name is generated.
    */
-  logGroupName?: string;
+  logGroupName?: string | undefined;
   /**
    * How long CloudWatch retains log events. If omitted, logs are kept
    * indefinitely. Accepts any `Duration.Input` (e.g. `"7 days"`,
@@ -31,25 +31,25 @@ export interface LogGroupProps {
    * whole days (`retentionInDays`) and must resolve to one of the retention
    * values CloudWatch accepts (1, 3, 5, 7, 14, 30, ...).
    */
-  retention?: Duration.Input;
+  retention?: Duration.Input | undefined;
   /**
    * Optional KMS key identifier used to encrypt the log group.
    */
-  kmsKeyId?: string;
+  kmsKeyId?: string | undefined;
   /**
    * Log class for the log group. Changing this value replaces the log group.
    * @default "STANDARD"
    */
-  logGroupClass?: LogGroupClass;
+  logGroupClass?: LogGroupClass | undefined;
   /**
    * Whether deletion protection is enabled for the log group.
    * @default false
    */
-  deletionProtectionEnabled?: boolean;
+  deletionProtectionEnabled?: boolean | undefined;
   /**
    * User-defined tags to apply to the log group.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface LogGroup extends Resource<
@@ -58,8 +58,8 @@ export interface LogGroup extends Resource<
   {
     logGroupName: LogGroupName;
     logGroupArn: LogGroupArn;
-    retentionInDays?: number;
-    kmsKeyId?: string;
+    retentionInDays?: number | undefined;
+    kmsKeyId?: string | undefined;
     logGroupClass: LogGroupClass;
     deletionProtectionEnabled: boolean;
     tags: Record<string, string>;
@@ -149,12 +149,13 @@ export const LogGroupProvider = () =>
   Provider.effect(
     LogGroup,
     Effect.gen(function* () {
-      const toLogGroupName = (id: string, props: { logGroupName?: string } = {}) =>
+      const toLogGroupName = (id: string, props: { logGroupName?: string | undefined } = {}) =>
         props.logGroupName
           ? Effect.succeed(props.logGroupName)
           : createPhysicalName({ id, maxLength: 512 });
-      const toLogGroupClass = (props: { logGroupClass?: LogGroupClass } = {}): LogGroupClass =>
-        props.logGroupClass ?? "STANDARD";
+      const toLogGroupClass = (
+        props: { logGroupClass?: LogGroupClass | undefined } = {},
+      ): LogGroupClass => props.logGroupClass ?? "STANDARD";
       // describeLogGroups returns ARNs with a trailing `:*` while reconcile
       // constructs them without — normalize so refresh/adoption never reports
       // phantom drift and interpolated IAM ARNs (`${arn}:*`) stay correct.

@@ -1,5 +1,7 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { rewriteFramesIntegration, Toucan } from "toucan-js";
 import type { ColoMetadata } from "./types.ts";
 
@@ -21,9 +23,11 @@ export function setupSentry(
   const sentry = new Toucan({
     dsn,
     request,
-    context,
     sampleRate: 1.0,
-    release: versionMetadata?.tag,
+    ...Record.filterMap(
+      { context, release: versionMetadata?.tag },
+      Result.fromNullishOr(() => undefined),
+    ),
     integrations: [
       rewriteFramesIntegration({
         iteratee(frame) {
@@ -64,7 +68,12 @@ export function setupSentry(
     sentry.setTag("scriptId", scriptId);
   }
 
-  sentry.setUser({ id: accountId?.toString() });
+  sentry.setUser(
+    Record.filterMap(
+      { id: accountId?.toString() },
+      Result.fromNullishOr(() => undefined),
+    ),
+  );
 
   return sentry;
 }

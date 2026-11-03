@@ -39,7 +39,7 @@ export type StateSource =
       readonly type: "provider";
       readonly backend: string;
       /** A store other than the account's default. */
-      readonly name?: string;
+      readonly name?: string | undefined;
     } & Pick<Target, "profile" | "envFile">);
 
 /** What lifecycle operations act on. */
@@ -225,7 +225,10 @@ export const migrate = Effect.fn("Alchemist.state.migrate")(function* (
 
 /** Past log entries from a state store, oldest first. */
 export const logs = Effect.fn("Alchemist.state.logs")(function* (
-  source: ProviderSource & { readonly limit?: number; readonly since?: Date },
+  source: ProviderSource & {
+    readonly limit?: number | undefined;
+    readonly since?: Date | undefined;
+  },
 ) {
   const { run, context } = yield* lifecycleOperation(source, "logs");
   return yield* run({ name: source.name, limit: source.limit, since: source.since }).pipe(

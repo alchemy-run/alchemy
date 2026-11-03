@@ -66,9 +66,9 @@ type DescribeBody = (() => void) | undefined;
 
 export interface DescribeOptions {
   /** Labels inherited by every nested suite and test. */
-  readonly tags?: Tags;
+  readonly tags?: Tags | undefined;
   /** Tags that must each be explicitly named in the filter to enable this test or suite. */
-  readonly optInTags?: Tags;
+  readonly optInTags?: Tags | undefined;
   readonly concurrent?: boolean;
   readonly sequential?: boolean;
   readonly timeout?: number;
@@ -180,9 +180,9 @@ export const describe: DescribeFn = makeDescribe({
 // ---------------------------------------------------------------------------
 
 export interface RegisterTestOptions {
-  readonly tags?: Tags;
+  readonly tags?: Tags | undefined;
   /** Tags that must each be explicitly named in the filter to enable this test or suite. */
-  readonly optInTags?: Tags;
+  readonly optInTags?: Tags | undefined;
   readonly name: string;
   readonly mode: Mode;
   readonly fails?: boolean;

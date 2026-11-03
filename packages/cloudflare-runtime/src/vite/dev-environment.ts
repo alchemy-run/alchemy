@@ -105,8 +105,8 @@ export class DistilledDevEnvironment extends vite.DevEnvironment {
 }
 
 class HotChannel implements vite.HotChannel {
-  #ws?: WebSocket;
-  queue?: Array<string>;
+  #ws: WebSocket | undefined;
+  queue: Array<string> | undefined;
   listeners = new Map<string, Set<vite.HotChannelListener>>();
 
   /**

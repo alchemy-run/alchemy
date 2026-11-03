@@ -14,7 +14,7 @@ const { test } = Test.make({ providers: Railway.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const asGroupMap = (value: unknown): Record<string, { name?: string }> => {
+const asGroupMap = (value: unknown): Record<string, { name?: string | undefined }> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }
@@ -22,7 +22,7 @@ const asGroupMap = (value: unknown): Record<string, { name?: string }> => {
   if (groups === null || typeof groups !== "object" || Array.isArray(groups)) {
     return {};
   }
-  const out: Record<string, { name?: string }> = {};
+  const out: Record<string, { name?: string | undefined }> = {};
   for (const [groupId, row] of Object.entries(groups)) {
     if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
     const rec = row as { name?: unknown; isDeleted?: unknown };
@@ -45,7 +45,7 @@ const readConfigGroups = (environmentId: string, projectId: string) =>
   readEnvironmentConfig(environmentId, projectId).pipe(
     Effect.map((env) => asGroupMap(env.config)),
     Effect.catchTag("RailwayNotFound", () =>
-      Effect.succeed({} as Record<string, { name?: string }>),
+      Effect.succeed({} as Record<string, { name?: string | undefined }>),
     ),
   );
 

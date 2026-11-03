@@ -166,15 +166,15 @@ export interface BudgetProps {
    * `{ includeCredit: false, includeRefund: false }` to track spend before
    * credits and refunds.
    */
-  costTypes?: BudgetCostTypes;
+  costTypes?: BudgetCostTypes | undefined;
   /**
    * Notifications and their subscribers.
    */
-  notifications?: BudgetNotification[];
+  notifications?: BudgetNotification[] | undefined;
   /**
    * Tags applied to the budget at creation.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Budget extends Resource<

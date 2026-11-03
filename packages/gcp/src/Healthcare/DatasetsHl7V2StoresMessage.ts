@@ -30,9 +30,9 @@ import {
 
 export type PatientId = {
   /** Patient identifier value (PID-2/3/4). */
-  value?: string;
+  value?: string | undefined;
   /** Identifier type, for example `MRN`. */
-  type?: string;
+  type?: string | undefined;
 };
 
 export type DatasetsHl7V2StoresMessageProps = {

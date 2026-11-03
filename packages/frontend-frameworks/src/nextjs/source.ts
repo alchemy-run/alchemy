@@ -716,7 +716,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       return {
         mode: "server",
         url: new URL(server.url),
-        serviceBinding: options.dev?.mode === "hmr" ? "http" : undefined,
+        ...(options.dev?.mode === "hmr" && { serviceBinding: "http" as const }),
       } satisfies SourceDevHandle;
     }),
   };

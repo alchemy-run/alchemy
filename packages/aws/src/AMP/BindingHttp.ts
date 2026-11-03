@@ -18,7 +18,9 @@ import { toWireSeconds } from "alchemy/Util/Duration";
 import type { SourceError } from "effect/ConfigProvider";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as AWSBindings from "../AWSBindings.ts";
 import { PrometheusApiError, type PrometheusTime } from "./PrometheusTypes.ts";
 import type { Workspace } from "./Workspace.ts";
@@ -176,7 +178,10 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
             fetch(signed.url, {
               method: signed.method,
               headers: signed.headers,
-              body,
+              ...Record.filterMap(
+                { body },
+                Result.fromNullishOr(() => undefined),
+              ),
             }),
           catch: toError(0),
         });

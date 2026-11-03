@@ -5,6 +5,8 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
@@ -285,14 +287,29 @@ const resolvedIp = (ip: InfrastructureTargetIp): ResolvedIp => ({
 
 const observedIp = (t: {
   ip: {
-    ipv4?: { ipAddr?: string | null; virtualNetworkId?: string | null } | null;
-    ipv6?: { ipAddr?: string | null; virtualNetworkId?: string | null } | null;
+    ipv4?:
+      | {
+          ipAddr?: string | null | undefined;
+          virtualNetworkId?: string | null | undefined;
+        }
+      | null
+      | undefined;
+    ipv6?:
+      | {
+          ipAddr?: string | null | undefined;
+          virtualNetworkId?: string | null | undefined;
+        }
+      | null
+      | undefined;
   };
 }): ResolvedIp => ({
   ...(t.ip.ipv4
     ? {
         ipv4: {
-          ipAddr: t.ip.ipv4.ipAddr ?? undefined,
+          ...Record.filterMap(
+            { ipAddr: t.ip.ipv4.ipAddr },
+            Result.fromNullishOr(() => undefined),
+          ),
           ...(t.ip.ipv4.virtualNetworkId ? { virtualNetworkId: t.ip.ipv4.virtualNetworkId } : {}),
         },
       }
@@ -300,7 +317,10 @@ const observedIp = (t: {
   ...(t.ip.ipv6
     ? {
         ipv6: {
-          ipAddr: t.ip.ipv6.ipAddr ?? undefined,
+          ...Record.filterMap(
+            { ipAddr: t.ip.ipv6.ipAddr },
+            Result.fromNullishOr(() => undefined),
+          ),
           ...(t.ip.ipv6.virtualNetworkId ? { virtualNetworkId: t.ip.ipv6.virtualNetworkId } : {}),
         },
       }

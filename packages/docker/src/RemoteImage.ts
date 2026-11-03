@@ -66,7 +66,7 @@ export interface RemoteImage extends Resource<
     /** Final image tag. */
     tag: string;
     /** Registry digest after push when available. */
-    repoDigest?: string;
+    repoDigest?: string | undefined;
   },
   never,
   Providers

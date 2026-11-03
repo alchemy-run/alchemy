@@ -33,9 +33,9 @@ const filter = (
 
 const canonicalTargets = <
   T extends {
-    Id?: string;
+    Id?: string | undefined;
     Events: S3.Event[];
-    Filter?: S3.NotificationConfigurationFilter;
+    Filter?: S3.NotificationConfigurationFilter | undefined;
   },
 >(
   targets: T[] = [],
