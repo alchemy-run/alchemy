@@ -532,6 +532,14 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
   it("publishes nothing it is not told to expose", () => {
     // @ts-expect-error a call the Api does not serve
     DomainHttp.toHttpApi(WalletApi, { expose: ["Withdraw"] });
+    // @ts-expect-error an operation the view does not have
+    DomainHttp.toHttpApi(WalletApi, { expose: ["Balance.nope"] });
+    // @ts-expect-error an aggregate has no `list`
+    DomainHttp.toHttpApi(WalletApi, { expose: ["Wallet.list"] });
+    // every read of a view and an aggregate, live ones included
+    DomainHttp.toHttpApi(WalletApi, {
+      expose: ["Balance.get", "Balance.watch", "Balance.events", "Wallet.get", "Wallet.watch"],
+    });
     expect(Object.keys(DomainHttp.toHttpApi(WalletApi).group.endpoints)).toEqual([]);
     expect(Object.keys(DomainHttp.toHttpApi(WalletApi, { expose: [] }).group.endpoints)).toEqual(
       [],

@@ -118,6 +118,10 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
   it("gives no tool it is not told to expose", () => {
     // @ts-expect-error a stream is not one tool result
     DomainAi.toToolkit(WalletApi, { expose: ["Balance.watch"] });
+    // @ts-expect-error a stream is not one tool result
+    DomainAi.toToolkit(WalletApi, { expose: ["Balance.events"] });
+    // @ts-expect-error an operation the view does not have
+    DomainAi.toToolkit(WalletApi, { expose: ["Balance.nope"] });
     expect(Object.keys(DomainAi.toToolkit(WalletApi).toolkit.tools)).toEqual([]);
     expect(
       Object.keys(DomainAi.toToolkit(WalletApi, { expose: ["Balance.get"] }).toolkit.tools),
