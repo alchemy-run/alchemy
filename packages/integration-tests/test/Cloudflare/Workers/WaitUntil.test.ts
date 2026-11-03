@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
@@ -38,6 +39,107 @@ const getText = Effect.fn(function* (url: string) {
   }
   return body;
 });
+
+// Journal labels are unique per run: the DO's storage outlives a run when
+// NO_DESTROY keeps the deployment.
+const run = crypto.randomUUID().slice(0, 8);
+
+const journalEntries = Effect.fn(function* (url: string, label: string, count: number) {
+  return yield* Effect.gen(function* () {
+    const text = yield* getText(`${url}/lifetime/entries/${label}`);
+    return yield* Effect.try({
+      try: () => (JSON.parse(text) as { entries: string[] }).entries,
+      catch: (cause) => new Error(`Invalid journal response: ${text}`, { cause }),
+    });
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("500 millis"),
+      until: (entries) => entries.length >= count,
+      times: 20,
+    }),
+  );
+});
+
+describe.skipIf(!!process.env.FAST)(
+  "waitUntil work outlives the event's response but not its scope",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
+  () => {
+    // Each case binds a resource to the event's scope and hands `waitUntil`
+    // work that uses it 200ms after the event returns. The scope must wait
+    // for that work: the work sees the resource `open`, and the release is
+    // journaled after it.
+    for (const [kind, response] of [
+      ["worker", "scheduled"],
+      ["nested", "scheduled"],
+      ["failing", "scheduled"],
+      ["stream", "streamed"],
+      ["rpc", "scheduled"],
+      ["do", "scheduled"],
+      ["do-stream", "a,b"],
+      ["do-fetch", "scheduled"],
+    ] as const) {
+      test(
+        `the event's scope stays open for waitUntil work (${kind})`,
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          yield* expectUrlContains(`${url}/raw`, "ok", {
+            label: "wait-until worker propagation",
+          });
+          const label = `${kind}-${run}`;
+          expect(yield* getText(`${url}/lifetime/${kind}/${label}`)).toBe(response);
+          expect(yield* journalEntries(url, label, 2)).toEqual([
+            `${label}:open`,
+            `${label}:released`,
+          ]);
+        }).pipe(logLevel),
+        { timeout: 120_000 },
+      );
+    }
+
+    // The event outlives these responses, but the responses must not wait
+    // for it: each hands off work that sleeps 3 seconds before journaling.
+    for (const [kind, response] of [
+      ["scoped", "scheduled"],
+      ["slow-stream", "streamed"],
+      ["do-slow-stream", "a,b"],
+    ] as const) {
+      test(
+        `waitUntil work does not hold the response (${kind})`,
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          yield* expectUrlContains(`${url}/raw`, "ok", {
+            label: "wait-until worker propagation",
+          });
+          const label = `${kind}-${run}`;
+          const [elapsed, body] = yield* getText(`${url}/lifetime/${kind}/${label}`).pipe(
+            Effect.timed,
+          );
+          expect(body).toBe(response);
+          expect(Duration.toMillis(elapsed)).toBeLessThan(2_500);
+          expect(yield* journalEntries(url, label, 1)).toEqual([`${label}:done`]);
+        }).pipe(logLevel),
+        { timeout: 120_000 },
+      );
+    }
+
+    test(
+      "the event's scope stays open for waitUntil work (HttpApi handler)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `api-${run}`;
+        expect(yield* getText(`${url}/api/lifetime/${label}`)).toBe('"scheduled"');
+        expect(yield* journalEntries(url, label, 2)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+  },
+);
 
 describe.skipIf(!!process.env.FAST)(
   "waitUntil runs background Effects past the response (worker ctx + DO state)",

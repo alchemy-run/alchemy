@@ -2,13 +2,12 @@ import type * as cf from "@cloudflare/workers-types";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
-import { BackgroundWork } from "./internal/BackgroundWork.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 import {
   getLoopbackEntrypoint,
   makeEntrypointExports,
+  runInBackground,
   type EntrypointExports,
 } from "./WorkerRuntime.ts";
 
@@ -102,18 +101,7 @@ export const fromDurableObjectState = (
   exports: makeEntrypointExports((name, options) =>
     getLoopbackEntrypoint(state.exports, name, options),
   ),
-  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<R>();
-      // Register the promise with workerd un-awaited — waitUntil extends the
-      // event's lifetime without blocking the caller.
-      const track = yield* Effect.serviceOption(BackgroundWork);
-      yield* Effect.sync(() => {
-        const promise = Effect.runPromiseWith(context)(effect);
-        if (Option.isSome(track)) track.value(promise);
-        state.waitUntil(promise);
-      });
-    }),
+  waitUntil: (effect) => runInBackground(effect, (promise) => state.waitUntil(promise)),
   blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();

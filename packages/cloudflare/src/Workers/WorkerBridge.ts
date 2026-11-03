@@ -19,7 +19,6 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as EffectHttp from "effect/http/HttpEffect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
@@ -27,8 +26,6 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironmentService.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
-import { isScopeEjected } from "./HttpServer.ts";
-import { BackgroundWork, makeBackgroundWork } from "./internal/BackgroundWork.ts";
 import {
   ErrorTag,
   type RpcErrorEnvelope,
@@ -38,10 +35,12 @@ import {
 } from "./Rpc.ts";
 import type { Worker } from "./Worker.ts";
 import {
+  EventLifetime,
   ExportedHandlerMethods,
   WorkerEnvironment,
   WorkerExecutionContext,
   fromExecutionContext,
+  makeEventLifetime,
 } from "./WorkerRuntime.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
@@ -75,17 +74,12 @@ export const makeWorkerBridge = (
     ) => readonly [Effect.Effect<any, any, any>, Context.Context<never>],
     ctx: cf.ExecutionContext,
     env: Record<string, unknown> | undefined,
-    onExit: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => T | Promise<T>,
+    onExit: (exit: Exit.Exit<any, any>, lifetime: EventLifetime["Service"]) => T | Promise<T>,
   ): Promise<T> => {
     const scope = Scope.makeUnsafe();
-    // The exporters outlive the request scope until the event's `waitUntil`
-    // work has settled (see `makeBackgroundWork`).
-    const telemetryScope = Scope.makeUnsafe();
-    const background = makeBackgroundWork({
-      scope,
-      telemetryScope,
-      waitUntil: (promise) => ctx.waitUntil(promise),
-    });
+    // Work the event hands to `waitUntil` runs after it returns, in its
+    // context: the request scope waits for it before closing.
+    const event = makeEventLifetime(scope);
     return build((promise) => ctx.waitUntil(promise as Promise<any>))
       .then(
         (built) => {
@@ -101,17 +95,16 @@ export const makeWorkerBridge = (
               Layer.mergeAll(
                 Layer.succeed(WorkerExecutionContext, fromExecutionContext(ctx, env)),
                 Layer.succeed(Scope.Scope, scope),
-                Layer.succeed(BackgroundWork, background.track),
+                Layer.succeed(EventLifetime, event.lifetime),
                 Layer.succeed(RuntimeContext, built.runtimeContext),
-                // The configured telemetry exporters, on their own scope:
-                // flushed into `ctx.waitUntil` once the request scope has
-                // closed, and shut down once the event's background work has
-                // settled — never on workerd's ephemeral isolate scope.
-                Layer.effectContext(
-                  buildEventTelemetry(built.context, telemetryScope, built.telemetry()).pipe(
-                    Effect.tap(background.setTelemetry),
-                  ),
-                ),
+                // The configured telemetry exporters. Constructed as part
+                // of this per-event layer, but `buildEventTelemetry`
+                // attaches their batching fibers and flush finalizers to
+                // the request `scope` (not this build's transient scope),
+                // so buffered telemetry flushes when the scope closes into
+                // `ctx.waitUntil` below — never on workerd's ephemeral
+                // isolate scope.
+                Layer.effectContext(buildEventTelemetry(built.context, scope, built.telemetry())),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(built.context)),
@@ -124,20 +117,21 @@ export const makeWorkerBridge = (
         // path can envelope-encode it like any other handler defect.
         (error) => Exit.die(error),
       )
-      .then((exit) => onExit(exit, scope))
+      .then((exit) => {
+        event.holdScope();
+        return onExit(exit, event.lifetime);
+      })
       .finally(() =>
-        isScopeEjected(scope)
-          ? undefined
-          : ctx.waitUntil(
-              // The HttpMiddleware tracer ends the request's root span in a
-              // dispatcher task scheduled after the handler effect resolves.
-              // Yield one macrotask before closing the scope so that span
-              // reaches the telemetry exporter's buffer before the scope's
-              // flush finalizer runs.
-              new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
-                Effect.runPromise(Scope.close(scope, Exit.void)),
-              ),
-            ),
+        ctx.waitUntil(
+          // The HttpMiddleware tracer ends the request's root span in a
+          // dispatcher task scheduled after the handler effect resolves.
+          // Yield one macrotask before closing the scope so that span
+          // reaches the telemetry exporter's buffer before the scope's
+          // flush finalizer runs.
+          new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
+            Effect.runPromise(Scope.close(scope, Exit.void)),
+          ),
+        ),
       );
   };
   class WorkerBridge extends Base {
@@ -475,18 +469,20 @@ export const makeRpcProxy = (
     },
   });
 
-export const handleRpcExit = async (exit: Exit.Exit<any, any>, scope?: Scope.Closeable) => {
+export const handleRpcExit = async (
+  exit: Exit.Exit<any, any>,
+  lifetime?: EventLifetime["Service"],
+) => {
   if (exit._tag === "Success") {
     if (Stream.isStream(exit.value)) {
       let stream = exit.value as Stream.Stream<any, any, any>;
-      if (scope !== undefined && !isScopeEjected(scope)) {
+      if (lifetime !== undefined) {
         // The RPC transport drains the encoded ReadableStream *after* this
-        // function returns, so the request scope must outlive the handler:
-        // eject it from the bridge's close-on-return path and close it when
-        // the stream settles instead — mirroring `scopeTransferToStream` on
-        // the fetch path.
-        EffectHttp.scopeDisableClose(scope);
-        stream = stream.pipe(Stream.onExit((streamExit) => Scope.close(scope, streamExit)));
+        // function returns, so the event must outlive the handler until the
+        // stream settles.
+        let done!: () => void;
+        lifetime.extend(new Promise<void>((resolve) => (done = resolve)));
+        stream = stream.pipe(Stream.onExit(() => Effect.sync(done)));
       }
       return await Effect.runPromise(toRpcStream(stream) as Effect.Effect<RpcStreamEnvelope>);
     }

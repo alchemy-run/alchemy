@@ -791,8 +791,9 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *
  * For ad-hoc background work, `state.waitUntil(effect)` forks an Effect
  * with the caller's full context and keeps the object alive until it
- * settles. Spans and logs it records export with the call's telemetry once
- * it settles.
+ * settles. The call's scope stays open until then too, so the work can use
+ * what the method acquired on it, and its spans and logs are exported with
+ * the call's.
  *
  * Attach cleanup to method scopes, not the constructor (init) closure —
  * the constructor runs once per in-memory instance under

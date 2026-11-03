@@ -163,7 +163,7 @@ test.provider(
 );
 
 test.provider(
-  "exports spans recorded in waitUntil work, after the event's own",
+  "exports spans recorded in waitUntil work",
   (stack) =>
     Effect.gen(function* () {
       const collector = yield* startOtlpCollector();
@@ -215,10 +215,24 @@ test.provider(
       };
       expect(parentOf("otel-event-flush.background")).toBe("otel-event-flush.worker");
       expect(parentOf("otel-event-flush.background.nested")).toBe("otel-event-flush.background");
-      // The request's own spans went out without waiting for its background work.
-      expect(
-        workerBatches.find(({ spans }) => spans.includes("otel-event-flush.worker"))?.spans,
-      ).not.toContain("otel-event-flush.background");
+
+      // A streamed body, which closes the request scope itself, and work that
+      // fails.
+      for (const [route, name] of [
+        ["/wait-until-stream", "otel-event-flush.background.stream"],
+        ["/wait-until-failing", "otel-event-flush.background.failing"],
+      ] as const) {
+        const routed = yield* client
+          .get(`${deployment.url}${route}`)
+          .pipe(Effect.withParentSpan(trace));
+        expect(routed.status).toBeLessThan(300);
+        yield* routed.text;
+        const spans = (yield* exported(name)).flatMap(({ records }) => records);
+        const span = spans.find((record) => record.name === name);
+        expect(spans.find((record) => record.spanId === span?.parentSpanId)?.name).toBe(
+          "otel-event-flush.worker",
+        );
+      }
 
       // Durable Object: `DurableObjectState.waitUntil` in an RPC call.
       const rpcResponse = yield* client
@@ -232,9 +246,6 @@ test.provider(
       expect(rpcSpans.find((span) => span.spanId === background?.parentSpanId)?.name).toBe(
         "otel-event-flush.rpc.later",
       );
-      expect(
-        rpcBatches.find(({ spans }) => spans.includes("otel-event-flush.rpc.later"))?.spans,
-      ).not.toContain("otel-event-flush.rpc.background");
 
       yield* stack.destroy();
     }),

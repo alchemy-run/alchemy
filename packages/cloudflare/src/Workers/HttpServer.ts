@@ -1,5 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Http from "alchemy/Http";
+import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as EffectHttp from "effect/http/HttpEffect";
@@ -8,9 +9,10 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 import { Request } from "./Request.ts";
 import type { WorkerServices } from "./Worker.ts";
-import { isWorkerEvent } from "./WorkerRuntime.ts";
+import { EventLifetime, isWorkerEvent } from "./WorkerRuntime.ts";
 
 export type HttpEffect = Http.HttpEffect<WorkerServices>;
 
@@ -94,17 +96,46 @@ const toHandledWebResponse = <Req>(
     const context = yield* Effect.context();
     const webResponse = yield* Deferred.make<Response>();
 
-    yield* EffectHttp.toHandled(handler, (request, response) => {
-      const withoutBody = request.method === "HEAD";
-      if (!HttpServerResponse.omitsBody(response, withoutBody)) {
-        response = EffectHttp.scopeTransferToStream(response);
-      }
-      return Deferred.succeed(
-        webResponse,
-        HttpServerResponse.toWeb(response, { withoutBody, context }),
-      );
-    });
+    const lifetime = Context.getOption(context, EventLifetime);
+
+    yield* EffectHttp.toHandled(handler, (request, response) =>
+      Effect.gen(function* () {
+        const withoutBody = request.method === "HEAD";
+        const hasBody = !HttpServerResponse.omitsBody(response, withoutBody);
+        if (Option.isSome(lifetime)) {
+          // The event closes this request's scope with its own, once its
+          // `waitUntil` work and the streamed body have settled.
+          lifetime.value.adopt((yield* Effect.scope) as Scope.Closeable);
+          if (hasBody) response = yield* extendWithBody(response, lifetime.value);
+        } else if (hasBody) {
+          response = EffectHttp.scopeTransferToStream(response);
+        }
+        return yield* Deferred.succeed(
+          webResponse,
+          HttpServerResponse.toWeb(response, { withoutBody, context }),
+        );
+      }),
+    );
     return yield* Deferred.await(webResponse);
   });
+
+/**
+ * Keep the event open until a streamed `response` body settles: Effect's
+ * `scopeTransferToStream` closes the fiber's scope when the body exits, so
+ * hand it one whose close only tells the event.
+ */
+const extendWithBody = (
+  response: HttpServerResponse.HttpServerResponse,
+  lifetime: EventLifetime["Service"],
+) => {
+  if (response.body._tag !== "Stream") return Effect.succeed(response);
+  const body = Scope.makeUnsafe();
+  lifetime.extend(
+    new Promise<void>((resolve) => Effect.runSync(Scope.addFinalizer(body, Effect.sync(resolve)))),
+  );
+  return Effect.sync(() => EffectHttp.scopeTransferToStream(response)).pipe(
+    Effect.provideService(Scope.Scope, body),
+  );
+};
 
 export { isScopeEjected } from "alchemy/Http";

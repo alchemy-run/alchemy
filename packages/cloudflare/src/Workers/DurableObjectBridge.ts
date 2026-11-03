@@ -19,11 +19,11 @@ import {
 } from "./AlarmCallback.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
-import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
-import { BackgroundWork, makeBackgroundWork } from "./internal/BackgroundWork.ts";
+import { makeRequestEffect } from "./HttpServer.ts";
 import { takeRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
+import { EventLifetime, makeEventLifetime } from "./WorkerRuntime.ts";
 
 /**
  * Create a DurableObjectBridge class that proxies RPC method calls through
@@ -154,17 +154,12 @@ export const makeDurableObjectBridge =
 
       async #execute(
         fn: (instance: DurableObjectShape) => Effect.Effect<any, any, any>,
-        onExit?: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => Promise<any>,
+        onExit?: (exit: Exit.Exit<any, any>, lifetime: EventLifetime["Service"]) => Promise<any>,
       ) {
         const scope = Scope.makeUnsafe();
-        // The exporters outlive the call's scope until the call's `waitUntil`
-        // work has settled (see `makeBackgroundWork`).
-        const telemetryScope = Scope.makeUnsafe();
-        const background = makeBackgroundWork({
-          scope,
-          telemetryScope,
-          waitUntil: (promise) => this.ctx.waitUntil(promise),
-        });
+        // Work this call hands to `waitUntil` runs after it returns, in its
+        // context: the call's scope waits for it before closing.
+        const event = makeEventLifetime(scope);
 
         const { instance, services, context, telemetry } = await this.#instance;
 
@@ -173,17 +168,13 @@ export const makeDurableObjectBridge =
             Effect.provide(
               Layer.mergeAll(
                 Layer.succeed(DurableObjectState, fromDurableObjectState(this.#state)),
-                Layer.succeed(BackgroundWork, background.track),
+                Layer.succeed(EventLifetime, event.lifetime),
                 Layer.succeed(Scope.Scope, scope),
-                // The configured telemetry exporters, on their own scope:
-                // flushed into `waitUntil` once the call's scope has closed,
-                // and shut down once its background work has settled (the
+                // The configured telemetry exporters, attached to the *call*
+                // scope by `buildEventTelemetry` so buffered telemetry
+                // flushes when the scope closes into `waitUntil` below (the
                 // isolate scope never finalizes on workerd).
-                Layer.effectContext(
-                  buildEventTelemetry(context, telemetryScope, telemetry()).pipe(
-                    Effect.tap(background.setTelemetry),
-                  ),
-                ),
+                Layer.effectContext(buildEventTelemetry(context, scope, telemetry())),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(context)),
@@ -191,24 +182,23 @@ export const makeDurableObjectBridge =
             ),
             Effect.runPromiseExit,
           )
-          .then((exit) =>
-            onExit
-              ? onExit(exit, scope)
+          .then((exit) => {
+            event.holdScope();
+            return onExit
+              ? onExit(exit, event.lifetime)
               : exit._tag === "Success"
                 ? Promise.resolve(exit.value)
-                : Promise.reject(Cause.squash(exit.cause)),
-          )
+                : Promise.reject(Cause.squash(exit.cause));
+          })
           .finally(() =>
-            isScopeEjected(scope)
-              ? undefined
-              : this.ctx.waitUntil(
-                  // Match WorkerBridge: yield one macrotask so the
-                  // HttpMiddleware tracer's late span-end reaches the
-                  // telemetry exporter before the scope's flush finalizer.
-                  new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
-                    Effect.runPromise(Scope.close(scope, Exit.void)),
-                  ),
-                ),
+            this.ctx.waitUntil(
+              // Match WorkerBridge: yield one macrotask so the
+              // HttpMiddleware tracer's late span-end reaches the
+              // telemetry exporter before the scope's flush finalizer.
+              new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
+                Effect.runPromise(Scope.close(scope, Exit.void)),
+              ),
+            ),
           );
       }
 

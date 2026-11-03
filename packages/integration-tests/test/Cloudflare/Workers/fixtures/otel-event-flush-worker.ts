@@ -9,6 +9,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/observability/OtlpTracer";
+import * as Stream from "effect/Stream";
 
 /**
  * Durable Object target whose events emit child spans — one HTTP fetch
@@ -65,6 +66,22 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
         if (request.url.startsWith("/rpc")) {
           const pong = yield* targetNamespace.getByName("target").ping();
           return HttpServerResponse.text(`worker-saw:${pong}`);
+        }
+        if (request.url.startsWith("/wait-until-stream")) {
+          // A streamed body takes over the request scope from the bridge.
+          yield* Cloudflare.waitUntil(
+            Effect.sleep("300 millis").pipe(Effect.withSpan("otel-event-flush.background.stream")),
+          );
+          return HttpServerResponse.stream(Stream.make("streamed").pipe(Stream.encodeText));
+        }
+        if (request.url.startsWith("/wait-until-failing")) {
+          yield* Cloudflare.waitUntil(
+            Effect.sleep("300 millis").pipe(
+              Effect.andThen(Effect.fail("background failure")),
+              Effect.withSpan("otel-event-flush.background.failing"),
+            ),
+          );
+          return HttpServerResponse.text("accepted", { status: 202 });
         }
         if (request.url.startsWith("/wait-until")) {
           // Background work that starts more background work. The sleeps

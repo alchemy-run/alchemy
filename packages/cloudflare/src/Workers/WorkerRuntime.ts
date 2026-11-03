@@ -3,9 +3,11 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as EffectHttp from "effect/http/HttpEffect";
 import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
-import { BackgroundWork } from "./internal/BackgroundWork.ts";
 import { resolveAccessContext, type WorkerExecutionContextAccess } from "./WorkerAccess.ts";
 
 export const WorkerTypeId = "Cloudflare.Worker";
@@ -196,6 +198,87 @@ export const WorkerExecutionContext = Context.Reference<WorkerExecutionContextSe
 );
 export type WorkerExecutionContext = typeof WorkerExecutionContext;
 
+/**
+ * The current event's lifetime. The Worker and Durable Object bridges close
+ * an event's scope once its handler has returned and every piece of work it
+ * was told about has settled: work handed to `waitUntil`, and a streamed
+ * response body or RPC result. Provided per event, and read from the calling
+ * fiber, so a context captured at init still reaches the live event.
+ *
+ * @internal
+ */
+export class EventLifetime extends Context.Service<
+  EventLifetime,
+  {
+    /** Keep the event's scope open until `promise` settles. */
+    readonly extend: (promise: Promise<unknown>) => void;
+    /**
+     * Close `scope` with the event's scope instead of when its owner
+     * returns: Effect's HTTP server closes a request's scope once the
+     * response is written, before the event's `waitUntil` work has run.
+     */
+    readonly adopt: (scope: Scope.Closeable) => void;
+  }
+>()("Cloudflare.Workers.EventLifetime") {}
+
+/**
+ * Run `effect` with the caller's context, hand its promise to `register`
+ * (workerd's `waitUntil`) un-awaited, and extend the event's
+ * {@link EventLifetime} until it settles.
+ *
+ * The event is found through {@link EventLifetime} rather than the ambient
+ * `Scope`: work handed off inside an `Effect.scoped` region (an RPC request's
+ * scope, say) must not hold that region open.
+ *
+ * @internal
+ */
+export const runInBackground = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  register: (promise: Promise<unknown>) => void,
+): Effect.Effect<void, never, R | RuntimeContext> =>
+  Effect.gen(function* () {
+    const context = yield* Effect.context<R>();
+    const lifetime = yield* Effect.serviceOption(EventLifetime);
+    yield* Effect.sync(() => {
+      const promise = Effect.runPromiseWith(context)(effect);
+      if (Option.isSome(lifetime)) lifetime.value.extend(promise);
+      register(promise);
+    });
+  });
+
+/**
+ * Make the {@link EventLifetime} of an event whose scope is `scope`. Provide
+ * `lifetime`, and call `holdScope` once the handler has returned: closing the
+ * scope then waits for the work the event was told about, including work
+ * started while waiting, before running the rest of its finalizers. So that
+ * work can still use the event's resources, and its spans and logs reach the
+ * event's exporters.
+ *
+ * @internal
+ */
+export const makeEventLifetime = (scope: Scope.Scope) => {
+  const work: Array<Promise<unknown>> = [];
+  const settled = Effect.promise(async () => {
+    for (let seen = 0; seen < work.length;) {
+      const batch = work.slice(seen);
+      seen = work.length;
+      await Promise.allSettled(batch);
+    }
+  });
+  const lifetime: EventLifetime["Service"] = {
+    extend: (promise) => void work.push(promise),
+    adopt: (inner) => {
+      EffectHttp.scopeDisableClose(inner);
+      Effect.runSync(Scope.addFinalizer(scope, Scope.close(inner, Exit.void)));
+    },
+  };
+  return {
+    lifetime,
+    // Added after the handler's own finalizers, so it runs before them.
+    holdScope: (): void => Effect.runSync(Scope.addFinalizer(scope, settled)),
+  };
+};
+
 export const fromExecutionContext = (
   ctx: cf.ExecutionContext,
   env?: Record<string, unknown>,
@@ -206,18 +289,7 @@ export const fromExecutionContext = (
   exports: makeEntrypointExports((name, options) =>
     getLoopbackEntrypoint(ctx.exports, name, options),
   ),
-  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<R>();
-      // Register the promise with workerd un-awaited — waitUntil extends the
-      // invocation's lifetime without blocking the response.
-      const track = yield* Effect.serviceOption(BackgroundWork);
-      yield* Effect.sync(() => {
-        const promise = Effect.runPromiseWith(context)(effect);
-        if (Option.isSome(track)) track.value(promise);
-        ctx.waitUntil(promise);
-      });
-    }),
+  waitUntil: (effect) => runInBackground(effect, (promise) => ctx.waitUntil(promise)),
   passThroughOnException: () => Effect.sync(() => ctx.passThroughOnException()),
   cache: {
     purge: (options) =>
