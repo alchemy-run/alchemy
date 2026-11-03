@@ -1711,6 +1711,7 @@ export default defineConfig({
           label: "Git",
           items: [
             { label: "Overview", link: "/git" },
+            { label: "What is a git host?", link: "/git/what-is-git" },
             { label: "Getting Started", link: "/git/getting-started" },
             {
               label: "Tutorial",

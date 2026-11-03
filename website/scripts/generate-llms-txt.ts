@@ -601,6 +601,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "git/index",
+        "git/what-is-git",
         "git/getting-started",
         "git/tutorial/part-1",
         "git/tutorial/part-2",
