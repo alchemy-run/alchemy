@@ -35,6 +35,7 @@ import { StorageName } from "alchemy/Workflows";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -215,8 +216,8 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
     const acquire = exclusively(
       Effect.gen(function* () {
         const held = yield* state.storage.get<number>(lease);
-        if (held !== undefined && held > Date.now()) return false;
-        yield* state.storage.put(lease, Date.now() + LEASE_MS);
+        if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
+        yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
         return true;
       }),
     );
@@ -420,7 +421,10 @@ const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
 const TICK_RUNS = 64;
 const TICK_MILLIS = 5_000;
 
+type Random = SecureRandom.SecureRandom["Service"];
+
 const backfillRuntime = (
+  random: Random,
   run: (id: string) => Effect.Effect<void, never, DurableObjectState | RuntimeContext>,
 ) =>
   Effect.gen(function* () {
@@ -541,7 +545,7 @@ const backfillRuntime = (
                 : stored;
             // The earliest request wins: already due sooner, that run sees this cause too.
             if (existing !== undefined && existing.due <= due) return;
-            const token = yield* Effect.sync(() => crypto.randomUUID());
+            const token = yield* random.uuidV4();
             yield* state.storage.put(jobKey(id), {
               due: existing !== undefined ? Math.min(existing.due, due) : due,
               token,
@@ -572,11 +576,11 @@ const plansOf = (targets: ReadonlyArray<string>, planOf: PlanOf) => {
   return plans;
 };
 
-const directoryObject = (net: Backfill.Network) =>
+const directoryObject = (net: Backfill.Network, random: Random) =>
   Effect.gen(function* () {
     return Effect.gen(function* () {
       let node: Backfill.Node | undefined;
-      const runtime = yield* backfillRuntime((id) => node!.run(id));
+      const runtime = yield* backfillRuntime(random, (id) => node!.run(id));
       node = Backfill.makeNode(runtime.storage, runtime.jobs, net, Backfill.defaultLimits);
       const role = node;
       return {
@@ -675,6 +679,7 @@ const aggregateObject = (
   net: Backfill.Network,
   model: () => ReadonlyArray<string>,
   planOf: PlanOf,
+  random: Random,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
@@ -690,7 +695,7 @@ const aggregateObject = (
 
       // This instance as a backfill source: consumers added later pull its events.
       let source: Backfill.Source | undefined;
-      const runtime = yield* backfillRuntime((id) =>
+      const runtime = yield* backfillRuntime(random, (id) =>
         id === "bf-flush"
           ? Effect.flatMap(state.storage.get<string>(ID_KEY), (stored) =>
               stored === undefined ? Effect.void : sourceFor(stored).flush,
@@ -733,7 +738,7 @@ const aggregateObject = (
             command,
             commandId: meta.commandId,
             context: meta.context,
-            now: yield* Effect.sync(() => Date.now()),
+            now: yield* Clock.currentTimeMillis,
             correlationId: meta.correlationId,
             trace: meta.trace,
             link: meta.link,
@@ -835,9 +840,8 @@ const aggregateObject = (
         schedule: (id: string, command: Json, meta: Aggregate.SendMeta, due: Aggregate.Due) =>
           Effect.gen(function* () {
             if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
-            const token = yield* Effect.sync(() => crypto.randomUUID());
-            const at =
-              "at" in due ? due.at : (yield* Effect.sync(() => Date.now())) + due.afterMillis;
+            const token = yield* random.uuidV4();
+            const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
             yield* state.storage.put(`scheduled:${meta.commandId}`, token);
             yield* timers.schedule(meta.commandId, {
               at,
@@ -888,6 +892,7 @@ const viewObject = (
   net: Backfill.Network,
   model: () => ReadonlyArray<string>,
   planOf: PlanOf,
+  random: Random,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
@@ -976,6 +981,7 @@ const viewObject = (
       let consumer: Backfill.Consumer | undefined;
       let source: Backfill.Source | undefined;
       const runtime = yield* backfillRuntime(
+        random,
         (id): Effect.Effect<void, never, DurableObjectState | RuntimeContext> =>
           Effect.flatMap(state.storage.get<string>(ID_KEY), (key) => {
             if (id.startsWith("bf-scan:")) return scannerFor().run(id);
@@ -1177,7 +1183,12 @@ const emptyProjectionMeta: ProjectionMeta = {
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
 
-const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: PlanOf) =>
+const projectionObject = (
+  kit: ProjectionKit,
+  net: Backfill.Network,
+  planOf: PlanOf,
+  random: Random,
+) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -1204,8 +1215,8 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
       const acquire = exclusively(
         Effect.gen(function* () {
           const held = yield* state.storage.get<number>(lease);
-          if (held !== undefined && held > Date.now()) return false;
-          yield* state.storage.put(lease, Date.now() + LEASE_MS);
+          if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
+          yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
           return true;
         }),
       );
@@ -1234,7 +1245,11 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
               });
               const run = [...rows.values()];
               if (run.length === 0) return;
-              if (run.length < size && waitMillis > 0 && Date.now() - run[0]!.at < waitMillis) {
+              if (
+                run.length < size &&
+                waitMillis > 0 &&
+                (yield* Clock.currentTimeMillis) - run[0]!.at < waitMillis
+              ) {
                 return yield* wake(run[0]!.at + waitMillis);
               }
               yield* kit.run(meta.key, run);
@@ -1261,7 +1276,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
         yield* state.storage.delete(lease).pipe(Effect.ignore);
         if (exit._tag === "Failure") {
           yield* Effect.logError(`projection ${kit.name} failed; retrying`, exit.cause);
-          yield* wake(Date.now() + PROJECTION_RETRY_MS);
+          yield* wake((yield* Clock.currentTimeMillis) + PROJECTION_RETRY_MS);
         }
       }) as Effect.Effect<void>;
       const callback = yield* makeCallback("domain:projection", () => drain);
@@ -1290,7 +1305,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
           yield* state.storage.put(`in:${pad(position)}`, {
             position,
             delivery,
-            at: Date.now(),
+            at: yield* Clock.currentTimeMillis,
           } satisfies Accepted);
           yield* state.storage.put("meta", {
             ...meta,
@@ -1313,7 +1328,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
       });
       // This key as a backfill consumer: it buffers and merges history in order.
       let consumer: Backfill.Consumer | undefined;
-      const runtime = yield* backfillRuntime((id) =>
+      const runtime = yield* backfillRuntime(random, (id) =>
         id.startsWith("bf-scan:")
           ? scannerFor().run(id)
           : id.startsWith("drive:")
@@ -1524,7 +1539,7 @@ const durableObjectPlatform = (
   /** The Domain version to lay models out with: `undefined` for the layout from before versions. */
   version: number | undefined,
   legacySagas: Map<string, string>,
-): Layer.Layer<Platform, never, Worker> =>
+): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.effect(
     Platform,
     Effect.gen(function* () {
@@ -1545,6 +1560,7 @@ const durableObjectPlatform = (
       // Factories run while the Domain's Layer is built, inside the Worker's
       // init phase; declaring a Durable Object needs that context.
       const init = yield* captureContext<Worker>();
+      const random = yield* SecureRandom.SecureRandom;
       // The Worker's bindings, at runtime: see `bound`.
       const env = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment));
       const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
@@ -1718,7 +1734,7 @@ const durableObjectPlatform = (
                 ),
             },
           };
-          directory = yield* inInit(object("DomainDirectory", directoryObject(net)));
+          directory = yield* inInit(object("DomainDirectory", directoryObject(net, random)));
 
           // A deploy's backfill: start each new consumer's run, then wait until every one is
           // complete. Reconciliation starts it and waits for it.
@@ -1817,7 +1833,7 @@ const durableObjectPlatform = (
                 Effect.gen(function* () {
                   const namespace = yield* object(
                     `${aggregate.aggregateName}Aggregate`,
-                    aggregateObject(kit, net, current, consumerPlans),
+                    aggregateObject(kit, net, current, consumerPlans, random),
                   );
                   sources.set(named(`${aggregate.aggregateName}Aggregate`), namespace);
                   return {
@@ -1904,14 +1920,17 @@ const durableObjectPlatform = (
                   const cls = consumerClass("view", view.viewName, kit.classGeneration);
                   const namespace = yield* object(
                     cls,
-                    viewObject(kit, net, current, consumerPlans),
+                    viewObject(kit, net, current, consumerPlans, random),
                   );
                   sources.set(named(cls), namespace);
                   viewGenerations.set(view.viewName, kit.classGeneration);
                   consumers.set(named(cls), namespace);
                   consumers.set(
                     runClass(named(cls)),
-                    yield* object(runClass(cls), viewObject(kit, net, current, consumerPlans)),
+                    yield* object(
+                      runClass(cls),
+                      viewObject(kit, net, current, consumerPlans, random),
+                    ),
                   );
                   const target = kit.target;
                   // A lazy view's key reads its history from its one source the first
@@ -2026,11 +2045,14 @@ const durableObjectPlatform = (
                     projection.projectionName,
                     kit.generation,
                   );
-                  const namespace = yield* object(cls, projectionObject(kit, net, consumerPlans));
+                  const namespace = yield* object(
+                    cls,
+                    projectionObject(kit, net, consumerPlans, random),
+                  );
                   consumers.set(named(cls), namespace);
                   consumers.set(
                     runClass(named(cls)),
-                    yield* object(runClass(cls), projectionObject(kit, net, consumerPlans)),
+                    yield* object(runClass(cls), projectionObject(kit, net, consumerPlans, random)),
                   );
                   return {
                     receive: (delivery) =>
@@ -2260,7 +2282,7 @@ export function layerDurableObjects({
 }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
-  Worker
+  Worker | SecureRandom.SecureRandom
 > {
   const timeoutSeconds =
     backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
@@ -2352,5 +2374,5 @@ export interface DurableObjectsOptions {
 
 const platforms = new Map<
   string,
-  Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker>
+  Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker | SecureRandom.SecureRandom>
 >();

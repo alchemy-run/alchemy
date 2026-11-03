@@ -19,6 +19,7 @@
  */
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -226,7 +227,9 @@ describe("Streaming tail workers without a registry proxy", () => {
     Layer.provideMerge(Docker.DockerLive),
     Layer.provide(Workerd.WorkerdLive),
     Layer.provide(configProvider()),
-    Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+    Layer.provideMerge(
+      Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, SecureRandom.layerWebCrypto),
+    ),
   );
 
   it.effect(

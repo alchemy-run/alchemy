@@ -1,4 +1,6 @@
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -120,7 +122,11 @@ export interface ModelClass<
   layer<E = never, R = never>(
     handlers: Layer.Layer<Policies, E, R>,
     options?: LayerOptions<Parts["views"][number]["viewName"]>,
-  ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
+  ): Layer.Layer<
+    Provided | Internals,
+    E,
+    Platform | SecureRandom.SecureRandom | Exclude<R, Provided>
+  >;
 }
 
 /**
@@ -325,7 +331,7 @@ const observeProjection =
     return effect.pipe(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
-          const now = yield* Effect.sync(() => Date.now());
+          const now = yield* Clock.currentTimeMillis;
           for (const { delivery } of batch) {
             yield* Telemetry.record(Telemetry.lag, tags, now - delivery.envelope.at);
           }
@@ -368,6 +374,7 @@ const build = <A, E, R>(
       legacyData,
     });
     const kernel = yield* Kernel.make(definitions, telemetry);
+    const random = yield* SecureRandom.SecureRandom;
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
@@ -451,6 +458,7 @@ const build = <A, E, R>(
         kernel,
         aggregate,
         aggregateStores.get(aggregate.aggregateName)!,
+        random,
       );
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
@@ -593,6 +601,7 @@ const aggregateClient = (
   kernel: Kernel.Kernel,
   aggregate: Aggregate.Any,
   store: AggregateStore,
+  random: SecureRandom.SecureRandom["Service"],
 ): Aggregate.ClientImpl => {
   /** What a send carries besides the command: its id, context, flow and trace. */
   const metaFor = (
@@ -602,7 +611,7 @@ const aggregateClient = (
     link: boolean,
   ) =>
     Effect.gen(function* () {
-      const commandId = yield* Aggregate.commandIdFor(options);
+      const commandId = yield* Aggregate.commandIdFor(options, random);
       const context = yield* RequestContext.capture;
       const correlationId = yield* Telemetry.correlationFor(commandId);
       yield* Effect.annotateCurrentSpan({
