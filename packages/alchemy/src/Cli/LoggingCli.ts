@@ -10,7 +10,7 @@ import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
 import { Cli, type PlanDisplayOptions } from "../Report.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
 import { formatResourceTag } from "../Util/ResourceOutput.ts";
-import { ansiFg, colorsEnabled } from "../Util/Terminal.ts";
+import { terminalStyle } from "../Util/Terminal.ts";
 import { theme } from "../Util/Theme.ts";
 import {
   actionStyle,
@@ -23,15 +23,12 @@ import { actionHasPlannedWork, buildPlanSummary } from "./NamespaceTree.ts";
 import { present } from "./Present.ts";
 import { formatDeclaredPropertyYaml, matchYamlChange, matchYamlKey } from "./PropertyDiff.ts";
 
-const ESC = "\x1b[";
-const RESET = `${ESC}0m`;
 // Shared with every other non-ink output path — notably it honors
 // FORCE_COLOR, so lines emitted from the piped dev sidecar keep their color.
-const useColor = colorsEnabled();
-const c = (code: string, s: string) => (useColor ? `${ESC}${code}m${s}${RESET}` : s);
-const hex = (color: string) => (s: string) => (useColor ? `${ansiFg(color)}${s}${RESET}` : s);
-const dim = (s: string) => c("2", s);
-const bold = (s: string) => c("1", s);
+const style = terminalStyle();
+const hex = (color: string) => style.hex(color);
+const dim = style.dim;
+const bold = style.bold;
 const red = hex(theme.color.danger);
 const green = hex(theme.color.success);
 const blue = hex(theme.color.accent);
