@@ -915,10 +915,13 @@ const make =
               // Once a step has run at the current time, the clock only moves forward.
               const started = steps.slice(0, index).some((earlier) => earlier._tag !== "Provide");
               if (started && at < clockState.now) {
-                const now = new Date(clockState.now).toISOString();
+                const now = DateTime.formatIso(DateTime.makeUnsafe(clockState.now));
                 return yield* fail(
-                  `the clock cannot move back, from ${now} to ${new Date(at).toISOString()}`,
-                  { expected: `${now} or later`, actual: new Date(at).toISOString() },
+                  `the clock cannot move back, from ${now} to ${DateTime.formatIso(DateTime.makeUnsafe(at))}`,
+                  {
+                    expected: `${now} or later`,
+                    actual: DateTime.formatIso(DateTime.makeUnsafe(at)),
+                  },
                 );
               }
               clockState.now = at;
@@ -1200,7 +1203,8 @@ const make =
                 );
               }
               if (actual._tag === "Died")
-                assertedDeaths.add(`${s.saga.sagaName}/${run.executionId}`);
+                // The engine names a model's sagas `<model>/<saga>`.
+                assertedDeaths.add(`${domain.modelName}/${s.saga.sagaName}/${run.executionId}`);
               break;
             }
             case "Answer": {
@@ -1301,7 +1305,7 @@ const make =
           return yield* new StepFailed({
             step: steps.length,
             atEnd: true,
-            message: `saga ${death.saga} run ${death.executionId} died with ${String(death.defect)}, which no step asserts`,
+            message: `saga ${death.saga.slice(`${domain.modelName}/`.length)} run ${death.executionId} died with ${String(death.defect)}, which no step asserts`,
           });
         }
         if (observed.length > 0) {

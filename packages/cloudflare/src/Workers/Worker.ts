@@ -34,6 +34,7 @@ import path from "pathe";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
+import type { DomainClass } from "../Domain/Version.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
@@ -802,6 +803,12 @@ export interface WorkerProps<
      * - Python Workers get `python_workers` instead of the JavaScript defaults.
      *
      * Duplicate flags are removed when defaults are applied.
+     *
+     * Add `enable_request_signal` to interrupt an Effect `fetch` handler when
+     * the client disconnects: the handler's finalizers run as an interruption
+     * and the Worker stays alive until they finish. Without the flag,
+     * Cloudflare cancels the request and its finalizers never run. `alchemy
+     * dev` does not report client disconnects.
      */
     flags?: (
       | "nodejs_compat"
@@ -1459,13 +1466,17 @@ export type Worker<Bindings = any> = Resource<
      */
     cache?: WorkerCache;
     /**
-     * Workers Observability traces settings contributed by
-     * `Cloudflare.Telemetry()`. Deep-merged into upload metadata: bound
-     * traces fill in when `WorkerProps.observability.traces` is omitted,
-     * and never clobber the default logs config. An explicit
-     * `observability.traces` object wins.
+     * Workers Observability traces and logs fields set on
+     * `Cloudflare.Telemetry()` — only the fields its caller set, so
+     * they can be merged with `WorkerProps.observability` field by field.
+     * Where the props omit `traces` / `logs`, these fill in over the
+     * defaults (on); a field set to different values in both fails the
+     * deploy with `ObservabilityConflictError`.
      */
-    observability?: Pick<WorkerObservability, "traces">;
+    observability?: {
+      traces?: Partial<NonNullable<WorkerObservability["traces"]>>;
+      logs?: Partial<NonNullable<WorkerObservability["logs"]>>;
+    };
     containers?: {
       className: string;
       /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
@@ -1485,6 +1496,12 @@ export type Worker<Bindings = any> = Resource<
       hash: string | undefined;
     }[];
     crons?: string[];
+    /**
+     * Durable Object classes a Domain model hosts, with the names they had in
+     * earlier Domain versions, so a deploy carries their data over to this
+     * version's names. See `Domain/Version.ts`.
+     */
+    domainClasses?: DomainClass[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local

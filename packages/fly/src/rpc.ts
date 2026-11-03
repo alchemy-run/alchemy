@@ -1,6 +1,8 @@
 import * as crypto from "node:crypto";
 import type { HttpEffect } from "alchemy/Http";
 import { RPC_PATH_PREFIX, serveRpc } from "alchemy/Rpc";
+import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -85,7 +87,7 @@ export const verifyFlySrc = (headers: Record<string, string | undefined>, org: s
         return [pair.slice(0, at), pair.slice(at + 1)];
       }),
     );
-    const now = yield* Effect.sync(() => Date.now() / 1000);
+    const now = (yield* Clock.currentTimeMillis) / 1000;
     const age = now - Number(fields.ts);
     return fields.org === org && age >= -60 && age <= MAX_FLY_SRC_AGE_SECONDS;
   });
@@ -107,11 +109,12 @@ export const serveFlyRpc = <Req = never>(
     const request = yield* HttpServerRequest;
     const headers = request.headers as Record<string, string | undefined>;
     const isRpc = request.url.includes(RPC_PATH_PREFIX);
-    const env = yield* Effect.sync(() => ({
-      bindingPort: process.env[BINDING_PORT_ENV] ?? "",
-      org: process.env[RPC_ORG_ENV] ?? "",
-      token: process.env[RPC_TOKEN_ENV] ?? "",
-    }));
+    const readEnv = (name: string) => Config.String(name).pipe(Effect.orElseSucceed(() => ""));
+    const env = {
+      bindingPort: yield* readEnv(BINDING_PORT_ENV),
+      org: yield* readEnv(RPC_ORG_ENV),
+      token: yield* readEnv(RPC_TOKEN_ENV),
+    };
     const bindingPort = env.bindingPort;
     const onBindingPort =
       bindingPort.length > 0 && header(headers, "fly-forwarded-port") === bindingPort;

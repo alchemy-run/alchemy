@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -526,7 +527,7 @@ export const WorkflowProvider = () =>
                   }),
                 ),
               );
-            const now = yield* Effect.sync(() => Date.now());
+            const now = yield* Clock.currentTimeMillis;
             const quiescent =
               observed.exists &&
               (observed.lastIngestion === undefined || now - observed.lastIngestion > 120_000);

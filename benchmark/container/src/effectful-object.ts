@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { EffectfulContainer } from "./effectful-container.ts";
@@ -26,7 +27,7 @@ export class EffectfulObject extends Cloudflare.DurableObject<EffectfulObject>()
         // RPC port answers.
         boot: () =>
           Effect.gen(function* () {
-            const start = yield* Effect.sync(() => Date.now());
+            const start = yield* Clock.currentTimeMillis;
             yield* container.start({ enableInternet: true });
             yield* container.ping().pipe(
               Effect.retry({
@@ -37,7 +38,7 @@ export class EffectfulObject extends Cloudflare.DurableObject<EffectfulObject>()
                 times: 40,
               }),
             );
-            const readyMs = (yield* Effect.sync(() => Date.now())) - start;
+            const readyMs = (yield* Clock.currentTimeMillis) - start;
             return { readyMs };
           }),
         shutdown: () => container.destroy().pipe(Effect.ignore),

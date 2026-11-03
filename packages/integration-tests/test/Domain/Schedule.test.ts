@@ -87,7 +87,7 @@ const HoldsLive = Holds.layer(HoldDeadlineLive).pipe(Layer.provide(InMemory));
 const h1 = Hold.ref("h-1");
 const h2 = Hold.ref("h-2");
 
-describe("Domain schedule", () => {
+describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.effect("a scheduled command fires when it is due", () =>
     story(
       Story.clock("2026-01-01T00:00:00Z"),

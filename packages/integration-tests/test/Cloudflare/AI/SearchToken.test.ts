@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { stageSuffix } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -75,7 +76,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const user = (process.env.USER ?? "test").toLowerCase();
+      const user = stageSuffix();
       const renamed = `${user}-alchemy-aisearch-token-renamed`;
 
       yield* stack.destroy();
@@ -124,7 +125,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const user = (process.env.USER ?? "test").toLowerCase();
+      const user = stageSuffix();
 
       yield* stack.destroy();
 

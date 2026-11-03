@@ -21,6 +21,7 @@
  */
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -41,21 +42,23 @@ const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
  * lexicographically sortable by creation time and safe as an R2 key prefix.
  */
 export const ulid = (): Effect.Effect<string> =>
-  Effect.sync(() => {
-    let time = Date.now();
-    const chars = Array.from({ length: 26 }, () => "0");
-    // 10 chars of time, most-significant first
-    for (let i = 9; i >= 0; i--) {
-      chars[i] = CROCKFORD[time % 32]!;
-      time = Math.floor(time / 32);
-    }
-    const rand = crypto.getRandomValues(new Uint8Array(16));
-    // 16 chars of randomness, 5 bits each from a fresh random byte
-    for (let i = 0; i < 16; i++) {
-      chars[10 + i] = CROCKFORD[rand[i]! % 32]!;
-    }
-    return chars.join("");
-  });
+  Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    Effect.sync(() => {
+      let time = now;
+      const chars = Array.from({ length: 26 }, () => "0");
+      // 10 chars of time, most-significant first
+      for (let i = 9; i >= 0; i--) {
+        chars[i] = CROCKFORD[time % 32]!;
+        time = Math.floor(time / 32);
+      }
+      const rand = crypto.getRandomValues(new Uint8Array(16));
+      // 16 chars of randomness, 5 bits each from a fresh random byte
+      for (let i = 0; i < 16; i++) {
+        chars[10 + i] = CROCKFORD[rand[i]! % 32]!;
+      }
+      return chars.join("");
+    }),
+  );
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Contract
@@ -296,7 +299,7 @@ export const RegistryLive = Registry.make(
             });
           }
           const repoId = yield* ulid();
-          const createdAt = Date.now();
+          const createdAt = yield* Clock.currentTimeMillis;
           // The DO's single-threaded event loop + transactionSync make the
           // exists-check + insert a real CAS.
           return yield* sql.transactionSync<RegistryEntry, RepoAlreadyExists>((raw, rollback) => {
@@ -422,7 +425,7 @@ export const RegistryLive = Registry.make(
         markDeleted: Effect.fn(function* (repoId: string) {
           yield* sql.run(
             `UPDATE repos SET deleted_at = ? WHERE repo_id = ? AND deleted_at IS NULL`,
-            Date.now(),
+            yield* Clock.currentTimeMillis,
             repoId,
           );
         }),

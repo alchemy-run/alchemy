@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -13,9 +14,10 @@ export default class IdpLookupWorker extends Cloudflare.Worker<IdpLookupWorker>(
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    const findIdp = yield* Cloudflare.Access.GetIdentityProvider({
-      name: "alchemy-zt-idp-worker-lookup",
-    });
+    // The test's stage-derived IdP name, read at deploy time and bound into
+    // the Worker as a plain-text variable.
+    const name = yield* Config.String("IDP_LOOKUP_NAME");
+    const findIdp = yield* Cloudflare.Access.GetIdentityProvider({ name });
 
     return {
       fetch: Effect.gen(function* () {

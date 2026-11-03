@@ -17,6 +17,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { stageSuffix, testName } from "../../names.ts";
 import MultipartWorker, { MultipartBucket } from "./fixtures/multipart-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -340,7 +341,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const bucketName = "alchemy-test-retained-move";
+      const bucketName = testName("alchemy-test-retained-move");
 
       // A retained bucket is alchemy's to forget, not to delete, so an
       // interrupted earlier run can leave a NON-EMPTY bucket behind — which
@@ -415,8 +416,8 @@ test.provider(
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const oldName = "alchemy-test-retained-replace-old";
-      const newName = "alchemy-test-retained-replace-new";
+      const oldName = testName("alchemy-test-retained-replace-old");
+      const newName = testName("alchemy-test-retained-replace-new");
 
       // Same reason as above: retained leftovers from an interrupted run are
       // never reclaimed by the engine.
@@ -832,7 +833,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const bucketName = "alchemy-test-r2-cors-drift";
+      const bucketName = testName("alchemy-test-r2-cors-drift");
       const rangeReads = {
         id: "range-reads",
         allowedMethods: ["GET", "HEAD"] as ("GET" | "HEAD")[],
@@ -914,7 +915,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const bucketName = "alchemy-test-r2-drift-repair";
+      const bucketName = testName("alchemy-test-r2-drift-repair");
 
       yield* forceDeleteBucket(accountId, bucketName);
       yield* stack.destroy();
@@ -958,7 +959,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const bucketName = "alchemy-test-r2-drift-recreate";
+      const bucketName = testName("alchemy-test-r2-drift-recreate");
 
       yield* forceDeleteBucket(accountId, bucketName);
       yield* stack.destroy();
@@ -1007,8 +1008,8 @@ test.provider(
 
       yield* stack.destroy();
 
-      const oldName = "alchemy-test-r2-cors-replace-a";
-      const newName = "alchemy-test-r2-cors-replace-b";
+      const oldName = testName("alchemy-test-r2-cors-replace-a");
+      const newName = testName("alchemy-test-r2-cors-replace-b");
       const cors = [
         {
           id: "range-reads",
@@ -1281,7 +1282,7 @@ test.provider(
       // Pin the physical name on every deploy so adding `name` cannot be
       // what schedules the update — same shape as the CORS drift case
       // above. A PR/user suffix keeps concurrent runs from colliding.
-      const suffix = (process.env.PULL_REQUEST ?? process.env.USER ?? "local")
+      const suffix = stageSuffix()
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "")
         .slice(0, 24);

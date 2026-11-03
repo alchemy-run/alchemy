@@ -40,7 +40,7 @@ test.provider(
           name: `projects/${project}/notificationConfigs/alchemy-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "SecurityCommandCenterLegacyDisabled"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

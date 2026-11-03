@@ -258,7 +258,11 @@ export const LocationProvider = () =>
           .pipe(
             Effect.retry({
               while: isTransientFeatureAccessBlip,
-              schedule: Schedule.exponential("500 millis"),
+              // Capped so the bounded retry stays under ~25s in total.
+              schedule: Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("4 seconds"),
+              ]),
               times: 8,
             }),
           );
@@ -302,7 +306,11 @@ export const LocationProvider = () =>
           .pipe(
             Effect.retry({
               while: isTransientFeatureAccessBlip,
-              schedule: Schedule.exponential("500 millis"),
+              // Capped so the bounded retry stays under ~25s in total.
+              schedule: Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("4 seconds"),
+              ]),
               times: 8,
             }),
           );

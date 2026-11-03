@@ -88,7 +88,11 @@ const ActingFor = Context.Reference<string | undefined>("Test/ActingFor", {
   defaultValue: () => undefined,
 });
 
+/** Every call of the Api that returns once. */
+const expose = ["Deposit", "Balance.get", "Balance.list", "Balance.snapshot"] as const;
+
 const walletTools = DomainAi.toToolkit(WalletApi, {
+  expose,
   headers: Effect.map(ActingFor, (owner): Headers.Input => (owner ? { "x-owner": owner } : {})),
 });
 
@@ -110,9 +114,22 @@ const ServerCredential = RpcMiddleware.layerClient(Session, ({ request, next }) 
 
 // ---------------------------------------------------------------- tests
 
-describe("Domain Ai: toToolkit", () => {
-  it("has one tool per call that returns once, with the Api's schemas", () => {
-    const { toolkit } = DomainAi.toToolkit(WalletApi);
+describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
+  it("gives no tool it is not told to expose", () => {
+    // @ts-expect-error a stream is not one tool result
+    DomainAi.toToolkit(WalletApi, { expose: ["Balance.watch"] });
+    // @ts-expect-error a stream is not one tool result
+    DomainAi.toToolkit(WalletApi, { expose: ["Balance.events"] });
+    // @ts-expect-error an operation the view does not have
+    DomainAi.toToolkit(WalletApi, { expose: ["Balance.nope"] });
+    expect(Object.keys(DomainAi.toToolkit(WalletApi).toolkit.tools)).toEqual([]);
+    expect(
+      Object.keys(DomainAi.toToolkit(WalletApi, { expose: ["Balance.get"] }).toolkit.tools),
+    ).toEqual(["WalletApi_Balance_get"]);
+  });
+
+  it("has one tool per exposed call, with the Api's schemas", () => {
+    const { toolkit } = DomainAi.toToolkit(WalletApi, { expose });
     expect(Object.keys(toolkit.tools)).toEqual([
       "WalletApi_Deposit_send",
       "WalletApi_Balance_get",
@@ -223,11 +240,9 @@ describe("Domain Ai: toToolkit", () => {
   it.live("a tool name a model provider would refuse fails the Layer with a DefinitionError", () =>
     Effect.gen(function* () {
       class LongApi extends Domain.Api("A".repeat(60), { model: Wallets, views: [] }) {}
-      const exit = yield* Layer.build(DomainAi.toToolkit(LongApi).layer).pipe(
-        Effect.provide(WalletsLive),
-        Effect.scoped,
-        Effect.exit,
-      );
+      const exit = yield* Layer.build(
+        DomainAi.toToolkit(LongApi, { expose: ["Deposit"] }).layer,
+      ).pipe(Effect.provide(WalletsLive), Effect.scoped, Effect.exit);
       expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toMatchObject({
         _tag: "DefinitionError",
         message: `The tool name ${"A".repeat(60)}_Deposit_send is longer than 64 characters`,
@@ -275,11 +290,11 @@ const mcpClient = (handler: (request: Request) => Promise<Response>) => {
   return { connect, request };
 };
 
-describe("Domain Ai: toMcp", () => {
+describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
   it.live("serves the tools over MCP; a call carries the request's headers to the Api", () =>
     Effect.gen(function* () {
       const { handler, dispose } = HttpRouter.toWebHandler(
-        DomainAi.toMcp(WalletApi).pipe(
+        DomainAi.toMcp(WalletApi, { expose }).pipe(
           Layer.provide(
             McpServer.layerHttp({
               name: "wallet",
@@ -333,7 +348,7 @@ describe("Domain Ai: toMcp", () => {
   it.live("serves a request-scoped MCP endpoint, as on a Worker", () =>
     Effect.gen(function* () {
       const { handler, dispose } = HttpRouter.toWebHandler(
-        DomainAi.toMcp(WalletApi).pipe(
+        DomainAi.toMcp(WalletApi, { expose }).pipe(
           Layer.provide(
             McpServer.layerHttpRequestScoped({
               name: "wallet",
