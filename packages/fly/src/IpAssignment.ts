@@ -21,8 +21,8 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  * be rejected when the org has no IPv4 quota. Prefer `v6` (free) or
  * `shared_v4` (free) in tests. `private_v6` is a Flycast address: it is
  * reachable only from the organization's private network. `egress_v4`
- * and `egress_v6` are static outbound addresses for the App's Machines
- * in `region`; they receive no traffic.
+ * and `egress_v6` are static outbound addresses of the App's Machines
+ * in `region`.
  */
 export type IpAssignmentType = "v4" | "v6" | "shared_v4" | "private_v6" | "egress_v4" | "egress_v6";
 
@@ -42,9 +42,8 @@ export interface IpAssignmentProps {
    */
   type: IpAssignmentType;
   /**
-   * Region for a dedicated address. Required for `egress_v4` and
-   * `egress_v6`: only the App's Machines in it send traffic from the
-   * address. Changing it replaces the assignment.
+   * Region for a dedicated or egress address. Required for `egress_v4`
+   * and `egress_v6`. Changing it replaces the assignment.
    */
   region?: string;
   /**
@@ -172,25 +171,18 @@ const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
  * ```
  *
  * ### Static egress
- * `egress_v4` and `egress_v6` give the App's Machines in `region` static
- * outbound addresses, for a partner that allowlists the addresses it
- * accepts connections from. They receive no traffic and survive deploys
- * and Machine replacement. `region` is required. `egress_v4` is billed.
- * Machines that already run pick a new address up within 5 to 10
- * minutes; Machines created after it use it at once.
+ * `egress_v4` and `egress_v6` are static outbound addresses. The App's
+ * Machines in `region` send their traffic from them, across deploys and
+ * Machine replacement. They receive no traffic. `region` is required and
+ * `egress_v4` is billed. Fly applies a new address to running Machines
+ * within 5 to 10 minutes.
  *
- * **Example:** Static egress in gru
+ * **Example:** Static egress in iad
  * ```typescript
  * export const EgressV4 = Fly.IpAssignment("EgressV4", {
- *   app: Worker,
+ *   app: Site,
  *   type: "egress_v4",
- *   region: "gru",
- * });
- *
- * export const EgressV6 = Fly.IpAssignment("EgressV6", {
- *   app: Worker,
- *   type: "egress_v6",
- *   region: "gru",
+ *   region: "iad",
  * });
  * ```
  *
