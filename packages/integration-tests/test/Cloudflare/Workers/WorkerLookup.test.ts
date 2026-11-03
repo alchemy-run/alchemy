@@ -1,12 +1,15 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Alchemy from "alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { expectUrlContains } from "../Utils/Http.ts";
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+});
 
 const targetScript = `import { WorkerEntrypoint } from "cloudflare:workers";
 export class Api extends WorkerEntrypoint {
@@ -31,6 +34,20 @@ const callerScript = `export default {
   },
 };`;
 
+// The target belongs to another stack, as a lookup's target always should:
+// the caller's stack only knows its name.
+const TargetStack = Alchemy.Stack(
+  "WorkerLookupTarget",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const target = yield* Cloudflare.Worker("lookup-target", { script: targetScript });
+    return { workerName: target.workerName.as<string>() };
+  }),
+);
+
+const target = beforeAll(deploy(TargetStack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(TargetStack));
+
 /**
  * `Cloudflare.Worker.lookup({ name })` binds a Worker found by its script
  * name — as a plain service binding and through `WorkerEntrypoint` — exactly
@@ -42,30 +59,21 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const { workerName } = yield* target;
 
-      // The target is deployed first; the caller only knows its name.
-      const target = () => Cloudflare.Worker("lookup-target", { script: targetScript });
-      const { workerName } = yield* stack.deploy(target());
-
-      const program = Effect.gen(function* () {
-        const deployedTarget = yield* target();
-        const caller = yield* Cloudflare.Worker("lookup-caller", {
-          script: callerScript,
-          workersDev: true,
-          env: {
-            TARGET: Cloudflare.Worker.lookup({ name: workerName }),
-            API: Cloudflare.WorkerEntrypoint(Cloudflare.Worker.lookup({ name: workerName }), "Api"),
-          },
-        });
-        return { target: deployedTarget, caller };
+      const program = Cloudflare.Worker("lookup-caller", {
+        script: callerScript,
+        workersDev: true,
+        env: {
+          TARGET: Cloudflare.Worker.lookup({ name: workerName }),
+          API: Cloudflare.WorkerEntrypoint(Cloudflare.Worker.lookup({ name: workerName }), "Api"),
+        },
       });
-      const deployed = yield* stack.deploy(program);
+      const caller = yield* stack.deploy(program);
 
-      yield* expectUrlContains(
-        deployed.caller.url!,
-        "lookup target up | hello alice from lookup target",
-        { label: "lookup-bound caller" },
-      );
+      yield* expectUrlContains(caller.url!, "lookup target up | hello alice from lookup target", {
+        label: "lookup-bound caller",
+      });
 
       // A lookup re-resolves to the same Worker, so nothing changes.
       const plan = yield* stack.plan(program);
@@ -76,6 +84,47 @@ test.provider(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
     timeout: 240_000,
+  },
+);
+
+/**
+ * Looking up a Worker this stack manages is always a mistake: the lookup has
+ * no dependency on it, so the stack could delete or replace it under the
+ * caller. The deploy fails with `LookupOfManagedResourceError` instead.
+ */
+test.provider(
+  "a lookup of a Worker this stack manages fails the deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const managed = () => Cloudflare.Worker("lookup-managed", { script: targetScript });
+      const { workerName } = yield* stack.deploy(managed());
+
+      const exit = yield* Effect.exit(
+        stack.deploy(
+          Effect.gen(function* () {
+            yield* managed();
+            yield* Cloudflare.Worker("lookup-managed-caller", {
+              script: callerScript,
+              env: { TARGET: Cloudflare.Worker.lookup({ name: workerName }) },
+            });
+          }),
+        ),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const pretty = Cause.pretty(exit.cause);
+        expect(pretty).toContain("LookupOfManagedResourceError");
+        expect(pretty).toContain("lookup-managed");
+      }
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
   },
 );
 

@@ -357,6 +357,20 @@ export class LookupNotSupportedError extends Data.TaggedError("LookupNotSupporte
 }> {}
 
 /**
+ * `Resource.lookup(props)` found a resource this stack already manages. A
+ * lookup carries no dependency, so the engine could delete or replace the
+ * resource without updating its consumers; reference the declared resource
+ * (or its `.ref`) instead.
+ */
+export class LookupOfManagedResourceError extends Data.TaggedError("LookupOfManagedResourceError")<{
+  message: string;
+  type: string;
+  props: unknown;
+  /** The FQN of the resource in this stack the lookup found. */
+  fqn: string;
+}> {}
+
+/**
  * A logical id for a looked-up resource, used where a declared resource's
  * would be (bind templates, labels): its primitive lookup values joined.
  */

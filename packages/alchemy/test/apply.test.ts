@@ -23,7 +23,7 @@ import { remote } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
 import { Cli } from "@/Report.ts";
-import { Resource } from "@/Resource";
+import { type LookupOfManagedResourceError, Resource } from "@/Resource";
 import { Stack, make as makeStack } from "@/Stack";
 import { Stage } from "@/Stage";
 import {
@@ -1030,6 +1030,39 @@ describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
       expect(yield* listState()).toEqual([]);
       expect(lookupTargetDeletes).not.toContain(name);
       expect(lookupTargets.get(name)).toEqual({ name, value: "v2" });
+    }),
+  );
+
+  // Always a user mistake: the lookup would bind the resource with no
+  // dependency, so this stack could delete or replace it under its consumer.
+  test.provider("a lookup of a resource this stack manages fails the deploy", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(LookupTarget("apply-managed", { value: "v1" }));
+
+      const expectManaged = (program: Effect.Effect<unknown, any, any>) =>
+        Effect.gen(function* () {
+          const exit = yield* Effect.exit(stack.deploy(program));
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const err = Cause.squash(exit.cause) as LookupOfManagedResourceError;
+            expect(err._tag).toBe("LookupOfManagedResourceError");
+            expect(err.fqn).toBe("apply-managed");
+          }
+        });
+
+      // Declared and looked up in the same program.
+      yield* expectManaged(
+        Effect.gen(function* () {
+          yield* LookupTarget("apply-managed", { value: "v1" });
+          yield* program("apply-managed");
+        }),
+      );
+      // Swapped from a declaration to a lookup, which would delete it.
+      yield* expectManaged(program("apply-managed"));
+
+      expect(yield* listState()).toEqual(["apply-managed"]);
+      yield* stack.destroy();
+      expect(lookupTargets.has("apply-managed")).toBe(false);
     }),
   );
 

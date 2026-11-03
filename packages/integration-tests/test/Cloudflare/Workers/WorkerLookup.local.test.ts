@@ -6,7 +6,10 @@ import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 
-const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  dev: true,
+});
 
 const targetScript = `import { WorkerEntrypoint } from "cloudflare:workers";
 export class Api extends WorkerEntrypoint {
@@ -20,6 +23,21 @@ export default {
   },
 };`;
 
+// The target belongs to another stack and is really deployed, even in dev.
+const TargetStack = Alchemy.Stack(
+  "WorkerLookupDevTarget",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const target = yield* Cloudflare.Worker("lookup-dev-target", { script: targetScript }).pipe(
+      Alchemy.remote(),
+    );
+    return { workerName: target.workerName.as<string>() };
+  }),
+);
+
+const target = beforeAll(deploy(TargetStack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(TargetStack));
+
 /**
  * Under `alchemy dev` a looked-up Worker is deployed, not run locally, so the
  * dev Worker reaches it through the remote-binding bridge — as a plain
@@ -30,35 +48,22 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const { workerName } = yield* target;
 
-      // The target is a real deployed Worker; the caller only knows its name.
-      const target = () =>
-        Cloudflare.Worker("lookup-dev-target", { script: targetScript }).pipe(Alchemy.remote());
-      const { workerName } = yield* stack.deploy(target());
-
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const deployedTarget = yield* target();
-          const caller = yield* Cloudflare.Worker("lookup-dev-caller", {
-            main: pathe.resolve(import.meta.dirname, "fixtures/lookup/caller.ts"),
-            env: {
-              TARGET: Cloudflare.Worker.lookup({ name: workerName }),
-              API: Cloudflare.WorkerEntrypoint(
-                Cloudflare.Worker.lookup({ name: workerName }),
-                "Api",
-              ),
-            },
-          });
-          return { target: deployedTarget, caller };
+      const caller = yield* stack.deploy(
+        Cloudflare.Worker("lookup-dev-caller", {
+          main: pathe.resolve(import.meta.dirname, "fixtures/lookup/caller.ts"),
+          env: {
+            TARGET: Cloudflare.Worker.lookup({ name: workerName }),
+            API: Cloudflare.WorkerEntrypoint(Cloudflare.Worker.lookup({ name: workerName }), "Api"),
+          },
         }),
       );
 
-      expect(deployed.caller.url).toMatch(/^http:\/\/localhost:\d+$/);
-      yield* expectUrlContains(
-        deployed.caller.url!,
-        "lookup target up | hello alice from lookup target",
-        { label: "dev lookup caller" },
-      );
+      expect(caller.url).toMatch(/^http:\/\/localhost:\d+$/);
+      yield* expectUrlContains(caller.url!, "lookup target up | hello alice from lookup target", {
+        label: "dev lookup caller",
+      });
 
       yield* stack.destroy();
     }),

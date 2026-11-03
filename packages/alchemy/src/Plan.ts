@@ -50,6 +50,7 @@ import {
 import { defaultProviderMode, stampedMode, type ProviderMode } from "./ProviderMode.ts";
 import {
   isResource,
+  LookupOfManagedResourceError,
   missingImplementation,
   type ResourceBinding,
   type ResourceLike,
@@ -1017,6 +1018,37 @@ const makePlan = <A>(
       return mapPlainData(input, ancestors, (child) => materializeStableRefs(child, ancestors));
     };
 
+    // A lookup that finds a resource this stack manages would bind it with
+    // no dependency edge. Detected by the provider's static `stables`, the
+    // properties that identify a resource; providers without them go unchecked.
+    const rejectManagedLookup = Effect.fn(function* (
+      expr: Output.LookupExpr<any>,
+      attrs: Record<string, unknown>,
+    ) {
+      const provider = yield* tryFindProviderByType(expr.lookupType, "live");
+      const stables = Option.getOrUndefined(provider)?.stables ?? [];
+      if (stables.length === 0) return;
+      for (const [fqn, row] of persistedRows) {
+        if (row === undefined || isActionState(row) || row.resourceType !== expr.lookupType) {
+          continue;
+        }
+        const attr = row.attr as Record<string, unknown> | undefined;
+        if (
+          attr !== undefined &&
+          stables.every((key) => attr[key] !== undefined && attr[key] === attrs[key])
+        ) {
+          return yield* Effect.die(
+            new LookupOfManagedResourceError({
+              message: `${expr.lookupType}.lookup(${JSON.stringify(expr.lookupProps)}) found '${fqn}', which this stack manages. Reference the declared resource instead: a lookup would not stop this stack deleting or replacing it.`,
+              type: expr.lookupType,
+              props: expr.lookupProps,
+              fqn,
+            }),
+          );
+        }
+      }
+    });
+
     const resolveOutput = (
       expr: Output.Expr<any>,
     ): Effect.Effect<any, Config.ConfigError | StateStoreError> =>
@@ -1029,6 +1061,10 @@ const makePlan = <A>(
         } else if (Output.isApplyExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr);
           return Output.hasOutputs(upstream) ? expr : expr.f(upstream);
+        } else if (Output.isLookupExpr(expr)) {
+          const attrs = yield* expr.f();
+          yield* rejectManagedLookup(expr, attrs);
+          return attrs;
         } else if (Output.isEffectExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr);
           return Output.hasOutputs(upstream) ? expr : yield* expr.f(upstream);

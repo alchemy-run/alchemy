@@ -1393,7 +1393,7 @@ export const capturedConfigHost = (mode: string) =>
 // LookupTarget — a resource found by `name` through `LookupTarget.lookup`.
 // `lookupTargets` stands in for the cloud: tests put the resources no stack
 // manages into it, keyed by a name unique to the test (files run their tests
-// concurrently). It is registered via `ProviderLayer.dual` so a dev run can
+// concurrently), and a declared LookupTarget lives there under its id. It is registered via `ProviderLayer.dual` so a dev run can
 // assert lookups always go through the live variant; `lookupCalls` records
 // which variant each lookup reached.
 
@@ -1417,12 +1417,16 @@ export const lookupTargetDeletes: string[] = [];
 
 const lookupTargetVariant = (mode: ProviderMode) =>
   Provider.succeed(LookupTarget, {
+    stables: ["name"],
     list: () => Effect.succeed([]),
     reconcile: Effect.fn(function* ({ id, news = {} }) {
-      return { name: id, value: news.value ?? id };
+      const attrs = { name: id, value: news.value ?? id };
+      lookupTargets.set(id, attrs);
+      return attrs;
     }),
     delete: Effect.fn(function* ({ id }) {
       lookupTargetDeletes.push(id);
+      lookupTargets.delete(id);
     }),
     lookup: Effect.fn(function* ({ name }) {
       lookupCalls.push({ mode, name });

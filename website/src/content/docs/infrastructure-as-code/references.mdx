@@ -104,6 +104,13 @@ deploy if nothing matches. Alchemy never creates, updates or deletes
 a looked-up resource, and `lookup` is a type error on resources that
 don't support it.
 
+A lookup is not a dependency, so don't use one for a resource your
+own stack declares: reference that resource directly. A lookup that
+finds one of the stack's own resources fails the deploy with
+`LookupOfManagedResourceError`. A resource another Alchemy stack
+manages is better found with `Resource.ref`, which reads that
+stack's state.
+
 ## Escape hatches
 
 When the Resource constructor isn't in scope, `Output.ref` is the
