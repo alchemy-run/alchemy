@@ -166,40 +166,83 @@ const twoQueues = Stack(
   }),
 );
 
+/** A depends on B through its props; C stands apart. */
+const dependentQueues = Stack(
+  "PreflightDependencies",
+  { providers: Layer.mergeAll(queueProvider(), PlanAuth), state: inMemoryState() },
+  Effect.gen(function* () {
+    const b = yield* Queue("B", {});
+    yield* Queue("A", { name: b.name });
+    yield* Queue("C", {});
+  }),
+);
+
+type PlanInput = Omit<Parameters<typeof Alchemist.plan>[0], "operation" | "stage">;
+
+/**
+ * Run `plans` with a temp `ALCHEMY_HOME` whose default profile configures
+ * the "Test" auth provider. Tests using this are `exclusive` (process env).
+ */
+const withProfile = (plans: ReadonlyArray<PlanInput>) =>
+  Effect.gen(function* () {
+    planned.length = 0;
+    const fs = yield* FileSystem.FileSystem;
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-preflight-plan-" });
+    const previous = { ALCHEMY_HOME: process.env.ALCHEMY_HOME, CI: process.env.CI };
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        process.env.ALCHEMY_HOME = dir;
+        // A CI runner resolves environment credentials, which skip the check.
+        delete process.env.CI;
+      }),
+      () =>
+        Effect.sync(() => {
+          for (const [key, value] of Object.entries(previous)) {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+          }
+        }),
+    );
+    yield* Effect.gen(function* () {
+      const profile = yield* ProfileStore;
+      yield* profile.setProviderConfig("default", "Test", { method: "stored" });
+      for (const input of plans) {
+        yield* Effect.scoped(Alchemist.plan({ ...input, operation: "deploy", stage: "test" }));
+      }
+    }).pipe(Effect.provide(Alchemist.layer()));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+
 it.live(
   "Alchemist.plan checks only the resources an include or exclude selects",
   () =>
     Effect.gen(function* () {
-      planned.length = 0;
-      const fs = yield* FileSystem.FileSystem;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-preflight-plan-" });
-      const previous = { ALCHEMY_HOME: process.env.ALCHEMY_HOME, CI: process.env.CI };
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          process.env.ALCHEMY_HOME = dir;
-          // A CI runner resolves environment credentials, which skip the check.
-          delete process.env.CI;
-        }),
-        () =>
-          Effect.sync(() => {
-            for (const [key, value] of Object.entries(previous)) {
-              if (value === undefined) delete process.env[key];
-              else process.env[key] = value;
-            }
-          }),
-      );
-      const plan = (selection: { include?: string[]; exclude?: string[] }) =>
-        Effect.scoped(
-          Alchemist.plan({ stack: twoQueues, operation: "deploy", stage: "test", ...selection }),
-        );
-      yield* Effect.gen(function* () {
-        const profile = yield* ProfileStore;
-        yield* profile.setProviderConfig("default", "Test", { method: "stored" });
-        yield* plan({});
-        yield* plan({ include: ["A"] });
-        yield* plan({ exclude: ["A"] });
-      }).pipe(Effect.provide(Alchemist.layer()));
+      yield* withProfile([
+        { stack: twoQueues },
+        { stack: twoQueues, include: ["A"] },
+        { stack: twoQueues, exclude: ["A"] },
+      ]);
       expect(planned).toEqual([["A", "Q"], ["A"], ["Q"]]);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    }),
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.live(
+  "Alchemist.plan checks the dependencies an include pulls in",
+  () =>
+    Effect.gen(function* () {
+      yield* withProfile([{ stack: dependentQueues, include: ["A"] }]);
+      expect(planned).toEqual([["A", "B"]]);
+    }),
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.live(
+  "Alchemist.plan skips the check for dev runs",
+  () =>
+    Effect.gen(function* () {
+      yield* withProfile([{ stack: twoQueues, dev: true }, { stack: twoQueues }]);
+      // Only the second, non-dev plan reaches the preflight.
+      expect(planned).toEqual([["A", "Q"]]);
+    }),
   { tags: ["unit", "local"], exclusive: true },
 );

@@ -4,9 +4,9 @@
  * resources (matched by the resource Type's leading segment,
  * `"Cloudflare.D1Database"` → `"Cloudflare"`) and the active profile's stored
  * config, and fails when that config cannot manage them, e.g. an OAuth grant
- * missing a scope. Without it
- * the run only fails later, on the first cloud call, with a generic
- * authorization error that names neither the resource nor the grant.
+ * missing a scope. Without it the run only fails later, on the first cloud
+ * call, with a generic authorization error that names neither the resource
+ * nor the grant.
  *
  * The check never calls the cloud and never blocks on its own lookups:
  * environment credentials, CI, a missing profile entry or an unreadable
