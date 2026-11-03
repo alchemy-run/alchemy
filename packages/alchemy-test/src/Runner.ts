@@ -720,40 +720,19 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   let exit = yield* runAttempt();
   while (attemptNeedsRetry(exit, test.fails) && retries < (test.retry ?? ctx.options.retry)) {
     retries++;
+    // The retry replaces this attempt's result; keep its error in the run
+    // log, or a test that passes on retry hides what failed (and leaked).
+    ctx.fileLog.appendTestLine(`${meta.file} > ${meta.titlePath.join(" > ")}`, {
+      level: "ERROR",
+      message: `attempt ${retries} failed, retrying: ${attemptOutcome(exit, test).error ?? "unknown"}`,
+      time: new Date(),
+    });
     // Clear IN PLACE — TestStart handed this array's reference out.
     ctx.capture.release(logs);
     exit = yield* runAttempt();
   }
 
-  let status: TestResult["status"];
-  let error: string | undefined;
-  if (wasInterrupted(exit)) {
-    status = "fail";
-    error = "killed (interrupted by user)";
-  } else if (Exit.isFailure(exit)) {
-    status = "fail";
-    error = prettyCause(exit.cause);
-  } else {
-    const failedHook = hookError(exit.value);
-    const bodyExit = exit.value.body;
-    if (failedHook !== undefined) {
-      status = "fail";
-      error = failedHook;
-    } else if (test.fails && bodyExit !== undefined) {
-      if (Exit.isFailure(bodyExit)) {
-        status = "pass";
-      } else {
-        status = "fail";
-        error = "expected test to fail, but it passed";
-      }
-    } else if (bodyExit !== undefined && Exit.isSuccess(bodyExit)) {
-      status = "pass";
-    } else {
-      status = "fail";
-      error = bodyExit === undefined ? "test body did not run" : prettyCause(bodyExit.cause);
-    }
-  }
-
+  const { status, error } = attemptOutcome(exit, test);
   if (ctx.interactive) ctx.completed.add(meta.id);
   const result: TestResult = { status, durationMs, error, logs, retries };
   ctx.results.set(meta.id, {
@@ -763,6 +742,29 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   yield* ctx.emit({ _tag: "TestEnd", test: meta, result });
   if (!ctx.interactive && status !== "fail") ctx.capture.release(logs);
 });
+
+/** The status and error a finished attempt reports. */
+const attemptOutcome = (
+  exit: Exit.Exit<TestAttempt, unknown>,
+  test: TestCase,
+): { status: TestResult["status"]; error: string | undefined } => {
+  if (wasInterrupted(exit)) return { status: "fail", error: "killed (interrupted by user)" };
+  if (Exit.isFailure(exit)) return { status: "fail", error: prettyCause(exit.cause) };
+  const failedHook = hookError(exit.value);
+  const bodyExit = exit.value.body;
+  if (failedHook !== undefined) return { status: "fail", error: failedHook };
+  if (test.fails && bodyExit !== undefined) {
+    return Exit.isFailure(bodyExit)
+      ? { status: "pass", error: undefined }
+      : { status: "fail", error: "expected test to fail, but it passed" };
+  }
+  if (bodyExit !== undefined && Exit.isSuccess(bodyExit))
+    return { status: "pass", error: undefined };
+  return {
+    status: "fail",
+    error: bodyExit === undefined ? "test body did not run" : prettyCause(bodyExit.cause),
+  };
+};
 
 /** Fail every (non-skipped) test in a subtree without running it. */
 const failSubtree = Effect.fn(function* (suite: Suite, ctx: ExecContext, error: string) {

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -207,6 +207,45 @@ it(
       ]);
       expect(`${stdout}\n${stderr}`).toContain("16 passed");
       expect(exitCode).toBe(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "a retried attempt's error stays in the run log when the retry passes",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-retry-log-"));
+    try {
+      await writeFile(
+        resolve(root, "retry.test.ts"),
+        `
+        import { it } from ${JSON.stringify(apiUrl)};
+        let attempts = 0;
+        it("flaky", () => {
+          if (++attempts === 1) throw new Error("first-attempt-marker");
+        }, { retry: 1 });
+        `,
+      );
+      const child = Bun.spawn([process.execPath, cli, root], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(exitCode).toBe(0);
+      const logFile = `${stdout}\n${stderr}`.match(/Full log: (\S+\.log)/)?.[1];
+      expect(logFile).toBeDefined();
+      const log = await readFile(logFile!, "utf8");
+      expect(log).toContain("attempt 1 failed, retrying");
+      expect(log).toContain("first-attempt-marker");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
