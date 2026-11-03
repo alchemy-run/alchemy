@@ -708,6 +708,7 @@ Turso SQLite databases as Stack resources: groups, databases, migrations, connec
 Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.
 
 - [Better Auth](https://alchemy.run/better-auth) — Build authentication with an Effect service, automatic database bindings, and deploy-time migrations.
+- [What is Better Auth?](https://alchemy.run/better-auth/what-is-better-auth) — The concepts behind Better Auth — the auth server, users, accounts, sessions and cookies, sign-in providers, the signing secret, the database and its migrations, and middleware — and how @alchemy.run/better-auth models each of them.
 
 ## Better Auth — Tutorial
 
@@ -753,6 +754,7 @@ Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in prov
 Observability as Stack resources — datasets, monitors, notifiers. The exporter-Layer pattern is documented in Concepts → Observability.
 
 - [Axiom](https://alchemy.run/axiom) — Observability as resources — OTEL datasets, ingest tokens, monitors, notifiers, and dashboards declared next to the code that emits the data.
+- [What is Axiom?](https://alchemy.run/axiom/what-is-axiom) — The concepts behind Axiom — organizations, datasets, OpenTelemetry ingest, API tokens, APL queries, monitors, notifiers, dashboards, views and annotations — and how @alchemy.run/axiom models each of them.
 - [Setup](https://alchemy.run/axiom/setup) — Connect alchemy to Axiom — account, credentials, and profiles.
 - [Datasets & ingest](https://alchemy.run/axiom/data/ingest) — Axiom datasets per OTel signal with OTLP endpoints as outputs, least-privilege ingest tokens, and per-stage naming with Stack.useSync.
 - [Alerting: monitors & notifiers](https://alchemy.run/axiom/guides/alerting) — Turn APL queries into alerts — Threshold, MatchEvent, and AnomalyDetection monitors wired to Slack, email, PagerDuty, and webhook notifiers, all as resources in your Stack.
@@ -763,7 +765,8 @@ Observability as Stack resources — datasets, monitors, notifiers. The exporter
 
 Repos, secrets, variables, and repository event sources as Stack resources; the CI/CD guides live under Guides and each cloud's tutorial part 5.
 
-- [GitHub](https://alchemy.run/github) — Repositories, Actions secrets and variables, webhooks, and repository event sources as Stack resources — the glue for CI/CD.
+- [GitHub](https://alchemy.run/github) — Repositories, Actions secrets, variables and environments, webhooks, repository event sources and pull request comments as Stack resources — the glue for CI/CD.
+- [What is GitHub?](https://alchemy.run/github/what-is-github) — The concepts behind GitHub as infrastructure — accounts and organizations, repositories, Actions workflows, secrets, variables and environments, OIDC, webhooks and pull request comments — and how @alchemy.run/github models each of them.
 - [Setup](https://alchemy.run/github/setup) — Connect alchemy to GitHub — account, credentials, and profiles.
 - [Repositories](https://alchemy.run/github/repository) — Manage GitHub repositories as Stack resources — create or adopt a repo, converge its settings on every deploy, rename in place, and opt into deletion explicitly.
 - [Actions secrets & variables](https://alchemy.run/github/actions-config) — Manage GitHub Actions secrets and variables as Stack resources — encrypted secrets, plain-text variables, bulk helpers, and CI credentials provisioned as code.
@@ -774,6 +777,7 @@ Repos, secrets, variables, and repository event sources as Stack resources; the 
 A git server you build in one file, use like any remote, and reshape one block at a time: setup, a six-part tutorial (push, access control, publishing, per-user credentials, your app's API, branch protection), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.
 
 - [Git](https://alchemy.run/git) — A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API.
+- [What is a git host?](https://alchemy.run/git/what-is-git) — The concepts behind hosting git — objects, refs, packs, the smart HTTP protocol, pushes and their verification, repositories, names and pull requests — and how @alchemy.run/git builds a host from them.
 - [Getting Started](https://alchemy.run/git/getting-started) — A complete quickstart for a Git host protected by a shared credential. Deploy it to Cloudflare, push a repository, and clone it back.
 - [Part 1: Push your first repository](https://alchemy.run/git/tutorial/part-1) — Deploy a Git host, push a commit, and clone it back. Add storage and hashing one layer at a time.
 - [Part 2: Control access](https://alchemy.run/git/tutorial/part-2) — Protect the existing Git host with one shared credential, then verify both accepted and rejected requests.
@@ -804,6 +808,7 @@ A git server you build in one file, use like any remote, and reshape one block a
 Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.
 
 - [Stripe](https://alchemy.run/stripe) — Sell subscriptions and onboard merchants from a Cloudflare Worker — catalog, Checkout, the Billing Portal, Connect, and webhooks declared next to the code that uses them.
+- [What is Stripe?](https://alchemy.run/stripe/what-is-stripe) — The concepts behind Stripe — accounts and test mode, API keys, products and prices, customers, Checkout, subscriptions, the Billing Portal, webhooks and Connect — and how @alchemy.run/stripe models each of them.
 - [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, CI, and how Worker bindings get their credentials.
 - [Sell a subscription](https://alchemy.run/stripe/guides/subscriptions) — The full SaaS billing loop on one Cloudflare Worker — hosted Checkout, the Billing Portal, and webhooks that keep an entitlement record your app gates on.
 - [Onboard merchants with Connect](https://alchemy.run/stripe/guides/connect) — Build a Connect platform on a Cloudflare Worker — create Express accounts, send merchants through hosted onboarding, and learn from account.updated when they can take payments.
@@ -813,7 +818,8 @@ Products, prices, coupons, customers, payment links, and webhooks as Stack resou
 
 Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.
 
-- [Docker](https://alchemy.run/docker) — Images, containers, networks, and volumes as Stack resources, driven through your active Docker CLI context.
+- [Docker](https://alchemy.run/docker) — Images, containers, networks, volumes and Swarm services as Stack resources, driven through your active Docker CLI context.
+- [What is Docker?](https://alchemy.run/docker/what-is-docker) — The concepts behind Docker — the engine and contexts, images and Dockerfiles, registries, containers, networks, volumes and Swarm — and how @alchemy.run/docker models each of them.
 - [Setup](https://alchemy.run/docker/setup) — Point alchemy at a Docker daemon — the active CLI context and the DOCKER_BIN override.
 - [Local services: Postgres with containers, networks, and volumes](https://alchemy.run/docker/local-services) — Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
 - [Build & push images](https://alchemy.run/docker/build-and-push) — Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
@@ -824,6 +830,7 @@ Local and CI Docker as Stack resources — images, containers, networks, and vol
 Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs (as images or Effect programs), raw manifests, and Helm charts — on a local cluster or any cluster reachable through a kubeconfig, token, client certificate, or exec plugin.
 
 - [Kubernetes](https://alchemy.run/kubernetes) — Run containers and Effect programs on any Kubernetes cluster with Alchemy. Declare Deployments, Jobs, raw manifests, and Helm charts in the same typed program as the rest of your infrastructure. No YAML, no kubectl apply.
+- [What is Kubernetes?](https://alchemy.run/kubernetes/what-is-kubernetes) — The concepts behind Kubernetes — clusters, nodes, the API server, namespaces, Pods, Deployments, Services, Jobs, ConfigMaps and Secrets, images, manifests, server-side apply and Helm — and how @alchemy.run/kubernetes models each of them.
 - [Setup](https://alchemy.run/kubernetes/setup) — Install Alchemy and connect it to a Kubernetes cluster, whether a local cluster on your machine, any cluster in your kubeconfig, or an explicit connection for CI. Then add a registry for images built from your code.
 - [Part 1: Your First Deployment](https://alchemy.run/kubernetes/tutorial/part-1) — Create a Stack, start a Kubernetes cluster on your machine with Kubernetes.LocalCluster, deploy a replicated HTTP service with Kubernetes.Deployment, and reach it with kubectl.
 - [Part 2: Namespaces & Configuration](https://alchemy.run/kubernetes/tutorial/part-2) — Create a Namespace with Kubernetes.Manifest, move the Deployment into it, and configure the app with environment variables and resource limits.
@@ -848,6 +855,7 @@ Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs (as ima
 Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.
 
 - [SQL](https://alchemy.run/sql) — Choose a database, connect with Effect SQL, Drizzle, or Prisma ORM, and deploy committed migrations.
+- [How SQL works in Alchemy](https://alchemy.run/sql/what-is-sql) — The concepts behind SQL in Alchemy — databases and engines, clients, connections and pools, request scope, migrations and their history — and how they fit together on every cloud.
 - [Databases](https://alchemy.run/sql/databases) — Compare database engines, connection paths, and deployment guides across Alchemy's SQL providers.
 - [Postgres](https://alchemy.run/sql/effect-sql/postgres) — SQL.Postgres turns a connection string into an @effect/sql-pg client — tagged-template queries with typed errors, one pool per execution.
 - [MySQL](https://alchemy.run/sql/effect-sql/mysql) — SQL.MySQL turns a connection string into an @effect/sql-mysql2 client — portable tagged-template queries with typed errors and one pool per execution.
@@ -869,6 +877,7 @@ Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committ
 Cloud-agnostic local process primitives — memoized builds, one-off commands, and dev servers; the static-site guides in each cloud hub consume them under the hood.
 
 - [Command](https://alchemy.run/command) — Alchemy's cloud-agnostic primitives for local processes in the deploy graph — memoized builds, one-off commands, and dev servers.
+- [How commands work](https://alchemy.run/command/what-is-command) — How Command puts local processes into a Stack — builds that produce assets, one-off commands run for their effects, dev servers — and how memoization decides when each runs again.
 - [Memoization: builds & one-off commands](https://alchemy.run/command/memoization) — Content-hash memoization shared by Command.Build and Command.Exec — what gets hashed, when a command re-runs, and the outdir contract on destroy.
 - [Dev servers](https://alchemy.run/command/dev-servers) — Run a framework dev server as a Command.Dev resource — started by alchemy dev, a no-op on alchemy deploy, with the server's URL surfaced back into your stack.
 
@@ -877,6 +886,7 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 TLS certificates from any ACME certificate authority as Stack resources, validated over DNS, renewed on deploy, or issued at runtime.
 
 - [ACME](https://alchemy.run/acme) — Manage TLS certificates independently of your hosting provider, at deploy time or from an application.
+- [What is ACME?](https://alchemy.run/acme/what-is-acme) — The concepts behind ACME certificates — certificate authorities, accounts, orders, challenges and DNS-01 validation, certificates and keys, renewal and revocation — and how @alchemy.run/acme models each of them.
 - [Getting started](https://alchemy.run/acme/getting-started) — Issue a staging TLS certificate with Let's Encrypt and an existing Cloudflare DNS zone.
 - [Certificate authorities](https://alchemy.run/acme/certificate-authorities) — Select a CA, configure external account binding, and understand account identity and key storage.
 - [DNS validation](https://alchemy.run/acme/dns-validation) — Configure Cloudflare DNS-01 challenges, wildcard certificates, propagation, and custom solvers.
@@ -934,4 +944,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~206 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~209 KB) — only fetch it when you need to locate a specific resource's reference page.
