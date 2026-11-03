@@ -1550,6 +1550,7 @@ export default defineConfig({
           label: "Better Auth",
           items: [
             { label: "Overview", link: "/better-auth" },
+            { label: "What is Better Auth?", link: "/better-auth/what-is-better-auth" },
             {
               label: "Tutorial",
               collapsed: false,

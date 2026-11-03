@@ -538,7 +538,7 @@ const SECTIONS: Section[] = [
     heading: "Better Auth",
     intro:
       "Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.",
-    pages: { slugs: ["better-auth/index"] },
+    pages: { slugs: ["better-auth/index", "better-auth/what-is-better-auth"] },
   },
   {
     heading: "Better Auth — Tutorial",
