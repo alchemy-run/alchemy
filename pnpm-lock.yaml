@@ -10648,7 +10648,7 @@ importers:
         version: 26.6.5
       oxlint:
         specifier: 'catalog:'
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
+        version: 1.89.0(oxlint-tsgolint@7.0.2005)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
