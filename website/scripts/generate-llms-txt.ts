@@ -696,6 +696,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "sql/index",
+        "sql/what-is-sql",
         "sql/databases",
         "sql/effect-sql/postgres",
         "sql/effect-sql/mysql",

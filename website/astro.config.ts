@@ -1876,6 +1876,7 @@ export default defineConfig({
           label: "SQL",
           items: [
             { label: "Overview", link: "/sql" },
+            { label: "How SQL works", link: "/sql/what-is-sql" },
             { label: "Databases", link: "/sql/databases" },
             {
               label: "Effect SQL",
