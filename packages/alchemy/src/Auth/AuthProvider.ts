@@ -299,6 +299,26 @@ export interface AuthProviderImpl<
    * only, never values.
    */
   readonly environment?: ReadonlyArray<EnvironmentVariable>;
+
+  /**
+   * Check, before a deploy is planned, that the stored profile configuration
+   * grants what `resources` (this provider's resources in the stack) need,
+   * e.g. OAuth scopes. Fail with an {@link AuthError} naming what is missing
+   * and how to grant it. Runs only for profile credentials, never for
+   * environment credentials, and must not call the cloud. Optional.
+   */
+  preflight?(
+    profileName: string,
+    config: Config,
+    resources: ReadonlyArray<PreflightResource>,
+  ): Effect.Effect<void, AuthError>;
+}
+
+/** A stack resource handed to {@link AuthProviderImpl.preflight}. */
+export interface PreflightResource {
+  /** Resource type, e.g. `Cloudflare.Access.Application`. */
+  readonly Type: string;
+  readonly FQN: string;
 }
 
 export interface AuthProvider<
@@ -482,6 +502,15 @@ export const AuthProvider =
           globalLogs,
         ),
         environment,
+        ...(service.preflight === undefined
+          ? {}
+          : {
+              preflight: (
+                profileName: string,
+                config: Config,
+                resources: ReadonlyArray<PreflightResource>,
+              ) => service.preflight!(profileName, config, resources),
+            }),
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>
           Schema.decodeUnknownEffect(service.configSchema)(config).pipe(

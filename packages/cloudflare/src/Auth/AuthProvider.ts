@@ -49,6 +49,7 @@ import {
   OFFLINE_ACCESS_SCOPE,
   partitionOAuthScopes,
 } from "./OAuthScopes.ts";
+import { missingOAuthScopes, missingOAuthScopesMessage } from "./ResourceScopes.ts";
 
 const options: Array<{
   value: CloudflareAuthConfig["method"];
@@ -778,6 +779,22 @@ export const CloudflareAuth = AuthProviderLayer<
       details,
       read: resolveCredentials,
       readEnvironment,
+      // Only OAuth grants carry a scope list; API tokens and keys are
+      // left to the run's own authorization errors.
+      preflight: (profileName, config, resources) => {
+        if (config.method !== "oauth" || !("scopes" in config)) return Effect.void;
+        const missing = missingOAuthScopes(config.scopes, resources);
+        if (missing.length === 0) return Effect.void;
+        return Effect.fail(
+          AuthError.make({
+            message: missingOAuthScopesMessage(
+              profileName,
+              missing,
+              reconfigureHint(CLOUDFLARE_AUTH_PROVIDER_NAME, profileName),
+            ),
+          }),
+        );
+      },
       environment: [
         {
           name: "CLOUDFLARE_ACCOUNT_ID",
