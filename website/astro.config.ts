@@ -1782,9 +1782,16 @@ export default defineConfig({
           label: "Docker",
           items: [
             { label: "Overview", link: "/docker" },
+            { label: "What is Docker?", link: "/docker/what-is-docker" },
             { label: "Setup", link: "/docker/setup" },
-            { label: "Run local services", link: "/docker/local-services" },
-            { label: "Build & push images", link: "/docker/build-and-push" },
+            {
+              label: "Guides",
+              items: [
+                { label: "Run local services", link: "/docker/local-services" },
+                { label: "Build & push images", link: "/docker/build-and-push" },
+                { label: "Docker Swarm", link: "/docker/swarm" },
+              ],
+            },
             providerResourcesEntry("Docker"),
           ],
         },

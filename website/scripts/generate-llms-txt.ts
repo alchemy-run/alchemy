@@ -648,6 +648,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "docker/index",
+        "docker/what-is-docker",
         "docker/setup",
         "docker/local-services",
         "docker/build-and-push",
