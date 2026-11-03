@@ -21,8 +21,13 @@ export type Reference = string | { zoneId: string; name?: string };
 
 export const isId = (zone: string): boolean => /^[a-f0-9]{32}$/i.test(zone);
 
-export const matchesZoneHostname = (zoneName: string, hostname: string): boolean =>
-  hostname === zoneName || hostname.endsWith(`.${zoneName}`);
+export const canonicalZoneName = (name: string): string => name.replace(/\.+$/, "").toLowerCase();
+
+export const matchesZoneHostname = (zoneName: string, hostname: string): boolean => {
+  const zone = canonicalZoneName(zoneName);
+  const host = canonicalZoneName(hostname);
+  return host === zone || host.endsWith(`.${zone}`);
+};
 
 export const resolveZoneId = ({
   accountId,
@@ -65,24 +70,47 @@ export const findZoneByName = ({
   Credentials | HttpClient.HttpClient
 > =>
   Effect.gen(function* () {
-    // Distilled `listZones` rides `Retry.makeDefault` (5xx / throttling).
-    // The previous raw `fetch` failed the first time Cloudflare answered
-    // `{ success: false, errors: [{ message: "unhandled server error" }] }`.
-    const page = yield* zones.listZones({
-      account: { id: accountId },
-      name,
-      perPage: 1,
-    });
-    const match = (page.result ?? []).find(
-      (candidate) => candidate.name === name && candidate.account.id === accountId,
-    );
-    if (match === undefined) return undefined;
-    return {
-      id: match.id,
-      name: match.name,
-      account: { id: match.account.id },
-    };
+    const matches = yield* findZonesByName({ accountId, name });
+    return matches[0];
   });
+
+/** Find every exact, account-scoped match across all API pages. */
+const findZonesByNameFrom = <R>(
+  accountId: string,
+  name: string,
+  pages: Stream.Stream<zones.ListZonesResponse, zones.ListZonesError, R>,
+): Effect.Effect<ZoneListItem[], zones.ListZonesError, R> =>
+  pages.pipe(
+    Stream.runCollect,
+    Effect.map((pages) =>
+      Array.from(pages).flatMap((page) =>
+        (page.result ?? [])
+          .filter(
+            (candidate) =>
+              candidate.account.id === accountId &&
+              canonicalZoneName(candidate.name) === canonicalZoneName(name),
+          )
+          .map((candidate) => ({
+            id: candidate.id,
+            name: candidate.name,
+            account: { id: candidate.account.id },
+          })),
+      ),
+    ),
+  );
+
+export const findZonesByName = ({
+  accountId,
+  name,
+}: {
+  accountId: string;
+  name: string;
+}): Effect.Effect<ZoneListItem[], zones.ListZonesError, Credentials | HttpClient.HttpClient> =>
+  findZonesByNameFrom(
+    accountId,
+    name,
+    zones.listZones.pages({ account: { id: accountId }, name, perPage: 100 }),
+  );
 
 /**
  * Exhaustively enumerate every zone in an account. Used by `list()` lifecycle
@@ -107,6 +135,6 @@ export const listAllZones = (
 
 /** Hostname plus each parent label, longest first — used to infer a zone. */
 export const zoneNameCandidates = (hostname: string): string[] => {
-  const parts = hostname.split(".");
+  const parts = canonicalZoneName(hostname).split(".");
   return parts.slice(0, -1).map((_, index) => parts.slice(index).join("."));
 };
