@@ -72,9 +72,76 @@ Clients that `watch` or read `events` open a WebSocket per read, with `Domain.pr
 
 More: [Cloudflare: Watch without polling](https://alchemy.run/domain/cloudflare#watch-without-polling).
 
-## Plain HTTP and OpenAPI
+## Public and partner APIs
 
-For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/Http` publishes an Api as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
+An API for clients you don't control is its own `HttpApi`, with each endpoint's response schema declared next to it. Its handlers call the domain through `clientInProcess` and map the result to that schema, so a field reaches the outside only when someone adds it here:
+
+```ts
+// packages/server/src/PartnerApi.ts
+export const Balance = Schema.Struct({ accountId: AccountId, balance: Schema.Number });
+
+export const GetBalance = HttpApiEndpoint.get("GetBalance", "/accounts/:id/balance", {
+  params: Schema.Struct({ id: AccountId }),
+  success: Balance,
+});
+
+export class Accounts extends HttpApiGroup.make("Accounts").add(GetBalance) {}
+
+export class PartnerApi extends HttpApi.make("PartnerApi").add(Accounts) {}
+
+export const AccountsLive = HttpApiBuilder.group(PartnerApi, "Accounts", (handlers) =>
+  handlers.handle(
+    "GetBalance",
+    Effect.fn(function* ({ params }) {
+      const bank = yield* CustomerApi.clientInProcess;
+      const summary = yield* bank.AccountSummary.get(params.id);
+      return { accountId: params.id, balance: summary.balance };   // only what GetBalance declares
+    }, Effect.scoped),
+  ),
+);
+```
+
+The domain's middleware and `validate` still run inside `clientInProcess`; the endpoint decides only what leaves.
+
+More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process).
+
+## Deploying
+
+The root `alchemy.run.ts` yields the server Worker and the foldkit website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.
+
+More: [Cloudflare: Deploy it](https://alchemy.run/domain/cloudflare#deploy-it), [Cloudflare: Deploy without dropping requests](https://alchemy.run/domain/cloudflare#deploy-without-dropping-requests).
+
+## Observability
+
+Every command, event and reaction is traced automatically:
+- `Domain.send` and `Domain.decide` spans for commands, with a span event per committed event.
+- `Domain.policy` and `Domain.view` spans that continue the trace of the commit they react to.
+- `Domain.saga` and `Domain.projection` spans that start their own trace and link back to their cause.
+- `Domain.external` spans for external system calls.
+
+All of them carry `domain.correlation_id`, the first command of the flow, which finds a whole flow across traces. Export to an OpenTelemetry backend to see each flow as one connected trace: declare an `Axiom.Dataset` per signal and an `Axiom.ApiToken` that may ingest into them, and add `Axiom.Telemetry({ token, traces, logs })` to the Worker's single `Effect.provide` (or `Alchemy.Telemetry.layerOtlp` for any OTLP endpoint). Name datasets per stage. `Cloudflare.Telemetry()` shows spans in Cloudflare's dashboard instead, but Cloudflare starts a new trace per Worker or Durable Object event, so flows don't connect and browser spans can't be added.
+
+Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.lag` (commit to handling), `domain.runs`, `domain.projection.batch_size`, `domain.external.calls`. Turn off view spans with `Bank.layer(handlers, { telemetry: { views: false } })`.
+
+More: [Observability](https://alchemy.run/domain/observability).
+
+## Pitfalls
+
+- Durable Object calls right after a fresh deploy can briefly hit alchemy's placeholder script. The Domain platform retries its own calls, so make test readiness probes retry the first real request.
+- Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
+- Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
+- Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, Durable Object classes named after the model (`Billing.AccountAggregate`). Two models with the same name on one platform fail.
+- Deploys keep data across Domain layout changes. Upgrading models that shared a class before Domain versions existed fails until one sets `legacyData: true` on its `layer`.
+
+More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where), [Cloudflare: Host several models in one Worker](https://alchemy.run/domain/cloudflare#host-several-models-in-one-worker), [Cloudflare: Upgrade without losing data](https://alchemy.run/domain/cloudflare#upgrade-without-losing-data).
+
+## Conveniences for internal tools
+
+`toHttpApi`, `toMcp` and `toCli` publish the calls their `expose` option lists, and nothing else: a command by its name (`"DepositMoney"`), a read as `<Name>.<operation>` (`"AccountSummary.get"`). A name the Api does not serve is a type error. They use the domain's own payloads, replies and state as the wire format. That is quick for internal tooling (scripts, admin consoles, an agent working on your own data), but what each call returns is decided elsewhere (the aggregate, view or command), so a reply or view that later gains a private field is published without anyone touching `expose`. Don't reach for them by default, and don't use them for a public or partner surface: write that API yourself (see [Public and partner APIs](#public-and-partner-apis)).
+
+### Plain HTTP and OpenAPI
+
+For internal clients that are not Effect (a script, an ops dashboard), `toHttpApi` from `@alchemy.run/domain/Http` publishes an Api as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
 
 ```ts
 import * as DomainHttp from "@alchemy.run/domain/Http";
@@ -83,8 +150,10 @@ import * as Etag from "effect/http/Etag";
 import * as HttpPlatform from "effect/http/HttpPlatform";
 import * as HttpRouter from "effect/http/HttpRouter";
 
-// every call the Api serves; a typed failure answers at its `httpApiStatus`, else 422
-const BankHttp = DomainHttp.toHttpApi(CustomerApi);
+// only the listed calls; a typed failure answers at its `httpApiStatus`, else 422
+const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
+  expose: ["DepositMoney", "AccountSummary.get", "AccountSummary.snapshot", "AccountSummary.list", "AccountSummary.events"],
+});
 
 // in the Worker's init, inside `.pipe(Effect.provide(BankLive))`
 return {
@@ -126,18 +195,6 @@ export class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 
 // GET /AccountSummary/a-2 as someone else -> 403 { "_tag": "NotOwner" }
 ```
 
-What the Api serves is what is published, so HTTP clients get their own Api:
-
-```ts
-export class PartnerApi extends Domain.Api("PartnerApi", {
-  model: Bank,
-  commands: ["DepositMoney"],
-  views: ["AccountSummary"],
-  streams: [],
-  aggregates: [],
-}) {}
-const PartnerHttp = DomainHttp.toHttpApi(PartnerApi);
-```
 
 To serve the group next to others or under a prefix, add it to your own `HttpApi`:
 
@@ -148,16 +205,18 @@ const AppLive = HttpApiBuilder.layer(AppApi).pipe(Layer.provide(BankHttp.layerFo
 
 More: [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api).
 
-## MCP
+### MCP
 
-`toMcp` from `@alchemy.run/domain/Ai` serves each call of an Api that returns once as an MCP tool, named `<api>_<name>_<operation>`:
+`toMcp` from `@alchemy.run/domain/Ai` serves each call `expose` lists (any call that returns once) as an MCP tool, named `<api>_<name>_<operation>`:
 
 ```ts
 import * as DomainAi from "@alchemy.run/domain/Ai";
 import { McpProtocol, McpServer } from "effect/ai";
 
 // packages/server/src/BankMcp.ts
-export const BankMcp = DomainAi.toMcp(AgentApi).pipe(
+export const BankMcp = DomainAi.toMcp(CustomerApi, {
+  expose: ["DepositMoney", "AccountSummary.get"],
+}).pipe(
   Layer.provide(
     McpServer.layerHttp({ name: "bank", version: "1.0.0", path: "/mcp", protocols: [McpProtocol.v2025_11_25] }),
   ),
@@ -170,7 +229,8 @@ On a Worker, use `McpServer.layerHttpRequestScoped` with `McpProtocol.v2026_07_2
 `toToolkit` gives the same tools to an agent in the app, acting for the headers you give it:
 
 ```ts
-const { toolkit, layer } = DomainAi.toToolkit(AgentApi, {
+const { toolkit, layer } = DomainAi.toToolkit(CustomerApi, {
+  expose: ["RequestTransfer", "AccountSummary.get"],
   headers: Effect.map(CurrentSession, (s) => ({ authorization: `Bearer ${s.token}` })),
 });
 const answer = LanguageModel.generateText({ prompt, toolkit }).pipe(Effect.provide(layer));
@@ -178,14 +238,15 @@ const answer = LanguageModel.generateText({ prompt, toolkit }).pipe(Effect.provi
 
 More: [MCP](https://alchemy.run/domain/mcp).
 
-## CLI
+### CLI
 
-`toCli` from `@alchemy.run/domain/Cli` builds an Effect CLI command that calls the deployed Api over HTTP, one kebab-case subcommand per command, view, stream or aggregate:
+`toCli` from `@alchemy.run/domain/Cli` builds an Effect CLI command that calls the deployed Api over HTTP, one kebab-case subcommand per exposed call that returns once:
 
 ```ts
 // packages/cli/src/bank.ts
 const bank = toCli(CustomerApi, {
   name: "bank",
+  expose: ["DepositMoney", "AccountSummary.get"],
   headers: Config.redacted("BANK_TOKEN").pipe(
     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
   ),
@@ -209,33 +270,3 @@ $ bank account-summary get --key a-1
 ```
 
 More: [CLI](https://alchemy.run/domain/cli).
-
-## Deploying
-
-The root `alchemy.run.ts` yields the server Worker and the foldkit website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.
-
-More: [Cloudflare: Deploy it](https://alchemy.run/domain/cloudflare#deploy-it), [Cloudflare: Deploy without dropping requests](https://alchemy.run/domain/cloudflare#deploy-without-dropping-requests).
-
-## Observability
-
-Every command, event and reaction is traced automatically:
-- `Domain.send` and `Domain.decide` spans for commands, with a span event per committed event.
-- `Domain.policy` and `Domain.view` spans that continue the trace of the commit they react to.
-- `Domain.saga` and `Domain.projection` spans that start their own trace and link back to their cause.
-- `Domain.external` spans for external system calls.
-
-All of them carry `domain.correlation_id`, the first command of the flow, which finds a whole flow across traces. Export to an OpenTelemetry backend to see each flow as one connected trace: declare an `Axiom.Dataset` per signal and an `Axiom.ApiToken` that may ingest into them, and add `Axiom.Telemetry({ token, traces, logs })` to the Worker's single `Effect.provide` (or `Alchemy.Telemetry.layerOtlp` for any OTLP endpoint). Name datasets per stage. `Cloudflare.Telemetry()` shows spans in Cloudflare's dashboard instead, but Cloudflare starts a new trace per Worker or Durable Object event, so flows don't connect and browser spans can't be added.
-
-Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.lag` (commit to handling), `domain.runs`, `domain.projection.batch_size`, `domain.external.calls`. Turn off view spans with `Bank.layer(handlers, { telemetry: { views: false } })`.
-
-More: [Observability](https://alchemy.run/domain/observability).
-
-## Pitfalls
-
-- Durable Object calls right after a fresh deploy can briefly hit alchemy's placeholder script. The Domain platform retries its own calls, so make test readiness probes retry the first real request.
-- Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
-- Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
-- Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, Durable Object classes named after the model (`Billing.AccountAggregate`). Two models with the same name on one platform fail.
-- Deploys keep data across Domain layout changes. Upgrading models that shared a class before Domain versions existed fails until one sets `legacyData: true` on its `layer`.
-
-More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where), [Cloudflare: Host several models in one Worker](https://alchemy.run/domain/cloudflare#host-several-models-in-one-worker), [Cloudflare: Upgrade without losing data](https://alchemy.run/domain/cloudflare#upgrade-without-losing-data).

@@ -344,11 +344,7 @@ Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { c
 
 More: [Api](https://alchemy.run/domain/api).
 
-`toHttpApi(CustomerApi)` from `@alchemy.run/domain/Http` publishes every call of the Api as a plain HTTP JSON API with an OpenAPI document. See [hosting.md](hosting.md#plain-http-and-openapi).
-
-`toMcp(CustomerApi)` from `@alchemy.run/domain/Ai` gives an agent each call that returns once as an MCP tool; `toToolkit` gives the same tools to an in-app agent. See [hosting.md](hosting.md#mcp).
-
-`toCli(CustomerApi)` from `@alchemy.run/domain/Cli` runs each call that returns once from a terminal, over the deployed Api's HTTP protocol. See [hosting.md](hosting.md#cli).
+An Api is the domain's interface for its own clients. For a public or partner API, write a separate `HttpApi` with its own response schemas that calls the Api in process; see [hosting.md](hosting.md#public-and-partner-apis). `toHttpApi`, `toMcp` and `toCli` publish only the calls their `expose` option lists, as the domain shapes them, which is convenient for internal tools only; see [hosting.md](hosting.md#conveniences-for-internal-tools).
 
 ## Model
 
