@@ -567,14 +567,6 @@ export const LocalWorkerProvider = () =>
            */
           edgeDomain:
             typeof props.domain === "string" ? props.domain : (props.domain?.name ?? undefined),
-          /**
-           * The zone outbound `fetch()`es report in `CF-Worker`: the custom
-           * domain, else the first route's zone, as Wrangler derives it.
-           */
-          zone:
-            (typeof props.domain === "string" ? props.domain : props.domain?.name) ??
-            props.routes?.[0]?.zoneName ??
-            (props.routes?.[0] ? routePatternHost(props.routes[0].pattern.trim()) : undefined),
         };
       });
 
@@ -917,7 +909,6 @@ export const LocalWorkerProvider = () =>
                       },
                       compatibilityDate: worker.compatibility.date,
                       compatibilityFlags: worker.compatibility.flags,
-                      zone: worker.zone,
                       // `dev.access` populates the Worker's native `ctx.access`.
                       access: worker.dev.access,
                       // Stream preview and Images variant URLs use the stable URL
@@ -1284,7 +1275,6 @@ export const LocalWorkerProvider = () =>
                         cache: worker.dev.cache,
                         cf: worker.dev.cf,
                         workerd: worker.dev.workerd,
-                        zone: worker.zone,
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },
@@ -1409,7 +1399,6 @@ export const LocalWorkerProvider = () =>
               streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
               cache: worker.dev.cache,
               cf: worker.dev.cf,
-              zone: worker.zone,
               access: worker.dev.access,
               workerd: worker.dev.workerd,
             },
