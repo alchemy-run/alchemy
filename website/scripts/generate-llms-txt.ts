@@ -735,6 +735,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "acme/index",
+        "acme/what-is-acme",
         "acme/getting-started",
         "acme/certificate-authorities",
         "acme/dns-validation",

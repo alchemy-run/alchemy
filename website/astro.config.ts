@@ -1930,6 +1930,7 @@ export default defineConfig({
           label: "ACME",
           items: [
             { label: "Overview", link: "/acme" },
+            { label: "What is ACME?", link: "/acme/what-is-acme" },
             { label: "Getting started", link: "/acme/getting-started" },
             {
               label: "Certificate authorities",
