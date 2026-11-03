@@ -22,7 +22,7 @@ export const MoveServiceTableToDatabaseHttp = Layer.effect(
         resource: "GCP.Metastore.Service",
         operation: metastore.moveTableToDatabaseProjectsLocationsServices,
         param: "service",
-        iam: { role: "roles/metastore.editor" },
+        iam: { role: "roles/metastore.metadataMutateAdmin" },
       },
     ],
   }),

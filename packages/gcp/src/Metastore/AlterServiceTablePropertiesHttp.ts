@@ -22,7 +22,7 @@ export const AlterServiceTablePropertiesHttp = Layer.effect(
         resource: "GCP.Metastore.Service",
         operation: metastore.alterTablePropertiesProjectsLocationsServices,
         param: "service",
-        iam: { role: "roles/metastore.editor" },
+        iam: { role: "roles/metastore.metadataMutateAdmin" },
       },
     ],
   }),

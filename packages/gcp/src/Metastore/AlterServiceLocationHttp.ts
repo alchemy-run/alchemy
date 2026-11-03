@@ -19,7 +19,7 @@ export const AlterServiceLocationHttp = Layer.effect(
         resource: "GCP.Metastore.Service",
         operation: metastore.alterLocationProjectsLocationsServices,
         param: "service",
-        iam: { role: "roles/metastore.editor" },
+        iam: { role: "roles/metastore.metadataMutateAdmin" },
       },
     ],
   }),

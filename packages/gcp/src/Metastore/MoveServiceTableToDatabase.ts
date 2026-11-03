@@ -26,7 +26,7 @@ export type MoveServiceTableToDatabaseShape = (
  * Move a table to another database.
  *
  * Bind it to a {@link Service} and provide {@link MoveServiceTableToDatabaseHttp}. The
- * host gets `roles/metastore.editor` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/metastore.metadataMutateAdmin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `services.moveTableToDatabase`
