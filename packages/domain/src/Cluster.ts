@@ -12,6 +12,7 @@ import type * as ShardingConfig from "effect/cluster/ShardingConfig";
 import * as SingleRunner from "effect/cluster/SingleRunner";
 import type { ConfigError } from "effect/Config";
 import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -27,11 +28,13 @@ import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
 import type * as Statement from "effect/sql/Statement";
 import * as Stream from "effect/Stream";
-import { WorkflowEngine } from "effect/workflow";
+import { Workflow, WorkflowEngine } from "effect/workflow";
 import type * as Aggregate from "./Aggregate.ts";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts";
+import { DefinitionError, NotOnHost, SharedOnHost } from "./DefinitionError.ts";
 import { isAfter, mergeCheckpoints } from "./InMemory.ts";
 import {
+  hostedModels,
   type Accepted,
   type AggregateKit,
   type AggregateStore,
@@ -39,6 +42,7 @@ import {
   emptySnapshot,
   emptyStreamMeta,
   type Json,
+  type ModelHost,
   Platform,
   type PolicyKit,
   type PolicyStore,
@@ -403,10 +407,11 @@ const emptyProjectionMeta: ProjectionMeta = {
 
 const parse = (text: string | null): Json => (text === null ? null : JSON.parse(text));
 
-const make = (options: Options) =>
+const make = (options: Options, models: Set<string>) =>
   Effect.gen(function* () {
     const sql = (yield* SqlClient.SqlClient).withoutTransforms();
     const sharding = yield* Sharding.Sharding;
+    const random = yield* SecureRandom.SecureRandom;
     const scope = yield* Effect.scope;
     const prefix = options.tablePrefix ?? "domain";
     const watchMillis = options.watchMillis ?? 250;
@@ -812,7 +817,7 @@ const make = (options: Options) =>
                     const outcome = yield* sql.withTransaction(
                       Effect.gen(function* () {
                         if (yield* receiptOf(id, meta.commandId)) return undefined;
-                        const token = yield* Effect.sync(() => crypto.randomUUID());
+                        const token = yield* random.uuidV4();
                         const at = yield* now;
                         const row = {
                           token,
@@ -942,6 +947,17 @@ const make = (options: Options) =>
 
     const view = (_view: unknown, kit: ViewKit) =>
       Effect.gen(function* (): Effect.fn.Return<ViewStore> {
+        // No history is kept for a consumer, so none can be replayed to it.
+        if (kit.generation > 0 || kit.catchUp !== undefined)
+          return yield* Effect.die(
+            new DefinitionError({
+              reason: new NotOnHost({
+                host: "Cluster",
+                consumer: kit.name,
+                feature: kit.generation > 0 ? "rebuild" : "lazy",
+              }),
+            }),
+          );
         const type = typeOf("View", kit.name);
         const entity = viewEntity(type);
         const keyOf = (key: string) => `${type}/${key}`;
@@ -978,7 +994,7 @@ const make = (options: Options) =>
         const apply = (key: string, deliveries: ReadonlyArray<Delivery>) =>
           Effect.gen(function* () {
             const before = yield* snapshotOf(key);
-            const result = kit.apply(key, before ?? emptySnapshot, deliveries);
+            const result = yield* kit.apply(key, before ?? emptySnapshot, deliveries);
             if (!result.changed) return undefined;
             const snapshot = JSON.stringify(result.snapshot);
             if (before)
@@ -1085,6 +1101,12 @@ const make = (options: Options) =>
 
     const projection = (_projection: unknown, kit: ProjectionKit) =>
       Effect.gen(function* (): Effect.fn.Return<ProjectionStore> {
+        if (kit.generation > 0)
+          return yield* Effect.die(
+            new DefinitionError({
+              reason: new NotOnHost({ host: "Cluster", consumer: kit.name, feature: "rebuild" }),
+            }),
+          );
         const type = typeOf("Projection", kit.name);
         const entity = projectionEntity(type);
         const size = kit.options.batch?.size ?? 1;
@@ -1341,7 +1363,57 @@ const make = (options: Options) =>
         };
       });
 
-    return Platform.of({ aggregate, view, policy, projection, stream });
+    // Storage is keyed by name within the table prefix, as it always was, so
+    // data written before models had storage of their own stays where it is.
+    // Two models on one prefix may not name the same thing: they would share it.
+    const claim = hostedModels({ release: true });
+    const owners = new Map<string, { readonly model: string; builds: number }>();
+    const own = (entity: string, model: string): Effect.Effect<void, never, Scope.Scope> =>
+      Effect.acquireRelease(
+        Effect.suspend(() => {
+          const held = owners.get(entity);
+          if (held !== undefined && held.model !== model)
+            return Effect.die(
+              new DefinitionError({
+                reason: new SharedOnHost({ entity, models: [held.model, model] }),
+              }),
+            );
+          if (held === undefined) owners.set(entity, { model, builds: 1 });
+          else held.builds++;
+          return Effect.void;
+        }),
+        () =>
+          Effect.sync(() => {
+            const held = owners.get(entity);
+            if (held !== undefined && held.model === model && --held.builds === 0)
+              owners.delete(entity);
+          }),
+      );
+    return Platform.of({
+      model: ({ modelName, id, sagas }) =>
+        Effect.gen(function* () {
+          yield* claim(modelName, id);
+          const modelScope = yield* Effect.scope;
+          const owned = (entity: string) =>
+            own(entity, modelName).pipe(Effect.provideService(Scope.Scope, modelScope));
+          for (const saga of sagas) yield* owned(`Saga/${saga}`);
+          // Its sagas keep the workflow names they had before: see `workflowEngine`.
+          models.add(modelName);
+          const host: ModelHost = {
+            aggregate: (definition, kit) =>
+              Effect.andThen(owned(`Aggregate/${kit.name}`), aggregate(definition, kit)),
+            view: (definition, kit) =>
+              Effect.andThen(owned(`View/${kit.name}`), view(definition, kit)),
+            policy: (definition, kit) =>
+              Effect.andThen(owned(`Policy/${kit.name}`), policy(definition, kit)),
+            projection: (definition, kit) =>
+              Effect.andThen(owned(`Projection/${kit.name}`), projection(definition, kit)),
+            stream: (definition, kit) =>
+              Effect.andThen(owned(`Stream/${kit.name}`), stream(definition, kit)),
+          };
+          return host;
+        }),
+    });
   });
 
 /**
@@ -1380,11 +1452,12 @@ const make = (options: Options) =>
  * @layer
  * @provides Domain.Platform
  * @provides WorkflowEngine
+ * @provides SecureRandom
  */
 export const layer = (
   options: Options = {},
 ): Layer.Layer<
-  Platform | WorkflowEngine.WorkflowEngine,
+  Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   never,
   Sharding.Sharding | MessageStorage.MessageStorage | SqlClient.SqlClient
 > => {
@@ -1392,8 +1465,19 @@ export const layer = (
   // share one platform: the sweeper is one singleton per table prefix.
   const key = cacheKey(options);
   let found = layers.get(key);
-  if (found === undefined)
-    layers.set(key, (found = Layer.merge(Layer.effect(Platform, make(options)), workflowEngine)));
+  if (found === undefined) {
+    const models = new Set<string>();
+    layers.set(
+      key,
+      (found = Layer.mergeAll(
+        Layer.effect(Platform, make(options, models)).pipe(
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+        workflowEngine(models),
+        SecureRandom.layerWebCrypto,
+      )),
+    );
+  }
   return found;
 };
 
@@ -1426,33 +1510,75 @@ const cacheKey = (options: Options): string => {
  * (a retry, or a replay after a crash), so its receipt dedupes it. The
  * sequence starts again on every execution.
  */
-const workflowEngine = Layer.effect(
-  WorkflowEngine.WorkflowEngine,
-  Effect.gen(function* () {
-    const engine = yield* WorkflowEngine.WorkflowEngine;
-    return WorkflowEngine.WorkflowEngine.of({
-      ...engine,
-      activityExecute: (activity, attempt) =>
-        Effect.gen(function* () {
-          const instance = yield* WorkflowEngine.WorkflowInstance;
-          const step = () =>
-            makeCurrentActivity(instance.workflow._tag, instance.executionId, activity.name);
-          // A copy of the activity (own fields, symbols included) whose every run gets a fresh step.
-          const withStep: typeof activity = Object.assign({}, activity, {
-            executeEncoded: Effect.suspend(() =>
-              Effect.provideService(activity.executeEncoded, CurrentActivity, step()),
-            ),
-          });
-          return yield* engine.activityExecute(withStep, attempt);
-        }),
-    });
-  }),
-).pipe(Layer.provide(ClusterWorkflowEngine.layer));
+const workflowEngine = (models: ReadonlySet<string>) =>
+  Layer.effect(
+    WorkflowEngine.WorkflowEngine,
+    Effect.gen(function* () {
+      const engine = yield* WorkflowEngine.WorkflowEngine;
+      /**
+       * A model runs its sagas under `<model>/<saga>`. Here they keep the
+       * workflow name they had before models had storage of their own: the
+       * cluster's entity type (`Workflow/<saga>`), the stored runs and the
+       * command ids of saga steps all derive from it. Two models on one table
+       * prefix may not name the same saga (see `SharedOnHost`).
+       */
+      const unprefixed = (name: string) => {
+        const slash = name.indexOf("/");
+        return slash > 0 && models.has(name.slice(0, slash)) ? name.slice(slash + 1) : name;
+      };
+      const original = new WeakMap<Workflow.Any, Workflow.Any>();
+      const own = <W extends Workflow.Any>(workflow: W): W => {
+        const name = unprefixed(workflow._tag);
+        if (name === workflow._tag) return workflow;
+        let found = original.get(workflow);
+        if (found === undefined) {
+          const proto = Object.getPrototypeOf(workflow) as Workflow.Any | null;
+          found =
+            proto !== null && proto._tag === name
+              ? proto
+              : (Object.create(workflow, {
+                  _tag: { value: name, enumerable: true },
+                }) as Workflow.Any);
+          original.set(workflow, found);
+        }
+        return found as W;
+      };
+      return WorkflowEngine.WorkflowEngine.of({
+        ...engine,
+        register: (workflow, execute) => engine.register(own(workflow), execute),
+        execute: (workflow, options) => engine.execute(own(workflow), options),
+        poll: (workflow, executionId) => engine.poll(own(workflow), executionId),
+        interrupt: (workflow, executionId) => engine.interrupt(own(workflow), executionId),
+        interruptUnsafe: (workflow, executionId) =>
+          engine.interruptUnsafe(own(workflow), executionId),
+        resume: (workflow, executionId) => engine.resume(own(workflow), executionId),
+        scheduleClock: (workflow, options) => engine.scheduleClock(own(workflow), options),
+        deferredDone: (deferred, options) =>
+          engine.deferredDone(deferred, {
+            ...options,
+            workflowName: unprefixed(options.workflowName),
+          }),
+        activityExecute: (activity, attempt) =>
+          Effect.gen(function* () {
+            const instance = yield* WorkflowEngine.WorkflowInstance;
+            const step = () =>
+              makeCurrentActivity(instance.workflow._tag, instance.executionId, activity.name);
+            // A copy of the activity (own fields, symbols included) whose every run gets a fresh step.
+            const withStep: typeof activity = Object.assign({}, activity, {
+              executeEncoded: Effect.suspend(() =>
+                Effect.provideService(activity.executeEncoded, CurrentActivity, step()),
+              ),
+            });
+            return yield* engine.activityExecute(withStep, attempt);
+          }),
+      });
+    }),
+  ).pipe(Layer.provide(ClusterWorkflowEngine.layer));
 
 const layers = new Map<
   string,
   Layer.Layer<
-    Platform | WorkflowEngine.WorkflowEngine,
+    Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
     never,
     Sharding.Sharding | MessageStorage.MessageStorage | SqlClient.SqlClient
   >
@@ -1502,13 +1628,14 @@ const layers = new Map<
  * @layer
  * @provides Domain.Platform
  * @provides WorkflowEngine
+ * @provides SecureRandom
  */
 export const layerSingleRunner = ({
   shardingConfig,
   runnerStorage,
   ...options
 }: SingleRunnerOptions = {}): Layer.Layer<
-  Platform | WorkflowEngine.WorkflowEngine,
+  Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   ConfigError,
   SqlClient.SqlClient
 > =>

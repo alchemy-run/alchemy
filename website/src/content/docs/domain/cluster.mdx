@@ -63,6 +63,10 @@ On MySQL and MariaDB the deploy step is required. Two runners that start on an e
 
 The host's tables start with `domain_` (`domain_aggregates`, `domain_events`, `domain_receipts`, …). Set `tablePrefix` to host two models in one database. To run every schema from one `Migrator`, use `Cluster.migrations()` as its loader.
 
+Rows are keyed by the name of the aggregate, view, policy, projection, stream or saga within the prefix, not by the model. Several models can share one prefix when their names differ; a model that names something another model on the same prefix already names does not build (`SharedOnHost`). Give it its own `tablePrefix`. A saga keeps its own name as its workflow name (`Workflow/<saga>`), so runs stored by an earlier version stay reachable.
+
+The host keeps no history for a consumer added or changed later: a view or projection with a `version`, or a `lazy` view, does not build on it (`NotOnHost`).
+
 ## Run several runners
 
 Give `Domain.Cluster.layer()` the cluster of your choice, for example `BunClusterSocket` or `NodeClusterSocket`. All runners use one database.

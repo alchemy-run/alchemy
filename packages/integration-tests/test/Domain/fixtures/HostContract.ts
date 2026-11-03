@@ -237,7 +237,13 @@ export class Contract extends Domain.Model("Contract", {
   streams: [Bumps],
   sagas: [Pay, Retry],
 }) {}
-export class ContractApi extends Domain.Api("ContractApi", Increment, Counter, Totals, Bumps) {}
+export class ContractApi extends Domain.Api("ContractApi", {
+  model: Contract,
+  commands: ["Increment"],
+  views: ["Totals"],
+  streams: ["Bumps"],
+  aggregates: ["Counter"],
+}) {}
 
 export const Handlers = Layer.mergeAll(BumpWriterLive, MirrorLive, PayLive, RetryLive);
 

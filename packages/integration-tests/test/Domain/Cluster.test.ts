@@ -4,22 +4,28 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as BunClusterSocket from "@effect/platform-bun/BunClusterSocket";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
+import * as Cause from "effect/Cause";
 import * as RunnerAddress from "effect/cluster/RunnerAddress";
 import * as ShardingConfig from "effect/cluster/ShardingConfig";
 import * as SqlMessageStorage from "effect/cluster/SqlMessageStorage";
 import * as SqlRunnerStorage from "effect/cluster/SqlRunnerStorage";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import {
+  Contract,
   ContractApi,
   Counter,
+  Handlers,
+  Pay,
   eventually,
   ExpireHold,
   Hold,
@@ -34,10 +40,69 @@ const onSqlite = (options: Domain.Cluster.SingleRunnerOptions = {}) =>
     Layer.provideMerge(SqliteClient.layer({ filename: ":memory:" })),
   );
 
+/** The `reason` tag of the DefinitionError a build died with. */
+const definitionReason = (exit: Exit.Exit<unknown, unknown>) => {
+  if (Exit.isSuccess(exit)) return "built";
+  const defect = Cause.squash(exit.cause) as { _tag?: string; reason?: { _tag: string } };
+  return defect._tag === "DefinitionError" ? defect.reason?._tag : String(defect);
+};
+
 hostContract("InMemory", () => InMemory);
 hostContract("Cluster on SQLite", () => onSqlite());
 
 describe("Domain.Cluster on SQLite", () => {
+  it.live("a model's sagas keep the workflow names they had before models had own storage", () =>
+    Effect.gen(function* () {
+      const pays = yield* Pay;
+      const run = yield* pays.start("p-names", {
+        wallet: "w-names",
+        amount: 1,
+        approval: false,
+        napMillis: 0,
+      });
+      yield* run.result;
+      const sql = yield* SqlClient.SqlClient;
+      const types = yield* sql<{
+        entity_type: string;
+      }>`SELECT DISTINCT entity_type FROM cluster_messages WHERE entity_type LIKE 'Workflow/%'`;
+      // Not `Workflow/Contract/Pay`: runs stored before stay reachable.
+      expect(types.map((row) => row.entity_type)).toEqual(["Workflow/Pay"]);
+    }).pipe(Effect.scoped, Effect.provide(hosted(onSqlite()))),
+  );
+
+  it.live("two models that name the same aggregate on one table prefix do not build", () =>
+    Effect.gen(function* () {
+      class Other extends Domain.Model("Other", { aggregates: [Counter] }) {}
+      const exit = yield* Layer.build(
+        Layer.mergeAll(Contract.layer(Handlers), Other.layer(Layer.empty)).pipe(
+          Layer.provide(onSqlite()),
+        ),
+      ).pipe(Effect.scoped, Effect.exit);
+      expect(definitionReason(exit)).toBe("SharedOnHost");
+    }),
+  );
+
+  it.live("a view with a version does not build: the host keeps no history to rebuild it", () =>
+    Effect.gen(function* () {
+      class Rebuilt extends Domain.View("Rebuilt", {
+        from: [Counter],
+        key: Counter,
+        version: 1,
+        state: Schema.Struct({ n: Schema.Number }),
+        initial: { n: 0 },
+        evolve: { Incremented: (s) => ({ n: s.n + 1 }) },
+      }) {}
+      class Versioned extends Domain.Model("Versioned", {
+        aggregates: [Counter],
+        views: [Rebuilt],
+      }) {}
+      const exit = yield* Layer.build(
+        Versioned.layer(Layer.empty).pipe(Layer.provide(onSqlite())),
+      ).pipe(Effect.scoped, Effect.exit);
+      expect(definitionReason(exit)).toBe("NotOnHost");
+    }),
+  );
+
   it.live("keeps the newest view entries of a key, and events still end their history", () =>
     Effect.gen(function* () {
       const api = yield* ContractApi.Client;

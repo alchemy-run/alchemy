@@ -353,6 +353,33 @@ export class LazyViewNeedsOneSource extends Data.TaggedError("LazyViewNeedsOneSo
   }
 }
 
+/**
+ * Two models hosted on one table prefix of the Cluster host name the same
+ * aggregate, view, policy, projection, stream or saga, so they would share its
+ * rows. Give one of them its own `tablePrefix`.
+ */
+export class SharedOnHost extends Data.TaggedError("SharedOnHost")<{
+  readonly entity: string;
+  readonly models: ReadonlyArray<string>;
+}> {
+  override get message() {
+    return `Models ${this.models.join(" and ")} both name ${this.entity} on one table prefix: give one of them its own tablePrefix`;
+  }
+}
+
+/** A host that keeps no history for consumers cannot rebuild or lazily fill a view or projection. */
+export class NotOnHost extends Data.TaggedError("NotOnHost")<{
+  readonly host: string;
+  readonly consumer: string;
+  readonly feature: "rebuild" | "lazy";
+}> {
+  override get message() {
+    return this.feature === "rebuild"
+      ? `${this.consumer} has a version, but the ${this.host} host cannot rebuild a view or projection from history: remove its version`
+      : `${this.consumer} is lazy, but the ${this.host} host cannot fill a view from its source's history: leave it out of \`lazy\``;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -388,7 +415,9 @@ export type Reason =
   | MissingGroup
   | NewerGeneration
   | ModelHostedTwice
-  | LazyViewNeedsOneSource;
+  | LazyViewNeedsOneSource
+  | SharedOnHost
+  | NotOnHost;
 
 /**
  * A domain definition error, found while the kernel is built or when a
