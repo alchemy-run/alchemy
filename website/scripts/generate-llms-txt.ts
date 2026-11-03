@@ -636,6 +636,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "stripe/index",
+        "stripe/what-is-stripe",
         "stripe/setup",
         "stripe/guides/subscriptions",
         "stripe/guides/connect",

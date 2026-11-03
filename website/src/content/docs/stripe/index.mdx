@@ -3,33 +3,35 @@ title: Stripe
 description: Sell subscriptions and onboard merchants from a Cloudflare Worker — catalog, Checkout, the Billing Portal, Connect, and webhooks declared next to the code that uses them.
 ---
 
-Stripe with alchemy means your billing lives in the same TypeScript
-program as the app that does the billing. The `Product` and `Price`
-are declared on the Worker that sells them. The Worker calls Stripe
-through typed bindings that carry their own permissions. Webhooks are
-one function call that provisions the endpoint and hands your handler
-a typed event. `bun alchemy deploy` ships all of it; `alchemy destroy`
-takes it down without leaving orphans in the Dashboard.
+import DAG from "../../../components/DAG.astro";
 
-New here? [Set up credentials](/stripe/setup), then pick the guide
-that matches what you're building.
+`@alchemy.run/stripe` puts your billing in the same TypeScript program as the app that bills. The Product and Price are declared on the Worker that sells them. The Worker calls Stripe through bindings that each carry their own permission. A webhook is one call that creates the endpoint and hands your handler a typed event. `alchemy deploy` ships all of it, and `alchemy destroy` takes it down without leaving anything behind in the Dashboard.
 
-## What are you building?
+<DAG
+  nodes={[
+    { id: "price", label: "ProMonthly", type: "Price", col: 0, row: 0 },
+    { id: "worker", label: "Api", type: "Worker", col: 1, row: 0 },
+    { id: "key", label: "restricted key", type: "one permission per binding", col: 1, row: 1 },
+    { id: "events", label: "Events", type: "webhook endpoint", col: 2, row: 0 },
+  ]}
+  edges={[
+    { from: "price", to: "worker" },
+    { from: "key", to: "worker" },
+    { from: "events", to: "worker", dashed: true },
+  ]}
+/>
 
-- **A SaaS that charges monthly** →
-  [Sell a subscription](/stripe/guides/subscriptions). Hosted Checkout,
-  the Billing Portal, and an entitlement record kept current by
-  webhooks. One Worker, one KV namespace.
-- **A platform that pays other businesses** →
-  [Onboard merchants with Connect](/stripe/guides/connect). Express
-  accounts, hosted onboarding with link refresh, and `account.updated`
-  driving a D1 merchant table.
-- **Anything that needs to know what Stripe did** →
-  [React to Stripe events](/stripe/guides/webhooks). Which events, how
-  `consumeEvents` works, when to declare the endpoint yourself.
+## Where to start
 
-Both guides walk a runnable example under `examples/` end to end and
-end with the full source.
+**New to Stripe?** [What is Stripe?](/stripe/what-is-stripe) walks through accounts, keys, products, prices, customers, Checkout, subscriptions, webhooks and Connect, once each, and shows how Alchemy models every one.
+
+**Building a SaaS that charges monthly?** [Sell a subscription](/stripe/guides/subscriptions) uses hosted Checkout, the Billing Portal, and an entitlement record kept current by webhooks, in one Worker.
+
+**Building a platform that pays other businesses?** [Onboard merchants with Connect](/stripe/guides/connect) creates Express accounts, runs hosted onboarding, and keeps a merchant table current from `account.updated`.
+
+**Need to know what Stripe did?** [React to Stripe events](/stripe/guides/webhooks) covers which events to handle and how `consumeEvents` works.
+
+Start with [Setup](/stripe/setup) to connect your account.
 
 ## What it looks like
 
@@ -85,20 +87,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-Three ideas carry the whole integration:
-
-- **Resources** (`Product`, `Price`, `Coupon`, `WebhookEndpoint`,
-  `BillingPortalConfiguration`, …) are Stack-managed. Alchemy creates,
-  updates, and deletes them. Objects Stripe won't hard-delete are
-  deactivated instead.
-- **Bindings** (`CreateCustomer`, `CreateCheckoutSession`,
-  `RetrieveProduct`, …) are what a Worker calls at runtime. Yielding
-  one registers the permission it needs on a
-  [`RestrictedApiKey`](/providers/stripe/restrictedapikey) and returns
-  a callable. Provide the matching `*Http` layer once at the end.
-- **Outputs** like `price.id` are yielded at plan time to get an
-  accessor, then yielded again inside a route. That's how a resource
-  id reaches runtime.
+Resources like `Product`, `Price`, `Coupon` and `WebhookEndpoint` are managed by the Stack: Alchemy creates, updates and deletes them, and deactivates the ones Stripe won't delete. Bindings like `CreateCustomer` and `CreateCheckoutSession` are what the Worker calls while it runs. Each one adds the permission it needs to a [`RestrictedApiKey`](/providers/stripe/restrictedapikey), and you provide its `*Http` Layer once. And an output like `price.id` is yielded in Construction to get an accessor, then yielded again inside a handler, which is how a resource's id reaches the running Worker.
 
 ## Reference
 

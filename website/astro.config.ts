@@ -1524,6 +1524,7 @@ export default defineConfig({
           label: "Stripe",
           items: [
             { label: "Overview", link: "/stripe" },
+            { label: "What is Stripe?", link: "/stripe/what-is-stripe" },
             { label: "Setup", link: "/stripe/setup" },
             {
               label: "Guides",
