@@ -34,18 +34,14 @@ import { stackOutputsView } from "./components/view/StackOutputs.tsx";
 import { DEV_RELOAD_EXIT_CODE, DevOptions } from "./DevOptions.ts";
 import { ConsoleLogLive } from "./GlobalLog.ts";
 import * as JsonConsole from "./JsonConsole.ts";
-import { selectCliServices } from "./selectCli.ts";
+import { selectRenderer } from "./selectCli.ts";
 
 // Interactive dev/deploy runs use the Sigil progress UI; CI, redirected output,
 // and other non-interactive terminals still select the append-only renderer.
 // `ALCHEMY_TUI` remains the explicit override in either direction.
 const services = Layer.mergeAll(
   // `alchemy dev` passes its `--log-format` down as `ALCHEMY_LOG_FORMAT`.
-  Layer.unwrap(
-    Effect.map(JsonConsole.enabled, (json) =>
-      json ? JsonConsole.renderer : Layer.provideMerge(selectCliServices(), Interaction.layer()),
-    ),
-  ),
+  selectRenderer(),
   RpcProviderProxy.fromEnv(),
   Layer.succeed(ArtifactStore, createArtifactStore()),
   // Dev runs live in this exec child, not the `alchemy` CLI process, so

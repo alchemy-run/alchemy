@@ -3,12 +3,20 @@ import type * as Prompt from "effect/cli/Prompt";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Interaction } from "../Interaction.ts";
+import * as Interaction from "../Interaction.ts";
 import type { Cli } from "../Report.ts";
+import { suppressInterruptMessages } from "./commands/errors.ts";
+import { currentConsoleSettings } from "./GlobalLog.ts";
 import { LoggingCli } from "./LoggingCli.ts";
 import { plainCliFormatter } from "./PlainCliFormatter.ts";
 
-type SelectedCli = Layer.Layer<Cli, never, Interaction | Prompt.Environment>;
+type SelectedCli = Layer.Layer<Cli, never, Interaction.Interaction | Prompt.Environment>;
+
+/** Whether the console is JSON: the parsed `--log-format`, else `ALCHEMY_LOG_FORMAT`. */
+export const jsonConsole = Effect.map(
+  currentConsoleSettings,
+  (settings) => settings.format === "json",
+);
 
 /**
  * A bad command line is an error: its usage text and errors print on
@@ -29,11 +37,11 @@ const presenter: CliOutput.Presenter = {
         }),
 };
 
-/** Select the interactive or append-only root renderer. */
-export const selectCliServices = () =>
+/** The interactive or append-only CLI over the provided Interaction. */
+const cliServices = () =>
   Layer.unwrap(
     Effect.gen(function* () {
-      const cli = yield* Interaction;
+      const cli = yield* Interaction.Interaction;
       if (!cli.terminal.input) {
         const plain: SelectedCli = Layer.mergeAll(
           LoggingCli,
@@ -53,4 +61,23 @@ export const selectCliServices = () =>
         );
       });
     }),
+  );
+
+/**
+ * The CLI's renderer and its Interaction:
+ *
+ * - `--log-format json`: messages become log records on stdout, views print
+ *   nothing, no prompts, and no shutdown or exit lines after the command;
+ * - an interactive terminal: the Sigil UI;
+ * - otherwise: plain log lines.
+ */
+export const selectRenderer = () =>
+  Layer.unwrap(
+    Effect.map(jsonConsole, (json) =>
+      json
+        ? Layer.provideMerge(cliServices(), Interaction.layerNonInteractive({ json: true })).pipe(
+            Layer.merge(Layer.effectDiscard(suppressInterruptMessages)),
+          )
+        : Layer.provideMerge(cliServices(), Interaction.layer()),
+    ),
   );

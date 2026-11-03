@@ -3,30 +3,15 @@ import { Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Interaction from "../Interaction.ts";
 import { makeLineBuffer } from "../Util/LineBuffer.ts";
 import { logChildLine } from "../Util/LogRecord.ts";
-import { suppressInterruptMessages } from "./commands/errors.ts";
-import { currentConsoleSettings } from "./GlobalLog.ts";
-import { selectCliServices } from "./selectCli.ts";
+import { jsonConsole, selectRenderer } from "./selectCli.ts";
 
 /**
  * The JSON console (`--log-format json`): stdout carries log records only,
  * one JSON line each in the run log's envelope, so the output can be piped.
  * No TUI or prompts; errors print as text on stderr.
  */
-
-/** Whether the console is JSON: the parsed `--log-format`, else `ALCHEMY_LOG_FORMAT`. */
-export const enabled = Effect.map(currentConsoleSettings, (settings) => settings.format === "json");
-
-/**
- * The JSON console's renderer: messages become log records, views print
- * nothing, and no shutdown or exit lines print after the command.
- */
-export const renderer = Layer.provideMerge(
-  selectCliServices(),
-  Interaction.layerNonInteractive({ json: true }),
-).pipe(Layer.merge(Layer.effectDiscard(suppressInterruptMessages)));
 
 /**
  * Stdout as log records for the scope: anything else written to it (the
@@ -85,18 +70,18 @@ const captureStdout = Effect.gen(function* () {
 
 /** `effect` with stdout captured as log records, when the console is JSON. */
 export const captureStdoutAround = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.flatMap(enabled, (json) =>
+  Effect.flatMap(jsonConsole, (json) =>
     json ? Effect.scoped(Effect.andThen(captureStdout, effect)) : effect,
   );
 
 /**
- * {@link renderer}, with stdout captured, over whatever renderer is already
- * provided, when the console is JSON. Effect CLI provides parsed flags to
+ * The JSON renderer ({@link selectRenderer}), with stdout captured, over
+ * whatever renderer is already provided, when the console is JSON. Effect CLI provides parsed flags to
  * command handlers only, so the CLI provides this on its root command
  * (`Command.provide`), where `--log-format` and the CLI's loggers are known.
  */
 export const override = Layer.unwrap(
-  Effect.map(enabled, (json) =>
-    json ? Layer.merge(renderer, Layer.effectDiscard(captureStdout)) : Layer.empty,
+  Effect.map(jsonConsole, (json) =>
+    json ? Layer.merge(selectRenderer(), Layer.effectDiscard(captureStdout)) : Layer.empty,
   ),
 );
