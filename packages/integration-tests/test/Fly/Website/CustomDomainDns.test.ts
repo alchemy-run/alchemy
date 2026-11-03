@@ -24,6 +24,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
+import { stageSuffix } from "../../names.ts";
 import { assertAppGone, getText } from "./fixtures/deployment.ts";
 
 const { test } = Test.make({
@@ -33,8 +34,11 @@ const { test } = Test.make({
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
-const CLOUDFLARE_HOST = `fly-dns.${ZONE}`;
-const ROUTE53_ZONE = `fly-dns-r53.${ZONE}`;
+// Per-stage hostnames: Let's Encrypt issues at most five certificates per
+// exact hostname a week, so a name shared by every user and worktree stays
+// rate limited.
+const CLOUDFLARE_HOST = `fly-dns-${stageSuffix()}.${ZONE}`;
+const ROUTE53_ZONE = `fly-dns-r53-${stageSuffix()}.${ZONE}`;
 const ROUTE53_HOST = ROUTE53_ZONE;
 /** Route 53 always assigns four name servers to a public hosted zone. */
 const ROUTE53_NAME_SERVER_COUNT = 4;
@@ -50,7 +54,13 @@ class NotPublished extends Data.TaggedError("NotPublished")<{
 class CertificateNotIssued extends Data.TaggedError("CertificateNotIssued")<{
   readonly hostname: string;
   readonly status: string | undefined;
-}> {}
+  readonly rateLimitedUntil: string | undefined;
+  readonly validationErrors: unknown;
+}> {
+  get message() {
+    return `Fly has not issued a certificate for ${this.hostname}: status ${this.status}${this.rateLimitedUntil ? `, rate limited until ${this.rateLimitedUntil}` : ""}, validation errors ${JSON.stringify(this.validationErrors ?? [])}`;
+  }
+}
 
 const cloudflareZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -126,10 +136,18 @@ const waitForIssuedCertificate = (appName: string, hostname: string) =>
         (certificate) => certificate.source === "fly" && certificate.status === "active",
       )
         ? Effect.succeed(checked)
-        : Effect.fail(new CertificateNotIssued({ hostname, status: checked.status })),
+        : Effect.fail(
+            new CertificateNotIssued({
+              hostname,
+              status: checked.status,
+              rateLimitedUntil: checked.rate_limited_until || undefined,
+              validationErrors: checked.validation_errors,
+            }),
+          ),
     ),
     Effect.retry({
-      while: (error) => error._tag === "CertificateNotIssued",
+      // A rate-limited hostname stays unissued for hours.
+      while: (error) => error._tag === "CertificateNotIssued" && !error.rateLimitedUntil,
       schedule: Schedule.spaced("10 seconds"),
       times: 30,
     }),
@@ -227,8 +245,9 @@ test.provider(
         yield* assertAppGone(appName);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
     }).pipe(logLevel),
-  // Image build + Machine boot + ACME issuance through public DNS.
-  { tags, timeout: 900_000 },
+  // Image build + Machine boot + ACME issuance through public DNS. No
+  // retries: each attempt orders another rate-limited certificate.
+  { tags, timeout: 900_000, retry: 0 },
 );
 
 test.provider(
@@ -304,6 +323,7 @@ test.provider(
         yield* assertAppGone(appName);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
     }).pipe(logLevel),
-  // Image build + Machine boot + ACME issuance through a delegated zone.
-  { tags: [...tags, "provider:aws", "provider:aws:route53"], timeout: 900_000 },
+  // Image build + Machine boot + ACME issuance through a delegated zone. No
+  // retries: each attempt orders another rate-limited certificate.
+  { tags: [...tags, "provider:aws", "provider:aws:route53"], timeout: 900_000, retry: 0 },
 );
