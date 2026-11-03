@@ -15,7 +15,7 @@ const { test } = Test.make({
 
 // One local control plane per suite, on a port of its own.
 const PORT = 16430;
-const Cluster = RivetDocker.ControlPlane("Rivet", { port: PORT });
+const Cluster = RivetDocker.SwarmControlPlane("Rivet", { port: PORT });
 
 const deployPool = (props: { drainOnVersionUpgrade?: boolean; actorEvictionPeriod?: number }) =>
   Effect.gen(function* () {

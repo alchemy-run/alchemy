@@ -49,9 +49,9 @@ export default class Room extends Rivet.DurableObject<Room>()(
 `Default` is the pool it runs on, given the control plane it joins:
 
 ```typescript title="src/cluster.ts"
-export const Cluster = RivetDocker.ControlPlane("Rivet");
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
 
-export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
 ```
 
 And any runtime calls a room by its name:

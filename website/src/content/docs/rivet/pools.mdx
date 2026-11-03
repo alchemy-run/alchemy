@@ -14,7 +14,7 @@ This chapter shows how to declare a pool and put a class on it, then when to sha
 A pool is a Layer, given the control plane it joins:
 
 ```typescript title="src/cluster.ts"
-export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
 ```
 
 The nodes connect out to the control plane and wait for rooms to run. Nothing connects in to them, so they need no public address and no load balancer.
@@ -75,7 +75,7 @@ Both join the same control plane, so a room on `Default` still calls a class on 
 More nodes run more rooms at once:
 
 ```typescript title="src/cluster.ts"
-export const Default = RivetDocker.Pool("Default", { replicas: 3 }).pipe(Layer.provide(Cluster));
+export const Default = RivetDocker.SwarmPool("Default", { replicas: 3 }).pipe(Layer.provide(Cluster));
 ```
 
 A single room still runs on one node at a time, so more nodes help a pool with many busy rooms, not one very busy room.
@@ -85,9 +85,9 @@ A single room still runs on one node at a time, so more nodes help a pool with m
 A pool works with any control plane it can reach. Its nodes only connect out, so the control plane can be anywhere:
 
 ```typescript title="src/cluster.ts"
-export const Cluster = RivetHetzner.ControlPlane("Rivet");
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
 
-export const Default = RivetRailway.Pool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetRailway.ServicePool("Default").pipe(Layer.provide(Cluster));
 ```
 
 Keep the two close when you can: every call to a room passes through the control plane.

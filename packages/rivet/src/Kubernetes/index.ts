@@ -3,5 +3,5 @@
  * Durable Object nodes on any Kubernetes cluster. Requires
  * `@alchemy.run/kubernetes`.
  */
-export * from "./ControlPlane.ts";
-export * from "./Pool.ts";
+export * from "./StatefulSetControlPlane.ts";
+export * from "./DeploymentPool.ts";

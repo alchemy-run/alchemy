@@ -8,7 +8,7 @@ import {
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
-export interface PoolOptions extends PoolSettings {
+export interface ServicePoolOptions extends PoolSettings {
   /**
    * Railway Project the nodes run in. Defaults to a Project of the pool's
    * own.
@@ -34,15 +34,15 @@ export interface PoolOptions extends PoolSettings {
  * ### Running Durable Objects on Railway
  * **Example:** Nodes on Railway, control plane on Fly
  * ```typescript
- * export const Cluster = RivetFly.ControlPlane("Rivet");
- * export const Default = RivetRailway.Pool("Default").pipe(Layer.provide(Cluster));
+ * export const Cluster = RivetFly.MachineControlPlane("Rivet");
+ * export const Default = RivetRailway.ServicePool("Default").pipe(Layer.provide(Cluster));
  * ```
  *
  * @primitive
  */
-export const Pool = (id: string, options: PoolOptions = {}) =>
+export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
   makePoolLayer({
-    label: "RivetRailway.Pool",
+    label: "RivetRailway.ServicePool",
     id,
     settings: options,
     expected: "a reachable control plane",

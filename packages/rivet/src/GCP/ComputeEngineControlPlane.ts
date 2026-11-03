@@ -11,7 +11,7 @@ import { adminToken } from "../internal/AdminToken.ts";
 import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
 
-/** The engine release `RivetGCP.ComputeControlPlane` runs by default. */
+/** The engine release `RivetGCP.ComputeEngineControlPlane` runs by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
 /** Container-Optimized OS: Docker preinstalled, a read-only root. */
@@ -22,7 +22,7 @@ const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
 const PEER_PORT = 6421;
 
-export interface ComputeControlPlaneProps {
+export interface ComputeEngineControlPlaneProps {
   /**
    * Number of control plane instances, spread across zones. Run 3 or more
    * in production.
@@ -99,12 +99,12 @@ setsid sh -c 'docker logs -f rivet-engine 2>&1 | sed -u "s/^/rivet-engine: /" > 
  * ### Running a control plane on GCP
  * **Example:** Three instances
  * ```typescript
- * export const Cluster = RivetGCP.ComputeControlPlane("Rivet");
+ * export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet");
  * ```
  *
  * **Example:** Larger instances and disks
  * ```typescript
- * export const Cluster = RivetGCP.ComputeControlPlane("Rivet", {
+ * export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet", {
  *   machineType: "n2-standard-4",
  *   diskSize: 100,
  * });
@@ -112,7 +112,7 @@ setsid sh -c 'docker logs -f rivet-engine 2>&1 | sed -u "s/^/rivet-engine: /" > 
  *
  * @primitive
  */
-export const ComputeControlPlane = (id: string, props: ComputeControlPlaneProps = {}) =>
+export const ComputeEngineControlPlane = (id: string, props: ComputeEngineControlPlaneProps = {}) =>
   Layer.effect(
     Cluster,
     Effect.gen(function* () {

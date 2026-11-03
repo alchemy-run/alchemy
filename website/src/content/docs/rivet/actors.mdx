@@ -67,7 +67,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Cluster } from "./cluster.ts";
 
-export const Counters = RivetDocker.Pool("Counters").pipe(Layer.provide(Cluster));
+export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
 
 export const Counter = Rivet.DurableObject("Counter", { main: "./src/actors.ts" }).pipe(
   Effect.provide(Counters),
@@ -98,7 +98,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Cluster } from "./cluster.ts";
 
-export const Counters = RivetDocker.Pool("Counters").pipe(Layer.provide(Cluster));
+export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
 
 export const Counter = Rivet.DurableObject("Counter", { main: "./src/main.ts" }).pipe(
   Effect.provide(Counters),

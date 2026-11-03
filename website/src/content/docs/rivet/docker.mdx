@@ -9,9 +9,9 @@ Host your Durable Objects on a Docker swarm, and the control plane and every poo
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import * as Layer from "effect/Layer";
 
-export const Cluster = RivetDocker.ControlPlane("Rivet");
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
 
-export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
 ```
 
 Install `@alchemy.run/docker`, and turn swarm mode on with `docker swarm init`.
@@ -21,7 +21,7 @@ Install `@alchemy.run/docker`, and turn swarm mode on with `docker swarm init`.
 One engine runs as a swarm service on `localhost:6420`, with its data on a Docker volume.
 
 ```typescript title="src/cluster.ts"
-export const Cluster = RivetDocker.ControlPlane("Rivet", { port: 16420 });
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet", { port: 16420 });
 ```
 
 Change `port` if 6420 is taken. One engine keeps its data on one disk, so use Docker for development, not production.
@@ -29,7 +29,7 @@ Change `port` if 6420 is taken. One engine keeps its data on one disk, so use Do
 ## The pool
 
 ```typescript title="src/cluster.ts"
-export const Default = RivetDocker.Pool("Default", { replicas: 2 }).pipe(Layer.provide(Cluster));
+export const Default = RivetDocker.SwarmPool("Default", { replicas: 2 }).pipe(Layer.provide(Cluster));
 ```
 
 Each deploy builds a node image with every class on the pool.
@@ -67,9 +67,9 @@ The [tutorial](/rivet/tutorial/part-1) builds this.
 ## Use another Docker engine
 
 ```typescript title="src/cluster.ts"
-export const Cluster = RivetDocker.ControlPlane("Rivet", { context: "my-server" });
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet", { context: "my-server" });
 ```
 
 `context` takes a Docker context name. See [Docker](/docker).
 
-Every option, with its default, is in the reference: [Docker ControlPlane](/providers/rivet/docker#controlplane) and [Docker Pool](/providers/rivet/docker#pool).
+Every option, with its default, is in the reference: [SwarmControlPlane](/providers/rivet/docker#swarmcontrolplane) and [SwarmPool](/providers/rivet/docker#swarmpool).

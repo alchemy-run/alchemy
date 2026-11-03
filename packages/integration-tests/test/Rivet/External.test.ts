@@ -19,9 +19,9 @@ const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.provid
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "RivetExternal", import.meta.url);
 
-const Cluster = RivetDocker.ControlPlane("RivetExternal", { port: CONTROL_PLANE_PORT });
-const AsyncPool = RivetDocker.Pool("AsyncPool").pipe(Layer.provide(Cluster));
-const EffectPool = RivetDocker.Pool("EffectPool").pipe(Layer.provide(Cluster));
+const Cluster = RivetDocker.SwarmControlPlane("RivetExternal", { port: CONTROL_PLANE_PORT });
+const AsyncPool = RivetDocker.SwarmPool("AsyncPool").pipe(Layer.provide(Cluster));
+const EffectPool = RivetDocker.SwarmPool("EffectPool").pipe(Layer.provide(Cluster));
 
 const fixture = (file: string) =>
   fileURLToPath(new URL(`./fixtures/external/${file}`, import.meta.url));

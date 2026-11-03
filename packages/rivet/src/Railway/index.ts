@@ -2,4 +2,4 @@
  * @alchemy.run/rivet/Railway — run pools of Durable Object nodes on Railway.
  * Requires `@alchemy.run/railway`.
  */
-export * from "./Pool.ts";
+export * from "./ServicePool.ts";

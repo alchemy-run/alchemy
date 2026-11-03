@@ -21,7 +21,7 @@ const APP_PATH = "/var/lib/rivet-node";
 const HASH_KEY = "rivet-node-hash";
 const ENV_KEY = "rivet-node-env";
 
-export interface ComputePoolOptions extends PoolSettings {
+export interface ComputeEnginePoolOptions extends PoolSettings {
   /**
    * Number of nodes, one instance each, spread across zones.
    * @default 1
@@ -103,24 +103,24 @@ pgrep -f "docker logs -f rivet-node" >/dev/null || setsid sh -c 'while true; do 
  *
  * Nodes only connect out to the control plane, so no inbound traffic
  * reaches them, and the pool works with any control plane it can reach —
- * `RivetGCP.ComputeControlPlane`, `RivetCloud.ControlPlane`, or one on
- * another cloud. On a `RivetGCP.ComputeControlPlane` the nodes join its
+ * `RivetGCP.ComputeEngineControlPlane`, `RivetCloud.ControlPlane`, or one on
+ * another cloud. On a `RivetGCP.ComputeEngineControlPlane` the nodes join its
  * network.
  *
  * ### Running Durable Objects on Compute Engine
  * **Example:** Two nodes
  * ```typescript
- * export const Cluster = RivetGCP.ComputeControlPlane("Rivet");
- * export const Default = RivetGCP.ComputePool("Default", { replicas: 2 }).pipe(
+ * export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet");
+ * export const Default = RivetGCP.ComputeEnginePool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Cluster),
  * );
  * ```
  *
  * @primitive
  */
-export const ComputePool = (id: string, options: ComputePoolOptions = {}) =>
+export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions = {}) =>
   makePoolLayer({
-    label: "RivetGCP.ComputePool",
+    label: "RivetGCP.ComputeEnginePool",
     id,
     settings: options,
     expected: "a reachable control plane",

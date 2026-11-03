@@ -157,9 +157,9 @@ Actors you've already written with RivetKit, in its async or Effect form, deploy
 A control plane is a Layer, one per place it can run. It creates the engines, disks, storage, load balancer and admin token on that cloud, and a namespace for your stage. A pool is a Layer too, given the control plane it joins:
 
 ```typescript title="src/cluster.ts"
-export const Cluster = RivetHetzner.ControlPlane("Rivet");
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
 
-export const Default = RivetHetzner.Pool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetHetzner.ServerPool("Default").pipe(Layer.provide(Cluster));
 ```
 
 A class names its pool with `Effect.provide(Default)`, and each deploy bundles every class on a pool into one program for its nodes. Because the control plane and the pool are just Layers, moving to another cloud changes this file and nothing else.

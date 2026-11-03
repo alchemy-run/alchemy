@@ -8,7 +8,7 @@ import { makePoolLayer, RIVETKIT_VERSION, type PoolSettings } from "../internal/
 import type { PoolHost } from "../internal/PoolHostService.ts";
 import type { Providers as RivetProviders } from "../Providers.ts";
 
-export interface PoolOptions extends PoolSettings {
+export interface SwarmPoolOptions extends PoolSettings {
   /**
    * Number of nodes.
    * @default 1
@@ -21,7 +21,7 @@ export interface PoolOptions extends PoolSettings {
  * swarm service whose tasks host every `Rivet.DurableObject` given this
  * pool and join the control plane's overlay network. Nodes only connect
  * out to the control plane, so the service publishes no ports. Requires a
- * `Rivet.Cluster` on a Docker network — `RivetDocker.ControlPlane`.
+ * `Rivet.Cluster` on a Docker network — `RivetDocker.SwarmControlPlane`.
  *
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
@@ -29,28 +29,28 @@ export interface PoolOptions extends PoolSettings {
  * ### Running Durable Objects on Docker
  * **Example:** A pool on the local swarm
  * ```typescript
- * export const Cluster = RivetDocker.ControlPlane("Rivet");
- * export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
+ * export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+ * export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
  * ```
  *
  * **Example:** Two nodes
  * ```typescript
- * export const Default = RivetDocker.Pool("Default", { replicas: 2 }).pipe(
+ * export const Default = RivetDocker.SwarmPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Cluster),
  * );
  * ```
  *
  * @primitive
  */
-export const Pool = (
+export const SwarmPool = (
   id: string,
-  options: PoolOptions = {},
+  options: SwarmPoolOptions = {},
 ): Layer.Layer<PoolHost, never, Cluster | Stack | RivetProviders | Docker.Providers> =>
   makePoolLayer({
-    label: "RivetDocker.Pool",
+    label: "RivetDocker.SwarmPool",
     id,
     settings: options,
-    expected: "a Docker network (RivetDocker.ControlPlane)",
+    expected: "a Docker network (RivetDocker.SwarmControlPlane)",
     network: (cluster) => (cluster.network?.kind === "docker" ? cluster.network : undefined),
     nodes: ({ network, pool, program, environment }) =>
       Docker.Image("RivetNodeImage", {

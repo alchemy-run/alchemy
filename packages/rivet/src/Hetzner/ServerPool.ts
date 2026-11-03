@@ -8,7 +8,7 @@ import {
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
-export interface PoolOptions extends PoolSettings {
+export interface ServerPoolOptions extends PoolSettings {
   /**
    * Number of nodes, one Server each.
    * @default 1
@@ -32,7 +32,7 @@ export interface PoolOptions extends PoolSettings {
  * `Hetzner.Service`. Nodes only connect out to the control plane, so a
  * firewall drops every inbound connection except SSH, which deploys them;
  * the pool works with any control plane it can reach —
- * `RivetHetzner.ControlPlane`, `RivetCloud.ControlPlane`, or one on another
+ * `RivetHetzner.ServerControlPlane`, `RivetCloud.ControlPlane`, or one on another
  * cloud.
  *
  * Every Durable Object given the same pool shares its nodes: declare the
@@ -41,17 +41,17 @@ export interface PoolOptions extends PoolSettings {
  * ### Running Durable Objects on Hetzner
  * **Example:** Two nodes
  * ```typescript
- * export const Cluster = RivetHetzner.ControlPlane("Rivet");
- * export const Default = RivetHetzner.Pool("Default", { replicas: 2 }).pipe(
+ * export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
+ * export const Default = RivetHetzner.ServerPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Cluster),
  * );
  * ```
  *
  * @primitive
  */
-export const Pool = (id: string, options: PoolOptions = {}) =>
+export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
   makePoolLayer({
-    label: "RivetHetzner.Pool",
+    label: "RivetHetzner.ServerPool",
     id,
     settings: options,
     expected: "a reachable control plane",

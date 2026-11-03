@@ -9,9 +9,9 @@ Host your Durable Objects in your Google Cloud project, and the control plane ru
 import * as RivetGCP from "@alchemy.run/rivet/GCP";
 import * as Layer from "effect/Layer";
 
-export const Cluster = RivetGCP.ComputeControlPlane("Rivet");
+export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet");
 
-export const Default = RivetGCP.WorkerPool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetGCP.CloudRunPool("Default").pipe(Layer.provide(Cluster));
 ```
 
 Install `@alchemy.run/gcp` and finish [GCP setup](/gcp/setup).
@@ -21,7 +21,7 @@ Install `@alchemy.run/gcp` and finish [GCP setup](/gcp/setup).
 You get three instances across zones. Each has a persistent disk, they share a Cloud Storage bucket, and a network load balancer is the endpoint.
 
 ```typescript title="src/cluster.ts"
-export const Cluster = RivetGCP.ComputeControlPlane("Rivet", {
+export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet", {
   instances: 3,
   machineType: "e2-standard-2",
   diskSize: 20,
@@ -30,10 +30,10 @@ export const Cluster = RivetGCP.ComputeControlPlane("Rivet", {
 
 ## On Cloud Run
 
-`WorkerPool` runs nodes on a Cloud Run worker pool:
+`CloudRunPool` runs nodes on a Cloud Run worker pool:
 
 ```typescript title="src/cluster.ts"
-export const Default = RivetGCP.WorkerPool("Default", {
+export const Default = RivetGCP.CloudRunPool("Default", {
   replicas: 2,
   cpu: "1",
   memory: "1Gi",
@@ -42,10 +42,10 @@ export const Default = RivetGCP.WorkerPool("Default", {
 
 ## On Compute Engine
 
-`ComputePool` runs one instance per node:
+`ComputeEnginePool` runs one Compute Engine instance per node:
 
 ```typescript title="src/cluster.ts"
-export const Default = RivetGCP.ComputePool("Default", {
+export const Default = RivetGCP.ComputeEnginePool("Default", {
   replicas: 2,
   machineType: "e2-small",
 }).pipe(Layer.provide(Cluster));
@@ -71,4 +71,4 @@ export default class Api extends GCP.Run.Service<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [ComputeControlPlane](/providers/rivet/gcp#computecontrolplane), [WorkerPool](/providers/rivet/gcp#workerpool) and [ComputePool](/providers/rivet/gcp#computepool).
+Every option, with its default, is in the reference: [ComputeEngineControlPlane](/providers/rivet/gcp#computeenginecontrolplane), [CloudRunPool](/providers/rivet/gcp#cloudrunpool) and [ComputeEnginePool](/providers/rivet/gcp#computeenginepool).

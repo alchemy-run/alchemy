@@ -22,7 +22,7 @@ export const Kind = Kubernetes.LocalCluster("RivetKind", {
   ],
 });
 
-export const Cluster = RivetKubernetes.ControlPlane("Rivet", {
+export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
   cluster: Kind,
   expose: {
     type: "NodePort",
@@ -30,4 +30,4 @@ export const Cluster = RivetKubernetes.ControlPlane("Rivet", {
     endpoint: `http://localhost:${CONTROL_PLANE_PORT}`,
   },
 });
-export const Default = RivetKubernetes.Pool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetKubernetes.DeploymentPool("Default").pipe(Layer.provide(Cluster));

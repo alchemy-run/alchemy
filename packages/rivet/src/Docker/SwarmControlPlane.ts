@@ -8,10 +8,10 @@ import { adminToken } from "../internal/AdminToken.ts";
 import { Namespace } from "../Namespace.ts";
 import type { Providers as RivetProviders } from "../Providers.ts";
 
-/** The engine release `RivetDocker.ControlPlane` runs by default. */
+/** The engine release `RivetDocker.SwarmControlPlane` runs by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
-export interface ControlPlaneProps {
+export interface SwarmControlPlaneProps {
   /**
    * Host port the control plane's API is published on.
    * @default 6420
@@ -45,19 +45,19 @@ export interface ControlPlaneProps {
  * ### Running a local control plane
  * **Example:** A control plane for local Durable Objects
  * ```typescript
- * export const Cluster = RivetDocker.ControlPlane("Rivet");
+ * export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
  * ```
  *
  * **Example:** On another port
  * ```typescript
- * export const Cluster = RivetDocker.ControlPlane("Rivet", { port: 16420 });
+ * export const Cluster = RivetDocker.SwarmControlPlane("Rivet", { port: 16420 });
  * ```
  *
  * @primitive
  */
-export const ControlPlane = (
+export const SwarmControlPlane = (
   id: string,
-  props: ControlPlaneProps = {},
+  props: SwarmControlPlaneProps = {},
 ): Layer.Layer<Cluster, never, RivetProviders | Docker.Providers> =>
   Layer.effect(
     Cluster,

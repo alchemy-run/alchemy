@@ -9,9 +9,9 @@ Host your Durable Objects on Hetzner Cloud, and the control plane runs on Server
 import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
 import * as Layer from "effect/Layer";
 
-export const Cluster = RivetHetzner.ControlPlane("Rivet");
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
 
-export const Default = RivetHetzner.Pool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetHetzner.ServerPool("Default").pipe(Layer.provide(Cluster));
 ```
 
 Install `@alchemy.run/hetzner` and finish [Hetzner setup](/hetzner/setup).
@@ -21,7 +21,7 @@ Install `@alchemy.run/hetzner` and finish [Hetzner setup](/hetzner/setup).
 You get one engine on a Server, with its data on a Volume. A Load Balancer is the endpoint. A firewall blocks every other connection to the Server.
 
 ```typescript title="src/cluster.ts"
-export const Cluster = RivetHetzner.ControlPlane("Rivet", {
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet", {
   location: "fsn1",
   serverType: "cx33",
   diskSize: 40,
@@ -33,7 +33,7 @@ export const Cluster = RivetHetzner.ControlPlane("Rivet", {
 More engines share object storage, so `objectStorage` is required. Hetzner Object Storage works:
 
 ```typescript title="src/cluster.ts"
-export const Cluster = RivetHetzner.ControlPlane("Rivet", {
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet", {
   instances: 3,
   objectStorage: {
     kind: "s3",
@@ -51,7 +51,7 @@ Create the bucket and its keys in the Hetzner console first.
 ## The pool
 
 ```typescript title="src/cluster.ts"
-export const Default = RivetHetzner.Pool("Default", { replicas: 2, serverType: "cx23" }).pipe(
+export const Default = RivetHetzner.ServerPool("Default", { replicas: 2, serverType: "cx23" }).pipe(
   Layer.provide(Cluster),
 );
 ```
@@ -84,4 +84,4 @@ export default class Api extends Hetzner.Service<Api>()(
 
 [Part 4 of the tutorial](/rivet/tutorial/part-4) deploys this.
 
-Every option, with its default, is in the reference: [Hetzner ControlPlane](/providers/rivet/hetzner#controlplane) and [Hetzner Pool](/providers/rivet/hetzner#pool).
+Every option, with its default, is in the reference: [ServerControlPlane](/providers/rivet/hetzner#servercontrolplane) and [ServerPool](/providers/rivet/hetzner#serverpool).
