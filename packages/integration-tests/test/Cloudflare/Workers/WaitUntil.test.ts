@@ -75,6 +75,8 @@ describe.skipIf(!!process.env.FAST)(
       ["stream", "streamed"],
       ["rpc", "scheduled"],
       ["do", "scheduled"],
+      ["do-nested", "scheduled"],
+      ["do-failing", "scheduled"],
       ["do-stream", "a,b"],
       ["do-fetch", "scheduled"],
     ] as const) {

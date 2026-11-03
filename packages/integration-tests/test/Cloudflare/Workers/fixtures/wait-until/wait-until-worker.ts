@@ -108,6 +108,23 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
           yield* state.waitUntil(useLater(append, resource, label));
           return "scheduled" as const;
         }),
+        // Background work that hands more work to `state.waitUntil`.
+        holdNested: Effect.fn(function* (label: string) {
+          const resource = yield* acquireResource(append, label);
+          yield* state.waitUntil(
+            Effect.sleep("100 millis").pipe(
+              Effect.andThen(state.waitUntil(useLater(append, resource, label))),
+            ),
+          );
+          return "scheduled" as const;
+        }),
+        // Background work that fails doesn't stop the call's scope closing.
+        holdFailing: Effect.fn(function* (label: string) {
+          yield* state.waitUntil(Effect.fail("background failure"));
+          const resource = yield* acquireResource(append, label);
+          yield* state.waitUntil(useLater(append, resource, label));
+          return "scheduled" as const;
+        }),
         // The same, from a method whose Stream result takes over the call's
         // scope until the caller has drained it.
         streamLater: (label: string) =>
@@ -274,6 +291,10 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
             return HttpServerResponse.text(yield* Effect.promise(() => rpc.holdLater(label)));
           } else if (kind === "do") {
             return HttpServerResponse.text(yield* journal.holdLater(label));
+          } else if (kind === "do-nested") {
+            return HttpServerResponse.text(yield* journal.holdNested(label));
+          } else if (kind === "do-failing") {
+            return HttpServerResponse.text(yield* journal.holdFailing(label));
           } else if (kind === "do-fetch") {
             const text = yield* Cloudflare.toHttpClient(journal)
               .execute(HttpClientRequest.get(`http://journal/hold/${label}`))
