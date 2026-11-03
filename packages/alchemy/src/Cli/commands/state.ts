@@ -4,6 +4,8 @@ import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 import * as Stream from "effect/Stream";
 import * as Alchemist from "../../Alchemist/index.ts";
 import type { Contributions, StateStoreLogEntry } from "../../Contributions.ts";
@@ -66,10 +68,8 @@ class StoreOptions extends Context.Service<
 
 /** The store options given, as `--<option>` flags. */
 const givenOptions = Effect.gen(function* () {
-  const options = yield* StoreOptions;
-  return Object.keys(options)
-    .filter((option) => options[option] !== undefined)
-    .map((option) => `--${option}`);
+  const options = Record.filter(yield* StoreOptions, Predicate.isNotUndefined);
+  return Record.keys(options).map((option) => `--${option}`);
 });
 
 /** "`--a` needs" or "`--a, --b` need": what the given flags require. */

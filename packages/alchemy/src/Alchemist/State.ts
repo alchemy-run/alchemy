@@ -2,6 +2,8 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 import * as Stream from "effect/Stream";
 import { AuthProvidersLive } from "../Auth/Registry.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
@@ -65,22 +67,20 @@ const findBackend = Effect.fn(function* (backend: string) {
 
 /** The options a source sets, failing on any its backend doesn't declare. */
 const storeOptions = Effect.fn(function* (source: ProviderSource, store: Contributions.StateStore) {
-  const declared = Object.keys(store.options ?? {});
-  const options: Record<string, string> = {};
-  for (const [option, value] of Object.entries(source.options ?? {})) {
-    if (value === undefined) continue;
-    if (!declared.includes(option)) {
-      return yield* new Contributions.ContributionError({
-        message: `Unknown option '${option}' for state backend '${source.backend}'. ${
-          declared.length === 0
-            ? "It doesn't have any options."
-            : `Available: ${declared.join(", ")}.`
-        }`,
-      });
-    }
-    options[option] = value;
+  const declared = store.options ?? {};
+  const given = Record.filter(source.options ?? {}, Predicate.isNotUndefined);
+  const unknown = Record.findFirst(given, (_, option) => !Record.has(declared, option));
+  if (Option.isSome(unknown)) {
+    const [option] = unknown.value;
+    return yield* new Contributions.ContributionError({
+      message: `Unknown option '${option}' for state backend '${source.backend}'. ${
+        Record.isEmptyRecord(declared)
+          ? "It doesn't have any options."
+          : `Available: ${Record.keys(declared).join(", ")}.`
+      }`,
+    });
   }
-  return options;
+  return given;
 });
 
 /**
