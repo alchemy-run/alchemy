@@ -154,6 +154,67 @@ it(
 );
 
 it(
+  "a limit caps holders of its label across files without charging queue time to timeouts",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-limits-"));
+    try {
+      // Three files, twelve 150ms tests, two permits: the queue takes about
+      // 900ms, longer than each test's 400ms timeout.
+      for (const file of ["a", "b", "c"]) {
+        await writeFile(
+          resolve(root, `${file}.test.ts`),
+          `
+          import { describe, it, expect } from ${JSON.stringify(apiUrl)};
+          const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+          const counter = ((globalThis as any).__limitCounter ??= { active: 0, peak: 0 });
+          describe.concurrent(${JSON.stringify(file)}, () => {
+            for (const n of [1, 2, 3, 4]) {
+              it(${JSON.stringify(file)} + n, async () => {
+                counter.active++;
+                counter.peak = Math.max(counter.peak, counter.active);
+                expect(counter.active).toBeLessThanOrEqual(2);
+                await sleep(150);
+                counter.active--;
+              }, { exclusive: { label: "api", permits: 2 }, timeout: 400 });
+            }
+            it(${JSON.stringify(file)} + " unlimited", async () => {
+              await sleep(10);
+            });
+          });
+          `,
+        );
+      }
+      await writeFile(
+        resolve(root, "z.test.ts"),
+        `
+        import { it, expect } from ${JSON.stringify(apiUrl)};
+        it("peak", async () => {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          expect((globalThis as any).__limitCounter?.peak).toBe(2);
+        }, { timeout: 5000 });
+        `,
+      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(`${stdout}\n${stderr}`).toContain("16 passed");
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
   "tag filters compose with names and skip excluded setup and teardown",
   async () => {
     const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-tags-"));

@@ -24,7 +24,7 @@ import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
 import { makeCapture } from "./Capture.ts";
 import { makeFileLog, type FileLog } from "./FileLog.ts";
-import type { Exclusive, FileSuite, Hook, LogEntry, Suite, TestCase } from "./Model.ts";
+import type { Exclusive, FileSuite, Hook, Limit, LogEntry, Suite, TestCase } from "./Model.ts";
 import { containsOnly, forEachTest, makeFileSuite, titlePath } from "./Model.ts";
 import type { TestPlan } from "./Plan.ts";
 import * as Registry from "./Registry.ts";
@@ -309,18 +309,35 @@ const EXCLUSIVE_PERMITS = 100_000;
 
 interface LockSpec {
   readonly global: boolean;
-  /** Sorted, so holders of several labels acquire them in one order. */
-  readonly labels: ReadonlyArray<string>;
+  /** Sorted by label, so holders of several labels acquire them in one order. */
+  readonly labels: ReadonlyArray<Limit>;
 }
 
-const lockSpec = (values: ReadonlyArray<Exclusive | undefined>): LockSpec => ({
-  global: values.some((value) => value === true),
-  labels: [
-    ...new Set(
-      values.filter((value): value is string => typeof value === "string" && value !== ""),
-    ),
-  ].sort(),
-});
+const lockSpec = (values: ReadonlyArray<Exclusive | undefined>): LockSpec => {
+  const flat = values.flatMap((value) => (Array.isArray(value) ? value : [value])) as Array<
+    boolean | string | Limit | undefined
+  >;
+  // A plain label is a one-permit lock; the tightest permit count wins.
+  const labels = new Map<string, number>();
+  for (const value of flat) {
+    const limit =
+      typeof value === "string"
+        ? value === ""
+          ? undefined
+          : { label: value, permits: 1 }
+        : typeof value === "object" && value !== null
+          ? value
+          : undefined;
+    if (limit === undefined) continue;
+    labels.set(limit.label, Math.min(labels.get(limit.label) ?? Infinity, limit.permits));
+  }
+  return {
+    global: flat.some((value) => value === true),
+    labels: [...labels]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, permits]) => ({ label, permits })),
+  };
+};
 
 interface RunLock {
   readonly withLock: (
@@ -342,10 +359,11 @@ interface RunLock {
 const makeRunLock = Effect.gen(function* () {
   const permits = yield* Semaphore.make(EXCLUSIVE_PERMITS);
   const labels = new Map<string, Semaphore.Semaphore>();
-  const labelLock = (label: string): Semaphore.Semaphore => {
+  // A label's permit count is fixed by its first holder.
+  const labelLock = ({ label, permits }: Limit): Semaphore.Semaphore => {
     let lock = labels.get(label);
     if (lock === undefined) {
-      lock = Semaphore.makeUnsafe(1);
+      lock = Semaphore.makeUnsafe(Math.max(1, Math.floor(permits)));
       labels.set(label, lock);
     }
     return lock;
