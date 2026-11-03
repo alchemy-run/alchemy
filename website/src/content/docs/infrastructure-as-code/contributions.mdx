@@ -116,10 +116,24 @@ import { state } from "./State.ts";
 export const stateStore: StateStoreImpl = { layer: state };
 ```
 
-`state` takes `{ name }` and returns a `State` layer. A missing `name` is the
-account's default store, and any other name is a separate store. With
-the store contributed, `alchemy state list --backend stripe --name team-a`
-opens it from the profile alone.
+`state` returns a `State` layer from the store's options. Declare the ones a
+profile alone can't tell it, and the CLI takes each as a flag with
+`--backend`:
+
+```diff lang="typescript"
+   stripe: {
+     description: "State in the profile's Stripe account",
++    options: {
++      name: { description: "A store other than the account's default, by name" },
++    },
+     load: Contributions.lazy(
+```
+
+An option that isn't given is missing from the map, so the store falls back
+to its default: a missing `name` is the account's default store, and any
+other name is a separate store. With the store contributed,
+`alchemy state list --backend stripe --name team-a` opens it from the
+profile alone, and an option the store doesn't declare is an error.
 
 ## Add a store lifecycle
 
@@ -141,7 +155,7 @@ optional, and `alchemy state` reports the ones a store doesn't have:
 | `logs`      | `alchemy state logs`         |
 | `tailLogs`  | `alchemy state logs --tail`  |
 
-Each operation receives the store's `name`, and Alchemy provides the
+Each operation receives the store's `options`, and Alchemy provides the
 profile's config and the provider's `auth`. The built-in stores are
 the reference:
 [`AWS/Alchemist/StateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/AWS/Alchemist/StateStore.ts)

@@ -60,8 +60,8 @@ const environment = stateEnvironment();
  * needed to provision it ahead of time. S3 keeps no log stream to show.
  */
 export const lifecycle: StateStoreLifecycle = {
-  bootstrap: ({ name }) =>
-    bootstrapStateBucket(name).pipe(
+  bootstrap: ({ options }) =>
+    bootstrapStateBucket(options?.name).pipe(
       Effect.map(({ bucketName, accountId, region, existed }) => ({
         status: existed ? ("adopted" as const) : ("created" as const),
         store: bucketName,
@@ -69,8 +69,8 @@ export const lifecycle: StateStoreLifecycle = {
       })),
       Effect.provide(environment),
     ),
-  teardown: ({ name }) =>
-    teardownStateBucket(name).pipe(
+  teardown: ({ options }) =>
+    teardownStateBucket(options?.name).pipe(
       Effect.map(({ bucketName, deleted }) => ({ deleted: deleted ? [bucketName] : [] })),
       Effect.provide(environment),
     ),
@@ -78,6 +78,6 @@ export const lifecycle: StateStoreLifecycle = {
 
 /** The S3 state store AWS contributes, as `--backend aws-s3`. */
 export const s3StateStore: StateStoreImpl = {
-  layer: (options) => s3State(options),
+  layer: (options) => s3State({ name: options?.name }),
   lifecycle,
 };

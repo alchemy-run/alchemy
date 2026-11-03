@@ -115,29 +115,53 @@ export const lazy = <M, A>(load: () => Promise<M>, pick: (module: M) => A): Lazy
 export interface StateStore {
   /** Shown when listing stores; no provider code loads to show it. */
   readonly description: string;
+  /**
+   * What a profile alone can't tell the store, by option name: a store other
+   * than the account's default, or where it is served. The CLI takes each as
+   * `--<name> <value>` with `--backend`, and the store reads it from
+   * {@link StateStoreOptions}. Metadata only, so `alchemy state` builds its
+   * flags without loading the store:
+   *
+   * ```ts
+   * options: {
+   *   name: { description: "The store's Worker name" },
+   *   domain: { description: "Hostname the store is served on" },
+   * },
+   * ```
+   *
+   * A name must be a lowercase flag name that no `alchemy state` flag takes.
+   */
+  readonly options?: Readonly<Record<string, StateStoreOption>>;
   /** The store itself, loaded when it's used. */
   readonly load: Lazy<StateStoreImpl>;
+}
+
+/** One setting a state store takes from the CLI, see {@link StateStore.options}. */
+export interface StateStoreOption {
+  /** Shown in `alchemy state` help. */
+  readonly description: string;
 }
 
 export interface StateStoreImpl {
   /** The store's `State` layer: the provider's own `state` function. */
   readonly layer: (
-    options: StateStoreOptions,
+    options?: StateStoreOptions,
   ) => Layer.Layer<State, ContributionFailure, ContributionServices>;
   /** Provisioning, teardown and logs, for the operations the store supports. */
   readonly lifecycle?: StateStoreLifecycle;
 }
 
-/** The options every state store's `state(...)` takes. */
-export interface StateStoreOptions {
-  /** A store other than the account's default, by logical name. */
-  readonly name?: string;
-}
+/**
+ * The values given for a store's {@link StateStore.options}, by option name.
+ * Only declared options appear, and only when they were set; the store uses
+ * its default for any that is missing.
+ */
+export type StateStoreOptions = Readonly<Record<string, string | undefined>>;
 
 /** Which store a lifecycle operation acts on, under the profile core resolved. */
 export interface StateStoreTarget {
-  /** A store other than the account's default, by logical name. */
-  readonly name?: string;
+  /** The store's {@link StateStore.options}; defaults for any not given. */
+  readonly options?: StateStoreOptions;
 }
 
 export interface StateStoreLifecycle {
@@ -490,6 +514,35 @@ const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
 /** `--backend` names alchemy handles itself, so no provider may take them. */
 export const RESERVED_BACKENDS: ReadonlyArray<string> = ["local", "configured"];
 
+/**
+ * Flag names `alchemy state` and the CLI take themselves, so no state store
+ * option may take them.
+ */
+export const RESERVED_STATE_STORE_OPTIONS: ReadonlyArray<string> = [
+  "backend",
+  "config",
+  "env-file",
+  "profile",
+  "recursive",
+  "yes",
+  "force",
+  "stack",
+  "stage",
+  "rollback",
+  "tail",
+  "limit",
+  "since",
+  "help",
+  "version",
+  "completions",
+  "no-input",
+  "fast-distilled",
+  "log-level",
+  "log-format",
+];
+
+const STATE_STORE_OPTION_NAME = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
 const loaded = new Map<string, Effect.Effect<ReadonlyArray<Contributions>, ContributionError>>();
 
 /** The providers reachable from the project in `cwd`, loaded once per process. */
@@ -540,6 +593,20 @@ export const stateStores = Effect.fn("Contributions.stateStores")(function* () {
         return yield* new ContributionError({
           message: `${provider.name} and ${owner} both contribute a state store named ${backend}`,
         });
+      }
+      for (const option of Object.keys(store.options ?? {})) {
+        if (
+          !STATE_STORE_OPTION_NAME.test(option) ||
+          RESERVED_STATE_STORE_OPTIONS.includes(option)
+        ) {
+          return yield* new ContributionError({
+            message: `${provider.name}'s ${backend} state store can't take an option named '${option}': ${
+              RESERVED_STATE_STORE_OPTIONS.includes(option)
+                ? "alchemy state already has that flag"
+                : "use a lowercase flag name, e.g. 'domain' or 'account-id'"
+            }`,
+          });
+        }
       }
       stores.set(backend, { provider, store });
     }

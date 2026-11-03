@@ -9,6 +9,9 @@ export default Contributions.make({
   stateStores: {
     gcp: {
       description: "Cloud Storage state store in the profile's GCP project",
+      options: {
+        name: { description: "A store other than the project's default, by name" },
+      },
       load: Contributions.lazy(
         () => import("./StateStore/Lifecycle.ts"),
         (module) => module.stateStore,

@@ -166,6 +166,13 @@ attaches it to the store's Worker as a custom domain and uses it from then on:
 state: Cloudflare.state({ domain: "alchemy-state.example.com" }),
 ```
 
+Commands that don't load the stack file take the same hostname as
+`--domain`, so they reach the store where deploys do:
+
+```sh
+alchemy state list --backend cloudflare --domain alchemy-state.example.com
+```
+
 ## AWS state store
 
 `AWS.state()` keeps state in one on-demand DynamoDB table per account and region, `alchemy-state`. A deploy loads a stage's records with one query instead of reading an object per resource.
@@ -306,13 +313,23 @@ const program = Effect.gen(function* () {
 ```
 
 `Alchemist.State.layer(source)` provides the same store as a `State` layer.
-The backend is the provider's name: `cloudflare`, `aws` or `gcp`. Pass `name`
-for a [named store](#more-than-one-store-per-account).
+The backend is the provider's name: `cloudflare`, `aws` or `gcp`. Pass
+`options` for what the profile can't tell the store, the same ones the CLI
+takes as flags: `{ name }` for a [named store](#more-than-one-store-per-account),
+and `{ domain }` for a Cloudflare store on a
+[custom domain](#serve-it-on-your-own-domain):
 
-Only the profile and `name` pick the store this way. Options set in the stack
-file, such as a [pinned account](#pin-the-account) or a
-[custom domain](#serve-it-on-your-own-domain), aren't read; use the
-`configured` source (the CLI default, without `--backend`) when they matter.
+```typescript
+const source = {
+  type: "provider",
+  backend: "cloudflare",
+  options: { name: "team-a", domain: "alchemy-state.example.com" },
+} as const;
+```
+
+Options set in the stack file aren't read, such as a
+[pinned account](#pin-the-account); use the `configured` source (the CLI
+default, without `--backend`) when they matter.
 
 ## Writing your own state store
 

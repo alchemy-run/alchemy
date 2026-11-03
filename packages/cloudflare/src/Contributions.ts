@@ -9,6 +9,12 @@ export default Contributions.make({
   stateStores: {
     cloudflare: {
       description: "State-store Worker in the profile's Cloudflare account",
+      options: {
+        name: { description: "The store's full Worker name, for a store other than the default" },
+        domain: {
+          description: "Hostname the store is served on, when it has a custom domain",
+        },
+      },
       load: Contributions.lazy(
         () => import("./Alchemist/StateStore.ts"),
         (module) => module.stateStore,

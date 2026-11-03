@@ -50,9 +50,9 @@ const logEntry = (line: {
 
 /** The state-store Worker's lifecycle, for `Alchemist.State` and `alchemy state`. */
 export const lifecycle: StateStoreLifecycle = {
-  bootstrap: ({ name, force }) =>
+  bootstrap: ({ options, force }) =>
     Effect.gen(function* () {
-      const { layer, accountId, workerName, profile } = yield* stateStoreScope(name);
+      const { layer, accountId, workerName, profile } = yield* stateStoreScope(options?.name);
       return yield* Effect.gen(function* () {
         const existed = yield* workers.getScriptSetting({ accountId, scriptName: workerName }).pipe(
           Effect.as(true),
@@ -60,7 +60,12 @@ export const lifecycle: StateStoreLifecycle = {
             Effect.succeed(false),
           ),
         );
-        const store = yield* bootstrapStateStore({ workerName, force, profile });
+        const store = yield* bootstrapStateStore({
+          workerName,
+          domain: options?.domain,
+          force,
+          profile,
+        });
         return {
           status: !existed
             ? ("created" as const)
@@ -72,15 +77,15 @@ export const lifecycle: StateStoreLifecycle = {
         };
       }).pipe(Effect.provide(layer));
     }),
-  teardown: ({ name }) =>
+  teardown: ({ options }) =>
     Effect.gen(function* () {
-      const { layer, workerName, profile } = yield* stateStoreScope(name);
+      const { layer, workerName, profile } = yield* stateStoreScope(options?.name);
       yield* Effect.provide(teardownStateStore({ workerName, profile }), layer);
       return { deleted: [workerName] };
     }),
-  logs: ({ name, limit, since }) =>
+  logs: ({ options, limit, since }) =>
     Effect.gen(function* () {
-      const { layer, accountId, workerName } = yield* stateStoreScope(name);
+      const { layer, accountId, workerName } = yield* stateStoreScope(options?.name);
       const lines = yield* Effect.gen(function* () {
         const telemetry = yield* CloudflareLogs;
         return yield* telemetry.queryLogs({
@@ -93,10 +98,10 @@ export const lifecycle: StateStoreLifecycle = {
       }).pipe(Effect.provide(layer));
       return lines.map(logEntry).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     }),
-  tailLogs: ({ name }) =>
+  tailLogs: ({ options }) =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const { layer, accountId, workerName } = yield* stateStoreScope(name);
+        const { layer, accountId, workerName } = yield* stateStoreScope(options?.name);
         const telemetry = yield* Effect.provide(CloudflareLogs, layer);
         return telemetry
           .tailScript({ accountId, scriptName: workerName })
@@ -107,7 +112,8 @@ export const lifecycle: StateStoreLifecycle = {
 
 /** The state store Cloudflare contributes. */
 export const stateStore: StateStoreImpl = {
-  // `--name` is the store's full Worker name.
-  layer: ({ name }) => state(name === undefined ? {} : { workerName: name }),
+  // `--name` is the store's full Worker name; `--domain` the hostname it is
+  // served on, as `Cloudflare.state({ domain })` configures it.
+  layer: (options) => state({ workerName: options?.name, domain: options?.domain }),
   lifecycle,
 };

@@ -31,9 +31,14 @@ All subcommands share these options:
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--backend <name>`  | `configured` (default) uses the stack's state layer; `local` reads `.alchemy/state`, including orphaned state after a failed bootstrap; a provider's store (`aws`, `cloudflare`) is reached from the profile alone, without a stack file |
 | `--name <name>`     | With a provider store, address one other than the account's default, by logical name (1-20 lowercase letters, digits and hyphens) |
+| `--domain <host>`   | With `--backend cloudflare`, the hostname the store is served on when it has a [custom domain](/state-store/#serve-it-on-your-own-domain) |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`)                                                                        |
 | `--env-file <path>` | Load environment variables from a file                                                                                                         |
 | `--config, -c <file>` | Stack entrypoint to resolve the state layer from (defaults to `alchemy.run.ts`)                                                              |
+
+`--name`, `--domain` and any other store option come from the installed
+providers' state stores, and each backend takes only the options it
+declares. `alchemy state --help` lists them.
 
 ## `state list`
 

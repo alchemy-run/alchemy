@@ -65,7 +65,11 @@ test.provider(
       // Never the default store, which every other run on the account uses.
       const worker = "alchemy-state-store-lifecycle";
       // `--name` is the store's full Worker name.
-      const target = { type: "provider", backend: "cloudflare", name: worker } as const;
+      const target = {
+        type: "provider",
+        backend: "cloudflare",
+        options: { name: worker },
+      } as const;
       const alchemist = Alchemist.layer();
       const defaultStacks = () =>
         Effect.flatMap(
@@ -313,13 +317,13 @@ test.provider(
       );
 
       // A command without the stack's config (`alchemy state --backend
-      // cloudflare --name <worker>`) finds the domain attached to the Worker,
-      // and keeps the credentials cached for it instead of re-minting them on
-      // workers.dev.
+      // cloudflare --name <worker> --domain <domain>`) reaches the store on its
+      // domain and keeps the credentials cached for it instead of re-minting
+      // them on workers.dev.
       const configless = yield* Alchemist.State.store({
         type: "provider",
         backend: "cloudflare",
-        name: workerName,
+        options: { name: workerName, domain },
       }).pipe(Effect.provide(Alchemist.layer()));
       expect(yield* configless.get({ stack: "domain", stage: "test", fqn: "domain/a" })).toEqual(
         record,

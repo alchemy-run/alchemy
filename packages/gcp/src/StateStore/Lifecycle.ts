@@ -71,8 +71,8 @@ const environment = stateEnvironment();
  * provision it ahead of time (CI).
  */
 export const lifecycle: StateStoreLifecycle = {
-  bootstrap: ({ name }) =>
-    bootstrapStateBucket(name).pipe(
+  bootstrap: ({ options }) =>
+    bootstrapStateBucket(options?.name).pipe(
       Effect.map(({ bucketName, project, region, existed }) => ({
         status: existed ? ("adopted" as const) : ("created" as const),
         store: bucketName,
@@ -80,12 +80,15 @@ export const lifecycle: StateStoreLifecycle = {
       })),
       Effect.provide(environment),
     ),
-  teardown: ({ name }) =>
-    teardownStateBucket(name).pipe(
+  teardown: ({ options }) =>
+    teardownStateBucket(options?.name).pipe(
       Effect.map(({ bucketName, deleted }) => ({ deleted: deleted ? [bucketName] : [] })),
       Effect.provide(environment),
     ),
 };
 
 /** The state store GCP contributes. */
-export const stateStore: StateStoreImpl = { layer: state, lifecycle };
+export const stateStore: StateStoreImpl = {
+  layer: (options) => state({ name: options?.name }),
+  lifecycle,
+};

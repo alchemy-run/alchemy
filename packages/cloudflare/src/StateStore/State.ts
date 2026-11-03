@@ -39,7 +39,6 @@ import {
   isStateStoreCredentialsStale,
 } from "./CredentialsFile.ts";
 import {
-  attachedStateStoreDomains,
   deployStateStoreWorker,
   encryptionKeyLost,
   findSecretSharingWorker,
@@ -82,7 +81,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
     State,
     Effect.gen(function* () {
       const isCI = yield* CI;
-      const { workerName } = options;
+      const { workerName, domain } = options;
       const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
       const profileName = yield* currentProfileName;
       const credStore = yield* CredentialsStore;
@@ -91,19 +90,12 @@ export const state = (options: CloudflareStateOptions = {}) =>
         backend: "cloudflare",
         name: workerName,
         label: `Cloudflare State Store '${scriptName}'`,
-        configured: options.accountId !== undefined || options.domain !== undefined,
+        configured: options.accountId !== undefined || domain !== undefined,
       };
 
       const init = Effect.gen(function* () {
         yield* validateStateStoreWorkerName(scriptName);
         const accountId = yield* resolveAccountId(options.accountId);
-        const credentials = yield* readStoreCredentials(credStore, profileName, scriptName);
-        const domain = yield* resolveStateStoreDomain({
-          accountId,
-          scriptName,
-          domain: options.domain,
-          cachedUrl: credentials?.url,
-        });
         const deployMissing = Provisioning.deployMissing(
           store,
           bootstrap({ workerName: scriptName, profile: profileName, accountId, domain }),
@@ -161,6 +153,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
             return yield* makeCloudflareStateStore(refreshed);
           });
 
+        const credentials = yield* readStoreCredentials(credStore, profileName, scriptName);
         if (credentials) {
           // The cached `url`/`authToken` are minted per-account (the `url`
           // encodes the account via its workers.dev subdomain). If the
@@ -245,13 +238,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       );
       const force = options.force ?? false;
       const accountId = yield* resolveAccountId(options.accountId);
-      const cached = yield* readStoreCredentials(yield* CredentialsStore, profileName, scriptName);
-      const domain = yield* resolveStateStoreDomain({
-        accountId,
-        scriptName,
-        domain: options.domain,
-        cachedUrl: cached?.url,
-      });
+      const { domain } = options;
       yield* Effect.annotateCurrentSpan({
         "alchemy.state_store.script_name": scriptName,
         "alchemy.state_store.profile": profileName,
@@ -690,32 +677,6 @@ const isStateStoreAvailable = (accountId: string, scriptName: string) =>
       WorkerHasNoVersions: () => Effect.succeed(false),
     }),
   );
-
-/**
- * The hostname the store serves on: the configured `domain`, else a custom
- * domain attached to its Worker, else its workers.dev URL (`undefined`). Every
- * run resolves the same one whether or not it loaded the stack's config, so a
- * config-less command keeps the cached credentials. Of several attached
- * domains, the cached one wins while it is still attached.
- */
-const resolveStateStoreDomain = Effect.fn(function* ({
-  accountId,
-  scriptName,
-  domain,
-  cachedUrl,
-}: {
-  accountId: string;
-  scriptName: string;
-  domain: string | undefined;
-  cachedUrl: string | undefined;
-}) {
-  if (domain !== undefined) return domain;
-  const attached = yield* attachedStateStoreDomains({ accountId, scriptName }).pipe(
-    Effect.mapError(existenceUnknown(scriptName)),
-  );
-  const cached = cachedUrl === undefined ? undefined : new URL(cachedUrl).hostname;
-  return cached !== undefined && attached.includes(cached) ? cached : attached[0];
-});
 
 /**
  * Whether cached credentials point at where the store serves now: its

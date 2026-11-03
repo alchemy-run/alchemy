@@ -250,29 +250,6 @@ export const stateStoreUrl = Effect.fn(function* ({
 });
 
 /**
- * The hostnames attached to the store's Worker as custom domains that route to
- * it. A disabled hostname serves only previews, not the store, and a legacy
- * service environment other than production is a different Worker.
- */
-export const attachedStateStoreDomains = Effect.fn(function* ({
-  accountId,
-  scriptName,
-}: {
-  accountId: string;
-  scriptName: string;
-}) {
-  const { result } = yield* workers.listDomains({ accountId, service: scriptName });
-  return (result ?? []).flatMap((d) =>
-    d.service === scriptName &&
-    (d.environment ?? "production") === "production" &&
-    d.enabled !== false &&
-    d.hostname
-      ? [d.hostname]
-      : [],
-  );
-});
-
-/**
  * The zone of the custom domain `domain` when it is attached to this Worker,
  * or `undefined`. Fails when another Worker owns the hostname.
  */

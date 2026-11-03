@@ -323,6 +323,24 @@ export default { name: ${JSON.stringify(name)}, devEnv: Effect.succeed(Effect.su
         }).pipe(Effect.scoped),
       { exclusive: true },
     );
+
+    it.effect(
+      "a state store option named after an alchemy state flag is an error",
+      () =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            storeNames({
+              "flag-store": `export default { name: "flag", stateStores: {
+              kv: { description: "KV", options: { profile: { description: "Clashes" } } },
+            } };`,
+            }),
+          );
+          expect(contributionErrorMessage(error)).toBe(
+            "flag's kv state store can't take an option named 'profile': alchemy state already has that flag",
+          );
+        }).pipe(Effect.scoped),
+      { exclusive: true },
+    );
   }),
 );
 
@@ -424,6 +442,21 @@ describe("Alchemist.State lifecycle", { tags: ["unit", "local"] }, () =>
         const message = contributionErrorMessage(error);
         expect(message).toContain("Unknown state backend 'nope'. Available: local, configured");
         expect(message).toContain("Install the package that provides it.");
+      }),
+    );
+
+    it.effect("rejects an option the backend doesn't declare", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          Alchemist.State.bootstrap({
+            type: "provider",
+            backend: "aws",
+            options: { domain: "state.example.com" },
+          }),
+        );
+        expect(contributionErrorMessage(error)).toBe(
+          "The aws state store has no 'domain' option. It takes: --name.",
+        );
       }),
     );
 

@@ -104,8 +104,8 @@ const environment = stateEnvironment();
  * bootstrapping is only needed to provision it ahead of time.
  */
 export const lifecycle: StateStoreLifecycle = {
-  bootstrap: ({ name }) =>
-    bootstrapStateTable(name).pipe(
+  bootstrap: ({ options }) =>
+    bootstrapStateTable(options?.name).pipe(
       Effect.map(({ tableName, accountId, region, existed }) => ({
         status: existed ? ("adopted" as const) : ("created" as const),
         store: tableName,
@@ -113,11 +113,11 @@ export const lifecycle: StateStoreLifecycle = {
       })),
       Effect.provide(environment),
     ),
-  teardown: ({ name }) => teardownStateTable(name).pipe(Effect.provide(environment)),
+  teardown: ({ options }) => teardownStateTable(options?.name).pipe(Effect.provide(environment)),
 };
 
 /** The state store AWS contributes, as `--backend aws`. */
 export const stateStore: StateStoreImpl = {
-  layer: (options) => dynamoDBState(options),
+  layer: (options) => dynamoDBState({ name: options?.name }),
   lifecycle,
 };
