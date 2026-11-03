@@ -1515,8 +1515,15 @@ export type Worker<Bindings = any> = Resource<
      */
     devRemote?: Record<string, boolean>;
   },
-  Providers
+  Providers,
+  WorkerLookup
 >;
+
+/** Props for {@link Worker.lookup}: find a Worker this stack doesn't manage. */
+export interface WorkerLookup {
+  /** The script name of the Worker, e.g. `"auth-service"`. */
+  name: string;
+}
 
 /** An external/async Worker declared without an Effect implementation. */
 export type ExternalWorker<Bindings = {}> = Worker<Bindings> & {
@@ -2703,6 +2710,26 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * };
  * ```
  *
+ * ### Looking up an existing Worker
+ * `Cloudflare.Worker.lookup` finds a Worker that Alchemy doesn't manage
+ * (deployed with Wrangler, from the dashboard, or by another pipeline) by
+ * its script name. Bind it like a declared Worker; the deploy fails if no
+ * Worker has that name, and Alchemy never updates or deletes it.
+ *
+ * **Example:** Bind a Worker deployed outside Alchemy
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: {
+ *     AUTH: Cloudflare.Worker.lookup({ name: "auth-service" }),
+ *     ADMIN: Cloudflare.WorkerEntrypoint(
+ *       Cloudflare.Worker.lookup({ name: "auth-service" }),
+ *       "Admin",
+ *     ),
+ *   },
+ * });
+ * ```
+ *
  * ### R2 Bucket
  * Bind an R2 bucket in the Construction phase with `Cloudflare.R2.ReadWriteBucket`.
  * The returned handle exposes `get`, `put`, `delete`, and `list`
@@ -2884,6 +2911,12 @@ export const Worker: ResourceClassLike<Worker> & {
    * bindings from another stack.
    */
   ref: WorkerRef;
+  /**
+   * Reference a Worker deployed outside this stack (Wrangler, the dashboard,
+   * another pipeline) by its script name, without managing it. Resolves
+   * during plan/deploy and fails the deploy when no such Worker exists.
+   */
+  lookup(props: WorkerLookup): Worker;
 } & Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
     <Self, Shape extends WorkerShape, Deps = never>(): {
       <const Id extends string>(

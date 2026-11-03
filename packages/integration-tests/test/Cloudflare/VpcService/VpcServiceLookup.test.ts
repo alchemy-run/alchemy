@@ -70,17 +70,17 @@ test.provider(
             script: asyncWorkerScript,
             env: {
               SVC_MANAGED: managed,
-              SVC_BY_ID: Cloudflare.VpcService.lookup({
+              SVC_BY_ID: Cloudflare.VpcService.VpcService.lookup({
                 serviceId: svc.serviceId,
               }),
-              SVC_BY_NAME: Cloudflare.VpcService.lookup({
+              SVC_BY_NAME: Cloudflare.VpcService.VpcService.lookup({
                 name: svc.serviceName,
               }),
             },
           });
           return {
-            byId: Cloudflare.VpcService.lookup({ serviceId: svc.serviceId }),
-            byName: Cloudflare.VpcService.lookup({ name: svc.serviceName }),
+            byId: Cloudflare.VpcService.VpcService.lookup({ serviceId: svc.serviceId }),
+            byName: Cloudflare.VpcService.VpcService.lookup({ name: svc.serviceName }),
             worker,
           };
         }),

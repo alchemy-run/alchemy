@@ -2289,6 +2289,7 @@ const makePlan = <A>(
               FormerFqns: undefined,
               RuntimeContext: undefined!,
               Providers: undefined,
+              Lookup: undefined as never,
             } as ResourceLike,
             downstream: [...downstream],
             bindings: oldState.bindings.map((binding) => ({
