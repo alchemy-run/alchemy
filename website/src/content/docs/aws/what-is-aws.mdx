@@ -13,23 +13,25 @@ Here is the whole picture, which the rest of this page explains piece by piece. 
 
 <DAG
   nodes={[
-    { id: "profile", label: "Profile", type: "you or CI", layer: 0 },
-    { id: "account", label: "Account", type: "123456789012 · us-east-1", tone: "accent", layer: 1 },
-    { id: "api", label: "Api", type: "Lambda Function", layer: 2 },
-    { id: "role", label: "Role", type: "IAM execution role", layer: 2 },
-    { id: "bucket", label: "Files", type: "S3 Bucket", layer: 3 },
-    { id: "queue", label: "Jobs", type: "SQS Queue", layer: 3 },
-    { id: "worker", label: "Worker", type: "Lambda Function", layer: 4 },
+    { id: "profile", label: "Profile", type: "you or CI", col: 0, row: 1 },
+    { id: "role", label: "Role", type: "IAM execution role", col: 1, row: 0 },
+    { id: "api", label: "Api", type: "Lambda Function", col: 1, row: 1 },
+    { id: "bucket", label: "Files", type: "S3 Bucket", col: 2, row: 1 },
+    { id: "queue", label: "Jobs", type: "SQS Queue", col: 2, row: 2 },
+    { id: "worker", label: "Worker", type: "Lambda Function", col: 3, row: 2 },
+  ]}
+  groups={[
+    { id: "account", label: "Account 123456789012", nodes: ["role"] },
+    { id: "region", label: "us-east-1", parent: "account", nodes: ["api", "bucket", "queue", "worker"], dashed: true },
   ]}
   edges={[
     { from: "profile", to: "account", label: "deploy" },
-    { from: "account", to: "api" },
-    { from: "account", to: "role" },
-    { from: "role", to: "bucket", label: "s3:PutObject" },
-    { from: "role", to: "queue", label: "sqs:SendMessage" },
+    { from: "role", to: "api", label: "runs as" },
+    { from: "api", to: "bucket", label: "s3:PutObject" },
+    { from: "api", to: "queue", label: "sqs:SendMessage" },
     { from: "queue", to: "worker", dashed: true },
   ]}
-  caption="Everything lives in one account and region. The role decides what the code may call. Dashed edges are events AWS delivers."
+  caption="IAM roles belong to the account and work in every region. The rest lives in one region. Dashed edges are events AWS delivers."
 />
 
 ## Accounts: the boundary around everything
