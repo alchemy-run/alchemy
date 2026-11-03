@@ -174,10 +174,8 @@ const closeEventScope = (
   exit: Exit.Exit<unknown, unknown>,
   background: ((effect: Effect.Effect<void>) => Effect.Effect<void>) | undefined,
 ): Effect.Effect<void> => {
-  const close = Effect.callback<void>((resume) => {
-    const handle = setTimeout(() => resume(Effect.void), 0);
-    return Effect.sync(() => clearTimeout(handle));
-  }).pipe(Effect.andThen(Scope.close(scope, exit)));
+  // A zero sleep only yields the fiber; any positive one is a timer task.
+  const close = Effect.sleep("1 millis").pipe(Effect.andThen(Scope.close(scope, exit)));
   return background === undefined ? close : background(close);
 };
 
