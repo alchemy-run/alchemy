@@ -121,7 +121,7 @@ return {
 
 A method takes arguments and returns an Effect. Arguments and results travel between machines as JSON, so they're strings, numbers, booleans, arrays and plain objects. A method can also return a `Stream`, or fail with a tagged error the caller catches by name. See [Calling a Durable Object](/rivet/calling).
 
-Methods share the room's state, and a room can run more than one call at once: while one waits on storage, another can start. `join` reads the count and writes it back, so two joins at the same moment can both read 2 and both write 3. [Storage](/rivet/storage#keep-a-change-in-one-step) shows how to keep a change in one step.
+Methods share the room's state, and a room can run more than one call at once. Storage stays consistent anyway: a call's reads and writes, with nothing else to wait on between them, never interleave with another call's. See [Storage](/rivet/storage#change-state-safely-while-calls-overlap).
 
 ## Handle HTTP with fetch
 

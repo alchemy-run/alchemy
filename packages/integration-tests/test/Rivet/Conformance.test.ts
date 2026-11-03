@@ -48,6 +48,37 @@ describe.skipIf(!!process.env.FAST)(
     conformanceTests(test, { baseUrl: () => baseUrl });
 
     test(
+      "concurrent get-then-put calls on one instance lose no updates",
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        // A fresh instance per attempt, so a retried attempt starts from zero.
+        const { count } = (yield* Effect.suspend(() =>
+          client.get(`${baseUrl}/race/${crypto.randomUUID()}?n=50`),
+        ).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        )) as { count: number };
+        expect(count).toBe(50);
+      }),
+      { timeout: 120_000 },
+    );
+
+    test(
+      "a transaction keeps other calls out and rolls back on failure",
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const result = (yield* Effect.suspend(() =>
+          client.get(`${baseUrl}/transaction/${crypto.randomUUID()}?n=10`),
+        ).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        )) as { count: number; aborted: boolean };
+        expect(result).toEqual({ count: 110, aborted: true });
+      }),
+      { timeout: 120_000 },
+    );
+
+    test(
       "a second class on the same pool calls the first through the gateway",
       Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;

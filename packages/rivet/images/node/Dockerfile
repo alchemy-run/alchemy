@@ -3,5 +3,5 @@
 # resolves `rivetkit` from /app/node_modules.
 FROM oven/bun:1
 WORKDIR /app
-ARG RIVETKIT_VERSION=3.0.0-preview.4
+ARG RIVETKIT_VERSION=3.0.0
 RUN bun add rivetkit@${RIVETKIT_VERSION}

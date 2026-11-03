@@ -8,7 +8,7 @@ import { adminToken } from "../internal/AdminToken.ts";
 import { Namespace } from "../Namespace.ts";
 
 /** The engine release `RivetFly.ControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0-preview.4";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
 const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
@@ -38,7 +38,7 @@ export interface ControlPlaneProps {
   diskSize?: number;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0-preview.4"
+   * @default "rivetdev/engine:3.0.0"
    */
   image?: string;
 }
@@ -128,7 +128,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
           yield* Fly.Machine(`${id}Engine${i}`, {
             app,
             region: props.region ?? "iad",
-            image: props.image ?? "rivetdev/engine:3.0.0-preview.4",
+            image: props.image ?? "rivetdev/engine:3.0.0",
             init: { entrypoint: ENTRYPOINT },
             guest: props.guest ?? { cpus: 2, memoryMb: 4096 },
             mounts: [{ path: DATA_PATH, sizeGb: props.diskSize ?? 10 }],

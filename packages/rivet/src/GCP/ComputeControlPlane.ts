@@ -12,7 +12,7 @@ import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
 
 /** The engine release `RivetGCP.ComputeControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0-preview.4";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
 /** Container-Optimized OS: Docker preinstalled, a read-only root. */
 const COS_IMAGE = "projects/cos-cloud/global/images/family/cos-stable";
@@ -46,7 +46,7 @@ export interface ComputeControlPlaneProps {
   zones?: string[];
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0-preview.4"
+   * @default "rivetdev/engine:3.0.0"
    */
   image?: string;
   /**

@@ -26,6 +26,7 @@ import { rpcMethodOf, serveRpc } from "../Rpc.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import { buildEventTelemetry } from "../TelemetryRuntime.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
+import { gateCall } from "./InputGate.ts";
 import { handleRpcExit, type Pin, type WorkerBuild } from "./Worker.ts";
 
 /**
@@ -217,7 +218,9 @@ export const makeDurableObjectInstance = ({
 
     const { instance: shape, services, context, runtime, telemetry } = await instance;
 
-    return fn(shape)
+    // An engine with async storage provides an `InputGate`; the call runs
+    // through it so storage can't interleave between calls.
+    return gateCall(Effect.suspend(() => fn(shape)))
       .pipe(
         Effect.provide(
           Layer.mergeAll(

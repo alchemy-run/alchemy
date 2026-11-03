@@ -102,11 +102,11 @@ See [Calling a Durable Object](/rivet/calling).
 
 ## Many calls at once
 
-An instance runs in one place, but it can take more than one call at once. While one call waits, on storage or on another call, the next one starts.
+An instance runs in one place, but it can take more than one call at once. While one call waits on another Durable Object or an HTTP request, the next one starts.
 
-So a method that reads a value and writes it back can see another call's write land in between, and lose it. Keep a change in one step, a single SQL statement, when two calls might make it together.
+Storage is the exception. Once a call starts reading and writing, no other call touches storage until the first one waits on something else. So a method that reads a value and writes it back never loses another call's write. For a change that has to wait in the middle, or undo itself on failure, use a transaction.
 
-See [Storage](/rivet/storage#keep-a-change-in-one-step).
+See [Storage](/rivet/storage#change-state-safely-while-calls-overlap).
 
 ## The control plane
 
