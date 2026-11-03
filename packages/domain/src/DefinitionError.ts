@@ -141,6 +141,27 @@ export class WriterKeyMismatch extends Data.TaggedError("WriterKeyMismatch")<{
   }
 }
 
+/** A schema in a state, command, event, reply or rejection has no JSON form. */
+export class NoJsonForm extends Data.TaggedError("NoJsonForm")<{
+  /** Where the schema is, such as `Order.state.placedAt`. */
+  readonly path: string;
+}> {
+  override get message() {
+    return `${this.path} has no JSON form: use a Schema with one, or annotate it with toCodecJson`;
+  }
+}
+
+/** An `initial` state that does not come back the same after a trip through JSON. */
+export class InitialNotJson extends Data.TaggedError("InitialNotJson")<{
+  readonly owner: string;
+  /** Why: the JSON error, or the JSON text that comes back different. */
+  readonly detail: string;
+}> {
+  override get message() {
+    return `${this.owner}.initial does not survive JSON: ${this.detail}`;
+  }
+}
+
 // ---------------------------------------------------------------- runtime
 
 /** An aggregate receives a command it does not list. */
@@ -368,6 +389,8 @@ export type Reason =
   | UnknownStream
   | TwoWriters
   | WriterKeyMismatch
+  | NoJsonForm
+  | InitialNotJson
   | UnhandledCommand
   | UnroutedCommand
   | UndeclaredDecision
