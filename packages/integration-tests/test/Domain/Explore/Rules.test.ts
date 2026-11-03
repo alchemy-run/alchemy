@@ -3,7 +3,7 @@ import { run, type Rule } from "@alchemy.run/domain/Explore";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as M from "./Models.ts";
 
-describe("TIMER-REARM (derived, refined)", () => {
+describe("TIMER-REARM (derived, refined)", { tags: ["unit", "local"] }, () => {
   it("finds the stale re-arm with no domain text, in 6 moves", async () => {
     const r = await run(M.jobScenario());
     const v = r.violations.find((x) => x.rule === "TIMER-REARM")!;
@@ -26,7 +26,7 @@ describe("TIMER-REARM (derived, refined)", () => {
   });
 });
 
-describe("time", () => {
+describe("time", { tags: ["unit", "local"] }, () => {
   it("an actor can act at the deadline before the timer fires only with a tick", async () => {
     const without = await run(M.jobScenario({ freeze: false, late: true, rules: [M.LATE_RULE] }));
     const withTick = await run(
@@ -38,14 +38,14 @@ describe("time", () => {
   });
 });
 
-describe("crash points", () => {
+describe("crash points", { tags: ["unit", "local"] }, () => {
   it("a crash between two sends of one policy run is reachable only with policy faults", async () => {
     expect((await run(M.twoSends(true))).violations.map((v) => v.rule)).toEqual(["HALF-DONE"]);
     expect((await run(M.twoSends(false))).violations.map((v) => v.rule)).toEqual([]);
   });
 });
 
-describe("defects", () => {
+describe("defects", { tags: ["unit", "local"] }, () => {
   const dying = (retryDefects: ReadonlyArray<string>) => M.dyingPolicy(retryDefects);
   it("a die in a policy is a DEFECT", async () => {
     expect((await run(dying([]))).violations.map((v) => v.rule)).toContain("DEFECT");
@@ -58,7 +58,7 @@ describe("defects", () => {
   });
 });
 
-describe("eventually", () => {
+describe("eventually", { tags: ["unit", "local"] }, () => {
   const FIRES: Rule = {
     id: "FIRES-WITHIN-2D",
     kind: "eventually",

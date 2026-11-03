@@ -16,7 +16,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as Schema from "effect/Schema";
 import * as M from "./Models.ts";
 
-describe("reachable / VACUOUS", () => {
+describe("reachable / VACUOUS", { tags: ["unit", "local"] }, () => {
   const NEVER_LATE: Rule = {
     id: "NEVER-LATE",
     kind: "state",
@@ -109,7 +109,7 @@ describe("reachable / VACUOUS", () => {
   });
 });
 
-describe("modelHash", () => {
+describe("modelHash", { tags: ["unit", "local"] }, () => {
   const make = (o: { text?: boolean; extra?: boolean; flip?: boolean; on?: boolean } = {}) => {
     class Done extends Domain.Event("Done", { x: o.text ? Schema.String : Schema.Number }) {}
     class Also extends Domain.Event("Also", {}) {}
@@ -196,7 +196,7 @@ describe("modelHash", () => {
   });
 });
 
-describe("honest fields on every run", () => {
+describe("honest fields on every run", { tags: ["unit", "local"] }, () => {
   const check = (r: Awaited<ReturnType<typeof run>>) => {
     const json = JSON.parse(JSON.stringify(r));
     expect(json.proof).toBe(false);

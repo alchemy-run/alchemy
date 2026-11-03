@@ -6,7 +6,7 @@ import { spiScenario } from "./Spi.model.ts";
 
 const url = new URL("./Fixture.worker.ts", import.meta.url).href;
 
-describe("workers", () => {
+describe("workers", { tags: ["unit", "local"] }, () => {
   for (const [name, scenario] of [
     ["job2", M.jobScenario({ ids: ["J1", "J2"], redeliveries: 1, rules: [M.JOB_ARMED] })],
     ["spi", spiScenario({ fails: 1 })],

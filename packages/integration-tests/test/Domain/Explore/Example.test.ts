@@ -136,7 +136,7 @@ const scenario: Explore.Scenario = {
 
 const story = Story.make(Holds, { layer: HoldExpiryLive });
 
-describe("the docs example", () => {
+describe("the docs example", { tags: ["unit", "local"] }, () => {
   it("finds the lost timer, and the Story fails on the rule", async () => {
     const report = await Explore.run(scenario);
     expect({

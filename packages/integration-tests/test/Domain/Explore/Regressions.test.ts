@@ -20,7 +20,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as M from "./Models.ts";
 
-describe("every search checks the state", () => {
+describe("every search checks the state", { tags: ["unit", "local"] }, () => {
   it("the swarm refuses a Date in fake state", async () => {
     const r = await run(M.dateActor, { search: { kind: "swarm", seeds: [1], walks: 1, depth: 2 } });
     expect(r.coverage).toEqual({ _tag: "CutOff", reason: "engine-error" });
@@ -28,7 +28,7 @@ describe("every search checks the state", () => {
   });
 });
 
-describe("a witness must be the state the search saw", () => {
+describe("a witness must be the state the search saw", { tags: ["unit", "local"] }, () => {
   let hidden = 0;
   const counter: Scenario = {
     ...M.twoBits,
@@ -51,7 +51,7 @@ describe("a witness must be the state the search saw", () => {
   });
 });
 
-describe("a Story is proven on the real runner", () => {
+describe("a Story is proven on the real runner", { tags: ["unit", "local"] }, () => {
   const PENDING: Rule = {
     id: "PENDING",
     kind: "state",
@@ -92,7 +92,7 @@ describe("a Story is proven on the real runner", () => {
   });
 });
 
-describe("a batched projection is not queued", () => {
+describe("a batched projection is not queued", { tags: ["unit", "local"] }, () => {
   it("queued + batch option is refused at setup", async () => {
     class Rows extends Domain.Projection("Rows", { from: [M.Src], key: M.Src, on: [M.Go] }) {}
     const Live = Rows.toLayer(Effect.succeed(Effect.fn(function* () {})), { batch: { size: 10 } });
@@ -108,7 +108,7 @@ describe("a batched projection is not queued", () => {
   });
 });
 
-describe("failure paths and limits", () => {
+describe("failure paths and limits", { tags: ["unit", "local"] }, () => {
   it("a refused build closes its scope", async () => {
     class Rows extends Domain.Projection("Rows", { from: [M.Src], key: M.Src, on: [M.Go] }) {}
     let closed = 0;
@@ -175,7 +175,7 @@ describe("failure paths and limits", () => {
   });
 });
 
-describe("identity", () => {
+describe("identity", { tags: ["unit", "local"] }, () => {
   it("one digest everywhere: truncated SHA-256", () => {
     expect(digestHex(digest("abc"))).toBe("ba7816bf8f01cfea414140de5dae2223");
     expect(digestHex(digest("héllo ✓"))).toHaveLength(32);
@@ -216,7 +216,7 @@ describe("identity", () => {
   });
 });
 
-describe("honest text", () => {
+describe("honest text", { tags: ["unit", "local"] }, () => {
   it("TIMER-REARM names a trigger", async () => {
     const r = await run(M.jobScenario({ freeze: false }));
     expect(r.ruleVerdicts.find((v) => v.rule === "TIMER-REARM")).toMatchObject({
@@ -239,7 +239,7 @@ describe("honest text", () => {
   });
 });
 
-describe("TIMER-REARM reports only what it can judge", () => {
+describe("TIMER-REARM reports only what it can judge", { tags: ["unit", "local"] }, () => {
   const rearm = (scenario: Scenario): Scenario => ({
     ...scenario,
     actors: [
