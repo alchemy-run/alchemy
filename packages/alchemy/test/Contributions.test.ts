@@ -455,7 +455,7 @@ describe("Alchemist.State lifecycle", { tags: ["unit", "local"] }, () =>
           }),
         );
         expect(contributionErrorMessage(error)).toBe(
-          "The aws state store has no 'domain' option. It takes: --name.",
+          "Unknown option 'domain' for state backend 'aws'. Available: name.",
         );
       }),
     );
