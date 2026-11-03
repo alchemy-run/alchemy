@@ -166,8 +166,9 @@ const sidecarOmitEnv = (options: MakeOptions): ReadonlyArray<string> =>
 
 /**
  * Default test stage: `ALCHEMY_TEST_STAGE`, then `test_$USER` (or
- * `test_$USERNAME` / `test_unknown`). Set an explicit test stage to isolate
- * concurrent worktrees that share a cloud account.
+ * `test_$USERNAME` / `test_unknown`). The runner sets ALCHEMY_TEST_STAGE to
+ * `test_$USER_<worktree>` in a linked git worktree, so concurrent worktrees
+ * sharing a cloud account stay isolated.
  * Matches the CLI's `live_$USER` / `dev_$USER` per-developer isolation.
  */
 export const defaultStage = (): string =>

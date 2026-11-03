@@ -4,6 +4,7 @@ import * as Output from "alchemy/Output";
 import { defaultProviderMode } from "alchemy/ProviderMode";
 import type { ResourceBinding } from "alchemy/Resource";
 import { isYieldableEffectLike } from "alchemy/Util/effect";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
@@ -823,20 +824,83 @@ const DEFAULT_OBSERVABILITY: WorkerObservability = {
 };
 
 /**
- * Resolve the observability metadata to upload. An explicit
- * `news.observability.traces` wins; otherwise the traces contributed by
- * `Cloudflare.Telemetry()` (a single binding row — rows are collapsed by
- * sid) fill in without clobbering the logs config. A cache-style `??` on
- * the whole object would drop the default `logs.invocationLogs`.
+ * `Cloudflare.Telemetry()` and the Worker's `observability` props both set
+ * the same field to different values. Set it in one place.
  */
-export const resolveObservability = (
+export class ObservabilityConflictError extends Data.TaggedError("ObservabilityConflictError")<{
+  key: "traces" | "logs";
+  field: string;
+  worker: unknown;
+  telemetry: unknown;
+}> {
+  override get message() {
+    return (
+      `observability.${this.key}.${this.field} is ${JSON.stringify(this.worker)} on the Worker ` +
+      `but ${JSON.stringify(this.telemetry)} in Cloudflare.Telemetry(). Set it in one place.`
+    );
+  }
+}
+
+type Traces = NonNullable<WorkerObservability["traces"]>;
+type Logs = NonNullable<WorkerObservability["logs"]>;
+
+const mergeObservability = <T extends Traces | Logs>(
+  key: "traces" | "logs",
+  worker: T | undefined,
+  telemetry: Partial<T>,
+  defaults: T,
+): Effect.Effect<T, ObservabilityConflictError> => {
+  if (worker === undefined) return Effect.succeed({ ...defaults, ...telemetry });
+  for (const [field, value] of Object.entries(telemetry)) {
+    const explicit = (worker as Record<string, unknown>)[field];
+    if (explicit !== undefined && JSON.stringify(explicit) !== JSON.stringify(value)) {
+      return Effect.fail(
+        new ObservabilityConflictError({ key, field, worker: explicit, telemetry: value }),
+      );
+    }
+  }
+  return Effect.succeed({ ...telemetry, ...worker });
+};
+
+/**
+ * Resolve the observability metadata to upload. `Cloudflare.Telemetry()`
+ * binds only the traces/logs fields its caller set. Where the Worker's
+ * props omit `traces` / `logs`, those fill in over the defaults (traces
+ * and logs on); where the props set them, the two merge field by field,
+ * and a field set to different values in both fails the deploy. A
+ * cache-style `??` on the whole object would drop the default
+ * `logs.invocationLogs`.
+ */
+export const resolveObservability = Effect.fn(function* (
   news: Pick<WorkerProps, "observability">,
   bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
-): WorkerObservability => {
+) {
   const observability = news.observability ?? DEFAULT_OBSERVABILITY;
-  const bound = bindings.find((b) => b.data.observability?.traces != null)?.data.observability
-    ?.traces;
-  return observability.traces != null || bound == null
-    ? observability
-    : { ...observability, traces: bound };
-};
+  const bound = bindings.find((b) => b.data.observability != null)?.data.observability;
+  if (bound === undefined) return observability;
+  const resolved: WorkerObservability = {
+    ...observability,
+    ...(bound.traces !== undefined && {
+      traces: yield* mergeObservability<Traces>(
+        "traces",
+        observability.traces ?? undefined,
+        bound.traces,
+        {
+          enabled: true,
+        },
+      ),
+    }),
+    ...(bound.logs !== undefined && {
+      logs: yield* mergeObservability<Logs>(
+        "logs",
+        news.observability?.logs ?? undefined,
+        bound.logs,
+        {
+          enabled: true,
+          invocationLogs: true,
+        },
+      ),
+    }),
+  };
+  return resolved;
+});

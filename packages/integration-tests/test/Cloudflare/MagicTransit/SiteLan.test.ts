@@ -6,6 +6,7 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -51,13 +52,12 @@ test.provider.skipIf(!entitled)(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const site = yield* Cloudflare.MagicTransit.MagicSite("Site", {
-            name: "alchemy-magic-site-lanlist",
             description: "alchemy magic site list test",
           });
           const lan = yield* Cloudflare.MagicTransit.MagicSiteLan("ListLan", {
             siteId: site.siteId,
             physport: 2,
-            name: "alchemy-site-lan-list",
+            name: testName("alchemy-site-lan-list"),
             vlanTag: 30,
             staticAddressing: { address: "192.168.30.1/24" },
           });
@@ -76,7 +76,7 @@ test.provider.skipIf(!entitled)(
       expect(found).toBeDefined();
       expect(found?.siteId).toEqual(deployed.site.siteId);
       expect(found?.accountId).toEqual(accountId);
-      expect(found?.name).toEqual("alchemy-site-lan-list");
+      expect(found?.name).toEqual(testName("alchemy-site-lan-list"));
 
       yield* stack.destroy();
     }).pipe(logLevel),

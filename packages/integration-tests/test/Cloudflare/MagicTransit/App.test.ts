@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -94,7 +95,7 @@ test.provider.skipIf(!entitled)(
 
       const app = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicApp("App", {
-          name: "alchemy-magic-app",
+          name: testName("alchemy-magic-app"),
           type: "Collaboration",
           hostnames: ["crm.alchemy.test"],
         }),
@@ -102,7 +103,7 @@ test.provider.skipIf(!entitled)(
 
       expect(app.appId).toBeTruthy();
       expect(app.accountId).toEqual(accountId);
-      expect(app.name).toEqual("alchemy-magic-app");
+      expect(app.name).toEqual(testName("alchemy-magic-app"));
       expect(app.type).toEqual("Collaboration");
       expect(app.hostnames).toEqual(["crm.alchemy.test"]);
 
@@ -113,14 +114,14 @@ test.provider.skipIf(!entitled)(
       // Update mutable props in place — same appId.
       const updated = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicApp("App", {
-          name: "alchemy-magic-app-v2",
+          name: testName("alchemy-magic-app-v2"),
           type: "Collaboration",
           hostnames: ["crm.alchemy.test", "erp.alchemy.test"],
         }),
       );
 
       expect(updated.appId).toEqual(app.appId);
-      expect(updated.name).toEqual("alchemy-magic-app-v2");
+      expect(updated.name).toEqual(testName("alchemy-magic-app-v2"));
       expect([...(updated.hostnames ?? [])].sort()).toEqual([
         "crm.alchemy.test",
         "erp.alchemy.test",
@@ -172,7 +173,7 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicApp("ListApp", {
-          name: "alchemy-magic-list-app",
+          name: testName("alchemy-magic-list-app"),
           type: "Collaboration",
           hostnames: ["list.alchemy.test"],
         }),

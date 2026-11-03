@@ -27,6 +27,7 @@
 import crypto from "node:crypto";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -560,9 +561,9 @@ const makeCore = Effect.gen(function* () {
     if (![base, remaining, maxObjectSize].every(Number.isFinite)) {
       return HttpServerResponse.text("bad coordinates", { status: 400 });
     }
-    const t0 = Date.now();
+    const t0 = yield* Clock.currentTimeMillis;
     const body = new Uint8Array(yield* request.arrayBuffer);
-    const tBody = Date.now();
+    const tBody = yield* Clock.currentTimeMillis;
     if (query.get("mode") === "deltas") {
       const { bases, jobs } = decodeDeltaBatch(body);
       const resolved = yield* resolveDeltas(bases, jobs, {
@@ -623,7 +624,7 @@ const makeCore = Effect.gen(function* () {
     // Two frames: the scan now, the part once its upload has finished —
     // the open response stream keeps this invocation alive meanwhile.
     const { readable, writable } = new IdentityTransformStream();
-    const tScan = Date.now();
+    const tScan = yield* Clock.currentTimeMillis;
     // A plain async writer, like the clone pump: writes settle only as the
     // response is read, and the open stream keeps this invocation alive
     // until the part's upload has finished.

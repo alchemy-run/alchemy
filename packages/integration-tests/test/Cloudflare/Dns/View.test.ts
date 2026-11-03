@@ -8,6 +8,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -55,7 +56,7 @@ test.provider.skipIf(internalDnsEntitled)(
       const error = yield* retryForbidden(
         dns.createSettingAccountView({
           accountId,
-          name: "alchemy-dns-view-test",
+          name: testName("alchemy-dns-view-test"),
           zones: [zoneId],
         }),
       ).pipe(Effect.flip);
@@ -99,7 +100,6 @@ test.provider.skipIf(!internalDnsEntitled)(
 
       const deployed = yield* stack.deploy(
         Cloudflare.DNS.View("ListView", {
-          name: "alchemy-dns-view-list",
           zones: [zoneId],
         }),
       );
@@ -127,29 +127,29 @@ test.provider.skipIf(!internalDnsEntitled)(
 
       const created = yield* stack.deploy(
         Cloudflare.DNS.View("TestView", {
-          name: "alchemy-dns-view-test",
+          name: testName("alchemy-dns-view-test"),
           zones: [zoneId],
         }),
       );
       expect(created.viewId).toBeDefined();
-      expect(created.name).toEqual("alchemy-dns-view-test");
+      expect(created.name).toEqual(testName("alchemy-dns-view-test"));
       expect(created.zones).toEqual([zoneId]);
 
       // Out-of-band verify via the SDK.
       const live = yield* retryForbidden(
         dns.getSettingAccountView({ accountId, viewId: created.viewId }),
       );
-      expect(live.name).toEqual("alchemy-dns-view-test");
+      expect(live.name).toEqual(testName("alchemy-dns-view-test"));
 
       // Rename in place — same physical view.
       const renamed = yield* stack.deploy(
         Cloudflare.DNS.View("TestView", {
-          name: "alchemy-dns-view-test-renamed",
+          name: testName("alchemy-dns-view-test-renamed"),
           zones: [zoneId],
         }),
       );
       expect(renamed.viewId).toEqual(created.viewId);
-      expect(renamed.name).toEqual("alchemy-dns-view-test-renamed");
+      expect(renamed.name).toEqual(testName("alchemy-dns-view-test-renamed"));
 
       yield* stack.destroy();
 

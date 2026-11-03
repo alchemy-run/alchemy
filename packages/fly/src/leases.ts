@@ -17,6 +17,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
+import * as Random from "effect/Random";
 import * as Schedule from "effect/Schedule";
 
 const TTL_SECONDS = 120;
@@ -37,7 +38,7 @@ const retrySchedule = <E>(): Schedule.Schedule<Duration.Duration, E> =>
       ),
     ),
     Schedule.addDelay<Duration.Duration, E>(() =>
-      Effect.sync(() => Duration.millis(Math.random() * 50)),
+      Effect.map(Random.next, (random) => Duration.millis(random * 50)),
     ),
   );
 

@@ -393,6 +393,7 @@ function PlanRowView(props: {
         iconColor={color}
         label={row.id}
         detail={rowDetail(status, state?.message)}
+        detailOverflow={status === "fail" ? "wrap" : "truncate"}
         depth={row.depth}
       >
         <Text color={color}>{taskLabel(row.action, status)}</Text>
@@ -475,6 +476,7 @@ function PlanRowView(props: {
           </>
         }
         detail={rowDetail(rowState.status, rowState.message)}
+        detailOverflow={rowState.status === "fail" ? "wrap" : "truncate"}
         depth={row.depth}
       >
         {modeNote ? <Text tone="muted">({modeNote})</Text> : null}

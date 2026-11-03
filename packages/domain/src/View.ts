@@ -61,6 +61,7 @@ export interface Any extends Context.Key<unknown, unknown> {
     readonly events?: ReadonlyArray<Event.Any>;
     readonly emit?: Handlers;
     readonly computed?: { readonly [name: string]: ((state: never) => unknown) | undefined };
+    readonly version?: number;
   } & Read.AnyContract;
   /** Type-level only: the view's state. */
   readonly "~state": unknown;
@@ -245,6 +246,20 @@ export interface Definition<
   };
   /** Values derived from state when read. */
   readonly computed?: ComputedFns<StateType<S>, Computed>;
+  /**
+   * Bump it whenever you change what the view computes (`evolve`, `emit`,
+   * `keyOf`, `state`, the events or sources it reads): every key is computed
+   * again from the history, and so is every view and projection that reads
+   * this one. Only ever increase it.
+   *
+   * A view keyed by the one aggregate it reads is rebuilt in place: the deploy
+   * waits for nothing, and each key re-reads its own instance's events the
+   * first time it is touched. Any other view is rebuilt from the history
+   * before the deploy finishes.
+   *
+   * @default 0
+   */
+  readonly version?: number;
 }
 
 /** Derived-value functions of a view. */

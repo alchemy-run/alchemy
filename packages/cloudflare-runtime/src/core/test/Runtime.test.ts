@@ -190,10 +190,11 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
     { timeout: 30_000 },
   );
 
-  // Miniflare's outbound interceptor: outbound fetches carry `CF-Worker`
-  // with the Worker's zone and drop `CF-Connecting-IP`.
+  // The outbound interceptor drops `CF-Connecting-IP`. Unlike Miniflare it
+  // adds no `CF-Worker`: Cloudflare-fronted sites answer 403 to one sent
+  // from a developer machine (#2965).
   it.effect(
-    "outbound fetches carry CF-Worker and drop CF-Connecting-IP",
+    "outbound fetches drop CF-Connecting-IP and add no CF-Worker",
     () =>
       Effect.gen(function* () {
         const seen: Array<{ cfWorker?: string; connectingIp?: string }> = [];
@@ -216,34 +217,26 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
         );
         const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/echo`;
         const runtime = yield* Runtime.Runtime;
-        const start = (name: string, zone?: string) =>
-          runtime.start({
-            name,
-            zone,
-            compatibilityDate: "2026-03-10",
-            compatibilityFlags: [],
-            bindings: [],
-            modules: [
-              {
-                name: "main.js",
-                type: "ESModule",
-                content: `export default {
+        const url = yield* runtime.start({
+          name: "outbound",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default {
   fetch: (request) =>
     new URL(request.url).pathname === "/outbound"
       ? fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } })
       : new Response("Not Found", { status: 404 }),
 };`,
-              },
-            ],
-          });
-        const defaultZone = yield* start("outbound-default");
-        yield* Effect.promise(() => fetch(new URL("/outbound", defaultZone)).then((r) => r.text()));
-        const customZone = yield* start("outbound-zone", "example.com");
-        yield* Effect.promise(() => fetch(new URL("/outbound", customZone)).then((r) => r.text()));
-        expect(seen).toEqual([
-          { cfWorker: "outbound-default.example.com", connectingIp: undefined },
-          { cfWorker: "example.com", connectingIp: undefined },
-        ]);
+            },
+          ],
+        });
+        yield* Effect.promise(() => fetch(new URL("/outbound", url)).then((r) => r.text()));
+        expect(seen).toEqual([{ cfWorker: undefined, connectingIp: undefined }]);
       }).pipe(Effect.scoped),
     { timeout: 30_000 },
   );

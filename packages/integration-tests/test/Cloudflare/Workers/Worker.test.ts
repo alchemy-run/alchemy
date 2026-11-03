@@ -29,6 +29,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { stageSuffix, testName } from "../../names.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
@@ -2092,7 +2093,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const suffix = stageSuffix();
           const domainA = `alchemy-circular-url-${suffix}.${circularUrlZone}`;
 
           yield* stack.destroy();
@@ -2451,7 +2452,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const suffix = stageSuffix();
           const domainA = `alchemy-worker-a-${suffix}.${customDomainZone}`;
           const domainB = `alchemy-worker-b-${suffix}.${customDomainZone}`;
 
@@ -3094,7 +3095,7 @@ export default {
           // props — `getCompatibility` (via `isPythonMain`) must tolerate it.
           // The entry module only exists after the build command runs, so the
           // Worker cannot know its `main` path until `build.outdir` resolves.
-          const marker = "alchemy-output-main-e2e-ok-7c31";
+          const marker = testName("alchemy-output-main-e2e-ok-7c31");
           const tempDir = yield* fs.makeTempDirectory({ prefix: "alchemy-output-main-" });
           yield* fs.writeFileString(
             path.join(tempDir, "worker.src.mjs"),

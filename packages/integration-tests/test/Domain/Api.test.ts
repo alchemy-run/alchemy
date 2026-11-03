@@ -79,7 +79,7 @@ class CloseApi extends Domain.Api("CloseApi", {
 const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
   api.commands.map((command) => command.tag);
 
-describe("Domain Api", () => {
+describe("Domain Api", { tags: ["unit", "local"] }, () => {
   it.effect("a concrete Api is an Api.Any", () =>
     Effect.sync(() => {
       const any: Domain.Api.Any = BankApi;
@@ -146,13 +146,29 @@ describe("Domain Api", () => {
     ),
   );
 
-  it.effect("an Api serves every command, view and stream it does not list", () =>
+  it.effect("an Api serves everything of a kind it does not list", () =>
     Effect.sync(() => {
       class Everything extends Domain.Api("Everything", { model: Bank }) {}
       expect(Bank.commands).toEqual([Deposit, Withdraw, Close]);
       expect(Everything.commands).toEqual([Deposit, Withdraw, Close]);
-      // Aggregates are read directly only when listed.
-      expect(Everything.serves).toEqual([Deposit, Withdraw, Close]);
+      expect(Everything.serves).toEqual([Deposit, Withdraw, Close, Account]);
+    }),
+  );
+
+  it.effect("by default an Api serves only the aggregates that declare read", () =>
+    Effect.sync(() => {
+      // Vault declares no `read`, so the Api serves its commands and not its state.
+      class VaultsApi extends Domain.Api("VaultsApi", { model: Vaults }) {}
+      expect(VaultsApi.serves).toEqual([Store]);
+    }),
+  );
+
+  it.effect("naming an aggregate without read is a type error", () =>
+    Effect.sync(() => {
+      // @ts-expect-error Vault declares no `read`, so it is not a name `aggregates` takes.
+      Domain.Api("VaultReads", { model: Vaults, aggregates: ["Vault"] });
+      // Account declares one.
+      Domain.Api("AccountReads", { model: Bank, aggregates: ["Account"] });
     }),
   );
 
@@ -232,10 +248,12 @@ class Vault extends Domain.Aggregate("Vault", {
 }) {}
 class Vaults extends Domain.Model("Vaults", { aggregates: [Vault] }) {}
 class VaultApi extends Domain.Api("VaultApi", { model: Vaults, commands: ["Store"] }) {}
-// Vault declares no `read`, so its state is not for clients.
+// Vault declares no `read`, so its state is not for clients: naming it is a
+// type error, and serving it anyway dies.
+// @ts-expect-error Vault declares no `read`, so it is not a name `aggregates` takes.
 class VaultStateApi extends Domain.Api("VaultStateApi", { model: Vaults, aggregates: ["Vault"] }) {}
 
-describe("Domain Rejection", () => {
+describe("Domain Rejection", { tags: ["unit", "local"] }, () => {
   it.live("a command rejects with any tagged error class, and the client gets it typed", () =>
     Effect.gen(function* () {
       const vaults = yield* VaultApi.clientInProcess;
@@ -338,7 +356,7 @@ class NotesApi extends Domain.Api("NotesApi", {
 
 const World = Notes.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
 
-describe("Domain Api in process", () => {
+describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
   it.live("clientInProcess calls an Api in process, through every entry's middleware", () =>
     Effect.gen(function* () {
       const notes = yield* NotesApi.clientInProcess;
@@ -409,7 +427,7 @@ describe("Domain Api in process", () => {
   );
 });
 
-describe("Domain Api exposing an aggregate", () => {
+describe("Domain Api exposing an aggregate", { tags: ["unit", "local"] }, () => {
   it.live("an aggregate without a read contract is never served", () =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(VaultStateApi.clientInProcess);

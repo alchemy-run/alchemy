@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -25,7 +26,7 @@ test.provider(
 
       const rule = yield* stack.deploy(
         Cloudflare.Gateway.Rule("ListRule", {
-          name: "alchemy-zt-rule-list",
+          name: testName("alchemy-zt-rule-list"),
           action: "block",
           filters: ["dns"],
           traffic: 'any(dns.domains[*] == "list-test.alchemy-test.example")',
@@ -45,7 +46,7 @@ test.provider(
       expect(found).toBeDefined();
       expect(found?.accountId).toEqual(accountId);
       expect(found?.action).toEqual("block");
-      expect(found?.name).toEqual("alchemy-zt-rule-list");
+      expect(found?.name).toEqual(testName("alchemy-zt-rule-list"));
 
       yield* stack.destroy();
     }).pipe(logLevel),

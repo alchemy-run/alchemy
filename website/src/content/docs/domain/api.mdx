@@ -122,7 +122,7 @@ export class BankApi extends Domain.Api("BankApi", {
 }) {}
 ```
 
-`model` is the model the Api is over. `commands`, `views`, `streams` and `aggregates` name what of it a client may reach, and naming something the model doesn't hold is a type error. A kind you leave out is served whole, so `Domain.Api("BankApi", { model: Bank })` serves every command, view and stream. `[]` serves none of a kind. Aggregates are read directly only when you name them.
+`model` is the model the Api is over. `commands`, `views`, `streams` and `aggregates` name what of it a client may reach, and naming something the model doesn't hold is a type error. A kind you leave out is served whole, so `Domain.Api("BankApi", { model: Bank })` serves every command, view and stream, and every aggregate that declares `read`. `[]` serves none of a kind, and naming an aggregate without `read` is a type error.
 
 Leaving something out is how you keep it internal. `OpenAccount` isn't listed, because only the `MainAccountProvisioning` policy opens accounts. No client can send it, however it's built.
 
@@ -136,6 +136,7 @@ export class SupportApi extends Domain.Api("SupportApi", {
   commands: ["FreezeAccount", "ChangeOwner", "ApproveTransfer"],
   views: ["AccountSummary", "AccountActivity"],
   streams: [],
+  aggregates: [],
 }) {}
 ```
 
@@ -295,10 +296,6 @@ The caller's `decide` and `validate` read the `CurrentActor` the trusted Layer p
 
 Tests use the same client. To test an Api end to end, including its middleware and every rejection, see [Testing an Api](/domain/testing-apis).
 
-To serve every call as a plain HTTP JSON API with an OpenAPI document, see [Plain HTTP and OpenAPI](/domain/http-api).
-
-To give an agent the Api's calls as tools, in the app or over MCP, see [MCP](/domain/mcp).
-
-To run the Api's calls from a terminal, see [CLI](/domain/cli).
+For internal tools, three conveniences publish the calls you list as they are: a plain HTTP JSON API with an OpenAPI document ([Plain HTTP and OpenAPI](/domain/http-api)), tools for an agent ([MCP](/domain/mcp)), and a command line ([CLI](/domain/cli)). A public or partner API is your own `HttpApi` that calls the Api in process, as in [Shape a public API](/domain/http-api#shape-a-public-api).
 
 Next, [Story](/domain/story): how to state each rule as an example, and run it.

@@ -7,7 +7,9 @@
  */
 export const lookupConfigName = (suite: "live" | "local") =>
   `alchemy-test-hd-lookup-${suite}-${(
-    (typeof process === "undefined" ? undefined : process.env.USER) ?? "ci"
+    (typeof process === "undefined"
+      ? undefined
+      : (process.env.ALCHEMY_TEST_STAGE ?? process.env.USER)) ?? "ci"
   )
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")}`;
