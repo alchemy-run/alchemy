@@ -49,8 +49,8 @@ export interface WorkflowProps extends PlatformProps {
 export interface WorkflowAttributes {
   /** The workflow's name. */
   workflow: string;
-  /** The shard group of the runners that host it. */
-  runners: string | undefined;
+  /** The shard group of the pool that hosts it. */
+  pool: string | undefined;
   /** The gateway URL callers start and read runs through. */
   gateway: string | undefined;
   /** The token callers present to the gateway. */
@@ -142,7 +142,7 @@ export type WorkflowTag<Self, W extends AnyWorkflow> = Effect.Effect<
     of<Handler extends WorkflowHandler<W>>(handler: Handler): Handler;
     /**
      * The workflow's implementation, as a Layer: an Effect that resolves
-     * bindings once per runner and returns the handler. Provide a runners
+     * bindings once per runner and returns the handler. Provide a pool
      * Layer to `impl` to deploy it; provide the returned Layer to the Stack.
      */
     make<InitReq = never>(
@@ -187,7 +187,7 @@ export interface WorkflowClass {
  * Declare it like Effect's `Workflow.make`, from a name and its schemas. The
  * declaration is the tag callers import; `.make(props, impl)` is its
  * implementation, as a Layer: an Effect that resolves bindings once per
- * runner and returns the handler, typed by `.of`. Providing a runners Layer
+ * runner and returns the handler, typed by `.of`. Providing a pool Layer
  * to the implementation is what deploys it.
  *
  * `yield* PlaceOrder` from any runtime returns its client: `start` a run,
@@ -205,7 +205,7 @@ export interface WorkflowClass {
  * ```
  *
  * ### Implementing a workflow
- * **Example:** Its implementation, deployed to runners
+ * **Example:** Its implementation, deployed to a pool
  * ```typescript
  * // src/PlaceOrderLive.ts
  * export default PlaceOrder.make(
@@ -247,7 +247,7 @@ export const Workflow: WorkflowClass = (() =>
   (name: string, options: Parameters<typeof EffectWorkflow.make>[1]) => {
     const workflow = EffectWorkflow.make(name, options) as AnyWorkflow;
     const id = resourceId(name);
-    placeInRunnersGroup(workflow, id);
+    placeInShardGroup(workflow, id);
     workflows.set(id, workflow);
     const tag = (platform as any)()(id);
     declarations.set(name, tag);
@@ -275,7 +275,7 @@ export const Workflow: WorkflowClass = (() =>
   }) as unknown as WorkflowClass;
 
 /**
- * Bind the gateway of the runners that host `name` into the current
+ * Bind the gateway of the pool that hosts `name` into the current
  * runtime: from its resource while deploying, from the environment at
  * runtime. Undefined outside any runtime.
  */
@@ -323,7 +323,7 @@ const unrouted = (name: string, inRuntime: boolean) =>
         }),
   );
 
-/** `yield* PlaceOrder`: its client, over the gateway of the runners that host it. */
+/** `yield* PlaceOrder`: its client, over the gateway of the pool that hosts it. */
 const clientOf = (workflow: AnyWorkflow, declaration: Effect.Effect<ClusterWorkflow, never, any>) =>
   Effect.gen(function* () {
     const target = yield* routeOf(workflow._tag, declaration);
@@ -344,11 +344,11 @@ const clientOf = (workflow: AnyWorkflow, declaration: Effect.Effect<ClusterWorkf
   });
 
 /**
- * Place a workflow in its runners' shard group, read when a run is routed:
- * the runners that host it have the group in their environment, so a child
+ * Place a workflow in its pool's shard group, read when a run is routed:
+ * the pool that hosts it has the group in their environment, so a child
  * run started on any of them reaches them.
  */
-const placeInRunnersGroup = (workflow: EffectWorkflow.Any, id: string) => {
+const placeInShardGroup = (workflow: EffectWorkflow.Any, id: string) => {
   const key = shardGroupKey(id);
   const self = workflow as unknown as { annotations: Context.Context<never> };
   self.annotations = Context.add(
@@ -376,7 +376,7 @@ export class WorkflowNotHosted extends Data.TaggedError("Cluster.WorkflowNotHost
 /**
  * Run `Cluster.Workflow`s through Alchemy's engine-neutral
  * `Workflows.RunWorkflow`: a `WorkflowEngine` that reaches each workflow
- * through the gateway of the runners that host it. Use it for code that
+ * through the gateway of the pool that hosts it. Use it for code that
  * runs the same workflow on any engine; otherwise `yield*` the workflow.
  *
  * ### Running workflows on any engine
@@ -435,12 +435,12 @@ export const WorkflowProvider = () =>
       Effect.sync(() => {
         const attrs: WorkflowAttributes = {
           workflow: id.replace(/Workflow$/, ""),
-          runners: undefined,
+          pool: undefined,
           gateway: undefined,
           token: undefined,
         };
         for (const { data } of bindings) {
-          attrs.runners = data.runners ?? attrs.runners;
+          attrs.pool = data.pool ?? attrs.pool;
           attrs.gateway = data.gateway ?? attrs.gateway;
           attrs.token = data.token ?? attrs.token;
         }

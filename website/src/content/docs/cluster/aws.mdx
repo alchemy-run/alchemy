@@ -3,7 +3,7 @@ title: AWS
 description: Run an Effect Cluster's database on RDS and its runners on ECS Fargate, called from Lambda or anywhere through a load balancer.
 ---
 
-Host your cluster in your AWS account: Postgres runs on RDS, in a VPC of its own, and runners run on ECS Fargate in the same VPC. A load balancer serves each set of runners' gateway, so a Lambda function, a container or a Worker calls the rooms by id.
+Host your cluster in your AWS account: Postgres runs on RDS, in a VPC of its own, and runners run on ECS Fargate in the same VPC. A load balancer serves each pool's gateway, so a Lambda function, a container or a Worker calls the rooms by id.
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterAWS.Database("Cluster");
 
-export const Default = ClusterAWS.EcsRunners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 ```
@@ -34,9 +34,9 @@ export const Database = ClusterAWS.Database("Cluster", {
 
 A new RDS instance takes 10 to 15 minutes to create.
 
-## The runners
+## The pool
 
-`EcsRunners` runs the runners as an ECS service on Fargate, in the database's VPC:
+`EcsPool` runs the pool as an ECS service on Fargate, in the database's VPC:
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
@@ -44,7 +44,7 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterAWS.Database("Cluster");
 
-export const Default = ClusterAWS.EcsRunners("Default", {
+export const Default = ClusterAWS.EcsPool("Default", {
   replicas: 3,
   cpu: 1024,
   memory: 2048,
@@ -52,7 +52,7 @@ export const Default = ClusterAWS.EcsRunners("Default", {
 }).pipe(Layer.provide(Database));
 ```
 
-Each set gets an internet-facing Application Load Balancer in front of its gateway. The runners only take gateway traffic from it, and the gateway checks every call's token.
+Each pool gets an internet-facing Application Load Balancer in front of its gateway. The runners only take gateway traffic from it, and the gateway checks every call's token.
 
 ## Call it from a Lambda
 
@@ -77,4 +77,4 @@ export default class Api extends Lambda.Function<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [Database](/providers/cluster/aws#database) and [EcsRunners](/providers/cluster/aws#ecsrunners).
+Every option, with its default, is in the reference: [Database](/providers/cluster/aws#database) and [EcsPool](/providers/cluster/aws#ecspool).

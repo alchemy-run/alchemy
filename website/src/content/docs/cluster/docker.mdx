@@ -3,7 +3,7 @@ title: Docker
 description: Run an Effect Cluster's database and runners on a Docker swarm, on your machine or a server.
 ---
 
-Run the whole cluster on Docker: Postgres and the runners are swarm services on one overlay network. Use it on your machine, or on a server you run.
+Run the whole cluster on Docker: Postgres and the pool are swarm services on one overlay network. Use it on your machine, or on a server you run.
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
 
-export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 ```
@@ -28,13 +28,13 @@ import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 export const Database = ClusterDocker.Database("Cluster", { port: 5433 });
 ```
 
-## The runners
+## The pool
 
-`ClusterDocker.Runners` runs a swarm service with `replicas` tasks. Each finds its own address among the service's tasks, and they talk on the overlay network.
+`ClusterDocker.SwarmPool` runs a swarm service with `replicas` tasks. Each finds its own address among the service's tasks, and they talk on the overlay network.
 
 ## Call it from a container
 
-Services on the database's network reach the gateway by the runners' name:
+Services on the database's network reach the gateway by the pool's name:
 
 ```typescript title="src/Api.ts"
 import * as Cluster from "@alchemy.run/effect-cluster";
@@ -67,6 +67,6 @@ export default class Api extends Docker.Service<Api>()(
 ) {}
 ```
 
-To call it from your machine instead, publish the gateway with `gatewayPort` on the runners.
+To call it from your machine instead, publish the gateway with `gatewayPort` on the pool.
 
-Every option, with its default, is in the reference: [Database](/providers/cluster/docker#database) and [Runners](/providers/cluster/docker#runners).
+Every option, with its default, is in the reference: [Database](/providers/cluster/docker#database) and [SwarmPool](/providers/cluster/docker#swarmpool).

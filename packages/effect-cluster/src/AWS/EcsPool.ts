@@ -2,11 +2,7 @@ import * as ECS from "@alchemy.run/aws/ECS";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { GATEWAY_PORT, RUNNER_PORT } from "../internal/Gateway.ts";
-import {
-  makeRunnersLayer,
-  RUNNER_DOCKERFILE,
-  type RunnersSettings,
-} from "../internal/RunnersHost.ts";
+import { makePoolLayer, RUNNER_DOCKERFILE, type PoolSettings } from "../internal/PoolHost.ts";
 
 /** Where AWS publishes the certificate authorities of every RDS region. */
 const RDS_CA_BUNDLE = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
@@ -19,7 +15,7 @@ ENV NODE_EXTRA_CA_CERTS=/etc/ssl/rds-ca.pem`,
 );
 import { awsNetworkOf, makeAwsGateway } from "./internal/Gateway.ts";
 
-export interface EcsRunnersOptions extends RunnersSettings {
+export interface EcsPoolOptions extends PoolSettings {
   /**
    * Number of runners.
    * @default 2
@@ -36,7 +32,7 @@ export interface EcsRunnersOptions extends RunnersSettings {
    */
   memory?: number;
   /**
-   * CPU architecture of the runners. The image is built for it on the
+   * CPU architecture of the pool. The image is built for it on the
    * deploying machine.
    * @default "X86_64"
    */
@@ -44,8 +40,8 @@ export interface EcsRunnersOptions extends RunnersSettings {
 }
 
 /**
- * Run an Effect Cluster's runners on ECS Fargate: an ECS service whose tasks
- * host every class given these runners, in the database's VPC, behind a
+ * Run a pool of Effect Cluster runners on ECS Fargate: an ECS service whose tasks
+ * host every class given this pool, in the database's VPC, behind a
  * load balancer that serves their gateway to callers anywhere. Requires a
  * database in an AWS VPC — `ClusterAWS.Database`.
  *
@@ -57,14 +53,14 @@ export interface EcsRunnersOptions extends RunnersSettings {
  * **Example:** Two runners on Fargate
  * ```typescript
  * export const Database = ClusterAWS.Database("Cluster");
- * export const Default = ClusterAWS.EcsRunners("Default", { replicas: 2 }).pipe(
+ * export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Database),
  * );
  * ```
  *
  * **Example:** Larger Graviton runners
  * ```typescript
- * export const Default = ClusterAWS.EcsRunners("Default", {
+ * export const Default = ClusterAWS.EcsPool("Default", {
  *   cpu: 2048,
  *   memory: 4096,
  *   architecture: "ARM64",
@@ -73,9 +69,9 @@ export interface EcsRunnersOptions extends RunnersSettings {
  *
  * @primitive
  */
-export const EcsRunners = (id: string, options: EcsRunnersOptions = {}) =>
-  makeRunnersLayer({
-    label: "ClusterAWS.EcsRunners",
+export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
+  makePoolLayer({
+    label: "ClusterAWS.EcsPool",
     id,
     settings: options,
     expected: "an AWS VPC (ClusterAWS.Database)",
@@ -87,7 +83,7 @@ export const EcsRunners = (id: string, options: EcsRunnersOptions = {}) =>
     nodes: ({ network, gateway, program, environment }) =>
       Effect.gen(function* () {
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
-        yield* ECS.Service(`${id}Runners`, {
+        yield* ECS.Service(`${id}Pool`, {
           cluster,
           context: program.pipe(Output.map((p) => p.dir)) as unknown as string,
           // Other runners reach the runner port; the load balancer, the gateway.

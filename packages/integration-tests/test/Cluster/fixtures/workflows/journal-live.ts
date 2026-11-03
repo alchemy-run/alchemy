@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import { Journal } from "./journal.ts";
 
-export const journalLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const journalLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Journal.make(
     { main, maxIdleTime: "10 minutes" },
     Effect.gen(function* () {
@@ -14,5 +14,5 @@ export const journalLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =
           List: () => Ref.get(entries),
         });
       });
-    }).pipe(Effect.provide(runners)),
+    }).pipe(Effect.provide(pool)),
   );

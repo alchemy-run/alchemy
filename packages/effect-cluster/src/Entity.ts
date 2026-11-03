@@ -32,7 +32,7 @@ import type { Rpc, RpcClient, RpcClientError, RpcGroup } from "effect/rpc";
 import type { Scope } from "effect/Scope";
 import { bindRoute, makeNamespace } from "./internal/Gateway.ts";
 import { type HostedRuntimeContext, makeHostedRuntimeContext } from "./internal/HostedRuntime.ts";
-import { RunnersHost } from "./internal/RunnersHostService.ts";
+import { PoolHost } from "./internal/PoolHostService.ts";
 import type { Providers } from "./Providers.ts";
 
 export const EntityTypeId = "Cluster.Entity";
@@ -60,17 +60,17 @@ export interface EntityProps extends PlatformProps {
 export interface EntityAttributes {
   /** The entity type: the class's logical id. */
   type: string;
-  /** The shard group of the runners that host it. */
-  runners: string | undefined;
+  /** The shard group of the pool that hosts it. */
+  pool: string | undefined;
   /** The gateway URL callers send requests to. */
   gateway: string | undefined;
   /** The token callers present to the gateway. */
   token: Redacted.Redacted<string> | undefined;
 }
 
-/** Data a runners Layer binds onto the entities it hosts. */
+/** Data a pool Layer binds onto the entities it hosts. */
 export interface EntityBindingContract {
-  runners?: string;
+  pool?: string;
   gateway?: string;
   token?: Redacted.Redacted<string>;
 }
@@ -152,8 +152,8 @@ export type EntityTag<Self, Type extends string, Rpcs extends Rpc.Any> = Effect.
     /** Type an instance's handlers against the entity's RPCs, as Effect Cluster's `Entity.of`. */
     of<Handlers extends EffectEntity.HandlersFrom<Rpcs>>(handlers: Handlers): Handlers;
     /**
-     * The entity's implementation, as a Layer. Provide a runners Layer to
-     * `impl` to deploy it, with its RPCs' middleware provided to the runners;
+     * The entity's implementation, as a Layer. Provide a pool Layer to
+     * `impl` to deploy it, with its RPCs' middleware provided to the pool;
      * then provide the returned Layer to the Stack.
      */
     make<InitReq = never>(
@@ -174,7 +174,7 @@ export interface ExternalEntityProps {
   /**
    * Your existing Effect Cluster program, relative to where the deploy
    * runs: one that launches its entities on `NodeClusterHttp` with HTTP
-   * transport and SQL storage. It is bundled into the runners and run as
+   * transport and SQL storage. It is bundled into the pool and run as
    * its own process on every runner, with `HOST`, `PORT` and `DATABASE_URL` set.
    */
   program: string;
@@ -184,12 +184,12 @@ export interface ExternalEntityProps {
 export interface EntityClass {
   /**
    * An external entity: an existing Effect Cluster program, run as it is.
-   * Provide a runners Layer to deploy it.
+   * Provide a pool Layer to deploy it.
    */
   <const Type extends string, Rpcs extends Rpc.Any>(
     entity: EffectEntity.Entity<Type, Rpcs>,
     props: ExternalEntityProps,
-  ): Effect.Effect<EntityNamespace<Rpcs>, never, RunnersHost | Providers> & {
+  ): Effect.Effect<EntityNamespace<Rpcs>, never, PoolHost | Providers> & {
     readonly entity: EffectEntity.Entity<Type, Rpcs>;
   };
   // `Self` names the class (`extends Cluster.Entity<Counter>()`).
@@ -241,7 +241,7 @@ const createRuntimeContext = makeHostedRuntimeContext<HostedEntity>(
     context,
     options: { maxIdleTime: props?.maxIdleTime, concurrency: props?.concurrency },
   }),
-  // Every RPC's middleware must reach the runners with the entity.
+  // Every RPC's middleware must reach the pool with the entity.
   (id, context) => {
     const missing = [...entities.get(id)!.protocol.requests.values()].flatMap((rpc) =>
       [...(rpc as unknown as Rpc.AnyWithProps).middlewares]
@@ -254,13 +254,13 @@ const createRuntimeContext = makeHostedRuntimeContext<HostedEntity>(
           new EntityMiddlewareMissing({
             message:
               `Cluster.Entity '${id}' is missing RPC middleware (${missing.join(", ")}). ` +
-              `Provide its Layer with the runners: Effect.provide(Default.pipe(Layer.provide(AuthLive))).`,
+              `Provide its Layer with the pool: Effect.provide(Default.pipe(Layer.provide(AuthLive))).`,
           }),
         );
   },
 );
 
-/** An entity's RPC uses middleware nothing provided to its runners. */
+/** An entity's RPC uses middleware nothing provided to its pool. */
 export class EntityMiddlewareMissing extends Data.TaggedError("Cluster.EntityMiddlewareMissing")<{
   readonly message: string;
 }> {}
@@ -290,15 +290,15 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  * The implementation has two phases. The outer Effect runs once per runner
  * and resolves bindings. The inner Effect runs once per instance, on its
  * first message, and returns its handlers, typed by `.of`. Providing a
- * runners Layer to the implementation, such as
- * `ClusterDocker.Runners("Default")`, is what deploys it.
+ * pool Layer to the implementation, such as
+ * `ClusterDocker.SwarmPool("Default")`, is what deploys it.
  *
  * `yield* Counter` from any runtime returns the entity's namespace, like a
  * Durable Object's: `getByName(entityId)` returns a client with the same
  * shape as Effect Cluster's `Entity.client(entityId)`. Inside the cluster,
  * calls go through Effect Cluster directly; elsewhere they go through the
- * runners' gateway over HTTP, so callers need no database access and no
- * route to the runners.
+ * pool's gateway over HTTP, so callers need no database access and no
+ * route to the pool.
  *
  * ### Declaring an entity
  * **Example:** A counter's declaration, which callers import
@@ -320,7 +320,7 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  * ```
  *
  * ### Implementing an entity
- * **Example:** The counter's implementation, deployed to runners
+ * **Example:** The counter's implementation, deployed to a pool
  * ```typescript
  * // src/CounterLive.ts
  * export default Counter.make(
@@ -336,7 +336,7 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  * );
  * ```
  *
- * **Example:** Middleware, provided with the runners
+ * **Example:** Middleware, provided with the pool
  * ```typescript
  * export const Increment = Rpc.make("Increment", {
  *   payload: { amount: Schema.Int },
@@ -390,7 +390,7 @@ export const Entity: EntityClass = ((...outer: ReadonlyArray<unknown>) =>
   outer.length > 0
     ? external(outer[0] as AnyEntity, outer[1] as ExternalEntityProps)
     : (typeOrEntity: string | AnyEntity, rpcs?: ReadonlyArray<Rpc.Any>) => {
-        const entity = placedInRunnersGroup(
+        const entity = placedInShardGroup(
           typeof typeOrEntity === "string" ? EffectEntity.make(typeOrEntity, rpcs!) : typeOrEntity,
         );
         entities.set(entity.type, entity);
@@ -404,16 +404,16 @@ export const Entity: EntityClass = ((...outer: ReadonlyArray<unknown>) =>
 
 type AnyEntity = EffectEntity.Entity<string, Rpc.Any>;
 
-/** The environment key holding the shard group an entity's runners serve. @internal */
+/** The environment key holding the shard group an entity's pool serves. @internal */
 export const shardGroupKey = (type: string) => sanitizeKey(`CLUSTER_${type}_SHARD_GROUP`);
 
 /**
- * Place an entity in its runners' shard group, read when a message is
- * routed: its runners, and every runtime that yields the class, have it in
+ * Place an entity in its pool's shard group, read when a message is
+ * routed: its pool, and every runtime that yields the class, have it in
  * their environment. Effect Cluster's own client (`Counter.entity.client`)
- * then routes to the right runners too.
+ * then routes to the right pool too.
  */
-const placedInRunnersGroup = (entity: AnyEntity) => {
+const placedInShardGroup = (entity: AnyEntity) => {
   const key = shardGroupKey(entity.type);
   return entity.annotate(
     ClusterSchema.ShardGroup,
@@ -425,8 +425,8 @@ const placedInRunnersGroup = (entity: AnyEntity) => {
 };
 
 /**
- * An external entity: declare its resource, then have the runners it was
- * given run its program. The runners Layer is what provides `RunnersHost`.
+ * An external entity: declare its resource, then have the pool it was
+ * given run its program. The pool Layer is what provides `PoolHost`.
  */
 const external = (entity: AnyEntity, props: ExternalEntityProps) => {
   entities.set(entity.type, entity);
@@ -435,7 +435,7 @@ const external = (entity: AnyEntity, props: ExternalEntityProps) => {
       main: props.main,
     }) as Effect.Effect<Entity, never, Providers>;
     if (globalThis.__ALCHEMY_RUNTIME__) return resource;
-    const host = yield* RunnersHost;
+    const host = yield* PoolHost;
     yield* host.deployExternal({
       type: entity.type,
       main: yield* Effect.sync(() => nodePath.resolve(props.main)),
@@ -473,7 +473,7 @@ const declare = (entity: AnyEntity, declaration: any, members: object) =>
 const clientOf = (entity: AnyEntity, declaration: Effect.Effect<Entity, never, any>) =>
   Effect.gen(function* () {
     // Built on a memo map of its own: a class built inside another's phase
-    // would otherwise reuse the caller's already-built runners Layer.
+    // would otherwise reuse the caller's already-built pool Layer.
     const resource = globalThis.__ALCHEMY_RUNTIME__
       ? undefined
       : yield* declaration.pipe(
@@ -490,8 +490,8 @@ const clientOf = (entity: AnyEntity, declaration: Effect.Effect<Entity, never, a
         )
         .pipe(Effect.flatMap((bound) => ctx.get<T>(bound)));
     const url = (yield* bind<string>("GATEWAY", resource?.gateway)) ?? "";
-    // The runners' shard group, for Effect Cluster's own client (`.entity.client`).
-    yield* bind<string>("SHARD_GROUP", resource?.runners);
+    // The pool's shard group, for Effect Cluster's own client (`.entity.client`).
+    yield* bind<string>("SHARD_GROUP", resource?.pool);
     const token = yield* bind<Redacted.Redacted<string> | string>("TOKEN", resource?.token);
     // A Worker calling a gateway Worker reaches it through a service binding.
     const service = sanitizeKey(`CLUSTER_${entity.type}_SERVICE`);
@@ -519,12 +519,12 @@ export const EntityProvider = () =>
       Effect.sync(() => {
         const attrs: EntityAttributes = {
           type: id,
-          runners: undefined,
+          pool: undefined,
           gateway: undefined,
           token: undefined,
         };
         for (const { data } of bindings) {
-          attrs.runners = data.runners ?? attrs.runners;
+          attrs.pool = data.pool ?? attrs.pool;
           attrs.gateway = data.gateway ?? attrs.gateway;
           attrs.token = data.token ?? attrs.token;
         }

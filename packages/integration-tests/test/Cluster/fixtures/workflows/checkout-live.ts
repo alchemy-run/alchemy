@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
 import { Checkout, Declined, Recorder } from "./workflows.ts";
 
-export const checkoutLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const checkoutLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Checkout.make(
     { main },
     Effect.gen(function* () {
@@ -28,5 +28,5 @@ export const checkoutLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) 
           });
         }),
       );
-    }).pipe(Effect.provide(runners)),
+    }).pipe(Effect.provide(pool)),
   );

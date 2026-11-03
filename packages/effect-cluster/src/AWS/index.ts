@@ -3,4 +3,4 @@
  * on AWS. Requires `@alchemy.run/aws`.
  */
 export * from "./Database.ts";
-export * from "./EcsRunners.ts";
+export * from "./EcsPool.ts";

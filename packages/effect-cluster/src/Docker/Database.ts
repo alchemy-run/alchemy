@@ -32,7 +32,7 @@ export interface DatabaseProps {
 /**
  * The database an Effect Cluster coordinates through, on a Docker swarm, as
  * an `Cluster.Database` Layer: Postgres as a one-replica swarm service
- * with its data on a named volume, on an overlay network the runners join.
+ * with its data on a named volume, on an overlay network the pool's runners join.
  * The Docker engine must be in swarm mode (`docker swarm init`).
  *
  * One Postgres on one disk is meant for development and tests.

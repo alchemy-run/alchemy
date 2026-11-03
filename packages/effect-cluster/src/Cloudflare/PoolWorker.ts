@@ -1,10 +1,10 @@
 /**
- * The Worker a `ClusterCloudflare.Runners` Layer deploys. While deploying it
+ * The Worker a `ClusterCloudflare.DurableObjectPool` Layer deploys. While deploying it
  * declares the Durable Object classes every cluster uses; inside the
- * deployed Worker it also builds each class the runners host, registers
+ * deployed Worker it also builds each class the pool hosts, registers
  * them for those objects, and serves the gateway callers reach them through.
  *
- * The runners Layer declares it, and the entry module it generates for the
+ * The pool Layer declares it, and the entry module it generates for the
  * Worker's bundle default-exports it with the hosted classes imported.
  *
  * @internal
@@ -28,7 +28,7 @@ import type { Workflow as EffectWorkflow } from "effect/workflow";
 import type { HostedCron } from "../Cron.ts";
 import { type HostedEntity, PlatformDeclaration } from "../Entity.ts";
 import { authorized, gatewayServer } from "../internal/Gateway.ts";
-import { HasNoRunners, type HostedRuntimeContext } from "../internal/HostedRuntime.ts";
+import { HasNoPool, type HostedRuntimeContext } from "../internal/HostedRuntime.ts";
 import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
 import {
@@ -67,7 +67,7 @@ const buildHosted = (definitions: ReadonlyArray<HostedDefinition>, scope: Scope.
       const built = runtime.hosted();
       if (built === undefined) {
         return yield* Effect.die(
-          new HasNoRunners({
+          new HasNoPool({
             message: `${runtime.Type} '${runtime.id}' did not finish its Construction phase.`,
           }),
         );
@@ -88,11 +88,11 @@ const wakeScheduled = (objects: {
   );
 
 /**
- * The runners Worker `id`. `definitions` are the classes it hosts, which
+ * The pool's Worker `id`. `definitions` are the classes it hosts, which
  * only the deployed Worker builds; `props` are its props, which only the
  * deploy reads.
  */
-export const runnersWorker = (
+export const poolWorker = (
   id: string,
   props: InputProps<Cloudflare.WorkerProps> | undefined,
   definitions: ReadonlyArray<HostedDefinition>,
@@ -113,14 +113,12 @@ export const runnersWorker = (
       // A class that fails to build fails every call, with its cause in the
       // Worker's logs rather than in a response anyone can read.
       return yield* serve(definitions, entities, scheduled, workflows).pipe(
-        Effect.tapCause((cause) =>
-          Effect.logError("Effect Cluster runners failed to start", cause),
-        ),
+        Effect.tapCause((cause) => Effect.logError("Effect Cluster pool failed to start", cause)),
         Effect.catchCause(() =>
           Effect.succeed({
             fetch: Effect.succeed(
               HttpServerResponse.text(
-                "Effect Cluster runners failed to start; see the Worker's logs.",
+                "Effect Cluster pool failed to start; see the Worker's logs.",
                 {
                   status: 503,
                 },

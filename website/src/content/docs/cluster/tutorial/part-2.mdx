@@ -1,6 +1,6 @@
 ---
 title: "Part 2: Signed-In Members"
-description: Add Effect RPC middleware so a room only lets signed-in users join, and provide it with the runners.
+description: Add Effect RPC middleware so a room only lets signed-in users join, and provide it with the pool.
 sidebar:
   order: 2
 ---
@@ -130,7 +130,7 @@ import { Room } from "./Room.ts";
 );
 ```
 
-`AuthLive` is provided with the runners, which carry it to the room on every runner. Leave it out and the deploy fails, naming the RPC that needs it.
+`AuthLive` is provided with the pool, which carries it to the room on every runner. Leave it out and the deploy fails, naming the RPC that needs it.
 
 ## Pass the token from the API
 

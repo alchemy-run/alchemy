@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
 import { Greet, Recorder } from "./workflows.ts";
 
-export const greetLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const greetLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Greet.make(
     { main },
     Effect.gen(function* () {
@@ -20,5 +20,5 @@ export const greetLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
           return greeting;
         }),
       );
-    }).pipe(Effect.provide(runners)),
+    }).pipe(Effect.provide(pool)),
   );

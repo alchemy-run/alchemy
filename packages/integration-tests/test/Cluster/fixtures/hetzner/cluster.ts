@@ -4,11 +4,11 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterHetzner.Database("Cluster");
 
-export const Default = ClusterHetzner.Runners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterHetzner.ServerPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 
-/** Runners of their own for the external program. */
-export const Legacy = ClusterHetzner.Runners("Legacy", { replicas: 1 }).pipe(
+/** A pool of its own for the external program. */
+export const Legacy = ClusterHetzner.ServerPool("Legacy", { replicas: 1 }).pipe(
   Layer.provide(Database),
 );

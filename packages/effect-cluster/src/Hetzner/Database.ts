@@ -69,7 +69,7 @@ docker run -d --name postgres --restart always --network host \\
 /**
  * The database an Effect Cluster coordinates through, on Hetzner Cloud, as
  * a `Cluster.Database` Layer: Postgres on a Server with a Volume, on a
- * private Network that the runners attach to. A firewall drops every
+ * private Network that the pool's Servers attach to. A firewall drops every
  * inbound connection on the Server's public address; runners reach it
  * over the Network.
  *

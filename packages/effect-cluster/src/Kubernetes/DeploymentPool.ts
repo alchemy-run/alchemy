@@ -2,9 +2,9 @@ import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { GATEWAY_PORT } from "../internal/Gateway.ts";
-import { makeRunnersLayer, type RunnersSettings } from "../internal/RunnersHost.ts";
+import { makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
 
-export interface RunnersOptions extends RunnersSettings {
+export interface DeploymentPoolOptions extends PoolSettings {
   /**
    * Number of runners.
    * @default 2
@@ -30,8 +30,8 @@ export interface RunnersOptions extends RunnersSettings {
 }
 
 /**
- * Run an Effect Cluster's runners on Kubernetes: a Deployment whose pods
- * host every class given these runners, in the database's cluster and
+ * Run a pool of Effect Cluster runners on Kubernetes: a Deployment whose pods
+ * host every class given this pool, in the database's cluster and
  * namespace. Pods reach each other at their own addresses; the gateway is
  * a Service of the Deployment, at
  * `http://{name}.{namespace}.svc.cluster.local:34500` for callers in the
@@ -42,27 +42,27 @@ export interface RunnersOptions extends RunnersSettings {
  * **Example:** Two runners
  * ```typescript
  * export const Database = ClusterKubernetes.Database("Cluster", { cluster: Kind });
- * export const Default = ClusterKubernetes.Runners("Default", { replicas: 2 }).pipe(
+ * export const Default = ClusterKubernetes.DeploymentPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Database),
  * );
  * ```
  *
  * @primitive
  */
-export const Runners = (id: string, options: RunnersOptions = {}) =>
-  makeRunnersLayer({
-    label: "ClusterKubernetes.Runners",
+export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) =>
+  makePoolLayer({
+    label: "ClusterKubernetes.DeploymentPool",
     id,
     settings: options,
     expected: "a Kubernetes cluster (ClusterKubernetes.Database)",
     network: (database) => (database.network?.kind === "kubernetes" ? database.network : undefined),
-    // The Deployment's Service is named after the runners.
+    // The Deployment's Service is named after the pool.
     gateway: (name, network) =>
       Effect.succeed({
         url: `http://${name}.${network.namespace}.svc.cluster.local:${GATEWAY_PORT}`,
       }),
     nodes: ({ network, name, program, environment }) =>
-      Kubernetes.Deployment(`${id}Runners`, {
+      Kubernetes.Deployment(`${id}Pool`, {
         cluster: network.cluster as Kubernetes.ClusterLike,
         name,
         namespace: network.namespace,

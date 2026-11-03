@@ -1,6 +1,6 @@
 ---
 title: Cloudflare
-description: Run an Effect Cluster's entities, workflows, singletons and crons on Cloudflare Durable Objects, with no database and no runners to manage.
+description: Run an Effect Cluster's entities, workflows, singletons and crons on Cloudflare Durable Objects, with no database and no servers to manage.
 ---
 
 import DAG from "../../../components/DAG.astro";
@@ -10,7 +10,7 @@ Host your cluster on Cloudflare: one Worker runs every class you give it, on Dur
 ```typescript title="src/Cluster.ts"
 import * as ClusterCloudflare from "@alchemy.run/effect-cluster/Cloudflare";
 
-export const Default = ClusterCloudflare.Runners("Default");
+export const Default = ClusterCloudflare.DurableObjectPool("Default");
 ```
 
 Install `@alchemy.run/cloudflare` and finish [Cloudflare setup](/cloudflare/setup). Add its providers next to the cluster's:
@@ -37,7 +37,7 @@ export default Alchemy.Stack(
 );
 ```
 
-Your entities, workflows, singletons and crons don't change. Their implementations take `Default` like they take any runners.
+Your entities, workflows, singletons and crons don't change. Their implementations take `Default` like they take any pool.
 
 ## Each instance is a Durable Object
 
@@ -46,7 +46,7 @@ A Durable Object is already one instance per name, in one place, handling one ev
 <DAG
   nodes={[
     { id: "caller", label: "Callers", type: "Worker, Lambda, container", layer: 0 },
-    { id: "worker", label: "Runners Worker", type: "the gateway", tone: "accent", layer: 1 },
+    { id: "worker", label: "Pool Worker", type: "the gateway", tone: "accent", layer: 1 },
     { id: "lobby", label: "Room lobby", type: "Durable Object", layer: 2 },
     { id: "kitchen", label: "Room kitchen", type: "Durable Object", layer: 2 },
   ]}
@@ -100,7 +100,7 @@ A singleton runs in an object that its alarm checks on every few seconds, restar
 
 ## Call it from a Worker
 
-A Worker can't fetch another Worker's `workers.dev` address in the same account, so a Worker that yields one of your classes gets a service binding to the runners' Worker, and its calls go through that:
+A Worker can't fetch another Worker's `workers.dev` address in the same account, so a Worker that yields one of your classes gets a service binding to the pool's Worker, and its calls go through that:
 
 ```typescript title="src/Api.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
@@ -127,6 +127,6 @@ Callers on any other runtime, like a Lambda function or a container, use the Wor
 
 ## What doesn't run on Cloudflare
 
-An [existing Effect Cluster program](/cluster/existing-programs) needs Node: give it runners on another host. Shard groups don't apply, because there are no shards.
+An [existing Effect Cluster program](/cluster/existing-programs) needs Node: give it a pool on another host. Shard groups don't apply, because there are no shards.
 
-Every option, with its default, is in the reference: [Runners](/providers/cluster/cloudflare#runners).
+Every option, with its default, is in the reference: [DurableObjectPool](/providers/cluster/cloudflare#durableobjectpool).

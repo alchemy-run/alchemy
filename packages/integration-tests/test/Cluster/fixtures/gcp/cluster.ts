@@ -4,11 +4,11 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterGCP.Database("Cluster");
 
-export const Default = ClusterGCP.ComputeRunners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterGCP.ComputeEnginePool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 
-/** Runners of their own for the external program. */
-export const Legacy = ClusterGCP.ComputeRunners("Legacy", { replicas: 1 }).pipe(
+/** A pool of its own for the external program. */
+export const Legacy = ClusterGCP.ComputeEnginePool("Legacy", { replicas: 1 }).pipe(
   Layer.provide(Database),
 );

@@ -1,6 +1,6 @@
 ---
 title: RPC middleware
-description: Authenticate and enrich every message to an entity with Effect RPC middleware — a server side that runs on the runners and a client side that runs in the caller.
+description: Authenticate and enrich every message to an entity with Effect RPC middleware — a server side that runs on the pool and a client side that runs in the caller.
 ---
 
 RPC middleware wraps every message to an RPC. Its server side runs on the runner, before the handler: it can reject the message, or provide a service the handler uses. Its client side runs in the caller, and usually adds headers.
@@ -98,9 +98,9 @@ export default Room.make(
 );
 ```
 
-## Provide the server side with the runners
+## Provide the server side with the pool
 
-`AuthLive` goes in the same `Effect.provide` as the runners, provided to them. The runners carry it to the entity on every runner.
+`AuthLive` goes in the same `Effect.provide` as the pool, provided to it. The pool carries it to the entity on every runner.
 
 Deploying an entity whose RPC uses middleware nobody provided fails the deploy, naming the RPC and the middleware:
 

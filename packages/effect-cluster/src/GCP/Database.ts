@@ -65,7 +65,7 @@ docker run -d --name postgres --restart always --network host \\
 /**
  * The database an Effect Cluster coordinates through, on Compute Engine,
  * as a `Cluster.Database` Layer: Postgres on an instance with a persistent
- * disk, in a VPC of its own that the runners join. Only the runners reach
+ * disk, in a VPC of its own that the pool's runners join. Only the runners reach
  * it; runners reach each other on the runner port.
  *
  * ### Running the database on GCP
@@ -90,7 +90,7 @@ export const Database = (id: string, props: DatabaseProps = {}) =>
       );
       const zone = props.zone ?? `${region}-a`;
       const cidr = props.cidrBlock ?? "10.47.0.0/20";
-      const runnersTag = yield* stackDnsLabel(`${id}-runners`, 63);
+      const poolTag = yield* stackDnsLabel(`${id}-pool`, 63);
       const databaseTag = yield* stackDnsLabel(`${id}-db`, 63);
       const network = yield* Compute.Network(`${id}Network`, { autoCreateSubnetworks: false });
       const subnet = yield* Compute.Subnetwork(`${id}Subnet`, {
@@ -102,7 +102,7 @@ export const Database = (id: string, props: DatabaseProps = {}) =>
         network: network.networkName,
         direction: "INGRESS",
         allowed: [{ protocol: "tcp", ports: ["5432"] }],
-        sourceTags: [runnersTag],
+        sourceTags: [poolTag],
         targetTags: [databaseTag],
       });
       // Runners send each other messages for the shards they own.
@@ -110,8 +110,8 @@ export const Database = (id: string, props: DatabaseProps = {}) =>
         network: network.networkName,
         direction: "INGRESS",
         allowed: [{ protocol: "tcp", ports: [String(RUNNER_PORT)] }],
-        sourceTags: [runnersTag],
-        targetTags: [runnersTag],
+        sourceTags: [poolTag],
+        targetTags: [poolTag],
       });
       const password = yield* Random(`${id}Password`, { bytes: 24 }) as unknown as Effect.Effect<
         Random,
@@ -160,7 +160,7 @@ export const Database = (id: string, props: DatabaseProps = {}) =>
           subnetwork: subnet.subnetworkName,
           region,
           cidr,
-          tag: runnersTag,
+          tag: poolTag,
         },
         shardGroups: yield* clusterShardGroups(id),
       };

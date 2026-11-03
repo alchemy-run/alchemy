@@ -1,7 +1,7 @@
 /**
- * The Platform and provider behind a class runners host that callers never
+ * The Platform and provider behind a class a pool hosts that callers never
  * address (a singleton, a cron): a resource whose only attribute is the
- * shard group of the runners that host it.
+ * shard group of the pool that hosts it.
  *
  * @internal
  */
@@ -22,8 +22,8 @@ export interface HostedProps extends PlatformProps {
 }
 
 export interface HostedAttributes {
-  /** The shard group of the runners that host it. */
-  runners: string | undefined;
+  /** The shard group of the pool that hosts it. */
+  pool: string | undefined;
 }
 
 export interface HostedResource<
@@ -54,8 +54,8 @@ export const makeHostedPlatform = <
       stables: [],
       reconcile: ({ bindings }) =>
         Effect.sync(() => {
-          const attrs: HostedAttributes = { runners: undefined };
-          for (const { data } of bindings) attrs.runners = data.runners ?? attrs.runners;
+          const attrs: HostedAttributes = { pool: undefined };
+          for (const { data } of bindings) attrs.pool = data.pool ?? attrs.pool;
           return attrs;
         }),
       delete: () => Effect.void,

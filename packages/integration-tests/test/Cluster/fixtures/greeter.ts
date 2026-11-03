@@ -1,4 +1,4 @@
-/** A second entity on the same runners, which calls the counter. */
+/** A second entity in the same pool, which calls the counter. */
 import * as Cluster from "@alchemy.run/effect-cluster";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";

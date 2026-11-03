@@ -3,4 +3,4 @@
  * runners on a Docker swarm. Requires `@alchemy.run/docker`.
  */
 export * from "./Database.ts";
-export * from "./Runners.ts";
+export * from "./SwarmPool.ts";

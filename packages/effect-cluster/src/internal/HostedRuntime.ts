@@ -1,6 +1,6 @@
 /**
- * The runtime context of something runners host (an entity, a workflow):
- * while deploying, its runners Layer registers how to deploy it, and it is
+ * The runtime context of something a pool hosts (an entity, a workflow):
+ * while deploying, its pool Layer registers how to deploy it, and it is
  * deployed once its Construction phase has run; on a runner, the built
  * class is kept for the runner to run.
  *
@@ -12,21 +12,21 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { RunnersHost } from "./RunnersHostService.ts";
+import { PoolHost } from "./PoolHostService.ts";
 
-/** Declares the runners resources for one hosted class, given its collected env. */
-export type DeployToRunners = (env: Record<string, unknown>) => Effect.Effect<void, never, any>;
+/** Declares the pool resources for one hosted class, given its collected env. */
+export type DeployToPool = (env: Record<string, unknown>) => Effect.Effect<void, never, any>;
 
 export interface HostedRuntimeContext<Hosted> extends HostRuntimeContext {
   readonly Type: string;
   readonly alwaysServe: true;
   /**
-   * Called by a runners Layer while the Construction phase runs: `deploy`
-   * declares the runners that host this class, once its env is collected.
+   * Called by a pool Layer while the Construction phase runs: `deploy`
+   * declares the pool that hosts this class, once its env is collected.
    */
-  readonly registerRunners: (deploy: DeployToRunners) => Effect.Effect<void>;
+  readonly registerPool: (deploy: DeployToPool) => Effect.Effect<void>;
   /**
-   * Called by a runners Layer with the services it was built with: those
+   * Called by a pool Layer with the services it was built with: those
    * provided to it, like an entity's RPC middleware, stay with the class
    * after the Construction phase that provided them ends.
    */
@@ -35,18 +35,18 @@ export interface HostedRuntimeContext<Hosted> extends HostRuntimeContext {
   readonly hosted: () => Hosted | undefined;
 }
 
-/** A hosted class as its runners see it: the resource, with its runtime context. */
+/** A hosted class as its pool sees it: the resource, with its runtime context. */
 export interface HostedClass {
   readonly Type: string;
   readonly LogicalId: string;
   readonly Props: { readonly main: string };
-  readonly registerRunners: (deploy: DeployToRunners) => Effect.Effect<void>;
+  readonly registerPool: (deploy: DeployToPool) => Effect.Effect<void>;
   readonly provideServices: (services: Context.Context<never>) => Effect.Effect<void>;
   readonly bind: any;
 }
 
-/** The class was deployed without a runners Layer, so nothing would host it. */
-export class HasNoRunners extends Data.TaggedError("Cluster.HasNoRunners")<{
+/** The class was deployed without a pool Layer, so nothing would host it. */
+export class HasNoPool extends Data.TaggedError("Cluster.HasNoPool")<{
   readonly message: string;
 }> {}
 
@@ -63,7 +63,7 @@ export const makeHostedRuntimeContext =
   ) =>
   (id: string): HostedRuntimeContext<Hosted> => {
     const base = createHostRuntimeContext(typeId)(id);
-    let deploy: DeployToRunners | undefined;
+    let deploy: DeployToPool | undefined;
     let hosted: Hosted | undefined;
     let services = Context.empty() as Context.Context<never>;
 
@@ -73,7 +73,7 @@ export const makeHostedRuntimeContext =
       // The Construction phase returns what the runner runs rather than a
       // handler shape: always hand it to `serve`.
       alwaysServe: true,
-      registerRunners: (next) =>
+      registerPool: (next) =>
         Effect.sync(() => {
           deploy = next;
         }),
@@ -86,7 +86,7 @@ export const makeHostedRuntimeContext =
         Effect.gen(function* () {
           // Runners provided to the class's Layer rather than its
           // implementation: ask them to host it now.
-          const host = Option.getOrUndefined(yield* Effect.serviceOption(RunnersHost));
+          const host = Option.getOrUndefined(yield* Effect.serviceOption(PoolHost));
           const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
           if (deploy === undefined && host !== undefined && self !== undefined) {
             yield* host.host(self as unknown as HostedClass);
@@ -100,10 +100,10 @@ export const makeHostedRuntimeContext =
           }
           if (deploy === undefined) {
             return yield* Effect.die(
-              new HasNoRunners({
+              new HasNoPool({
                 message:
-                  `${typeId} '${id}' has no runners. Provide a runners Layer to its implementation, ` +
-                  `for example ClusterDocker.Runners("Default").`,
+                  `${typeId} '${id}' has no pool. Provide a pool Layer to its implementation, ` +
+                  `for example ClusterDocker.SwarmPool("Default").`,
               }),
             );
           }

@@ -2,9 +2,9 @@ import * as Hetzner from "@alchemy.run/hetzner";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { GATEWAY_PORT } from "../internal/Gateway.ts";
-import { makeRunnersLayer, type RunnersSettings } from "../internal/RunnersHost.ts";
+import { makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
 
-export interface RunnersOptions extends RunnersSettings {
+export interface ServerPoolOptions extends PoolSettings {
   /**
    * Number of runners, one Server each.
    * @default 2
@@ -17,11 +17,11 @@ export interface RunnersOptions extends RunnersSettings {
   serverType?: string;
 }
 
-/** The label the gateway's Load Balancer finds the runners' Servers by. */
-const RUNNERS_LABEL = "cluster-runners";
+/** The label the gateway's Load Balancer finds the pool's Servers by. */
+const POOL_LABEL = "cluster-pool";
 
 /**
- * Run an Effect Cluster's runners on Hetzner Cloud: Servers on the
+ * Run a pool of Effect Cluster runners on Hetzner Cloud: Servers on the
  * database's private Network, each running every class given these
  * runners as a `Hetzner.Service`, behind a Load Balancer that serves their
  * gateway to callers anywhere. Runners talk to each other and the database
@@ -32,16 +32,16 @@ const RUNNERS_LABEL = "cluster-runners";
  * **Example:** Two runners
  * ```typescript
  * export const Database = ClusterHetzner.Database("Cluster");
- * export const Default = ClusterHetzner.Runners("Default", { replicas: 2 }).pipe(
+ * export const Default = ClusterHetzner.ServerPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Database),
  * );
  * ```
  *
  * @primitive
  */
-export const Runners = (id: string, options: RunnersOptions = {}) =>
-  makeRunnersLayer({
-    label: "ClusterHetzner.Runners",
+export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
+  makePoolLayer({
+    label: "ClusterHetzner.ServerPool",
     id,
     settings: options,
     expected: "a Hetzner Network (ClusterHetzner.Database)",
@@ -70,7 +70,7 @@ export const Runners = (id: string, options: RunnersOptions = {}) =>
             },
           ],
           targets: [
-            { type: "label_selector", selector: `${RUNNERS_LABEL}=${name}`, usePrivateIp: true },
+            { type: "label_selector", selector: `${POOL_LABEL}=${name}`, usePrivateIp: true },
           ],
         });
         return { url: Output.interpolate`http://${balancer.ipv4}` };
@@ -80,7 +80,7 @@ export const Runners = (id: string, options: RunnersOptions = {}) =>
         const firewall = yield* Hetzner.Firewall(`${id}Firewall`, {
           rules: [
             {
-              description: "SSH, which deploys the runners",
+              description: "SSH, which deploys the pool",
               direction: "in",
               protocol: "tcp",
               port: "22",
@@ -97,7 +97,7 @@ export const Runners = (id: string, options: RunnersOptions = {}) =>
             enableIpv6: false,
             networks: [{ networkId: network.networkId as number }],
             firewalls: [firewall],
-            labels: { [RUNNERS_LABEL]: name },
+            labels: { [POOL_LABEL]: name },
           });
           yield* Hetzner.Service(`${id}Runner${i}Service`, {
             server,

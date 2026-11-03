@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import { Counters } from "./counter.ts";
 import { Greeters } from "./greeter.ts";
 
-export const greeterLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const greeterLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Greeters.make(
     { main },
     Effect.gen(function* () {
@@ -19,5 +19,5 @@ export const greeterLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =
             ),
         });
       });
-    }).pipe(Effect.provide(runners)),
+    }).pipe(Effect.provide(pool)),
   );

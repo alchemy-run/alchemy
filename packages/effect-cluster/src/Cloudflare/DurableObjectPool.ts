@@ -17,13 +17,13 @@ import type { Entity } from "../Entity.ts";
 import { registerRouteBinder, routeType } from "../internal/Gateway.ts";
 import type { HostedClass } from "../internal/HostedRuntime.ts";
 import { HOSTED_TYPES, stackDnsLabel } from "../internal/Naming.ts";
-import { RunnersHost } from "../internal/RunnersHostService.ts";
+import { PoolHost } from "../internal/PoolHostService.ts";
+import { Pool as PoolResource, type PoolEntity } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
-import { Runners as RunnersResource, type RunnersEntity } from "../Runners.ts";
-import { runnersWorker } from "./RunnersWorker.ts";
+import { poolWorker } from "./PoolWorker.ts";
 
-// A Worker that calls a class these runners host gets a service binding to
-// the runners' Worker: Workers can't fetch another Worker's workers.dev URL.
+// A Worker that calls a class this pool hosts gets a service binding to
+// the pool's Worker: Workers can't fetch another Worker's workers.dev URL.
 registerRouteBinder((key, worker) =>
   Effect.gen(function* () {
     if (globalThis.__ALCHEMY_RUNTIME__) return;
@@ -40,9 +40,9 @@ registerRouteBinder((key, worker) =>
   }),
 );
 
-export interface RunnersOptions {
+export interface DurableObjectPoolOptions {
   /**
-   * The name the runners are known by, used for their Worker's entry.
+   * The name the pool is known by, used for its Worker's entry.
    * @default ${stack}-${stage}-${id}
    */
   name?: string;
@@ -54,27 +54,27 @@ export class ExternalProgramOnWorkers extends Data.TaggedError("Cluster.External
 }> {}
 
 /**
- * Write the Worker's entry module: it imports every class the runners host
- * and default-exports the runners Worker with them, so the Worker's own
+ * Write the Worker's entry module: it imports every class the pool hosts
+ * and default-exports the pool Worker with them, so the Worker's own
  * bundler bundles them all.
  */
-const writeEntry = Effect.fn(function* (id: string, workerId: string, runners: RunnersResource) {
+const writeEntry = Effect.fn(function* (id: string, workerId: string, pool: PoolResource) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = path.resolve(yield* dotAlchemyDirectory, "cluster", yield* stackDnsLabel(id));
-  return Output.mapEffect((entities: RunnersEntity[]) =>
+  return Output.mapEffect((entities: PoolEntity[]) =>
     Effect.gen(function* () {
       yield* fs.makeDirectory(dir, { recursive: true });
       const file = path.join(dir, "worker.ts");
       const source = [
-        `import { runnersWorker } from "@alchemy.run/effect-cluster/Cloudflare/RunnersWorker";`,
+        `import { poolWorker } from "@alchemy.run/effect-cluster/Cloudflare/PoolWorker";`,
         ...entities.map(
           (entity, i) =>
             `import { ${entity.handler} as e${i} } from ${JSON.stringify(
               entity.module.startsWith("file:") ? new URL(entity.module).pathname : entity.module,
             )};`,
         ),
-        `export default runnersWorker(${JSON.stringify(workerId)}, undefined, [${entities
+        `export default poolWorker(${JSON.stringify(workerId)}, undefined, [${entities
           .map((entity, i) => `{ name: ${JSON.stringify(entity.name)}, value: e${i} }`)
           .join(", ")}]);`,
         "",
@@ -82,12 +82,12 @@ const writeEntry = Effect.fn(function* (id: string, workerId: string, runners: R
       yield* fs.writeFileString(file, source);
       return file;
     }).pipe(Effect.orDie),
-  )(runners.entities);
+  )(pool.entities);
 });
 
 /**
  * Run an Effect Cluster on Cloudflare: one Worker that hosts every class
- * given these runners on Durable Objects. Each entity instance is a Durable
+ * given this pool on Durable Objects. Each entity instance is a Durable
  * Object named by its type and id, so there are no shards, no runners to
  * place it on, and no database: the object's own SQLite holds its persisted
  * messages. Each workflow execution is a Durable Object too, and each
@@ -99,19 +99,19 @@ const writeEntry = Effect.fn(function* (id: string, workerId: string, runners: R
  * ### Running entities on Cloudflare
  * **Example:** Runners on Durable Objects
  * ```typescript
- * export const Default = ClusterCloudflare.Runners("Default");
+ * export const Default = ClusterCloudflare.DurableObjectPool("Default");
  * ```
  *
  * @primitive
  */
-export const Runners = (
+export const DurableObjectPool = (
   id: string,
-  options: RunnersOptions = {},
-): Layer.Layer<RunnersHost, never, Stack | Providers | Cloudflare.Providers> =>
+  options: DurableObjectPoolOptions = {},
+): Layer.Layer<PoolHost, never, Stack | Providers | Cloudflare.Providers> =>
   Layer.effect(
-    RunnersHost,
+    PoolHost,
     Effect.gen(function* () {
-      // What was provided to the runners, like an entity's RPC middleware,
+      // What was provided to the pool, like an entity's RPC middleware,
       // goes with every class they host.
       const services = yield* Effect.context<never>();
       const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
@@ -121,35 +121,35 @@ export const Runners = (
         return {
           host: (hosted) => hosted.provideServices(services),
           deployExternal: () => Effect.void,
-        } satisfies RunnersHost["Service"];
+        } satisfies PoolHost["Service"];
       }
       const name = options.name ?? (yield* stackDnsLabel(id));
-      const workerId = `${id}Runners`;
+      const workerId = `${id}Pool`;
       const context = yield* Effect.context<Stack | Providers | Cloudflare.Providers>();
 
-      /** Put `hosted` on the runners, and bind the gateway onto `resource`. */
+      /** Put `hosted` on the pool, and bind the gateway onto `resource`. */
       const deploy = Effect.fn(function* (
-        hosted: RunnersEntity,
+        hosted: PoolEntity,
         env: Record<string, unknown>,
         resource: Entity,
       ) {
-        const runners = yield* RunnersResource(id, { name });
+        const pool = yield* PoolResource(id, { name });
         const token = yield* Random(`${id}GatewayToken`, {
           bytes: 32,
         }) as unknown as Effect.Effect<Random, never, Providers>;
-        yield* runners.bind`${hosted.name}`({ entities: [hosted], env });
-        const worker = yield* runnersWorker(
+        yield* pool.bind`${hosted.name}`({ entities: [hosted], env });
+        const worker = yield* poolWorker(
           workerId,
           {
-            main: (yield* writeEntry(id, workerId, runners)) as unknown as string,
+            main: (yield* writeEntry(id, workerId, pool)) as unknown as string,
             compatibility: { flags: ["nodejs_compat"] },
             env: {
               // The classes' own environment, which only the deploy knows
               // the keys of: one secret, unpacked when the Worker starts.
-              CLUSTER_ENV: runners.env.pipe(
+              CLUSTER_ENV: pool.env.pipe(
                 Output.map((values) => Redacted.make(JSON.stringify(values))),
               ),
-              CLUSTER_RUNNERS: name,
+              CLUSTER_POOL: name,
               CLUSTER_GATEWAY_TOKEN: token.text,
             } as unknown as Record<string, string>,
           },
@@ -158,8 +158,8 @@ export const Runners = (
         // Callers that are Workers reach the gateway through a service binding.
         routeType(hosted.name, worker.workerName);
         // What callers need to reach the entity through the gateway.
-        yield* resource.bind`Runners`({
-          runners: name,
+        yield* resource.bind`Pool`({
+          pool: name,
           gateway: worker.url as unknown as string,
           token: token.text,
         });
@@ -168,7 +168,7 @@ export const Runners = (
       const host = (hosted: HostedClass) =>
         Effect.andThen(
           hosted.provideServices(services),
-          hosted.registerRunners((env) =>
+          hosted.registerPool((env) =>
             deploy(
               { name: hosted.LogicalId, module: hosted.Props.main, handler: "default" },
               env,
@@ -186,9 +186,9 @@ export const Runners = (
             new ExternalProgramOnWorkers({
               message:
                 `Cluster.Entity '${type}' runs an existing Effect Cluster program, which needs Node: ` +
-                `give it runners on another host, like ClusterDocker.Runners or ClusterAWS.EcsRunners.`,
+                `give it a pool on another host, like ClusterDocker.SwarmPool or ClusterAWS.EcsPool.`,
             }),
           ),
-      } satisfies RunnersHost["Service"];
+      } satisfies PoolHost["Service"];
     }),
   );

@@ -3,17 +3,17 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
-import type { RunnersHost } from "./internal/RunnersHostService.ts";
+import type { PoolHost } from "./internal/PoolHostService.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
- * A runners Layer, as every host's `Runners` returns it: provide it to an
- * implementation to deploy it to those runners.
+ * A pool Layer, as every host's pool returns it: provide it to an
+ * implementation to deploy it to that pool.
  */
-export type RunnersLayer<R = never> = Layer.Layer<RunnersHost, never, R>;
+export type PoolLayer<R = never> = Layer.Layer<PoolHost, never, R>;
 
-/** An entity class a set of runners is built with. */
-export interface RunnersEntity {
+/** An entity class a pool is built with. */
+export interface PoolEntity {
   /** The entity type: the class's logical id. */
   name: string;
   /** The module that exports the class. */
@@ -27,58 +27,58 @@ export interface RunnersEntity {
   program?: string;
 }
 
-/** Data the entities a set of runners hosts bind onto it. */
-export interface RunnersBindingContract {
-  entities?: RunnersEntity[];
+/** Data the entities a pool hosts bind onto it. */
+export interface PoolBindingContract {
+  entities?: PoolEntity[];
   env?: Record<string, unknown>;
 }
 
-export interface RunnersProps {
-  /** The name runners are known by, used in their service names. */
+export interface PoolProps {
+  /** The pool's name, used in its service names. */
   name: string;
 }
 
-export interface RunnersAttributes {
-  /** The name runners are known by. */
+export interface PoolAttributes {
+  /** The pool's name. */
   name: string;
-  /** The entity classes the runners host, sorted by type. */
-  entities: RunnersEntity[];
+  /** The entity classes the pool hosts, sorted by type. */
+  entities: PoolEntity[];
   /** Environment values the hosted classes need, merged. */
   env: Record<string, unknown>;
 }
 
-export interface Runners extends Resource<
-  "Cluster.Runners",
-  RunnersProps,
-  RunnersAttributes,
-  RunnersBindingContract,
+export interface Pool extends Resource<
+  "Cluster.Pool",
+  PoolProps,
+  PoolAttributes,
+  PoolBindingContract,
   Providers
 > {}
 
 /**
- * The set of entity classes one group of runners hosts, collected from the
- * entities that were given it. Runners Layers (`ClusterDocker.Runners`,
+ * The set of entity classes one pool hosts, collected from the
+ * entities that were given it. Pool Layers (`ClusterDocker.SwarmPool`,
  * …) declare one and build their program from it; it owns nothing in the
  * cloud.
  *
  * @internal
  */
-export const Runners = Resource<Runners>("Cluster.Runners");
+export const Pool = Resource<Pool>("Cluster.Pool");
 
 /**
- * A set of runners was given an external `Cluster.Entity` and something
+ * A pool was given an external `Cluster.Entity` and something
  * else hosted another way: an external program owns every runner it runs on.
  */
-export class RunnersProgramConflict extends Data.TaggedError("Cluster.RunnersProgramConflict")<{
+export class PoolProgramConflict extends Data.TaggedError("Cluster.PoolProgramConflict")<{
   readonly message: string;
 }> {}
 
-export const RunnersProvider = () =>
-  Provider.succeed(Runners, {
+export const PoolProvider = () =>
+  Provider.succeed(Pool, {
     stables: ["name"],
     reconcile: ({ id, news, bindings }) =>
       Effect.gen(function* () {
-        const entities = new Map<string, RunnersEntity>();
+        const entities = new Map<string, PoolEntity>();
         const env: Record<string, unknown> = {};
         for (const { data } of bindings) {
           for (const entity of data.entities ?? []) entities.set(entity.name, entity);
@@ -87,11 +87,11 @@ export const RunnersProvider = () =>
         const all = [...entities.values()];
         const programs = new Set(all.flatMap((entity) => (entity.program ? [entity.program] : [])));
         if (programs.size > 1 || (programs.size === 1 && all.some((entity) => !entity.program))) {
-          return yield* new RunnersProgramConflict({
+          return yield* new PoolProgramConflict({
             message:
               `Runners '${id}' were given ${all.map((entity) => `'${entity.name}'`).join(", ")}, ` +
               `but an external program runs on every runner it is given: give each program ` +
-              `runners of its own, and host Alchemy entities on other runners.`,
+              `a pool of its own, and host Alchemy entities in another pool.`,
           });
         }
         return {

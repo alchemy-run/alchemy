@@ -3,7 +3,7 @@ title: GCP
 description: Run an Effect Cluster's database and runners on Compute Engine, called from Cloud Run or anywhere through a regional load balancer.
 ---
 
-Host your cluster in your GCP project: Postgres and the runners run on Compute Engine instances in a VPC of their own. A regional load balancer on a static address serves the runners' gateway, so a Cloud Run service, a Worker or anything else calls the rooms by id.
+Host your cluster in your GCP project: Postgres and the runners run on Compute Engine instances in a VPC of their own. A regional load balancer on a static address serves the pool's gateway, so a Cloud Run service, a Worker or anything else calls the rooms by id.
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterGCP from "@alchemy.run/effect-cluster/GCP";
@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterGCP.Database("Cluster");
 
-export const Default = ClusterGCP.ComputeRunners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterGCP.ComputeEnginePool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 ```
@@ -31,9 +31,9 @@ export const Database = ClusterGCP.Database("Cluster", {
 });
 ```
 
-## The runners
+## The pool
 
-`ComputeRunners` runs one instance per runner, spread across the region's zones. Each fetches the runners' program from a Cloud Storage bucket and runs it on the host network; a change to the program reaches every runner through its metadata.
+`ComputeEnginePool` runs one instance per runner, spread across the region's zones. Each fetches the pool's program from a Cloud Storage bucket and runs it on the host network; a change to the program reaches every runner through its metadata.
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterGCP from "@alchemy.run/effect-cluster/GCP";
@@ -41,7 +41,7 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterGCP.Database("Cluster");
 
-export const Default = ClusterGCP.ComputeRunners("Default", {
+export const Default = ClusterGCP.ComputeEnginePool("Default", {
   replicas: 3,
   machineType: "e2-standard-2",
 }).pipe(Layer.provide(Database));
@@ -72,4 +72,4 @@ export default class Api extends GCP.Run.Service<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [Database](/providers/cluster/gcp#database) and [ComputeRunners](/providers/cluster/gcp#computerunners).
+Every option, with its default, is in the reference: [Database](/providers/cluster/gcp#database) and [ComputeEnginePool](/providers/cluster/gcp#computeenginepool).

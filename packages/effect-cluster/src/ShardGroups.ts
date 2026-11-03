@@ -3,7 +3,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "./Providers.ts";
 
-/** The shard groups one set of runners serves, bound onto its database's {@link ShardGroups}. */
+/** The shard groups one pool serves, bound onto its database's {@link ShardGroups}. */
 export interface ShardGroupsBindingContract {
   groups?: string[];
 }
@@ -22,7 +22,7 @@ export interface ShardGroups extends Resource<
 > {}
 
 /**
- * Every shard group in one cluster, collected from the runners that share
+ * Every shard group in one cluster, collected from the pools that share
  * its database. Every runner and gateway is configured with the whole list:
  * Effect Cluster numbers each shard's lock by its group's place in it, so
  * they must all agree. It owns nothing in the cloud.

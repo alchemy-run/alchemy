@@ -5,11 +5,11 @@ import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { Database } from "../Database.ts";
 import { GATEWAY_PORT } from "../internal/Gateway.ts";
-import { makeRunnersLayer, type RunnersSettings } from "../internal/RunnersHost.ts";
-import type { RunnersHost } from "../internal/RunnersHostService.ts";
+import { makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
+import type { PoolHost } from "../internal/PoolHostService.ts";
 import type { Providers } from "../Providers.ts";
 
-export interface RunnersOptions extends RunnersSettings {
+export interface SwarmPoolOptions extends PoolSettings {
   /**
    * Number of runners.
    * @default 1
@@ -24,33 +24,33 @@ export interface RunnersOptions extends RunnersSettings {
 }
 
 /**
- * Run an Effect Cluster's runners on a Docker swarm: a swarm service whose
- * tasks host every `Cluster.Entity` given these runners, on the
+ * Run a pool of Effect Cluster runners on a Docker swarm: a swarm service whose
+ * tasks host every `Cluster.Entity` given this pool, on the
  * database's overlay network. Runners find each other through the
  * database and talk on the network; the gateway is served on the same
  * network. Requires an `Cluster.Database` on a Docker network —
  * `ClusterDocker.Database`.
  *
- * Every entity given the same runners shares them: declare the runners once
+ * Every entity given the same pool shares it: declare the pool once
  * and provide them to each class.
  *
  * ### Running entities on Docker
  * **Example:** Two runners on the local swarm
  * ```typescript
  * export const Database = ClusterDocker.Database("Cluster");
- * export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
+ * export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Database),
  * );
  * ```
  *
  * @primitive
  */
-export const Runners = (
+export const SwarmPool = (
   id: string,
-  options: RunnersOptions = {},
-): Layer.Layer<RunnersHost, never, Database | Stack | Providers | Docker.Providers> =>
-  makeRunnersLayer({
-    label: "ClusterDocker.Runners",
+  options: SwarmPoolOptions = {},
+): Layer.Layer<PoolHost, never, Database | Stack | Providers | Docker.Providers> =>
+  makePoolLayer({
+    label: "ClusterDocker.SwarmPool",
     id,
     settings: options,
     expected: "a Docker network (ClusterDocker.Database)",
@@ -65,7 +65,7 @@ export const Runners = (
           tag: program.pipe(Output.map((p) => p.hash)) as unknown as string,
           skipPush: true,
         });
-        yield* Docker.Service(`${id}Runners`, {
+        yield* Docker.Service(`${id}Pool`, {
           name,
           image: image.imageRef,
           replicas: options.replicas ?? 1,

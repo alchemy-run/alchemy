@@ -103,7 +103,7 @@ export type CronTag<Self, Name extends string> = Named<Name> &
     /**
      * The cron's implementation, as a Layer: its schedule, and an Effect
      * that resolves bindings once per runner and returns the job to run.
-     * Provide a runners Layer to `impl` to deploy it; provide the returned
+     * Provide a pool Layer to `impl` to deploy it; provide the returned
      * Layer to the Stack.
      */
     make<InitReq = never>(
@@ -133,7 +133,7 @@ export interface CronClass {
  * Layer: its schedule, as Effect's `ClusterCron.make` takes it, and an
  * Effect that resolves bindings once per runner and returns the job. The job can read
  * the time it was scheduled for with `ClusterCron.CurrentScheduledTime`.
- * Providing a runners Layer to the implementation is what deploys it.
+ * Providing a pool Layer to the implementation is what deploys it.
  *
  * ### Declaring a cron
  * **Example:** A nightly job

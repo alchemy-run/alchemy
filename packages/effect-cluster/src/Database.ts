@@ -9,7 +9,7 @@ import { ShardGroups } from "./ShardGroups.ts";
 
 /**
  * The private network runners must join to reach the database and each
- * other. A runners Layer matches on `kind` and refuses a network it cannot
+ * other. A pool Layer matches on `kind` and refuses a network it cannot
  * join.
  */
 export type ClusterNetwork =
@@ -19,7 +19,7 @@ export type ClusterNetwork =
       readonly name: Input<string>;
     }
   | {
-      /** An AWS VPC; runners run in its subnets, in the runners' security group. */
+      /** An AWS VPC; runners run in its subnets, in the pool's security group. */
       readonly kind: "aws";
       readonly vpcId: Input<string>;
       readonly subnetIds: Input<string>[];
@@ -58,7 +58,7 @@ export type ClusterNetwork =
       readonly namespace: string;
     };
 
-/** What every database Layer gives the runners it is provided to. */
+/** What every database Layer gives the pool it is provided to. */
 export interface DatabaseShape {
   /**
    * The Postgres connection URL runners use for runner registration,
@@ -67,7 +67,7 @@ export interface DatabaseShape {
   readonly url: Input<Redacted.Redacted<string>>;
   /** The network runners join to reach it, when it is private. */
   readonly network?: ClusterNetwork;
-  /** Every shard group in the cluster, which each set of runners registers with. */
+  /** Every shard group in the cluster, which each pool registers with. */
   readonly shardGroups: ShardGroups;
 }
 
@@ -85,7 +85,7 @@ export interface DatabaseProps {
 
 /**
  * A Postgres database you already run, as an Effect Cluster `Database`
- * Layer: Neon, PlanetScale, RDS, or any Postgres the runners can reach.
+ * Layer: Neon, PlanetScale, RDS, or any Postgres the pool can reach.
  *
  * ### Using an existing database
  * **Example:** A Postgres URL from config

@@ -24,7 +24,7 @@ Finish [setup](/cluster/setup), including `docker swarm init`. Install `@alchemy
 
 The database is a Postgres the runners coordinate through: who owns which rooms, and the messages waiting for them. This one runs on your Docker swarm.
 
-## Add runners
+## Add a pool
 
 ```diff lang="typescript"
 // src/Cluster.ts
@@ -33,12 +33,12 @@ import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 
 export const Database = ClusterDocker.Database("Cluster");
 +
-+export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
++export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
 +  Layer.provide(Database),
 +);
 ```
 
-Runners are the processes that run your rooms. `Layer.provide(Database)` tells them which database to join. With two, each runs about half the rooms.
+A pool is a group of runners, the processes that run your rooms. `Layer.provide(Database)` tells it which database to join. With two runners, each runs about half the rooms.
 
 ## Declare the room
 
@@ -75,7 +75,7 @@ The declaration lists the messages a room accepts, as Effect RPC schemas. `Join`
 +);
 ```
 
-An entity's code runs in two phases. The outer Effect runs once on each runner; the inner Effect runs once per room, on its first message, and returns its handlers. `Room.of` types them against the declaration. Providing `Default` runs the room on those runners.
+An entity's code runs in two phases. The outer Effect runs once on each runner; the inner Effect runs once per room, on its first message, and returns its handlers. `Room.of` types them against the declaration. Providing `Default` runs the room on that pool.
 
 ## Track who's in the room
 
@@ -144,7 +144,7 @@ Each room keeps its members in memory. A room handles its messages one at a time
 +) {}
 ```
 
-The API is a container on the database's network. `yield* Room` gives it the rooms by id; `getByName` names one, and `Join` sends it a message through the runners' gateway.
+The API is a container on the database's network. `yield* Room` gives it the rooms by id; `getByName` names one, and `Join` sends it a message through the pool's gateway.
 
 ## Deploy it
 
@@ -168,7 +168,7 @@ The API is a container on the database's network. `yield* Room` gives it the roo
 +);
 ```
 
-The Stack deploys the API and provides the room's implementation, which brings the runners and the database with it.
+The Stack deploys the API and provides the room's implementation, which brings the pool and the database with it.
 
 ```sh
 alchemy deploy

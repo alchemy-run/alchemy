@@ -22,7 +22,7 @@ Effect Cluster has no coordinator service. Runners coordinate through a Postgres
 
 ## A database Layer
 
-Each cloud's `Database` is a Layer that runs Postgres on that cloud, on a private network its runners join:
+Each cloud's `Database` is a Layer that runs Postgres on that cloud, on a private network its pools join:
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
@@ -30,14 +30,14 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterAWS.Database("Cluster");
 
-export const Default = ClusterAWS.EcsRunners("Default").pipe(Layer.provide(Database));
+export const Default = ClusterAWS.EcsPool("Default").pipe(Layer.provide(Database));
 ```
 
-Give it to every set of runners in the cluster. Runners on a different cloud than the database can't join its network, and the deploy says so.
+Give it to every pool in the cluster. A pool on a different cloud than the database can't join its network, and the deploy says so.
 
 ## One you already have
 
-`Cluster.Database.fromUrl` uses any Postgres the runners can reach:
+`Cluster.Database.fromUrl` uses any Postgres the pool can reach:
 
 ```typescript title="src/Cluster.ts"
 import * as Cluster from "@alchemy.run/effect-cluster";

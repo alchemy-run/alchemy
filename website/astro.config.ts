@@ -1903,7 +1903,7 @@ export default defineConfig({
               label: "Running Effect Cluster",
               items: [
                 { label: "Databases", link: "/cluster/databases" },
-                { label: "Runners", link: "/cluster/runners" },
+                { label: "Pools", link: "/cluster/pools" },
               ],
             },
             {

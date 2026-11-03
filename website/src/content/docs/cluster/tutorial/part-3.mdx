@@ -164,7 +164,7 @@ import RoomLive from "./src/RoomLive.ts";
 +  }).pipe(Effect.provide(Layer.mergeAll(RoomLive, InviteLive))),
 ```
 
-The workflow runs on the same runners as the rooms.
+The workflow runs in the same pool as the rooms.
 
 ```sh
 alchemy deploy

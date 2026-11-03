@@ -1,6 +1,6 @@
 /**
- * Names every runners Layer shares, kept apart from the bundling in
- * `RunnersHost.ts` so a runtime that bundles a runners Layer (a Worker) never
+ * Names every pool Layer shares, kept apart from the bundling in
+ * `PoolHost.ts` so a runtime that bundles a pool Layer (a Worker) never
  * pulls in the bundler.
  *
  * @internal
@@ -10,7 +10,7 @@ import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import { EntityTypeId } from "../Entity.ts";
 
-/** The resource types runners host. */
+/** The resource types a pool hosts. */
 export const HOSTED_TYPES = new Set<string>([
   EntityTypeId,
   "Cluster.Workflow",

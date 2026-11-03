@@ -1,4 +1,4 @@
-/** The counter's implementation, deployed to the default runners with its middleware. */
+/** The counter's implementation, deployed to the default pool with its middleware. */
 import type * as Cluster from "@alchemy.run/effect-cluster";
 import { Entity } from "effect/cluster";
 import * as Effect from "effect/Effect";
@@ -8,7 +8,7 @@ import * as Stream from "effect/Stream";
 import { AuthLive, CurrentUser } from "./auth.ts";
 import { CounterBoom, Counters } from "./counter.ts";
 
-export const counterLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const counterLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Counters.make(
     { main },
     Effect.gen(function* () {
@@ -29,5 +29,5 @@ export const counterLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =
             }),
         });
       });
-    }).pipe(Effect.provide(runners.pipe(Layer.provide(AuthLive)))),
+    }).pipe(Effect.provide(pool.pipe(Layer.provide(AuthLive)))),
   );

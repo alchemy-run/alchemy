@@ -1,6 +1,6 @@
 /**
  * What the AWS runners share: the database's VPC, and a load balancer that
- * serves each set of runners' gateway to callers anywhere.
+ * serves each pool's gateway to callers anywhere.
  *
  * @internal
  */
@@ -18,8 +18,8 @@ export const awsNetworkOf = (database: DatabaseShape): AwsNetwork | undefined =>
   database.network?.kind === "aws" ? database.network : undefined;
 
 /**
- * An internet-facing load balancer in front of the runners' gateway. It is
- * declared before the runners, so the gateway's URL never depends on them.
+ * An internet-facing load balancer in front of the pool's gateway. It is
+ * declared before the pool, so the gateway's URL never depends on it.
  */
 export const makeAwsGateway = Effect.fn(function* (
   id: string,

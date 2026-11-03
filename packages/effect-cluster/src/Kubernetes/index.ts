@@ -3,4 +3,4 @@
  * runners on Kubernetes. Requires `@alchemy.run/kubernetes`.
  */
 export * from "./Database.ts";
-export * from "./Runners.ts";
+export * from "./DeploymentPool.ts";

@@ -32,7 +32,7 @@ export interface DatabaseProps {
  *
  * Its data lives in the pod, so it is meant for development and tests; for
  * a managed Postgres (RDS, Cloud SQL, Neon), pass its URL to
- * `Cluster.Database.fromUrl` and give the runners the cluster.
+ * `Cluster.Database.fromUrl` and give the pool its cluster.
  *
  * ### Running the database on Kubernetes
  * **Example:** Postgres on a local kind cluster

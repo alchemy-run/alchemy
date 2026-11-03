@@ -20,11 +20,11 @@ export const Kind = Kubernetes.LocalCluster("ClusterKind", {
 
 export const Database = ClusterKubernetes.Database("Cluster", { cluster: Kind });
 
-export const Default = ClusterKubernetes.Runners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterKubernetes.DeploymentPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 
-/** Runners of their own for the external program. */
-export const Legacy = ClusterKubernetes.Runners("Legacy", { replicas: 1 }).pipe(
+/** A pool of its own for the external program. */
+export const Legacy = ClusterKubernetes.DeploymentPool("Legacy", { replicas: 1 }).pipe(
   Layer.provide(Database),
 );

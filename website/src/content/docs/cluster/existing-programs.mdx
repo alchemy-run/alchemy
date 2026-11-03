@@ -1,9 +1,9 @@
 ---
 title: Existing programs
-description: Deploy an Effect Cluster program you already have, unchanged, on runners of its own, and call its entities from any runtime.
+description: Deploy an Effect Cluster program you already have, unchanged, on a pool of its own, and call its entities from any runtime.
 ---
 
-An Effect Cluster program you already have deploys as it is. Alchemy bundles it, runs it on runners of its own, and serves its entities through a gateway, so any runtime calls them like an entity declared with Alchemy.
+An Effect Cluster program you already have deploys as it is. Alchemy bundles it, runs it on a pool of its own, and serves its entities through a gateway, so any runtime calls them like an entity declared with Alchemy.
 
 ## Your program
 
@@ -41,11 +41,11 @@ export const Tally = Cluster.Entity(TallyEntity, {
 }).pipe(Effect.provide(Legacy));
 ```
 
-`main` exports the entity under its type's name; the gateway imports it to serve the entity's RPCs. The program is bundled into the runners' image and runs as its own process on every runner, with the gateway beside it.
+`main` exports the entity under its type's name; the gateway imports it to serve the entity's RPCs. The program is bundled into the pool's image and runs as its own process on every runner, with the gateway beside it.
 
-## Give it runners of its own
+## Give it a pool of its own
 
-A program owns the runners it runs on, so give it a set no other class uses:
+A program owns the pool it runs on, so give it a pool no other class uses:
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
@@ -53,12 +53,12 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
 
-export const Default = ClusterDocker.Runners("Default").pipe(Layer.provide(Database));
+export const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
 
-export const Legacy = ClusterDocker.Runners("Legacy").pipe(Layer.provide(Database));
+export const Legacy = ClusterDocker.SwarmPool("Legacy").pipe(Layer.provide(Database));
 ```
 
-Both sets share the database, so they're one cluster. Its entities keep the shard groups the program gives them, `default` unless it sets others; list them with the runners' `shardGroups` option.
+Both pools share the database, so they're one cluster. Its entities keep the shard groups the program gives them, `default` unless it sets others; list them with the pool's `shardGroups` option.
 
 ## Call it
 

@@ -3,7 +3,7 @@ import { Random, RandomProvider } from "alchemy/Random";
 import * as Layer from "effect/Layer";
 import { CronProvider, CronResource } from "./Cron.ts";
 import { EntityProvider, EntityResource } from "./Entity.ts";
-import { Runners, RunnersProvider } from "./Runners.ts";
+import { Pool, PoolProvider } from "./Pool.ts";
 import { ShardGroups, ShardGroupsProvider } from "./ShardGroups.ts";
 import { SingletonProvider, SingletonResource } from "./Singleton.ts";
 import { WorkflowProvider, WorkflowResource } from "./Workflow.ts";
@@ -30,7 +30,7 @@ export const providers = () =>
       WorkflowResource,
       SingletonResource,
       CronResource,
-      Runners,
+      Pool,
       ShardGroups,
       Random,
     ]),
@@ -41,7 +41,7 @@ export const providers = () =>
         WorkflowProvider(),
         SingletonProvider(),
         CronProvider(),
-        RunnersProvider(),
+        PoolProvider(),
         ShardGroupsProvider(),
         RandomProvider(),
       ),

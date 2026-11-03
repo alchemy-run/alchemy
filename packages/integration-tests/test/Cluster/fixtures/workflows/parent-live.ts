@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { Activity } from "effect/workflow";
 import { Greet, Parent, Recorder } from "./workflows.ts";
 
-export const parentLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const parentLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Parent.make(
     { main },
     Effect.gen(function* () {
@@ -15,5 +15,5 @@ export const parentLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
           return `parent got ${greeting}`;
         }),
       );
-    }).pipe(Effect.provide(runners)),
+    }).pipe(Effect.provide(pool)),
   );

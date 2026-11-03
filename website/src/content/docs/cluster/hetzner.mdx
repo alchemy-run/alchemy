@@ -3,7 +3,7 @@ title: Hetzner
 description: Run an Effect Cluster's database and runners on Hetzner Cloud Servers, on a private Network, behind a Load Balancer.
 ---
 
-Host your cluster on Hetzner Cloud: Postgres runs on a Server with a Volume, and each runner runs on a Server of its own, all on a private Network. A Load Balancer serves the runners' gateway, so a Hetzner Service or anything else calls the rooms by id.
+Host your cluster on Hetzner Cloud: Postgres runs on a Server with a Volume, and each runner runs on a Server of its own, all on a private Network. A Load Balancer serves the pool's gateway, so a Hetzner Service or anything else calls the rooms by id.
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterHetzner from "@alchemy.run/effect-cluster/Hetzner";
@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterHetzner.Database("Cluster");
 
-export const Default = ClusterHetzner.Runners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterHetzner.ServerPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 ```
@@ -32,9 +32,9 @@ export const Database = ClusterHetzner.Database("Cluster", {
 });
 ```
 
-## The runners
+## The pool
 
-`ClusterHetzner.Runners` creates one Server per runner on the Network, and runs the runners' program on each as a `Hetzner.Service`. Runners reach each other over the Network; their firewall only lets SSH in, which deploys them. The Load Balancer finds the Servers by label and checks each at `/health`.
+`ClusterHetzner.ServerPool` creates one Server per runner on the Network, and runs the pool's program on each as a `Hetzner.Service`. Runners reach each other over the Network; their firewall only lets SSH in, which deploys them. The Load Balancer finds the Servers by label and checks each at `/health`.
 
 ## Call it from a Hetzner Service
 
@@ -65,4 +65,4 @@ export default class Api extends Hetzner.Service<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [Database](/providers/cluster/hetzner#database) and [Runners](/providers/cluster/hetzner#runners).
+Every option, with its default, is in the reference: [Database](/providers/cluster/hetzner#database) and [ServerPool](/providers/cluster/hetzner#serverpool).

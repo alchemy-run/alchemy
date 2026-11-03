@@ -1,6 +1,6 @@
 ---
 title: Fly
-description: Run an Effect Cluster's database and runners on Fly.io, on a private network, with the gateway at the runners' fly.dev address.
+description: Run an Effect Cluster's database and runners on Fly.io, on a private network, with the gateway at the pool's fly.dev address.
 ---
 
 Host your cluster on Fly.io: Postgres runs on a Fly Machine with a volume, and the runners run as a Fly Service, all on a private network for your stack. The runners serve their gateway at `https://{name}.fly.dev`.
@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterFly.Database("Cluster");
 
-export const Default = ClusterFly.Runners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterFly.MachinePool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 ```
@@ -32,9 +32,9 @@ export const Database = ClusterFly.Database("Cluster", {
 });
 ```
 
-## The runners
+## The pool
 
-`ClusterFly.Runners` runs a Fly Service with `replicas` Machines. Runners reach each other at their Machines' private addresses, over Fly's IPv6 network.
+`ClusterFly.MachinePool` runs a Fly Service with `replicas` Machines. Runners reach each other at their Machines' private addresses, over Fly's IPv6 network.
 
 ## Call it from a Fly Service
 
@@ -59,4 +59,4 @@ export default class Api extends Fly.Service<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [Database](/providers/cluster/fly#database) and [Runners](/providers/cluster/fly#runners).
+Every option, with its default, is in the reference: [Database](/providers/cluster/fly#database) and [MachinePool](/providers/cluster/fly#machinepool).

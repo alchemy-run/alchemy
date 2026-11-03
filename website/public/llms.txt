@@ -719,31 +719,31 @@ Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, 
 
 ## Effect Cluster
 
-Effect Cluster entities, workflows, singletons and crons, on a Postgres database and runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or on Cloudflare Durable Objects, called by id from any runtime.
+Effect Cluster entities, workflows, singletons and crons, on a Postgres database and a pool of runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or on Cloudflare Durable Objects, called by id from any runtime.
 
-- [Effect Cluster](https://alchemy.run/cluster) — Effect Cluster entities, workflows, singletons and crons, deployed to runners on your own cloud and called by name from any runtime.
-- [What is Effect Cluster?](https://alchemy.run/cluster/what-is-effect-cluster) — The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners, the database, workflows, singletons and crons — and how @alchemy.run/effect-cluster deploys them.
+- [Effect Cluster](https://alchemy.run/cluster) — Effect Cluster entities, workflows, singletons and crons, deployed to a pool on your own cloud and called by name from any runtime.
+- [What is Effect Cluster?](https://alchemy.run/cluster/what-is-effect-cluster) — The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners and pools, the database, workflows, singletons and crons — and how @alchemy.run/effect-cluster deploys them.
 - [Setup](https://alchemy.run/cluster/setup) — Install the Effect Cluster provider and get Docker ready to run a cluster on your machine.
 - [Part 1: Your First Entity](https://alchemy.run/cluster/tutorial/part-1) — Run an Effect Cluster database and runners on Docker, and deploy a chat room entity that tracks who's in it.
-- [Part 2: Signed-In Members](https://alchemy.run/cluster/tutorial/part-2) — Add Effect RPC middleware so a room only lets signed-in users join, and provide it with the runners.
+- [Part 2: Signed-In Members](https://alchemy.run/cluster/tutorial/part-2) — Add Effect RPC middleware so a room only lets signed-in users join, and provide it with the pool.
 - [Part 3: Invitations](https://alchemy.run/cluster/tutorial/part-3) — Add a durable workflow that invites someone to a room, waits for their answer, and lets them in.
-- [Part 4: Run It on AWS](https://alchemy.run/cluster/tutorial/part-4) — Move the chat rooms from Docker to AWS by swapping the database, the runners and the API's host.
+- [Part 4: Run It on AWS](https://alchemy.run/cluster/tutorial/part-4) — Move the chat rooms from Docker to AWS by swapping the database, the pool and the API's host.
 - [Entities](https://alchemy.run/cluster/entities) — How an Effect Cluster entity is written in Alchemy — its declaration, its two-phase implementation, its instances, and where its code lives.
 - [Calling an entity](https://alchemy.run/cluster/calling) — Call an Effect Cluster entity from any runtime by id — RPCs, streams, typed errors, fire-and-forget messages and headers.
-- [RPC middleware](https://alchemy.run/cluster/middleware) — Authenticate and enrich every message to an entity with Effect RPC middleware — a server side that runs on the runners and a client side that runs in the caller.
+- [RPC middleware](https://alchemy.run/cluster/middleware) — Authenticate and enrich every message to an entity with Effect RPC middleware — a server side that runs on the pool and a client side that runs in the caller.
 - [Workflows](https://alchemy.run/cluster/workflows) — Durable workflows on Effect Cluster — persisted activities, durable sleeps, signals, compensations and child workflows — declared and implemented like an entity and started from any runtime.
 - [Singletons](https://alchemy.run/cluster/singletons) — Run one fiber across the whole cluster with an Effect Cluster singleton — on exactly one runner, moved when that runner stops.
 - [Crons](https://alchemy.run/cluster/crons) — Run a job on a schedule with an Effect Cluster cron — once per scheduled time across the cluster, with the schedule on its Layer.
-- [Existing programs](https://alchemy.run/cluster/existing-programs) — Deploy an Effect Cluster program you already have, unchanged, on runners of its own, and call its entities from any runtime.
+- [Existing programs](https://alchemy.run/cluster/existing-programs) — Deploy an Effect Cluster program you already have, unchanged, on a pool of its own, and call its entities from any runtime.
 - [Databases](https://alchemy.run/cluster/databases) — The Postgres an Effect Cluster coordinates through — what runners keep in it, and how to run one on any cloud or connect to one you have.
-- [Runners](https://alchemy.run/cluster/runners) — How a set of Effect Cluster runners hosts your entities, workflows, singletons and crons — what's bundled together, shard groups, the gateway, and how to split work across sets.
+- [Pools](https://alchemy.run/cluster/pools) — How a pool of Effect Cluster runners hosts your entities, workflows, singletons and crons — what's bundled together, shard groups, the gateway, and how to split work across pools.
 - [Docker](https://alchemy.run/cluster/docker) — Run an Effect Cluster's database and runners on a Docker swarm, on your machine or a server.
 - [AWS](https://alchemy.run/cluster/aws) — Run an Effect Cluster's database on RDS and its runners on ECS Fargate, called from Lambda or anywhere through a load balancer.
 - [GCP](https://alchemy.run/cluster/gcp) — Run an Effect Cluster's database and runners on Compute Engine, called from Cloud Run or anywhere through a regional load balancer.
 - [Kubernetes](https://alchemy.run/cluster/kubernetes) — Run an Effect Cluster's database and runners on any Kubernetes cluster — EKS, GKE, or kind on your machine.
-- [Fly](https://alchemy.run/cluster/fly) — Run an Effect Cluster's database and runners on Fly.io, on a private network, with the gateway at the runners' fly.dev address.
+- [Fly](https://alchemy.run/cluster/fly) — Run an Effect Cluster's database and runners on Fly.io, on a private network, with the gateway at the pool's fly.dev address.
 - [Hetzner](https://alchemy.run/cluster/hetzner) — Run an Effect Cluster's database and runners on Hetzner Cloud Servers, on a private Network, behind a Load Balancer.
-- [Cloudflare](https://alchemy.run/cluster/cloudflare) — Run an Effect Cluster's entities, workflows, singletons and crons on Cloudflare Durable Objects, with no database and no runners to manage.
+- [Cloudflare](https://alchemy.run/cluster/cloudflare) — Run an Effect Cluster's entities, workflows, singletons and crons on Cloudflare Durable Objects, with no database and no servers to manage.
 
 ## Better Auth
 

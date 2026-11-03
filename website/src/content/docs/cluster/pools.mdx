@@ -1,11 +1,11 @@
 ---
-title: Runners
-description: How a set of Effect Cluster runners hosts your entities, workflows, singletons and crons — what's bundled together, shard groups, the gateway, and how to split work across sets.
+title: Pools
+description: How a pool of Effect Cluster runners hosts your entities, workflows, singletons and crons — what's bundled together, shard groups, the gateway, and how to split work across pools.
 ---
 
 import DAG from "../../../components/DAG.astro";
 
-**Runners** are the processes that run your code. A set of runners is a Layer: provide it to an implementation, and that implementation runs on every runner in the set.
+A **pool** is a group of **runners**, the processes that run your code. A pool is a Layer: provide it to an implementation, and that implementation runs on every runner in the pool. Each host names its pool after what it runs on, like `ClusterDocker.SwarmPool` or `ClusterAWS.EcsPool`.
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
@@ -13,14 +13,14 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
 
-export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 ```
 
-## One set, one program
+## One pool, one program
 
-Every class provided the same runners is bundled into one Node program, built into one image, and run on every runner in the set. A change to any of them builds a new image, and the host replaces the runners, a few at a time.
+Every class provided the same pool is bundled into one Node program, built into one image, and run on every runner in the pool. A change to any of them builds a new image, and the host replaces the runners, a few at a time.
 
 <DAG
   nodes={[
@@ -38,14 +38,14 @@ Every class provided the same runners is bundled into one Node program, built in
     { from: "default", to: "r1" },
     { from: "default", to: "r2" },
   ]}
-  caption="Every runner in a set runs the same classes."
+  caption="Every runner in a pool runs the same classes."
 />
 
 Effect Cluster needs this: it gives each shard to any runner in a group, whatever classes the runner has, so every runner must have them all.
 
-## Split work across sets
+## Split work across pools
 
-A second set is its own program, image and service, scaled and deployed on its own:
+A second pool is its own program, image and service, scaled and deployed on its own:
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
@@ -53,20 +53,20 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
 
-export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 
-export const Billing = ClusterDocker.Runners("Billing", { replicas: 4 }).pipe(
+export const Billing = ClusterDocker.SwarmPool("Billing", { replicas: 4 }).pipe(
   Layer.provide(Database),
 );
 ```
 
-Each set is its own **shard group**, so its classes' instances only run on its runners. Sets on the same database are one cluster: an entity on `Default` calls one on `Billing` directly.
+Each pool is its own **shard group**, so its classes' instances only run on its runners. Pools on the same database are one cluster: an entity on `Default` calls one on `Billing` directly.
 
 ## Deploying with Layers
 
-Provide runners to an implementation's Effect, with whatever its handlers need from them, like RPC middleware:
+Provide a pool to an implementation's Effect, with whatever its handlers need from them, like RPC middleware:
 
 ```typescript title="src/RoomLive.ts"
 import * as Effect from "effect/Effect";
@@ -90,7 +90,7 @@ export default Room.make(
 );
 ```
 
-Or provide them to the Layer `.make` returns, as Effect does with `toLayer`:
+Or provide it to the Layer `.make` returns, as Effect does with `toLayer`:
 
 ```typescript title="src/SweeperLive.ts"
 import * as Effect from "effect/Effect";
@@ -108,7 +108,7 @@ export default Sweeper.make(
 
 ## The gateway
 
-Every set serves its classes over HTTP to callers outside the cluster, behind a token. Where the gateway is reachable depends on the cloud:
+Every pool serves its classes over HTTP to callers outside the cluster, behind a token. Where the gateway is reachable depends on the cloud:
 
 | Cloud | Gateway |
 |---|---|
@@ -118,7 +118,7 @@ Every set serves its classes over HTTP to callers outside the cluster, behind a 
 | Kubernetes | a Service, in the cluster (or a load balancer, with `serviceType`) |
 | Fly | `https://{name}.fly.dev` |
 | Hetzner | a Load Balancer |
-| Cloudflare | the runners' Worker, through a service binding from other Workers |
+| Cloudflare | the pool's Worker, through a service binding from other Workers |
 
 Load balancers check the gateway at `/health`, which needs no token.
 

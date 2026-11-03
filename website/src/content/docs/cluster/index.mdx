@@ -1,25 +1,25 @@
 ---
 title: Effect Cluster
-description: Effect Cluster entities, workflows, singletons and crons, deployed to runners on your own cloud and called by name from any runtime.
+description: Effect Cluster entities, workflows, singletons and crons, deployed to a pool on your own cloud and called by name from any runtime.
 ---
 
 import DAG from "../../../components/DAG.astro";
 
 `@alchemy.run/effect-cluster` deploys [Effect Cluster](https://effect.website) programs. An **entity** is a class with one instance per id: a chat room, a shopping cart, a user's session. Each instance handles its messages one at a time, so it can keep state without locks.
 
-You run the cluster yourself. A Postgres **database** tracks which runner owns which entities. A set of **runners** runs your code. Both deploy in the same Stack as the rest of your app, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner. On Cloudflare there's neither: every instance is a Durable Object.
+You run the cluster yourself. A Postgres **database** tracks which runner owns which entities. A **pool** of runners runs your code. Both deploy in the same Stack as the rest of your app, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner. On Cloudflare there's neither: every instance is a Durable Object.
 
 <DAG
   nodes={[
     { id: "caller", label: "Callers", type: "Worker, Lambda, container", col: 0, row: 0 },
-    { id: "runners", label: "Runners", type: "run your code", tone: "accent", col: 1, row: 0 },
+    { id: "runners", label: "Pool", type: "runs your code", tone: "accent", col: 1, row: 0 },
     { id: "db", label: "Database", type: "shards and messages", col: 2, row: 0 },
   ]}
   edges={[
     { from: "caller", to: "runners", label: "room lobby" },
     { from: "runners", to: "db" },
   ]}
-  caption="Callers name an entity. The runners route the message to the runner that owns it."
+  caption="Callers name an entity. The pool routes the message to the runner that owns it."
 />
 
 ## A taste
@@ -36,7 +36,7 @@ export class Room extends Cluster.Entity<Room>()("Room", [
 ]) {}
 ```
 
-Its implementation is a Layer, deployed by providing runners to it:
+Its implementation is a Layer, deployed by providing a pool to it:
 
 ```typescript title="src/RoomLive.ts"
 import * as Effect from "effect/Effect";
@@ -61,7 +61,7 @@ export default Room.make(
 );
 ```
 
-`Default` is the runners it runs on, given the database they coordinate through:
+`Default` is the pool it runs on, given the database its runners coordinate through:
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
@@ -69,7 +69,7 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
 
-export const Default = ClusterDocker.Runners("Default").pipe(Layer.provide(Database));
+export const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
 ```
 
 And any runtime calls a room by its id:
@@ -104,7 +104,7 @@ Swap `ClusterDocker` for `ClusterAWS`, `ClusterFly` or any other cloud, and the 
 
 **Want to build one?** The [tutorial](/cluster/tutorial/part-1) builds chat rooms step by step, from a room on your machine to invitations, a nightly cleanup and AWS.
 
-**Want the whole picture?** The concepts read as a manual, one idea per chapter: [Entities](/cluster/entities), [Calling an entity](/cluster/calling), [RPC middleware](/cluster/middleware), [Workflows](/cluster/workflows), [Singletons](/cluster/singletons), [Crons](/cluster/crons), [Databases](/cluster/databases) and [Runners](/cluster/runners).
+**Want the whole picture?** The concepts read as a manual, one idea per chapter: [Entities](/cluster/entities), [Calling an entity](/cluster/calling), [RPC middleware](/cluster/middleware), [Workflows](/cluster/workflows), [Singletons](/cluster/singletons), [Crons](/cluster/crons), [Databases](/cluster/databases) and [Pools](/cluster/pools).
 
 **Already have an Effect Cluster program?** It deploys unchanged. See [Existing programs](/cluster/existing-programs).
 

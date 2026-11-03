@@ -4,15 +4,15 @@ import type { Entity } from "../Entity.ts";
 import type { HostedClass } from "./HostedRuntime.ts";
 
 /**
- * What a runners Layer gives the Effect it is provided to: a way for an
+ * What a pool Layer gives the Effect it is provided to: a way for an
  * external `Cluster.Entity` (an existing Effect Cluster program, referenced
- * by file) to run on the runners.
+ * by file) to run on the pool.
  * @internal
  */
-export class RunnersHost extends Context.Service<
-  RunnersHost,
+export class PoolHost extends Context.Service<
+  PoolHost,
   {
-    /** Host a class (an entity, a workflow) on the runners: its Construction phase is running. */
+    /** Host a class (an entity, a workflow) on the pool: its Construction phase is running. */
     readonly host: (self: HostedClass) => Effect.Effect<void>;
     readonly deployExternal: (entity: {
       readonly type: string;
@@ -22,4 +22,4 @@ export class RunnersHost extends Context.Service<
       readonly resource: Entity;
     }) => Effect.Effect<void>;
   }
->()("Cluster.RunnersHost") {}
+>()("Cluster.PoolHost") {}

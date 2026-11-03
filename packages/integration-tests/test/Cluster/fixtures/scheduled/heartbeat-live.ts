@@ -6,7 +6,7 @@ import * as Schedule from "effect/Schedule";
 import { Journal } from "../workflows/journal.ts";
 import { Heartbeat } from "./heartbeat.ts";
 
-export const heartbeatLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const heartbeatLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Heartbeat.make(
     { main },
     Effect.gen(function* () {
@@ -18,5 +18,5 @@ export const heartbeatLive = <R>(main: string, runners: Cluster.RunnersLayer<R>)
         const journal = yield* journals.getByName("heartbeat");
         yield* journal.Append({ entry: host }).pipe(Effect.repeat(Schedule.spaced("1 second")));
       }).pipe(Effect.orDie);
-    }).pipe(Effect.provide(runners)),
+    }).pipe(Effect.provide(pool)),
   );

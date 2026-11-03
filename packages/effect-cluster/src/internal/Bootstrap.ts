@@ -46,7 +46,7 @@ import { PlatformDeclaration, type HostedEntity } from "../Entity.ts";
 import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
 import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
-import { HasNoRunners, type HostedRuntimeContext } from "./HostedRuntime.ts";
+import { HasNoPool, type HostedRuntimeContext } from "./HostedRuntime.ts";
 
 const env = (name: string) => process.env[name];
 
@@ -181,7 +181,7 @@ export class ExternalProgramExited extends Data.TaggedError("Cluster.ExternalPro
   readonly code: number | null;
 }> {}
 
-/** The shard groups these runners serve, and every group in the cluster. */
+/** The shard groups this pool serves, and every group in the cluster. */
 const shardGroupsConfig = () => {
   const list = (name: string) =>
     (env(name) ?? "")
@@ -228,7 +228,7 @@ export const bootstrap = (
       const built = runtime.hosted();
       if (built === undefined) {
         return yield* Effect.die(
-          new HasNoRunners({
+          new HasNoPool({
             message: `${runtime.Type} '${runtime.id}' did not finish its Construction phase.`,
           }),
         );
@@ -238,7 +238,7 @@ export const bootstrap = (
 
     const host = yield* runnerHost;
     const group = env("CLUSTER_SHARD_GROUPS") ?? "default";
-    // Every hosted entity lives in these runners' own shard group.
+    // Every hosted entity lives in this pool's own shard group.
     const placed = hosted
       .filter((entry): entry is HostedEntity => entry.kind === "entity")
       .map((entry) => ({
@@ -282,7 +282,7 @@ export const bootstrap = (
         ...shardGroupsConfig(),
       },
     }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
-    // Singletons and crons run in these runners' shard group too, each with
+    // Singletons and crons run in this pool's shard group too, each with
     // the services its Construction phase had.
     const scheduled = hosted.flatMap((entry) =>
       entry.kind === "singleton"

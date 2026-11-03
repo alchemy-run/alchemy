@@ -24,7 +24,7 @@ export class Room extends Cluster.Entity<Room>()("Room", [
 ]) {}
 ```
 
-Callers import the declaration, never the implementation. A Worker that calls the room bundles its schemas, not its code or its runners.
+Callers import the declaration, never the implementation. A Worker that calls the room bundles its schemas, not its code or its pool.
 
 ## Implement it
 

@@ -2,10 +2,10 @@ import { WorkerEnvironment } from "alchemy/Workers/WorkerEnvironment";
 /**
  * How callers reach entities. Inside the cluster (a runner, where
  * `Sharding` is in context) calls go straight through Effect Cluster's own
- * client. Anywhere else they go through the gateway the runners serve: each
+ * client. Anywhere else they go through the gateway the pool serves: each
  * entity's RPCs as an RPC group over HTTP, addressed by entity id, behind a
  * bearer token, so a caller needs no database access and no route to the
- * runners.
+ * pool.
  *
  * Either way the caller's client middleware runs in the caller, and the
  * headers it sets reach the entity's own middleware on the runner.

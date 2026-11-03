@@ -14,7 +14,7 @@ export const Kind = Kubernetes.LocalCluster("Kind", { name: "rooms" });
 
 export const Database = ClusterKubernetes.Database("Cluster", { cluster: Kind });
 
-export const Default = ClusterKubernetes.Runners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterKubernetes.DeploymentPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 ```
@@ -25,9 +25,9 @@ Install `@alchemy.run/kubernetes`. `cluster` takes any cluster Alchemy manages, 
 
 `ClusterKubernetes.Database` runs Postgres in a pod, so its data lives as long as the pod does: it suits development and tests. For production, run a managed Postgres and pass its URL to `Cluster.Database.fromUrl`.
 
-## The runners
+## The pool
 
-`ClusterKubernetes.Runners` builds the runners' image, pushes it to the cluster's registry, and runs it as a Deployment. Pods reach each other at their own addresses. The Deployment's Service serves the gateway at `http://{name}.{namespace}.svc.cluster.local:34500`:
+`ClusterKubernetes.DeploymentPool` builds the pool's image, pushes it to the cluster's registry, and runs it as a Deployment. Pods reach each other at their own addresses. The Deployment's Service serves the gateway at `http://{name}.{namespace}.svc.cluster.local:34500`:
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterKubernetes from "@alchemy.run/effect-cluster/Kubernetes";
@@ -38,7 +38,7 @@ export const Kind = Kubernetes.LocalCluster("Kind", { name: "rooms" });
 
 export const Database = ClusterKubernetes.Database("Cluster", { cluster: Kind });
 
-export const Default = ClusterKubernetes.Runners("Default", {
+export const Default = ClusterKubernetes.DeploymentPool("Default", {
   replicas: 3,
   serviceType: "LoadBalancer",
   resources: { requests: { cpu: "500m", memory: "512Mi" } },
@@ -71,4 +71,4 @@ export default Kubernetes.Deployment(
 );
 ```
 
-Every option, with its default, is in the reference: [Database](/providers/cluster/kubernetes#database) and [Runners](/providers/cluster/kubernetes#runners).
+Every option, with its default, is in the reference: [Database](/providers/cluster/kubernetes#database) and [DeploymentPool](/providers/cluster/kubernetes#deploymentpool).

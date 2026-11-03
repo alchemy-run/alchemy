@@ -61,7 +61,7 @@ export type SingletonTag<Self, Name extends string> = Named<Name> &
     /**
      * The singleton's implementation, as a Layer: an Effect that resolves
      * bindings once per runner and returns the fiber to run. Provide a
-     * runners Layer to `impl` to deploy it; provide the returned Layer to
+     * pool Layer to `impl` to deploy it; provide the returned Layer to
      * the Stack.
      */
     make<InitReq = never>(
@@ -79,12 +79,12 @@ export interface SingletonClass {
 
 /**
  * A **Singleton** on an Effect Cluster: one fiber, running on exactly one
- * of its runners. If that runner stops, another starts it.
+ * of its pool. If that runner stops, another starts it.
  *
  * Declare it by name. `.make(props, impl)` is its implementation, as a
  * Layer: an Effect that resolves bindings once per runner and returns the
  * fiber, which only the runner that owns the singleton runs. Providing a
- * runners Layer to the implementation is what deploys it.
+ * pool Layer to the implementation is what deploys it.
  *
  * ### Declaring a singleton
  * **Example:** A loop that runs once across the cluster

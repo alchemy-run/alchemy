@@ -1,7 +1,7 @@
 /**
- * What every runners Layer shares, whatever runs its runners: register the
- * entity whose Construction phase is running with the runners resource, bind
- * what callers need onto the entity, and bundle every class the runners host
+ * What every pool Layer shares, whatever runs its pool: register the
+ * entity whose Construction phase is running with the pool resource, bind
+ * what callers need onto the entity, and bundle every class the pool hosts
  * into one Node program. A host only declares the service that runs it.
  *
  * @internal
@@ -24,17 +24,17 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { Database, type DatabaseShape } from "../Database.ts";
 import { shardGroupKey, type Entity } from "../Entity.ts";
+import { Pool, type PoolEntity } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
-import { Runners, type RunnersEntity } from "../Runners.ts";
 import { GATEWAY_PORT, RUNNER_PORT } from "./Gateway.ts";
 import type { HostedClass } from "./HostedRuntime.ts";
 import { HOSTED_TYPES, shortLabel, stackDnsLabel } from "./Naming.ts";
-import { RunnersHost } from "./RunnersHostService.ts";
+import { PoolHost } from "./PoolHostService.ts";
 
 const VIRTUAL = "virtual:cluster-entities";
 
-/** Resolve {@link VIRTUAL} to a module that imports every class the runners host. */
-const entitiesPlugin = (entities: ReadonlyArray<RunnersEntity>) => {
+/** Resolve {@link VIRTUAL} to a module that imports every class the pool hosts. */
+const entitiesPlugin = (entities: ReadonlyArray<PoolEntity>) => {
   const source = [
     ...entities.map(
       (entity, i) =>
@@ -55,35 +55,35 @@ const entitiesPlugin = (entities: ReadonlyArray<RunnersEntity>) => {
   ];
 };
 
-/** The runners were given a database whose network they cannot join. */
+/** The pool was given a database whose network it cannot join. */
 export class DatabaseNetworkMismatch extends Data.TaggedError("Cluster.DatabaseNetworkMismatch")<{
   readonly message: string;
 }> {}
 
-export interface RunnersSettings {
+export interface PoolSettings {
   /**
-   * The name the runners are known by. It is also the shard group the
+   * The name the pool is known by. It is also the shard group the
    * entities they host are placed in.
    * @default ${stack}-${stage}-${id}
    */
   name?: string;
   /**
    * The shard groups an external program's entities use, which these
-   * runners serve. Entities declared with Alchemy always use the runners'
+   * runners serve. Entities declared with Alchemy always use the pool's
    * own group.
    * @default ["default"]
    */
   shardGroups?: string[];
 }
 
-/** What a host needs to declare the service that runs the runners. */
-export interface RunnersNodes<Network, Gateway extends RunnersGateway = RunnersGateway> {
+/** What a host needs to declare the service that runs the pool. */
+export interface PoolNodes<Network, Gateway extends PoolGateway = PoolGateway> {
   /** What the host declared for the gateway (e.g. a load balancer to register with). */
   readonly gateway: Gateway;
   readonly database: DatabaseShape;
   readonly network: Network;
-  readonly runners: Runners;
-  /** The runners' name, a DNS label. */
+  readonly pool: Pool;
+  /** The pool's name, a DNS label. */
   readonly name: string;
   /**
    * The bundled program: a directory holding `runner.mjs` with a
@@ -99,7 +99,7 @@ export interface RunnersNodes<Network, Gateway extends RunnersGateway = RunnersG
 }
 
 /** What a host binds onto each entity so callers can reach the gateway. */
-export interface RunnersGateway {
+export interface PoolGateway {
   readonly url: Input<string>;
 }
 
@@ -116,33 +116,29 @@ ENTRYPOINT ["node", "/app/runner.mjs"]
 `;
 
 /**
- * A runners Layer: `network` narrows the database's network to the one this
- * host can join; `gateway` names where callers reach the runners;
+ * A pool Layer: `network` narrows the database's network to the one this
+ * host can join; `gateway` names where callers reach the pool;
  * `nodes` declares the service that runs them.
  */
-export const makeRunnersLayer = <
-  Network,
-  Req,
-  Gateway extends RunnersGateway = RunnersGateway,
->(options: {
+export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGateway>(options: {
   readonly label: string;
   readonly id: string;
-  readonly settings: RunnersSettings;
+  readonly settings: PoolSettings;
   readonly network: (database: DatabaseShape) => Network | undefined;
   readonly expected: string;
   /** The longest runner name the host accepts. @default 63 */
   readonly nameLength?: number;
   /** The runner image's Dockerfile, when the host needs more than {@link RUNNER_DOCKERFILE}. */
   readonly dockerfile?: string;
-  /** Where callers reach the gateway, declaring what it needs; before the runners' service. */
+  /** Where callers reach the gateway, declaring what it needs; before the pool's service. */
   readonly gateway: (name: string, network: Network) => Effect.Effect<Gateway, never, Req>;
-  readonly nodes: (nodes: RunnersNodes<Network, Gateway>) => Effect.Effect<void, never, Req>;
-}): Layer.Layer<RunnersHost, never, Database | Stack | Providers | Req> =>
+  readonly nodes: (nodes: PoolNodes<Network, Gateway>) => Effect.Effect<void, never, Req>;
+}): Layer.Layer<PoolHost, never, Database | Stack | Providers | Req> =>
   Layer.effect(
-    RunnersHost,
+    PoolHost,
     Effect.gen(function* () {
       const database = yield* Database;
-      // What was provided to the runners, like an entity's RPC middleware,
+      // What was provided to the pool, like an entity's RPC middleware,
       // goes with every class they host.
       const services = yield* Effect.context<never>();
       const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
@@ -152,7 +148,7 @@ export const makeRunnersLayer = <
         return {
           host: (hosted) => hosted.provideServices(services),
           deployExternal: () => Effect.void,
-        } satisfies RunnersHost["Service"];
+        } satisfies PoolHost["Service"];
       }
       const network = options.network(database);
       if (network === undefined) {
@@ -162,8 +158,8 @@ export const makeRunnersLayer = <
           }),
         );
       }
-      // Named up front, so an entity knows its runners without depending on
-      // the runners resource, whose bindings carry every entity's env.
+      // Named up front, so an entity knows its pool without depending on
+      // the pool resource, whose bindings carry every entity's env.
       const name = options.settings.name ?? (yield* stackDnsLabel(options.id, options.nameLength));
       // A shard group only has to be unique within its database, and must
       // never be one an external program uses (usually `default`). Effect
@@ -172,27 +168,27 @@ export const makeRunnersLayer = <
       const gateway = yield* options.gateway(name, network);
       const context = yield* Effect.context<Stack | Providers | Req>();
 
-      /** Put `hosted` on the runners, bind the gateway onto `resource`, and declare the runners. */
-      const deploy = (hosted: RunnersEntity, env: Record<string, unknown>, resource: Entity) =>
+      /** Put `hosted` on the pool, bind the gateway onto `resource`, and declare the pool. */
+      const deploy = (hosted: PoolEntity, env: Record<string, unknown>, resource: Entity) =>
         Effect.gen(function* () {
-          const runners = yield* Runners(options.id, { name });
+          const pool = yield* Pool(options.id, { name });
           const token = yield* Random(`${options.id}GatewayToken`, {
             bytes: 32,
           }) as unknown as Effect.Effect<Random, never, Providers>;
           // The hosting runners route the entity to its own shard group.
-          yield* runners.bind`${hosted.name}`({
+          yield* pool.bind`${hosted.name}`({
             entities: [hosted],
             env:
               hosted.program === undefined ? { ...env, [shardGroupKey(hosted.name)]: group } : env,
           });
-          // Alchemy entities live in the runners' own shard group; an
+          // Alchemy entities live in the pool's own shard group; an
           // external program keeps the groups its entities use.
           const groups =
             hosted.program === undefined ? [group] : (options.settings.shardGroups ?? ["default"]);
           yield* database.shardGroups.bind`${name}`({ groups });
           // What callers need to reach the entity through the gateway.
-          yield* resource.bind`Runners`({
-            runners: group,
+          yield* resource.bind`Pool`({
+            pool: group,
             gateway: gateway.url,
             token: token.text,
           });
@@ -201,15 +197,15 @@ export const makeRunnersLayer = <
             gateway,
             database,
             network,
-            runners,
+            pool,
             name,
-            program: yield* bundleRunners(
+            program: yield* bundleProgram(
               options.id,
-              runners,
+              pool,
               options.dockerfile ?? RUNNER_DOCKERFILE,
             ),
             environment: Output.all(
-              runners.env,
+              pool.env,
               output(database.url),
               token.text,
               database.shardGroups.groups,
@@ -223,7 +219,7 @@ export const makeRunnersLayer = <
                 ALCHEMY_PHASE: "runtime",
                 CLUSTER_DATABASE_URL: Redacted.value(url),
                 CLUSTER_GATEWAY_TOKEN: Redacted.value(tokenText),
-                CLUSTER_RUNNERS: name,
+                CLUSTER_POOL: name,
                 CLUSTER_SHARD_GROUPS: groups.join(","),
                 CLUSTER_AVAILABLE_SHARD_GROUPS: allGroups.join(","),
               })),
@@ -234,7 +230,7 @@ export const makeRunnersLayer = <
       const host = (hosted: HostedClass) =>
         Effect.andThen(
           hosted.provideServices(services),
-          hosted.registerRunners((env) =>
+          hosted.registerPool((env) =>
             deploy(
               { name: hosted.LogicalId, module: hosted.Props.main, handler: "default" },
               env,
@@ -244,7 +240,7 @@ export const makeRunnersLayer = <
         );
 
       // The generic `Self` is the class whose phase is running. When it is
-      // not hosted on runners, the runners were given an external entity,
+      // not hosted on runners, the pool was given an external entity,
       // which may be declared inside any runtime's Construction phase.
       if (hostsSelf) yield* host(self as unknown as HostedClass);
 
@@ -257,7 +253,7 @@ export const makeRunnersLayer = <
             {},
             resource,
           ) as Effect.Effect<void>,
-      } satisfies RunnersHost["Service"];
+      } satisfies PoolHost["Service"];
     }),
   );
 
@@ -281,13 +277,13 @@ const runnerEntry = (name: "runner" | "external-runner") =>
 
 /**
  * Bundle the runner program and its Dockerfile into a directory of their
- * own, once the runners know their classes, and resolve to the directory.
+ * own, once the pool knows its classes, and resolve to the directory.
  */
-const bundleRunners = Effect.fn(function* (id: string, runners: Runners, dockerfile: string) {
+const bundleProgram = Effect.fn(function* (id: string, pool: Pool, dockerfile: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = path.resolve(yield* dotAlchemyDirectory, "cluster", yield* stackDnsLabel(id));
-  return Output.mapEffect((entities: RunnersEntity[]) =>
+  return Output.mapEffect((entities: PoolEntity[]) =>
     Effect.gen(function* () {
       yield* fs.remove(dir, { recursive: true, force: true });
       yield* fs.makeDirectory(dir, { recursive: true });
@@ -326,5 +322,5 @@ const bundleRunners = Effect.fn(function* (id: string, runners: Runners, dockerf
       );
       return { dir, hash };
     }).pipe(Effect.orDie),
-  )(runners.entities);
+  )(pool.entities);
 });

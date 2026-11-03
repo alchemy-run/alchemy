@@ -4,7 +4,7 @@ import * as Storage from "@alchemy.run/gcp/Storage";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { GATEWAY_PORT, RUNNER_PORT } from "../internal/Gateway.ts";
-import { makeRunnersLayer, type RunnersSettings } from "../internal/RunnersHost.ts";
+import { makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
 import { COS_IMAGE } from "./Database.ts";
 
 const NODE_IMAGE = "node:26-slim";
@@ -12,7 +12,7 @@ const APP_PATH = "/var/lib/cluster-runner";
 const ENV_KEY = "cluster-runner-env";
 const HASH_KEY = "cluster-runner-hash";
 
-export interface ComputeRunnersOptions extends RunnersSettings {
+export interface ComputeEnginePoolOptions extends PoolSettings {
   /**
    * Number of runners, one instance each, spread across zones.
    * @default 2
@@ -24,7 +24,7 @@ export interface ComputeRunnersOptions extends RunnersSettings {
    */
   machineType?: string;
   /**
-   * Zones the runners are spread across, in the database's region.
+   * Zones the pool is spread across, in the database's region.
    * @default the region's `-a`, `-b` and `-c` zones
    */
   zones?: string[];
@@ -77,7 +77,7 @@ pgrep -f "docker logs -f cluster-runner" >/dev/null || setsid sh -c 'while true;
 `;
 
 /**
- * Run an Effect Cluster's runners on Compute Engine: instances in the
+ * Run a pool of Effect Cluster runners on Compute Engine: instances in the
  * database's VPC, spread across zones, each running every class given these
  * runners from a Cloud Storage bucket, behind a regional load balancer on a
  * static address that serves their gateway to callers anywhere. Runners
@@ -90,21 +90,21 @@ pgrep -f "docker logs -f cluster-runner" >/dev/null || setsid sh -c 'while true;
  * **Example:** Two runners
  * ```typescript
  * export const Database = ClusterGCP.Database("Cluster");
- * export const Default = ClusterGCP.ComputeRunners("Default", { replicas: 2 }).pipe(
+ * export const Default = ClusterGCP.ComputeEnginePool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Database),
  * );
  * ```
  *
  * @primitive
  */
-export const ComputeRunners = (id: string, options: ComputeRunnersOptions = {}) =>
-  makeRunnersLayer({
-    label: "ClusterGCP.ComputeRunners",
+export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions = {}) =>
+  makePoolLayer({
+    label: "ClusterGCP.ComputeEnginePool",
     id,
     settings: options,
     expected: "a GCP network (ClusterGCP.Database)",
     network: (database) => (database.network?.kind === "gcp" ? database.network : undefined),
-    // A static address, before the instances, so the URL never depends on them.
+    // A static address, before the instances, so the URL never depends on it.
     gateway: (_name, network) =>
       Effect.gen(function* () {
         const address = yield* Compute.Address(`${id}GatewayAddress`, { region: network.region });

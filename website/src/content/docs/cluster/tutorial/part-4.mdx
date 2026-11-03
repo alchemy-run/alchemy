@@ -1,6 +1,6 @@
 ---
 title: "Part 4: Run It on AWS"
-description: Move the chat rooms from Docker to AWS by swapping the database, the runners and the API's host.
+description: Move the chat rooms from Docker to AWS by swapping the database, the pool and the API's host.
 sidebar:
   order: 4
 ---
@@ -9,7 +9,7 @@ The rooms, the middleware and the invitations don't know where they run. In this
 
 Finish [AWS setup](/aws/setup) and install `@alchemy.run/aws`.
 
-## Swap the database and the runners
+## Swap the database and the pool
 
 ```diff lang="typescript"
 // src/Cluster.ts
@@ -20,13 +20,13 @@ import * as Layer from "effect/Layer";
 -export const Database = ClusterDocker.Database("Cluster");
 +export const Database = ClusterAWS.Database("Cluster");
 
--export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
-+export const Default = ClusterAWS.EcsRunners("Default", { replicas: 2 }).pipe(
+-export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
++export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );
 ```
 
-The database is now an RDS instance in a VPC of its own, and the runners an ECS service in that VPC, behind a load balancer that serves their gateway.
+The database is now an RDS instance in a VPC of its own, and the pool an ECS service in that VPC, behind a load balancer that serves its gateway.
 
 ## Serve the API from Lambda
 

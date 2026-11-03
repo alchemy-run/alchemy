@@ -35,7 +35,7 @@ The client has the same shape as Effect Cluster's own `Entity.client`, and the s
 
 ## How the call travels
 
-While deploying, `yield* Room` binds three values into the caller's environment: the address of the runners' gateway, the token it checks, and the runners' shard group. At runtime, it reads them back and calls the gateway over HTTP. The caller needs no access to the database and no route to the runners.
+While deploying, `yield* Room` binds three values into the caller's environment: the address of the pool's gateway, the token it checks, and the pool's shard group. At runtime, it reads them back and calls the gateway over HTTP. The caller needs no access to the database and no route to the pool.
 
 Inside the cluster, one entity calling another (or a workflow calling an entity) goes straight from runner to runner, through Effect Cluster itself.
 

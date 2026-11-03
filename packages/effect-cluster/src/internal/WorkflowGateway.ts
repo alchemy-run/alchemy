@@ -1,6 +1,6 @@
 /**
- * How callers outside the cluster reach the workflows runners host: four
- * RPCs on the runners' gateway, served by the runners' own
+ * How callers outside the cluster reach the workflows a pool hosts: four
+ * RPCs on the pool's gateway, served by the pool's own
  * `ClusterWorkflowEngine`, and a `WorkflowEngine` for callers that sends
  * them. Payloads, results and signals cross as JSON, encoded with the
  * workflow's own schemas.
@@ -45,7 +45,7 @@ class UnknownWorkflow extends Data.TaggedError("Cluster.UnknownWorkflow")<{
   readonly workflow: string;
 }> {}
 
-/** The runners' side: each RPC on the runners' own engine, for the workflows they host. */
+/** The pool's side: each RPC on the pool's own engine, for the workflows they host. */
 export const workflowHandlers = (workflows: ReadonlyMap<string, Workflow.Any>) =>
   WorkflowRpcs.toLayer(
     Effect.gen(function* () {
@@ -95,16 +95,16 @@ export const workflowHandlers = (workflows: ReadonlyMap<string, Workflow.Any>) =
     }),
   );
 
-/** A step only runs inside a run, and runs only run on the runners. */
-class RunsOnRunners extends Data.TaggedError("Cluster.RunsOnRunners")<{
+/** A step only runs inside a run, and runs only run on the pool. */
+class RunsOnPool extends Data.TaggedError("Cluster.RunsOnPool")<{
   readonly operation: string;
 }> {}
 
-const onRunners = (operation: string) => Effect.die(new RunsOnRunners({ operation }));
+const onPool = (operation: string) => Effect.die(new RunsOnPool({ operation }));
 
 /**
  * A caller's engine: starts and reads runs through the gateway of the
- * runners that host each workflow. `route` returns that gateway.
+ * pool that hosts each workflow. `route` returns that gateway.
  */
 export const makeRemoteEngine = (
   route: (workflowName: string) => Effect.Effect<GatewayTarget>,
@@ -170,8 +170,8 @@ export const makeRemoteEngine = (
         client["Workflow.Interrupt"]({ workflow: workflow._tag, executionId }),
       ),
     resume: () => Effect.void,
-    activityExecute: () => onRunners("Activity execution"),
-    deferredResult: () => onRunners("DurableDeferred reads"),
+    activityExecute: () => onPool("Activity execution"),
+    deferredResult: () => onPool("DurableDeferred reads"),
     deferredDone: ({ workflowName, executionId, deferredName, exit }) =>
       Effect.flatMap(encodeExit(exit), (text) =>
         call(workflowName, (client) =>
@@ -183,6 +183,6 @@ export const makeRemoteEngine = (
           }),
         ),
       ),
-    scheduleClock: () => onRunners("DurableClock scheduling"),
+    scheduleClock: () => onPool("DurableClock scheduling"),
   });
 };

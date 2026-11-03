@@ -549,7 +549,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Effect Cluster",
     intro:
-      "Effect Cluster entities, workflows, singletons and crons, on a Postgres database and runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or on Cloudflare Durable Objects, called by id from any runtime.",
+      "Effect Cluster entities, workflows, singletons and crons, on a Postgres database and a pool of runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or on Cloudflare Durable Objects, called by id from any runtime.",
     pages: {
       slugs: [
         "cluster/index",
@@ -567,7 +567,7 @@ const SECTIONS: Section[] = [
         "cluster/crons",
         "cluster/existing-programs",
         "cluster/databases",
-        "cluster/runners",
+        "cluster/pools",
         "cluster/docker",
         "cluster/aws",
         "cluster/gcp",

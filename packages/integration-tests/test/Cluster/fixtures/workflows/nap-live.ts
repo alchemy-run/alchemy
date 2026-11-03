@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { Activity, DurableClock } from "effect/workflow";
 import { Nap, Recorder } from "./workflows.ts";
 
-export const napLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const napLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Nap.make(
     { main },
     Effect.gen(function* () {
@@ -20,5 +20,5 @@ export const napLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
           return "rested";
         }),
       );
-    }).pipe(Effect.provide(runners)),
+    }).pipe(Effect.provide(pool)),
   );

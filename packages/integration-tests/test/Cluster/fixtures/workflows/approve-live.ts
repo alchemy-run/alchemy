@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { Activity, DurableDeferred } from "effect/workflow";
 import { Approval, Approve, Recorder } from "./workflows.ts";
 
-export const approveLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const approveLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Approve.make(
     { main },
     Effect.gen(function* () {
@@ -16,5 +16,5 @@ export const approveLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =
           return `approved by ${by}`;
         }),
       );
-    }).pipe(Effect.provide(runners)),
+    }).pipe(Effect.provide(pool)),
   );

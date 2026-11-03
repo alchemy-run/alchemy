@@ -41,7 +41,7 @@ const DATA = "/var/lib/postgresql/data";
 /**
  * The database an Effect Cluster coordinates through, on Fly.io, as a
  * `Cluster.Database` Layer: Postgres on a Fly Machine with a volume, in an
- * App on a private network that the runners join. Nothing outside the
+ * App on a private network that the pool's runners join. Nothing outside the
  * network reaches it.
  *
  * One Postgres on one volume is meant for development and small clusters;

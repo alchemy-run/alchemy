@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { Journal } from "../workflows/journal.ts";
 import { Tick } from "./tick.ts";
 
-export const tickLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
+export const tickLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
   Tick.make(
     { main, cron: "*/2 * * * * *" },
     Effect.gen(function* () {
@@ -15,5 +15,5 @@ export const tickLive = <R>(main: string, runners: Cluster.RunnersLayer<R>) =>
         const journal = yield* journals.getByName("ticks");
         yield* journal.Append({ entry: String(scheduled.epochMilliseconds) });
       }).pipe(Effect.orDie);
-    }).pipe(Effect.provide(runners)),
+    }).pipe(Effect.provide(pool)),
   );
