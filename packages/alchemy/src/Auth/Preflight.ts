@@ -44,8 +44,9 @@ export const preflightCredentials = Effect.fn("Alchemy.preflightCredentials")(fu
       Effect.option,
     );
     if (Option.isNone(resolved)) continue;
-    const { source, profileName, config } = resolved.value;
-    if (source !== "profile" || profileName === undefined || config === undefined) continue;
+    // Environment credentials (CI or exported variables) carry no profile config.
+    const { profileName, config } = resolved.value;
+    if (profileName === undefined || config === undefined) continue;
     yield* auth.preflight(profileName, config, owned);
   }
 });

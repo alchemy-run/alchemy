@@ -308,6 +308,7 @@ export interface AuthProviderImpl<
    * environment credentials, and must not call the cloud. Optional.
    */
   preflight?(
+    this: void,
     profileName: string,
     config: Config,
     resources: ReadonlyArray<PreflightResource>,
@@ -502,15 +503,7 @@ export const AuthProvider =
           globalLogs,
         ),
         environment,
-        ...(service.preflight === undefined
-          ? {}
-          : {
-              preflight: (
-                profileName: string,
-                config: Config,
-                resources: ReadonlyArray<PreflightResource>,
-              ) => service.preflight!(profileName, config, resources),
-            }),
+        ...(service.preflight === undefined ? {} : { preflight: service.preflight }),
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>
           Schema.decodeUnknownEffect(service.configSchema)(config).pipe(

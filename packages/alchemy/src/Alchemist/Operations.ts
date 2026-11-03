@@ -280,12 +280,14 @@ export const plan = Effect.fn("Alchemist.plan")(function* <
   const deploy: DeployPlanOptions = input;
   const built = yield* buildStack(input.stack, deploy);
   // Before planning reads anything from the cloud, check that the stored
-  // credentials can manage the stack's resources (e.g. OAuth scopes). Local
-  // dev runs emulate most resources, so they skip it.
+  // credentials can manage the resources this plan covers (e.g. OAuth
+  // scopes). Local dev runs emulate most resources, so they skip it.
   if (!deploy.dev) {
-    yield* preflightCredentials(Object.values(built.stack.resources)).pipe(
-      Effect.provide(built.context),
-    );
+    const resources = yield* Plan.selectedResources(built.stack, {
+      include: deploy.include,
+      exclude: deploy.exclude,
+    });
+    yield* preflightCredentials(resources).pipe(Effect.provide(built.context));
   }
   const native = yield* Plan.make(built.stack, {
     force: deploy.force,
