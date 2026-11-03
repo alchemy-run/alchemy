@@ -9,5 +9,5 @@ import type { Limit } from "@alchemy.run/test";
  */
 export const flyApi: Limit = {
   label: "fly-api",
-  permits: Number(process.env.ALCHEMY_TEST_FLY_PERMITS ?? 16),
+  permits: Number(process.env.ALCHEMY_TEST_FLY_PERMITS ?? 12),
 };

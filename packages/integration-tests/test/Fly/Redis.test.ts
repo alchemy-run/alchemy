@@ -36,9 +36,8 @@ const waitUntilAppGone = (appName: string) =>
     }),
   );
 
-// Every case deploys its own stack, so they run concurrently; the flyApi limit
-// caps the load on Fly.
-describe.concurrent("Redis", () => {
+// Sequential: concurrent Upstash lifecycles slow each other past the timeout.
+describe.sequential("Redis", () => {
   test.provider(
     "lists cheapest redis plan",
     (stack) =>
