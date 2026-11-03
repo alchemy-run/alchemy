@@ -216,7 +216,12 @@ test.provider(
       );
       expect(batches).toHaveLength(1);
       const [{ batch, spans }] = batches;
-      expect([...spans].sort()).toEqual(["GET", "otel-event-flush.worker"]);
+      // The handler's finalizer ran on the event scope, after the body ended.
+      expect([...spans].sort()).toEqual([
+        "GET",
+        "otel-event-flush.finalizer-after-body",
+        "otel-event-flush.worker",
+      ]);
       expect(batch.body).toContain('"name":"otel-event-flush.stream-tail"');
       // The body ended while its export was still held.
       expect(batch.completed).toBe(false);
