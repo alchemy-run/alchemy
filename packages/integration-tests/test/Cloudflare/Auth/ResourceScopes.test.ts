@@ -9,7 +9,7 @@ import { Policy } from "@alchemy.run/cloudflare/Access/Policy";
 import { ServiceToken } from "@alchemy.run/cloudflare/Access/ServiceToken";
 import type { CloudflareAuthConfig } from "@alchemy.run/cloudflare/Auth/AuthConfig";
 import { CloudflareAuth } from "@alchemy.run/cloudflare/Auth/AuthProvider";
-import { ALL_SCOPES } from "@alchemy.run/cloudflare/Auth/OAuthScopes";
+import { ALL_SCOPES, OAUTH_SCOPE_NAMES } from "@alchemy.run/cloudflare/Auth/OAuthScopes";
 import {
   missingOAuthScopes,
   missingOAuthScopesMessage,
@@ -69,6 +69,54 @@ describe(
       }
     });
 
+    it("asks each type for the Cloudflare permissions its endpoints accept", () => {
+      // Pinned by permission name, so a wrong scope id fails even when it is
+      // a valid scope in the catalog.
+      expect(
+        Object.fromEntries(
+          Object.entries(RESOURCE_OAUTH_SCOPES).map(([type, scopes]) => [
+            type,
+            scopes.map((scope) => OAUTH_SCOPE_NAMES[scope]),
+          ]),
+        ),
+      ).toEqual({
+        "Cloudflare.Access.Application": ["Access: Apps and Policies Write", "Access: Apps Write"],
+        "Cloudflare.Access.Policy": ["Access: Apps and Policies Write", "Access: Policies Write"],
+        "Cloudflare.Access.Bookmark": ["Access: Apps and Policies Write"],
+        "Cloudflare.Access.Group": [
+          "Access: Organizations, Identity Providers, and Groups Write",
+          "Access: Groups Write",
+        ],
+        "Cloudflare.Access.IdentityProvider": [
+          "Access: Organizations, Identity Providers, and Groups Write",
+          "Access: Identity Providers Write",
+        ],
+        "Cloudflare.Access.Organization": [
+          "Access: Organizations, Identity Providers, and Groups Write",
+          "Access: Organizations Write",
+        ],
+        "Cloudflare.Access.ServiceToken": ["Access: Service Tokens Write"],
+        "Cloudflare.Access.CustomPage": ["Access: Custom Pages Write"],
+        "Cloudflare.Access.Certificate": ["Access: Mutual TLS Certificates Write"],
+        "Cloudflare.Worker": ["Workers Scripts Write"],
+        "Cloudflare.Workflow": ["Workers Scripts Write"],
+        "Cloudflare.Workers.Route": ["Workers Routes Write"],
+        "Cloudflare.D1Database": ["D1 Write"],
+        "Cloudflare.R2.Bucket": ["Workers R2 Storage Write"],
+        "Cloudflare.KV.Namespace": ["Workers KV Storage Write"],
+        "Cloudflare.Queues.Queue": ["Queues Write", "Workers Scripts Write"],
+        "Cloudflare.Hyperdrive": ["Hyperdrive Write"],
+        "Cloudflare.VectorizeIndex": ["Vectorize Write"],
+        "Cloudflare.SecretsStore": ["Secrets Store Write"],
+        "Cloudflare.DNS.Record": ["DNS Write"],
+        "Cloudflare.Tunnel.Tunnel": [
+          "Cloudflare Tunnel Write",
+          "Cloudflare One Connectors Write",
+          "Cloudflare One Connector: cloudflared Write",
+        ],
+      });
+    });
+
     it("names each missing scope once with the resources that need it", () => {
       const missing = missingOAuthScopes(
         ["workers-scripts.write", "d1.write"],
@@ -76,27 +124,32 @@ describe(
           { Type: "Cloudflare.Worker", FQN: "Api" },
           { Type: "Cloudflare.D1Database", FQN: "Db" },
           { Type: "Cloudflare.Access.Application", FQN: "AdminApp" },
-          { Type: "Cloudflare.Access.Policy", FQN: "AdminPolicy" },
           { Type: "Cloudflare.Access.ServiceToken", FQN: "CiToken" },
+          { Type: "Cloudflare.Access.Application", FQN: "DocsApp" },
+          { Type: "Cloudflare.Access.Policy", FQN: "AdminPolicy" },
           { Type: "Cloudflare.Unmapped.Thing", FQN: "Other" },
         ],
       );
       expect(missing).toEqual([
         {
           scope: "access.write",
-          alternatives: ["zone-access.write"],
-          resources: ["AdminApp", "AdminPolicy"],
+          alternatives: ["access-app.write"],
+          resources: ["AdminApp", "DocsApp"],
         },
+        { scope: "access-service-token.write", alternatives: [], resources: ["CiToken"] },
         {
-          scope: "access-service-token.write",
-          alternatives: [],
-          resources: ["CiToken"],
+          scope: "access.write",
+          alternatives: ["access-policy.write"],
+          resources: ["AdminPolicy"],
         },
       ]);
       const message = missingOAuthScopesMessage("default", missing, "Run `reconfigure`.");
       expect(message).toContain("profile 'default'");
       expect(message).toContain(
-        "access.write (Access: Apps and Policies Write) or zone-access.write: AdminApp, AdminPolicy",
+        "access.write (Access: Apps and Policies Write) or access-app.write: AdminApp, DocsApp",
+      );
+      expect(message).toContain(
+        "access.write (Access: Apps and Policies Write) or access-policy.write: AdminPolicy",
       );
       expect(message).toContain(
         "access-service-token.write (Access: Service Tokens Write): CiToken",
@@ -104,14 +157,40 @@ describe(
       expect(message).toContain("Run `reconfigure`.");
     });
 
+    it("accepts the narrower Access scopes for the objects they cover", () => {
+      const access = [
+        { Type: "Cloudflare.Access.Application", FQN: "App" },
+        { Type: "Cloudflare.Access.Policy", FQN: "Policy" },
+        { Type: "Cloudflare.Access.Group", FQN: "Group" },
+        { Type: "Cloudflare.Access.IdentityProvider", FQN: "Idp" },
+        { Type: "Cloudflare.Access.Organization", FQN: "Org" },
+      ];
+      expect(
+        missingOAuthScopes(
+          [
+            "access-app.write",
+            "access-policy.write",
+            "access-group.write",
+            "access-idp.write",
+            "access-org.write",
+          ],
+          access,
+        ),
+      ).toEqual([]);
+      expect(missingOAuthScopes(["access.write", "access-acct.write"], access)).toEqual([]);
+      // A narrow scope covers only its own objects.
+      expect(
+        missingOAuthScopes(["access-app.write", "access-group.write"], access).flatMap(
+          (entry) => entry.resources,
+        ),
+      ).toEqual(["Policy", "Idp", "Org"]);
+    });
+
     it("accepts any one of a resource's alternative scopes", () => {
       expect(
         missingOAuthScopes(
-          ["zone-access.write", "workers-scripts.write"],
-          [
-            { Type: "Cloudflare.Access.Application", FQN: "ZoneApp" },
-            { Type: "Cloudflare.Queues.Queue", FQN: "Jobs" },
-          ],
+          ["workers-scripts.write"],
+          [{ Type: "Cloudflare.Queues.Queue", FQN: "Jobs" }],
         ),
       ).toEqual([]);
     });

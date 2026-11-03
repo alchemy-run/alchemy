@@ -2,20 +2,26 @@ import type { PreflightResource } from "alchemy/Auth/AuthProvider";
 import { OAUTH_SCOPE_NAMES, type OAuthScopeId } from "./OAuthScopes.ts";
 
 /**
- * The OAuth scope each resource type's create/update/delete calls need: any
- * one scope of the list is enough. Taken from the `x-api-token-group` that
- * Cloudflare's API schema (https://github.com/cloudflare/api-schemas) lists
- * for those endpoints, mapped to the scope with the same permission name in
+ * The OAuth scopes each resource type's create/update/delete calls accept:
+ * any one scope of the list is enough. The permissions come from the
+ * `x-api-token-group` of those endpoints in Cloudflare's API schema
+ * (https://github.com/cloudflare/api-schemas), plus, for Access, the narrower
+ * scopes for the same objects in Cloudflare's permissions reference
+ * (https://developers.cloudflare.com/fundamentals/api/reference/permissions/).
+ * Each maps to the scope with that permission name in
  * {@link OAUTH_SCOPE_NAMES}. Types not listed here are not checked.
+ *
+ * The check asks for write access even when the plan would leave the
+ * resource unchanged, so a read-only grant fails it for a stack that
+ * declares the resource.
  */
 export const RESOURCE_OAUTH_SCOPES: Readonly<Record<string, ReadonlyArray<OAuthScopeId>>> = {
-  // Account- and zone-level apps and policies share one permission.
-  "Cloudflare.Access.Application": ["access.write", "zone-access.write"],
-  "Cloudflare.Access.Policy": ["access.write", "zone-access.write"],
+  "Cloudflare.Access.Application": ["access.write", "access-app.write"],
+  "Cloudflare.Access.Policy": ["access.write", "access-policy.write"],
   "Cloudflare.Access.Bookmark": ["access.write"],
-  "Cloudflare.Access.Group": ["access-acct.write"],
-  "Cloudflare.Access.IdentityProvider": ["access-acct.write"],
-  "Cloudflare.Access.Organization": ["access-acct.write"],
+  "Cloudflare.Access.Group": ["access-acct.write", "access-group.write"],
+  "Cloudflare.Access.IdentityProvider": ["access-acct.write", "access-idp.write"],
+  "Cloudflare.Access.Organization": ["access-acct.write", "access-org.write"],
   "Cloudflare.Access.ServiceToken": ["access-service-token.write"],
   "Cloudflare.Access.CustomPage": ["access-custom-page.write"],
   "Cloudflare.Access.Certificate": ["access-certificate.write"],
@@ -39,30 +45,34 @@ export const RESOURCE_OAUTH_SCOPES: Readonly<Record<string, ReadonlyArray<OAuthS
 
 /** One scope a stack needs but the grant lacks. */
 export interface MissingOAuthScope {
-  /** The scope to grant; {@link alternatives} would do as well. */
+  /** The scope to grant; any of {@link alternatives} would do instead. */
   readonly scope: OAuthScopeId;
   readonly alternatives: ReadonlyArray<OAuthScopeId>;
   /** FQNs of the resources that need it. */
   readonly resources: ReadonlyArray<string>;
 }
 
-/** The scopes `resources` need that `granted` lacks, one entry per scope. */
+/**
+ * The scopes `resources` need that `granted` lacks: one entry per accepted
+ * scope list, in the order the resources first need it.
+ */
 export const missingOAuthScopes = (
   granted: ReadonlyArray<string>,
   resources: ReadonlyArray<PreflightResource>,
 ): MissingOAuthScope[] => {
   const grantedSet = new Set(granted);
-  const missing = new Map<OAuthScopeId, { alternatives: OAuthScopeId[]; resources: string[] }>();
+  const missing = new Map<string, MissingOAuthScope & { resources: string[] }>();
   for (const resource of resources) {
     const accepted = RESOURCE_OAUTH_SCOPES[resource.Type];
     if (accepted === undefined || accepted.some((scope) => grantedSet.has(scope))) continue;
     const [scope, ...alternatives] = accepted;
     if (scope === undefined) continue;
-    const entry = missing.get(scope) ?? { alternatives, resources: [] };
+    const key = accepted.join(" ");
+    const entry = missing.get(key) ?? { scope, alternatives, resources: [] };
     entry.resources.push(resource.FQN);
-    missing.set(scope, entry);
+    missing.set(key, entry);
   }
-  return [...missing].map(([scope, entry]) => ({ scope, ...entry }));
+  return [...missing.values()];
 };
 
 /** The message for a grant missing `missing`, with the command that fixes it. */
