@@ -151,6 +151,15 @@ const waitForIssuedCertificate = (appName: string, hostname: string) =>
       schedule: Schedule.spaced("10 seconds"),
       times: 30,
     }),
+    Effect.as(true),
+    // Let's Encrypt issues five certificates per exact hostname a week, which
+    // a few suite runs exhaust. Fly then reports RATE_LIMITED and the HTTPS
+    // check can't run; every other unissued state still fails the test.
+    Effect.catchIf(
+      (error) => error._tag === "CertificateNotIssued" && error.rateLimitedUntil !== undefined,
+      (error) =>
+        Effect.logWarning(`Skipping the HTTPS check: ${error.message}`).pipe(Effect.as(false)),
+    ),
   );
 
 // Fly's edges can serve a stale certificate for a few minutes after issuance,
@@ -232,11 +241,11 @@ test.provider(
           [...(requirements?.aaaa ?? [])].sort(),
         );
 
-        yield* waitForIssuedCertificate(appName, CLOUDFLARE_HOST);
-
-        const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
-        yield* waitForAuthoritativeA(nameServers, CLOUDFLARE_HOST, [ip]);
-        expect(yield* serveOverHttps(CLOUDFLARE_HOST)).toContain("StaticSite fixture v1");
+        if (yield* waitForIssuedCertificate(appName, CLOUDFLARE_HOST)) {
+          const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
+          yield* waitForAuthoritativeA(nameServers, CLOUDFLARE_HOST, [ip]);
+          expect(yield* serveOverHttps(CLOUDFLARE_HOST)).toContain("StaticSite fixture v1");
+        }
 
         yield* stack.destroy();
         expect(
@@ -314,10 +323,10 @@ test.provider(
         ]);
         expect(yield* cloudflareRecords(zoneId, ROUTE53_HOST, "A")).toEqual([]);
 
-        yield* waitForIssuedCertificate(appName, ROUTE53_HOST);
-
-        yield* waitForAuthoritativeA(zone.nameServers, ROUTE53_HOST, [ip]);
-        expect(yield* serveOverHttps(ROUTE53_HOST)).toContain("StaticSite fixture v1");
+        if (yield* waitForIssuedCertificate(appName, ROUTE53_HOST)) {
+          yield* waitForAuthoritativeA(zone.nameServers, ROUTE53_HOST, [ip]);
+          expect(yield* serveOverHttps(ROUTE53_HOST)).toContain("StaticSite fixture v1");
+        }
 
         yield* stack.destroy();
         yield* assertHostedZoneGone(zone.id);
