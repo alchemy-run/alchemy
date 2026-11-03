@@ -586,6 +586,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "github/index",
+        "github/what-is-github",
         "github/setup",
         "github/repository",
         "github/actions-config",

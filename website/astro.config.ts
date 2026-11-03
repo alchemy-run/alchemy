@@ -1691,13 +1691,19 @@ export default defineConfig({
           label: "GitHub",
           items: [
             { label: "Overview", link: "/github" },
+            { label: "What is GitHub?", link: "/github/what-is-github" },
             { label: "Setup", link: "/github/setup" },
-            { label: "Repositories", link: "/github/repository" },
             {
-              label: "Actions secrets & variables",
-              link: "/github/actions-config",
+              label: "Concepts",
+              items: [
+                { label: "Repositories", link: "/github/repository" },
+                {
+                  label: "Actions secrets & variables",
+                  link: "/github/actions-config",
+                },
+                { label: "Webhooks & events", link: "/github/events" },
+              ],
             },
-            { label: "Webhooks & events", link: "/github/events" },
             providerResourcesEntry("GitHub"),
           ],
         },
