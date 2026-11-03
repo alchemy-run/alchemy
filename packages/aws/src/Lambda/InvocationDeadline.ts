@@ -1,6 +1,5 @@
 import type * as lambda from "aws-lambda";
 import * as Clock from "effect/Clock";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -250,12 +249,8 @@ export const withInvocationDeadline: {
       const graceMs =
         options?.interrupt === false
           ? 0
-          : readTimeoutGrace(
-              yield* Config.option(Config.String(TIMEOUT_GRACE_ENV)).pipe(
-                Effect.map(Option.getOrUndefined),
-                Effect.orElseSucceed(() => undefined),
-              ),
-            );
+          : // oxlint-disable-next-line effecttsgo/process-env-in-effect -- the Lambda runtime's env, read per invocation; a ConfigProvider snapshot would miss it
+            readTimeoutGrace(process.env[TIMEOUT_GRACE_ENV]);
       const budgetMs = remainingMs - graceMs;
       // Leave room for the interrupt to land before the backstop; with no
       // grace the backstop carves its margin out of the budget, as before.
