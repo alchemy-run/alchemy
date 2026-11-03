@@ -15,7 +15,9 @@ import { encodeState, reviveState } from "alchemy/State/StateEncoding";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -254,7 +256,7 @@ export const dynamoDBState = (options: DynamoDBStateOptions = {}) =>
     State,
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
-      const context = yield* Effect.context<AwsDeps | AWSEnvironment>();
+      const context = yield* Effect.context<AwsDeps | AWSEnvironment | SecureRandom.SecureRandom>();
 
       // Bind the leases to this layer's scope. The cached effect runs on
       // the first state operation, which may sit in a shorter scope.
@@ -288,17 +290,12 @@ const amortizeCheck = (
   ttlMs: number,
   lastOkAt: number | undefined,
 ): Effect.Effect<void, StateStoreError> =>
-  Effect.suspend(() => {
-    if (lastOkAt !== undefined && Date.now() - lastOkAt < ttlMs) {
-      return Effect.void;
+  Effect.gen(function* () {
+    if (lastOkAt !== undefined && (yield* Clock.currentTimeMillis) - lastOkAt < ttlMs) {
+      return;
     }
-    return checkLive.pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          lastOkAt = Date.now();
-        }),
-      ),
-    );
+    yield* checkLive;
+    lastOkAt = yield* Clock.currentTimeMillis;
   });
 
 /**
@@ -346,6 +343,7 @@ export const makeDynamoDBState = (options: DynamoDBStateOptions = {}) =>
   makeStore(options).pipe(withoutSdkDebugLogs);
 
 const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
+  const random = yield* SecureRandom.SecureRandom;
   const leaseScope = yield* Effect.scope;
   // Captured under `withoutSdkDebugLogs` (below), so every store call runs
   // with the raised floor: request payloads are state, and state holds
@@ -502,7 +500,8 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     if (bytes > threshold) {
       // A fresh key per write, so the committed item's object is never
       // overwritten in place.
-      const ref = `${blobPrefix(key.stack, key.stage)}${encodeURIComponent(key.SK)}-${yield* Effect.sync(() => crypto.randomUUID())}.json`;
+      const suffix = yield* random.uuidV4();
+      const ref = `${blobPrefix(key.stack, key.stage)}${encodeURIComponent(key.SK)}-${suffix}.json`;
       yield* use(({ bucket }) =>
         s3.putObject({
           Bucket: bucket,
@@ -634,7 +633,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
 
   /** Take the stage's lease, held until `scope` closes. */
   const acquireLease = Effect.fn(function* (stack: string, stage: string, scope: Scope.Scope) {
-    const token = yield* Effect.sync(() => crypto.randomUUID());
+    const token = yield* random.uuidV4();
     const now = yield* Clock.currentTimeMillis;
     // Take the lease when nobody holds it or the holder let it expire.
     const acquired = yield* putLease(stack, stage, token, now + LEASE_TTL_MS, {
@@ -744,7 +743,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     // The conditional put just proved the lease, so the first check is free.
     return {
       token,
-      checkLive: amortizeCheck(verify, LEASE_CHECK_TTL_MS, Date.now()),
+      checkLive: amortizeCheck(verify, LEASE_CHECK_TTL_MS, yield* Clock.currentTimeMillis),
     } satisfies HeldLease;
   });
 
@@ -1266,7 +1265,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       });
     }
     yield* beforeCommit;
-    const migratedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
+    const migratedAt = DateTime.formatIso(yield* DateTime.now);
     yield* writeUnderLease(stack, stage, lease, (table) => ({
       Put: {
         TableName: table,

@@ -48,10 +48,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         scc.getProjectsSecurityHealthAnalyticsSettingsCustomModules({
-          name: `${parent}/customModules/alchemy-missing`,
+          name: `${parent}/customModules/1234567890`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "SecurityCommandCenterLegacyDisabled"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -74,8 +74,8 @@ const Stats = Schema.Struct({
 const timestamp = "2026-01-02T03:04:05.000Z";
 
 describe.concurrent.each([
-  { dev: true, stage: "native-websocket-local" },
-  { dev: false, stage: "native-websocket-live" },
+  { dev: true, stage: `${Test.defaultStage()}-native-websocket-local` },
+  { dev: false, stage: `${Test.defaultStage()}-native-websocket-live` },
 ])(
   "Native WebSocket attachments (dev: $dev)",
   ({ dev, stage }) => {

@@ -126,6 +126,29 @@ const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) =
 };
 
 /**
+ * Rolldown resolves imports to real paths, so an absolute glob under a
+ * symlink (macOS `/var` → `/private/var`) is matched by its real base.
+ */
+const realGlobs = (rules: readonly ModuleRule[] | undefined) =>
+  Effect.gen(function* () {
+    if (rules === undefined) return rules;
+    const fs = yield* FileSystem.FileSystem;
+    const real = (glob: string) => {
+      const negated = glob.startsWith("!");
+      const body = negated ? glob.slice(1) : glob;
+      if (!path.isAbsolute(body)) return Effect.succeed(glob);
+      const { base } = picomatch.scan(body);
+      return fs.realPath(base).pipe(
+        Effect.map((resolved) => `${negated ? "!" : ""}${resolved}${body.slice(base.length)}`),
+        Effect.orElseSucceed(() => glob),
+      );
+    };
+    return yield* Effect.forEach(rules, (rule) =>
+      Effect.forEach(rule.globs, real).pipe(Effect.map((globs) => ({ ...rule, globs }))),
+    );
+  });
+
+/**
  * Point rolldown's failure to load an imported non-JavaScript file (a font,
  * markdown, an image) at the `rules` that upload it as a module. A text file
  * that happens to parse as JavaScript fails later, without a default export.
@@ -258,6 +281,7 @@ export const WorkerBundle = Effect.gen(function* () {
         ]),
     );
     const realMain = yield* sanitizeMain(options.main);
+    const rules = yield* realGlobs(options.rules);
     const cwd = yield* findCwdForBundle(realMain).pipe(
       Effect.mapError((cause) =>
         Bundle.BundleError.make({
@@ -311,7 +335,7 @@ export const WorkerBundle = Effect.gen(function* () {
       input: realMain,
       plugins: [
         overrides?.plugins,
-        cloudflarePlugins(toModuleRules(realMain, options.rules)),
+        cloudflarePlugins(toModuleRules(realMain, rules)),
         workerModules,
         options.entry.kind === "effect"
           ? [virtualEntryPlugin(makeEffectVirtualEntry(options.entry.exports, options.stack))]

@@ -7,6 +7,7 @@ import { Service } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -137,7 +138,10 @@ export const LocalEdgeLive = Layer.effect(
     const rootScope = yield* Effect.scope;
     const lock = yield* Semaphore.make(1);
     // Unique per edge: the router registers in the machine-wide dev registry.
-    const routerName = `alchemy-edge-${crypto.randomUUID().slice(0, 8)}`;
+    const routerName = `alchemy-edge-${yield* SecureRandom.SecureRandom.pipe(
+      Effect.flatMap((random) => random.uuidV4()),
+      Effect.map((id) => id.slice(0, 8)),
+    )}`;
 
     const routes = new Map<string, ReadonlyArray<LocalEdgeRoute>>();
     const domains = new Map<string, LocalEdgeDomain>();

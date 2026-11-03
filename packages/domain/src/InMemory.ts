@@ -1,3 +1,4 @@
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
@@ -95,7 +96,7 @@ const memo = <A>(make: (key: string) => A) => {
 export const make = (
   options: Options = {},
 ): {
-  readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine>;
+  readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom>;
   readonly control: Control;
 } => {
   const now = options.now ?? (() => Date.now());
@@ -664,11 +665,7 @@ export const make = (
                 Effect.tap((created) => Effect.sync(() => keys.set(key, created))),
               );
             });
-          const target = targetId({
-            kind: "view",
-            name: kit.name,
-            ...(kit.generation > 0 ? { generation: kit.generation } : {}),
-          });
+          const target = kit.target;
           /** Apply deliveries to a key and route what it emits. Callers hold `lock`. */
           const apply = (key: string, deliveries: ReadonlyArray<Delivery>) =>
             Effect.gen(function* () {
@@ -753,7 +750,42 @@ export const make = (
             );
             return role;
           });
-          sourceRoles.set(kit.name, sourceRole);
+          // A key of a view keyed by its one aggregate reads its history from that
+          // instance before it answers anything, the first time: when the view is
+          // lazy, or rebuilt in place. After that, it is read like any other.
+          const caughtUp = new Set<string>();
+          const ready = (key: string): Effect.Effect<void> =>
+            Effect.suspend(() => {
+              const catchUp = kit.catchUp;
+              if (catchUp === undefined || caughtUp.has(key)) return Effect.void;
+              const ref = { source: catchUp.source, id: key };
+              return consumer(key)
+                .start(target, ref, 5_000)
+                .pipe(
+                  Effect.repeat({ until: (started) => started === "settled", times: 20 }),
+                  Effect.tap((started) =>
+                    Effect.sync(() => {
+                      if (started === "settled") caughtUp.add(key);
+                    }),
+                  ),
+                  Effect.asVoid,
+                );
+            });
+          // Read as a source (by a view or projection catching up), a key has its
+          // own history first: what reads it never sees a key still filling.
+          sourceRoles.set(kit.name, (key) => {
+            const role = sourceRole(key);
+            const first = ready(key);
+            return {
+              ...role,
+              log: (after, limit) => Effect.andThen(first, role.log(after, limit)),
+              cursor: (target) => Effect.andThen(first, role.cursor(target)),
+              read: (target, at, after, limit) =>
+                Effect.andThen(first, role.read(target, at, after, limit)),
+              handoff: (target, at, through) =>
+                Effect.andThen(first, role.handoff(target, at, through)),
+            };
+          });
           return {
             receive: (key, deliveries) =>
               Effect.gen(function* () {
@@ -763,16 +795,26 @@ export const make = (
                   yield* lock.withPermits(1)(apply(key, deliveries));
               }),
             read: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.snapshot))),
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) => SubscriptionRef.get(current.snapshot)),
+              ),
             changes: (key) =>
               Stream.unwrap(
-                get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.snapshot))),
+                ready(key).pipe(
+                  Effect.andThen(get(key)),
+                  Effect.map((current) => SubscriptionRef.changes(current.snapshot)),
+                ),
               ),
             list: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) => SubscriptionRef.get(current.entries)),
+              ),
             tail: (key, after) =>
               Stream.unwrap(
-                get(key).pipe(
+                ready(key).pipe(
+                  Effect.andThen(get(key)),
                   Effect.map((current) => {
                     let last = after;
                     return SubscriptionRef.changes(current.entries).pipe(
@@ -1057,12 +1099,12 @@ export const make = (
         }),
 
       // A deploy that adds consumers starts their runs.
-      start: (targets, plans) =>
+      start: (targets, plans, backfill) =>
         Effect.suspend(() => {
           model = targets;
           planOf = plans;
           return Effect.forEach(
-            targets,
+            backfill,
             (target) => {
               const plan = plans(target);
               if (plan === undefined) return Effect.void;
@@ -1094,6 +1136,7 @@ export const make = (
     layer: Layer.mergeAll(
       Layer.succeed(Platform, platform),
       Layer.succeed(WorkflowEngine.WorkflowEngine, workflows),
+      SecureRandom.layerWebCrypto,
     ),
     control,
   };
@@ -1118,9 +1161,9 @@ export const make = (
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const InMemory: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine> = Layer.suspend(
-  () => make().layer,
-);
+export const InMemory: Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom
+> = Layer.suspend(() => make().layer);
 
 /** Is a stream write's origin after the last one applied? @internal */
 export const isAfter = (

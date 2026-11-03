@@ -16,6 +16,7 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toWireDays, toWireSeconds } from "alchemy/Util/Duration";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -2413,13 +2414,9 @@ export const DBInstanceProvider = () =>
           const finalDBSnapshotIdentifier = skipFinalSnapshot
             ? undefined
             : (output.finalDBSnapshotIdentifier ??
-              (yield* Effect.sync(
-                () =>
-                  `${output.dbInstanceIdentifier}-final-${new Date()
-                    .toISOString()
-                    .replaceAll(/[:.]/g, "-")
-                    .toLowerCase()}`,
-              )));
+              `${output.dbInstanceIdentifier}-final-${DateTime.formatIso(yield* DateTime.now)
+                .replaceAll(/[:.]/g, "-")
+                .toLowerCase()}`);
           yield* rds
             .deleteDBInstance({
               DBInstanceIdentifier: output.dbInstanceIdentifier,

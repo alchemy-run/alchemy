@@ -5,6 +5,7 @@ import * as Alchemist from "alchemy/Alchemist";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import {
   selectableScopes,
   tokenPolicies,
@@ -82,17 +83,17 @@ const withGlobalKey = (credentials: GlobalCredentials) =>
 export const catalog = Effect.fn("Alchemist.cloudflare.token.catalog")(
   // The credentials only authenticate the call, via the transformer below.
   function* (_credentials: GlobalCredentials) {
-    const listAccounts = yield* accounts.listAccounts;
     const listPermissionGroups = yield* user.listTokenPermissionGroups;
-    const { accountResponse, permissionGroupResponse } = yield* Effect.all(
+    const { accountList, permissionGroupResponse } = yield* Effect.all(
       {
-        accountResponse: listAccounts({}),
+        // GET /accounts pages at 20 by default; walk every page.
+        accountList: accounts.listAccounts.items({ perPage: 50 }).pipe(Stream.runCollect),
         permissionGroupResponse: listPermissionGroups({}),
       },
       { concurrency: "unbounded" },
     );
     return {
-      accounts: accountResponse.result.map(({ id, name }) => ({
+      accounts: Array.from(accountList).map(({ id, name }) => ({
         id,
         name,
       })),

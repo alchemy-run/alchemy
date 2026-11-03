@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -99,7 +100,7 @@ test.provider.skipIf(!entitled)(
   "list includes a deployed custom nameserver",
   (stack) =>
     Effect.gen(function* () {
-      const nsName = `alchemy-ns-list.${zoneName}`;
+      const nsName = `${testName("alchemy-ns-list")}.${zoneName}`;
 
       yield* stack.destroy();
 
@@ -124,7 +125,7 @@ test.provider.skipIf(!entitled)(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const nsName = `alchemy-ns1.${zoneName}`;
+      const nsName = `${testName("alchemy-ns1")}.${zoneName}`;
 
       yield* stack.destroy();
 
