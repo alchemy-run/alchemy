@@ -168,6 +168,32 @@ test.provider(
 );
 
 test.provider(
+  "generate options pass through to drizzle-kit generate",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(DRIFTED_SCHEMA_SOURCE);
+
+      yield* stack.deploy(
+        Drizzle.Schema("app-schema", {
+          schema: ws.schemaPath,
+          out: ws.out,
+          generate: { breakpoints: false },
+        }),
+      );
+
+      const dirs = yield* readMigrationDirs(ws.out);
+      expect(dirs).toHaveLength(1);
+      const sql = yield* fs.readFileString(path.join(ws.out, dirs[0]!, "migration.sql"));
+      expect(sql).toContain('CREATE TABLE "users"');
+      expect(sql).toContain('CREATE TABLE "posts"');
+      expect(sql).not.toContain("statement-breakpoint");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
   "repeated deploys with no schema drift produce noop, not update (regression: forced update cascaded into Neon.Branch)",
   (stack) =>
     Effect.gen(function* () {
