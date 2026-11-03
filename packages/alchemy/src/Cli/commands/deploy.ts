@@ -6,6 +6,7 @@ import * as Alchemist from "../../Alchemist/index.ts";
 import * as Interaction from "../../Interaction.ts";
 import { Cli } from "../../Report.ts";
 import { renderApply } from "../../Report.ts";
+import { readOnlyState } from "../../State/State.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
 import { stackOutputsView } from "../components/view/StackOutputs.tsx";
 import { exitDeclined } from "./errors.ts";
@@ -149,7 +150,12 @@ const detectAndMaybeRepairDrift = Effect.fn(function* <E, R>(
   return decision !== "cancel";
 });
 
-const runStack = Effect.fn(function* (options: StackCommandOptions) {
+// A dry run never writes state, so it reads without the stage's lease: it
+// needs only read access to the store and never blocks a deploy.
+const runStack = (options: StackCommandOptions) =>
+  options.dryRun ? readOnlyState(runStackCommand(options)) : runStackCommand(options);
+
+const runStackCommand = Effect.fn(function* (options: StackCommandOptions) {
   yield* validateSelectionOptions(options);
   const cli = yield* Cli;
   const display = { detailed: options.detailed, stage: options.stage };

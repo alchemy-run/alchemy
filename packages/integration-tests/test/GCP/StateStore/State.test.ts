@@ -7,6 +7,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
+import { readOnlyState } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -149,6 +150,59 @@ test.provider(
       // longer listed.
       const after = yield* makeGcsState(options);
       expect(yield* after.listStages(STACK)).not.toContain(stage);
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 120_000 },
+);
+
+// #2751: `alchemy plan` and `alchemy drift` only read state, so a deploy
+// holding the stage's lease does not block them.
+test.provider(
+  "a read-only run reads a stage another deploy holds without its lease",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(GCP.Storage.Bucket("StateBucket", { forceDestroy: true }));
+      const options = { bucketName: bucket.bucketName, prefix: "read-only" };
+      const stage = "read-only";
+      const created = resource("Vpc", { vpcId: "vpc-aaaa" });
+      const request = { stack: STACK, stage, fqn: created.fqn, value: created };
+      const media = yield* makeObjectMedia;
+      const leaseToken = media
+        .download({
+          bucket: bucket.bucketName,
+          object: `read-only/${STACK}/${stage}/__lease__.json`,
+        })
+        .pipe(
+          Effect.map(
+            ({ body }) => (JSON.parse(new TextDecoder().decode(body)) as { token: string }).token,
+          ),
+        );
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const held = yield* makeGcsState(options);
+          yield* held.set(request);
+          const token = yield* leaseToken;
+
+          yield* readOnlyState(
+            Effect.gen(function* () {
+              const reader = yield* makeGcsState(options);
+              expect(yield* reader.list({ stack: STACK, stage })).toEqual([created.fqn]);
+              expect(yield* reader.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
+                attr: { vpcId: "vpc-aaaa" },
+              });
+              const refused = yield* reader.set(request).pipe(Effect.flip);
+              expect(refused.message).toContain("read-only");
+            }),
+          );
+
+          // The deploy still holds its lease and can keep writing.
+          expect(yield* leaseToken).toBe(token);
+          yield* held.set({ ...request, value: { ...created, attr: { vpcId: "vpc-bbbb" } } });
+          yield* held.deleteStack({ stack: STACK, stage });
+        }),
+      );
       yield* stack.destroy();
     }),
   { tags, timeout: 120_000 },

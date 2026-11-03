@@ -9,6 +9,7 @@ import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
@@ -16,6 +17,7 @@ import * as Redacted from "effect/Redacted";
 import * as References from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { READ_ONLY_STACK, ReadOnlyRole, runAsReadOnlyRole } from "./fixtures/read-only-cli.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -852,6 +854,71 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
     timeout: 120_000,
+  },
+);
+
+// #2751: `alchemy plan` and `alchemy drift` only read state. They need only
+// read access to the bucket, and a deploy holding the stage's lease does not
+// block them.
+test.provider(
+  "plan and drift read S3 state as a read-only role while a deploy holds the lease",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { bucket, role } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* AWS.S3.Bucket("StateBucket", { forceDestroy: true });
+          const role = yield* ReadOnlyRole([
+            { Effect: "Allow", Action: ["s3:ListBucket"], Resource: bucket.bucketArn },
+            {
+              Effect: "Allow",
+              Action: ["s3:GetObject"],
+              Resource: Output.interpolate`${bucket.bucketArn}/*`,
+            },
+          ]);
+          return { bucket, role };
+        }),
+      );
+      const stage = stack.stage;
+      const leaseToken = s3
+        .getObject({
+          Bucket: bucket.bucketName,
+          Key: `read-only/${READ_ONLY_STACK}/${stage}/__lease__.json`,
+        })
+        .pipe(
+          Effect.flatMap((object) => Stream.mkString(Stream.decodeText(object.Body!))),
+          Effect.map((text) => (JSON.parse(text) as { token: string }).token),
+        );
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          // A deploy of the stage, holding its lease.
+          const deploy = yield* makeS3State({ bucketName: bucket.bucketName, prefix: "read-only" });
+          yield* deploy.setOutput({ stack: READ_ONLY_STACK, stage, value: {} });
+          const held = yield* leaseToken;
+
+          for (const command of ["plan", "drift"] as const) {
+            const { exitCode, output } = yield* runAsReadOnlyRole(role.roleArn, command, stage, {
+              READ_ONLY_STATE_BUCKET: bucket.bucketName,
+            });
+            // A failure shows the CLI's output.
+            expect({ command, exitCode, output: exitCode === 0 ? "" : output }).toEqual({
+              command,
+              exitCode: 0,
+              output: "",
+            });
+          }
+          // The deploy still holds its lease and can keep writing.
+          expect(yield* leaseToken).toBe(held);
+          yield* deploy.setOutput({ stack: READ_ONLY_STACK, stage, value: { done: true } });
+          yield* deploy.deleteStack({ stack: READ_ONLY_STACK, stage });
+        }),
+      );
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
+    timeout: 180_000,
   },
 );
 

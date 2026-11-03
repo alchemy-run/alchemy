@@ -6,6 +6,7 @@ import * as Alchemist from "../../Alchemist/index.ts";
 import * as Interaction from "../../Interaction.ts";
 import { Cli } from "../../Report.ts";
 import { renderApply } from "../../Report.ts";
+import { readOnlyState } from "../../State/State.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
 import { config, envFile, profile, resolveStage, stage } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
@@ -32,6 +33,10 @@ const routeDrift = Effect.fn(function* ({
   repair = false,
 }: SyncArgs) {
   const cli = yield* Cli;
+  const terminal = yield* Interaction.Interaction;
+  // Without --repair or a terminal to ask, the check only reads state: it
+  // needs only read access to the store and never blocks a deploy.
+  const readOnly = !repair && !terminal.terminal.input;
   const snapshot = yield* Alchemist.importStack(main).pipe(
     Effect.flatMap((stack) =>
       Alchemist.Drift.scan({
@@ -47,14 +52,14 @@ const routeDrift = Effect.fn(function* ({
       computingLabel: "Checking drift",
       readyLabel: "Drift check complete",
     }),
+    (scan) => (readOnly ? readOnlyState(scan) : scan),
   );
   if (!Alchemist.Drift.hasDrift(snapshot)) {
     return yield* cli.displayPlan(snapshot.native);
   }
 
   if (!repair) {
-    const terminal = yield* Interaction.Interaction;
-    if (!terminal.terminal.input) {
+    if (readOnly) {
       return yield* cli.displayPlan(snapshot.native);
     }
     const decision = yield* terminal.prompt

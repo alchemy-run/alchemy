@@ -1,6 +1,7 @@
 import { makePostgresState } from "@alchemy.run/sql/PostgresState";
 import { describe, expect, it } from "@alchemy.run/test";
-import { StateStoreError, type StateService } from "alchemy/State/State";
+import * as PgClient from "@effect/sql-pg/PgClient";
+import { readOnlyState, StateStoreError, type StateService } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
@@ -39,15 +40,37 @@ if (wantsLive && !liveUrl) {
 /** Each store gets its own pool, as separate deploy processes would. */
 const withLiveStore = <A, E>(
   use: (store: StateService) => Effect.Effect<A, E>,
+  url = liveUrl!,
 ): Effect.Effect<A, E | StateStoreError> =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
-    const store = yield* makePostgresState({ url: Redacted.make(liveUrl!) }, scope);
+    const store = yield* makePostgresState({ url: Redacted.make(url) }, scope);
     return yield* use(store);
   }).pipe(Effect.scoped);
 
 const stack = "alchemy-postgres-state-live";
 const request = { stack, stage: "test", fqn: `${stack}/test/db` };
+
+/**
+ * A role that can only `select` from the store's tables, as a plan or a
+ * drift check in CI would connect. Returns its connection URL.
+ */
+const selectOnlyRole = Effect.gen(function* () {
+  const sql = yield* PgClient.PgClient;
+  yield* sql`
+    do $$ begin
+      create role alchemy_state_reader login password 'reader';
+    exception when duplicate_object then null;
+    end $$
+  `;
+  yield* sql`grant usage on schema public to alchemy_state_reader`;
+  yield* sql`revoke create on schema public from alchemy_state_reader`;
+  yield* sql`grant select on alchemy_resource_state, alchemy_stack_output to alchemy_state_reader`;
+  const url = new URL(liveUrl!);
+  url.username = "alchemy_state_reader";
+  url.password = "reader";
+  return url.toString();
+}).pipe(Effect.provide(PgClient.layer({ url: Redacted.make(liveUrl!) })));
 
 const sampleState = {
   kind: "resource",
@@ -91,6 +114,36 @@ describe.skipIf(!runLive)("Postgres state store against real Postgres", { tags: 
         expect(error).toBeInstanceOf(StateStoreError);
         expect(error.message).toContain("holds the Postgres state lock");
 
+        yield* holder.deleteStack({ stack });
+      }),
+    ),
+  );
+
+  // #2751: `alchemy plan` and `alchemy drift` only read state.
+  it.effect("a read-only run reads as a select-only role while a deploy holds the lock", () =>
+    withLiveStore((holder) =>
+      Effect.gen(function* () {
+        yield* holder.deleteStack({ stack });
+        yield* holder.set({ ...request, value: sampleState });
+        const readerUrl = yield* selectOnlyRole;
+
+        yield* readOnlyState(
+          withLiveStore(
+            (reader) =>
+              Effect.gen(function* () {
+                expect(yield* reader.list({ stack, stage: "test" })).toEqual([request.fqn]);
+                expect(yield* reader.get(request)).toBeDefined();
+                const refused = yield* reader
+                  .set({ ...request, value: sampleState })
+                  .pipe(Effect.flip);
+                expect(refused.message).toContain("read-only");
+              }),
+            readerUrl,
+          ),
+        );
+
+        // The deploy still holds its lock and can keep writing.
+        yield* holder.set({ ...request, value: sampleState });
         yield* holder.deleteStack({ stack });
       }),
     ),
