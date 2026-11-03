@@ -662,6 +662,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "kubernetes/index",
+        "kubernetes/what-is-kubernetes",
         "kubernetes/setup",
         "kubernetes/tutorial/part-1",
         "kubernetes/tutorial/part-2",

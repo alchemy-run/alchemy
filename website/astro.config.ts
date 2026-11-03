@@ -1792,6 +1792,7 @@ export default defineConfig({
           label: "Kubernetes",
           items: [
             { label: "Overview", link: "/kubernetes" },
+            { label: "What is Kubernetes?", link: "/kubernetes/what-is-kubernetes" },
             { label: "Setup", link: "/kubernetes/setup" },
             {
               label: "Tutorial",
