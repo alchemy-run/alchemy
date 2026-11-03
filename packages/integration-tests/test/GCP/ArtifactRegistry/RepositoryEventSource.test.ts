@@ -69,5 +69,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:artifactregistry", "live"], timeout: 900_000 },
 );

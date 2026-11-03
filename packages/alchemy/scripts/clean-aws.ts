@@ -7,6 +7,7 @@ import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import { NodeServices } from "@effect/platform-node";
+import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -100,8 +101,8 @@ const formatError = (error: unknown) => {
   }
 };
 
-const log = (message: string) => Effect.sync(() => console.log(message));
-const warn = (message: string) => Effect.sync(() => console.warn(message));
+const log = (message: string) => Console.log(message);
+const warn = (message: string) => Console.warn(message);
 
 const isNotFoundError = (error: unknown) =>
   typeof error === "object" &&

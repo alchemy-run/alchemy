@@ -61,6 +61,7 @@ export interface Any extends Context.Key<unknown, unknown> {
     readonly events?: ReadonlyArray<Event.Any>;
     readonly emit?: Handlers;
     readonly computed?: { readonly [name: string]: ((state: never) => unknown) | undefined };
+    readonly version?: number;
   } & Read.AnyContract;
   /** Type-level only: the view's state. */
   readonly "~state": unknown;
@@ -245,6 +246,20 @@ export interface Definition<
   };
   /** Values derived from state when read. */
   readonly computed?: ComputedFns<StateType<S>, Computed>;
+  /**
+   * Bump it whenever you change what the view computes (`evolve`, `emit`,
+   * `keyOf`, `state`, the events or sources it reads): every key is computed
+   * again from the history, and so is every view and projection that reads
+   * this one. Only ever increase it.
+   *
+   * A view keyed by the one aggregate it reads is rebuilt in place: the deploy
+   * waits for nothing, and each key re-reads its own instance's events the
+   * first time it is touched. Any other view is rebuilt from the history
+   * before the deploy finishes.
+   *
+   * @default 0
+   */
+  readonly version?: number;
 }
 
 /** Derived-value functions of a view. */
@@ -281,9 +296,25 @@ export interface WatchOptions<S> {
 }
 
 /**
+ * How much of the history recorded before a view or projection (or before its
+ * current version) has reached it. A consumer added to a model that already
+ * has events, or rebuilt by bumping its version, receives that history first.
+ */
+export interface History {
+  /** Every event recorded before it has reached it: its answers cover the whole history. */
+  readonly complete: boolean;
+}
+
+/**
  * The read API of a view, obtained with `yield* MyView`.
  */
 export interface Host<S, Key extends Key.Any, E> {
+  /**
+   * Whether the history recorded before this view, or before its current
+   * version, has reached it. Until it has, its answers cover only part of
+   * the history: a screen can say so, or hold its reads until it is complete.
+   */
+  readonly history: Effect.Effect<History>;
   /** Read the current state of a key. `none` if it does not exist. */
   readonly query: (
     key: Key.RefOf<Key>,

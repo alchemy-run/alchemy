@@ -17,7 +17,7 @@ import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type { Servable } from "./Api.ts";
-import { DefinitionError } from "./internal.ts";
+import { DefinitionError, MissingGroup } from "./DefinitionError.ts";
 import { type Operation, operationsOf, outsideClient } from "./ReadRpcs.ts";
 
 /**
@@ -340,9 +340,9 @@ export const toHttpApi = <A extends Publishable>(
 
   const layerFor = (httpApi: HttpApi.HttpApi<string, HttpApiGroup.Constraint>) => {
     if (!(name in httpApi.groups)) {
-      return new DefinitionError(
-        `${httpApi.identifier} does not hold the ${name} group: add it first`,
-      ).pipe(Effect.die, Layer.effectDiscard);
+      return new DefinitionError({
+        reason: new MissingGroup({ httpApi: httpApi.identifier, group: name }),
+      }).pipe(Effect.die, Layer.effectDiscard);
     }
     return HttpApiBuilder.group(httpApi as never, name as never, (handlers: any) => {
       // The Api's in-process client: its handlers and middleware, nothing

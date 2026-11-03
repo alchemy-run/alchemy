@@ -94,5 +94,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 900_000 },
 );

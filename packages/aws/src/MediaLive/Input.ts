@@ -233,12 +233,15 @@ export const InputProvider = () =>
             ),
           ),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const input =
             output?.inputId !== undefined
               ? yield* getInput(output.inputId)
               : yield* findByName(yield* createName(id, olds ?? {}));
           if (input === undefined) return undefined;
+          // A create-first replacement finds the input it is replacing by name:
+          // that is not the replacement.
+          if (output === undefined && input.Id === previous?.inputId) return undefined;
           const attrs = toAttrs(input);
           return (yield* hasAlchemyTags(id, toTagRecord(input.Tags))) ? attrs : Unowned(attrs);
         }),

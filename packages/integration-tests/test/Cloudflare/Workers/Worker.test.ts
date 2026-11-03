@@ -18,13 +18,18 @@ import { isResourceState } from "alchemy/State/State";
 import { initialCwd } from "alchemy/Util/Node";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { stageSuffix, testName } from "../../names.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
@@ -2088,7 +2093,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const suffix = stageSuffix();
           const domainA = `alchemy-circular-url-${suffix}.${circularUrlZone}`;
 
           yield* stack.destroy();
@@ -2447,7 +2452,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const suffix = stageSuffix();
           const domainA = `alchemy-worker-a-${suffix}.${customDomainZone}`;
           const domainB = `alchemy-worker-b-${suffix}.${customDomainZone}`;
 
@@ -2796,6 +2801,89 @@ export default {
     );
 
     test.provider(
+      "codeUpdateStrategy defers or applies Durable Object code updates",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const client = yield* HttpClient.HttpClient;
+          yield* stack.destroy();
+
+          // The object reports the code version it runs plus an id minted in
+          // its constructor, so a reset onto new code is visible.
+          const program = (
+            version: string,
+            codeUpdateStrategy: Cloudflare.WorkerCodeUpdateStrategy,
+          ) =>
+            Effect.gen(function* () {
+              return yield* Cloudflare.Worker("CodeUpdateStrategyWorker", {
+                script: `import { DurableObject } from "cloudflare:workers";
+export class Probe extends DurableObject {
+  started = crypto.randomUUID();
+  whoami() {
+    return "${version}:" + this.started;
+  }
+}
+export default {
+  async fetch(request, env) {
+    return new Response(await env.Probe.getByName("shared").whoami());
+  },
+};`,
+                env: { Probe: Cloudflare.DurableObject("Probe") },
+                codeUpdateStrategy,
+              });
+            });
+          const deferred = { mode: "deferred", maxDelay: "10 minutes" } as const;
+          const immediate = { mode: "immediate" } as const;
+
+          const worker = yield* stack.deploy(program("v1", deferred));
+          yield* expectUrlContains(worker.url!, "v1:");
+          const whoami = client.get(worker.url!, { headers: { "cache-control": "no-cache" } }).pipe(
+            Effect.flatMap(HttpClientResponse.filterStatusOk),
+            Effect.flatMap((response) => response.text),
+          );
+          const v1 = yield* whoami;
+          expect(v1).toMatch(/^v1:/);
+
+          // The strategy applies per deploy: changing only it is not an update.
+          const plan = yield* stack.plan(program("v1", immediate));
+          expect(
+            Object.values(plan.resources).find(
+              (node) => node.resource.LogicalId === "CodeUpdateStrategyWorker",
+            )?.action,
+          ).toBe("noop");
+
+          // Deferred: keep the object active through the deploy, and it
+          // keeps running the code it started with.
+          const pinger = yield* whoami.pipe(
+            Effect.ignore,
+            Effect.repeat(Schedule.spaced("1 second")),
+            Effect.forkChild,
+          );
+          yield* stack.deploy(program("v2", deferred));
+          const samples = yield* whoami.pipe(
+            Effect.repeat({ schedule: Schedule.spaced("1 second"), times: 4 }),
+            Effect.andThen(whoami),
+          );
+          yield* Fiber.interrupt(pinger);
+          expect(samples).toBe(v1);
+
+          // Immediate: the object resets onto the new code right away.
+          yield* stack.deploy(program("v3", immediate));
+          yield* expectUrlContains(worker.url!, "v3:", { timeout: "30 seconds" });
+
+          // Out of range is rejected before anything is uploaded.
+          const error = yield* stack
+            .deploy(program("v4", { mode: "deferred", maxDelay: "25 hours" }))
+            .pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "WorkerCodeUpdateStrategyError" });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 240_000 },
+    );
+
+    test.provider(
       "worker.durableObjectNamespaces stability across DO and worker changes",
       (stack) =>
         // Exercises plan actions for a downstream resource whose props reference
@@ -3007,7 +3095,7 @@ export default {
           // props — `getCompatibility` (via `isPythonMain`) must tolerate it.
           // The entry module only exists after the build command runs, so the
           // Worker cannot know its `main` path until `build.outdir` resolves.
-          const marker = "alchemy-output-main-e2e-ok-7c31";
+          const marker = testName("alchemy-output-main-e2e-ok-7c31");
           const tempDir = yield* fs.makeTempDirectory({ prefix: "alchemy-output-main-" });
           yield* fs.writeFileString(
             path.join(tempDir, "worker.src.mjs"),

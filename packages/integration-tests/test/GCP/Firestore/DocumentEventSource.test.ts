@@ -106,5 +106,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 1_800_000 },
+  { tags: ["provider:gcp", "provider:gcp:firestore", "live"], timeout: 1_800_000 },
 );

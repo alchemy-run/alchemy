@@ -59,6 +59,12 @@ $ bank deposit-money --target a-1 --amount 1000
 $ bank deposit-money --json '{"target":"a-1","amount":1000}' --amount 50
 ```
 
+It also takes the call's own wire payload, with the input nested, as the HTTP API and MCP tools take it:
+
+```sh
+$ bank deposit-money --json '{"target":"a-1","input":{"amount":1000}}'
+```
+
 ## Read a view
 
 A view, a stream or an aggregate is a subcommand with one subcommand per read, `get`, `peek`, `list` or `snapshot`:

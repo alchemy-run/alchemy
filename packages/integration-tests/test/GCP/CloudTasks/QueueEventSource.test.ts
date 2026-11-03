@@ -92,5 +92,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 1_500_000 },
+  { tags: ["provider:gcp", "provider:gcp:cloudtasks", "live"], timeout: 1_500_000 },
 );

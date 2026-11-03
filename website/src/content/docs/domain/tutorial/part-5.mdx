@@ -7,6 +7,12 @@ sidebar:
 
 Put the bank on Cloudflare. Every account, customer, view and policy becomes a Durable Object, and a Worker serves the Api. You need a [configured Cloudflare profile](/cloudflare/setup).
 
+## Install the Cloudflare provider
+
+```sh
+bun add @alchemy.run/cloudflare
+```
+
 ## Serve the Api from a Worker
 
 ```typescript
@@ -87,10 +93,14 @@ const program = Effect.gen(function* () {
   yield* bank.RegisterCustomer(CustomerId.make(customerId), { name: customerId }).pipe(
     Effect.catchTag("AlreadyRegistered", () => Effect.void),
   );
-  // Print the balance now and after every change, in the background.
-  yield* bank.AccountSummary.watch(accountId).pipe(
+  const summaries = bank.AccountSummary.watch(accountId).pipe(
     Stream.map(({ state }) => state),
     Stream.filter((summary) => summary !== null && summary.owner !== null),
+  );
+  // The policy opens the account shortly after registration: wait for it.
+  yield* Stream.runHead(summaries);
+  // Print the balance now and after every change, in the background.
+  yield* summaries.pipe(
     Stream.runForEach((summary) => Effect.log(`balance: ${summary?.balance}`)),
     Effect.forkChild,
   );
@@ -98,7 +108,7 @@ const program = Effect.gen(function* () {
   yield* bank.DepositMoney(accountId, { amount: 100 });
   yield* Effect.sleep("1 second");
   yield* bank.WithdrawMoney(accountId, { amount: 30 });
-  yield* Effect.sleep("1 second");
+  yield* Effect.sleep("2 seconds");
 });
 
 const Connection = Layer.mergeAll(Domain.protocolHttp(url!), sessionClient(customerId)).pipe(
@@ -108,16 +118,16 @@ const Connection = Layer.mergeAll(Domain.protocolHttp(url!), sessionClient(custo
 Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(Connection)));
 ```
 
-The script registers a customer, watches their balance in the background, then deposits and withdraws. The policy opens the account shortly after registration, so the watch waits for it to have an owner.
+The script registers a customer and waits for the policy to open their account, which happens shortly after registration. Then it watches the balance in the background while it deposits and withdraws.
 
 ```sh
 bun scripts/try.ts http://localhost:1337
 ```
 
 ```
-balance: 0
-balance: 100
-balance: 70
+[12:00:01.402] INFO (#9): balance: 0
+[12:00:02.613] INFO (#9): balance: 100
+[12:00:03.804] INFO (#9): balance: 70
 ```
 
 The watch prints the balance each time it changes. Over HTTP it checks for changes a few times a second, so the script pauses between commands to show each one; [Part 6](/domain/tutorial/part-6) switches to WebSockets, where the bank pushes every change.

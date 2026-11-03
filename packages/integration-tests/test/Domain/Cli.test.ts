@@ -173,7 +173,7 @@ const json = (text: string): unknown => JSON.parse(text);
 
 // ---------------------------------------------------------------- tests
 
-describe("Domain toCli", () => {
+describe("Domain toCli", { tags: ["unit", "local"] }, () => {
   it.live("runs a command from flags and prints its receipt as JSON", () =>
     hosted(
       Effect.gen(function* () {
@@ -295,6 +295,14 @@ describe("Domain toCli", () => {
         ]);
         expect(fromJson.code).toBe(0);
         expect(json(fromJson.stdout)).toMatchObject({ reply: { balance: 4 } });
+        // The call's own wire JSON, with its nested `input`, works too.
+        const fromWire = yield* run(asSam, [
+          "deposit",
+          "--json",
+          JSON.stringify({ target: "w-5", input: { amount: 6, note: "wire" } }),
+        ]);
+        expect(fromWire.code).toBe(0);
+        expect(json(fromWire.stdout)).toMatchObject({ reply: { balance: 6 } });
         const bad = yield* run(asSam, ["deposit", "--json", "{not json"]);
         expect(bad.code).toBe(1);
         expect(bad.stderr).toContain("--json");

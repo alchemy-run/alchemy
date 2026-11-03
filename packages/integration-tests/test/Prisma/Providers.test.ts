@@ -9,6 +9,7 @@ import * as Interaction from "alchemy/Interaction";
 import * as Provider from "alchemy/Provider";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -239,6 +240,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
               ),
             ),
             Effect.provide(NodeServices.layer),
+            Effect.provide(SecureRandom.layerWebCrypto),
             Effect.provide(Interaction.layerNonInteractive()),
           ),
         ),

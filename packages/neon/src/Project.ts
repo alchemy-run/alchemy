@@ -513,7 +513,11 @@ export class OperationFailed extends Data.TaggedError("NeonOperationFailed")<{
   operationId: string;
   action: string;
   status: string;
-}> {}
+}> {
+  override get message() {
+    return `Neon operation ${this.operationId} (${this.action}) ended ${this.status}`;
+  }
+}
 
 export class OperationPending extends Data.TaggedError("NeonOperationPending")<{
   operationId: string;

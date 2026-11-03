@@ -2,6 +2,7 @@ import * as Axiom from "@distilled.cloud/axiom";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "./Providers.ts";
@@ -72,6 +73,15 @@ export type ApiToken = Resource<
  */
 export const ApiToken = Resource<ApiToken>("Axiom.ApiToken");
 
+/** Axiom created a token but returned no bearer value. */
+export class MissingApiTokenValue extends Data.TaggedError("MissingApiTokenValue")<{
+  readonly id: string;
+}> {
+  override get message() {
+    return `Axiom did not return a value for the new API token ${this.id}`;
+  }
+}
+
 export const ApiTokenProvider = () =>
   Provider.effect(
     ApiToken,
@@ -126,7 +136,7 @@ export const ApiTokenProvider = () =>
           // once; capture it into Redacted state for downstream consumers.
           const result = yield* create(news);
           if (!result.token) {
-            return yield* Effect.die(new Error("Axiom did not return a token on create"));
+            return yield* Effect.die(new MissingApiTokenValue({ id: result.id }));
           }
           return {
             ...result,
