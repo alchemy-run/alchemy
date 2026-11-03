@@ -163,6 +163,24 @@ organization default. The network must already exist: an App created with
 the same `network` creates it, and an unknown name fails with
 `NetworkNotFound`. Changing `network` replaces the assignment.
 
+## Static outbound addresses
+
+Fly can change the address a Machine sends traffic from.
+`egress_v4` and `egress_v6` give the App's Machines in a region static
+outbound addresses:
+
+```typescript
+export const EgressV4 = Fly.IpAssignment("EgressV4", {
+  app: Site,
+  type: "egress_v4",
+  region: "iad",
+});
+```
+
+The addresses persist across deploys and Machine replacement and
+receive no traffic. `region` is required and `egress_v4` is billed. Fly
+applies a new address to running Machines within 5 to 10 minutes.
+
 ## Use your own hostname
 
 A Certificate covers a hostname on a `Fly.App`. It cannot target a

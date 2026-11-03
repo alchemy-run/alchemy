@@ -20,9 +20,11 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  * Fly IP family allocated onto an App. Dedicated `v4` is billed and may
  * be rejected when the org has no IPv4 quota. Prefer `v6` (free) or
  * `shared_v4` (free) in tests. `private_v6` is a Flycast address: it is
- * reachable only from the organization's private network.
+ * reachable only from the organization's private network. `egress_v4`
+ * and `egress_v6` are static outbound addresses of the App's Machines
+ * in `region`.
  */
-export type IpAssignmentType = "v4" | "v6" | "shared_v4" | "private_v6";
+export type IpAssignmentType = "v4" | "v6" | "shared_v4" | "private_v6" | "egress_v4" | "egress_v6";
 
 export interface IpAssignmentProps {
   /**
@@ -35,11 +37,13 @@ export interface IpAssignmentProps {
    * `shared_v4` is a shared Anycast IPv4 (free). `v4` is a dedicated
    * IPv4 (billed; may 400 when the org is over quota). `private_v6` is
    * a Flycast IPv6 (free) that Fly's proxy serves only inside the
-   * private network. Changing type replaces the assignment.
+   * private network. `egress_v4` (billed) and `egress_v6` are static
+   * outbound addresses. Changing type replaces the assignment.
    */
   type: IpAssignmentType;
   /**
-   * Region for a dedicated address. Changing it replaces the assignment.
+   * Region for a dedicated or egress address. Required for `egress_v4`
+   * and `egress_v6`. Changing it replaces the assignment.
    */
   region?: string;
   /**
@@ -166,6 +170,22 @@ const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
  * });
  * ```
  *
+ * ### Static egress
+ * `egress_v4` and `egress_v6` are static outbound addresses. The App's
+ * Machines in `region` send their traffic from them, across deploys and
+ * Machine replacement. They receive no traffic. `region` is required and
+ * `egress_v4` is billed. Fly applies a new address to running Machines
+ * within 5 to 10 minutes.
+ *
+ * **Example:** Static egress in iad
+ * ```typescript
+ * export const EgressV4 = Fly.IpAssignment("EgressV4", {
+ *   app: Site,
+ *   type: "egress_v4",
+ *   region: "iad",
+ * });
+ * ```
+ *
  * ### Region
  * `region` pins a dedicated address. Shared Anycast ignores it. See
  * [Regions](/fly/compute/regions) for the list of codes.
@@ -265,6 +285,10 @@ export class IpAssignmentAppMissing extends Data.TaggedError("Fly.IpAssignmentAp
   type: IpAssignmentType;
 }> {}
 
+export class IpAssignmentRegionMissing extends Data.TaggedError("Fly.IpAssignmentRegionMissing")<{
+  type: IpAssignmentType;
+}> {}
+
 const appNameOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { appName?: unknown; name?: unknown };
@@ -278,9 +302,16 @@ const appNameOf = (value: unknown): string | undefined => {
 };
 
 const asType = (value: string | undefined): IpAssignmentType | undefined =>
-  value === "v4" || value === "v6" || value === "shared_v4" || value === "private_v6"
+  value === "v4" ||
+  value === "v6" ||
+  value === "shared_v4" ||
+  value === "private_v6" ||
+  value === "egress_v4" ||
+  value === "egress_v6"
     ? value
     : undefined;
+
+const isEgress = (type: IpAssignmentType) => type === "egress_v4" || type === "egress_v6";
 
 /**
  * Fly omits `type` from IP assignment responses. Only Flycast addresses carry
@@ -294,6 +325,8 @@ const networkOf = (assignment: FlyIPAssignment) => assignment.network?.name || u
 const inferType = (assignment: FlyIPAssignment, fallback?: IpAssignmentType): IpAssignmentType => {
   const wire = asType(assignment.type);
   if (wire !== undefined) return wire;
+  if (assignment.egress === true)
+    return (assignment.ip ?? "").includes(":") ? "egress_v6" : "egress_v4";
   if (assignment.shared === true) return "shared_v4";
   if (isFlycast(assignment)) return "private_v6";
   const ip = assignment.ip ?? "";
@@ -361,7 +394,12 @@ const waitUntilGone = (appName: string, ip: string) =>
 /** Whether the App has any address reachable from the internet. */
 export const hasPublicAddress = (appName: string) =>
   listAssignments(appName).pipe(
-    Effect.map((ips) => ips.some((item) => inferType(item) !== "private_v6")),
+    Effect.map((ips) =>
+      ips.some((item) => {
+        const type = inferType(item);
+        return type !== "private_v6" && !isEgress(type);
+      }),
+    ),
   );
 
 /**
@@ -393,9 +431,9 @@ export const syncOwnedAppAddresses = Effect.fn(function* (
     }
   }
   // Release public addresses of a private Service and Flycast addresses
-  // on any other network.
+  // on any other network. Egress addresses are not the Service's to manage.
   for (const item of observed) {
-    if (item.ip === undefined || isDesiredFlycast(item)) continue;
+    if (item.ip === undefined || isDesiredFlycast(item) || isEgress(inferType(item))) continue;
     if (isPublic && inferType(item) !== "private_v6") continue;
     yield* machines
       .deleteAppIPAssignment({ app_name: appName, ip: item.ip })
@@ -474,6 +512,9 @@ export const IpAssignmentProvider = () =>
       const appName = appNameOf(props.app) ?? output?.appName;
       if (appName === undefined) {
         return yield* new IpAssignmentAppMissing({ type: props.type });
+      }
+      if (isEgress(props.type) && props.region === undefined) {
+        return yield* new IpAssignmentRegionMissing({ type: props.type });
       }
 
       // Observe by cached ip, then by desired type/region/service.

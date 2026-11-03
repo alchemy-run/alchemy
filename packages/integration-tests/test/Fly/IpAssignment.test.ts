@@ -2,6 +2,7 @@ import * as Fly from "@alchemy.run/fly";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -9,6 +10,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { fetchFrom, httpService, nginx } from "./fixtures/flycast.ts";
+import SecureUsers from "./fixtures/secure-users.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -554,4 +556,168 @@ test.provider(
     ],
     timeout: 120_000,
   },
+);
+
+const egressTags = [
+  "provider:fly",
+  "provider:fly:app",
+  "provider:fly:ipassignment",
+  "provider:fly:machine",
+  "live",
+];
+
+const listedIp = (appName: string, ip: string) =>
+  machines
+    .listAppIPAssignments({ app_name: appName })
+    .pipe(Effect.map((res) => (res.ips ?? []).find((item) => item.ip === ip)));
+
+test.provider(
+  "egress_v4 and egress_v6 are static outbound addresses that survive a redeploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = Effect.gen(function* () {
+        const app = yield* Fly.App("EgressApp");
+        const v4 = yield* Fly.IpAssignment("EgressV4", { app, type: "egress_v4", region: "iad" });
+        const v6 = yield* Fly.IpAssignment("EgressV6", { app, type: "egress_v6", region: "iad" });
+        return { app, v4, v6 };
+      });
+
+      const created = yield* stack.deploy(program);
+      expect(created.v4.type).toEqual("egress_v4");
+      expect(created.v4.region).toEqual("iad");
+      expect(created.v4.shared).toEqual(false);
+      expect(created.v4.ip).not.toContain(":");
+      expect(created.v6.type).toEqual("egress_v6");
+      expect(created.v6.ip).toContain(":");
+      for (const ip of [created.v4.ip, created.v6.ip]) {
+        const listed = yield* listedIp(created.app.appName, ip);
+        expect(listed?.egress).toEqual(true);
+        expect(listed?.region).toEqual("iad");
+      }
+
+      const redeployed = yield* stack.deploy(program);
+      expect(redeployed.v4.ip).toEqual(created.v4.ip);
+      expect(redeployed.v6.ip).toEqual(created.v6.ip);
+
+      const rows = yield* (yield* Provider.findProvider(Fly.IpAssignment)).list();
+      expect(rows.find((row) => row.ip === created.v4.ip)?.type).toEqual("egress_v4");
+      expect(rows.find((row) => row.ip === created.v6.ip)?.type).toEqual("egress_v6");
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilIpGone(created.app.appName, created.v4.ip)).toEqual("gone");
+      expect(yield* waitUntilIpGone(created.app.appName, created.v6.ip)).toEqual("gone");
+      expect(yield* waitUntilAppGone(created.app.appName)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: egressTags, timeout: 120_000 },
+);
+
+test.provider(
+  "a Machine in the region sends traffic from egress_v4",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* Fly.App("EgressMachineApp");
+          const egress = yield* Fly.IpAssignment("EgressV4", {
+            app,
+            type: "egress_v4",
+            region: "iad",
+          });
+          // The env var orders the Machine after the address: a Machine
+          // created after it sends traffic from it at once.
+          const machine = yield* Fly.Machine("Caller", {
+            app,
+            ...nginx,
+            env: { EGRESS_IP: egress.ip },
+          });
+          return { app, egress, machine };
+        }),
+      );
+
+      const seen = yield* fetchFrom(deployed.machine, "http://api.ipify.org", deployed.egress.ip);
+      expect(seen.trim()).toEqual(deployed.egress.ip);
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilIpGone(deployed.app.appName, deployed.egress.ip)).toEqual("gone");
+      expect(yield* waitUntilAppGone(deployed.app.appName)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: egressTags, timeout: 180_000 },
+);
+
+test.provider(
+  "a v6 is allocated next to an egress_v6 instead of adopting it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* Fly.App("EgressIngressApp");
+          const egress = yield* Fly.IpAssignment("EgressV6", {
+            app,
+            type: "egress_v6",
+            region: "iad",
+          });
+          // `region` orders the v6 after the egress address, so the
+          // egress address is already listed when the v6 is matched.
+          const ingress = yield* Fly.IpAssignment("Public", {
+            app,
+            type: "v6",
+            region: egress.region,
+          });
+          return { app, egress, ingress };
+        }),
+      );
+
+      expect(deployed.ingress.ip).not.toEqual(deployed.egress.ip);
+      expect(deployed.ingress.type).toEqual("v6");
+      expect((yield* listedIp(deployed.app.appName, deployed.ingress.ip))?.egress).not.toEqual(
+        true,
+      );
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilIpGone(deployed.app.appName, deployed.ingress.ip)).toEqual("gone");
+      expect(yield* waitUntilIpGone(deployed.app.appName, deployed.egress.ip)).toEqual("gone");
+      expect(yield* waitUntilAppGone(deployed.app.appName)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: egressTags, timeout: 120_000 },
+);
+
+test.provider(
+  "a private Service keeps the egress addresses of its App",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const users = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* SecureUsers;
+        }),
+      );
+      const egress = yield* machines.createAppIPAssignment({
+        app_name: users.appName,
+        type: "egress_v6",
+        region: "iad",
+      });
+      const ip = egress.ip!;
+      expect((yield* listedIp(users.appName, ip))?.egress).toEqual(true);
+
+      // A private Service converges to Flycast only. The egress address is
+      // neither a public address it reports nor one it releases.
+      yield* Drift.repair({ name: stack.name, stage: stack.stage });
+      expect((yield* listedIp(users.appName, ip))?.egress).toEqual(true);
+
+      yield* machines.deleteAppIPAssignment({ app_name: users.appName, ip });
+      yield* stack.destroy();
+
+      expect(yield* waitUntilAppGone(users.appName)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: [...egressTags, "provider:fly:service"], timeout: 240_000 },
 );
