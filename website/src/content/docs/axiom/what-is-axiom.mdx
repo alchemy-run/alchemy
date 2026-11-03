@@ -13,21 +13,24 @@ Here is the whole picture, which the rest of this page explains piece by piece. 
 
 <DAG
   nodes={[
-    { id: "worker", label: "Worker", type: "Effect · OpenTelemetry", layer: 0 },
-    { id: "token", label: "ingest", type: "API token", layer: 0 },
-    { id: "traces", label: "app-traces", type: "dataset", tone: "accent", layer: 1 },
-    { id: "logs", label: "app-logs", type: "dataset", tone: "accent", layer: 1 },
-    { id: "monitor", label: "panics", type: "monitor", layer: 2 },
-    { id: "slack", label: "ops-slack", type: "notifier", layer: 3 },
+    { id: "worker", label: "Worker", type: "ingest token", col: 0, row: 0 },
+    { id: "traces", label: "app-traces", type: "Dataset", tone: "accent", col: 1, row: 0 },
+    { id: "dash", label: "app", type: "Dashboard", col: 2, row: 0 },
+    { id: "logs", label: "app-logs", type: "Dataset", tone: "accent", col: 1, row: 1 },
+    { id: "monitor", label: "panics", type: "Monitor", col: 2, row: 1 },
+    { id: "slack", label: "ops-slack", type: "Notifier", col: 3, row: 1 },
+  ]}
+  groups={[
+    { id: "org", label: "Organization acme", nodes: ["traces", "dash", "logs", "monitor", "slack"] },
   ]}
   edges={[
-    { from: "worker", to: "traces" },
-    { from: "worker", to: "logs" },
-    { from: "token", to: "worker" },
+    { from: "worker", to: "traces", label: "traces" },
+    { from: "worker", to: "logs", label: "logs" },
+    { from: "traces", to: "dash", label: "APL" },
     { from: "logs", to: "monitor", label: "APL" },
-    { from: "monitor", to: "slack" },
+    { from: "monitor", to: "slack", label: "notifies" },
   ]}
-  caption="Telemetry flows into datasets. Monitors query them and notify you."
+  caption="Everything lives in an organization. Telemetry lands in datasets. Dashboards and monitors query them with APL, and a monitor alerts you through a notifier."
 />
 
 ## Organizations and tokens

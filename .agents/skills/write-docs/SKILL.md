@@ -85,9 +85,12 @@ Each of these was a correction. Don't relearn them.
 - **Every secrets page mentions secret providers** (Doppler, Infisical, per-stage
   `secrets`), not just `.env`.
   More: [Secrets pages](references/page-shapes.md#secrets-pages).
-- **Diagrams show real boundaries.** An AWS account is an outer border, a region
-  is a dashed border inside it, and IAM roles sit in the account, outside the
-  region. Use `groups` on `DAG`.
+- **Diagrams show the platform, not a request.** The What is diagram draws how
+  the platform is structured and what contains what, as borders: an AWS account
+  around a region, with IAM roles outside it; a Cloudflare account around a zone
+  and a Durable Object namespace; a Neon project around its branches. A request
+  flowing through boxes was rejected. Each platform has its own model, so draw
+  that one. Use `groups` on `DAG`.
   More: [Diagrams](references/structure.md#diagrams).
 - **Show the snippet the section talks about.** A section that names a resource,
   like a CloudWatch dashboard, shows a small snippet declaring it.

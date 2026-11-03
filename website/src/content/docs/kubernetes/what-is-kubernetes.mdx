@@ -9,26 +9,30 @@ Kubernetes runs containers on a group of machines and keeps them running. You te
 
 This page introduces the concepts you meet on Kubernetes, once each, and how Alchemy models them. The examples follow one small app: a web server with two replicas behind a Service, and a nightly job, on a cluster that might be on your laptop or in a cloud.
 
-Here is the whole picture, which the rest of this page explains piece by piece. You send objects to the cluster's API server. It schedules the Deployment's Pods and the Job's Pod onto nodes, and the Service sends traffic to the Deployment's Pods.
+Here is the whole picture, which the rest of this page explains piece by piece. You send objects to the cluster's API server, which keeps them in a namespace. The Deployment creates Pods, the Service selects them, and the CronJob creates a Job on schedule.
 
 <DAG
   nodes={[
-    { id: "you", label: "Alchemy", type: "server-side apply", layer: 0 },
-    { id: "api", label: "API server", type: "control plane", tone: "accent", layer: 1 },
-    { id: "deploy", label: "web", type: "Deployment", layer: 2 },
-    { id: "job", label: "nightly", type: "CronJob", layer: 2 },
-    { id: "pods", label: "Pods", type: "on nodes", layer: 3 },
-    { id: "svc", label: "web", type: "Service", layer: 3 },
+    { id: "you", label: "Alchemy", type: "server-side apply", col: 0, row: 0 },
+    { id: "api", label: "API server", type: "control plane", tone: "accent", col: 1, row: 0 },
+    { id: "deploy", label: "web", type: "Deployment", col: 1, row: 1 },
+    { id: "pods", label: "web-…", type: "Pods × 2", col: 2, row: 1 },
+    { id: "svc", label: "web", type: "Service", col: 3, row: 1 },
+    { id: "cron", label: "nightly", type: "CronJob", col: 1, row: 2 },
+    { id: "job", label: "nightly-…", type: "Job · Pod", col: 2, row: 2 },
+  ]}
+  groups={[
+    { id: "cluster", label: "Cluster", nodes: ["api"] },
+    { id: "ns", label: "Namespace app", parent: "cluster", nodes: ["deploy", "pods", "svc", "cron", "job"], dashed: true },
   ]}
   edges={[
-    { from: "you", to: "api" },
-    { from: "api", to: "deploy" },
-    { from: "api", to: "job" },
-    { from: "deploy", to: "pods" },
-    { from: "job", to: "pods" },
-    { from: "svc", to: "pods" },
+    { from: "you", to: "api", label: "apply" },
+    { from: "api", to: "ns", label: "stores objects" },
+    { from: "deploy", to: "pods", label: "creates" },
+    { from: "svc", to: "pods", label: "selects" },
+    { from: "cron", to: "job", label: "on schedule" },
   ]}
-  caption="You describe objects. The cluster keeps running what they describe."
+  caption="The API server stores the objects you apply, and the cluster keeps running what they describe. Objects live in a namespace, and Pods run on the cluster's nodes."
 />
 
 ## Clusters, nodes and the API server

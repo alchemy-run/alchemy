@@ -9,24 +9,28 @@ Railway runs containers for you. You put **services** in a **project**: your API
 
 This page introduces the concepts you meet on Railway, once each, and how Alchemy models them. The examples follow one small app: an API service with a Postgres database and a Volume, in one project.
 
-Here is the whole picture, which the rest of this page explains piece by piece. A project holds an environment. In it, the API service is reachable on its own domain, and reaches Postgres over the project's private network.
+Here is the whole picture, which the rest of this page explains piece by piece. A workspace holds the project. The project runs a full copy of its services in each environment, and services in one environment reach each other over its private network.
 
 <DAG
   nodes={[
-    { id: "ws", label: "Workspace", type: "API token", layer: 0 },
-    { id: "project", label: "Site", type: "Project", tone: "accent", layer: 1 },
-    { id: "env", label: "production", type: "Environment", layer: 2 },
-    { id: "api", label: "Api", type: "Service · *.up.railway.app", layer: 3 },
-    { id: "pg", label: "Postgres", type: "Service · private", layer: 3 },
+    { id: "token", label: "API token", type: "one workspace", col: 0, row: 0 },
+    { id: "api", label: "Api", type: "Service · public URL", tone: "accent", col: 1, row: 0 },
+    { id: "pg", label: "Postgres", type: "Service · Volume", col: 2, row: 0 },
+    { id: "api2", label: "Api", type: "Service", col: 1, row: 1 },
+    { id: "pg2", label: "Postgres", type: "Service · Volume", col: 2, row: 1 },
+  ]}
+  groups={[
+    { id: "ws", label: "Workspace acme", nodes: [] },
+    { id: "project", label: "Project Site", parent: "ws", nodes: [], dashed: true },
+    { id: "prod", label: "production", parent: "project", nodes: ["api", "pg"], dashed: true },
+    { id: "staging", label: "staging", parent: "project", nodes: ["api2", "pg2"], dashed: true },
   ]}
   edges={[
-    { from: "ws", to: "project" },
-    { from: "project", to: "env" },
-    { from: "env", to: "api" },
-    { from: "env", to: "pg" },
-    { from: "api", to: "pg", label: "railway.internal", dashed: true },
+    { from: "token", to: "ws", label: "deploy" },
+    { from: "api", to: "pg", label: "private network" },
+    { from: "api2", to: "pg2", label: "private network" },
   ]}
-  caption="Services in an environment reach each other over the project's private network."
+  caption="A workspace holds projects. Each environment is a full copy of the project's services, with its own variables, data and private network."
 />
 
 ## Workspaces and tokens

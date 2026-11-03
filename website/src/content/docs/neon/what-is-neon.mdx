@@ -13,21 +13,26 @@ Here is the whole picture, which the rest of this page explains piece by piece. 
 
 <DAG
   nodes={[
-    { id: "project", label: "app-db", type: "Project", layer: 0 },
-    { id: "main", label: "main", type: "Branch", tone: "accent", layer: 1 },
-    { id: "pr", label: "pr-42", type: "Branch · copy of main", layer: 1 },
-    { id: "compute", label: "compute", type: "Postgres endpoint", layer: 2 },
-    { id: "fn", label: "Api", type: "Function", layer: 2 },
-    { id: "bucket", label: "Uploads", type: "Bucket", layer: 2 },
+    { id: "compute", label: "compute", type: "Postgres · autoscales", col: 0, row: 0 },
+    { id: "fn", label: "Api", type: "Function", tone: "accent", col: 1, row: 0 },
+    { id: "bucket", label: "Uploads", type: "Bucket", col: 2, row: 0 },
+    { id: "compute2", label: "compute", type: "suspends when idle", col: 0, row: 1 },
+    { id: "fn2", label: "Api", type: "Function", col: 1, row: 1 },
+    { id: "bucket2", label: "Uploads", type: "Bucket", col: 2, row: 1 },
+  ]}
+  groups={[
+    { id: "org", label: "Organization acme", nodes: [] },
+    { id: "project", label: "Project app-db · aws-us-east-1", parent: "org", nodes: [], dashed: true },
+    { id: "main", label: "Branch main", parent: "project", nodes: ["compute", "fn", "bucket"], dashed: true },
+    { id: "pr", label: "Branch pr-42 · copy of main", parent: "project", nodes: ["compute2", "fn2", "bucket2"], dashed: true },
   ]}
   edges={[
-    { from: "project", to: "main" },
-    { from: "main", to: "pr", dashed: true },
-    { from: "main", to: "compute" },
-    { from: "main", to: "fn" },
-    { from: "main", to: "bucket" },
+    { from: "fn", to: "compute", label: "SQL" },
+    { from: "fn", to: "bucket", label: "S3 API" },
+    { from: "fn2", to: "compute2", label: "SQL" },
+    { from: "fn2", to: "bucket2", label: "S3 API" },
   ]}
-  caption="Everything attaches to a branch, and a new branch starts as a copy of its parent."
+  caption="A project is one Postgres deployment in one region. Each branch has its own compute, Functions and Buckets, and a new branch starts as a copy of its parent."
 />
 
 ## Organizations and API keys

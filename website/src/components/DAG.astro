@@ -65,6 +65,12 @@ export interface EdgeIn {
   label?: string;
   /** Render as a dashed line (e.g. for "later" / "deferred" edges). */
   dashed?: boolean;
+  /**
+   * On the grid, where an elbow leaves its source. `"bottom"` (the default)
+   * leaves from the top or bottom and turns into the target's side. `"side"`
+   * leaves from the source's side and turns into the target's top or bottom.
+   */
+  exit?: "bottom" | "side";
 }
 
 /**
@@ -271,7 +277,8 @@ for (const g of [...groups].sort((a, b) => depthOf(b) - depthOf(a))) {
   if (inner.length === 0) continue;
   const x0 = Math.min(...inner.map((b) => b.x)) - GROUP_PAD;
   const y0 = Math.min(...inner.map((b) => b.y)) - GROUP_LABEL;
-  const x1 = Math.max(...inner.map((b) => b.x + b.w)) + GROUP_PAD;
+  // Wide enough for its label.
+  const x1 = Math.max(...inner.map((b) => b.x + b.w), x0 + g.label.length * 6.8 + 24 - GROUP_PAD) + GROUP_PAD;
   const y1 = Math.max(...inner.map((b) => b.y + b.h)) + GROUP_PAD;
   boxes.set(g.id, { x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
 }
@@ -332,15 +339,28 @@ const gridEdge = (e: EdgeIn): Edge => {
     // Label beside the line, not across it.
     return { ...done(`M ${ax} ${y1} L ${ax} ${y2}`, ax + 8, (y1 + y2) / 2 + 2), beside: true };
   }
+  if (e.exit === "side") {
+    // An elbow: leave from the side, then run up or down into the target.
+    const x1 = b.x > a.x ? a.x + NODE_W : a.x;
+    const bx = b.x + NODE_W / 2;
+    const y2 = b.y > a.y ? b.y - TIP : b.y + b.h + TIP;
+    return done(`M ${x1} ${ay} L ${bx} ${ay} L ${bx} ${y2}`, (x1 + bx) / 2, ay);
+  }
   // An elbow: leave from the top or bottom, then run across into the target's side.
   const y1 = b.y > a.y ? a.y + a.h : a.y;
   const x2 = b.x > a.x ? b.x - TIP : b.x + NODE_W + TIP;
   return done(`M ${ax} ${y1} L ${ax} ${by} L ${x2} ${by}`, (ax + x2) / 2, by);
 };
 
-// An edge into a group runs straight across to its border.
+// An edge into a group runs straight to its border: down or up from a node
+// above or below it, otherwise across.
 const groupEdge = (e: EdgeIn, box: Box): Edge => {
   const a = positions.get(e.from)!;
+  const x = a.x + NODE_W / 2;
+  if (x > box.x && x < box.x + box.w && (a.y + a.h < box.y || a.y > box.y + box.h)) {
+    const [y1, y2] = box.y > a.y ? [a.y + a.h, box.y - TIP] : [a.y, box.y + box.h + TIP];
+    return { d: `M ${x} ${y1} L ${x} ${y2}`, midX: x + 8, midY: (y1 + y2) / 2 + 2, label: e.label, dashed: e.dashed, beside: true };
+  }
   const y = a.y + a.h / 2;
   const [x1, x2] = box.x > a.x ? [a.x + NODE_W, box.x - TIP] : [a.x, box.x + box.w + TIP];
   return { d: `M ${x1} ${y} L ${x2} ${y}`, midX: (x1 + x2) / 2, midY: y, label: e.label, dashed: e.dashed };
@@ -427,6 +447,27 @@ const buildEdges = (): Edge[] =>
   });
 
 const edgeShapes = buildEdges();
+
+// A group label sits at the start of its border, or after the first edge
+// that would run through it, or at the end.
+const verticals = edgeShapes.flatMap((e) => {
+  const pts = [...e.d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])] as const);
+  return pts.slice(1).flatMap(([x, y], i) => {
+    const [px, py] = pts[i]!;
+    return px === x ? [{ x, y0: Math.min(py, y), y1: Math.max(py, y) }] : [];
+  });
+});
+const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } => {
+  const width = g.label.length * 6.8;
+  const crossing = verticals
+    .filter((v) => v.y0 < b.y + 22 && v.y1 > b.y + 4 && v.x > b.x && v.x < b.x + b.w)
+    .map((v) => v.x);
+  const clear = (x0: number) => !crossing.some((x) => x > x0 - 6 && x < x0 + width + 6);
+  const start = [b.x + 12, ...crossing.map((x) => x + 10).sort((a, c) => a - c)].find(
+    (x) => x + width < b.x + b.w - 12 && clear(x),
+  );
+  return start !== undefined ? { x: start, anchor: "start" } : { x: b.x + b.w - 12, anchor: "end" };
+};
 ---
 
 <figure class="alc-dag not-content" data-nosnippet>
@@ -468,7 +509,12 @@ const edgeShapes = buildEdges();
               class="alc-dag__group-bg"
               stroke-dasharray={g.dashed ? "5 4" : undefined}
             />
-            <text x={b.x + 12} y={b.y + 17} class="alc-dag__group-label">
+            <text
+              x={labelPlace(g, b).x}
+              y={b.y + 17}
+              text-anchor={labelPlace(g, b).anchor}
+              class="alc-dag__group-label"
+            >
               {g.label}
             </text>
           </g>

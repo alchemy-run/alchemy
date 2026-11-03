@@ -9,25 +9,29 @@ Docker packages a program with everything it needs to run, its runtime, librarie
 
 This page introduces the concepts you meet with Docker, once each, and how Alchemy models them. The examples follow one small setup: Postgres in a container, with its data on a volume, reachable by name on a network.
 
-Here is the whole picture, which the rest of this page explains piece by piece. A context points at an engine. The engine pulls an image from a registry, and runs it as a container attached to a network and a volume.
+Here is the whole picture, which the rest of this page explains piece by piece. A context points at an engine, which holds everything else. The engine runs images as containers, which reach each other by name on a network and keep their data on a volume.
 
 <DAG
   nodes={[
-    { id: "ctx", label: "context", type: "Docker Desktop · ssh://vps", layer: 0 },
-    { id: "engine", label: "engine", type: "dockerd", tone: "accent", layer: 1 },
-    { id: "image", label: "postgres:18-alpine", type: "image", layer: 2 },
-    { id: "container", label: "postgres", type: "container", layer: 3 },
-    { id: "net", label: "app-network", type: "network", layer: 4 },
-    { id: "vol", label: "postgres-data", type: "volume", layer: 4 },
+    { id: "ctx", label: "context", type: "local or ssh://vps", col: 0, row: 1 },
+    { id: "pgImage", label: "postgres:18", type: "image", col: 1, row: 0 },
+    { id: "apiImage", label: "api", type: "image · built", col: 2, row: 0 },
+    { id: "pg", label: "postgres", type: "container", tone: "accent", col: 1, row: 1 },
+    { id: "api", label: "api", type: "container", col: 2, row: 1 },
+    { id: "vol", label: "postgres-data", type: "volume", col: 1, row: 2 },
+  ]}
+  groups={[
+    { id: "engine", label: "Engine dockerd", nodes: ["pgImage", "apiImage", "vol"] },
+    { id: "net", label: "Network app-network", parent: "engine", nodes: ["pg", "api"], dashed: true },
   ]}
   edges={[
-    { from: "ctx", to: "engine" },
-    { from: "engine", to: "image" },
-    { from: "image", to: "container" },
-    { from: "container", to: "net" },
-    { from: "container", to: "vol" },
+    { from: "ctx", to: "engine", label: "points at" },
+    { from: "pgImage", to: "pg", label: "runs as" },
+    { from: "apiImage", to: "api", label: "runs as" },
+    { from: "api", to: "pg", label: "postgres:5432" },
+    { from: "pg", to: "vol", label: "mounts" },
   ]}
-  caption="The engine runs containers from images, and attaches them to networks and volumes."
+  caption="An engine holds images, containers, networks and volumes. Containers run from images, reach each other by name on a shared network, and keep their data on volumes."
 />
 
 ## The engine and contexts

@@ -54,7 +54,9 @@ to its provider's existing slugs (e.g. after `"<provider>/what-is-<provider>"`).
 
 ## Diagrams
 
-Use `website/src/components/DAG.astro`. Never embed images or ASCII art.
+Use `website/src/components/DAG.astro`. Never embed images or ASCII art. A
+What is page's diagram shows the platform's structure (see SKILL.md), drawn
+with `groups` on the grid.
 
 - **Auto layout** (`layer` on nodes) suits a left-to-right flow. **Grid layout**
   (`col` and `row` on every node) suits anything with borders or two dimensions.
@@ -63,6 +65,14 @@ Use `website/src/components/DAG.astro`. Never embed images or ASCII art.
   edge can point at a group's `id`, and it ends at the border (`profile` →
   `account`, labelled "deploy"). Leave a free row or column where a border needs
   room.
+- **Routing on the grid.** A straight edge runs along a row or a column. An
+  elbow leaves the source's top or bottom and turns into the target's side; with
+  `exit: "side"` it leaves the side and turns into the target's top or bottom.
+  Pick whichever keeps lines off other nodes and from sharing a segment. An edge
+  to a group from above or below runs vertically into its border.
+- **Group borders size themselves** to their label, and a label moves clear of
+  an edge running through it. Keep node labels and types short (about 20
+  characters), or they overflow the node.
 - **Edge labels are platform terms** (`s3:PutObject`, `runs as`, `flycast`).
   Labels on vertical edges sit beside the line.
 - **`tone: "accent"`** marks the one node the diagram is about.

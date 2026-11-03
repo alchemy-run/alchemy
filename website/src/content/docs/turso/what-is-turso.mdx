@@ -13,22 +13,21 @@ Here is the whole picture, which the rest of this page explains piece by piece. 
 
 <DAG
   nodes={[
-    { id: "org", label: "acme", type: "organization", layer: 0 },
-    { id: "group", label: "Group", type: "aws-us-east-1", tone: "accent", layer: 1 },
-    { id: "db", label: "Db", type: "app database", layer: 2 },
-    { id: "t1", label: "tenant-a", type: "database", layer: 2 },
-    { id: "t2", label: "tenant-b", type: "database", layer: 2 },
-    { id: "worker", label: "Worker", type: "Connect · ManageDatabases", layer: 3 },
+    { id: "worker", label: "Worker", type: "group token", col: 0, row: 0 },
+    { id: "app", label: "app", type: "database", tone: "accent", col: 1, row: 0 },
+    { id: "a", label: "tenant-a", type: "database", col: 2, row: 0 },
+    { id: "b", label: "tenant-b", type: "database", col: 3, row: 0 },
+    { id: "c", label: "tenant-c", type: "database", col: 1, row: 1 },
+  ]}
+  groups={[
+    { id: "org", label: "Organization acme", nodes: [] },
+    { id: "us", label: "Group default · aws-us-east-1", parent: "org", nodes: ["app", "a", "b"], dashed: true },
+    { id: "eu", label: "Group eu · aws-eu-west-1", parent: "org", nodes: ["c"], dashed: true },
   ]}
   edges={[
-    { from: "org", to: "group" },
-    { from: "group", to: "db" },
-    { from: "group", to: "t1" },
-    { from: "group", to: "t2" },
-    { from: "db", to: "worker" },
-    { from: "t1", to: "worker" },
+    { from: "worker", to: "us" },
   ]}
-  caption="Databases live in a group, which decides where they run."
+  caption="An organization holds groups, and a group decides where its databases run. Every database in a group shares its location, so a tenant that must stay in Europe gets a database in a European group. A group token reaches every database in its group."
 />
 
 ## Organizations

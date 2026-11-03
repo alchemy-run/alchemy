@@ -13,20 +13,25 @@ Here is the whole picture, which the rest of this page explains piece by piece. 
 
 <DAG
   nodes={[
-    { id: "browser", label: "browser", type: "cookie", layer: 0 },
-    { id: "routes", label: "/api/auth/*", type: "auth routes", tone: "accent", layer: 1 },
-    { id: "db", label: "AuthDb", type: "users · sessions · accounts", layer: 2 },
-    { id: "mw", label: "middleware", type: "current user", layer: 1 },
-    { id: "api", label: "/api/notes", type: "your handler", layer: 2 },
+    { id: "browser", label: "browser", type: "cookie", col: 0, row: 0 },
+    { id: "routes", label: "/api/auth/*", type: "auth routes", tone: "accent", col: 1, row: 0 },
+    { id: "mw", label: "middleware", type: "current user", col: 1, row: 1 },
+    { id: "api", label: "/api/notes", type: "your handler", col: 1, row: 2 },
+    { id: "user", label: "user", type: "table", col: 3, row: 0 },
+    { id: "session", label: "session", type: "table", col: 3, row: 1 },
+  ]}
+  groups={[
+    { id: "app", label: "Your Worker or Lambda", nodes: ["routes", "mw", "api"] },
+    { id: "db", label: "AuthDb · your database", nodes: ["user", "session"] },
   ]}
   edges={[
     { from: "browser", to: "routes", label: "sign in" },
-    { from: "routes", to: "db" },
     { from: "browser", to: "mw", label: "request" },
-    { from: "mw", to: "db" },
+    { from: "routes", to: "user", label: "users, sessions" },
+    { from: "mw", to: "session", label: "reads session" },
     { from: "mw", to: "api" },
   ]}
-  caption="Sign-in writes a session. Every later request reads it back."
+  caption="Better Auth runs inside your app and keeps its tables in your database. Sign-in writes a session, and every later request reads it back."
 />
 
 ## The auth server

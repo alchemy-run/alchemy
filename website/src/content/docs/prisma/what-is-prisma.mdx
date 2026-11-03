@@ -9,22 +9,28 @@ Prisma's data platform runs two things for you: **Prisma Postgres**, a serverles
 
 This page introduces the concepts you meet on Prisma's platform, once each, and how Alchemy models them. The examples follow one small app: an API on Compute with a Postgres database, and a branch per preview.
 
-Here is the whole picture, which the rest of this page explains piece by piece. A project holds a database and a Compute app. A connection hands the app its database URL, and a branch groups a preview's copies of both.
+Here is the whole picture, which the rest of this page explains piece by piece. A workspace holds the project. Each branch of the project has its own database and app, and the app receives its database's `DATABASE_URL`.
 
 <DAG
   nodes={[
-    { id: "project", label: "app", type: "Project", tone: "accent", layer: 0 },
-    { id: "db", label: "db", type: "Prisma Postgres", layer: 1 },
-    { id: "app", label: "api", type: "Compute app", layer: 1 },
-    { id: "conn", label: "api", type: "Connection", layer: 2 },
+    { id: "token", label: "Service token", type: "one workspace", col: 0, row: 0 },
+    { id: "db", label: "db", type: "Prisma Postgres", col: 1, row: 0 },
+    { id: "app", label: "api", type: "Compute app", tone: "accent", col: 2, row: 0 },
+    { id: "db2", label: "db", type: "Prisma Postgres", col: 1, row: 1 },
+    { id: "app2", label: "api", type: "Compute app", col: 2, row: 1 },
+  ]}
+  groups={[
+    { id: "ws", label: "Workspace acme", nodes: [] },
+    { id: "project", label: "Project app · us-east-1", parent: "ws", nodes: [], dashed: true },
+    { id: "main", label: "Branch main · production", parent: "project", nodes: ["db", "app"], dashed: true },
+    { id: "pr", label: "Branch pr-42 · preview", parent: "project", nodes: ["db2", "app2"], dashed: true },
   ]}
   edges={[
-    { from: "project", to: "db" },
-    { from: "project", to: "app" },
-    { from: "db", to: "conn" },
-    { from: "conn", to: "app", label: "DATABASE_URL" },
+    { from: "token", to: "ws", label: "deploy" },
+    { from: "db", to: "app", label: "DATABASE_URL" },
+    { from: "db2", to: "app2", label: "DATABASE_URL" },
   ]}
-  caption="A project holds a database and the app that uses it. A connection carries the app's credentials."
+  caption="A workspace holds projects. Each branch of a project groups a database and the apps that use it. The first branch is production, the rest are previews."
 />
 
 ## Workspaces and tokens

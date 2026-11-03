@@ -9,25 +9,33 @@ Cloudflare runs one network in more than 340 cities, and it runs your code on ev
 
 This page introduces the concepts you meet on Cloudflare, once each, and how Alchemy models them. The examples follow one small app: a Worker that stores uploads in R2, counts visits in a Durable Object, and queues jobs for a consumer.
 
-Here is the whole picture, which the rest of this page explains piece by piece. A request for your domain reaches the nearest city. The Worker there answers it, using its bindings to reach a Bucket, a Durable Object and a Queue.
+Here is the whole picture, which the rest of this page explains piece by piece. Everything lives in your account. A zone holds your domain, which routes requests to a Worker in every city. The Worker reaches a Bucket, Durable Objects and a Queue through bindings, and each Durable Object lives in one city.
 
 <DAG
   nodes={[
-    { id: "user", label: "Request", type: "app.example.com", layer: 0 },
-    { id: "worker", label: "Worker", type: "nearest city", tone: "accent", layer: 1 },
-    { id: "r2", label: "Uploads", type: "R2 Bucket", layer: 2 },
-    { id: "do", label: "Counter", type: "Durable Object", layer: 2 },
-    { id: "queue", label: "Jobs", type: "Queue", layer: 2 },
-    { id: "consumer", label: "Consumer", type: "Worker", layer: 3 },
+    { id: "profile", label: "Profile", type: "you or CI", col: 0, row: 1 },
+    { id: "domain", label: "app.example.com", type: "Custom domain", col: 1, row: 0 },
+    { id: "worker", label: "Api", type: "Worker · every city", tone: "accent", col: 1, row: 1 },
+    { id: "r2", label: "Uploads", type: "R2 Bucket", col: 2, row: 1 },
+    { id: "roomA", label: "room-a", type: "Durable Object", col: 2, row: 2 },
+    { id: "roomB", label: "room-b", type: "Durable Object", col: 3, row: 2 },
+    { id: "queue", label: "Jobs", type: "Queue", col: 2, row: 3 },
+    { id: "consumer", label: "Consumer", type: "Worker", col: 3, row: 3 },
+  ]}
+  groups={[
+    { id: "account", label: "Account", nodes: ["worker", "r2", "queue", "consumer"] },
+    { id: "zone", label: "Zone example.com", parent: "account", nodes: ["domain"], dashed: true },
+    { id: "rooms", label: "Rooms namespace · one city per object", parent: "account", nodes: ["roomA", "roomB"], dashed: true },
   ]}
   edges={[
-    { from: "user", to: "worker" },
+    { from: "profile", to: "account", label: "deploy" },
+    { from: "domain", to: "worker", label: "routes to" },
     { from: "worker", to: "r2", label: "binding" },
-    { from: "worker", to: "do", label: "binding" },
+    { from: "worker", to: "roomA", label: "binding" },
     { from: "worker", to: "queue", label: "binding" },
     { from: "queue", to: "consumer", dashed: true },
   ]}
-  caption="The Worker runs near the user. Everything it uses is a binding. Dashed edges are messages delivered later."
+  caption="There are no regions to pick. Zones hold your domains, and Workers and storage belong to the account and run across the whole network. Each Durable Object lives in one city. Dashed edges are messages delivered later."
 />
 
 ## Accounts: where everything lives

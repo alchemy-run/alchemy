@@ -9,26 +9,29 @@ Fly.io runs your programs as small virtual machines in data centers around the w
 
 This page introduces the concepts you meet on Fly, once each, and how Alchemy models them. The examples follow one small app: an API Service in two regions that stores files on a Volume and keeps its data in Postgres.
 
-Here is the whole picture, which the rest of this page explains piece by piece. A request reaches Fly's proxy, which sends it to the nearest Machine in the App. Each Machine has its own Volume, and both reach Postgres over Fly's private network.
+Here is the whole picture, which the rest of this page explains piece by piece. Everything in an organization shares one private network. The App's Machines run in two regions, each with its own Volume, and reach Postgres over the private network. Fly's proxy sends each request to the nearest Machine.
 
 <DAG
   nodes={[
-    { id: "req", label: "request", type: "api.fly.dev", layer: 0 },
-    { id: "proxy", label: "Fly proxy", type: "nearest region", tone: "accent", layer: 1 },
-    { id: "iad", label: "Machine", type: "iad", layer: 2 },
-    { id: "lhr", label: "Machine", type: "lhr", layer: 2 },
-    { id: "vol", label: "Volume", type: "one per Machine", layer: 3 },
-    { id: "pg", label: "Postgres", type: "private network", layer: 3 },
+    { id: "proxy", label: "Fly proxy", type: "anycast · api.fly.dev", col: 0, row: 0 },
+    { id: "volIad", label: "data", type: "Volume · iad", col: 1, row: 0 },
+    { id: "iad", label: "Machine", type: "iad", tone: "accent", col: 2, row: 0 },
+    { id: "volLhr", label: "data", type: "Volume · lhr", col: 1, row: 1 },
+    { id: "lhr", label: "Machine", type: "lhr", tone: "accent", col: 2, row: 1 },
+    { id: "pg", label: "Postgres", type: "Managed Postgres", col: 3, row: 0 },
+  ]}
+  groups={[
+    { id: "org", label: "Organization acme · private network", nodes: ["pg"] },
+    { id: "app", label: "App api", parent: "org", nodes: ["volIad", "iad", "volLhr", "lhr"], dashed: true },
   ]}
   edges={[
-    { from: "req", to: "proxy" },
-    { from: "proxy", to: "iad" },
-    { from: "proxy", to: "lhr" },
-    { from: "iad", to: "vol" },
+    { from: "proxy", to: "app", label: "nearest" },
+    { from: "iad", to: "volIad", label: "mounts" },
+    { from: "lhr", to: "volLhr", label: "mounts" },
     { from: "iad", to: "pg" },
-    { from: "lhr", to: "pg" },
+    { from: "lhr", to: "pg", exit: "side" },
   ]}
-  caption="The proxy sends each request to a nearby Machine. Machines reach data over the private network."
+  caption="An organization's apps share one private network over WireGuard. Each Machine runs in one region, with its own Volume there. The proxy sends each request to the nearest Machine."
 />
 
 ## Organizations

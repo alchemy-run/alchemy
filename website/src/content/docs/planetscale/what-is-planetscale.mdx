@@ -13,21 +13,24 @@ Here is the whole picture, which the rest of this page explains piece by piece. 
 
 <DAG
   nodes={[
-    { id: "org", label: "acme", type: "organization", layer: 0 },
-    { id: "db", label: "app-db", type: "Postgres database", tone: "accent", layer: 1 },
-    { id: "main", label: "main", type: "production branch", layer: 2 },
-    { id: "pr", label: "pr-42", type: "development branch", layer: 2 },
-    { id: "role", label: "app-role", type: "role · connection", layer: 3 },
-    { id: "app", label: "Worker", type: "via Hyperdrive", layer: 4 },
+    { id: "prod", label: "Api", type: "prod stage", col: 0, row: 0 },
+    { id: "preview", label: "Api", type: "pr-42 stage", col: 0, row: 1 },
+    { id: "primary", label: "primary", type: "read · write", tone: "accent", col: 1, row: 0 },
+    { id: "replicas", label: "replicas", type: "read-only", col: 2, row: 0 },
+    { id: "dev", label: "primary", type: "development size", col: 1, row: 1 },
+  ]}
+  groups={[
+    { id: "org", label: "Organization acme", nodes: [] },
+    { id: "db", label: "Database app-db · Postgres · us-east", parent: "org", nodes: [], dashed: true },
+    { id: "main", label: "Branch main · production", parent: "db", nodes: ["primary", "replicas"], dashed: true },
+    { id: "pr", label: "Branch pr-42 · development", parent: "db", nodes: ["dev"], dashed: true },
   ]}
   edges={[
-    { from: "org", to: "db" },
-    { from: "db", to: "main" },
-    { from: "db", to: "pr" },
-    { from: "pr", to: "role" },
-    { from: "role", to: "app" },
+    { from: "prod", to: "main", label: "role" },
+    { from: "preview", to: "pr", label: "role" },
+    { from: "primary", to: "replicas", label: "replicates", dashed: true },
   ]}
-  caption="A database has branches. Each branch has its own roles, and a role is how an app connects."
+  caption="An organization holds databases, each in one region. A database holds branches, and each branch is its own cluster: production with replicas, development as one small node. Each stage connects through a role on its branch."
 />
 
 ## Organizations

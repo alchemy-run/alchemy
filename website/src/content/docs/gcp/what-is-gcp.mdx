@@ -9,27 +9,29 @@ Google Cloud (GCP) is a set of services, Cloud Run, Firestore, Cloud Storage, Pu
 
 This page introduces the concepts you meet on GCP, once each, and how Alchemy models them. The examples follow one small app: a Cloud Run service that stores links in Firestore and publishes an event to Pub/Sub for a worker.
 
-Here is the whole picture, which the rest of this page explains piece by piece. Your profile picks a project. Inside it, the service runs as its own service account, and that account holds a role on each resource it uses.
+Here is the whole picture, which the rest of this page explains piece by piece. Your profile deploys into a project. Service accounts and topics belong to the whole project, while the service, the database and the worker live in one region. The service runs as its own service account, which holds a role on each resource it uses.
 
 <DAG
   nodes={[
-    { id: "profile", label: "Profile", type: "gcloud login", layer: 0 },
-    { id: "project", label: "Project", type: "my-app-prod · us-central1", tone: "accent", layer: 1 },
-    { id: "api", label: "Api", type: "Cloud Run service", layer: 2 },
-    { id: "sa", label: "alch-api-…", type: "service account", layer: 2 },
-    { id: "db", label: "Links", type: "Firestore database", layer: 3 },
-    { id: "topic", label: "Events", type: "Pub/Sub topic", layer: 3 },
-    { id: "worker", label: "Worker", type: "worker pool", layer: 4 },
+    { id: "profile", label: "Profile", type: "gcloud login", col: 0, row: 1 },
+    { id: "sa", label: "alch-api-…", type: "Service account", col: 1, row: 0 },
+    { id: "topic", label: "Events", type: "Pub/Sub topic", col: 2, row: 0 },
+    { id: "api", label: "Api", type: "Cloud Run service", tone: "accent", col: 1, row: 1 },
+    { id: "db", label: "Links", type: "Firestore database", col: 1, row: 2 },
+    { id: "worker", label: "Worker", type: "Cloud Run worker pool", col: 3, row: 2 },
+  ]}
+  groups={[
+    { id: "project", label: "Project my-app-prod", nodes: ["sa", "topic"] },
+    { id: "region", label: "us-central1", parent: "project", nodes: ["api", "db", "worker"], dashed: true },
   ]}
   edges={[
     { from: "profile", to: "project", label: "deploy" },
-    { from: "project", to: "api" },
-    { from: "project", to: "sa" },
-    { from: "sa", to: "db", label: "datastore.user" },
-    { from: "sa", to: "topic", label: "pubsub.publisher" },
-    { from: "topic", to: "worker", dashed: true },
+    { from: "sa", to: "api", label: "runs as" },
+    { from: "api", to: "db", label: "datastore.user" },
+    { from: "api", to: "topic", label: "pubsub.publisher", exit: "side" },
+    { from: "topic", to: "worker", dashed: true, exit: "side" },
   ]}
-  caption="The service runs as its own service account, which holds one role on each resource it uses. Dashed edges are messages delivered later."
+  caption="Service accounts and Pub/Sub topics belong to the project and work in every region. The service, the database and the worker live in one region. Dashed edges are messages delivered later."
 />
 
 ## Projects: where resources live

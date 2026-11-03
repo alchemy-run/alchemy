@@ -13,21 +13,24 @@ Here is the whole picture, which the rest of this page explains piece by piece. 
 
 <DAG
   nodes={[
-    { id: "token", label: "API token", type: "one project", layer: 0 },
-    { id: "server", label: "Box", type: "Server · cx22 · nbg1", tone: "accent", layer: 1 },
-    { id: "svc", label: "Api", type: "Service · systemd", layer: 2 },
-    { id: "vol", label: "Data", type: "Volume", layer: 2 },
-    { id: "fw", label: "Web", type: "Firewall", layer: 2 },
-    { id: "dns", label: "api.example.com", type: "DNS record", layer: 2 },
+    { id: "token", label: "API token", type: "one project", col: 0, row: 1 },
+    { id: "fw", label: "Web", type: "Firewall", col: 1, row: 0 },
+    { id: "server", label: "Box", type: "Server · cx22", tone: "accent", col: 1, row: 1 },
+    { id: "vol", label: "Data", type: "Volume", col: 2, row: 1 },
+    { id: "record", label: "api", type: "DNS record · A", col: 2, row: 2 },
+  ]}
+  groups={[
+    { id: "project", label: "Project my-app", nodes: ["fw"] },
+    { id: "location", label: "nbg1 · Nuremberg", parent: "project", nodes: ["server", "vol"], dashed: true },
+    { id: "zone", label: "Zone example.com", parent: "project", nodes: ["record"], dashed: true },
   ]}
   edges={[
-    { from: "token", to: "server", label: "deploy" },
-    { from: "server", to: "svc" },
-    { from: "server", to: "vol" },
-    { from: "fw", to: "server" },
-    { from: "dns", to: "server" },
+    { from: "token", to: "project", label: "deploy" },
+    { from: "fw", to: "server", label: "applies to" },
+    { from: "server", to: "vol", label: "attached" },
+    { from: "record", to: "server", label: "points at", exit: "side" },
   ]}
-  caption="Everything lives in one project. The Server runs your program, and the rest of the platform surrounds it."
+  caption="An API token reaches one project. A Server and its Volumes sit in one location. Firewalls and DNS zones belong to the project and apply anywhere in it."
 />
 
 ## Projects and API tokens

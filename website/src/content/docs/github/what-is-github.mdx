@@ -9,26 +9,28 @@ GitHub hosts your code, and it's also part of how your code reaches production. 
 
 This page introduces the concepts you meet on GitHub, once each, and how Alchemy models them. The examples follow one setup: a repository whose Actions workflow deploys to a cloud with a credential the Stack created, and comments each preview's URL on its pull request.
 
-Here is the whole picture, which the rest of this page explains piece by piece. The Stack creates a cloud role and stores it in the repository's Actions configuration. A workflow uses it to deploy, and comments on the pull request.
+Here is the whole picture, which the rest of this page explains piece by piece. The Stack stores a cloud role in the repository's Actions secrets. A workflow run uses it to deploy, a production environment keeps its own secret for production jobs, and the run comments on the pull request.
 
 <DAG
   nodes={[
-    { id: "stack", label: "Stack", type: "alchemy deploy", layer: 0 },
-    { id: "role", label: "deploy role", type: "cloud credential", layer: 1 },
-    { id: "repo", label: "my-org/api", type: "repository", tone: "accent", layer: 1 },
-    { id: "vars", label: "Actions", type: "secrets · variables", layer: 2 },
-    { id: "run", label: "workflow run", type: "on push / PR", layer: 3 },
-    { id: "pr", label: "pull request", type: "preview comment", layer: 4 },
+    { id: "stack", label: "Stack", type: "alchemy deploy", col: 0, row: 0 },
+    { id: "secret", label: "DEPLOY_ROLE", type: "Actions secret", col: 1, row: 0 },
+    { id: "run", label: "workflow run", type: "on push / PR", tone: "accent", col: 2, row: 0 },
+    { id: "pr", label: "pull request", type: "preview comment", col: 3, row: 0 },
+    { id: "envSecret", label: "PROD_ROLE", type: "environment secret", col: 1, row: 1 },
+  ]}
+  groups={[
+    { id: "org", label: "Organization my-org", nodes: [] },
+    { id: "repo", label: "Repository my-org/api", parent: "org", nodes: ["secret", "run", "pr"], dashed: true },
+    { id: "env", label: "Environment production", parent: "repo", nodes: ["envSecret"], dashed: true },
   ]}
   edges={[
-    { from: "stack", to: "role" },
-    { from: "stack", to: "repo" },
-    { from: "role", to: "vars", label: "ARN / token" },
-    { from: "repo", to: "vars" },
-    { from: "vars", to: "run" },
-    { from: "run", to: "pr" },
+    { from: "stack", to: "repo", label: "sets" },
+    { from: "secret", to: "run", label: "every job" },
+    { from: "envSecret", to: "run", label: "deploy job only", exit: "side" },
+    { from: "run", to: "pr", label: "comments" },
   ]}
-  caption="The Stack provisions the credentials CI deploys with, and CI reports back on the pull request."
+  caption="An organization holds repositories. A repository's secrets reach every workflow job, and an environment's secrets reach only the jobs that deploy to it."
 />
 
 ## Accounts and organizations
