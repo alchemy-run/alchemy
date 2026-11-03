@@ -177,7 +177,12 @@ const dependentQueues = Stack(
   }),
 );
 
-type PlanInput = Omit<Parameters<typeof Alchemist.plan>[0], "operation" | "stage">;
+interface PlanInput {
+  readonly stack: typeof twoQueues | typeof dependentQueues;
+  readonly include?: ReadonlyArray<string>;
+  readonly exclude?: ReadonlyArray<string>;
+  readonly dev?: boolean;
+}
 
 /**
  * Run `plans` with a temp `ALCHEMY_HOME` whose default profile configures
