@@ -153,9 +153,11 @@ const waitForIssuedCertificate = (appName: string, hostname: string) =>
     }),
   );
 
+// Fly's edges can serve a stale certificate for a few minutes after issuance,
+// longest for a hostname a just-deleted App served, failing TLS verification.
 const serveOverHttps = (hostname: string) =>
   getText(`https://${hostname}/`).pipe(
-    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
+    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 48 }),
   );
 
 const cloneSite = Effect.gen(function* () {
