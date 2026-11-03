@@ -20,10 +20,16 @@ type SpanOptions = Parameters<Tracer.Tracer["span"]>[0];
 type RunInContext = ReturnType<typeof AsyncLocalStorage.snapshot>;
 type CloudflareSpan = ReturnType<(typeof import("cloudflare:workers"))["tracing"]["startSpan"]>;
 
+/** An async context snapshot and the Cloudflare span active inside it. */
+interface AsyncContext {
+  readonly run: RunInContext;
+  readonly activeSpanId: string | undefined;
+}
+
 class Span extends Tracer.NativeSpan {
   constructor(
     options: SpanOptions,
-    readonly runInContext: RunInContext,
+    readonly asyncContext: AsyncContext,
     readonly cloudflareSpan?: CloudflareSpan,
   ) {
     // Cascade Cloudflare's decision: an untraced invocation (`isTraced`
@@ -71,54 +77,53 @@ class Span extends Tracer.NativeSpan {
  * sets the span status to `error`. Effect trace/span IDs are independent
  * of Cloudflare's opaque IDs.
  */
-export const layer = (fiberContext: boolean): Layer.Layer<never> =>
-  Layer.effect(
-    Tracer.Tracer,
-    Effect.gen(function* () {
-      // `tracing` only exists on compatibility dates >= 2026-07-28. Deploy
-      // already rejects older dates (`assertCloudflareTelemetryCompatibility`),
-      // so a missing API here (an old local workerd) just keeps spans
-      // Effect-local.
-      const { tracing } = yield* cloudflare_workers;
-      const invocationContext = AsyncLocalStorage.snapshot();
-      // Without the fiber hook a parentless span starts in the current async
-      // context, so stores entered after this Tracer was built stay visible.
-      const contextFor = (span: Tracer.AnySpan | undefined): RunInContext => {
-        while (span?._tag === "Span") {
-          if (span instanceof Span) return span.runInContext;
-          span = Option.getOrUndefined(span.parent);
+export const layer: Layer.Layer<never> = Layer.effect(
+  Tracer.Tracer,
+  Effect.gen(function* () {
+    // `tracing` only exists on compatibility dates >= 2026-07-28. Deploy
+    // already rejects older dates (`assertCloudflareTelemetryCompatibility`),
+    // so a missing API here (an old local workerd) just keeps spans
+    // Effect-local.
+    const { tracing } = yield* cloudflare_workers;
+    const activeSpanId = () => tracing?.getActiveSpan?.()?.spanContext().spanId;
+    const capture = (): AsyncContext => ({
+      run: AsyncLocalStorage.snapshot(),
+      activeSpanId: activeSpanId(),
+    });
+    const invocationContext = capture();
+    const contextFor = (span: Tracer.AnySpan | undefined): AsyncContext => {
+      while (span?._tag === "Span") {
+        if (span instanceof Span) return span.asyncContext;
+        span = Option.getOrUndefined(span.parent);
+      }
+      return invocationContext;
+    };
+    // Switch to the snapshot only when a different Cloudflare span is
+    // active: that is what nests platform spans under the Effect span.
+    // Otherwise stay, so AsyncLocalStorage stores entered since the
+    // snapshot (e.g. by middleware calling back into Effect) stay visible.
+    const enter = <A>(context: AsyncContext, f: () => A): A =>
+      activeSpanId() === context.activeSpanId ? f() : context.run(f);
+
+    return Tracer.make({
+      span(options) {
+        const parentContext = options.root
+          ? invocationContext
+          : contextFor(Option.getOrUndefined(options.parent));
+
+        if (!options.sampled || tracing?.startActiveSpan === undefined) {
+          return new Span(options, parentContext);
         }
-        return fiberContext ? invocationContext : AsyncLocalStorage.snapshot();
-      };
 
-      return Tracer.make({
-        span(options) {
-          const parentContext = contextFor(
-            options.root ? undefined : Option.getOrUndefined(options.parent),
-          );
-
-          if (!options.sampled || tracing?.startActiveSpan === undefined) {
-            return new Span(options, parentContext);
-          }
-
-          return parentContext(() =>
-            tracing.startActiveSpan(
-              options.name,
-              (span) => new Span(options, AsyncLocalStorage.snapshot(), span),
-            ),
-          );
-        },
-        // Run each fiber step in its span's async context so platform spans
-        // and console output attach under the active Effect span.
-        ...(fiberContext
-          ? {
-              context(primitive, fiber) {
-                return contextFor(fiber.cache.span)(() =>
-                  primitive["~effect/Effect/evaluate"](fiber),
-                );
-              },
-            }
-          : {}),
-      });
-    }),
-  );
+        return enter(parentContext, () =>
+          tracing.startActiveSpan(options.name, (span) => new Span(options, capture(), span)),
+        );
+      },
+      context(primitive, fiber) {
+        return enter(contextFor(fiber.cache.span), () =>
+          primitive["~effect/Effect/evaluate"](fiber),
+        );
+      },
+    });
+  }),
+);
