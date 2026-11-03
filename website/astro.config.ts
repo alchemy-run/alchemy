@@ -560,6 +560,21 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "cloudflare/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Accounts and API tokens", link: "/cloudflare/accounts-and-tokens" },
+                {
+                  label: "Secrets & env",
+                  link: "/cloudflare/security/secrets-env",
+                },
+                {
+                  label: "Secrets Store",
+                  link: "/cloudflare/security/secrets-store",
+                },
+                { label: "Access", link: "/cloudflare/security/access" },
+              ],
+            },
+            {
               label: "Workers",
               items: [
                 { label: "Workers", link: "/cloudflare/compute/workers" },
@@ -669,19 +684,6 @@ export default defineConfig({
                   link: "/cloudflare/networking/federated-apis",
                 },
                 { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
-              ],
-            },
-            {
-              label: "Security & secrets",
-              items: [
-                {
-                  label: "Secrets & env",
-                  link: "/cloudflare/security/secrets-env",
-                },
-                {
-                  label: "Secrets Store",
-                  link: "/cloudflare/security/secrets-store",
-                },
                 { label: "Turnstile", link: "/cloudflare/security/turnstile" },
               ],
             },
@@ -952,8 +954,9 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "gcp/tutorial" } }],
             },
             {
-              label: "Access & security",
+              label: "Accounts & access",
               items: [
+                { label: "Projects and regions", link: "/gcp/projects-and-regions" },
                 { label: "IAM & bindings", link: "/gcp/security/iam" },
                 { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
                 { label: "Federated identity", link: "/gcp/security/federated-identity" },
@@ -1051,6 +1054,12 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "hetzner/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Projects, tokens & SSH keys", link: "/hetzner/projects-and-tokens" },
+              ],
+            },
+            {
               label: "Compute",
               items: [
                 { label: "Servers", link: "/hetzner/compute/servers" },
@@ -1126,6 +1135,13 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "fly/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Organizations and tokens", link: "/fly/organizations-and-tokens" },
+                { label: "Secrets", link: "/fly/data/secrets" },
+              ],
+            },
+            {
               label: "Compute",
               items: [
                 { label: "Apps", link: "/fly/compute/apps" },
@@ -1157,7 +1173,6 @@ export default defineConfig({
                 },
                 { label: "Redis", link: "/fly/data/redis" },
                 { label: "Tigris", link: "/fly/data/tigris" },
-                { label: "Secrets", link: "/fly/data/secrets" },
               ],
             },
             {
@@ -1212,6 +1227,13 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "railway/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Workspaces and tokens", link: "/railway/workspaces-and-tokens" },
+                { label: "Variables", link: "/railway/data/variables" },
+              ],
+            },
+            {
               label: "Compute",
               items: [
                 { label: "Projects", link: "/railway/compute/projects" },
@@ -1243,7 +1265,6 @@ export default defineConfig({
                 },
                 { label: "Mongo", link: "/railway/data/mongo" },
                 { label: "Redis", link: "/railway/data/redis" },
-                { label: "Variables", link: "/railway/data/variables" },
                 { label: "Buckets", link: "/railway/data/buckets" },
               ],
             },
@@ -1304,6 +1325,16 @@ export default defineConfig({
             { label: "What is PlanetScale?", link: "/planetscale/what-is-planetscale" },
             { label: "Setup", link: "/planetscale/setup" },
             {
+              label: "Accounts & access",
+              items: [
+                {
+                  label: "Organizations and tokens",
+                  link: "/planetscale/organizations-and-tokens",
+                },
+                { label: "Credentials", link: "/planetscale/data/credentials" },
+              ],
+            },
+            {
               label: "Engines",
               items: [
                 { label: "Postgres", link: "/planetscale/data/postgres" },
@@ -1313,7 +1344,6 @@ export default defineConfig({
             {
               label: "Databases",
               items: [
-                { label: "Credentials", link: "/planetscale/data/credentials" },
                 { label: "Migrations", link: "/planetscale/data/migrations" },
                 { label: "Backups & restores", link: "/planetscale/data/backups" },
               ],
@@ -1345,6 +1375,13 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "turso/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Team & organization", link: "/turso/organization" },
+                { label: "Tokens", link: "/turso/tokens" },
+              ],
+            },
+            {
               label: "Databases",
               items: [
                 { label: "Groups", link: "/turso/groups" },
@@ -1353,13 +1390,6 @@ export default defineConfig({
                 { label: "Connections", link: "/turso/connections" },
                 { label: "Database per tenant", link: "/turso/database-per-tenant" },
                 { label: "Preview databases", link: "/turso/preview-databases" },
-              ],
-            },
-            {
-              label: "Access",
-              items: [
-                { label: "Tokens", link: "/turso/tokens" },
-                { label: "Team & organization", link: "/turso/organization" },
               ],
             },
             providerResourcesEntry("Turso"),
@@ -1382,11 +1412,17 @@ export default defineConfig({
               ],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Organization governance", link: "/neon/governance" },
+                { label: "Roles", link: "/neon/data/roles" },
+              ],
+            },
+            {
               label: "Postgres",
               items: [
                 { label: "Branching", link: "/neon/data/branching" },
                 { label: "Connections", link: "/neon/data/connections" },
-                { label: "Roles", link: "/neon/data/roles" },
                 { label: "Migrations", link: "/neon/data/migrations" },
               ],
             },
@@ -1396,10 +1432,6 @@ export default defineConfig({
                 { label: "Functions", link: "/neon/functions" },
                 { label: "Storage", link: "/neon/storage" },
               ],
-            },
-            {
-              label: "Organization",
-              items: [{ label: "Governance", link: "/neon/governance" }],
             },
             {
               label: "Guides",
@@ -1461,6 +1493,10 @@ export default defineConfig({
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "prisma/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [{ label: "Workspaces and tokens", link: "/prisma/workspaces-and-tokens" }],
             },
             {
               label: "Data",
@@ -1526,6 +1562,10 @@ export default defineConfig({
             { label: "Overview", link: "/stripe" },
             { label: "What is Stripe?", link: "/stripe/what-is-stripe" },
             { label: "Setup", link: "/stripe/setup" },
+            {
+              label: "Accounts & access",
+              items: [{ label: "Accounts and API keys", link: "/stripe/accounts-and-keys" }],
+            },
             {
               label: "Guides",
               items: [
@@ -1676,6 +1716,12 @@ export default defineConfig({
             { label: "What is Axiom?", link: "/axiom/what-is-axiom" },
             { label: "Setup", link: "/axiom/setup" },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Organizations and tokens", link: "/axiom/organizations-and-tokens" },
+              ],
+            },
+            {
               label: "Data",
               items: [{ label: "Datasets & ingest", link: "/axiom/data/ingest" }],
             },
@@ -1697,13 +1743,19 @@ export default defineConfig({
             { label: "What is GitHub?", link: "/github/what-is-github" },
             { label: "Setup", link: "/github/setup" },
             {
-              label: "Concepts",
+              label: "Accounts & access",
               items: [
-                { label: "Repositories", link: "/github/repository" },
+                { label: "Accounts and tokens", link: "/github/accounts-and-tokens" },
                 {
                   label: "Actions secrets & variables",
                   link: "/github/actions-config",
                 },
+              ],
+            },
+            {
+              label: "Concepts",
+              items: [
+                { label: "Repositories", link: "/github/repository" },
                 { label: "Webhooks & events", link: "/github/events" },
               ],
             },

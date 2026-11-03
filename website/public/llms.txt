@@ -116,6 +116,7 @@ The Cloudflare hub: overview, What is Cloudflare? (accounts, zones, Workers, bin
 
 - [Cloudflare](https://alchemy.run/cloudflare) — Build on Cloudflare with Alchemy. Declare Workers, Durable Objects, R2, D1, KV and Queues in TypeScript, and bind each one into the Worker that uses it with a typed client.
 - [What is Cloudflare?](https://alchemy.run/cloudflare/what-is-cloudflare) — The concepts behind Cloudflare — accounts, zones, the global network, Workers, bindings, Durable Objects, storage, queues, workflows, containers and API tokens — and how @alchemy.run/cloudflare models each of them.
+- [Accounts and API tokens](https://alchemy.run/cloudflare/accounts-and-tokens) — How a Cloudflare account holds your Workers, storage and zones, how Alchemy signs in to it with OAuth or an API token, and how your Stack mints scoped tokens for CI and runtimes.
 - [Setup](https://alchemy.run/cloudflare/setup) — Install Alchemy, create a Cloudflare account, and connect the two — OAuth or API token, saved to a local profile. No environment variables required.
 - [Local development](https://alchemy.run/cloudflare/local-development) — alchemy dev runs Workers in workerd with local simulators for KV, R2, D1, Queues, Hyperdrive, Workflows, Containers, and the Worker binding surface — browser rendering, images, email, cron, Stream, and more.
 
@@ -240,6 +241,7 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 
 - [Prisma](https://alchemy.run/prisma) — Declare Prisma Postgres databases, connections, branches and Compute apps as Stack resources with Alchemy, and run the same Stack against a local Postgres in dev.
 - [What is Prisma?](https://alchemy.run/prisma/what-is-prisma) — The concepts behind Prisma's data platform — workspaces, projects, Prisma Postgres, connections, branches, Compute apps, deployments and buckets — and how @alchemy.run/prisma models each of them.
+- [Workspaces and tokens](https://alchemy.run/prisma/workspaces-and-tokens) — How a Prisma workspace holds your projects and billing, how a service token decides where Alchemy deploys, and how apps get their own database connections.
 - [Setup](https://alchemy.run/prisma/setup) — Connect alchemy to Prisma — account, service tokens, and profiles.
 
 ## Prisma — tutorial
@@ -392,6 +394,7 @@ Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/
 
 - [GCP](https://alchemy.run/gcp) — Build on Google Cloud with Alchemy. Declare Cloud Run services, jobs, Firestore, Cloud Storage and Pub/Sub in TypeScript, and let bindings grant each runtime's service account the roles its code uses.
 - [What is GCP?](https://alchemy.run/gcp/what-is-gcp) — The concepts behind Google Cloud — organizations, projects, APIs, regions, IAM principals, roles and service accounts, Cloud Run and the other runtimes, events, networks and logging — and how @alchemy.run/gcp models each of them.
+- [Projects and regions](https://alchemy.run/gcp/projects-and-regions) — How GCP projects isolate resources and sit in an organization, how regions and zones place them, and how profiles and stages choose where each Alchemy deploy goes.
 - [Setup](https://alchemy.run/gcp/setup) — Connect alchemy to Google Cloud — project, service-account key, the APIs to enable, and Docker.
 
 ## GCP — Tutorial
@@ -477,6 +480,7 @@ The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the
 
 - [Fly](https://alchemy.run/fly) — Run Effect programs on Fly.io with Alchemy. Declare Services, Machines, Volumes, Postgres, Redis and Tigris in TypeScript, in the regions near your users.
 - [What is Fly?](https://alchemy.run/fly/what-is-fly) — The concepts behind Fly.io — organizations, Apps, Machines, regions, the Fly proxy, private networking, Volumes, managed data, secrets and certificates — and how @alchemy.run/fly models each of them.
+- [Organizations and tokens](https://alchemy.run/fly/organizations-and-tokens) — How a Fly organization holds your Apps and billing, how an organization token decides where Alchemy deploys, and how to keep production in its own organization.
 - [Setup](https://alchemy.run/fly/setup) — Create a Fly org, generate an API token, and store it in a profile.
 - [IPs & certificates](https://alchemy.run/fly/networking) — Public and private Fly Services, App addresses, and certificates for your own hostname.
 
@@ -530,6 +534,7 @@ The Hetzner hub: overview, What is Hetzner? (projects, locations, Servers, Servi
 
 - [Hetzner](https://alchemy.run/hetzner) — Run Effect programs on Hetzner Cloud Servers with Alchemy. Declare Servers, Services, Volumes, networks, firewalls, load balancers and DNS in one TypeScript program.
 - [What is Hetzner?](https://alchemy.run/hetzner/what-is-hetzner) — The concepts behind Hetzner Cloud — projects, locations, Servers, images, SSH keys, Volumes, private networks, firewalls, load balancers, IPs and DNS — and how @alchemy.run/hetzner models each of them.
+- [Projects, tokens and SSH keys](https://alchemy.run/hetzner/projects-and-tokens) — How a Hetzner Cloud project isolates your Servers, how its API token decides where Alchemy deploys, and how SSH keys reach your Servers.
 - [Setup](https://alchemy.run/hetzner/setup) — Install Alchemy and connect it to Hetzner Cloud — create a project, generate an API token, and store it in a profile.
 
 ## Hetzner — Tutorial
@@ -578,6 +583,7 @@ The Railway hub: overview, What is Railway? (workspaces, projects, environments,
 
 - [Railway](https://alchemy.run/railway) — Run Effect programs on Railway with Alchemy. Declare Projects, Services, Functions, Postgres, MySQL, Redis, Volumes and Buckets in one TypeScript program.
 - [What is Railway?](https://alchemy.run/railway/what-is-railway) — The concepts behind Railway — workspaces, projects, environments, services, deployments, databases, volumes, variables, private networking and domains — and how @alchemy.run/railway models each of them.
+- [Workspaces and tokens](https://alchemy.run/railway/workspaces-and-tokens) — How a Railway workspace holds your projects and billing, which tokens Alchemy can deploy with, and how to keep production apart.
 - [Setup](https://alchemy.run/railway/setup) — Create a Railway workspace, generate an account API token, and store it in a profile.
 - [Custom domains, TCP & private networks](https://alchemy.run/railway/networking) — Reach a Railway Service on your own hostname, expose databases over public TCP, and name private-mesh DNS.
 
@@ -632,6 +638,7 @@ Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdr
 
 - [PlanetScale](https://alchemy.run/planetscale) — Declare PlanetScale Postgres and MySQL databases, branches and credentials in your Stack with Alchemy, apply migrations on deploy, and give every preview stage its own branch.
 - [What is PlanetScale?](https://alchemy.run/planetscale/what-is-planetscale) — The concepts behind PlanetScale — organizations, databases, the Postgres and Vitess engines, cluster sizes, branches, credentials, connections, migrations and backups — and how @alchemy.run/planetscale models each of them.
+- [Organizations and tokens](https://alchemy.run/planetscale/organizations-and-tokens) — How a PlanetScale organization holds your databases and members, how Alchemy signs in with OAuth or a service token, and how database credentials differ from deploy credentials.
 - [Setup](https://alchemy.run/planetscale/setup) — Connect alchemy to PlanetScale — account, credentials, and profiles.
 - [Postgres](https://alchemy.run/planetscale/data/postgres) — PlanetScale Postgres as Stack resources — databases, branches, roles with least-privilege inherited roles, and direct vs pooled connection origins.
 - [MySQL](https://alchemy.run/planetscale/data/mysql) — PlanetScale MySQL (Vitess) as Stack resources — databases, branches, and passwords, with SQL migrations per branch and a straight line into Cloudflare Hyperdrive.
@@ -755,6 +762,7 @@ Observability as Stack resources — datasets, monitors, notifiers. The exporter
 
 - [Axiom](https://alchemy.run/axiom) — Observability as resources — OTEL datasets, ingest tokens, monitors, notifiers, and dashboards declared next to the code that emits the data.
 - [What is Axiom?](https://alchemy.run/axiom/what-is-axiom) — The concepts behind Axiom — organizations, datasets, OpenTelemetry ingest, API tokens, APL queries, monitors, notifiers, dashboards, views and annotations — and how @alchemy.run/axiom models each of them.
+- [Organizations and tokens](https://alchemy.run/axiom/organizations-and-tokens) — How an Axiom organization holds your datasets, how Alchemy deploys with a personal token, and how your Stack mints API tokens that can only ingest or only query.
 - [Setup](https://alchemy.run/axiom/setup) — Connect alchemy to Axiom — account, credentials, and profiles.
 - [Datasets & ingest](https://alchemy.run/axiom/data/ingest) — Axiom datasets per OTel signal with OTLP endpoints as outputs, least-privilege ingest tokens, and per-stage naming with Stack.useSync.
 - [Alerting: monitors & notifiers](https://alchemy.run/axiom/guides/alerting) — Turn APL queries into alerts — Threshold, MatchEvent, and AnomalyDetection monitors wired to Slack, email, PagerDuty, and webhook notifiers, all as resources in your Stack.
@@ -767,6 +775,7 @@ Repos, secrets, variables, and repository event sources as Stack resources; the 
 
 - [GitHub](https://alchemy.run/github) — Repositories, Actions secrets, variables and environments, webhooks, repository event sources and pull request comments as Stack resources — the glue for CI/CD.
 - [What is GitHub?](https://alchemy.run/github/what-is-github) — The concepts behind GitHub as infrastructure — accounts and organizations, repositories, Actions workflows, secrets, variables and environments, OIDC, webhooks and pull request comments — and how @alchemy.run/github models each of them.
+- [Accounts and tokens](https://alchemy.run/github/accounts-and-tokens) — How GitHub accounts and organizations own repositories, which token Alchemy acts as and the scopes it needs, and how OIDC lets workflows reach a cloud with no stored secret.
 - [Setup](https://alchemy.run/github/setup) — Connect alchemy to GitHub — account, credentials, and profiles.
 - [Repositories](https://alchemy.run/github/repository) — Manage GitHub repositories as Stack resources — create or adopt a repo, converge its settings on every deploy, rename in place, and opt into deletion explicitly.
 - [Actions secrets & variables](https://alchemy.run/github/actions-config) — Manage GitHub Actions secrets and variables as Stack resources — encrypted secrets, plain-text variables, bulk helpers, and CI credentials provisioned as code.
@@ -809,6 +818,7 @@ Products, prices, coupons, customers, payment links, and webhooks as Stack resou
 
 - [Stripe](https://alchemy.run/stripe) — Sell subscriptions and onboard merchants from a Cloudflare Worker — catalog, Checkout, the Billing Portal, Connect, and webhooks declared next to the code that uses them.
 - [What is Stripe?](https://alchemy.run/stripe/what-is-stripe) — The concepts behind Stripe — accounts and test mode, API keys, products and prices, customers, Checkout, subscriptions, the Billing Portal, webhooks and Connect — and how @alchemy.run/stripe models each of them.
+- [Accounts and API keys](https://alchemy.run/stripe/accounts-and-keys) — How a Stripe account and its test mode keep data apart, how secret and restricted keys differ, and which key Alchemy deploys with and which your runtimes hold.
 - [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, CI, and how Worker bindings get their credentials.
 - [Sell a subscription](https://alchemy.run/stripe/guides/subscriptions) — The full SaaS billing loop on one Cloudflare Worker — hosted Checkout, the Billing Portal, and webhooks that keep an entitlement record your app gates on.
 - [Onboard merchants with Connect](https://alchemy.run/stripe/guides/connect) — Build a Connect platform on a Cloudflare Worker — create Express accounts, send merchants through hosted onboarding, and learn from account.updated when they can take payments.
@@ -944,4 +954,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~209 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~211 KB) — only fetch it when you need to locate a specific resource's reference page.

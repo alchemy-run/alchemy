@@ -186,6 +186,7 @@ const SECTIONS: Section[] = [
       slugs: [
         "cloudflare/index",
         "cloudflare/what-is-cloudflare",
+        "cloudflare/accounts-and-tokens",
         "cloudflare/setup",
         "cloudflare/local-development",
       ],
@@ -239,7 +240,14 @@ const SECTIONS: Section[] = [
   },
   {
     heading: "Prisma — start here",
-    pages: { slugs: ["prisma/index", "prisma/what-is-prisma", "prisma/setup"] },
+    pages: {
+      slugs: [
+        "prisma/index",
+        "prisma/what-is-prisma",
+        "prisma/workspaces-and-tokens",
+        "prisma/setup",
+      ],
+    },
   },
   {
     heading: "Prisma — tutorial",
@@ -338,7 +346,7 @@ const SECTIONS: Section[] = [
     intro:
       "Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.",
     pages: {
-      slugs: ["gcp/index", "gcp/what-is-gcp", "gcp/setup"],
+      slugs: ["gcp/index", "gcp/what-is-gcp", "gcp/projects-and-regions", "gcp/setup"],
     },
   },
   {
@@ -386,7 +394,13 @@ const SECTIONS: Section[] = [
     intro:
       "The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the proxy, private networking, Volumes, managed data and how Alchemy models each), setup (org, API token, profile), and networking.",
     pages: {
-      slugs: ["fly/index", "fly/what-is-fly", "fly/setup", "fly/networking"],
+      slugs: [
+        "fly/index",
+        "fly/what-is-fly",
+        "fly/organizations-and-tokens",
+        "fly/setup",
+        "fly/networking",
+      ],
     },
   },
   {
@@ -410,7 +424,12 @@ const SECTIONS: Section[] = [
     intro:
       "The Hetzner hub: overview, What is Hetzner? (projects, locations, Servers, Services, Volumes, networks, firewalls, load balancers, DNS and how Alchemy models each), and setup (project, API token, profile).",
     pages: {
-      slugs: ["hetzner/index", "hetzner/what-is-hetzner", "hetzner/setup"],
+      slugs: [
+        "hetzner/index",
+        "hetzner/what-is-hetzner",
+        "hetzner/projects-and-tokens",
+        "hetzner/setup",
+      ],
     },
   },
   {
@@ -438,7 +457,13 @@ const SECTIONS: Section[] = [
     intro:
       "The Railway hub: overview, What is Railway? (workspaces, projects, environments, services, databases, volumes, variables, networking and how Alchemy models each), setup (workspace, API token, profile), and networking.",
     pages: {
-      slugs: ["railway/index", "railway/what-is-railway", "railway/setup", "railway/networking"],
+      slugs: [
+        "railway/index",
+        "railway/what-is-railway",
+        "railway/workspaces-and-tokens",
+        "railway/setup",
+        "railway/networking",
+      ],
     },
   },
   {
@@ -465,6 +490,7 @@ const SECTIONS: Section[] = [
       slugs: [
         "planetscale/index",
         "planetscale/what-is-planetscale",
+        "planetscale/organizations-and-tokens",
         "planetscale/setup",
         "planetscale/data/postgres",
         "planetscale/data/mysql",
@@ -572,6 +598,7 @@ const SECTIONS: Section[] = [
       slugs: [
         "axiom/index",
         "axiom/what-is-axiom",
+        "axiom/organizations-and-tokens",
         "axiom/setup",
         "axiom/data/ingest",
         "axiom/guides/alerting",
@@ -588,6 +615,7 @@ const SECTIONS: Section[] = [
       slugs: [
         "github/index",
         "github/what-is-github",
+        "github/accounts-and-tokens",
         "github/setup",
         "github/repository",
         "github/actions-config",
@@ -638,6 +666,7 @@ const SECTIONS: Section[] = [
       slugs: [
         "stripe/index",
         "stripe/what-is-stripe",
+        "stripe/accounts-and-keys",
         "stripe/setup",
         "stripe/guides/subscriptions",
         "stripe/guides/connect",
