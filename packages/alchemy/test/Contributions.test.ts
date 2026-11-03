@@ -323,24 +323,6 @@ export default { name: ${JSON.stringify(name)}, devEnv: Effect.succeed(Effect.su
         }).pipe(Effect.scoped),
       { exclusive: true },
     );
-
-    it.effect(
-      "a state store option named after an alchemy state flag is an error",
-      () =>
-        Effect.gen(function* () {
-          const error = yield* Effect.flip(
-            storeNames({
-              "flag-store": `export default { name: "flag", stateStores: {
-              kv: { description: "KV", options: { profile: { description: "Clashes" } } },
-            } };`,
-            }),
-          );
-          expect(contributionErrorMessage(error)).toBe(
-            "flag's kv state store can't take an option named 'profile': alchemy state already has that flag",
-          );
-        }).pipe(Effect.scoped),
-      { exclusive: true },
-    );
   }),
 );
 

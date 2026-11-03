@@ -66,16 +66,6 @@ class StoreOptions extends Context.Service<
   Readonly<Record<string, string | undefined>>
 >()("alchemy/Cli/state/StoreOptions") {}
 
-/** The store options given, as `--<option>` flags. */
-const givenOptions = Effect.gen(function* () {
-  const options = Record.filter(yield* StoreOptions, Predicate.isNotUndefined);
-  return Record.keys(options).map((option) => `--${option}`);
-});
-
-/** "`--a` needs" or "`--a, --b` need": what the given flags require. */
-const need = (flags: ReadonlyArray<string>) =>
-  `${flags.join(", ")} ${flags.length === 1 ? "needs" : "need"}`;
-
 const config = Flag.File("config").pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Flag.withAlias("c"),
@@ -101,26 +91,26 @@ type StateArgs = {
   readonly backend: string;
 };
 
-const source = Effect.fn(function* (
-  args: StateArgs,
-): Effect.fn.Return<Alchemist.State.StateSource, UserInputError, StoreOptions> {
+const source = Effect.fn(function* (args: StateArgs) {
   if (args.backend !== "local" && args.backend !== "configured") {
     return yield* lifecycleSource(args);
   }
-  const given = yield* givenOptions;
-  if (given.length > 0) {
+  const options = yield* StoreOptions;
+  if (Record.some(options, Predicate.isNotUndefined)) {
     return yield* new UserInputError({
-      message: `${need(given)} --backend with a provider's state store.`,
+      message: "State store options need --backend with a provider's state store.",
     });
   }
-  return args.backend === "local"
-    ? { type: "local" }
-    : {
-        type: "configured",
-        entrypoint: args.main,
-        profile: args.profile,
-        envFile: Option.getOrUndefined(args.envFile),
-      };
+  const source: Alchemist.State.StateSource =
+    args.backend === "local"
+      ? { type: "local" }
+      : {
+          type: "configured",
+          entrypoint: args.main,
+          profile: args.profile,
+          envFile: Option.getOrUndefined(args.envFile),
+        };
+  return source;
 });
 
 /** Lifecycle commands act on a provider's state store. */
@@ -130,14 +120,16 @@ const lifecycleBackend = Flag.String("backend").pipe(
 
 const lifecycleSource = Effect.fn(function* (
   args: Pick<StateArgs, "envFile" | "profile" | "backend">,
-): Effect.fn.Return<Alchemist.State.ProviderSource, never, StoreOptions> {
-  return {
+) {
+  const options = yield* StoreOptions;
+  const source: Alchemist.State.ProviderSource = {
     type: "provider",
     backend: args.backend,
-    options: yield* StoreOptions,
+    options,
     profile: args.profile,
     envFile: Option.getOrUndefined(args.envFile),
   };
+  return source;
 });
 
 const normalizedPath = (path: string | undefined) => {
@@ -168,7 +160,7 @@ const listCommand = Command.make(
   { path: pathArgument, recursive, main: config, envFile, profile, backend },
   instrumentCommand("state.list")(
     Effect.fn(function* ({ path, recursive, ...args }) {
-      const store = yield* Alchemist.State.store(yield* source(args));
+      const store = yield* source(args).pipe(Effect.flatMap(Alchemist.State.store));
       const items = yield* usingStore(store)(
         State.listState({
           path: yield* path.pipe(Option.getOrUndefined, normalizedPath),
@@ -185,7 +177,7 @@ const readCommand = Command.make(
   { path: pathArgument, recursive, main: config, envFile, profile, backend },
   instrumentCommand("state.read")(
     Effect.fn(function* ({ path, recursive, ...args }) {
-      const store = yield* Alchemist.State.store(yield* source(args));
+      const store = yield* source(args).pipe(Effect.flatMap(Alchemist.State.store));
       const requested = yield* path.pipe(Option.getOrUndefined, normalizedPath);
       const entries = yield* usingStore(store)(State.readState({ path: requested, recursive }));
       yield* Console.log(
@@ -217,7 +209,7 @@ const deleteCommand = Command.make(
       if (requested === "") {
         return yield* new UserInputError({ message: "cannot delete the state root" });
       }
-      const store = yield* Alchemist.State.store(yield* source(args));
+      const store = yield* source(args).pipe(Effect.flatMap(Alchemist.State.store));
       yield* usingStore(store)(State.deleteState({ path: requested, recursive }));
       yield* Interaction.success(`Deleted state at ${requested}`);
     }),
@@ -230,7 +222,7 @@ const deleteCommand = Command.make(
 const stateExplorer = (args: StateArgs) =>
   Effect.gen(function* () {
     const cli = yield* Interaction.Interaction;
-    const store = yield* Alchemist.State.store(yield* source(args));
+    const store = yield* source(args).pipe(Effect.flatMap(Alchemist.State.store));
     const on = provideStore(store);
     const explorer: StateExplorerSource = {
       backend: store.id,
@@ -286,7 +278,7 @@ const nukeCommand = Command.make(
   { main: config, envFile, profile, backend, yes },
   instrumentCommand("state.unsafe.nuke")(
     Effect.fn(function* ({ yes, ...args }) {
-      const store = yield* Alchemist.State.store(yield* source(args));
+      const store = yield* source(args).pipe(Effect.flatMap(Alchemist.State.store));
       const stacks = [...(yield* store.listStacks())].sort();
       if (stacks.length === 0) {
         yield* Interaction.info("Nothing to clear.");
@@ -335,9 +327,11 @@ const bootstrapCommand = Command.make(
   instrumentCommand("state.bootstrap")(
     Effect.fn(function* ({ force, main, backend, ...args }) {
       if (backend === undefined) {
-        const given = [...(force ? ["--force"] : []), ...(yield* givenOptions)];
-        if (given.length > 0) {
-          return yield* new UserInputError({ message: `${need(given)} --backend.` });
+        const options = yield* StoreOptions;
+        if (force || Record.some(options, Predicate.isNotUndefined)) {
+          return yield* new UserInputError({
+            message: "--force and state store options need --backend.",
+          });
         }
         const { version } = yield* Alchemist.State.bootstrapConfigured({
           type: "configured",
@@ -348,10 +342,8 @@ const bootstrapCommand = Command.make(
         yield* Interaction.success(`State store configured in '${main}' is ready (v${version})`);
         return;
       }
-      const result = yield* Alchemist.State.bootstrap({
-        ...(yield* lifecycleSource({ ...args, backend })),
-        force,
-      });
+      const target = yield* lifecycleSource({ ...args, backend });
+      const result = yield* Alchemist.State.bootstrap({ ...target, force });
       yield* Interaction.success(
         `State store '${result.store}' ${result.status} (${Object.values(result.location).join(", ")})`,
       );
@@ -370,7 +362,7 @@ const teardownCommand = Command.make(
         confirmLabel: "Destroy",
         cancelLabel: "Cancel",
       });
-      const result = yield* Alchemist.State.teardown(yield* lifecycleSource(args));
+      const result = yield* lifecycleSource(args).pipe(Effect.flatMap(Alchemist.State.teardown));
       yield* Interaction.success(
         result.deleted.length === 0 ? "Nothing to delete" : `Deleted ${result.deleted.join(", ")}`,
       );
@@ -402,11 +394,9 @@ const migrateCommand = Command.make(
   },
   instrumentCommand("state.migrate")(
     Effect.fn(function* ({ stack, stage, rollback, ...args }) {
-      const result = yield* Alchemist.State.migrate(yield* source(args), {
-        stack,
-        stage,
-        rollback,
-      });
+      const result = yield* source(args).pipe(
+        Effect.flatMap((source) => Alchemist.State.migrate(source, { stack, stage, rollback })),
+      );
       if (result.stages.length === 0) {
         yield* Interaction.info("No stages to migrate.");
         return;
