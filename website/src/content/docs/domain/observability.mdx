@@ -37,6 +37,8 @@ Domain.send Account.WithdrawMoney           the Worker, where the Api received i
 
 Each event carries the span that committed it, so the policies and views that react to it continue the same trace, however long the delivery took.
 
+A [query](/domain/query) is a `Domain.query <Name>` span in the Worker, with `domain.outcome`, the rows it returned (`domain.query.rows`) and the rows `visible` hid (`domain.query.hidden`). Waiting for the caller's own write adds a `Domain.caughtUp <Projection>` span. Nothing from the query's input is recorded unless its `attributes` returns it.
+
 ## Trace the browser
 
 foldkit traces every Command it runs, and every Api call carries the caller's trace on, so the browser can start the trace: a click, the commands it sends, and everything they cause on the server. Give the app a tracer that exports to its own origin:

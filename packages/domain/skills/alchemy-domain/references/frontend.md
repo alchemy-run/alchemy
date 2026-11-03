@@ -62,6 +62,27 @@ Allocate ids with `DomainFoldkit.next(model.commandIds)` and store the returned 
 
 More: [Integrate with Foldkit: Derive the Commands](https://alchemy.run/domain/foldkit#derive-the-commands), [Send a command from update](https://alchemy.run/domain/foldkit#send-a-command-from-update).
 
+## Ask a query
+
+A query has no live read: `DomainFoldkit.make` gives each Api query a Command, not a Subscription.
+
+```ts
+const { commandId: requestId, commandIds } = DomainFoldkit.next(model.commandIds);
+const read = Command.mapMessage(
+  BankClient.AccountLedger({
+    input: { account: model.accountId },
+    requestId,
+    take: 5,
+    ...(after === undefined ? {} : { after }),
+  }),
+  (result) => Message.ReceivedBankResult({ result }),
+);
+```
+
+Args are `{ input, requestId, atLeast?, after?, take? }`. `SucceededAccountLedger` carries `{ requestId, result }`; a paged `result` is `{ entries, cursor }`, and `cursor` is `null` on the last page. `FailedAccountLedger` carries `Rejected`, `Denied`, `TimedOut` (only for a query with `from`: its projections did not reach `atLeast`), or `Unknown`. Keep the in-flight `requestId` in the Model and drop a reply with another id. Ask `TimedOut` and `Unknown` again with a new id: a query changes nothing. Pass a command's `receipt` as `atLeast` to read your own write. `CommandHeaders.get` receives the query name.
+
+More: [Integrate with Foldkit: Ask a query](https://alchemy.run/domain/foldkit#ask-a-query), [Query](https://alchemy.run/domain/query).
+
 ## Follow a View's state
 
 ```ts

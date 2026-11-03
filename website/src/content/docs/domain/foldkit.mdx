@@ -1,6 +1,6 @@
 ---
 title: Integrate with Foldkit
-description: Derive Foldkit Commands from an Api, follow View snapshots, and seed the Model from Flags.
+description: Derive Foldkit Commands from an Api, ask its queries, follow View snapshots, and seed the Model from Flags.
 ---
 
 [Foldkit](https://foldkit.dev) changes its Model through Messages. Commands perform side effects. Subscriptions follow live data. The optional `@alchemy.run/domain/Foldkit` adapter connects these parts to a Domain Api.
@@ -16,7 +16,7 @@ import { CustomerApi } from "@bank/domain/CustomerApi.api";
 export const Bank = DomainFoldkit.make(CustomerApi);
 ```
 
-`Bank` has one Command per Api command and a read namespace for each View, Aggregate, and Stream. Each read namespace has `watch` and `events`. View namespaces also have `SnapshotFlags` and `decodeSnapshotFlags`. The name `Message` is reserved: `make` does not compile for an Api with an entry named `Message`. Each Command takes `{ target, input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
+`Bank` has one Command per Api command, one Command per Api query (see [Ask a query](#ask-a-query)), and a read namespace for each View, Aggregate, and Stream. Each read namespace has `watch` and `events`. View namespaces also have `SnapshotFlags` and `decodeSnapshotFlags`. The name `Message` is reserved: `make` does not compile for an Api with an entry named `Message`. Each Command takes `{ target, input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
 
 A success carries `reply` and `receipt: { stream, version }`. Pass the receipt to a read's `atLeast` option when that read must include the write.
 
@@ -120,6 +120,43 @@ Use `isEnabled: (model) => model.online` to stop the stream while offline. A ret
 
 Use `watch` for state. A View can change its state without an output event, so `events` cannot replace the state watch.
 
+## Ask a query
+
+A [query](/domain/query) is one request and one answer. It has no live read, so the adapter gives it a Command, not a Subscription. Each query Command takes `{ input, requestId, atLeast?, after?, take? }`. `after` and `take` page a query with a `row`.
+
+```typescript
+const { commandId: requestId, commandIds } = DomainFoldkit.next(model.commandIds);
+const read = Command.mapMessage(
+  Bank.AccountLedger({
+    input: { account: model.accountId },
+    requestId,
+    take: 20,
+    atLeast: receipt, // optional: wait until the query's projections have this write
+  }),
+  (result) => Message.ReceivedBankResult({ result }),
+);
+```
+
+Its result is `Bank.Message.Succeeded<Name>` with `{ requestId, result }`, or `Bank.Message.Failed<Name>` with `{ requestId, failure }`. A paged result is `{ entries, cursor }`; pass `cursor` as `after` for the next page. `cursor` is `null` on the last page.
+
+```typescript
+Bank.Message.match(result, {
+  SucceededAccountLedger: ({ requestId, result }) =>
+    isCurrent(model, requestId) ? appendPage(model, result.entries, result.cursor) : model,
+  FailedAccountLedger: ({ requestId, failure }) =>
+    Match.value(failure).pipe(
+      Match.tagsExhaustive({
+        Rejected: ({ rejection }) => refused(model, rejection._tag), // fields intact
+        Denied: ({ error }) => signIn(model, error),
+        TimedOut: () => askAgain(model), // the projections did not reach atLeast in time
+        Unknown: () => askAgain(model), // transport or a defect
+      }),
+    ),
+});
+```
+
+Keep the `requestId` of the page in flight in the Model, and drop a reply with another id: an older request can answer after a newer one. A query changes nothing, so ask `TimedOut` and `Unknown` again with a new id. `TimedOut` is in the type only for a query with `from`. `CommandHeaders.get` receives the query name, as it receives a command tag.
+
 ## Seed the first paint
 
 The server reads `client.AccountSummary.snapshot(accountId)` and encodes its state with the View's Schema. Put its `{ state, cursor }` into Flags.
@@ -162,6 +199,6 @@ Live reads authenticate by cookie. Serve the app and Api on one origin. WebSocke
 
 ## Test and host the app
 
-Use `foldkit/story` to test Model changes and resolve Commands by their definitions. Use `Domain.InMemory` with the adapter's Command effects to test replies, refusals, and View reads.
+Use `foldkit/story` to test Model changes and resolve Commands by their definitions. Use `Domain.InMemory` with the adapter's Command effects to test replies, refusals, query results, and View reads.
 
-Build with `@foldkit/vite-plugin`. Host the web assets and forward `/api` to the Domain Worker on the same origin. The [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain) includes the runtime, offline queue, tests, and Worker.
+Build with `@foldkit/vite-plugin`. Host the web assets and forward `/api` to the Domain Worker on the same origin. The [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain) includes the runtime, offline queue, ledger history read through a query, tests, and Worker.

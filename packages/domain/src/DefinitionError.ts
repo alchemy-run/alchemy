@@ -23,7 +23,7 @@ export class DuplicateName extends Data.TaggedError("DuplicateName")<{
 
 /** The Domain lists the same aggregate, policy or projection twice. */
 export class DuplicateDefinition extends Data.TaggedError("DuplicateDefinition")<{
-  readonly kind: "aggregate" | "policy" | "projection";
+  readonly kind: "aggregate" | "policy" | "projection" | "query";
   readonly entity: string;
 }> {
   override get message() {

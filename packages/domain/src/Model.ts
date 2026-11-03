@@ -15,6 +15,9 @@ import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
 import {
   DefinitionError,
+  DuplicateDefinition,
+  DuplicateName,
+  UnknownSource,
   ForeignAppend,
   LazyViewNeedsOneSource,
   MissingWorkflowEngine,
@@ -30,6 +33,7 @@ import {
   Platform,
   type PolicyStore,
   type ProjectionStore,
+  type StoredEvent,
   type StreamEntry,
   type StreamMeta,
   type StreamStore,
@@ -38,6 +42,7 @@ import {
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import * as Projection from "./Projection.ts";
+import * as Query from "./Query.ts";
 import * as RequestContext from "./RequestContext.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -66,6 +71,8 @@ export class Internals extends Context.Service<
     readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Key.Any, unknown>>;
     /** Each stream's API, by stream name. */
     readonly streamHosts: ReadonlyMap<string, DomainStream.Host<Key.Any, unknown>>;
+    /** Each query, hosted, by query name. */
+    readonly queries: ReadonlyMap<string, Query.Host>;
   }
 >()("alchemy/Domain/ModelInternals") {}
 
@@ -79,6 +86,7 @@ export interface Members<
   J extends ReadonlyArray<Projection.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
   G extends ReadonlyArray<Saga.Any> = readonly [],
+  Q extends ReadonlyArray<Query.Any> = readonly [],
 > {
   readonly aggregates: A;
   readonly views?: V;
@@ -86,20 +94,24 @@ export interface Members<
   readonly projections?: J;
   readonly streams?: S;
   readonly sagas?: G;
+  /** The queries it answers, from the stores its projections write. */
+  readonly queries?: Q;
 }
 
 /**
  * The class type returned by {@link make}.
  *
  * `Provided` is every aggregate, view, stream and projection-progress service
- * the Model provides; `Policies` is every policy and projection whose
- * implementation `layer` requires.
+ * the Model provides; `Policies` is every policy, projection and query whose
+ * implementation `layer` requires; `Missing` is any member a query reads that
+ * the Model does not host.
  */
 export interface ModelClass<
   Name extends string,
   Provided,
   Policies,
   Parts extends Servable = Servable,
+  Missing = never,
 > {
   new (_: never): {};
   readonly kind: "Model";
@@ -112,6 +124,8 @@ export interface ModelClass<
   readonly views: Parts["views"];
   /** The model's streams, in order. */
   readonly streams: Parts["streams"];
+  /** The model's queries, in order. */
+  readonly queries: Parts["queries"];
   readonly definitions: Kernel.Definitions;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
@@ -125,7 +139,7 @@ export interface ModelClass<
   ): Layer.Layer<
     Provided | Internals,
     E,
-    Platform | SecureRandom.SecureRandom | Exclude<R, Provided>
+    Platform | SecureRandom.SecureRandom | Exclude<R, Provided> | Missing
   >;
 }
 
@@ -149,6 +163,7 @@ export interface Servable {
   readonly commands: ReadonlyArray<Command.Any>;
   readonly views: ReadonlyArray<View.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
+  readonly queries: ReadonlyArray<Query.Any>;
 }
 
 /** What a model's members serve. */
@@ -156,11 +171,13 @@ export interface ServableBy<
   A extends ReadonlyArray<Aggregate.Any>,
   V extends ReadonlyArray<View.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
+  Q extends ReadonlyArray<Query.Any> = readonly [],
 > {
   readonly aggregates: A;
   readonly commands: ReadonlyArray<A[number]["definition"]["commands"][number]>;
   readonly views: V;
   readonly streams: S;
+  readonly queries: Q;
 }
 
 type ProvidedBy<
@@ -200,12 +217,17 @@ export interface LayerOptions<Views extends string = string> {
   readonly lazy?: ReadonlyArray<Views>;
 }
 
-/** Every implementation a model's `layer` requires: its policies, projections and sagas. */
+/** Every implementation a model's `layer` requires: its policies, projections, sagas and queries. */
 type HandledBy<
   P extends ReadonlyArray<Policy.Any>,
   J extends ReadonlyArray<Projection.Any>,
   G extends ReadonlyArray<Saga.Any>,
-> = Identifier<P[number]> | Identifier<J[number]> | Saga.ImplementationIdentifier<G[number]>;
+  Q extends ReadonlyArray<Query.Any> = readonly [],
+> =
+  | Identifier<P[number]>
+  | Identifier<J[number]>
+  | Saga.ImplementationIdentifier<G[number]>
+  | Query.Identifier<Q[number]>;
 
 /**
  * The aggregates, views and policies you host together. `layer(policies)`
@@ -243,10 +265,17 @@ export const make = <
   const J extends ReadonlyArray<Projection.Any> = readonly [],
   const S extends ReadonlyArray<DomainStream.Any> = readonly [],
   const G extends ReadonlyArray<Saga.Any> = readonly [],
+  const Q extends ReadonlyArray<Query.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P, J, S, G>,
-): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>, ServableBy<A, V, S>> => {
+  members: Members<A, V, P, J, S, G, Q>,
+): ModelClass<
+  Name,
+  ProvidedBy<A, V, J, S, G>,
+  HandledBy<P, J, G, Q>,
+  ServableBy<A, V, S, Q>,
+  Exclude<Query.NeedsOf<Q[number]>, ProvidedBy<A, V, J, S, G>>
+> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
@@ -265,13 +294,15 @@ export const make = <
     ];
     static readonly views = definitions.views;
     static readonly streams = definitions.streams;
-    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
+    static readonly queries: ReadonlyArray<Query.Any> = members.queries ?? [];
+    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G, Q>, E, R>, options?: LayerOptions) {
       return Layer.effectContext(
         build(
           name,
           definitions,
           handlers,
           members.sagas ?? [],
+          members.queries ?? [],
           Telemetry.resolve(options?.telemetry),
           options?.legacyData ?? false,
           options?.lazy ?? [],
@@ -281,8 +312,9 @@ export const make = <
   } as unknown as ModelClass<
     Name,
     ProvidedBy<A, V, J, S, G>,
-    HandledBy<P, J, G>,
-    ServableBy<A, V, S>
+    HandledBy<P, J, G, Q>,
+    ServableBy<A, V, S, Q>,
+    Exclude<Query.NeedsOf<Q[number]>, ProvidedBy<A, V, J, S, G>>
   >;
 };
 
@@ -361,6 +393,7 @@ const build = <A, E, R>(
   definitions: Kernel.Definitions,
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
+  queries: ReadonlyArray<Query.Any>,
   telemetry: Telemetry.Resolved,
   legacyData: boolean,
   lazy: ReadonlyArray<string>,
@@ -498,6 +531,7 @@ const build = <A, E, R>(
               generation: kernel.generationOf("projection", projection.projectionName),
             }),
           ),
+          aggregateStores,
         ),
       );
     }
@@ -586,6 +620,48 @@ const build = <A, E, R>(
         kernel.targets.filter((target) => !lazyTargets.has(target)),
       );
 
+    // Queries run where the Api runs, reading your store and the model's members.
+    const queryHosts = new Map<string, Query.Host>();
+    for (const query of queries) {
+      if (commands.has(query.queryName)) {
+        return yield* Effect.die(
+          new DefinitionError({ reason: new DuplicateName({ entity: query.queryName }) }),
+        );
+      }
+      if (queryHosts.has(query.queryName)) {
+        return yield* Effect.die(
+          new DefinitionError({
+            reason: new DuplicateDefinition({ kind: "query", entity: query.queryName }),
+          }),
+        );
+      }
+      for (const projection of query.definition.from ?? []) {
+        if (!definitions.projections.includes(projection)) {
+          return yield* Effect.die(
+            new DefinitionError({
+              reason: new UnknownSource({
+                consumer: query.queryName,
+                source: projection.projectionName,
+              }),
+            }),
+          );
+        }
+      }
+      const implementation = Context.getUnsafe(
+        implementations as Context.Context<unknown>,
+        query as Context.Key<unknown, Query.Implementation>,
+      );
+      queryHosts.set(
+        query.queryName,
+        Query.host(query, implementation, hosts, (projection) =>
+          Context.getUnsafe(
+            hosts,
+            projection.Progress as Context.Key<unknown, Projection.Progress>,
+          ),
+        ),
+      );
+    }
+
     return Context.add(hosts, Internals, {
       kernel,
       aggregates: aggregateStores,
@@ -594,6 +670,7 @@ const build = <A, E, R>(
       commands,
       viewHosts,
       streamHosts,
+      queries: queryHosts,
     });
   });
 
@@ -973,31 +1050,76 @@ const history = (platform: ModelHost, target: () => string): Effect.Effect<View.
       ? Effect.map(platform.history(target()), ({ complete }) => ({ complete }))
       : Effect.succeed({ complete: true }),
   );
+/**
+ * The events of the command that brought an aggregate instance to `version`:
+ * the run of events up to it that share its last event's command id. Reads a
+ * small window first, and widens it only for a command with many events.
+ */
+const commandEvents = (
+  store: AggregateStore,
+  id: string,
+  version: number,
+): Effect.Effect<ReadonlyArray<StoredEvent>> =>
+  Effect.gen(function* () {
+    // A version beyond the instance's is clamped: there is nothing more to wait for.
+    const last = Math.min(version, (yield* store.state(id)).version);
+    if (last <= 0) return [];
+    for (let window = 8; ; window *= 4) {
+      const from = Math.max(0, last - window);
+      const events = yield* store.tail(id, from).pipe(
+        Stream.takeUntil((stored) => stored.envelope.seq >= last),
+        Stream.runCollect,
+      );
+      const commandId = events[events.length - 1]?.envelope.commandId;
+      let start = events.length - 1;
+      while (start > 0 && events[start - 1]!.envelope.commandId === commandId) start--;
+      if (start > 0 || from === 0) return events.slice(Math.max(0, start));
+    }
+  });
 
 const projectionProgress = (
   kernel: Kernel.Kernel,
   projection: Projection.Any,
   store: () => ProjectionStore,
   history: Effect.Effect<View.History>,
+  aggregates: ReadonlyMap<string, AggregateStore>,
 ): Projection.Progress => ({
   history,
   caughtUp: (receipt, options) =>
     Effect.gen(function* () {
       const [aggregate, ...rest] = receipt.stream.split("/");
       const id = rest.join("/");
-      const first = receipt.version - receipt.events.length + 1;
+      // A receipt from a client carries no events: read them from the aggregate.
+      const consumes = projection.definition.from.some(
+        (source) => source.kind === "Aggregate" && source.aggregateName === aggregate,
+      );
+      const source = aggregates.get(aggregate!);
+      const events: ReadonlyArray<{ readonly event: unknown; readonly seq: number }> =
+        receipt.events !== undefined
+          ? receipt.events.map((event, index) => ({
+              event,
+              seq: receipt.version - receipt.events!.length + 1 + index,
+            }))
+          : consumes && source
+            ? yield* Effect.forEach(yield* commandEvents(source, id, receipt.version), (stored) =>
+                Effect.map(kernel.decodeEvent(stored.event), (event) => ({
+                  event,
+                  seq: stored.envelope.seq,
+                })),
+              )
+            : [];
       const waits = new Map<string, number>();
-      receipt.events.forEach((event, index) => {
+      for (const { event, seq } of events) {
         for (const key of kernel.projectionKeys(
           projection,
           aggregate!,
           id,
           event as { readonly _tag: string },
-          first + index,
+          seq,
         )) {
-          waits.set(key, Math.max(waits.get(key) ?? 0, first + index));
+          waits.set(key, Math.max(waits.get(key) ?? 0, seq));
         }
-      });
+      }
       yield* Effect.forEach(
         waits,
         ([key, seq]) =>
