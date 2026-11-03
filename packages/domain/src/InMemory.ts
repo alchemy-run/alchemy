@@ -480,7 +480,11 @@ export const make = (
           });
           sourceRoles.set(kit.name, sourceRole);
           // Callers hold `lock`.
-          const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+          const commit = (
+            id: string,
+            command: Json,
+            meta: Aggregate.SendMeta,
+          ): Effect.Effect<SendResult> =>
             Effect.gen(function* () {
               const current = instance(id);
               const duplicate = current.receipts.get(meta.commandId);
@@ -523,6 +527,20 @@ export const make = (
                 },
               };
               current.receipts.set(meta.commandId, sent);
+              // A phase's timers change with the commit.
+              for (const commandId of result.timers?.cancel ?? []) {
+                timers.delete(`${modelName}/${kit.name}/${id}/${commandId}`);
+              }
+              for (const armed of result.timers?.arm ?? []) {
+                current.receipts.delete(armed.meta.commandId);
+                current.cancelled.delete(armed.meta.commandId);
+                yield* timer(
+                  `${modelName}/${kit.name}/${id}/${armed.meta.commandId}`,
+                  armed.at,
+                  commit(id, armed.command, armed.meta).pipe(Effect.asVoid),
+                  lock.withPermits(1),
+                );
+              }
               yield* announce(id);
               yield* enqueue(live.send, kit.deliver);
               return sent;
