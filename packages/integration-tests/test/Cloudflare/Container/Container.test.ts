@@ -159,9 +159,16 @@ describe.concurrent.each([
           const rows = yield* Effect.forEach(yield* state.list(scope), (fqn) =>
             state.get({ ...scope, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
           );
-          const container = rows.find(({ row }) => row?.resourceType === "Cloudflare.Container");
+          const container = rows.find(
+            ({ row }) =>
+              row !== undefined &&
+              "resourceType" in row &&
+              row.resourceType === "Cloudflare.Container",
+          );
           assert(container?.row && "attr" in container.row);
           const { fqn, row } = container;
+          const { attr } = row;
+          assert(attr);
           const planned = Plan.make(effectful).pipe(
             Effect.map((plan) => plan.resources[fqn]?.action),
           );
@@ -170,7 +177,7 @@ describe.concurrent.each([
           yield* state.set({
             ...scope,
             fqn,
-            value: { ...row, attr: { ...row.attr, hash: { ...row.attr.hash, image: "stale" } } },
+            value: { ...row, attr: { ...attr, hash: { ...attr.hash, image: "stale" } } },
           });
           const action = yield* planned.pipe(
             Effect.ensuring(state.set({ ...scope, fqn, value: row }).pipe(Effect.orDie)),
