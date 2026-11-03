@@ -378,7 +378,14 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
       Effect.retry({
         times: 8,
         schedule: retrySchedule<machines.CreateMachineLeaseError | MachineLeaseLost>(),
-        while: (error) => error._tag === "TooManyRequests",
+        // A renewal re-sends the nonce we hold, so replaying it after a
+        // transient 5xx extends the same lease instead of taking a new one.
+        while: (error) =>
+          error._tag === "TooManyRequests" ||
+          error._tag === "InternalServerError" ||
+          error._tag === "BadGateway" ||
+          error._tag === "ServiceUnavailable" ||
+          error._tag === "GatewayTimeout",
       }),
       Effect.timeout("75 seconds"),
       Effect.catch((error) =>
