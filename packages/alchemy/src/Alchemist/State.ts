@@ -71,9 +71,11 @@ const storeOptions = Effect.fn(function* (source: ProviderSource, store: Contrib
     if (value === undefined) continue;
     if (!declared.includes(option)) {
       return yield* new Contributions.ContributionError({
-        message: `Unknown option '${option}' for state backend '${source.backend}'. Available: ${
-          declared.length === 0 ? "none" : declared.join(", ")
-        }.`,
+        message: `Unknown option '${option}' for state backend '${source.backend}'. ${
+          declared.length === 0
+            ? "It doesn't have any options."
+            : `Available: ${declared.join(", ")}.`
+        }`,
       });
     }
     options[option] = value;
