@@ -38,7 +38,7 @@ export class Session extends RpcMiddleware.Service<Session, { provides: CurrentA
     },
     {
       filename: bank("src/CustomerApi.api.ts"),
-      code: `${head}export class CustomerApi extends Domain.Api("CustomerApi", A, B) {}`,
+      code: `${head}export class CustomerApi extends Domain.Api("CustomerApi", { model: Bank, commands: ["A"] }) {}`,
     },
     // Plain values and helpers keep plain names.
     {
