@@ -8,7 +8,6 @@ import {
   MigrationError,
   type DrizzleV0LayoutError,
   type MigrationApplyError,
-  type MigrationOrder,
   type SqlExecutor,
 } from "./Format.ts";
 import { readMigrationRecords } from "./Records.ts";
@@ -34,13 +33,6 @@ export type MigrationsInput =
       dir: string;
       /** Override the applied-migrations table name. */
       table?: string;
-      /**
-       * `linear` fails a deploy whose pending file sorts before an
-       * already-applied one, since fresh databases would run the two in the
-       * opposite order. `non-linear` applies it anyway.
-       * @default "linear"
-       */
-      order?: MigrationOrder;
     }
   | {
       /** A `Drizzle.Schema`-shaped resource output. */
@@ -50,7 +42,6 @@ export type MigrationsInput =
 export interface NormalizedMigrationsInput {
   dir: string;
   table?: string;
-  order?: MigrationOrder;
 }
 
 export const normalizeMigrationsInput = (input: MigrationsInput): NormalizedMigrationsInput => {
@@ -86,7 +77,6 @@ export const stampedOf = (
 export interface ResolvedMigrations {
   dir: string;
   table: string;
-  order?: MigrationOrder;
 }
 
 /**
@@ -100,7 +90,6 @@ export const resolveMigrations = (options: {
 }): ResolvedMigrations => ({
   dir: options.input.dir,
   table: options.input.table ?? options.stamped.table ?? ALCHEMY_DEFAULT_TABLE,
-  order: options.input.order,
 });
 
 /**
@@ -124,7 +113,6 @@ export const applyMigrations = (options: {
       executor,
       table: resolved.table,
       records,
-      order: resolved.order,
     });
   });
 
@@ -178,7 +166,8 @@ export const runMigrations = <E, R>(options: {
 /**
  * Prior migration files whose contents changed or that disappeared from
  * the directory, relative to the hashes persisted on the last deploy.
- * Additive files (new names) are not rewritten history.
+ * Additive files (new names) are not rewritten history, and neither is a
+ * file renamed with its contents unchanged.
  */
 export const rewrittenMigrationHistory = (
   previous: Record<string, string> | undefined,
@@ -187,10 +176,14 @@ export const rewrittenMigrationHistory = (
   if (previous === undefined) return undefined;
   const changed: string[] = [];
   const removed: string[] = [];
+  const added = Object.keys(next).filter((name) => previous[name] === undefined);
   for (const name of Object.keys(previous)) {
     const hash = next[name];
-    if (hash === undefined) removed.push(name);
-    else if (hash !== previous[name]) changed.push(name);
+    if (hash === undefined) {
+      const renamed = added.findIndex((other) => next[other] === previous[name]);
+      if (renamed === -1) removed.push(name);
+      else added.splice(renamed, 1);
+    } else if (hash !== previous[name]) changed.push(name);
   }
   changed.sort();
   removed.sort();

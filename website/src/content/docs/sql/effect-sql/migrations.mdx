@@ -65,8 +65,8 @@ CREATE TABLE IF NOT EXISTS "__alchemy_migrations" (
 );
 ```
 
-Detection is by `name`, so renaming an applied file is a schema
-change, not a cosmetic one.
+Detection is by `name`. Renaming an applied file without changing its
+contents moves its row to the new name; the file does not run again.
 
 To put the bookkeeping in a differently-named table, use the object
 form of the prop:
@@ -85,20 +85,16 @@ const db = yield* Cloudflare.D1.Database("app-db", {
 A new file must sort after every file the database has already
 applied. Otherwise this database runs it last while a fresh database
 runs it in its sorted place, and the two schemas can drift. Such a
-deploy fails with `NonLinearMigrationHistoryError`; rename the file so
-it sorts last. This happens when two branches each add a migration and
-the older-numbered one merges second.
+deploy fails with `NonLinearMigrationHistoryError`. This happens when
+two branches each add a migration and the older-numbered one merges
+second. Rename the file so it sorts last:
 
-To apply out-of-order files anyway, set `order`:
-
-```typescript
-const db = yield* Cloudflare.D1.Database("app-db", {
-  migrations: {
-    dir: "./migrations",
-    order: "non-linear", // default: "linear"
-  },
-});
+```sh
+git mv migrations/0004_tags.sql migrations/0006_tags.sql
 ```
+
+A database that already applied the file under its old name keeps it
+applied under the new one.
 
 ## Adopting an existing database
 

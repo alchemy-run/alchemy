@@ -271,7 +271,7 @@ test.provider(
 /**
  * #2912: a new file that sorts before an applied one would run in a
  * different order here than on a fresh database, so the deploy fails before
- * running it. `order: "non-linear"` applies it anyway.
+ * running it. Renaming it to sort last lets it apply.
  */
 test.provider(
   "D1 migrations refuse a pending file that sorts before an applied one",
@@ -289,19 +289,18 @@ test.provider(
 
       yield* stack.destroy();
 
-      const deploy = (order?: "linear" | "non-linear") =>
-        Effect.gen(function* () {
-          const db = yield* Cloudflare.D1.Database("LocalNonLinearDB", {
-            migrations: { dir: migrationsDir, order },
-          });
-          const worker = yield* Cloudflare.Worker("d1-nonlinear-worker", {
-            main: pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts"),
-            env: { DB: db },
-          });
-          return { db, worker };
+      const deploy = Effect.gen(function* () {
+        const db = yield* Cloudflare.D1.Database("LocalNonLinearDB", {
+          migrations: migrationsDir,
         });
+        const worker = yield* Cloudflare.Worker("d1-nonlinear-worker", {
+          main: pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts"),
+          env: { DB: db },
+        });
+        return { db, worker };
+      });
 
-      const v1 = yield* stack.deploy(deploy());
+      const v1 = yield* stack.deploy(deploy);
       const url = v1.worker.url!;
 
       yield* fs.writeFileString(
@@ -309,7 +308,7 @@ test.provider(
         "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
       );
 
-      const rejected = yield* stack.deploy(deploy()).pipe(Effect.flip);
+      const rejected = yield* stack.deploy(deploy).pipe(Effect.flip);
       expect(String(rejected)).toContain("NonLinearMigrationHistoryError");
       expect(String(rejected)).toContain("0001_users.sql");
 
@@ -321,15 +320,19 @@ test.provider(
       const schema = (yield* getJsonReady(`${url}/tables`)) as { tables: string[] };
       expect(schema.tables).not.toContain("users");
 
-      const v3 = yield* stack.deploy(deploy("non-linear"));
+      yield* fs.rename(
+        path.join(migrationsDir, "0001_users.sql"),
+        path.join(migrationsDir, "0003_users.sql"),
+      );
+      const v3 = yield* stack.deploy(deploy);
       expect(Object.keys(v3.db.migrationsHashes).sort()).toEqual([
-        "0001_users.sql",
         "0002_posts.sql",
+        "0003_users.sql",
       ]);
       const after = (yield* getJsonReady(`${v3.worker.url}/migrations`)) as {
         migrations: Array<{ name: string }>;
       };
-      expect(after.migrations.map((m) => m.name)).toEqual(["0002_posts.sql", "0001_users.sql"]);
+      expect(after.migrations.map((m) => m.name)).toEqual(["0002_posts.sql", "0003_users.sql"]);
 
       yield* stack.destroy();
     }).pipe(logLevel),

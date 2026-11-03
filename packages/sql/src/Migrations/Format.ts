@@ -128,7 +128,7 @@ export class RewrittenMigrationHistoryError extends Data.TaggedError(
  * A pending migration file sorts before one that is already applied. It
  * would run after it here but before it on every fresh database, so the
  * two orders can produce different schemas. Rename the file so it sorts
- * last, or opt into `order: "non-linear"`.
+ * last; a database that already applied it carries the rename over.
  */
 export class NonLinearMigrationHistoryError extends Data.TaggedError(
   "NonLinearMigrationHistoryError",
@@ -137,13 +137,6 @@ export class NonLinearMigrationHistoryError extends Data.TaggedError(
   newestApplied: string;
   message: string;
 }> {}
-
-/**
- * How pending migrations relate to applied ones:
- * - `linear` — every pending file must sort after the newest applied one
- * - `non-linear` — apply pending files wherever they sort
- */
-export type MigrationOrder = "linear" | "non-linear";
 
 /** Human-readable `changed X; removed Y` fragment for rewritten-history errors. */
 export const describeRewrittenHistory = (options: {
