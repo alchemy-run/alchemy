@@ -720,7 +720,12 @@ const SECTIONS: Section[] = [
     intro:
       "Cloud-agnostic local process primitives — memoized builds, one-off commands, and dev servers; the static-site guides in each cloud hub consume them under the hood.",
     pages: {
-      slugs: ["command/index", "command/memoization", "command/dev-servers"],
+      slugs: [
+        "command/index",
+        "command/what-is-command",
+        "command/memoization",
+        "command/dev-servers",
+      ],
     },
   },
   {

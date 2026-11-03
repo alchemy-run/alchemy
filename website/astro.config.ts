@@ -1917,6 +1917,7 @@ export default defineConfig({
           label: "Command",
           items: [
             { label: "Overview", link: "/command" },
+            { label: "How commands work", link: "/command/what-is-command" },
             {
               label: "Memoized builds & commands",
               link: "/command/memoization",
