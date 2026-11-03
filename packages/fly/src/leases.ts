@@ -44,7 +44,13 @@ const retrySchedule = <E>(): Schedule.Schedule<Duration.Duration, E> =>
 export class MachineLeaseBusy extends Data.TaggedError("Fly.MachineLeaseBusy")<{
   appName: string;
   machineId: string;
-}> {}
+  /** Fly's conflict message: the lease holder and its expiry. */
+  reason?: string;
+}> {
+  get message() {
+    return `Machine lease for ${this.appName}/${this.machineId} is held by another operation${this.reason ? `: ${this.reason}` : ""}`;
+  }
+}
 
 export class MachineLeaseLost extends Data.TaggedError("Fly.MachineLeaseLost")<{
   appName: string;
@@ -71,6 +77,9 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
   const scope = yield* Effect.scope;
   const held = new Map<string, HeldLease>();
   const deleting = new Set<string>();
+  // Machines this lease set deleted; a later snapshot of the same operation
+  // must not wait for them to accept a lease.
+  const removed = new Set<string>();
   const renewals = new Set<Fiber.Fiber<void, never>>();
   const uncertain = new Set<string>();
   const lost = yield* Deferred.make<never, MachineLeaseLost>();
@@ -131,8 +140,10 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
                     while: (error) => error._tag === "Conflict" || error._tag === "TooManyRequests",
                   }),
                   Effect.timeout("30 seconds"),
-                  Effect.catchTag("Conflict", () =>
-                    Effect.fail(new MachineLeaseBusy({ appName, machineId })),
+                  Effect.catchTag("Conflict", (error) =>
+                    Effect.fail(
+                      new MachineLeaseBusy({ appName, machineId, reason: error.message }),
+                    ),
                   ),
                   Effect.catchTag(["HttpClientError", "GatewayTimeout", "TimeoutError"], (error) =>
                     lose(machineId, `acquisition uncertain: ${error._tag}`),
@@ -274,7 +285,10 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
         Effect.asVoid,
         Effect.catch((error) =>
           Effect.gen(function* () {
-            if (error._tag === "NotFound") return yield* forget(machineId);
+            if (error._tag === "NotFound") {
+              removed.add(machineId);
+              return yield* forget(machineId);
+            }
             if (
               error._tag === "Fly.MachineMutationUncertain" ||
               error._tag === "InternalServerError" ||
@@ -282,12 +296,16 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
               error._tag === "ServiceUnavailable"
             ) {
               // Keep renewal aware of the removal until its exact target has been observed.
-              if (yield* confirmRemoved(machineId)) return;
+              if (yield* confirmRemoved(machineId)) {
+                removed.add(machineId);
+                return;
+              }
             }
             return yield* Effect.fail(error);
           }),
         ),
       );
+      removed.add(machineId);
       yield* forget(machineId);
     }).pipe(
       Effect.ensuring(
@@ -407,6 +425,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
     Effect.forkScoped,
   );
   const checkTarget = (machineId: string) => nonce(machineId).pipe(Effect.asVoid);
+  const wasRemoved = (machineId: string) => removed.has(machineId);
   return {
     acquire,
     check,
@@ -416,6 +435,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
     remove,
     forget,
     nonceIfHeld,
+    wasRemoved,
   };
 });
 

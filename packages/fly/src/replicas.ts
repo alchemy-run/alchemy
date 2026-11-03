@@ -653,6 +653,8 @@ export const leaseSnapshot = Effect.fn(function* (
     (machine) =>
       Effect.gen(function* () {
         if (!machine.id || machine.host_status === "unreachable") return;
+        // Already deleted by this operation (a scale-down retired it).
+        if (leases.wasRemoved(machine.id)) return;
         const id = machine.id;
         yield* leases.acquire([id]).pipe(
           Effect.tap(() => Effect.sync(() => leased.add(id))),
@@ -670,7 +672,7 @@ export const leaseSnapshot = Effect.fn(function* (
   ).pipe(Effect.timeout("30 seconds"));
   const observed: FlyMachine[] = [];
   for (const machine of ordered) {
-    if (!machine.id) continue;
+    if (!machine.id || leases.wasRemoved(machine.id)) continue;
     if (machine.host_status === "unreachable") {
       observed.push(machine);
       continue;
