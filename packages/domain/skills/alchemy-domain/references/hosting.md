@@ -78,24 +78,25 @@ An API for clients you don't control is its own `HttpApi`, with each endpoint's 
 
 ```ts
 // packages/server/src/PartnerApi.ts
-const Balance = Schema.Struct({ accountId: AccountId, balance: Schema.Number });
+export const Balance = Schema.Struct({ accountId: AccountId, balance: Schema.Number });
 
-export class PartnerApi extends HttpApi.make("PartnerApi").add(
-  HttpApiGroup.make("Accounts").add(
-    HttpApiEndpoint.get("balance", "/accounts/:id/balance", {
-      params: Schema.Struct({ id: AccountId }),
-      success: Balance,
-    }),
-  ),
-) {}
+export const GetBalance = HttpApiEndpoint.get("GetBalance", "/accounts/:id/balance", {
+  params: Schema.Struct({ id: AccountId }),
+  success: Balance,
+});
 
-const AccountsLive = HttpApiBuilder.group(PartnerApi, "Accounts", (handlers) =>
-  handlers.handle("balance", ({ params }) =>
-    Effect.gen(function* () {
+export class Accounts extends HttpApiGroup.make("Accounts").add(GetBalance) {}
+
+export class PartnerApi extends HttpApi.make("PartnerApi").add(Accounts) {}
+
+export const AccountsLive = HttpApiBuilder.group(PartnerApi, "Accounts", (handlers) =>
+  handlers.handle(
+    "GetBalance",
+    Effect.fn(function* ({ params }) {
       const bank = yield* CustomerApi.clientInProcess;
       const summary = yield* bank.AccountSummary.get(params.id);
-      return { accountId: params.id, balance: summary.balance };   // only what this endpoint declares
-    }).pipe(Effect.scoped),
+      return { accountId: params.id, balance: summary.balance };   // only what GetBalance declares
+    }, Effect.scoped),
   ),
 );
 ```
