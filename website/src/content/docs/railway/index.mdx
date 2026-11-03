@@ -5,7 +5,7 @@ description: Run Effect programs on Railway with Alchemy. Declare Projects, Serv
 
 import DAG from "../../../components/DAG.astro";
 
-Railway runs containers for you. You put services in a project, your API, a worker, a Postgres database, and Railway builds each one, runs it, gives it a URL, and connects the services in a project over a private network. Databases, volumes and buckets sit beside them, and you pay for the CPU and memory you actually use.
+Railway is a cloud for running containers and the databases beside them. A project groups your services, Postgres, MySQL and Redis databases, volumes and buckets. Railway runs each service, gives it a URL, and connects everything in the project over a private network. Environments copy a whole project for staging or a pull request, and you pay only for the CPU and memory you use.
 
 <DAG
   nodes={[

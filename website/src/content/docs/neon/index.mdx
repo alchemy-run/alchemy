@@ -5,7 +5,7 @@ description: Declare Neon Postgres projects, branches and roles, plus Functions,
 
 import DAG from "../../../components/DAG.astro";
 
-Neon is serverless Postgres. It keeps your data separate from the compute that queries it, so compute scales with load and stops when idle, and a whole database, data included, can be branched in a second. Around the database, Neon also runs Functions, object storage, user sign-in, an HTTP Data API and an AI gateway, each attached to a branch.
+Neon started as serverless Postgres and has grown into branchable infrastructure. Storage is separate from compute, so a database scales with load and sleeps when idle. A branch copies the whole database, data included, in a second. Around Postgres, Neon now runs Functions, object storage, user sign-in, a Data API and an AI gateway. Each is attached to a branch, so branching copies the whole backend, not just the data.
 
 <DAG
   nodes={[

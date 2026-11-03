@@ -5,7 +5,7 @@ description: Run Effect programs on Fly.io with Alchemy. Declare Services, Machi
 
 import DAG from "../../../components/DAG.astro";
 
-Fly.io runs your programs as small virtual machines in data centers around the world. You choose the regions, Fly starts Machines there, and its proxy sends each request to the nearest one that's running. Each Machine is a whole server with its own disk if you want one, and Fly runs Postgres, Redis and object storage alongside your apps, all on one private network.
+Fly.io is a public cloud that runs your apps as fast-booting virtual machines, called Machines, in dozens of regions close to your users. A built-in proxy sends each request to the nearest Machine. Every app in an organization shares a private network over WireGuard, which also reaches your laptop or another cloud. Postgres, Redis and object storage sit on the same network.
 
 <DAG
   nodes={[

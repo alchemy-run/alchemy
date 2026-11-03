@@ -5,7 +5,7 @@ description: Create Turso SQLite databases and query them from your Workers.
 
 import DAG from "../../../components/DAG.astro";
 
-Turso hosts SQLite databases for you. Each database is a whole SQLite file, run by Turso and reached over the network, and databases are cheap enough to have thousands: one per customer, one per pull request, one per user.
+Turso is a database platform built on libSQL, its open-source fork of SQLite. Its databases are cheap enough to have thousands, one per customer, user or pull request, and can sync to replicas embedded in your app.
 
 <DAG
   nodes={[

@@ -5,7 +5,7 @@ description: Declare PlanetScale Postgres and MySQL databases, branches and cred
 
 import DAG from "../../../components/DAG.astro";
 
-PlanetScale runs Postgres and MySQL databases for you, as clusters with replicas across availability zones. Its MySQL runs on Vitess, which shards a database across many servers so it can outgrow one machine. And every database can be branched like code, so each pull request can test against its own copy of the schema.
+PlanetScale is likely the fastest managed Postgres and MySQL you can buy, at a price that undercuts the large clouds. Its Metal clusters run on local NVMe drives instead of network storage. Its MySQL is built on Vitess, the sharding system created to scale YouTube's databases. And every database can be branched like code, so schema changes are tested and deployed like a pull request.
 
 <DAG
   nodes={[
