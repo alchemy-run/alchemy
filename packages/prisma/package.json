@@ -77,7 +77,6 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
-    "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/prisma": "workspace:*",
     "@prisma/dev": "catalog:",

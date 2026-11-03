@@ -20,6 +20,9 @@
       "path": "../../submodules/distilled/packages/core/tsconfig.json"
     },
     {
+      "path": "../../submodules/distilled/packages/aws4signer/tsconfig.json"
+    },
+    {
       "path": "../alchemy/tsconfig.json"
     }
   ]

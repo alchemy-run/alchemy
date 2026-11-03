@@ -4,7 +4,8 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 /**
  * Shared read-side routes so every method of {@link ReadBucketClient}
- * (`get`, `head`, `list`, `presignGet`) is driven over `fetch`. Returns
+ * (`get`, `head`, `list`, `presignGet`) is driven over `fetch`; `/get-json`
+ * reads an object through `json()`. Returns
  * `undefined` when the path is not a read route so the caller can fall
  * through (used by the read-write fixtures).
  */
@@ -12,13 +13,35 @@ export const readRoutes = (store: ReadBucketClient, url: URL) =>
   Effect.gen(function* () {
     if (url.pathname === "/get") {
       const key = url.searchParams.get("key") ?? "";
-      const object = yield* store.get(key).pipe(Effect.orDie);
+      const offset = url.searchParams.get("offset");
+      const length = url.searchParams.get("length");
+      const object = yield* store
+        .get(key, {
+          range:
+            offset === null
+              ? undefined
+              : { offset: Number(offset), length: length === null ? undefined : Number(length) },
+        })
+        .pipe(Effect.orDie);
       const value = object ? yield* object.text().pipe(Effect.orDie) : null;
       return yield* HttpServerResponse.json({
         value,
         contentType: object?.contentType ?? null,
         metadata: object?.metadata ?? null,
       });
+    }
+    if (url.pathname === "/get-json") {
+      const key = url.searchParams.get("key") ?? "";
+      const object = yield* store.get(key).pipe(Effect.orDie);
+      const result = object
+        ? yield* object.json<unknown>().pipe(
+            Effect.map((value) => ({ ok: true, value })),
+            Effect.catchTag("BucketError", (error) =>
+              Effect.succeed({ ok: false, error: error.message }),
+            ),
+          )
+        : { ok: false, error: "missing" };
+      return yield* HttpServerResponse.json(result);
     }
     if (url.pathname === "/head") {
       const key = url.searchParams.get("key") ?? "";
