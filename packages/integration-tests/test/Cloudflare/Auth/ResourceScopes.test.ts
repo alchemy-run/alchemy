@@ -17,6 +17,8 @@ import {
 } from "@alchemy.run/cloudflare/Auth/ResourceScopes";
 import { Database } from "@alchemy.run/cloudflare/D1/Database";
 import { Record } from "@alchemy.run/cloudflare/DNS/Record";
+import { RecordList } from "@alchemy.run/cloudflare/DNS/RecordList";
+import { Records } from "@alchemy.run/cloudflare/DNS/Records";
 import { Connection } from "@alchemy.run/cloudflare/Hyperdrive/Connection";
 import { Namespace } from "@alchemy.run/cloudflare/KV/Namespace";
 import { Queue } from "@alchemy.run/cloudflare/Queues/Queue";
@@ -51,6 +53,8 @@ describe(
         ServiceToken,
         Database,
         Record,
+        Records,
+        RecordList,
         Connection,
         Namespace,
         Queue,
@@ -109,6 +113,8 @@ describe(
         "Cloudflare.VectorizeIndex": ["Vectorize Write"],
         "Cloudflare.SecretsStore": ["Secrets Store Write"],
         "Cloudflare.DNS.Record": ["DNS Write"],
+        "Cloudflare.DNS.Records": ["DNS Write"],
+        "Cloudflare.DNS.RecordList": ["DNS Write"],
         "Cloudflare.Tunnel.Tunnel": [
           "Cloudflare Tunnel Write",
           "Cloudflare One Connectors Write",

@@ -36,6 +36,8 @@ export const RESOURCE_OAUTH_SCOPES: Readonly<Record<string, ReadonlyArray<OAuthS
   "Cloudflare.VectorizeIndex": ["vectorize.write"],
   "Cloudflare.SecretsStore": ["secrets-store.write"],
   "Cloudflare.DNS.Record": ["dns.write"],
+  "Cloudflare.DNS.Records": ["dns.write"],
+  "Cloudflare.DNS.RecordList": ["dns.write"],
   "Cloudflare.Tunnel.Tunnel": [
     "argotunnel.write",
     "teams-connectors.write",
