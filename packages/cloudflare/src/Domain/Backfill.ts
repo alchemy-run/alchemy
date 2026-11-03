@@ -227,9 +227,15 @@ const BackfillLive = () =>
     read: Effect.fn(function* ({ output }) {
       return output;
     }),
-    reconcile: Effect.fn(function* ({ instanceId: resource, news, output, session }) {
+    reconcile: Effect.fn(function* ({ instanceId: resource, news, olds, output, session }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const label = news.targets.join(", ");
+      // A target the last deploy saw complete, with the same plan, has its history: this
+      // deploy fills the others. One whose plan changed is checked again by its run.
+      const done = new Set(output?.status === "complete" ? output.targets : []);
+      const samePlan = (target: string) =>
+        JSON.stringify(olds?.plans?.[target]) === JSON.stringify(news.plans?.[target]);
+      const filling = news.targets.filter((target) => !done.has(target) || !samePlan(target));
+      const label = filling.join(", ");
       const started = yield* Clock.currentTimeMillis;
       const timeout = (news.timeoutSeconds ?? 1800) * 1000;
       const instance = (id: string) =>
@@ -284,10 +290,13 @@ const BackfillLive = () =>
           return id;
         });
 
+      const attrs = () => ({ accountId, workflowName: news.workflowName, targets: news.targets });
+      // Only views and projections the last deploy filled were removed: nothing to wait for.
+      if (filling.length === 0 && output !== undefined)
+        return { ...attrs(), instanceId: output.instanceId, status: "complete" };
       let attempt = 0;
       let id = yield* start(attempt);
       let progress: ReadonlyArray<Progress> | undefined;
-      const attrs = () => ({ accountId, workflowName: news.workflowName, targets: news.targets });
       const where = () =>
         progress === undefined ? label : progress.map((run) => describeProgress(run)).join("; ");
 
@@ -304,7 +313,10 @@ const BackfillLive = () =>
               simple: true,
             })
             .pipe(Effect.retry(retryInternal)));
-        if (status !== undefined) progress = progressOf(status.steps ?? []) ?? progress;
+        if (status !== undefined)
+          progress =
+            progressOf(status.steps ?? [])?.filter((run) => filling.includes(run.target)) ??
+            progress;
 
         if (current.status === "complete") {
           yield* session.note(`Backfilled ${label}`, { kind: "status" });

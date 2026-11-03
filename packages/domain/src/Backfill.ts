@@ -569,6 +569,8 @@ const readAt = (
 
 /** A target's generation: `view:Name#2` is 2. */
 const generationOf = (target: string) => Number(/[#@](\d+)$/.exec(target)?.[1] ?? 0);
+/** A target's generation: `view:Name#2` (or `@2`, rebuilt in place) is 2. */
+export const generationOfTarget = generationOf;
 
 /** Refused by an instance still on older code; the sender tries again later. */
 class Stale extends Data.TaggedError("Stale")<{ readonly message: string }> {}
@@ -1980,6 +1982,11 @@ export const makeRun = (
     readonly waitMillis: number;
     /** How long before a pass that wasn't done runs again, doubling each time up to 30s. */
     readonly againMillis: number;
+    /**
+     * Whether the code this runs knows a newer generation of the run's consumer
+     * (a version bump): the run is superseded, and stops.
+     */
+    readonly superseded?: (target: string) => boolean;
   },
 ) => {
   const relay = makeRelay(net);
@@ -1996,6 +2003,12 @@ export const makeRun = (
     Effect.gen(function* () {
       const state = yield* getState(target);
       if (state === undefined || state.phase === "complete") return;
+      // A newer generation replaced it: its keys refuse what it would push. Stop.
+      if (options.superseded?.(target) === true) {
+        yield* Effect.logInfo(`backfill run-superseded ${target}`);
+        yield* storage.delete([stateKey(target), progressKey(target)]);
+        return yield* clearPrefix(`rd:${enc(target)}:`);
+      }
       const started = yield* Clock.currentTimeMillis;
       const deadline = started + options.waitMillis;
       // One try at everything: every round runs in this pass, whatever the clock says.
