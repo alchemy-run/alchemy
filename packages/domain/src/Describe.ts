@@ -123,7 +123,7 @@ export interface SagaDescription {
 /** An Api, as data. */
 export interface ApiDescription {
   readonly name: string;
-  readonly entries: ReadonlyArray<{ readonly kind: Api.Entry["kind"]; readonly name: string }>;
+  readonly entries: ReadonlyArray<{ readonly kind: Api.Servable["kind"]; readonly name: string }>;
 }
 
 /**
@@ -349,7 +349,7 @@ export const describe = (model: Model.Any, options?: DescribeOptions): Descripti
     apis: byName(
       (options?.apis ?? []).map((api) => ({
         name: api.apiName,
-        entries: api.entries
+        entries: api.serves
           .map((entry) => ({ kind: entry.kind, name: entryName(entry) }))
           .sort((a, b) => compare(a.name, b.name)),
       })),
@@ -358,7 +358,7 @@ export const describe = (model: Model.Any, options?: DescribeOptions): Descripti
   return { ...body, hash: hashOf(canonical(body)) };
 };
 
-const entryName = (entry: Api.Entry): string => {
+const entryName = (entry: Api.Servable): string => {
   switch (entry.kind) {
     case "Command":
       return entry.tag;

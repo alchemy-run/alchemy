@@ -93,9 +93,15 @@ class Bank extends Domain.Model("Bank", {
   streams: [Cards],
   sagas: [Move],
 }) {}
-class BankApi extends Domain.Api("BankApi", Open, Balance, Account, Cards) {}
+class BankApi extends Domain.Api("BankApi", {
+  model: Bank,
+  commands: ["Open"],
+  views: ["Balance"],
+  streams: ["Cards"],
+  aggregates: ["Account"],
+}) {}
 
-describe("Domain.describe", () => {
+describe("Domain.describe", { tags: ["unit", "local"] }, () => {
   const description = Domain.describe(Bank, { apis: [BankApi] });
 
   it("is plain JSON data", () => {
