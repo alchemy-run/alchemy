@@ -198,11 +198,15 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
     () =>
       Effect.gen(function* () {
         const seen: Array<{ cfWorker?: string; connectingIp?: string }> = [];
+        // Only the Worker's own requests count: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with `GET /`.
         const echo = NodeHttp.createServer((req, res) => {
-          seen.push({
-            cfWorker: req.headers["cf-worker"] as string | undefined,
-            connectingIp: req.headers["cf-connecting-ip"] as string | undefined,
-          });
+          if (req.url === "/echo") {
+            seen.push({
+              cfWorker: req.headers["cf-worker"] as string | undefined,
+              connectingIp: req.headers["cf-connecting-ip"] as string | undefined,
+            });
+          }
           res.end("ok");
         });
         yield* Effect.acquireRelease(
@@ -211,7 +215,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
           ),
           () => Effect.promise(() => new Promise<void>((resolve) => echo.close(() => resolve()))),
         );
-        const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/`;
+        const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/echo`;
         const runtime = yield* Runtime.Runtime;
         const url = yield* runtime.start({
           name: "outbound",
@@ -223,12 +227,15 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
               name: "main.js",
               type: "ESModule",
               content: `export default {
-  fetch: () => fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } }),
+  fetch: (request) =>
+    new URL(request.url).pathname === "/outbound"
+      ? fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } })
+      : new Response("Not Found", { status: 404 }),
 };`,
             },
           ],
         });
-        yield* Effect.promise(() => fetch(url).then((r) => r.text()));
+        yield* Effect.promise(() => fetch(new URL("/outbound", url)).then((r) => r.text()));
         expect(seen).toEqual([{ cfWorker: undefined, connectingIp: undefined }]);
       }).pipe(Effect.scoped),
     { timeout: 30_000 },
@@ -299,8 +306,10 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
             .toBuffer(),
         );
         const via: Array<string | undefined> = [];
+        // Only the Worker's own requests count: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with `GET /`.
         const origin = NodeHttp.createServer((req, res) => {
-          via.push(req.headers.via as string | undefined);
+          if (req.url === "/image.png") via.push(req.headers.via as string | undefined);
           res.setHeader("content-type", "image/png");
           res.end(png);
         });
@@ -322,12 +331,15 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
               name: "main.js",
               type: "ESModule",
               content: `export default {
-  fetch: () => fetch(${JSON.stringify(target)}, { cf: { image: { width: 4, format: "png" } } }),
+  fetch: (request) =>
+    new URL(request.url).pathname === "/image"
+      ? fetch(${JSON.stringify(target)}, { cf: { image: { width: 4, format: "png" } } })
+      : new Response("Not Found", { status: 404 }),
 };`,
             },
           ],
         });
-        const response = yield* Effect.promise(() => fetch(url));
+        const response = yield* Effect.promise(() => fetch(new URL("/image", url)));
         const body = Buffer.from(yield* Effect.promise(() => response.arrayBuffer()));
         const metadata = yield* Effect.promise(() => sharp(body).metadata());
         expect({
