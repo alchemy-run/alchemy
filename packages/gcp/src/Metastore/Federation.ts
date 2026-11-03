@@ -303,7 +303,20 @@ export const FederationProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.undefined),
+            // A backend service that is briefly UPDATING (a backup or config
+            // change in flight) rejects federation until it is ACTIVE again.
+            Effect.retry({
+              while: (error) =>
+                error._tag === "BadRequest" &&
+                (error.message ?? "").includes(
+                  "Only ACTIVE DPMS instances can be configured for federation",
+                ),
+              times: 20,
+              schedule: Schedule.spaced("15 seconds"),
+            }),
+          );
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
