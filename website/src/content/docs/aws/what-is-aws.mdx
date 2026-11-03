@@ -190,6 +190,37 @@ See [Websites](/aws/frontend/websites) and [Custom domains](/aws/networking/cust
 
 Every service reports to **CloudWatch**. Your Function's logs go to a **log group**, each service publishes **metrics** like invocations, errors and queue depth, and an **alarm** watches a metric and notifies you when it crosses a line.
 
+A **dashboard** puts metrics side by side. It's declared next to the Function it watches, so each stage gets its own:
+
+```typescript title="alchemy.run.ts"
+const api = yield* Api;
+
+yield* AWS.CloudWatch.Dashboard("Api", {
+  DashboardBody: api.functionName.pipe(
+    Output.map((functionName) => ({
+      widgets: [
+        {
+          type: "metric",
+          width: 12,
+          height: 6,
+          properties: {
+            title: "Invocations and errors",
+            stat: "Sum",
+            period: 300,
+            metrics: [
+              ["AWS/Lambda", "Invocations", "FunctionName", functionName],
+              ["AWS/Lambda", "Errors", "FunctionName", functionName],
+            ],
+          },
+        },
+      ],
+    })),
+  ),
+});
+```
+
+`functionName` is only known once the Function is deployed, so the body is built from it with `Output.map`.
+
 See [CloudWatch](/aws/observability/cloudwatch).
 
 ## State: Alchemy's record in your account
