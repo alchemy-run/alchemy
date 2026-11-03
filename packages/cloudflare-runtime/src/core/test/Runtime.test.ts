@@ -192,7 +192,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
 
   // The outbound interceptor drops `CF-Connecting-IP`. Unlike Miniflare it
   // adds no `CF-Worker`: Cloudflare-fronted sites answer 403 to one sent
-  // from a developer machine (#2962).
+  // from a developer machine (#2965).
   it.effect(
     "outbound fetches drop CF-Connecting-IP and add no CF-Worker",
     () =>

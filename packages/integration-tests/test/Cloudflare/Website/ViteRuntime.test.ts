@@ -494,7 +494,7 @@ describe.concurrent(
     // `cron-triggers/__tests__/cf-worker-header.spec.ts` expects outbound
     // fetches to carry `CF-Worker` with the Worker's custom domain. Alchemy
     // deliberately adds none, even with a domain: Cloudflare-fronted sites
-    // answer 403 to one sent from a developer machine (#2962). Attaching a
+    // answer 403 to one sent from a developer machine (#2965). Attaching a
     // domain deploys only to a zone the account owns, so this runs in dev.
     devTest.provider(
       "Vite runtime: outbound fetches carry no CF-Worker, even with a custom domain (dev)",

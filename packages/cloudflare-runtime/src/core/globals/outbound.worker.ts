@@ -9,7 +9,7 @@
  *    does not add `CF-Worker`: on the edge Cloudflare sets it after the
  *    destination zone's WAF runs, but sent from a developer machine it
  *    reaches the WAF as a forged header, and Cloudflare-fronted sites
- *    answer 403 (alchemy-run/alchemy#2962).
+ *    answer 403 (alchemy-run/alchemy#2965, findings in the PR).
  * 2. A fetch with `cf.image` transform options (`fetch(url, { cf: { image } })`)
  *    fetches the origin image and transforms it locally with Sharp,
  *    mirroring "transform via Workers". If Sharp can't transform it, the
