@@ -11,6 +11,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../names.ts";
 import Api from "./fixtures/api.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
 import { ECHO_BODY, Echo } from "./fixtures/echo.ts";
@@ -328,11 +329,13 @@ const appGone = (appName: string) =>
     }),
   );
 
-const appNames = Effect.gen(function* () {
-  const org_slug = yield* resolveOrgSlug();
-  const { apps } = yield* machines.listApps({ org_slug });
-  return new Set((apps ?? []).flatMap((app) => (app.name ? [app.name] : [])));
-});
+/** Names of the organization's Apps on `network`. */
+const appsOnNetwork = (network: string) =>
+  Effect.gen(function* () {
+    const org_slug = yield* resolveOrgSlug();
+    const { apps } = yield* machines.listApps({ org_slug });
+    return (apps ?? []).flatMap((app) => (app.name && app.network === network ? [app.name] : []));
+  });
 
 // An image build sits between a Service creating its own App and starting
 // its Machines. A deploy interrupted there leaves an App with nothing in it,
@@ -342,13 +345,16 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const before = yield* appNames;
+      // A network only this test uses identifies its App among the Apps
+      // other tests create concurrently.
+      const network = testName("interrupted-echo");
+      expect(yield* appsOnNetwork(network)).toEqual([]);
 
       // Interrupt the deploy as soon as the Service's App appears.
       const created = yield* Effect.raceFirst(
-        stack.deploy(Echo()).pipe(Effect.as(undefined)),
-        appNames.pipe(
-          Effect.map((names) => [...names].find((name) => !before.has(name))),
+        stack.deploy(Echo({ network })).pipe(Effect.as(undefined)),
+        appsOnNetwork(network).pipe(
+          Effect.map((names) => names[0]),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             until: (name) => name !== undefined,
