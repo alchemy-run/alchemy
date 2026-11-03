@@ -36,7 +36,9 @@ type CommandResult = {
 // The summary line the CLI prints once a run converges. In non-TTY mode every
 // line carries a `[time] LEVEL (#fiber): ` prefix, so anchor on the text.
 const DONE = /Done: \d+ succeeded/;
-const timeoutMs = 4 * 60_000;
+// A Fly example that builds an image on a remote builder after provisioning
+// Postgres (fly-website-vite) takes ~4 minutes to converge.
+const timeoutMs = 6 * 60_000;
 
 const command = Command.make(
   "test-example-cli",

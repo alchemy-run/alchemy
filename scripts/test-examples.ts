@@ -513,7 +513,7 @@ const command = Command.make(
       env,
       // Each `alchemy dev` session is a CLI, an exec child, sidecars, workerd
       // and a bundler watch loop; 30 at once starve each other past the
-      // 4-minute readiness timeout.
+      // readiness timeout.
       { concurrency: 8 },
     );
     const failedCliTests = cliResults.filter((result) => result.exitCode !== 0);
