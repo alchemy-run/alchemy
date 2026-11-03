@@ -19,7 +19,7 @@ Finish [Rivet setup](/rivet/setup), including `docker swarm init`. Install `@alc
 +// src/cluster.ts
 +import * as RivetDocker from "@alchemy.run/rivet/Docker";
 +
-+export const Cluster = RivetDocker.ControlPlane("Rivet");
++export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
 ```
 
 The control plane keeps every room's data and routes each call to the right room. This one runs on your Docker swarm, on `localhost:6420`.
@@ -31,9 +31,9 @@ The control plane keeps every room's data and routes each call to the right room
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
 +import * as Layer from "effect/Layer";
 
-export const Cluster = RivetDocker.ControlPlane("Rivet");
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
 +
-+export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
++export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
 ```
 
 A pool is the group of nodes that run your code. `Layer.provide(Cluster)` tells it which control plane to join.

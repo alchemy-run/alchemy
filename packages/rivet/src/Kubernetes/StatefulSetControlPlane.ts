@@ -19,7 +19,7 @@ import { Namespace } from "../Namespace.ts";
 
 export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
-/** The engine release `RivetKubernetes.ControlPlane` runs by default. */
+/** The engine release `RivetKubernetes.StatefulSetControlPlane` runs by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
 const DATA_PATH = "/var/lib/rivet";
@@ -49,7 +49,7 @@ export type ControlPlaneExposure =
       readonly endpoint: Input<string>;
     };
 
-export interface ControlPlaneProps {
+export interface StatefulSetControlPlaneProps {
   /**
    * The cluster to run on: a cluster resource (`Kubernetes.LocalCluster`,
    * `AWS.EKS.Cluster`, …), a `Kubernetes.KubeConfig(...)`, or a connection.
@@ -125,13 +125,13 @@ const storageEnvironment = (storage: ObjectStorage | undefined) =>
  *
  * One engine keeps actor data on its own volume. More need shared object
  * storage (`objectStorage`: S3, an S3-compatible service, or GCS) reached
- * over HTTPS. Pools of nodes on the same cluster — `RivetKubernetes.Pool` —
+ * over HTTPS. Pools of nodes on the same cluster — `RivetKubernetes.DeploymentPool` —
  * connect to the engines inside the cluster.
  *
  * ### Running a control plane on Kubernetes
  * **Example:** Three engines behind a load balancer, data in S3
  * ```typescript
- * export const Cluster = RivetKubernetes.ControlPlane("Rivet", {
+ * export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
  *   cluster: EksCluster,
  *   instances: 3,
  *   objectStorage: { kind: "s3", bucket: "my-rivet-data", region: "us-west-2" },
@@ -140,7 +140,7 @@ const storageEnvironment = (storage: ObjectStorage | undefined) =>
  *
  * **Example:** One engine on a local kind cluster
  * ```typescript
- * export const Cluster = RivetKubernetes.ControlPlane("Rivet", {
+ * export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
  *   cluster: Kind,
  *   expose: { type: "NodePort", nodePort: 30642, endpoint: "http://localhost:16450" },
  * });
@@ -148,7 +148,7 @@ const storageEnvironment = (storage: ObjectStorage | undefined) =>
  *
  * @primitive
  */
-export const ControlPlane = (id: string, props: ControlPlaneProps) =>
+export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPlaneProps) =>
   Layer.effect(
     Cluster,
     Effect.gen(function* () {
@@ -161,7 +161,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps) =>
       if (instances > 1 && props.objectStorage === undefined) {
         return yield* Effect.die(
           new ObjectStorageRequired({
-            message: `RivetKubernetes.ControlPlane("${id}") runs ${instances} engines, which share actor data through objectStorage.`,
+            message: `RivetKubernetes.StatefulSetControlPlane("${id}") runs ${instances} engines, which share actor data through objectStorage.`,
           }),
         );
       }

@@ -250,7 +250,7 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
             new DurableObjectHasNoPool({
               message:
                 `Rivet.DurableObject '${id}' has no pool. Provide a pool Layer to its Effect, ` +
-                `for example RivetDocker.Pool("Default") or RivetAWS.EcsPool("Default").`,
+                `for example RivetDocker.SwarmPool("Default") or RivetAWS.EcsPool("Default").`,
             }),
           );
         }
@@ -271,7 +271,7 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * `alarm`.
  *
  * Where it runs is a pool Layer provided to the outer Effect —
- * `RivetDocker.Pool("Default")`, `RivetAWS.EcsPool("Default")` — and the
+ * `RivetDocker.SwarmPool("Default")`, `RivetAWS.EcsPool("Default")` — and the
  * pool is given the control plane. Every Durable Object given the same pool
  * runs on the same nodes.
  *
@@ -288,8 +288,8 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * ### Declaring a Durable Object
  * **Example:** A counter on a local pool
  * ```typescript
- * export const Cluster = RivetDocker.ControlPlane("Rivet");
- * export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
+ * export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+ * export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
  *
  * export default class Counter extends Rivet.DurableObject<Counter>()(
  *   "Counter",
@@ -349,7 +349,7 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * ### Deploying RivetKit Actors
  * **Example:** Actors written with RivetKit, or `@rivetkit/effect`, run unchanged
  * ```typescript
- * export const Counters = RivetDocker.Pool("Counters").pipe(Layer.provide(Cluster));
+ * export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
  *
  * export const Counter = Rivet.DurableObject("Counter", { main: "./src/actors.ts" }).pipe(
  *   Effect.provide(Counters),

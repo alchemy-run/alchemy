@@ -2,5 +2,5 @@
 import * as RivetFly from "@alchemy.run/rivet/Fly";
 import * as Layer from "effect/Layer";
 
-export const Cluster = RivetFly.ControlPlane("Rivet");
-export const Default = RivetFly.Pool("Default").pipe(Layer.provide(Cluster));
+export const Cluster = RivetFly.MachineControlPlane("Rivet");
+export const Default = RivetFly.MachinePool("Default").pipe(Layer.provide(Cluster));

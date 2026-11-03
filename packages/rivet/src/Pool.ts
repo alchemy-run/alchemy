@@ -92,7 +92,7 @@ export interface Pool extends Resource<
 /**
  * A node pool on a Rivet control plane. Nodes that connect with the pool's
  * name host its actors; the control plane rejects nodes whose pool does not
- * exist. Pool Layers (`RivetDocker.Pool`, …) create one for the nodes they
+ * exist. Pool Layers (`RivetDocker.SwarmPool`, …) create one for the nodes they
  * run, so declare one directly only for nodes Alchemy does not deploy.
  *
  * ### Creating a pool

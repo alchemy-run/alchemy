@@ -97,9 +97,9 @@ Like any RivetKit program, it runs its own process on every node, so its pool ru
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import * as Layer from "effect/Layer";
 
-export const Cluster = RivetDocker.ControlPlane("Rivet");
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
 
-export const Counters = RivetDocker.Pool("Counters").pipe(Layer.provide(Cluster));
+export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
 ```
 
 ## Reach it from other code

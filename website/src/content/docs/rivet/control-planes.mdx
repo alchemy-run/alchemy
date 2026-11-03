@@ -35,7 +35,7 @@ A control plane is a Layer. Each cloud has its own:
 ```typescript title="src/cluster.ts"
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
 
-export const Cluster = RivetDocker.ControlPlane("Rivet");
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
 ```
 
 It creates everything the control plane needs on that cloud: machines, disks, storage, a load balancer, an admin token, and a namespace for your stage, so each stage's rooms are kept apart.
@@ -45,7 +45,7 @@ It creates everything the control plane needs on that cloud: machines, disks, st
 A pool joins a control plane through `Layer.provide`:
 
 ```typescript title="src/cluster.ts"
-export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
 ```
 
 Every pool given `Cluster` shares one control plane, so every Durable Object on those pools lives in one place, and they can all call each other.
@@ -55,7 +55,7 @@ Every pool given `Cluster` shares one control plane, so every Durable Object on 
 Every control plane gives pools the same thing: an address, a token and a namespace. So moving to another cloud is a change to this one line:
 
 ```typescript title="src/cluster.ts"
-export const Cluster = RivetHetzner.ControlPlane("Rivet");
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
 ```
 
 The rooms, the Api and the calls between them stay as they are. The pool usually moves too, so its nodes run near the control plane. See [Pool](/rivet/pools).

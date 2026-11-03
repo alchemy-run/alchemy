@@ -69,7 +69,7 @@ export interface ClusterShape {
 /**
  * The Rivet control plane a pool's nodes join and `Rivet.Client` calls.
  * Provided by a control plane constructor (`Rivet.ControlPlane`,
- * `RivetDocker.ControlPlane`, …) and required by every pool Layer.
+ * `RivetDocker.SwarmControlPlane`, …) and required by every pool Layer.
  */
 export class Cluster extends Context.Service<Cluster, ClusterShape>()("Rivet.Cluster") {}
 

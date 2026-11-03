@@ -10,9 +10,9 @@ import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
 import * as RivetRailway from "@alchemy.run/rivet/Railway";
 import * as Layer from "effect/Layer";
 
-export const Cluster = RivetHetzner.ControlPlane("Rivet");
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
 
-export const Default = RivetRailway.Pool("Default").pipe(Layer.provide(Cluster));
+export const Default = RivetRailway.ServicePool("Default").pipe(Layer.provide(Cluster));
 ```
 
 Install `@alchemy.run/railway` and finish [Railway setup](/railway/setup).
@@ -24,7 +24,7 @@ The pool gets a Railway Project of its own. Put it in one you have instead:
 ```typescript title="src/cluster.ts"
 export const Project = Railway.Project("Rooms");
 
-export const Default = RivetRailway.Pool("Default", {
+export const Default = RivetRailway.ServicePool("Default", {
   project: Project,
   region: "us-west2",
 }).pipe(Layer.provide(Cluster));
@@ -48,4 +48,4 @@ export default class Api extends Railway.Service<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [Railway Pool](/providers/rivet/railway#pool).
+Every option, with its default, is in the reference: [ServicePool](/providers/rivet/railway#servicepool).

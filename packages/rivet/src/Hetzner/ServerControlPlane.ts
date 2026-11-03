@@ -14,7 +14,7 @@ import { Namespace } from "../Namespace.ts";
 
 export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
-/** The engine release `RivetHetzner.ControlPlane` runs by default. */
+/** The engine release `RivetHetzner.ServerControlPlane` runs by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
 /** Hetzner's Ubuntu image with Docker preinstalled. */
@@ -24,7 +24,7 @@ const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
 const PEER_PORT = 6421;
 
-export interface ControlPlaneProps {
+export interface ServerControlPlaneProps {
   /**
    * Number of engines, one Server each with a Volume of its own. More than
    * one needs {@link objectStorage}. Run 3 or more in production.
@@ -121,17 +121,17 @@ const plain = (value: unknown) => (Redacted.isRedacted(value) ? Redacted.value(v
  * `objectStorage` — Hetzner Object Storage, or any S3-compatible bucket.
  *
  * Pools of nodes anywhere reach it at its public address —
- * `RivetHetzner.Pool` on Hetzner, or a pool on any other cloud.
+ * `RivetHetzner.ServerPool` on Hetzner, or a pool on any other cloud.
  *
  * ### Running a control plane on Hetzner
  * **Example:** One engine
  * ```typescript
- * export const Cluster = RivetHetzner.ControlPlane("Rivet");
+ * export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
  * ```
  *
  * **Example:** Three engines sharing Hetzner Object Storage
  * ```typescript
- * export const Cluster = RivetHetzner.ControlPlane("Rivet", {
+ * export const Cluster = RivetHetzner.ServerControlPlane("Rivet", {
  *   instances: 3,
  *   objectStorage: {
  *     kind: "s3",
@@ -146,7 +146,7 @@ const plain = (value: unknown) => (Redacted.isRedacted(value) ? Redacted.value(v
  *
  * @primitive
  */
-export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
+export const ServerControlPlane = (id: string, props: ServerControlPlaneProps = {}) =>
   Layer.effect(
     Cluster,
     Effect.gen(function* () {
@@ -159,7 +159,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
       if (instances > 1 && props.objectStorage === undefined) {
         return yield* Effect.die(
           new ObjectStorageRequired({
-            message: `RivetHetzner.ControlPlane("${id}") runs ${instances} engines, which share actor data through objectStorage.`,
+            message: `RivetHetzner.ServerControlPlane("${id}") runs ${instances} engines, which share actor data through objectStorage.`,
           }),
         );
       }

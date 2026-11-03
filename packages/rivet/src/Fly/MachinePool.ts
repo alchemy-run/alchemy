@@ -8,7 +8,7 @@ import {
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
-export interface PoolOptions extends PoolSettings {
+export interface MachinePoolOptions extends PoolSettings {
   /**
    * Number of nodes.
    * @default 1
@@ -31,7 +31,7 @@ export interface PoolOptions extends PoolSettings {
  * Fly Service whose Machines host every `Rivet.DurableObject` given this
  * pool. Nodes only connect out to the control plane, so the Service takes
  * no traffic and works with any control plane it can reach —
- * `RivetFly.ControlPlane`, `RivetCloud.ControlPlane`, or one on another
+ * `RivetFly.MachineControlPlane`, `RivetCloud.ControlPlane`, or one on another
  * cloud.
  *
  * Every Durable Object given the same pool shares its nodes: declare the
@@ -40,17 +40,17 @@ export interface PoolOptions extends PoolSettings {
  * ### Running Durable Objects on Fly
  * **Example:** Two nodes
  * ```typescript
- * export const Cluster = RivetFly.ControlPlane("Rivet");
- * export const Default = RivetFly.Pool("Default", { replicas: 2 }).pipe(
+ * export const Cluster = RivetFly.MachineControlPlane("Rivet");
+ * export const Default = RivetFly.MachinePool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Cluster),
  * );
  * ```
  *
  * @primitive
  */
-export const Pool = (id: string, options: PoolOptions = {}) =>
+export const MachinePool = (id: string, options: MachinePoolOptions = {}) =>
   makePoolLayer({
-    label: "RivetFly.Pool",
+    label: "RivetFly.MachinePool",
     id,
     settings: options,
     expected: "a reachable control plane",

@@ -7,7 +7,7 @@ import {
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
-export interface WorkerPoolOptions extends PoolSettings {
+export interface CloudRunPoolOptions extends PoolSettings {
   /**
    * Number of nodes.
    * @default 1
@@ -36,7 +36,7 @@ export interface WorkerPoolOptions extends PoolSettings {
  * given this pool. Worker pools serve no requests and keep a fixed number
  * of instances running, which is what a node is: it only connects out to
  * the control plane. Works with any control plane it can reach —
- * `RivetGCP.ComputeControlPlane`, `RivetCloud.ControlPlane`, or one on
+ * `RivetGCP.ComputeEngineControlPlane`, `RivetCloud.ControlPlane`, or one on
  * another cloud.
  *
  * Every Durable Object given the same pool shares its nodes: declare the
@@ -45,17 +45,17 @@ export interface WorkerPoolOptions extends PoolSettings {
  * ### Running Durable Objects on Cloud Run
  * **Example:** Two nodes
  * ```typescript
- * export const Cluster = RivetGCP.ComputeControlPlane("Rivet");
- * export const Default = RivetGCP.WorkerPool("Default", { replicas: 2 }).pipe(
+ * export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet");
+ * export const Default = RivetGCP.CloudRunPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Cluster),
  * );
  * ```
  *
  * @primitive
  */
-export const WorkerPool = (id: string, options: WorkerPoolOptions = {}) =>
+export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
   makePoolLayer({
-    label: "RivetGCP.WorkerPool",
+    label: "RivetGCP.CloudRunPool",
     id,
     settings: options,
     expected: "a reachable control plane",

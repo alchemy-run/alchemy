@@ -27,11 +27,11 @@ This removes the Docker control plane, the pool and the API. Do it before you sw
 +import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
 import * as Layer from "effect/Layer";
 
--export const Cluster = RivetDocker.ControlPlane("Rivet");
-+export const Cluster = RivetHetzner.ControlPlane("Rivet");
+-export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
++export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
 
--export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
-+export const Default = RivetHetzner.Pool("Default").pipe(Layer.provide(Cluster));
+-export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
++export const Default = RivetHetzner.ServerPool("Default").pipe(Layer.provide(Cluster));
 ```
 
 The control plane runs on a Hetzner Server behind a Load Balancer. The pool gets a Server of its own. `src/room.ts` doesn't change.

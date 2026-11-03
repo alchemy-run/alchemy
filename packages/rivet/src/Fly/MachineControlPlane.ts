@@ -7,14 +7,14 @@ import { Cluster } from "../Cluster.ts";
 import { adminToken } from "../internal/AdminToken.ts";
 import { Namespace } from "../Namespace.ts";
 
-/** The engine release `RivetFly.ControlPlane` runs by default. */
+/** The engine release `RivetFly.MachineControlPlane` runs by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
 
 const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
 const PEER_PORT = 6421;
 
-export interface ControlPlaneProps {
+export interface MachineControlPlaneProps {
   /**
    * Number of engines, one Machine each with a volume of its own. Run 3 or
    * more in production.
@@ -62,17 +62,17 @@ const ENTRYPOINT = [
  * created for the stage.
  *
  * Pools of nodes anywhere reach it at its public address —
- * `RivetFly.Pool` on Fly, or a pool on any other cloud.
+ * `RivetFly.MachinePool` on Fly, or a pool on any other cloud.
  *
  * ### Running a control plane on Fly
  * **Example:** Three engines in Ashburn
  * ```typescript
- * export const Cluster = RivetFly.ControlPlane("Rivet");
+ * export const Cluster = RivetFly.MachineControlPlane("Rivet");
  * ```
  *
  * **Example:** Larger engines in Frankfurt
  * ```typescript
- * export const Cluster = RivetFly.ControlPlane("Rivet", {
+ * export const Cluster = RivetFly.MachineControlPlane("Rivet", {
  *   region: "fra",
  *   guest: { cpus: 4, memoryMb: 8192 },
  *   diskSize: 50,
@@ -81,7 +81,7 @@ const ENTRYPOINT = [
  *
  * @primitive
  */
-export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
+export const MachineControlPlane = (id: string, props: MachineControlPlaneProps = {}) =>
   Layer.effect(
     Cluster,
     Effect.gen(function* () {

@@ -8,10 +8,10 @@ import {
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
-export interface PoolOptions extends PoolSettings {
+export interface DeploymentPoolOptions extends PoolSettings {
   /**
    * The cluster to run the nodes on. Omit it to run them on the control
-   * plane's own cluster (`RivetKubernetes.ControlPlane`); give it to run
+   * plane's own cluster (`RivetKubernetes.StatefulSetControlPlane`); give it to run
    * them on another cluster, which reaches the control plane at its public
    * endpoint.
    */
@@ -51,27 +51,28 @@ export interface PoolOptions extends PoolSettings {
  * ### Running Durable Objects on Kubernetes
  * **Example:** Nodes beside the control plane
  * ```typescript
- * export const Cluster = RivetKubernetes.ControlPlane("Rivet", { cluster: EksCluster });
- * export const Default = RivetKubernetes.Pool("Default", { replicas: 3 }).pipe(
+ * export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", { cluster: EksCluster });
+ * export const Default = RivetKubernetes.DeploymentPool("Default", { replicas: 3 }).pipe(
  *   Layer.provide(Cluster),
  * );
  * ```
  *
  * **Example:** Nodes on another cluster, against Rivet Cloud
  * ```typescript
- * export const Default = RivetKubernetes.Pool("Default", { cluster: GkeCluster }).pipe(
+ * export const Default = RivetKubernetes.DeploymentPool("Default", { cluster: GkeCluster }).pipe(
  *   Layer.provide(RivetCloud.ControlPlane()),
  * );
  * ```
  *
  * @primitive
  */
-export const Pool = (id: string, options: PoolOptions = {}) =>
+export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) =>
   makePoolLayer({
-    label: "RivetKubernetes.Pool",
+    label: "RivetKubernetes.DeploymentPool",
     id,
     settings: options,
-    expected: "a Kubernetes cluster (RivetKubernetes.ControlPlane, or the `cluster` option)",
+    expected:
+      "a Kubernetes cluster (RivetKubernetes.StatefulSetControlPlane, or the `cluster` option)",
     network: (cluster) =>
       options.cluster !== undefined
         ? { kind: "external" as const, cluster: options.cluster, namespace: options.namespace }
@@ -81,7 +82,7 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
     nodes: (nodes) =>
       Effect.gen(function* () {
         const { network } = nodes;
-        const target = network.cluster as PoolOptions["cluster"] & {};
+        const target = network.cluster as DeploymentPoolOptions["cluster"] & {};
         const cluster = Effect.isEffect(target) ? yield* target : target;
         // Nodes on the control plane's cluster connect inside it; others at
         // its public endpoint.

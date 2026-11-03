@@ -2,5 +2,5 @@
 import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
 import * as Layer from "effect/Layer";
 
-export const Cluster = RivetHetzner.ControlPlane("Rivet");
-export const Default = RivetHetzner.Pool("Default").pipe(Layer.provide(Cluster));
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
+export const Default = RivetHetzner.ServerPool("Default").pipe(Layer.provide(Cluster));
