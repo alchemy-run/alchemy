@@ -109,7 +109,7 @@ export const layer: Layer.Layer<never> = Layer.effect(
       span(options) {
         const parentContext = options.root
           ? invocationContext
-          : contextFor(Option.getOrUndefined(options.parent));
+          : options.parent.pipe(Option.getOrUndefined, contextFor);
 
         if (!options.sampled || tracing?.startActiveSpan === undefined) {
           return new Span(options, parentContext);
