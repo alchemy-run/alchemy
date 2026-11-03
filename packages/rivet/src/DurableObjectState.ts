@@ -287,11 +287,8 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
           yield* Effect.promise(() =>
             db
               .transaction(async (tx) => {
-                exit = await Effect.runPromiseExit(
-                  effect.pipe(
-                    Effect.provideService(CurrentTransaction, tx),
-                    Effect.provideContext(context),
-                  ),
+                exit = await Effect.runPromiseExitWith(context)(
+                  effect.pipe(Effect.provideService(CurrentTransaction, tx)),
                 );
                 if (Exit.isFailure(exit)) throw rollback;
               })

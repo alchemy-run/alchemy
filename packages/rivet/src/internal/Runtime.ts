@@ -67,6 +67,7 @@ const handleRequest = (instance: DurableObjectInstance, request: Request) =>
 export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObject>) =>
   Effect.gen(function* () {
     if (durableObjects.length === 0) return yield* Effect.never;
+    const context = yield* Effect.context<never>();
     const { actor, setup } = yield* Effect.promise(() => import("rivetkit"));
     const { db } = yield* Effect.promise(() => import("rivetkit/db"));
 
@@ -98,7 +99,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
             // storage: the instance's own input gate keeps one call's
             // storage from interleaving with another's.
             services: Context.add(
-              Effect.runSync(Effect.scoped(Layer.build(InputGateLive))),
+              Effect.runSyncWith(context)(InputGateLive.pipe(Layer.build, Effect.scoped)),
               DurableObjectState,
               makeDurableObjectState(c),
             ),
