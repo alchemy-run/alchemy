@@ -61,14 +61,21 @@ export type CommandName<M extends Model.Any> = M["commands"][number]["tag"];
 export type ViewName<M extends Model.Any> = M["views"][number]["viewName"];
 /** The names of the streams a model holds. */
 export type StreamName<M extends Model.Any> = M["streams"][number]["streamName"];
-/** The names of the aggregates a model holds. */
-export type AggregateName<M extends Model.Any> = M["aggregates"][number]["aggregateName"];
+/** The names of the aggregates a model holds that declare `read`, so an Api may serve them. */
+export type AggregateName<M extends Model.Any> = ReadableName<M["aggregates"][number]>;
+
+/** An aggregate's name, unless its type says it declared no `read`. */
+type ReadableName<A> = A extends Aggregate.Any
+  ? [A["definition"]["read"]] extends [undefined]
+    ? never
+    : A["aggregateName"]
+  : never;
 
 /**
  * What {@link make} takes: the model, and the names of what of it the Api
  * serves. A kind it does not list is served whole: every command, view and
- * stream of the model. `[]` serves none of a kind. Aggregates are read
- * directly only when listed.
+ * stream of the model, and every aggregate that declares `read`. `[]` serves
+ * none of a kind.
  */
 export interface Options<
   M extends Model.Any,
@@ -85,7 +92,7 @@ export interface Options<
   readonly views?: V;
   /** The streams a client may read. Every stream of the model by default. */
   readonly streams?: S;
-  /** The aggregates a client may read directly, through their `read` contract. None by default. */
+  /** The aggregates a client may read directly, through their `read` contract. Every one that declares `read` by default. */
   readonly aggregates?: A;
 }
 
@@ -529,23 +536,23 @@ const withCaughtUp = <A>(
 type Handler = (input: never) => unknown;
 
 /**
- * A name an Api lists that its model does not hold. The type of the options
- * rules it out; this catches a model typed as `Model.Any`.
+ * The first thing an Api lists that it cannot serve: a name its model does
+ * not hold, or an aggregate without a `read` contract. The type of the
+ * options rules both out; this catches a model typed as `Model.Any`.
  */
+/** Why an Api cannot serve something it lists. */
+type Unservable = NotInModel | Unreadable;
+
 const notInModel = (
-  apiModel: Model.Any,
-  unresolved: ReadonlyArray<string>,
+  _apiModel: Model.Any,
+  unresolved: ReadonlyArray<Unservable>,
 ): DefinitionError | undefined =>
-  unresolved.length === 0
-    ? undefined
-    : new DefinitionError({
-        reason: new NotInModel({ entity: unresolved[0]!, model: apiModel.modelName }),
-      });
+  unresolved.length === 0 ? undefined : new DefinitionError({ reason: unresolved[0]! });
 
 const handlersOf = (
   apiModel: Model.Any,
   entries: ReadonlyArray<Servable>,
-  unresolved: ReadonlyArray<string>,
+  unresolved: ReadonlyArray<Unservable>,
 ): Effect.Effect<Record<string, Handler>, never, Model.Internals> =>
   Effect.gen(function* () {
     const problem = notInModel(apiModel, unresolved);
@@ -970,7 +977,7 @@ const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
 const makeProtocolInProcess = (
   model: Model.Any,
   entries: ReadonlyArray<Servable>,
-  unresolved: ReadonlyArray<string>,
+  unresolved: ReadonlyArray<Unservable>,
   group: RpcGroup.RpcGroup<Rpc.Any>,
 ): Layer.Layer<RpcClient.Protocol, never, Model.Internals> =>
   Layer.effect(
@@ -1044,7 +1051,7 @@ const build = (
   name: string,
   model: Model.Any,
   entries: ReadonlyArray<Servable>,
-  unresolved: ReadonlyArray<string>,
+  unresolved: ReadonlyArray<Unservable>,
   group: RpcGroup.RpcGroup<Rpc.Any>,
 ): unknown => {
   const client = RpcClient.make(group).pipe(
@@ -1194,13 +1201,14 @@ export const make = <
   const C extends ReadonlyArray<CommandName<M>> = ReadonlyArray<CommandName<M>>,
   const V extends ReadonlyArray<ViewName<M>> = ReadonlyArray<ViewName<M>>,
   const S extends ReadonlyArray<StreamName<M>> = ReadonlyArray<StreamName<M>>,
-  const A extends ReadonlyArray<AggregateName<M>> = readonly [],
+  const A extends ReadonlyArray<AggregateName<M>> = ReadonlyArray<AggregateName<M>>,
 >(
   name: Name,
   options: Options<M, C, V, S, A>,
 ): ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, A>>> => {
   const { model } = options;
-  const unresolved: Array<string> = [];
+  // What the Api lists but cannot serve, as the message it dies with when served.
+  const unresolved: Array<Unservable> = [];
   const pick = <T>(
     all: ReadonlyArray<T>,
     names: ReadonlyArray<string> | undefined,
@@ -1210,14 +1218,22 @@ export const make = <
       ? all
       : names.flatMap((n) => {
           const found = all.find((t) => nameOfT(t) === n);
-          if (found === undefined) unresolved.push(n);
+          if (found === undefined)
+            unresolved.push(new NotInModel({ entity: n, model: model.modelName }));
           return found === undefined ? [] : [found];
         });
   const serves: ReadonlyArray<Servable> = [
     ...pick(model.commands, options.commands, (c) => c.tag),
     ...pick(model.views, options.views, (v) => v.viewName),
     ...pick(model.streams, options.streams, (s) => s.streamName),
-    ...pick(model.aggregates, options.aggregates ?? [], (a) => a.aggregateName),
+    ...pick(model.aggregates, options.aggregates, (a) => a.aggregateName).filter((aggregate) => {
+      if (aggregate.definition.read !== undefined) return true;
+      // Unlisted, an aggregate without `read` is simply not served; listed, it is a mistake.
+      if (options.aggregates !== undefined) {
+        unresolved.push(new Unreadable({ aggregate: aggregate.aggregateName }));
+      }
+      return false;
+    }),
   ];
   return build(
     name,
@@ -1252,7 +1268,7 @@ export const protocolInProcess = <Name extends string, Serves extends ReadonlyAr
   makeProtocolInProcess(
     api.model,
     api.serves,
-    (api as unknown as { readonly [Unresolved]: ReadonlyArray<string> })[Unresolved],
+    (api as unknown as { readonly [Unresolved]: ReadonlyArray<Unservable> })[Unresolved],
     api.group,
   );
 

@@ -173,7 +173,7 @@ const json = (text: string): unknown => JSON.parse(text);
 
 // ---------------------------------------------------------------- tests
 
-describe("Domain toCli", () => {
+describe("Domain toCli", { tags: ["unit", "local"] }, () => {
   it.live("runs a command from flags and prints its receipt as JSON", () =>
     hosted(
       Effect.gen(function* () {

@@ -16,6 +16,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { stageSuffix } from "../../names.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import type { TraceSink } from "./fixtures/native-tracing/collector.ts";
@@ -555,9 +556,9 @@ test.provider(
 // to. Cloudflare's exporter needs a public hostname, so the collector
 // gets a deterministic custom domain on the standing test zone.
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
-const collectorHost = `native-trace-collector-${process.env.PULL_REQUEST ?? process.env.USER}.${zoneName}`;
+const collectorHost = `native-trace-collector-${stageSuffix()}.${zoneName}`;
 // Named up front: the traced Worker lists the destination by name.
-const destinationName = `native-trace-export-${process.env.PULL_REQUEST ?? process.env.USER}`;
+const destinationName = `native-trace-export-${stageSuffix()}`;
 const collectorMain = pathe.resolve(import.meta.dirname, "fixtures/native-tracing/collector.ts");
 
 /** An exported OTLP span, reduced to what the status assertions read. */

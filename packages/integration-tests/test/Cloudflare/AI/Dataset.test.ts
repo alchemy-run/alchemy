@@ -8,12 +8,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const GATEWAY_ID = "alchemy-test-aigw-dataset";
-const GATEWAY_ID_B = "alchemy-test-aigw-dataset-b";
+const GATEWAY_ID = testName("alchemy-test-aigw-dataset");
+const GATEWAY_ID_B = testName("alchemy-test-aigw-dataset-b");
 
 class DatasetStillExists extends Data.TaggedError("DatasetStillExists") {}
 
@@ -49,7 +50,7 @@ describe.sequential(
             const gateway = yield* Cloudflare.AI.Gateway("DatasetGateway", { id: GATEWAY_ID });
             const dataset = yield* Cloudflare.AI.Dataset("Dataset", {
               gatewayId: gateway.gatewayId,
-              name: "alchemy-test-dataset",
+              name: testName("alchemy-test-dataset"),
               filters: [{ key: "success", operator: "eq", value: [true] }],
             });
             return { gateway, dataset };
@@ -59,7 +60,7 @@ describe.sequential(
         expect(initial.dataset.datasetId).toBeDefined();
         expect(initial.dataset.accountId).toEqual(accountId);
         expect(initial.dataset.gatewayId).toEqual(GATEWAY_ID);
-        expect(initial.dataset.name).toEqual("alchemy-test-dataset");
+        expect(initial.dataset.name).toEqual(testName("alchemy-test-dataset"));
         expect(initial.dataset.enable).toBe(true);
         expect(initial.dataset.filters).toEqual([
           { key: "success", operator: "eq", value: [true] },
@@ -71,7 +72,7 @@ describe.sequential(
           gatewayId: GATEWAY_ID,
           id: initial.dataset.datasetId,
         });
-        expect(live.name).toEqual("alchemy-test-dataset");
+        expect(live.name).toEqual(testName("alchemy-test-dataset"));
         expect(live.enable).toBe(true);
         expect(live.filters).toEqual([{ key: "success", operator: "eq", value: [true] }]);
 
@@ -81,7 +82,7 @@ describe.sequential(
             const gateway = yield* Cloudflare.AI.Gateway("DatasetGateway", { id: GATEWAY_ID });
             const dataset = yield* Cloudflare.AI.Dataset("Dataset", {
               gatewayId: gateway.gatewayId,
-              name: "alchemy-test-dataset-v2",
+              name: testName("alchemy-test-dataset-v2"),
               enable: false,
               filters: [
                 { key: "provider", operator: "eq", value: ["workers-ai"] },
@@ -93,7 +94,7 @@ describe.sequential(
         );
 
         expect(updated.dataset.datasetId).toEqual(initial.dataset.datasetId);
-        expect(updated.dataset.name).toEqual("alchemy-test-dataset-v2");
+        expect(updated.dataset.name).toEqual(testName("alchemy-test-dataset-v2"));
         expect(updated.dataset.enable).toBe(false);
         expect(updated.dataset.filters).toHaveLength(2);
 
@@ -102,7 +103,7 @@ describe.sequential(
           gatewayId: GATEWAY_ID,
           id: initial.dataset.datasetId,
         });
-        expect(liveUpdated.name).toEqual("alchemy-test-dataset-v2");
+        expect(liveUpdated.name).toEqual(testName("alchemy-test-dataset-v2"));
         expect(liveUpdated.enable).toBe(false);
         expect(liveUpdated.filters).toHaveLength(2);
 
@@ -112,7 +113,7 @@ describe.sequential(
             const gateway = yield* Cloudflare.AI.Gateway("DatasetGateway", { id: GATEWAY_ID });
             const dataset = yield* Cloudflare.AI.Dataset("Dataset", {
               gatewayId: gateway.gatewayId,
-              name: "alchemy-test-dataset-v2",
+              name: testName("alchemy-test-dataset-v2"),
               enable: false,
               filters: [
                 { key: "provider", operator: "eq", value: ["workers-ai"] },
@@ -142,7 +143,7 @@ describe.sequential(
             yield* Cloudflare.AI.Gateway("ReplaceGatewayB", { id: GATEWAY_ID_B });
             const dataset = yield* Cloudflare.AI.Dataset("ReplaceDataset", {
               gatewayId: gatewayA.gatewayId,
-              name: "alchemy-test-dataset-replace",
+              name: testName("alchemy-test-dataset-replace"),
               filters: [],
             });
             return { dataset };
@@ -158,7 +159,7 @@ describe.sequential(
             const gatewayB = yield* Cloudflare.AI.Gateway("ReplaceGatewayB", { id: GATEWAY_ID_B });
             const dataset = yield* Cloudflare.AI.Dataset("ReplaceDataset", {
               gatewayId: gatewayB.gatewayId,
-              name: "alchemy-test-dataset-replace",
+              name: testName("alchemy-test-dataset-replace"),
               filters: [],
             });
             return { dataset };
@@ -188,7 +189,7 @@ describe.sequential(
             const gateway = yield* Cloudflare.AI.Gateway("HealGateway", { id: GATEWAY_ID });
             const dataset = yield* Cloudflare.AI.Dataset("HealDataset", {
               gatewayId: gateway.gatewayId,
-              name: "alchemy-test-dataset-heal",
+              name: testName("alchemy-test-dataset-heal"),
               filters: [{ key: "success", operator: "eq", value: [true] }],
             });
             return { dataset };
@@ -209,7 +210,7 @@ describe.sequential(
             const gateway = yield* Cloudflare.AI.Gateway("HealGateway", { id: GATEWAY_ID });
             const dataset = yield* Cloudflare.AI.Dataset("HealDataset", {
               gatewayId: gateway.gatewayId,
-              name: "alchemy-test-dataset-heal",
+              name: testName("alchemy-test-dataset-heal"),
               enable: false,
               filters: [{ key: "success", operator: "eq", value: [true] }],
             });
@@ -225,7 +226,7 @@ describe.sequential(
           gatewayId: GATEWAY_ID,
           id: healed.dataset.datasetId,
         });
-        expect(live.name).toEqual("alchemy-test-dataset-heal");
+        expect(live.name).toEqual(testName("alchemy-test-dataset-heal"));
 
         yield* stack.destroy();
 
@@ -244,7 +245,6 @@ describe.sequential(
             const gateway = yield* Cloudflare.AI.Gateway("ListGateway", { id: GATEWAY_ID });
             const dataset = yield* Cloudflare.AI.Dataset("ListDataset", {
               gatewayId: gateway.gatewayId,
-              name: "alchemy-test-dataset-list",
               filters: [{ key: "success", operator: "eq", value: [true] }],
             });
             return { dataset };

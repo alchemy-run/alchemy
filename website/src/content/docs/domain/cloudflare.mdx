@@ -183,6 +183,32 @@ Pass a `jurisdiction` to `DomainCloudflare.layerDurableObjects` in `BankLive` to
 
 A Durable Object in a jurisdiction is a different object from the one with the same name outside it. A model that already has data starts empty when you add a jurisdiction, and its old objects stay where they were. Other resources the Worker uses, like the ledger's D1 database, take their own `jurisdiction`. `alchemy dev` doesn't emulate jurisdictions: local workerd runs the model unrestricted.
 
+## Host several models in one Worker
+
+Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
+
+Renaming a model renames its classes, and the model starts empty under the new names.
+
+## Upgrade without losing data
+
+Each Worker records the Domain version it was deployed with. When a later Alchemy release lays models out differently, the next deploy moves the deployed data to the new layout: it renames classes in place, so every aggregate, view row and running saga carries over.
+
+Models deployed before versions existed named classes after the definition alone, like `AccountAggregate`. If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails until you choose:
+
+```typescript
+import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as Layer from "effect/Layer";
+import { Audit, AuditHandlers } from "./Audit.ts";
+import { Billing, BillingHandlers } from "./Billing.ts";
+
+const Platform = DomainCloudflare.layerDurableObjects();
+// Billing keeps the accounts both models wrote; Audit starts empty.
+export const BillingLive = Billing.layer(BillingHandlers, { legacyData: true }).pipe(
+  Layer.provide(Platform),
+);
+export const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
+```
+
 ## Count on these guarantees
 
 Commands to one aggregate instance run one at a time. Its events, new state and reply commit together, or not at all.

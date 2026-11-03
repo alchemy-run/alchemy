@@ -3,6 +3,7 @@ import { encodeState } from "alchemy/State/StateEncoding";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
@@ -58,28 +59,35 @@ export default class Store extends DurableObject<Store>()(
         }).pipe(Effect.orDie);
 
       const decryptEntry = (entry: string) =>
-        Effect.tryPromise(async () => {
+        Effect.gen(function* () {
           const framed = Buffer.from(entry, "base64");
           const counter = framed.subarray(0, NONCE_BYTES);
           const ciphertext = framed.subarray(NONCE_BYTES);
-          try {
-            const pt = await crypto.subtle.decrypt(
-              { name: "AES-CTR", counter, length: 64 },
-              cryptoKey,
-              ciphertext,
-            );
-            return JSON.parse(new TextDecoder().decode(pt)) as ResourceState;
-          } catch (error) {
+          const state = yield* Effect.result(
+            Effect.tryPromise(async () => {
+              const pt = await crypto.subtle.decrypt(
+                { name: "AES-CTR", counter, length: 64 },
+                cryptoKey,
+                ciphertext,
+              );
+              return JSON.parse(new TextDecoder().decode(pt)) as ResourceState;
+            }),
+          );
+          if (Result.isFailure(state)) {
             // In 2.0.0-beta.45 we rotated encryption keys unnecessarily, so
             // entries written under the previous key exist. AES-CTR is
             // unauthenticated: the wrong key doesn't fail `decrypt`, it yields
             // random bytes that fail `JSON.parse`. Either way the entry is
             // unreadable; return undefined so the engine reconciles the
             // resource (users may lose some data) instead of the deploy dying.
-            console.error("Error decrypting entry. Returning undefined instead.", error);
+            yield* Effect.logError(
+              "Error decrypting entry. Returning undefined instead.",
+              state.failure,
+            );
             return undefined;
           }
-        }).pipe(Effect.orDie);
+          return state.success;
+        });
 
       return {
         // -- Root DO methods -----------------------------------------

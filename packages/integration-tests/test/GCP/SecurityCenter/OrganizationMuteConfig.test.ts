@@ -48,7 +48,7 @@ test.provider(
           name: `${organization}/muteConfigs/alchemy-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "Forbidden"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

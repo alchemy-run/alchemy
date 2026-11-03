@@ -161,6 +161,7 @@ class DepositOnlyApi extends Domain.Api("DepositOnlyApi", {
   model: Wallets,
   commands: ["Deposit"],
   views: [],
+  aggregates: [],
 }) {}
 
 /** The hosted model, its middleware, and an in-process Bun server with a client for it. */
@@ -236,7 +237,7 @@ const at = "2026-10-25T12:00:00.000Z";
 
 // ---------------------------------------------------------------- tests
 
-describe("Domain toHttpApi", () => {
+describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
   it.live("a command endpoint runs the command and answers with its receipt", () =>
     Effect.gen(function* () {
       const { status, body } = yield* send("POST", "/Deposit", {

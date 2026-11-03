@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 import { CERT_5, CERT_6, KEY_5, KEY_6 } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -19,9 +20,9 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 
 // Deterministic per-test hostnames. Each test owns a disjoint subdomain so
 // reruns never collide (never derive names from Date.now()/random).
-const HOST_LIFECYCLE = `alchemy-aop-assoc.${zoneName}`;
-const HOST_REPLACE_A = `alchemy-aop-assoc-replace-a.${zoneName}`;
-const HOST_REPLACE_B = `alchemy-aop-assoc-replace-b.${zoneName}`;
+const HOST_LIFECYCLE = `${testName("alchemy-aop-assoc")}.${zoneName}`;
+const HOST_REPLACE_A = `${testName("alchemy-aop-assoc-replace-a")}.${zoneName}`;
+const HOST_REPLACE_B = `${testName("alchemy-aop-assoc-replace-b")}.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
