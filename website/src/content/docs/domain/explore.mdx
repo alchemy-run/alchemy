@@ -281,7 +281,7 @@ An engine error means the engine could not run the model as a host would. It is 
 | ------------------ | -------------------------------------------------------------------------------- |
 | `AsyncEffect`      | A move did not finish synchronously. Moves run on the synchronous runner         |
 | `ClockSleep`       | `Clock.sleep` or a `retry` schedule in a move                                    |
-| `HiddenRandomness` | `Math.random` or `crypto.randomUUID` in a move                                   |
+| `HiddenRandomness` | `Math.random`, `crypto.randomUUID` or `SecureRandom` in a move                   |
 | `NonJsonState`     | A state or fake value that is not plain JSON                                     |
 | `HiddenState`      | A second build reached another state: a layer holds state outside the fakes      |
 | `ReplayDiverged`   | A replay took another branch or another choice                                   |

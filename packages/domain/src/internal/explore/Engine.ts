@@ -6,6 +6,7 @@
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -26,6 +27,7 @@ import {
   errorText,
   explorePlatform,
   partitionKey,
+  refusedRandom,
   Rt,
   sandboxed,
   splitPartition,
@@ -281,8 +283,8 @@ export type ModelLike = Model.Any & { readonly sagas?: ReadonlyArray<unknown> };
 export interface Scenario {
   readonly name: string;
   readonly model: ModelLike;
-  /** `Model.layer(handlers)` with the fakes provided; it needs only `Platform`. */
-  readonly layer: Layer.Layer<any, any, Platform>;
+  /** `Model.layer(handlers)` with the fakes provided; it needs only `Platform` and `SecureRandom`, which explore provides. */
+  readonly layer: Layer.Layer<any, any, Platform | SecureRandom.SecureRandom>;
   readonly actors: ReadonlyArray<Actor>;
   readonly fakes: ReadonlyArray<Fake>;
   readonly rules: ReadonlyArray<Rule>;
@@ -457,7 +459,14 @@ export const build = async (scenario: Scenario): Promise<Built> => {
     ctx = await withActive(rt, () =>
       Effect.runPromise(
         Layer.buildWithScope(
-          scenario.layer.pipe(Layer.provide(Layer.succeed(Platform, explorePlatform(rt)))),
+          scenario.layer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                Layer.succeed(Platform, explorePlatform(rt)),
+                Layer.succeed(SecureRandom.SecureRandom, refusedRandom(rt)),
+              ),
+            ),
+          ),
           scope,
         ).pipe(Effect.provide(quiet)),
       ),
@@ -694,10 +703,11 @@ const runWork = (b: Built, pk: string): Effect.Effect<void, unknown> =>
         snapshot: { state: null, version: 0, checkpoints: {}, seq: 0 },
         entries: [],
       });
-      return Effect.try({
-        try: () => kit.apply(key, part.snapshot, [q.d]),
-        catch: (e) => String((e as Error)?.message ?? e),
-      }).pipe(
+      return Effect.suspend(() => kit.apply(key, part.snapshot, [q.d])).pipe(
+        Effect.catchCause((cause) => {
+          const e = Cause.squash(cause) as Error | undefined;
+          return Effect.fail(String(e?.message ?? e));
+        }),
         Effect.flatMap((result) => {
           remove();
           if (!result.changed) return Effect.void;

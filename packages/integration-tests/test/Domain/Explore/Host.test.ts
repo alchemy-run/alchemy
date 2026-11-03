@@ -6,7 +6,7 @@ import {
   freshWorld,
   identityOf,
 } from "@alchemy.run/domain/internal/explore/Engine";
-import { explorePlatform, Rt, type World } from "@alchemy.run/domain/internal/explore/Host";
+import { exploreHost, Rt, type World } from "@alchemy.run/domain/internal/explore/Host";
 /**
  * Host fidelity: full state identity, full receipts, keyed policy order,
  * projection positions and failures, views.
@@ -18,127 +18,131 @@ import { spiScenario } from "./Spi.model.ts";
 
 const hex = (w: World) => digestHex(digest(canonical(identityOf(w))));
 
-describe("state identity: every field that changes later behaviour is in the hash", () => {
-  const base = (): World => ({
-    ...freshWorld(M.jobScenario()),
-    aggs: {
-      Job: {
-        J1: {
-          state: { a: 1 },
-          version: 1,
-          receipts: {
-            c1: {
-              _tag: "Accepted",
-              receipt: { stream: "Job/J1", version: 1, events: [{ _tag: "E" }], reply: { n: 1 } },
+describe(
+  "state identity: every field that changes later behaviour is in the hash",
+  { tags: ["unit", "local"] },
+  () => {
+    const base = (): World => ({
+      ...freshWorld(M.jobScenario()),
+      aggs: {
+        Job: {
+          J1: {
+            state: { a: 1 },
+            version: 1,
+            receipts: {
+              c1: {
+                _tag: "Accepted",
+                receipt: { stream: "Job/J1", version: 1, events: [{ _tag: "E" }], reply: { n: 1 } },
+              },
             },
+            cancelled: {},
+            armedBy: {},
           },
-          cancelled: {},
-          armedBy: {},
         },
       },
-    },
-    work: {
-      "policy|P|J1": [
-        {
-          d: {
-            target: { kind: "policy", name: "P" },
-            key: "J1",
-            source: "Job/J1",
-            seq: 1,
-            origin: "Job",
-            tag: "E",
-            event: { _tag: "E", x: 1 },
-            envelope: { id: "J1", stream: "Job/J1", seq: 1, at: 0, commandId: "c1" },
-          } as never,
-          tries: 0,
-        },
-      ],
-    },
-    timers: {
-      "Job/J1/t1": {
-        agg: "Job",
-        id: "J1",
-        command: { _tag: "Fire", deadline: 1 },
-        meta: { commandId: "t1", context: { who: "a" } },
-        at: 5,
-      },
-    },
-    views: {
-      V: {
-        J1: {
-          snapshot: { state: { n: 1 }, version: 1, checkpoints: { "Job/J1": 1 }, seq: 0 },
-          entries: [],
-        },
-      },
-    },
-    proj: {
-      P: {
-        J1: {
-          next: 1,
-          pending: [],
-          intake: { "Job/J1": 1 },
-          checkpoints: { "Job/J1": 1 },
-          tries: 0,
-          stuck: false,
-        },
-      },
-    },
-  });
-  const edits: Array<[string, (w: any) => void]> = [
-    ["receipt reply", (w) => (w.aggs.Job.J1.receipts.c1.receipt.reply.n = 2)],
-    ["receipt events", (w) => (w.aggs.Job.J1.receipts.c1.receipt.events = [])],
-    ["pending event body", (w) => (w.work["policy|P|J1"][0].d.event.x = 2)],
-    ["pending envelope", (w) => (w.work["policy|P|J1"][0].d.envelope.commandId = "c9")],
-    ["timer command", (w) => (w.timers["Job/J1/t1"].command.deadline = 2)],
-    ["timer context", (w) => (w.timers["Job/J1/t1"].meta.context.who = "b")],
-    ["view snapshot", (w) => (w.views.V.J1.snapshot.state.n = 2)],
-    ["projection checkpoint", (w) => (w.proj.P.J1.checkpoints["Job/J1"] = 0)],
-    [
-      "cancel on a version-zero instance",
-      (w) =>
-        (w.aggs.Job.J2 = {
-          state: null,
-          version: 0,
-          receipts: {},
-          cancelled: { t: true },
-          armedBy: {},
-        }),
-    ],
-    [
-      "dead-letter content",
-      (w) =>
-        (w.dead = [
+      work: {
+        "policy|P|J1": [
           {
-            kind: "policy",
-            target: "P",
-            key: "J1",
-            tag: "E",
-            source: "Job/J1",
-            seq: 1,
-            error: "x",
+            d: {
+              target: { kind: "policy", name: "P" },
+              key: "J1",
+              source: "Job/J1",
+              seq: 1,
+              origin: "Job",
+              tag: "E",
+              event: { _tag: "E", x: 1 },
+              envelope: { id: "J1", stream: "Job/J1", seq: 1, at: 0, commandId: "c1" },
+            } as never,
+            tries: 0,
           },
-        ]),
-    ],
-  ];
-  for (const [name, edit] of edits)
-    it(name, () => {
-      const a = base();
-      const b = base();
-      edit(b);
-      expect(hex(b)).not.toBe(hex(a));
+        ],
+      },
+      timers: {
+        "Job/J1/t1": {
+          agg: "Job",
+          id: "J1",
+          command: { _tag: "Fire", deadline: 1 },
+          meta: { commandId: "t1", context: { who: "a" } },
+          at: 5,
+        },
+      },
+      views: {
+        V: {
+          J1: {
+            snapshot: { state: { n: 1 }, version: 1, checkpoints: { "Job/J1": 1 }, seq: 0 },
+            entries: [],
+          },
+        },
+      },
+      proj: {
+        P: {
+          J1: {
+            next: 1,
+            pending: [],
+            intake: { "Job/J1": 1 },
+            checkpoints: { "Job/J1": 1 },
+            tries: 0,
+            stuck: false,
+          },
+        },
+      },
     });
+    const edits: Array<[string, (w: any) => void]> = [
+      ["receipt reply", (w) => (w.aggs.Job.J1.receipts.c1.receipt.reply.n = 2)],
+      ["receipt events", (w) => (w.aggs.Job.J1.receipts.c1.receipt.events = [])],
+      ["pending event body", (w) => (w.work["policy|P|J1"][0].d.event.x = 2)],
+      ["pending envelope", (w) => (w.work["policy|P|J1"][0].d.envelope.commandId = "c9")],
+      ["timer command", (w) => (w.timers["Job/J1/t1"].command.deadline = 2)],
+      ["timer context", (w) => (w.timers["Job/J1/t1"].meta.context.who = "b")],
+      ["view snapshot", (w) => (w.views.V.J1.snapshot.state.n = 2)],
+      ["projection checkpoint", (w) => (w.proj.P.J1.checkpoints["Job/J1"] = 0)],
+      [
+        "cancel on a version-zero instance",
+        (w) =>
+          (w.aggs.Job.J2 = {
+            state: null,
+            version: 0,
+            receipts: {},
+            cancelled: { t: true },
+            armedBy: {},
+          }),
+      ],
+      [
+        "dead-letter content",
+        (w) =>
+          (w.dead = [
+            {
+              kind: "policy",
+              target: "P",
+              key: "J1",
+              tag: "E",
+              source: "Job/J1",
+              seq: 1,
+              error: "x",
+            },
+          ]),
+      ],
+    ];
+    for (const [name, edit] of edits)
+      it(name, () => {
+        const a = base();
+        const b = base();
+        edit(b);
+        expect(hex(b)).not.toBe(hex(a));
+      });
 
-  it("the redelivery memory counts only while a redelivery can happen", () => {
-    const a = { ...base(), budget: { redeliveries: 0 } };
-    const b = { ...a, delivered: { x: { d: {} as never, tries: 0 } } };
-    expect(hex(b)).toBe(hex(a));
-    expect(hex({ ...b, budget: { redeliveries: 1 } })).not.toBe(
-      hex({ ...a, budget: { redeliveries: 1 } }),
-    );
-  });
-});
+    it("the redelivery memory counts only while a redelivery can happen", () => {
+      const a = { ...base(), budget: { redeliveries: 0 } };
+      const b = { ...a, delivered: { x: { d: {} as never, tries: 0 } } };
+      expect(hex(b)).toBe(hex(a));
+      expect(hex({ ...b, budget: { redeliveries: 1 } })).not.toBe(
+        hex({ ...a, budget: { redeliveries: 1 } }),
+      );
+    });
+  },
+);
 
-describe("SPI parity", () => {
+describe("SPI parity", { tags: ["unit", "local"] }, () => {
   it("a duplicate command id answers the FULL receipt (events too)", async () => {
     const scenario = {
       ...M.twoSends(false),
@@ -180,10 +184,8 @@ describe("SPI parity", () => {
   it("policy work is ordered per key in receive order: two sources into one key give one runnable head", () => {
     const rt = new Rt({});
     rt.world = freshWorld(M.jobScenario());
-    const platform = explorePlatform(rt);
-    const store = Effect.runSync(
-      platform.policy({} as never, { name: "P", run: () => Effect.void }),
-    );
+    const host = exploreHost(rt);
+    const store = Effect.runSync(host.policy({} as never, { name: "P", run: () => Effect.void }));
     const d = (source: string, seq: number) => ({
       target: { kind: "policy" as const, name: "P" },
       key: "K",
@@ -209,11 +211,14 @@ describe("SPI parity", () => {
     const rt = new Rt({});
     rt.world = freshWorld(M.jobScenario());
     const store = Effect.runSync(
-      explorePlatform(rt).projection({} as never, {
-        name: "Q",
-        options: {},
-        run: () => Effect.void,
-      }),
+      exploreHost(rt).projection(
+        {} as never,
+        {
+          name: "Q",
+          options: {},
+          run: () => Effect.void,
+        } as never,
+      ),
     );
     const d = (source: string, seq: number) => ({
       target: { kind: "projection" as const, name: "Q" },
@@ -270,7 +275,7 @@ describe("SPI parity", () => {
   });
 });
 
-describe("Story values", () => {
+describe("Story values", { tags: ["unit", "local"] }, () => {
   it("a plain tagged object keeps its _tag", () => {
     expect(toCode({ _tag: "Set", value: 1 })).toBe('{ _tag: "Set", value: 1 }');
   });

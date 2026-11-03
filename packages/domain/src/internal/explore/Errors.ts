@@ -10,7 +10,7 @@ export type EngineErrorKind =
   | "AsyncEffect"
   /** `Clock.sleep` (or a policy `retry` schedule) inside a move. */
   | "ClockSleep"
-  /** `Math.random` or `crypto.randomUUID` inside a move. */
+  /** `Math.random`, `crypto.randomUUID` or `SecureRandom` inside a move. */
   | "HiddenRandomness"
   /** Fake or model state that is not plain JSON. */
   | "NonJsonState"

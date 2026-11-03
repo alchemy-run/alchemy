@@ -11,6 +11,7 @@ import {
   type Scenario,
 } from "@alchemy.run/domain/Explore";
 import { Story, type Step } from "@alchemy.run/domain/Story";
+import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -139,6 +140,22 @@ export const randomActor = fakeScenario(
       key: "r",
       enabled: (s) => !s.fake("g").r,
       run: () => Effect.sync(() => void (g().r = crypto.randomUUID())),
+    },
+  ],
+  [],
+);
+/** A send with no command id: the model draws one from SecureRandom. */
+export const randomIdActor = fakeScenario(
+  "randomIdActor",
+  [
+    {
+      key: "i",
+      run: (ctx) =>
+        (
+          Context.getUnsafe(ctx, Dummy) as unknown as {
+            readonly send: (id: string, command: Ping) => Effect.Effect<unknown, unknown>;
+          }
+        ).send("x", new Ping({})),
     },
   ],
   [],

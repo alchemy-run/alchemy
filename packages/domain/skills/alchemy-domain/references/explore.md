@@ -10,7 +10,7 @@ import * as Explore from "@alchemy.run/domain/Explore";
 const scenario: Explore.Scenario = {
   name: "holds",
   model: Holds,
-  layer: Holds.layer(HoldExpiryLive), // needs only Platform: provide fakes here
+  layer: Holds.layer(HoldExpiryLive), // explore provides Platform and SecureRandom: provide fakes here
   fakes: [],
   actors: [actor("place", new PlaceHold({ expiresAt }), (s) => s === undefined)],
   rules: [heldHasTimer],
@@ -70,7 +70,7 @@ A fake is an assumption about a real system. Avoid both false results:
 - A fake that never fails hides a failure path: `choose` the failures the real system has.
 - A fake that does what the real system cannot gives a false break. Before you trust a break, check the fake against the real contract. Name the assumption in `rule.assumes`.
 
-A layer holds no state outside `fakeState`, and a move has no async effect, `Clock.sleep`, `Math.random` or `crypto.randomUUID`. Each of these is an engine error.
+A layer holds no state outside `fakeState`, and a move has no async effect, `Clock.sleep`, `Math.random`, `crypto.randomUUID` or `SecureRandom` (a send with no command id draws one). Each of these is an engine error.
 
 More: [Explore a model: Write fakes as assumptions](https://alchemy.run/domain/explore#write-fakes-as-assumptions).
 

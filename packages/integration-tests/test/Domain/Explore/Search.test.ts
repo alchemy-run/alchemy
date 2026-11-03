@@ -6,7 +6,7 @@ import { replay, run } from "@alchemy.run/domain/Explore";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as M from "./Models.ts";
 
-describe("known counts", () => {
+describe("known counts", { tags: ["unit", "local"] }, () => {
   it("two one-shot independent bits: 4 states, 4 transitions, exhausted", async () => {
     const r = await run(M.twoBits);
     expect([r.states, r.transitions, r.coverage._tag]).toEqual([4, 4, "Exhausted"]);
@@ -26,7 +26,7 @@ describe("known counts", () => {
   });
 });
 
-describe("root and depth", () => {
+describe("root and depth", { tags: ["unit", "local"] }, () => {
   it("an invalid root with no moves is a violation, at path length 0", async () => {
     const r = await run(M.badRoot);
     expect(r.violations.map((v) => [v.rule, v.trace.steps.length])).toEqual([["ROOT", 0]]);
@@ -45,11 +45,12 @@ describe("root and depth", () => {
   });
 });
 
-describe("engine errors are never a clean result", () => {
+describe("engine errors are never a clean result", { tags: ["unit", "local"] }, () => {
   const cases: Array<[string, Parameters<typeof run>[0], string]> = [
     ["async effect", M.asyncActor, "AsyncEffect"],
     ["Clock.sleep", M.sleepActor, "ClockSleep"],
     ["crypto.randomUUID", M.randomActor, "HiddenRandomness"],
+    ["a send with no command id (SecureRandom)", M.randomIdActor, "HiddenRandomness"],
     ["a Date in fake state", M.dateActor, "NonJsonState"],
   ];
   for (const [name, scenario, kind] of cases)
@@ -66,7 +67,7 @@ describe("engine errors are never a clean result", () => {
   });
 });
 
-describe("determinism and replay", () => {
+describe("determinism and replay", { tags: ["unit", "local"] }, () => {
   it("the same scenario twice: the same counts and the same traces", async () => {
     const a = await run(M.jobScenario({ ids: ["J1", "J2"], rules: [M.JOB_ARMED] }));
     const b = await run(M.jobScenario({ ids: ["J1", "J2"], rules: [M.JOB_ARMED] }));
