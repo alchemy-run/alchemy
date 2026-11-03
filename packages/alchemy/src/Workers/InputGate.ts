@@ -16,6 +16,11 @@
  * waiting for storage. Calls still overlap while they wait on the outside
  * world; they only line up around storage.
  *
+ * The bridge runs each request, each alarm and the instance's construction
+ * as a call. Work a call hands to `waitUntil` and fibers it forks stay part
+ * of it after it returns, so a background loop started by the constructor
+ * is gated as one long call.
+ *
  * It's opt-in: the Durable Object bridge runs a call through the gate only
  * when the engine provides {@link InputGate}, and storage only when the
  * engine wraps its operations in {@link gateStorage}. Cloudflare has its own
@@ -139,8 +144,8 @@ export const makeInputGate: Effect.Effect<InputGateShape> = Effect.sync(() => {
       });
     });
 
-  // Storage outside any call (the instance's construction, `waitUntil`
-  // work) counts as a call of its own per operation.
+  // Storage outside any call (an engine that doesn't run construction
+  // through `call`) counts as a call of its own per operation.
   const currentCall = Effect.gen(function* () {
     return (yield* CurrentCall) ?? nextCall++;
   });

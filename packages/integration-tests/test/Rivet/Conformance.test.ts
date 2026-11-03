@@ -79,6 +79,37 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     test(
+      "a background loop the constructor starts loses no updates to concurrent calls",
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const { count } = (yield* Effect.suspend(() =>
+          client.get(`${baseUrl}/background/${crypto.randomUUID()}?n=50`),
+        ).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        )) as { count: number };
+        expect(count).toBe(100);
+      }),
+      { timeout: 120_000 },
+    );
+
+    test(
+      "an alarm replaced while it fires leaves the new alarm set and doesn't run",
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const result = (yield* Effect.suspend(() =>
+          client.get(`${baseUrl}/alarm-replaced/${crypto.randomUUID()}`),
+        ).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        )) as { fired: number; alarm: number | null };
+        expect(result.fired).toBe(0);
+        expect(result.alarm).not.toBeNull();
+      }),
+      { timeout: 120_000 },
+    );
+
+    test(
       "a second class on the same pool calls the first through the gateway",
       Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;

@@ -7,6 +7,7 @@ import * as Rivet from "@alchemy.run/rivet";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Schedule from "effect/Schedule";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
 import { Cluster, FRONT_PORT } from "./cluster.ts";
 import Counter from "./counter.ts";
@@ -50,6 +51,33 @@ export default class Front extends Docker.Service<Front>()(
             { concurrency: "unbounded", discard: true },
           );
           return yield* HttpServerResponse.json({ count: yield* tally.read("count") });
+        }
+        // `n` increments spread over the background loop's run; returns the
+        // final count once the loop is done.
+        if (group === "background" && name !== undefined) {
+          const n = Number(url.searchParams.get("n") ?? "50");
+          const tally = tallies.getByName(name);
+          yield* Effect.forEach(
+            Array.from({ length: n }, (_, i) => i),
+            (i) => Effect.andThen(Effect.sleep(`${i * 5} millis`), tally.increment("background")),
+            { concurrency: "unbounded", discard: true },
+          );
+          yield* tally.backgroundDone().pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("200 millis"),
+              until: (done) => done,
+              times: 50,
+            }),
+          );
+          return yield* HttpServerResponse.json({ count: yield* tally.read("background") });
+        }
+        // An alarm replaced while it fires; returns what's left afterwards.
+        if (group === "alarm-replaced" && name !== undefined) {
+          const tally = tallies.getByName(name);
+          yield* tally.replaceFiringAlarm();
+          // Give the fired alarm's call time to run once the gate frees up.
+          yield* Effect.sleep("3 seconds");
+          return yield* HttpServerResponse.json(yield* tally.alarmState());
         }
         // A slow transaction racing `n` increments, then a rolled-back one.
         if (group === "transaction" && name !== undefined) {

@@ -113,6 +113,16 @@ const KV_TABLE = "_alchemy_kv";
 const META_TABLE = "_alchemy_meta";
 const ALARM_KEY = "alarm";
 
+/**
+ * The alarm that's set: its RivetKit schedule (absent until a transaction
+ * that set it commits), when, and the token it fires with.
+ */
+interface StoredAlarm {
+  readonly id?: string;
+  readonly at: number;
+  readonly token: string;
+}
+
 /** Create Alchemy's storage tables. Run from the actor's database migration. @internal */
 export const migrateStorage = async (db: ActorContextLike["db"]) => {
   await db.execute(
@@ -136,8 +146,17 @@ const decode = <T>(text: string) =>
     return v8.deserialize(Buffer.from(text, "base64")) as T;
   });
 
-/** The transaction storage runs in, inside `storage.transaction`. */
-const CurrentTransaction = Context.Reference<ActorDatabase | undefined>(
+/**
+ * The transaction storage runs in, inside `storage.transaction`, and the
+ * scheduler work to run once it commits: RivetKit's scheduler writes through
+ * the outer database, which the transaction holds until then.
+ */
+interface Transaction {
+  readonly db: ActorDatabase;
+  readonly afterCommit: Array<Effect.Effect<void>>;
+}
+
+const CurrentTransaction = Context.Reference<Transaction | undefined>(
   "Rivet/DurableObjectState/CurrentTransaction",
   { defaultValue: () => undefined },
 );
@@ -148,7 +167,7 @@ const query = <Row extends Record<string, unknown>>(
   ...args: unknown[]
 ) =>
   Effect.gen(function* () {
-    const db = (yield* CurrentTransaction) ?? c.db;
+    const db = (yield* CurrentTransaction)?.db ?? c.db;
     return yield* Effect.promise(() => db.execute<Row>(sql, ...args));
   });
 
@@ -165,9 +184,24 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
     ALARM_KEY,
   ).pipe(
     Effect.map((rows) =>
-      rows[0] === undefined ? undefined : (JSON.parse(rows[0].value) as { id: string; at: number }),
+      rows[0] === undefined ? undefined : (JSON.parse(rows[0].value) as StoredAlarm),
     ),
   );
+
+  const writeAlarm = (alarm: StoredAlarm) =>
+    query(
+      c,
+      `INSERT INTO ${META_TABLE} (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      ALARM_KEY,
+      JSON.stringify(alarm),
+    );
+
+  // A schedule that has already fired, or a stale one, carries a token that
+  // no longer matches, so one left uncancelled is harmless.
+  const cancelSchedule = (alarm: StoredAlarm | undefined) =>
+    alarm?.id === undefined
+      ? Effect.void
+      : Effect.asVoid(Effect.promise(() => c.schedule.cancel(alarm.id!)));
 
   const ops: Omit<DurableObjectStorage, "transaction"> = {
     get: <T>(key: string) =>
@@ -241,15 +275,30 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
       Effect.gen(function* () {
         const at = typeof scheduledTime === "number" ? scheduledTime : scheduledTime.getTime();
         const existing = yield* readAlarm;
-        if (existing !== undefined) {
-          yield* Effect.promise(() => c.schedule.cancel(existing.id));
+        // The token tells the firing alarm whether it's still the one set.
+        const token = yield* Effect.sync(() => crypto.randomUUID());
+        const schedule = Effect.gen(function* () {
+          yield* cancelSchedule(existing);
+          return yield* Effect.promise(() => c.schedule.at(at, ALARM_ACTION, token));
+        });
+        const transaction = yield* CurrentTransaction;
+        if (transaction === undefined) {
+          yield* writeAlarm({ id: yield* schedule, at, token });
+          return;
         }
-        const id = yield* Effect.promise(() => c.schedule.at(at, ALARM_ACTION));
-        yield* query(
-          c,
-          `INSERT INTO ${META_TABLE} (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-          ALARM_KEY,
-          JSON.stringify({ id, at }),
+        // Record it with the transaction; schedule it once that commits.
+        yield* writeAlarm({ at, token });
+        transaction.afterCommit.push(
+          Effect.gen(function* () {
+            const id = yield* schedule;
+            yield* query(
+              c,
+              `UPDATE ${META_TABLE} SET value = ? WHERE key = ? AND value = ?`,
+              JSON.stringify({ id, at, token } satisfies StoredAlarm),
+              ALARM_KEY,
+              JSON.stringify({ at, token } satisfies StoredAlarm),
+            );
+          }),
         );
       }),
     getAlarm: () => readAlarm.pipe(Effect.map((alarm) => alarm?.at ?? null)),
@@ -257,8 +306,10 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
       Effect.gen(function* () {
         const existing = yield* readAlarm;
         if (existing === undefined) return;
-        yield* Effect.promise(() => c.schedule.cancel(existing.id));
         yield* query(c, `DELETE FROM ${META_TABLE} WHERE key = ?`, ALARM_KEY);
+        const transaction = yield* CurrentTransaction;
+        if (transaction === undefined) yield* cancelSchedule(existing);
+        else transaction.afterCommit.push(cancelSchedule(existing));
       }),
   };
 
@@ -282,13 +333,14 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
       gateExclusive(
         Effect.gen(function* () {
           const context = yield* Effect.context<R>();
-          const db = (yield* CurrentTransaction) ?? c.db;
+          const outer = yield* CurrentTransaction;
+          const afterCommit: Array<Effect.Effect<void>> = [];
           let exit: Exit.Exit<A, E> | undefined;
           yield* Effect.promise(() =>
-            db
+            (outer?.db ?? c.db)
               .transaction(async (tx) => {
                 exit = await Effect.runPromiseExitWith(context)(
-                  effect.pipe(Effect.provideService(CurrentTransaction, tx)),
+                  effect.pipe(Effect.provideService(CurrentTransaction, { db: tx, afterCommit })),
                 );
                 if (Exit.isFailure(exit)) throw rollback;
               })
@@ -296,6 +348,11 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
                 if (error !== rollback) throw error;
               }),
           );
+          // A nested transaction's scheduler work waits for the outermost.
+          if (Exit.isSuccess(exit!)) {
+            if (outer !== undefined) outer.afterCommit.push(...afterCommit);
+            else yield* Effect.forEach(afterCommit, (work) => work, { discard: true });
+          }
           return yield* exit!;
         }),
       ),
@@ -314,8 +371,30 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
 };
 
 /**
- * Clear the stored alarm once it fires, so `getAlarm` reports `null` while
- * the handler runs (as on Cloudflare). @internal
+ * Claim a fired alarm: clear it, so `getAlarm` reports `null` while the
+ * handler runs (as on Cloudflare), and report whether it's still the alarm
+ * that's set. One replaced or deleted after RivetKit started firing it
+ * leaves the newer alarm alone and doesn't run the handler. Goes through
+ * the input gate, so it can't land inside a call's `setAlarm`. @internal
  */
-export const clearFiredAlarm = (c: ActorContextLike) =>
-  query(c, `DELETE FROM ${META_TABLE} WHERE key = ?`, ALARM_KEY).pipe(Effect.asVoid);
+export const claimFiredAlarm = (c: ActorContextLike, token: unknown) =>
+  gateStorage(
+    Effect.gen(function* () {
+      const rows = yield* query<{ value: string }>(
+        c,
+        `SELECT value FROM ${META_TABLE} WHERE key = ?`,
+        ALARM_KEY,
+      );
+      const stored = rows[0];
+      if (stored === undefined || (JSON.parse(stored.value) as StoredAlarm).token !== token) {
+        return false;
+      }
+      yield* query(
+        c,
+        `DELETE FROM ${META_TABLE} WHERE key = ? AND value = ?`,
+        ALARM_KEY,
+        stored.value,
+      );
+      return true;
+    }),
+  );

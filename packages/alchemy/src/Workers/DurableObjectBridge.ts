@@ -158,20 +158,26 @@ export const makeDurableObjectInstance = ({
         Layer.provideMerge(Layer.succeedContext(services)),
         Layer.provideMerge(Layer.succeedContext(context)),
       );
-      return constructor.pipe(
-        Effect.provide(doContext),
-        Effect.flatMap((inner) =>
-          Effect.suspend(() => {
-            const seal = initialize?.();
-            const instanceContext = Layer.succeed(RuntimeContext, instanceRuntimeContext).pipe(
-              Layer.provideMerge(doContext),
-            );
-            return inner.pipe(
-              Effect.provide(instanceContext),
-              Effect.ensuring(Effect.sync(() => seal?.())),
-            );
-          }),
+      // Construction runs through the gate as a call of its own, so fibers it
+      // forks (a background loop) belong to that call and their storage is
+      // gated like any call's.
+      return gateCall(
+        constructor.pipe(
+          Effect.flatMap((inner) =>
+            Effect.suspend(() => {
+              const seal = initialize?.();
+              const instanceContext = Layer.succeed(RuntimeContext, instanceRuntimeContext).pipe(
+                Layer.provideMerge(doContext),
+              );
+              return inner.pipe(
+                Effect.provide(instanceContext),
+                Effect.ensuring(Effect.sync(() => seal?.())),
+              );
+            }),
+          ),
         ),
+      ).pipe(
+        Effect.provide(doContext),
         Effect.map((built): BuiltDurableObject => ({
           instance: built as DurableObjectInstanceShape,
           services: Context.add(services, RuntimeContext, instanceRuntimeContext),

@@ -118,7 +118,7 @@ alarm: () =>
   }),
 ```
 
-`getAlarm` returns when the alarm is due, or `null`. `deleteAlarm` cancels it. A room that needs several timers keeps them in a table and sets the alarm to the earliest.
+`getAlarm` returns when the alarm is due, or `null`. `deleteAlarm` cancels it. An alarm moved or cancelled after it came due, but before `alarm` started, doesn't run. A room that needs several timers keeps them in a table and sets the alarm to the earliest.
 
 ## Change state safely while calls overlap
 
@@ -132,6 +132,19 @@ yield* state.storage.put("visitors", visitors);
 Fifty joins at once count fifty visitors. That's the same rule Cloudflare's Durable Objects follow, so code written for one runs correctly on the other.
 
 The protection ends when the call waits on anything that isn't storage, like another Durable Object or an HTTP request. Read again after the wait rather than reusing a value from before it.
+
+The `alarm` handler, work handed to `waitUntil`, and fibers the room forks when it starts follow the same rule. A fiber the room forks counts as part of the room's start, so a loop that reads and writes in the background keeps its read and its write together, just like a call:
+
+```typescript title="src/room.ts"
+yield* Effect.forkDetach(
+  Effect.gen(function* () {
+    const ticks = ((yield* state.storage.get<number>("ticks")) ?? 0) + 1;
+    yield* state.storage.put("ticks", ticks);
+  }).pipe(Effect.repeat(Schedule.spaced("1 minute"))),
+);
+```
+
+A call never pauses to let others in during plain code, so keep heavy computation off the room. A long loop with no waits holds everything else back until it finishes.
 
 ## Group changes in a transaction
 
@@ -148,7 +161,7 @@ yield* state.storage.transaction(
 );
 ```
 
-Its writes commit together if it succeeds and roll back if it fails. No other call touches storage until it finishes, whatever it waits on.
+Its writes commit together if it succeeds and roll back if it fails, alarms included: an alarm set or cancelled inside takes effect when the transaction commits. No other call touches storage until it finishes, whatever it waits on.
 
 That also means a call back into this room from inside the transaction would wait for the transaction itself, so don't call other Durable Objects from one.
 

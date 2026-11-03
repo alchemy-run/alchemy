@@ -23,7 +23,7 @@ import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
   DurableObjectState,
-  clearFiredAlarm,
+  claimFiredAlarm,
   makeDurableObjectState,
   migrateStorage,
   type ActorContextLike,
@@ -118,11 +118,11 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
         onRequest: (c: ActivationContext, request: Request) =>
           handleRequest(instanceOf(c), request),
         actions: {
-          [ALARM_ACTION]: (c: ActivationContext) =>
+          [ALARM_ACTION]: (c: ActivationContext, token: unknown) =>
             instanceOf(c).execute((shape) =>
-              clearFiredAlarm(c).pipe(
-                Effect.andThen(
-                  typeof shape.alarm === "function"
+              claimFiredAlarm(c, token).pipe(
+                Effect.flatMap((current) =>
+                  current && typeof shape.alarm === "function"
                     ? (shape.alarm as () => Effect.Effect<void>)()
                     : Effect.void,
                 ),
