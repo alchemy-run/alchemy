@@ -1,4 +1,5 @@
 import * as Fly from "@alchemy.run/fly";
+import { resolveOrgSlug } from "@alchemy.run/fly/Environment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
@@ -326,6 +327,45 @@ const appGone = (appName: string) =>
       times: 10,
     }),
   );
+
+const appNames = Effect.gen(function* () {
+  const org_slug = yield* resolveOrgSlug();
+  const { apps } = yield* machines.listApps({ org_slug });
+  return new Set((apps ?? []).flatMap((app) => (app.name ? [app.name] : [])));
+});
+
+// An image build sits between a Service creating its own App and starting
+// its Machines. A deploy interrupted there leaves an App with nothing in it,
+// which destroy must still find and delete.
+test.provider(
+  "destroy deletes the App of a Service whose deploy was interrupted before its Machines started",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const before = yield* appNames;
+
+      // Interrupt the deploy as soon as the Service's App appears.
+      const created = yield* Effect.raceFirst(
+        stack.deploy(Echo()).pipe(Effect.as(undefined)),
+        appNames.pipe(
+          Effect.map((names) => [...names].find((name) => !before.has(name))),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (name) => name !== undefined,
+            times: 120,
+          }),
+        ),
+      );
+      expect(created).toEqual(expect.any(String));
+
+      yield* stack.destroy();
+      expect(yield* appGone(created!)).toBe(true);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:service", "live"],
+    timeout: 300_000,
+  },
+);
 
 const getText = (url: string) =>
   HttpClient.get(url).pipe(

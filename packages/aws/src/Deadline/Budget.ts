@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
@@ -350,7 +351,7 @@ export const BudgetProvider = () =>
           // Deadline clamps a startTime in the past to the creation instant,
           // so a past desired startTime can never converge — only compare it
           // while it is still in the future.
-          const now = yield* Effect.sync(() => Date.now());
+          const now = yield* Clock.currentTimeMillis;
           const desiredStart = desiredSchedule.fixed.startTime.getTime();
           const scheduleDrifted =
             (desiredStart > now && observedSchedule.startTime.getTime() !== desiredStart) ||

@@ -21,7 +21,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Scope from "effect/Scope";
 import packageJson from "../../package.json" with { type: "json" };
-import * as Interaction from "../Interaction.ts";
 import { logShutdown } from "../Util/Shutdown.ts";
 import { checkLatestVersion } from "./checkVersion.ts";
 import {
@@ -32,7 +31,8 @@ import {
 import { handleCliErrors } from "./commands/errors.ts";
 import { VersionCheck } from "./commands/instrument.ts";
 import { GlobalLogLive, LogFormatFlag, LogLevelFlag } from "./GlobalLog.ts";
-import { selectCliServices } from "./selectCli.ts";
+import * as JsonConsole from "./JsonConsole.ts";
+import { selectRenderer } from "./selectCli.ts";
 
 const commandMetadata = [
   ["provider", "Manage cloud provider prerequisites and utilities"],
@@ -166,6 +166,9 @@ const root = Command.make("alchemy", {}, () =>
     ),
   ]),
   Command.withGlobalFlags([NoInput, FastDistilled, LogLevelFlag, LogFormatFlag]),
+  // Built per command, once the flags are parsed: `--log-format json`
+  // swaps in the JSON console's renderer.
+  Command.provide(JsonConsole.override),
 );
 
 /**
@@ -202,7 +205,7 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  Layer.provide(Layer.provideMerge(selectCliServices(), Interaction.layer()), PlatformServices),
+  Layer.provide(selectRenderer(), PlatformServices),
   // Debug run log in the project's .alchemy/log — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.

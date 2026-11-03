@@ -164,8 +164,18 @@ const WalletsLive = Layer.mergeAll(Wallets.layer(Layer.empty), SessionLive).pipe
 const hosted = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provide(WalletsLive)) as Effect.Effect<A, E>;
 
+/** Every call of the Api that returns once. */
+const expose = [
+  "Deposit",
+  "Balance.get",
+  "Balance.list",
+  "Balance.snapshot",
+  "Wallet.get",
+] as const;
+
 const asSam = toCli(WalletApi, {
   name: "wallet",
+  expose,
   headers: { authorization: "Bearer sam" },
 });
 
@@ -173,7 +183,7 @@ const json = (text: string): unknown => JSON.parse(text);
 
 // ---------------------------------------------------------------- tests
 
-describe("Domain toCli", () => {
+describe("Domain toCli", { tags: ["unit", "local"] }, () => {
   it.live("runs a command from flags and prints its receipt as JSON", () =>
     hosted(
       Effect.gen(function* () {
@@ -231,7 +241,7 @@ describe("Domain toCli", () => {
         expect(String(failure)).toContain("CallRejected");
 
         // The middleware's error is typed too: no bearer, no session.
-        const anonymous = yield* run(toCli(WalletApi, { name: "wallet" }), [
+        const anonymous = yield* run(toCli(WalletApi, { name: "wallet", expose }), [
           "wallet",
           "get",
           "--key",
@@ -316,6 +326,7 @@ describe("Domain toCli", () => {
         const run = yield* cliOver;
         const fromEnv = toCli(WalletApi, {
           name: "wallet",
+          expose,
           headers: Effect.sync(() => ({ authorization: "Bearer kim" })),
         });
         const deposit = yield* run(fromEnv, ["deposit", "--target", "w-3", "--amount", "3"]);
@@ -377,10 +388,10 @@ describe("Domain toCli", () => {
         class Renames extends Domain.Model("Renames", { aggregates: [Names] }) {}
         class RenameApi extends Domain.Api("RenameApi", { model: Renames }) {}
         const run = yield* cliOver;
-        const help = yield* run(toCli(RenameApi, { name: "rename" }) as typeof asSam, [
-          "rename",
-          "--help",
-        ]);
+        const help = yield* run(
+          toCli(RenameApi, { name: "rename", expose: ["Rename"] }) as typeof asSam,
+          ["rename", "--help"],
+        );
         expect(help.code).toBe(0);
         expect(help.stdout).toContain("--target");
         expect(help.stdout).toContain("--input");
@@ -411,7 +422,9 @@ describe("Domain toCli", () => {
         }) {}
         class Clashes extends Domain.Model("Clashes", { aggregates: [Wallet, Clashing] }) {}
         class ClashApi extends Domain.Api("ClashApi", { model: Clashes, views: [] }) {}
-        expect(yield* defectOf(toCli(ClashApi, { name: "clash" }))).toMatchObject({
+        expect(
+          yield* defectOf(toCli(ClashApi, { name: "clash", expose: ["Deposit", "deposit"] })),
+        ).toMatchObject({
           _tag: "DefinitionError",
           message: "ClashApi: `Deposit` and `deposit` are both the command deposit",
         });
@@ -429,10 +442,34 @@ describe("Domain toCli", () => {
         }) {}
         class Reserves extends Domain.Model("Reserves", { aggregates: [Reserving] }) {}
         class ReservedApi extends Domain.Api("ReservedApi", { model: Reserves }) {}
-        expect(yield* defectOf(toCli(ReservedApi, { name: "reserved" }))).toMatchObject({
+        expect(
+          yield* defectOf(toCli(ReservedApi, { name: "reserved", expose: ["Reserved"] })),
+        ).toMatchObject({
           _tag: "DefinitionError",
           message: expect.stringContaining("--json, which the CLI reserves"),
         });
+      }),
+    ),
+  );
+
+  it.live("builds no subcommand it is not told to expose", () =>
+    hosted(
+      Effect.gen(function* () {
+        const run = yield* cliOver;
+        // @ts-expect-error a stream is not a subcommand
+        toCli(WalletApi, { expose: ["Wallet.watch"] });
+        const depositOnly = toCli(WalletApi, { name: "wallet", expose: ["Deposit"] });
+        /** The subcommands `--help` lists. */
+        const subcommands = (stdout: string) =>
+          (stdout.split("SUBCOMMANDS")[1] ?? "")
+            .split("\n")
+            .map((line) => line.trim().split(/\s+/)[0])
+            .filter(Boolean);
+        const help = yield* run(depositOnly, ["--help"]);
+        expect(subcommands(help.stdout)).toEqual(["deposit"]);
+        expect((yield* run(depositOnly, ["balance", "get", "--key", "w-1"])).code).toBe(1);
+        const none = yield* run(toCli(WalletApi, { name: "wallet" }), ["--help"]);
+        expect(subcommands(none.stdout)).toEqual([]);
       }),
     ),
   );

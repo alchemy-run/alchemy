@@ -344,6 +344,15 @@ export class ModelHostedTwice extends Data.TaggedError("ModelHostedTwice")<{
   }
 }
 
+/** A view set to fill lazily isn't keyed by its one source, so a key can't find its own history. */
+export class LazyViewNeedsOneSource extends Data.TaggedError("LazyViewNeedsOneSource")<{
+  readonly view: string;
+}> {
+  override get message() {
+    return `${this.view} can't be lazy: a lazy view must read one aggregate and be keyed by it, so each key reads its own instance's history. Leave it out of \`lazy\`, and the deploy fills it.`;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -378,7 +387,8 @@ export type Reason =
   | DuplicateCommand
   | MissingGroup
   | NewerGeneration
-  | ModelHostedTwice;
+  | ModelHostedTwice
+  | LazyViewNeedsOneSource;
 
 /**
  * A domain definition error, found while the kernel is built or when a

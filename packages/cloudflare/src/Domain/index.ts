@@ -35,6 +35,7 @@ import { StorageName } from "alchemy/Workflows";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -49,6 +50,7 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
+import { outsideAlarmPass } from "../Workers/AlarmCallback.ts";
 import {
   DurableObject as CloudflareDurableObject,
   type DurableObjectJurisdiction,
@@ -214,8 +216,8 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
     const acquire = exclusively(
       Effect.gen(function* () {
         const held = yield* state.storage.get<number>(lease);
-        if (held !== undefined && held > Date.now()) return false;
-        yield* state.storage.put(lease, Date.now() + LEASE_MS);
+        if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
+        yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
         return true;
       }),
     );
@@ -247,10 +249,12 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
           yield* state.storage.put(entries);
           yield* state.storage.put(`${name}-seq`, last);
           // The backstop: delivered even if this instance dies before `kick` runs.
-          yield* callback.schedule("drain", { after: "10 seconds", payload: {} });
+          // Its rows are progress, so a callback staging them doesn't hand it
+          // its retry budget.
+          yield* callback.schedule("drain", { after: "10 seconds", payload: {}, progress: last });
         }),
       /** Process staged rows now, in the background, keeping the instance alive until done. */
-      kick: state.waitUntil(drain.pipe(Effect.ignoreCause)),
+      kick: state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause))),
       /** Process staged rows now, and wait (unless another drain holds the lease). */
       flush: drain,
     };
@@ -417,7 +421,10 @@ const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
 const TICK_RUNS = 64;
 const TICK_MILLIS = 5_000;
 
+type Random = SecureRandom.SecureRandom["Service"];
+
 const backfillRuntime = (
+  random: Random,
   run: (id: string) => Effect.Effect<void, never, DurableObjectState | RuntimeContext>,
 ) =>
   Effect.gen(function* () {
@@ -538,7 +545,7 @@ const backfillRuntime = (
                 : stored;
             // The earliest request wins: already due sooner, that run sees this cause too.
             if (existing !== undefined && existing.due <= due) return;
-            const token = yield* Effect.sync(() => crypto.randomUUID());
+            const token = yield* random.uuidV4();
             yield* state.storage.put(jobKey(id), {
               due: existing !== undefined ? Math.min(existing.due, due) : due,
               token,
@@ -569,11 +576,11 @@ const plansOf = (targets: ReadonlyArray<string>, planOf: PlanOf) => {
   return plans;
 };
 
-const directoryObject = (net: Backfill.Network) =>
+const directoryObject = (net: Backfill.Network, random: Random) =>
   Effect.gen(function* () {
     return Effect.gen(function* () {
       let node: Backfill.Node | undefined;
-      const runtime = yield* backfillRuntime((id) => node!.run(id));
+      const runtime = yield* backfillRuntime(random, (id) => node!.run(id));
       node = Backfill.makeNode(runtime.storage, runtime.jobs, net, Backfill.defaultLimits);
       const role = node;
       return {
@@ -672,6 +679,7 @@ const aggregateObject = (
   net: Backfill.Network,
   model: () => ReadonlyArray<string>,
   planOf: PlanOf,
+  random: Random,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
@@ -687,7 +695,7 @@ const aggregateObject = (
 
       // This instance as a backfill source: consumers added later pull its events.
       let source: Backfill.Source | undefined;
-      const runtime = yield* backfillRuntime((id) =>
+      const runtime = yield* backfillRuntime(random, (id) =>
         id === "bf-flush"
           ? Effect.flatMap(state.storage.get<string>(ID_KEY), (stored) =>
               stored === undefined ? Effect.void : sourceFor(stored).flush,
@@ -730,7 +738,7 @@ const aggregateObject = (
             command,
             commandId: meta.commandId,
             context: meta.context,
-            now: yield* Effect.sync(() => Date.now()),
+            now: yield* Clock.currentTimeMillis,
             correlationId: meta.correlationId,
             trace: meta.trace,
             link: meta.link,
@@ -832,9 +840,8 @@ const aggregateObject = (
         schedule: (id: string, command: Json, meta: Aggregate.SendMeta, due: Aggregate.Due) =>
           Effect.gen(function* () {
             if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
-            const token = yield* Effect.sync(() => crypto.randomUUID());
-            const at =
-              "at" in due ? due.at : (yield* Effect.sync(() => Date.now())) + due.afterMillis;
+            const token = yield* random.uuidV4();
+            const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
             yield* state.storage.put(`scheduled:${meta.commandId}`, token);
             yield* timers.schedule(meta.commandId, {
               at,
@@ -885,6 +892,7 @@ const viewObject = (
   net: Backfill.Network,
   model: () => ReadonlyArray<string>,
   planOf: PlanOf,
+  random: Random,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
@@ -911,11 +919,7 @@ const viewObject = (
                   .pipe(Effect.map((rows) => [...rows.values()])),
           ),
         );
-      const target = targetId({
-        kind: "view",
-        name: kit.name,
-        ...(kit.generation > 0 ? { generation: kit.generation } : {}),
-      });
+      const target = kit.target;
       // Pushes and sends an apply leaves for after its transaction commits.
       let after: Array<Effect.Effect<void, never, DurableObjectState | RuntimeContext>> = [];
 
@@ -977,6 +981,7 @@ const viewObject = (
       let consumer: Backfill.Consumer | undefined;
       let source: Backfill.Source | undefined;
       const runtime = yield* backfillRuntime(
+        random,
         (id): Effect.Effect<void, never, DurableObjectState | RuntimeContext> =>
           Effect.flatMap(state.storage.get<string>(ID_KEY), (key) => {
             if (id.startsWith("bf-scan:")) return scannerFor().run(id);
@@ -1044,6 +1049,21 @@ const viewObject = (
             ),
         }));
 
+      /**
+       * A key of a view keyed by its one aggregate reads its history from that
+       * instance (if it hasn't yet) before it serves it.
+       */
+      const filled = (key: string) =>
+        Effect.suspend(() => {
+          const catchUp = kit.catchUp;
+          if (catchUp === undefined) return Effect.void;
+          return Effect.gen(function* () {
+            yield* state.storage.put(ID_KEY, key);
+            yield* consumerFor(key)
+              .start(target, { source: catchUp.source, id: key }, 20_000)
+              .pipe(Effect.repeat({ until: (started) => started === "settled", times: 5 }));
+          });
+        });
       return {
         receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
           reportDefects(
@@ -1060,13 +1080,20 @@ const viewObject = (
         // The backfill protocol, as a source, a consumer and a scanner.
         ...scannerRpc(() => scannerFor()),
         ...runRpc(relay, runFor),
+        // Read as a source, a key keyed by its aggregate has its own history
+        // first: a view or projection catching up never sees it still filling.
         bfLog: (key: string, after: number, limit: number) =>
-          reportDefects(sourceFor(key).log(after, limit)),
-        bfCursor: (key: string, target: string) => reportDefects(sourceFor(key).cursor(target)),
+          reportDefects(Effect.andThen(filled(key), sourceFor(key).log(after, limit))),
+        bfCursor: (key: string, target: string) =>
+          reportDefects(Effect.andThen(filled(key), sourceFor(key).cursor(target))),
         bfRead: (key: string, target: string, reader: string, after: number, limit: number) =>
-          reportDefects(sourceFor(key).read(target, reader, after, limit)),
+          reportDefects(
+            Effect.andThen(filled(key), sourceFor(key).read(target, reader, after, limit)),
+          ),
         bfHandoff: (key: string, target: string, consumerKey: string, through: number) =>
-          reportDefects(sourceFor(key).handoff(target, consumerKey, through)),
+          reportDefects(
+            Effect.andThen(filled(key), sourceFor(key).handoff(target, consumerKey, through)),
+          ),
         bfStart: (key: string, target: string, ref: Backfill.SourceRef, waitMillis?: number) =>
           reportDefects(
             Effect.gen(function* () {
@@ -1156,7 +1183,12 @@ const emptyProjectionMeta: ProjectionMeta = {
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
 
-const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: PlanOf) =>
+const projectionObject = (
+  kit: ProjectionKit,
+  net: Backfill.Network,
+  planOf: PlanOf,
+  random: Random,
+) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -1183,13 +1215,21 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
       const acquire = exclusively(
         Effect.gen(function* () {
           const held = yield* state.storage.get<number>(lease);
-          if (held !== undefined && held > Date.now()) return false;
-          yield* state.storage.put(lease, Date.now() + LEASE_MS);
+          if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
+          yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
           return true;
         }),
       );
       // Re-run the drain later: when a short batch has waited long enough, or after a failure.
       let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
+      // Each input's backstop advances this cursor: once an input arrives, a
+      // drain waiting for it from inside its own callback waits the batch
+      // wait, not that callback's retry backoff.
+      const advance = Effect.gen(function* () {
+        const progress = ((yield* state.storage.get<number>("drain-progress")) ?? 0) + 1;
+        yield* state.storage.put("drain-progress", progress);
+        return progress;
+      });
       // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
       const drain: Effect.Effect<void> = Effect.gen(function* () {
         if (!(yield* acquire)) return;
@@ -1205,7 +1245,11 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
               });
               const run = [...rows.values()];
               if (run.length === 0) return;
-              if (run.length < size && waitMillis > 0 && Date.now() - run[0]!.at < waitMillis) {
+              if (
+                run.length < size &&
+                waitMillis > 0 &&
+                (yield* Clock.currentTimeMillis) - run[0]!.at < waitMillis
+              ) {
                 return yield* wake(run[0]!.at + waitMillis);
               }
               yield* kit.run(meta.key, run);
@@ -1232,7 +1276,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
         yield* state.storage.delete(lease).pipe(Effect.ignore);
         if (exit._tag === "Failure") {
           yield* Effect.logError(`projection ${kit.name} failed; retrying`, exit.cause);
-          yield* wake(Date.now() + PROJECTION_RETRY_MS);
+          yield* wake((yield* Clock.currentTimeMillis) + PROJECTION_RETRY_MS);
         }
       }) as Effect.Effect<void>;
       const callback = yield* makeCallback("domain:projection", () => drain);
@@ -1261,7 +1305,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
           yield* state.storage.put(`in:${pad(position)}`, {
             position,
             delivery,
-            at: Date.now(),
+            at: yield* Clock.currentTimeMillis,
           } satisfies Accepted);
           yield* state.storage.put("meta", {
             ...meta,
@@ -1273,6 +1317,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
           yield* callback.schedule("drain", {
             after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
             payload: {},
+            progress: yield* advance,
           });
           return true;
         });
@@ -1283,7 +1328,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
       });
       // This key as a backfill consumer: it buffers and merges history in order.
       let consumer: Backfill.Consumer | undefined;
-      const runtime = yield* backfillRuntime((id) =>
+      const runtime = yield* backfillRuntime(random, (id) =>
         id.startsWith("bf-scan:")
           ? scannerFor().run(id)
           : id.startsWith("drive:")
@@ -1319,7 +1364,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
             runtime.provide(
               Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),
             ),
-          after: runtime.provide(state.waitUntil(drain.pipe(Effect.ignoreCause))),
+          after: runtime.provide(state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause)))),
         }));
       const keep = (key: string) => state.storage.put(ID_KEY, key);
       return {
@@ -1329,7 +1374,8 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
               yield* keep(key);
               if (!(yield* consumerFor(key).admit(target, [delivery]))) return;
               const accepted = yield* exclusively(state.storage.transaction(intake(key, delivery)));
-              if (accepted) yield* state.waitUntil(drain.pipe(Effect.ignoreCause));
+              if (accepted)
+                yield* state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause)));
             }),
           ),
         checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
@@ -1493,7 +1539,7 @@ const durableObjectPlatform = (
   /** The Domain version to lay models out with: `undefined` for the layout from before versions. */
   version: number | undefined,
   legacySagas: Map<string, string>,
-): Layer.Layer<Platform, never, Worker> =>
+): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.effect(
     Platform,
     Effect.gen(function* () {
@@ -1514,6 +1560,7 @@ const durableObjectPlatform = (
       // Factories run while the Domain's Layer is built, inside the Worker's
       // init phase; declaring a Durable Object needs that context.
       const init = yield* captureContext<Worker>();
+      const random = yield* SecureRandom.SecureRandom;
       // The Worker's bindings, at runtime: see `bound`.
       const env = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment));
       const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
@@ -1687,7 +1734,7 @@ const durableObjectPlatform = (
                 ),
             },
           };
-          directory = yield* inInit(object("DomainDirectory", directoryObject(net)));
+          directory = yield* inInit(object("DomainDirectory", directoryObject(net, random)));
 
           // A deploy's backfill: start each new consumer's run, then wait until every one is
           // complete. Reconciliation starts it and waits for it.
@@ -1786,7 +1833,7 @@ const durableObjectPlatform = (
                 Effect.gen(function* () {
                   const namespace = yield* object(
                     `${aggregate.aggregateName}Aggregate`,
-                    aggregateObject(kit, net, current, consumerPlans),
+                    aggregateObject(kit, net, current, consumerPlans, random),
                   );
                   sources.set(named(`${aggregate.aggregateName}Aggregate`), namespace);
                   return {
@@ -1869,24 +1916,93 @@ const durableObjectPlatform = (
             view: (view, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const cls = consumerClass("view", view.viewName, kit.generation);
+                  // A view rebuilt in place keeps its class: see `Kernel.inPlace`.
+                  const cls = consumerClass("view", view.viewName, kit.classGeneration);
                   const namespace = yield* object(
                     cls,
-                    viewObject(kit, net, current, consumerPlans),
+                    viewObject(kit, net, current, consumerPlans, random),
                   );
                   sources.set(named(cls), namespace);
-                  viewGenerations.set(view.viewName, kit.generation);
+                  viewGenerations.set(view.viewName, kit.classGeneration);
                   consumers.set(named(cls), namespace);
                   consumers.set(
                     runClass(named(cls)),
-                    yield* object(runClass(cls), viewObject(kit, net, current, consumerPlans)),
+                    yield* object(
+                      runClass(cls),
+                      viewObject(kit, net, current, consumerPlans, random),
+                    ),
                   );
+                  const target = kit.target;
+                  // A lazy view's key reads its history from its one source the first
+                  // time it is read; each isolate asks a key once.
+                  const caughtUp = new Set<string>();
+                  const ready = (key: string): Effect.Effect<void> =>
+                    Effect.suspend(() => {
+                      const catchUp = kit.catchUp;
+                      if (catchUp === undefined || caughtUp.has(key)) return Effect.void;
+                      return net.consumer
+                        .start(target, key, { source: catchUp.source, id: key }, 20_000)
+                        .pipe(
+                          Effect.repeat({ until: (started) => started === "settled", times: 5 }),
+                          Effect.tap((started) =>
+                            Effect.sync(() => {
+                              if (started === "settled") caughtUp.add(key);
+                            }),
+                          ),
+                          Effect.asVoid,
+                        );
+                    });
+                  /**
+                   * The key computed here, with this code, from its source's events.
+                   * A key's object still on the code from before a deploy (until it is
+                   * idle) can't fill itself for a version it doesn't know: until it
+                   * moves, its reads are answered this way, and nothing is stored.
+                   */
+                  const computed = (key: string) =>
+                    Effect.gen(function* () {
+                      const source = kit.catchUp!.source;
+                      const deliveries: Array<Delivery> = [];
+                      for (let after = 0; ;) {
+                        const rows = yield* net.source.log({ source, id: key }, after, 1_000);
+                        for (const row of yield* kit.history(target, source, key, rows))
+                          deliveries.push(...row.deliveries);
+                        if (rows.length < 1_000) break;
+                        after += rows.length;
+                      }
+                      return yield* kit.apply(key, emptySnapshot, deliveries);
+                    });
+                  /** Read from the key's object, or compute it here while that object can't fill itself. */
+                  const orComputed = <A>(
+                    fromObject: Effect.Effect<A>,
+                    fromHere: (result: Effect.Success<ReturnType<typeof computed>>) => A,
+                    key: string,
+                  ): Effect.Effect<A> =>
+                    ready(key).pipe(
+                      Effect.andThen(fromObject),
+                      Effect.catchCause((cause) =>
+                        kit.catchUp === undefined
+                          ? Effect.failCause(cause)
+                          : Effect.map(computed(key), fromHere),
+                      ),
+                    );
                   const read = (key: string) =>
                     announce.pipe(
-                      Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
+                      Effect.andThen(
+                        orComputed(
+                          unwrapDefects<ViewSnapshot>(namespace.getByName(key).read()),
+                          (result) => result.snapshot,
+                          key,
+                        ),
+                      ),
                     );
                   const after = (key: string, cursor: number) =>
-                    unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
+                    orComputed(
+                      unwrapDefects<ReadonlyArray<ViewEntry>>(
+                        namespace.getByName(key).after(cursor),
+                      ),
+                      (result) => result.entries.filter((entry) => entry.seq > cursor),
+                      key,
+                    );
                   return {
                     receive: (key, deliveries) =>
                       unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
@@ -1897,7 +2013,8 @@ const durableObjectPlatform = (
                         Stream.changesWith((a, b) => a.version === b.version),
                       ),
                     list: (key) => after(key, 0),
-                    connect: connectTo(namespace),
+                    connect: (key, subscription) =>
+                      ready(key).pipe(Effect.andThen(connectTo(namespace)(key, subscription))),
                     tail: (key, from) =>
                       Stream.suspend(() => {
                         let first = true;
@@ -1928,11 +2045,14 @@ const durableObjectPlatform = (
                     projection.projectionName,
                     kit.generation,
                   );
-                  const namespace = yield* object(cls, projectionObject(kit, net, consumerPlans));
+                  const namespace = yield* object(
+                    cls,
+                    projectionObject(kit, net, consumerPlans, random),
+                  );
                   consumers.set(named(cls), namespace);
                   consumers.set(
                     runClass(named(cls)),
-                    yield* object(runClass(cls), projectionObject(kit, net, consumerPlans)),
+                    yield* object(runClass(cls), projectionObject(kit, net, consumerPlans, random)),
                   );
                   return {
                     receive: (delivery) =>
@@ -1984,18 +2104,18 @@ const durableObjectPlatform = (
                 .pipe(
                   Effect.map((phase) => ({ complete: phase === "complete", through: undefined })),
                 ),
-            start: (targets, plansOfTarget) =>
+            start: (targets, plansOfTarget, backfilled) =>
               Effect.gen(function* () {
                 // At deploy time: reconciliation runs the backfill of new consumers and waits.
-                if (!globalThis.__ALCHEMY_RUNTIME__ && targets.length > 0) {
+                if (!globalThis.__ALCHEMY_RUNTIME__ && backfilled.length > 0) {
                   yield* inInit(
                     Effect.gen(function* () {
                       const worker = yield* CloudflareWorker;
                       yield* BackfillRun(named("DomainBackfillRun"), {
                         scriptName: worker.workerName as unknown as string,
                         workflowName: backfill.workflowName as string,
-                        targets: [...targets],
-                        plans: plansOf(targets, plansOfTarget) as Record<
+                        targets: [...backfilled],
+                        plans: plansOf(backfilled, plansOfTarget) as Record<
                           string,
                           { sources?: string[]; singleSource: boolean }
                         >,
@@ -2011,12 +2131,12 @@ const durableObjectPlatform = (
                   Effect.sync(() => {
                     model = targets;
                     planOf = plansOfTarget;
-                    if (targets.length === 0) return;
+                    if (backfilled.length === 0) return;
                     // Locally no Workflow runs: the first call starts each run (once).
                     news = Effect.suspend(() => {
-                      const plans = plansOf(targets, planOf);
+                      const plans = plansOf(backfilled, planOf);
                       return Effect.forEach(
-                        targets.filter((target) => plans[target] !== undefined),
+                        backfilled.filter((target) => plans[target] !== undefined),
                         (target) => net.run.begin(target, plans[target]!),
                         { discard: true },
                       );
@@ -2162,7 +2282,7 @@ export function layerDurableObjects({
 }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
-  Worker
+  Worker | SecureRandom.SecureRandom
 > {
   const timeoutSeconds =
     backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
@@ -2254,5 +2374,5 @@ export interface DurableObjectsOptions {
 
 const platforms = new Map<
   string,
-  Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker>
+  Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker | SecureRandom.SecureRandom>
 >();

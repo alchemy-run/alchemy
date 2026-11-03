@@ -7,6 +7,7 @@ import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -64,7 +65,7 @@ test.provider.skipIf(!web3Entitled)(
   (stack) =>
     Effect.gen(function* () {
       const zone = yield* resolveZone;
-      const name = `alchemy-web3-list.${zone.name}`;
+      const name = `${testName("alchemy-web3-list")}.${zone.name}`;
 
       yield* stack.destroy();
 
