@@ -9,7 +9,11 @@ receiving end is code too: datasets, ingest tokens, monitors,
 notifiers, and dashboards live in the same Stack as the Workers and
 Functions they observe, so a threshold change is a reviewable diff.
 
-New here? [Set up credentials](/axiom/setup) first.
+## Where to start
+
+**New to Axiom?** [What is Axiom?](/axiom/what-is-axiom) walks through datasets, ingest, tokens, APL, monitors, notifiers and dashboards, once each, and shows how Alchemy models every one.
+
+**Ready to go?** [Setup](/axiom/setup) connects your organization, and [Observability with Axiom](/cloudflare/observability/axiom-observability) takes a Worker from no telemetry to a monitor that pages you. The chapters cover [Datasets & ingest](/axiom/data/ingest), [Monitors & alerting](/axiom/guides/alerting), [Dashboards as code](/axiom/guides/dashboards) and [Annotations](/axiom/guides/annotations).
 
 ## Resources
 
@@ -48,7 +52,7 @@ anomaly monitors:
 const slack = yield* Axiom.Notifier("ops-slack", {
   name: "ops-channel",
   properties: {
-    slack: { slackUrl: process.env.SLACK_WEBHOOK_URL! },
+    slack: { slackUrl: yield* Config.String("SLACK_WEBHOOK_URL") },
   },
 });
 

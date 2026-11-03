@@ -1673,6 +1673,7 @@ export default defineConfig({
           label: "Axiom",
           items: [
             { label: "Overview", link: "/axiom" },
+            { label: "What is Axiom?", link: "/axiom/what-is-axiom" },
             { label: "Setup", link: "/axiom/setup" },
             {
               label: "Data",

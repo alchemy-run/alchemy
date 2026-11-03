@@ -571,6 +571,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "axiom/index",
+        "axiom/what-is-axiom",
         "axiom/setup",
         "axiom/data/ingest",
         "axiom/guides/alerting",
