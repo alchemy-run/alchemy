@@ -40,7 +40,7 @@ Alchemy reaches an account through a [profile](/environments/profiles). Add AWS 
 alchemy profile edit --add AWS
 ```
 
-SSO through IAM Identity Center is the usual choice. Alchemy runs the login for you and reads the account id and region from the AWS profile you pick. Console login and stored access keys work too. See [Setup](/aws/setup).
+Console login is the simplest choice: you sign in to the AWS Console in your browser, and Alchemy gets short-lived credentials for that identity, with no access keys to store. Organizations that use IAM Identity Center sign in through SSO instead. Either way, Alchemy runs the login for you. See [Setup](/aws/setup).
 
 Make a profile per account, and name it after the account it reaches:
 
