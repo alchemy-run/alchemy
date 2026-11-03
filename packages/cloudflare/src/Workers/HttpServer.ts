@@ -5,6 +5,7 @@ import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import type * as Exit from "effect/Exit";
+import * as HttpBody from "effect/http/HttpBody";
 import * as EffectHttp from "effect/http/HttpEffect";
 import { ClientAbort } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
@@ -12,6 +13,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import { DurableObjectState } from "./DurableObjectState.ts";
 import { Request } from "./Request.ts";
 import type { WorkerServices } from "./Worker.ts";
@@ -99,14 +101,12 @@ const toHandledWebResponse = <Req>(
     const context = yield* Effect.context();
     const webResponse = yield* Deferred.make<Response>();
     // The bridge's per-event scope, which holds the telemetry flush
-    // finalizers, is the ambient scope here; `toHandled` opens the request
-    // scope beneath it. A streamed body outlives the handler's return, so it
-    // takes ownership of both: the bridge skips its close-on-return for an
-    // ejected event scope, and the request scope's oldest finalizer closes
-    // the event scope once the body has settled.
-    const eventScope = Context.getOption(context, Scope.Scope);
-    // The event ends once the body closes, so the close runs in the event's
-    // `waitUntil`: the flush neither holds back the body's EOF nor is cut off.
+    // finalizers. `toHandled` opens a request scope of its own, unrelated to
+    // it; the handler runs on the event scope instead, so the event has one
+    // scope and the bridge owns it. Effect's request scope stays empty.
+    const eventScope = Option.getOrUndefined(Context.getOption(context, Scope.Scope)) as
+      | Scope.Closeable
+      | undefined;
     // `getOrUndefined` skips the Worker reference's deferred default, so only
     // the bridge-provided context counts.
     const eventContext =
@@ -120,38 +120,48 @@ const toHandledWebResponse = <Req>(
             eventContext
               .waitUntil(effect)
               .pipe(Effect.provideService(RuntimeContext, runtimeContext));
-    let transferred = false;
-    const owningEventScope = Option.isNone(eventScope)
-      ? handler
-      : Effect.gen(function* () {
-          const requestScope = yield* Effect.scope;
-          // Registered before the handler acquires anything, so it runs after
-          // every finalizer the handler and its body attach to the request
-          // scope: the exporter flushes after the stream's finalizer spans.
-          yield* Scope.addFinalizerExit(requestScope, (exit) =>
-            transferred
-              ? closeEventScope(eventScope.value as Scope.Closeable, exit, background)
-              : Effect.void,
-          );
-          return yield* handler;
-        });
 
-    yield* EffectHttp.toHandled(owningEventScope, (request, response) => {
-      const withoutBody = request.method === "HEAD";
-      if (!HttpServerResponse.omitsBody(response, withoutBody)) {
-        if (response.body._tag === "Stream" && Option.isSome(eventScope)) {
-          transferred = true;
-          EffectHttp.scopeDisableClose(eventScope.value);
+    yield* EffectHttp.toHandled(
+      eventScope === undefined ? handler : Effect.provideService(handler, Scope.Scope, eventScope),
+      (request, response) => {
+        const withoutBody = request.method === "HEAD";
+        if (!HttpServerResponse.omitsBody(response, withoutBody)) {
+          response =
+            eventScope === undefined
+              ? EffectHttp.scopeTransferToStream(response)
+              : transferEventScopeToStream(response, eventScope, background);
         }
-        response = EffectHttp.scopeTransferToStream(response);
-      }
-      return Deferred.succeed(
-        webResponse,
-        HttpServerResponse.toWeb(response, { withoutBody, context }),
-      );
-    });
+        return Deferred.succeed(
+          webResponse,
+          HttpServerResponse.toWeb(response, { withoutBody, context }),
+        );
+      },
+    );
     return yield* Deferred.await(webResponse);
   });
+
+/**
+ * A streamed body outlives the handler's return, so it takes the event scope:
+ * the bridge skips its close-on-return for an ejected scope, and the body
+ * closes it once it settles. The close runs in the event's `waitUntil`, so
+ * the telemetry flush neither holds back the body's EOF nor is cut off.
+ */
+const transferEventScopeToStream = (
+  response: HttpServerResponse.HttpServerResponse,
+  scope: Scope.Closeable,
+  background: ((effect: Effect.Effect<void>) => Effect.Effect<void>) | undefined,
+): HttpServerResponse.HttpServerResponse => {
+  if (response.body._tag !== "Stream") return response;
+  EffectHttp.scopeDisableClose(scope);
+  return HttpServerResponse.setBody(
+    response,
+    HttpBody.stream(
+      Stream.onExit(response.body.stream, (exit) => closeEventScope(scope, exit, background)),
+      response.body.contentType,
+      response.body.contentLength,
+    ),
+  );
+};
 
 /**
  * The HttpMiddleware tracer ends the request's root span in a dispatcher
