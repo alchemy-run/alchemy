@@ -26,6 +26,7 @@ export const layer = Layer.effect(
       // to "domain does not use Access" so we don't pop a login prompt for
       // every transient hiccup. This mirrors workers-sdk's behavior.
       lookup: (domain: string) =>
+        // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- probe needs redirect: "manual"; the ambient Http1FetchHttpClient overrides RequestInit, so HttpClient would follow the 302
         Effect.promise((signal) => fetch(`https://${domain}`, { redirect: "manual", signal })).pipe(
           Effect.map(
             (response) =>

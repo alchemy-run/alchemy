@@ -56,7 +56,13 @@ class Counters extends Domain.Model("Counters", {
   projections: [BumpWriter],
   streams: [Bumps],
 }) {}
-class CounterApi extends Domain.Api("CounterApi", Increment, Counter, Totals, Bumps) {}
+class CounterApi extends Domain.Api("CounterApi", {
+  model: Counters,
+  commands: ["Increment"],
+  views: ["Totals"],
+  streams: ["Bumps"],
+  aggregates: ["Counter"],
+}) {}
 
 const Hosted = Counters.layer(BumpWriterLive).pipe(Layer.provideMerge(InMemory));
 const InProcess = Layer.effect(CounterApi.Client, CounterApi.clientInProcess).pipe(
@@ -121,7 +127,7 @@ for (const [transport, layer] of [
   ["in process", InProcess],
   ["over the wire", Wire],
 ] as const) {
-  describe(`Domain live reads ${transport}`, () => {
+  describe(`Domain live reads ${transport}`, { tags: ["unit", "local"] }, () => {
     for (const kind of ["aggregate", "view", "stream"] as const) {
       it.live(`${kind} events mark the end of their history`, () =>
         Effect.gen(function* () {

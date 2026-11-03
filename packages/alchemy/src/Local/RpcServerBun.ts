@@ -12,6 +12,9 @@ export const RpcServerBun = RpcServer.layerServer(
         | { type: "parent" }
       >({
         port: 0,
+        // Loopback only, as in RpcServerNode: with no hostname Bun listens on
+        // every interface.
+        hostname: "127.0.0.1",
         fetch: (request, server) => {
           const url = new URL(request.url);
           if (
@@ -56,11 +59,7 @@ export const RpcServerBun = RpcServer.layerServer(
             if (ws.data.type === "session") {
               ws.data.session.dispatch.close(code, reason);
             } else if (ws.data.type === "parent") {
-              // The sidecar exits with its parent; record why the link closed.
-              console.error(
-                `[alchemy sidecar] parent connection closed (code ${code}${reason ? `, ${reason}` : ""}); shutting down`,
-              );
-              parentDisconnected();
+              parentDisconnected(`code ${code}${reason ? `, ${reason}` : ""}`);
             }
           },
         },

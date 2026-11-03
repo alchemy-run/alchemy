@@ -461,6 +461,8 @@ export type WorkflowInstanceSubscribeOptions = runtime.WorkflowInstanceSubscribe
 export interface WorkflowHandle<Input = unknown, Result = unknown> {
   Type: TypeId;
   name: string;
+  /** Account-global physical Workflow name, for a resource that starts runs through the API. */
+  workflowName: Output.Output<string> | string;
   /**
    * Start a workflow instance. Pass payload through `params`; omit `id` to let
    * Cloudflare generate an instance ID.
@@ -1101,6 +1103,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
       const self: WorkflowHandle<any, any> = {
         Type: TypeId,
         name,
+        workflowName: props?.workflowName ?? workflow.workflowName,
         create: (options?: WorkflowInstanceCreateOptions<any>) =>
           Effect.tryPromise(() => binding.create(options)).pipe(
             Effect.map(wrapInstance),
@@ -1278,7 +1281,7 @@ export const ProviderLive = () =>
         return { action: "update" } as const;
       }
     }),
-    read: Effect.fn(function* ({ output, olds }) {
+    read: Effect.fn(function* ({ output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const workflowName =
         output?.workflowName ??
@@ -1300,8 +1303,13 @@ export const ProviderLive = () =>
         schedules: fromObservedSchedules(workflow.schedules),
         jurisdiction: workflow.jurisdiction ?? undefined,
       };
-      // Explicit names carry no ownership marker; cold reads require adoption.
-      return output === undefined && olds?.workflowName !== undefined ? Unowned(attrs) : attrs;
+      // Explicit names carry no ownership marker; cold reads require adoption,
+      // except of the generation a replacement is replacing.
+      return output === undefined &&
+        olds?.workflowName !== undefined &&
+        previous?.workflowId !== workflow.id
+        ? Unowned(attrs)
+        : attrs;
     }),
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

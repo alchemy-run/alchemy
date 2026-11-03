@@ -61,13 +61,13 @@ test.provider(
       const environment = yield* yield* CloudflareEnvironment;
       const { accountId } = environment;
       // Never the default store, which every other run on the account uses.
-      const name = "lifecycle";
       const worker = "alchemy-state-store-lifecycle";
-      const target = { _tag: "Provider", backend: "cloudflare", name } as const;
+      // `--name` is the store's full Worker name.
+      const target = { type: "provider", backend: "cloudflare", name: worker } as const;
       const alchemist = Alchemist.layer();
       const defaultStacks = () =>
         Effect.flatMap(
-          Alchemist.State.store({ _tag: "Provider", backend: "cloudflare" }).pipe(
+          Alchemist.State.store({ type: "provider", backend: "cloudflare" }).pipe(
             Effect.provide(alchemist),
           ),
           (store) => store.listStacks(),
@@ -139,7 +139,7 @@ test.provider(
       // deleted Worker's workers.dev URL can keep serving for a few seconds,
       // so retry until the edge reports it gone.
       expect(environment.type).toBe("apiToken");
-      const expected = `Run 'alchemy state bootstrap --backend cloudflare --name ${name}`;
+      const expected = `Run 'alchemy state bootstrap --backend cloudflare --name ${worker}`;
       const inCi = yield* inCI(
         environment.type === "apiToken"
           ? {

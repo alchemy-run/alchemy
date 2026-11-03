@@ -52,6 +52,7 @@ import {
   createFlyAppName,
   createFlyResourceName,
   diffMachineMetadata,
+  matchesAlchemyPhysicalName,
   sanitizeFlyAppName,
 } from "./Metadata.ts";
 import type { BoundTarget, MountedDisk, ServiceBinding } from "./MountVolume.ts";
@@ -1509,6 +1510,26 @@ const toAttrs = (set: ReplicaSet, codeHash: string, access: Access): Service["At
   code: { hash: codeHash },
 });
 
+/** The replica set of a Service whose App exists but runs no Machines yet. */
+const emptyReplicaSet = (appName: string, name: string): ReplicaSet => ({
+  appName,
+  machineId: "",
+  machineIds: [],
+  name,
+  baseName: name,
+  region: "",
+  regions: [],
+  state: "created",
+  instanceId: undefined,
+  privateIp: undefined,
+  imageRef: undefined,
+  guest: undefined,
+  services: undefined,
+  count: 0,
+  mounts: [],
+  replicas: [],
+});
+
 const machineIdsOf = (output: Service["Attributes"] | undefined) =>
   output?.machineIds ??
   (output?.machineId !== undefined && output.machineId.length > 0 ? [output.machineId] : []);
@@ -1709,7 +1730,26 @@ export const ServiceProvider = () =>
             machineIds: machineIdsOf(output),
             baseName: name,
           });
-          if (found === undefined) return undefined;
+          if (found === undefined) {
+            // A create interrupted between creating the Service's own App and
+            // starting its Machines (an image build in between can take
+            // minutes) leaves the App with nothing in it. Report it, so the
+            // engine's recovery of the interrupted create deletes it instead
+            // of leaking it. The App's name is derived from this resource's
+            // instance, so an App with that name is this resource's.
+            if (!ownsApp || appName === undefined) return undefined;
+            const app = yield* machines
+              .getApp({ app_name: appName })
+              .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+            if (app === undefined || !matchesAlchemyPhysicalName(app.name)) return undefined;
+            return toAttrs(emptyReplicaSet(appName, name), output?.code.hash ?? "", {
+              ownsApp,
+              isPublic: false,
+              network: output?.network ?? olds?.network,
+              bindingPort: olds?.bindingPort ?? DEFAULT_BINDING_PORT,
+              rpcToken: output?.rpcToken,
+            });
+          }
           return toAttrs(found, output?.code.hash ?? "", {
             ownsApp,
             isPublic: ownsApp && (yield* hasPublicAddress(found.appName)),

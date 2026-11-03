@@ -32,7 +32,9 @@ import { Resource, type ResourceBinding } from "alchemy/Resource";
 import type { ProcessContext, ProcessServices } from "alchemy/Runtime/Process";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
+import { logChildLine } from "alchemy/Util/LogRecord";
 import { sha256Object } from "alchemy/Util/sha256";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -866,6 +868,7 @@ export const Compute: Platform<
         // Runtime ConfigProvider lookups call back into RuntimeContext.get.
         // Read the process env directly here to avoid re-entering that path.
         Effect.sync(() => {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime RuntimeContext.get must read process.env directly to avoid re-entering the ConfigProvider
           const value = process.env[key];
           if (value === undefined) {
             return undefined;
@@ -1322,12 +1325,12 @@ export const waitForDeploymentUrl = Effect.fn(function* (
     });
   }
   const timeoutMs = timeoutSeconds * 1_000;
-  const startedAt = yield* Effect.sync(() => Date.now());
+  const startedAt = yield* Clock.currentTimeMillis;
   let lastStatus: number | undefined;
   let lastBody = "";
 
   while (true) {
-    const beforeRequest = yield* Effect.sync(() => Date.now());
+    const beforeRequest = yield* Clock.currentTimeMillis;
     const remainingBeforeRequest = timeoutMs - (beforeRequest - startedAt);
     if (remainingBeforeRequest <= 0) {
       return yield* Effect.fail(deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody));
@@ -1350,7 +1353,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
       if (response.status !== 404 && acceptsStatus(response.status)) {
         return;
       }
-      const beforeBody = yield* Effect.sync(() => Date.now());
+      const beforeBody = yield* Clock.currentTimeMillis;
       const remainingBeforeBody = timeoutMs - (beforeBody - startedAt);
       if (remainingBeforeBody > 0) {
         const bodyPrefix = yield* readResponseBodyPrefix(response).pipe(
@@ -1369,7 +1372,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
       }
     }
 
-    const elapsed = yield* Effect.sync(() => Date.now() - startedAt);
+    const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
     if (elapsed >= timeoutMs) {
       return yield* Effect.fail(deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody));
     }
@@ -2090,11 +2093,22 @@ const startDev = Effect.fn(function* (id: string, props: ComputeProps) {
     cwd,
     env,
     extendEnv: true,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
     detached: false,
   });
+  // The dev server's output becomes log records instead of raw writes over
+  // the CLI's renderer; each drain ends when the process does.
+  for (const name of ["stdout", "stderr"] as const) {
+    yield* handle[name].pipe(
+      Stream.decodeText,
+      Stream.splitLines,
+      Stream.runForEach((line) => logChildLine(line, { stream: name })),
+      Effect.ignore,
+      Effect.forkDetach,
+    );
+  }
   devProcesses.set(processKey, handle);
   return localUrl;
 });

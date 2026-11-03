@@ -185,7 +185,7 @@ const resolvePythonModulesDir = Effect.fn(function* (
   }
 
   yield* Effect.logDebug(
-    `[${options.fqn}] Vendoring Python dependencies for ${pythonVersion} (emscripten-wasm32) with uv`,
+    `Vendoring Python dependencies for ${pythonVersion} (emscripten-wasm32) with uv`,
   );
   yield* fs
     .makeDirectory(staging, { recursive: true })

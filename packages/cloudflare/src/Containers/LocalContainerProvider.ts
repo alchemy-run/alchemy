@@ -6,6 +6,7 @@ import * as RpcProvider from "alchemy/Local/RpcProvider";
 import type { ResourceBinding } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -233,7 +234,7 @@ export const LocalContainerProvider = () =>
             applicationId: output?.applicationId ?? generateLocalId(),
             applicationName: yield* createContainerApplicationName(id, undefined),
             accountId,
-            createdAt: output?.createdAt ?? new Date().toISOString(),
+            createdAt: output?.createdAt ?? DateTime.formatIso(yield* DateTime.now),
             observability: news.observability,
           });
           if (!hasImageSource(news)) return attributes;
@@ -260,7 +261,7 @@ export const LocalContainerProvider = () =>
           affinities: news.affinities,
           configuration: placeholderConfiguration(news, env),
           durableObjects: undefined,
-          createdAt: new Date().toISOString(),
+          createdAt: DateTime.formatIso(yield* DateTime.now),
           version: 1,
           dev: { ...withBuildSecrets(dev, news), env },
           hash: { image: hash },

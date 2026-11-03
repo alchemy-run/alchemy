@@ -111,6 +111,30 @@ describe.concurrent(
     );
 
     test(
+      "effect worker reads env strings that parse as JSON as strings (#2847)",
+      Effect.gen(function* () {
+        const { effectUrl } = yield* stack;
+
+        const body = yield* expectUrlContains(`${effectUrl}/json-strings`, '"PLAIN"', {
+          timeout: "60 seconds",
+          label: "effect env-worker /json-strings",
+        });
+        const strings = {
+          JSON_FALSE: "false",
+          JSON_NUM: "42",
+          JSON_NULL: "null",
+          JSON_OBJ: '{"a":1}',
+          PLAIN: "my-queue",
+        };
+        expect(JSON.parse(body)).toEqual({
+          init: { ...strings, JSON_FALSE_BOOL: false },
+          runtime: { ...strings, JSON_FALSE_BOOL: false },
+          env: strings,
+        });
+      }).pipe(logLevel),
+    );
+
+    test(
       "effect worker resolves the yielded VersionMetadata binding",
       Effect.gen(function* () {
         const { effectUrl } = yield* stack;

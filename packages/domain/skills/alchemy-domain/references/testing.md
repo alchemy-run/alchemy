@@ -104,6 +104,26 @@ story(
 
 More: [Testing models: Assert real calls](https://alchemy.run/domain/testing-models#assert-real-calls).
 
+### Every adapter, same tests
+
+An adapter is a Layer for the system's service. Run one set of tests against each adapter (vendor, in-memory fake, no-op) so a fake never drifts from the vendor:
+
+```ts
+for (const [adapter, layer] of [["Twilio", TwilioSms], ["fake", FakeSms]] as const) {
+  describe(`Sms: ${adapter}`, () => {
+    it.effect("counts the segments", () =>
+      Effect.gen(function* () {
+        const sms = yield* Sms;
+        const sent = yield* sms.send({ to: "+15550100", body: "x".repeat(200) });
+        expect(sent.segments).toBe(2);
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+}
+```
+
+More: [Testing models: Run the same tests against every adapter](https://alchemy.run/domain/testing-models#run-the-same-tests-against-every-adapter).
+
 ### Sagas
 
 Test what a saga does: the events its steps record on aggregates, and how the run ended. Don't test its internal steps.

@@ -5,20 +5,18 @@ import type {
   StateStoreLifecycle,
   StateStoreLogEntry,
 } from "alchemy/Contributions";
-import * as Provisioning from "alchemy/State/Provisioning";
-import { fileLogger } from "alchemy/Util/FileLogger";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as Stream from "effect/Stream";
 import * as CloudflareAccess from "../Access.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import * as CloudflareCredentials from "../Credentials.ts";
 import { CloudflareLogs } from "../Logs.ts";
+import { STATE_STORE_SCRIPT_NAME } from "../StateStore/Api.ts";
+import { validateStateStoreWorkerName } from "../StateStore/Deploy.ts";
 import {
   bootstrap as bootstrapStateStore,
   state,
-  stateStoreScriptName,
   teardownStateStore,
 } from "../StateStore/State.ts";
 
@@ -27,12 +25,12 @@ import {
  * runs with, under the profile config and auth registry core provides.
  */
 export const stateStoreScope = Effect.fn(function* (name: string | undefined) {
-  if (name !== undefined) yield* Provisioning.storeName(name);
+  // `--name` is the store's full Worker name.
+  const workerName = yield* validateStateStoreWorkerName(name ?? STATE_STORE_SCRIPT_NAME);
   const layer = Layer.mergeAll(
     CloudflareCredentials.fromAuthProvider(),
     CloudflareEnvironment.fromProfile(),
     CloudflareAccess.AccessLive,
-    Logger.layer([fileLogger("cloudflare-state-store.log")], { mergeWithExisting: true }),
   );
   const { accountId } = yield* Effect.flatten(CloudflareEnvironment.CloudflareEnvironment).pipe(
     Effect.provide(layer),
@@ -41,7 +39,7 @@ export const stateStoreScope = Effect.fn(function* (name: string | undefined) {
     layer,
     profile: yield* currentProfileName,
     accountId,
-    workerName: stateStoreScriptName(name),
+    workerName,
   };
 });
 
@@ -108,4 +106,8 @@ export const lifecycle: StateStoreLifecycle = {
 };
 
 /** The state store Cloudflare contributes. */
-export const stateStore: StateStoreImpl = { layer: state, lifecycle };
+export const stateStore: StateStoreImpl = {
+  // `--name` is the store's full Worker name.
+  layer: ({ name }) => state(name === undefined ? {} : { workerName: name }),
+  lifecycle,
+};

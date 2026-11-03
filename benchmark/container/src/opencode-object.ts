@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
@@ -27,7 +28,7 @@ export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
       return {
         boot: () =>
           Effect.gen(function* () {
-            const start = yield* Effect.sync(() => Date.now());
+            const start = yield* Clock.currentTimeMillis;
             yield* container.start({ enableInternet: true });
             yield* Effect.gen(function* () {
               const health = yield* port.fetch(
@@ -64,7 +65,7 @@ export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
                 times: 40,
               }),
             );
-            const readyMs = (yield* Effect.sync(() => Date.now())) - start;
+            const readyMs = (yield* Clock.currentTimeMillis) - start;
             return { readyMs };
           }),
         shutdown: () => container.destroy().pipe(Effect.ignore),

@@ -22,6 +22,9 @@ import {
   makeTableFunction,
   type TableFunctionOptions,
 } from "./fixtures/event-source-mapping-table-handler.ts";
+import EventSourceMappingVisibilityFunctionLive, {
+  EventSourceMappingVisibilityFunction,
+} from "./fixtures/event-source-mapping-visibility-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -74,6 +77,34 @@ test.provider(
           schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 240_000,
+  },
+);
+
+// Lambda runs a Function for `timeout + timeoutMargin`, so a 30-second Function
+// on a queue left at SQS's 30-second visibility timeout is refused by AWS. The
+// mapping reports it as a typed error that names the setting to change.
+test.provider(
+  "a queue whose visibility timeout is below the function's Lambda timeout fails with a typed error",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* stack
+        .deploy(
+          EventSourceMappingVisibilityFunction.pipe(
+            Effect.provide(EventSourceMappingVisibilityFunctionLive),
+          ),
+        )
+        .pipe(Effect.flip);
+      expect(error._tag).toBe("QueueVisibilityTimeoutBelowFunctionTimeout");
+      expect(error.message).toContain("31 seconds");
+      expect(error.message).toContain("visibilityTimeout");
+
+      yield* stack.destroy();
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],

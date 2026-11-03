@@ -402,7 +402,7 @@ describe("Alchemist.State lifecycle", { tags: ["unit", "local"] }, () =>
             root,
             Effect.scoped(
               Effect.flatMap(
-                Alchemist.State.store({ _tag: "Provider", backend: "scoped-store" }),
+                Alchemist.State.store({ type: "provider", backend: "scoped-store" }),
                 (store) => store.listStacks(),
               ),
             ),
@@ -417,7 +417,7 @@ describe("Alchemist.State lifecycle", { tags: ["unit", "local"] }, () =>
     it.effect("rejects an unknown backend", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          Alchemist.State.bootstrap({ _tag: "Provider", backend: "nope" }),
+          Alchemist.State.bootstrap({ type: "provider", backend: "nope" }),
         );
         // The available stores depend on the @alchemy.run packages installed
         // around the repo, so only the stable parts are pinned.
@@ -430,7 +430,7 @@ describe("Alchemist.State lifecycle", { tags: ["unit", "local"] }, () =>
     it.effect("rejects an operation the backend doesn't have", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          Alchemist.State.logs({ _tag: "Provider", backend: "aws" }),
+          Alchemist.State.logs({ type: "provider", backend: "aws" }),
         );
         expect(contributionErrorMessage(error)).toBe("State backend 'aws' does not support logs.");
       }),

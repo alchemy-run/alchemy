@@ -248,6 +248,11 @@ export class BrowserSession implements DurableObject {
     this.chromeWs.addEventListener("close", (e) => {
       this.closeSession(e);
     });
+    // A killed Chrome can drop the socket without a close frame (Windows
+    // aborts it), which workerd reports as `error` with no `close` event.
+    this.chromeWs.addEventListener("error", () => {
+      this.closeSession();
+    });
     this.#scheduleStatusCheck();
     return new Response(null, { status: 204 });
   }
@@ -392,6 +397,10 @@ export class BrowserSession implements DurableObject {
     chrome.addEventListener("close", (e) => {
       forwardClose(server, e);
       forwardClose(chrome, e);
+      this.wss = this.wss.filter((p) => p !== pair);
+    });
+    chrome.addEventListener("error", () => {
+      forwardClose(server);
       this.wss = this.wss.filter((p) => p !== pair);
     });
 

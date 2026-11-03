@@ -174,6 +174,41 @@ it.effect("refunds through the real payments adapter", () =>
 
 The story records every real call. `call` checks what a call was sent, and `returned` checks what it returned. `failed` checks a declared error instead, and `died` a defect. Like a stubbed call, each real call needs its `call` step first, and a story fails if no step asserts how a real call ended. The story waits for real calls to finish before each step.
 
+## Run the same tests against every adapter
+
+An external system often has several adapters: the vendor's, an in-memory fake for tests, a no-op for a dev stage. An adapter is a Layer for the system's service, so one set of tests can run against each of them, and the fake can't drift from the vendor.
+
+```typescript
+// packages/server/test/Sms.test.ts
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { Sms, Undeliverable } from "@bank/domain/Messaging/Sms.external";
+import { FakeSms } from "../src/Messaging/FakeSms.ts";
+import { TwilioSms } from "../src/Messaging/TwilioSms.ts";
+
+for (const [adapter, layer] of [["Twilio", TwilioSms], ["fake", FakeSms]] as const) {
+  describe(`Sms: ${adapter}`, () => {
+    it.effect("counts the segments", () =>
+      Effect.gen(function* () {
+        const sms = yield* Sms;
+        const sent = yield* sms.send({ to: "+15550100", body: "x".repeat(200) });
+        expect(sent.segments).toBe(2);
+      }).pipe(Effect.provide(layer)),
+    );
+
+    it.effect("refuses a landline", () =>
+      Effect.gen(function* () {
+        const sms = yield* Sms;
+        const error = yield* sms.send({ to: "+15550199", body: "hi" }).pipe(Effect.flip);
+        expect(error).toEqual(new Undeliverable({ reason: "landline" }));
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+}
+```
+
+Every call through a `toLayer` adapter is also checked against the operation's schemas, so an adapter that returns a value or error the declaration rejects fails the test with an `ExternalSystemSchemaError`.
+
 ## Move the clock
 
 A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. The clock only moves forward. A `clock` step with only `provide` steps before it may set any time; after that, a time earlier than the current one fails the story. `Story.advance("1 day")` moves it forward by a duration instead of to a time. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).

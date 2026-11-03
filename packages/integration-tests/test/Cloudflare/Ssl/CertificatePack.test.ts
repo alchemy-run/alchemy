@@ -12,6 +12,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -66,7 +67,7 @@ test.provider(
           zoneId,
           type: "advanced",
           certificateAuthority: "google",
-          hosts: [zoneName, `acm-probe.${zoneName}`],
+          hosts: [zoneName, `${testName("acm-probe")}.${zoneName}`],
           validationMethod: "txt",
           validityDays: 90,
         })

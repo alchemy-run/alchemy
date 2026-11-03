@@ -1,5 +1,6 @@
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -220,6 +221,7 @@ export const ProfileStoreLive = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const pathService = yield* Path.Path;
+    const random = yield* SecureRandom.SecureRandom;
 
     yield* fs.makeDirectory(profileDirPath(DEFAULT_PROFILE_NAME), {
       recursive: true,
@@ -227,11 +229,12 @@ export const ProfileStoreLive = Layer.effect(
     yield* fs.chmod(profileDirPath(DEFAULT_PROFILE_NAME), 0o700);
 
     const provideLockServices = <A, E>(
-      effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
+      effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | SecureRandom.SecureRandom>,
     ): Effect.Effect<A, E> =>
       effect.pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, pathService),
+        Effect.provideService(SecureRandom.SecureRandom, random),
       );
 
     const decodeJson = (file: string) =>
@@ -321,8 +324,7 @@ export const ProfileStoreLive = Layer.effect(
         return V0.mergeSidecar(provider, values, decoded.success);
       });
 
-    /** Expand the released v0 store and preserve every original file. */
-    const migrateCentralManifest = provideLockServices(
+    const migrateCentralManifestLocked = provideLockServices(
       withLock(
         "profiles-migrate",
         Effect.gen(function* () {
@@ -417,6 +419,12 @@ export const ProfileStoreLive = Layer.effect(
         }),
       ),
     );
+
+    /**
+     * Expand the released v0 store and preserve every original file. Checked
+     * once per process, on the first profile read, rather than on every read.
+     */
+    const migrateCentralManifest = yield* Effect.cached(migrateCentralManifestLocked);
 
     const readProviderFile = (profile: string, file: string) =>
       Effect.gen(function* () {

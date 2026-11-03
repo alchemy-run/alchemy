@@ -351,6 +351,13 @@ across both images until the rollout completes. See
 [Rollouts](/cloudflare/compute/containers#rollouts) in the Containers
 guide.
 
+## Durable Objects roll out by object
+
+Each Durable Object runs one version. Raising the traffic moves more
+objects onto the new version, and each one waits to go idle before it
+switches. See
+[Gradual deployments assign objects to versions](/cloudflare/compute/code-updates#gradual-deployments-assign-objects-to-versions).
+
 ## Where next
 
 - [Workers](/cloudflare/compute/workers) — the full Worker reference,

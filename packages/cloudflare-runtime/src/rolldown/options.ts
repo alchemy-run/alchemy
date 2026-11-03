@@ -68,6 +68,29 @@ export interface BasePluginOptions {
    * ```
    */
   skipEnvironments?: Array<string>;
+  /**
+   * Extra rules for imports emitted as separate Worker modules, checked
+   * before the built-in rules (`.wasm` → CompiledWasm, `.bin` → Data,
+   * `.txt`/`.html`/`.sql` → Text). `test` receives the resolved file path.
+   *
+   * @default []
+   * @example
+   * ```ts
+   * cloudflare({ moduleRules: [{ type: "Text", test: (path) => path.endsWith(".md") }] });
+   * ```
+   */
+  moduleRules?: Array<AdditionalModuleRule>;
+}
+
+/** A rule that emits matching imports as a separate Worker module. */
+export interface AdditionalModuleRule {
+  /**
+   * The module type. Without one, the built-in rules decide by extension
+   * and other files are Data.
+   */
+  type?: "CompiledWasm" | "Data" | "Text" | undefined;
+  /** Whether the resolved file path belongs to this rule. */
+  test: (path: string) => boolean;
 }
 
 /**

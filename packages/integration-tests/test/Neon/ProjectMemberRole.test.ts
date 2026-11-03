@@ -190,7 +190,7 @@ const context = {
   oldBindings: [],
   newBindings: [],
   bindings: [],
-  session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+  session: { note: () => Effect.void },
 };
 const noCloudCredentials = Effect.die("Safety-only governance tests must not issue Neon requests");
 

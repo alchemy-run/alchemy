@@ -16,7 +16,7 @@ const VOCS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/vocs/source";
 
 export interface VocsProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
 > {
   /**
    * Root directory of the Vocs project.

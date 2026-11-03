@@ -95,7 +95,12 @@ class Bank extends Domain.Model("Bank", {
   policies: [BookDeposits],
 }) {}
 
-class BankApi extends Domain.Api("BankApi", Deposit, Ship, Wallet, Ledger, Bookings, Parcel) {}
+class BankApi extends Domain.Api("BankApi", {
+  model: Bank,
+  commands: ["Deposit", "Ship"],
+  views: ["Bookings"],
+  aggregates: ["Wallet", "Ledger", "Parcel"],
+}) {}
 
 const Hosted = Bank.layer(BookDepositsLive).pipe(Layer.provide(InMemory));
 
@@ -109,7 +114,7 @@ const Wire = Domain.protocolHttp("").pipe(
   Layer.provideMerge(Hosted),
 );
 
-describe("Domain Api over the wire", () => {
+describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
   it.live("an input may name its fields target and commandId", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;

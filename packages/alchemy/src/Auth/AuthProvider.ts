@@ -1,6 +1,7 @@
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -11,7 +12,9 @@ import * as Semaphore from "effect/Semaphore";
 import { Interaction } from "../Interaction.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import { cachedFunction } from "../Util/cached-function.ts";
+import { globalLogs } from "../Util/LogRecord.ts";
 import { withProfileCredentialsLock } from "./Lock.ts";
+import { AuthProviders } from "./Registry.ts";
 
 /**
  * Canonical web host for OAuth provider-agnostic landing pages
@@ -76,12 +79,7 @@ export const refreshHint = (provider: string, profileName: string): string =>
 export const reconfigureHint = (provider: string, profileName: string): string =>
   `Run \`alchemy profile edit --profile ${profileName} --reconfigure ${provider}\` to reconfigure.`;
 
-export class AuthProviders extends Context.Service<
-  AuthProviders,
-  {
-    [providerName: string]: AuthProvider;
-  }
->()("AuthProviders") {}
+export { AuthProviders, AuthProvidersLive } from "./Registry.ts";
 
 /**
  * Declares one environment variable a provider's {@link AuthProviderImpl.readEnvironment}
@@ -354,7 +352,7 @@ export const AuthProvider =
       | Effect.Effect<AuthProviderImpl<Config, Credentials, R>, never, ImplReq>,
   ) =>
     Effect.gen(function* () {
-      // FileSystem/Path back the cross-process credentials lock that wraps
+      // FileSystem/Path/SecureRandom back the cross-process credentials lock that wraps
       // `logout`/`read`/`details` below, so capture them with the impl's own services.
       //
       // `Effect.context()` snapshots the ENTIRE fiber context (the type
@@ -372,8 +370,12 @@ export const AuthProvider =
       // re-declares as a requirement anyway, so no call site can rely on the
       // capture satisfying it.
       const ctx = Context.omit(Interaction)(
-        yield* Effect.context<FileSystem.FileSystem | Path.Path | R | ImplReq>(),
-      ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
+        yield* Effect.context<
+          FileSystem.FileSystem | Path.Path | SecureRandom.SecureRandom | R | ImplReq
+        >(),
+      ) as Context.Context<
+        FileSystem.FileSystem | Path.Path | SecureRandom.SecureRandom | R | ImplReq
+      >;
       // `read` and `readEnvironment` resolve credentials for a caller that
       // has already chosen its ConfigProvider (`resolveProviderConfig`
       // checks `presentEnvironment` under it), so they read through that
@@ -411,12 +413,12 @@ export const AuthProvider =
         );
       }
 
+      // Auth and credentials are account-level: every method's logs go to
+      // the global run log, not the project's.
       const provider: AuthProvider<Config, Credentials> = {
         logEnvironmentCredentials: yield* cachedFunction(
           (used: ReadonlyArray<string>) =>
-            Effect.logInfo(
-              `${name}: using environment variables (${used.join(", ")}) instead of the profile.`,
-            ),
+            Effect.logInfo(`${name}: using environment variables (${used.join(", ")}).`),
           { key: ([used]) => JSON.stringify(used.toSorted()) },
         ),
         kind: "AuthProvider",
@@ -433,7 +435,11 @@ export const AuthProvider =
           Semaphore.withPermits(
             interactiveMutex,
             1,
-          )(service.configure(profileName, currentConfig).pipe(Effect.provideContext(ctx))),
+          )(
+            service
+              .configure(profileName, currentConfig)
+              .pipe(Effect.provideContext(ctx), globalLogs),
+          ),
         login: (profileName, config, updateConfig, reload) =>
           Semaphore.withPermits(
             interactiveMutex,
@@ -441,11 +447,12 @@ export const AuthProvider =
           )(
             service
               .login(profileName, config, updateConfig, reload)
-              .pipe(Effect.provideContext(ctx)),
+              .pipe(Effect.provideContext(ctx), globalLogs),
           ),
         logout: (profileName, config) =>
           withProfileCredentialsLock(profileName, service.logout(profileName, config)).pipe(
             Effect.provideContext(ctx),
+            globalLogs,
           ),
         details: (profileName, loadConfig, updateConfig) =>
           withProfileCredentialsLock(
@@ -453,7 +460,7 @@ export const AuthProvider =
             Effect.flatMap(loadConfig, (config) =>
               service.details(profileName, config, updateConfig),
             ),
-          ).pipe(Effect.provideContext(ctx)),
+          ).pipe(Effect.provideContext(ctx), globalLogs),
         ...(service.configureWith === undefined
           ? {}
           : {
@@ -463,15 +470,22 @@ export const AuthProvider =
                   readonly method: string;
                   readonly values: Record<string, string>;
                 },
-              ) => service.configureWith!(profileName, input).pipe(Effect.provideContext(ctx)),
+              ) =>
+                service.configureWith!(profileName, input).pipe(
+                  Effect.provideContext(ctx),
+                  globalLogs,
+                ),
               configureMethods: service.configureMethods,
             }),
         read: (profileName, loadConfig, updateConfig) =>
           withProfileCredentialsLock(
             profileName,
             Effect.flatMap(loadConfig, (config) => service.read(profileName, config, updateConfig)),
-          ).pipe(Effect.provideContext(resolveCtx)),
-        readEnvironment: service.readEnvironment?.pipe(Effect.provideContext(resolveCtx)),
+          ).pipe(Effect.provideContext(resolveCtx), globalLogs),
+        readEnvironment: service.readEnvironment?.pipe(
+          Effect.provideContext(resolveCtx),
+          globalLogs,
+        ),
         environment,
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>

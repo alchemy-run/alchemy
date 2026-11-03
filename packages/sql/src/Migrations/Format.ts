@@ -78,6 +78,12 @@ export interface SqlExecutor {
 export class MigrationError extends Data.TaggedError("MigrationError")<{
   message: string;
   cause?: unknown;
+  /**
+   * The request may never have reached the database (a 5xx, a timeout, a
+   * reset socket). A failed batch marked transient is resent if the
+   * applied-migrations table shows it did not land.
+   */
+  transient?: boolean;
 }> {}
 
 /**

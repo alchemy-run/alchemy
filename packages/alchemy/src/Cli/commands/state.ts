@@ -4,8 +4,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import * as AlchemistState from "../../Alchemist/routes/state.ts";
-import type { ProviderSource, StateSource } from "../../Alchemist/routes/state.ts";
+import * as Alchemist from "../../Alchemist/index.ts";
 import type { StateStoreLogEntry } from "../../Contributions.ts";
 import * as Interaction from "../../Interaction.ts";
 import * as State from "../../State/index.ts";
@@ -59,18 +58,18 @@ type StateArgs = {
   readonly name: string | undefined;
 };
 
-const source = (args: StateArgs): StateSource =>
+const source = (args: StateArgs): Alchemist.State.StateSource =>
   args.backend === "local"
-    ? { _tag: "Local" }
+    ? { type: "local" }
     : args.backend === "configured"
       ? {
-          _tag: "Configured",
+          type: "configured",
           entrypoint: args.main,
           profile: args.profile,
           envFile: Option.getOrUndefined(args.envFile),
         }
       : {
-          _tag: "Provider",
+          type: "provider",
           backend: args.backend,
           name: args.name,
           profile: args.profile,
@@ -84,8 +83,8 @@ const lifecycleBackend = Flag.String("backend").pipe(
 
 const lifecycleSource = (
   args: Pick<StateArgs, "envFile" | "profile" | "backend" | "name">,
-): ProviderSource => ({
-  _tag: "Provider",
+): Alchemist.State.ProviderSource => ({
+  type: "provider",
   backend: args.backend,
   name: args.name,
   profile: args.profile,
@@ -120,7 +119,7 @@ const listCommand = Command.make(
   { path: pathArgument, recursive, main: config, envFile, profile, backend, name: storeName },
   instrumentCommand("state.list")(
     Effect.fn(function* ({ path, recursive, ...args }) {
-      const store = yield* AlchemistState.store(source(args));
+      const store = yield* Alchemist.State.store(source(args));
       const items = yield* usingStore(store)(
         State.listState({
           path: yield* path.pipe(Option.getOrUndefined, normalizedPath),
@@ -137,7 +136,7 @@ const readCommand = Command.make(
   { path: pathArgument, recursive, main: config, envFile, profile, backend, name: storeName },
   instrumentCommand("state.read")(
     Effect.fn(function* ({ path, recursive, ...args }) {
-      const store = yield* AlchemistState.store(source(args));
+      const store = yield* Alchemist.State.store(source(args));
       const requested = yield* path.pipe(Option.getOrUndefined, normalizedPath);
       const entries = yield* usingStore(store)(State.readState({ path: requested, recursive }));
       yield* Console.log(
@@ -170,7 +169,7 @@ const deleteCommand = Command.make(
       if (requested === "") {
         return yield* new UserInputError({ message: "cannot delete the state root" });
       }
-      const store = yield* AlchemistState.store(source(args));
+      const store = yield* Alchemist.State.store(source(args));
       yield* usingStore(store)(State.deleteState({ path: requested, recursive }));
       yield* Interaction.success(`Deleted state at ${requested}`);
     }),
@@ -183,7 +182,7 @@ const deleteCommand = Command.make(
 const stateExplorer = (args: StateArgs) =>
   Effect.gen(function* () {
     const cli = yield* Interaction.Interaction;
-    const store = yield* AlchemistState.store(source(args));
+    const store = yield* Alchemist.State.store(source(args));
     const on = provideStore(store);
     const explorer: StateExplorerSource = {
       backend: store.id,
@@ -239,7 +238,7 @@ const nukeCommand = Command.make(
   { main: config, envFile, profile, backend, name: storeName, yes },
   instrumentCommand("state.unsafe.nuke")(
     Effect.fn(function* ({ yes, ...args }) {
-      const store = yield* AlchemistState.store(source(args));
+      const store = yield* Alchemist.State.store(source(args));
       const stacks = [...(yield* store.listStacks())].sort();
       if (stacks.length === 0) {
         yield* Interaction.info("Nothing to clear.");
@@ -292,8 +291,8 @@ const bootstrapCommand = Command.make(
         if (force || args.name !== undefined) {
           return yield* new UserInputError({ message: "--force and --name need --backend." });
         }
-        const { version } = yield* AlchemistState.bootstrapConfigured({
-          _tag: "Configured",
+        const { version } = yield* Alchemist.State.bootstrapConfigured({
+          type: "configured",
           entrypoint: main,
           profile: args.profile,
           envFile: Option.getOrUndefined(args.envFile),
@@ -301,7 +300,7 @@ const bootstrapCommand = Command.make(
         yield* Interaction.success(`State store configured in '${main}' is ready (v${version})`);
         return;
       }
-      const result = yield* AlchemistState.bootstrap({
+      const result = yield* Alchemist.State.bootstrap({
         ...lifecycleSource({ ...args, backend }),
         force,
       });
@@ -323,7 +322,7 @@ const teardownCommand = Command.make(
         confirmLabel: "Destroy",
         cancelLabel: "Cancel",
       });
-      const result = yield* AlchemistState.teardown(lifecycleSource(args));
+      const result = yield* Alchemist.State.teardown(lifecycleSource(args));
       yield* Interaction.success(
         result.deleted.length === 0 ? "Nothing to delete" : `Deleted ${result.deleted.join(", ")}`,
       );
@@ -356,7 +355,7 @@ const migrateCommand = Command.make(
   },
   instrumentCommand("state.migrate")(
     Effect.fn(function* ({ stack, stage, rollback, ...args }) {
-      const result = yield* AlchemistState.migrate(source(args), { stack, stage, rollback });
+      const result = yield* Alchemist.State.migrate(source(args), { stack, stage, rollback });
       if (result.stages.length === 0) {
         yield* Interaction.info("No stages to migrate.");
         return;
@@ -416,12 +415,12 @@ const logsCommand = Command.make(
         `${formatLocalTimestamp(entry.timestamp)} ${entry.message}`;
       if (tail) {
         yield* Interaction.info(`Tailing the ${args.backend} state store...`);
-        yield* AlchemistState.tailLogs(target).pipe(
+        yield* Alchemist.State.tailLogs(target).pipe(
           Stream.runForEach((entry) => Console.log(format(entry))),
         );
         return;
       }
-      const entries = yield* AlchemistState.logs({
+      const entries = yield* Alchemist.State.logs({
         ...target,
         limit,
         since: since ? yield* parseSince(since) : undefined,

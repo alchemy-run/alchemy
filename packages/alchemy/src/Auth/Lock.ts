@@ -1,5 +1,5 @@
 import * as Clock from "effect/Clock";
-import * as Console from "effect/Console";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -51,7 +51,8 @@ const acquireFileLock = Effect.fn(function* (lockPath: string, timeout: Duration
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const ownerPath = path.join(lockPath, "owner");
-  const owner = yield* Effect.sync(() => crypto.randomUUID());
+  const random = yield* SecureRandom.SecureRandom;
+  const owner = yield* random.uuidV4();
 
   yield* fs.makeDirectory(path.dirname(lockPath), { recursive: true });
 
@@ -133,12 +134,9 @@ type Phase = { current: "waiting" | "held" };
 /**
  * Periodic "I am not dead, I am stuck here" notice, forked for the lifetime
  * of a {@link withLock} call.
- *
- * Deliberately `Console.error` rather than `Effect.logWarning`: the CLI's
- * telemetry layer replaces the console logger with the OTLP one (see
- * `Telemetry/Layer.ts`), so log records reach `.alchemy/log/out` but never
- * the terminal. The whole point of this notice is to reach the user who is
- * watching a frozen terminal, so it must not go through the logger.
+ * Logged as a warning: the console logger shows it above the noise floor
+ * (telemetry merges with it rather than replacing it), and JSON output and
+ * the run log carry it too.
  */
 const stallNotice = (lockPath: string, label: string, phase: Phase, interval: Duration.Input) =>
   Effect.gen(function* () {
@@ -148,7 +146,7 @@ const stallNotice = (lockPath: string, label: string, phase: Phase, interval: Du
       // notice cadence and the reported wait must not drift apart.
       const now = yield* Clock.currentTimeMillis;
       const seconds = Math.round((now - start) / 1000);
-      yield* Console.error(
+      yield* Effect.logWarning(
         phase.current === "waiting"
           ? `alchemy: ${seconds}s waiting for the auth lock '${lockPath}' (${label}). ` +
               `Another alchemy process holds it; if none is running, delete that directory.`

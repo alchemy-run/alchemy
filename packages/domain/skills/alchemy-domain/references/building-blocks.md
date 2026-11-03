@@ -48,6 +48,10 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 
 A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Events and rejections take `attributes` as a third argument: `Domain.Event("MoneyWithdrawn", { ... }, { attributes: (e) => ({ ... }) })`. Nothing from a payload is traced unless `attributes` returns it, and `Redacted` values record as `<redacted>`.
 
+`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...) plus `attributes`. `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
+
+More: [Command: Annotate a rejection](https://alchemy.run/domain/command#annotate-a-rejection).
+
 More: [Command](https://alchemy.run/domain/command), [Event](https://alchemy.run/domain/event).
 
 ## Aggregate
@@ -173,7 +177,9 @@ emit: { TransferRequested: { out: moved("out"), in: moved("in") } },
 
 A view keyed by a different aggregate than its source uses `keyOf`, returning `undefined` to skip. A view about something with no aggregate of its own (an org) takes a string Schema as `key` (`key: OrgId`); its `keyOf` returns the value, and reads take the value (`watch(orgId)`). Policies, projections and streams take a Schema `key` the same way (`Domain.Key.Any` is either). Don't declare an empty aggregate only to key something. Add derived fields with `computed: { total: (v) => ... }`.
 
-More: [View](https://alchemy.run/domain/view), [Views as security boundaries](https://alchemy.run/domain/view-security).
+When you change what a deployed view computes (`evolve`, `emit`, `keyOf`, `state`, the events or sources it reads), bump its `version` in the declaration (`version: 1`), and only ever increase it. The deploy recomputes it from the events: in place for a view keyed by the one aggregate it reads, from the history otherwise, and rebuilds whatever reads it.
+
+More: [View](https://alchemy.run/domain/view), [Views as security boundaries](https://alchemy.run/domain/view-security), [Change a view: bump its version](https://alchemy.run/domain/model#change-a-view-bump-its-version).
 
 ## Policy
 
@@ -324,18 +330,21 @@ More: [Stream](https://alchemy.run/domain/stream).
 
 ```ts
 // CustomerApi.api.ts
-export class CustomerApi extends Domain.Api(
-  "CustomerApi",
-  RegisterCustomer, DepositMoney, WithdrawMoney,   // commands: client methods
-  Account,                                          // aggregates with `read`
-  AccountSummary, Statement,                        // views
-  AccountCard,                                      // streams
-) {}
+export class CustomerApi extends Domain.Api("CustomerApi", {
+  model: Bank, // names must be part of it
+  commands: ["RegisterCustomer", "DepositMoney", "WithdrawMoney"], // client methods
+  views: ["AccountSummary", "Statement"],
+  streams: ["AccountCard"],
+  aggregates: ["Account"], // read directly, through their `read` contract
+}) {}
+// A kind left out is served whole (aggregates: those with `read`); `[]` serves none.
 ```
 
-Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
+Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself, through its own middleware and `validate`.
 
 More: [Api](https://alchemy.run/domain/api).
+
+An Api is the domain's interface for its own clients. For a public or partner API, write a separate `HttpApi` with its own response schemas that calls the Api in process; see [hosting.md](hosting.md#public-and-partner-apis). `toHttpApi`, `toMcp` and `toCli` publish only the calls their `expose` option lists, as the domain shapes them, which is convenient for internal tools only; see [hosting.md](hosting.md#conveniences-for-internal-tools).
 
 ## Model
 

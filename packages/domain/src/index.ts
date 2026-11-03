@@ -134,6 +134,8 @@ export declare namespace View {
   export type Page<E> = ViewModule.Page<E>;
   /** What `MyView.evolve` applies. */
   export type LocalInput<Def, Key extends KeyModule.Any> = ViewModule.LocalInput<Def, Key>;
+  /** How much of the history recorded before a view or projection has reached it. */
+  export type History = ViewModule.History;
 }
 /** A read model folded from events, per key. See {@link ViewModule.make}. */
 export const View = ViewModule.make;
@@ -199,10 +201,26 @@ export declare namespace ExternalSystem {
 export const ExternalSystem = ExternalSystemModule.make;
 
 export declare namespace Api {
-  /** What an Api may expose: commands, views, and aggregates with a `read` contract. */
-  export type Entry = ApiModule.Entry;
+  /** What an Api may serve: commands, views, streams, and aggregates with a `read` contract. */
+  export type Servable = ApiModule.Servable;
+  /** What `Domain.Api` takes: the model, and the names of what of it the Api serves. */
+  export type Options<
+    M extends ModelModule.Any,
+    C extends ReadonlyArray<ApiModule.CommandName<M>>,
+    V extends ReadonlyArray<ApiModule.ViewName<M>>,
+    S extends ReadonlyArray<ApiModule.StreamName<M>>,
+    A extends ReadonlyArray<ApiModule.AggregateName<M>>,
+  > = ApiModule.Options<M, C, V, S, A>;
+  /** The names of the commands a model holds: their tags. */
+  export type CommandName<M extends ModelModule.Any> = ApiModule.CommandName<M>;
+  /** The names of the views a model holds. */
+  export type ViewName<M extends ModelModule.Any> = ApiModule.ViewName<M>;
+  /** The names of the streams a model holds. */
+  export type StreamName<M extends ModelModule.Any> = ApiModule.StreamName<M>;
+  /** The names of the aggregates a model holds. */
+  export type AggregateName<M extends ModelModule.Any> = ApiModule.AggregateName<M>;
   /** The typed client of an Api. */
-  export type Client<E extends ApiModule.Entry> = ApiModule.ApiClient<E>;
+  export type Client<E extends ApiModule.Servable> = ApiModule.ApiClient<E>;
   /** Type-level identity of an Api's client service, e.g. `Domain.Api.ClientKey<"BankApi">`. */
   export type ClientKey<Name extends string> = ApiModule.ClientKey<Name>;
   export type CommandClient<C extends CommandModule.Any> = ApiModule.CommandClient<C>;
@@ -234,6 +252,8 @@ export const protocolInProcess = ApiModule.protocolInProcess;
 export declare namespace Model {
   /** Any Model class. */
   export type Any = ModelModule.Any;
+  /** How a model's `layer` hosts it, including each view's version. */
+  export type LayerOptions<Views extends string = string> = ModelModule.LayerOptions<Views>;
 }
 /** The aggregates, views, policies, projections and streams hosted together. See {@link ModelModule.make}. */
 export const Model = ModelModule.make;

@@ -1,6 +1,6 @@
+import type { ApplyEvent, ApplyStatus, ResourceStatusChanged } from "../../../Events.ts";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../../../Plan.ts";
 import type { ProviderMode } from "../../../ProviderMode.ts";
-import type { ApplyEvent, ApplyStatus, ResourceStatusChanged } from "../../../Report.ts";
 import {
   buildNamespaceTree,
   buildPlanSummary,
@@ -313,7 +313,7 @@ export class PlanTree {
       };
     };
 
-    if (event._tag === "apply.resource.status") {
+    if (event.type === "apply.resource.status") {
       const current = tasks.get(key);
       if (current) {
         tasks.set(key, {

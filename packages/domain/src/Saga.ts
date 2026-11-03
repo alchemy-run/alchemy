@@ -1,4 +1,4 @@
-import { makeRun } from "alchemy/Workflows";
+import { makeRun, StorageName } from "alchemy/Workflows";
 import * as EffectCause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -372,6 +372,55 @@ export interface SagaClass<
 }
 
 // ---------------------------------------------------------------- the client
+
+/**
+ * A model's view of a workflow engine. Its sagas' workflows are named
+ * `<model>/<saga>`, so two models that run the same saga never share its runs.
+ *
+ * @internal
+ */
+export const engineFor = (
+  engine: WorkflowEngine.WorkflowEngine["Service"],
+  modelName: string,
+): WorkflowEngine.WorkflowEngine["Service"] => {
+  const prefix = `${modelName}/`;
+  const renamed = new WeakMap<Workflow.Any, Workflow.Any>();
+  // A running saga reports its own (already renamed) workflow back; keep it as is.
+  const rename = <W extends Workflow.Any>(workflow: W): W => {
+    if (workflow._tag.startsWith(prefix)) return workflow;
+    let found = renamed.get(workflow);
+    if (found === undefined) {
+      found = Object.create(workflow, {
+        _tag: { value: `${prefix}${workflow._tag}`, enumerable: true },
+        // Storage named after the model too: `Billing.OpenAccount`.
+        annotations: {
+          value: Context.add(workflow.annotations, StorageName, `${modelName}.${workflow._tag}`),
+          enumerable: true,
+        },
+      }) as Workflow.Any;
+      renamed.set(workflow, found);
+    }
+    return found as W;
+  };
+  return {
+    ...engine,
+    register: (workflow, execute) => engine.register(rename(workflow), execute),
+    execute: (workflow, options) => engine.execute(rename(workflow), options),
+    poll: (workflow, executionId) => engine.poll(rename(workflow), executionId),
+    interrupt: (workflow, executionId) => engine.interrupt(rename(workflow), executionId),
+    interruptUnsafe: (workflow, executionId) =>
+      engine.interruptUnsafe(rename(workflow), executionId),
+    resume: (workflow, executionId) => engine.resume(rename(workflow), executionId),
+    scheduleClock: (workflow, options) => engine.scheduleClock(rename(workflow), options),
+    deferredDone: (deferred, options) =>
+      engine.deferredDone(deferred, {
+        ...options,
+        workflowName: options.workflowName.startsWith(prefix)
+          ? options.workflowName
+          : `${prefix}${options.workflowName}`,
+      }),
+  };
+};
 
 /** @internal Build a saga's client over a workflow engine. */
 export const client = (
