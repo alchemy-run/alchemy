@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { canonicalCidr } from "alchemy/Util/ip-address";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -259,7 +260,8 @@ export const ClientVpnAuthorizationRuleProvider = () =>
           }
           if (!rule) {
             // Do not replay a completed create token after out-of-band deletion.
-            const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const clientToken = yield* random.uuidV4();
             yield* ec2
               .authorizeClientVpnIngress({
                 ClientVpnEndpointId: news.clientVpnEndpointId,

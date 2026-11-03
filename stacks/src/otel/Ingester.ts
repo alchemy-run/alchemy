@@ -93,6 +93,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
 
           const response = yield* Effect.tryPromise({
             try: () =>
+              // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- raw Web Request/Response relay passed straight to HttpServerResponse.fromWeb
               fetch(otlp.endpoint, {
                 method: "POST",
                 headers: {
@@ -133,6 +134,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
 
         const upstream = yield* Effect.tryPromise({
           try: () =>
+            // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- raw Web Request/Response reverse proxy (cf cache opts, redirect: "manual", fromWeb passthrough)
             fetch(target, {
               method: raw.method,
               headers,

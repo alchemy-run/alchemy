@@ -144,6 +144,55 @@ describe.concurrent.each([
         }).pipe(logLevel),
         { timeout },
       );
+
+      // Guest code changes only the bundle, never a prop. The program in
+      // `exports` is an Effect, which `isResolved` never accepts, so the live
+      // diff used to return before its image hash check and plan a noop.
+      // A stale recorded hash stands in for a changed bundle.
+      test.skipIf(dev)(
+        "plans an update when the guest code's image hash changes",
+        Effect.gen(function* () {
+          yield* stack;
+          const effectful = yield* EffectfulStack;
+          const state = yield* yield* State;
+          const scope = { stack: effectful.name, stage };
+          const rows = yield* Effect.forEach(yield* state.list(scope), (fqn) =>
+            state.get({ ...scope, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
+          );
+          const container = rows.find(
+            ({ row }) =>
+              row !== undefined &&
+              "resourceType" in row &&
+              row.resourceType === "Cloudflare.Container",
+          );
+          assert(container?.row && "attr" in container.row);
+          const { fqn, row } = container;
+          const { attr } = row;
+          assert(attr);
+          const planned = Plan.make(effectful).pipe(
+            Effect.map((plan) => plan.resources[fqn]?.action),
+          );
+
+          expect(yield* planned).toBe("noop");
+          yield* state.set({
+            ...scope,
+            fqn,
+            value: { ...row, attr: { ...attr, hash: { ...attr.hash, image: "stale" } } },
+          });
+          const action = yield* planned.pipe(
+            Effect.ensuring(state.set({ ...scope, fqn, value: row }).pipe(Effect.orDie)),
+          );
+          expect(action).toBe("update");
+        }).pipe(
+          Effect.provide(
+            Layer.effectContext(EffectfulStack.pipe(Effect.map((stack) => stack.services))).pipe(
+              Layer.provideMerge(Layer.succeed(Stage, stage)),
+            ),
+          ),
+          logLevel,
+        ),
+        { timeout, retry: 0 },
+      );
     });
 
     /**

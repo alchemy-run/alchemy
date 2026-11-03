@@ -246,7 +246,10 @@ export const ApiKeyProvider = () =>
                 KeyName: keyName,
                 Restrictions: desiredRestrictions,
                 Description: news.description,
-                ExpireTime: news.expireTime ? new Date(news.expireTime) : undefined,
+                ExpireTime: news.expireTime
+                  ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                    new Date(news.expireTime)
+                  : undefined,
                 NoExpiry: news.expireTime ? undefined : (news.noExpiry ?? true),
                 Tags: desiredTags,
               })
@@ -260,7 +263,8 @@ export const ApiKeyProvider = () =>
           }
 
           const desiredExpireTime = news.expireTime
-            ? new Date(news.expireTime).toISOString()
+            ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+              new Date(news.expireTime).toISOString()
             : undefined;
           if (
             state.description !== (news.description ?? undefined) ||
@@ -271,7 +275,10 @@ export const ApiKeyProvider = () =>
               KeyName: keyName,
               Description: news.description,
               Restrictions: desiredRestrictions,
-              ExpireTime: desiredExpireTime ? new Date(desiredExpireTime) : undefined,
+              ExpireTime: desiredExpireTime
+                ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                  new Date(desiredExpireTime)
+                : undefined,
               NoExpiry: desiredExpireTime ? undefined : true,
               // Required to update a key that has been used recently.
               ForceUpdate: true,

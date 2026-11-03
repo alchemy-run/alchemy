@@ -1,6 +1,8 @@
 import { measureElement, useProgress, useTitle, type DOMElement } from "@alchemy.run/sigil";
 import { useLayoutEffect, useRef, useState } from "@alchemy.run/sigil/react";
-import { useTerminalSize } from "../ui/index.ts";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
+import { useAlchemyStatus, useTerminalSize } from "../ui/index.ts";
 import type { PlanTree, PlanTreeState } from "./PlanTree.ts";
 
 export const usePlanPresentation = (options: {
@@ -28,6 +30,23 @@ export const usePlanPresentation = (options: {
   const titleProgress = settled || total === 0 ? "" : ` ${completed}/${total}`;
   const titleDetail = tree.titleDetail ? ` · ${tree.titleDetail}` : "";
   useTitle(mode === "apply" ? `${label}${titleProgress}${titleDetail}` : undefined);
+  // OSC 7501: working while applying, then the outcome, which stays visible
+  // in the terminal after the CLI exits.
+  const failed = outcome === "failure" || failures > 0;
+  useAlchemyStatus(
+    mode !== "apply"
+      ? undefined
+      : busy
+        ? {
+            state: "working",
+            ...Record.filterMap(
+              { progress: total === 0 ? undefined : (completed / total) * 100 },
+              Result.fromNullishOr(() => undefined),
+            ),
+            msg: `${label}${titleDetail}`,
+          }
+        : { state: failed ? "error" : "done", msg: `${label}${titleDetail}` },
+  );
 
   const beforeRef = useRef<DOMElement>(null);
   const summaryRef = useRef<DOMElement>(null);

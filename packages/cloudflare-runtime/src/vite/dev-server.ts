@@ -2,6 +2,7 @@ import * as NodeFs from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -67,7 +68,10 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
     Effect.provide(
       ViteAssets.ViteAssetsLive(server, {
         hasUserWorker: entryEnvironment.entryName !== undefined,
-      }).pipe(Layer.provideMerge(Layer.succeedContext(context))),
+      }).pipe(
+        Layer.provideMerge(Layer.succeedContext(context)),
+        Layer.merge(SecureRandom.layerWebCrypto),
+      ),
     ),
     Scope.provide(scope),
     Effect.runPromise,
@@ -192,7 +196,9 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   const runtime = yield* Runtime.Runtime;
   const moduleFallback = yield* makeModuleFallbackService;
 
-  const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
+  const name =
+    options.worker?.name ??
+    `vite-dev-${yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))}`;
   return yield* runtime.start({
     // Everything the caller configured on the Worker (crons, tail consumers,
     // Cache API, request.cf, ...) reaches workerd; the fields below are the

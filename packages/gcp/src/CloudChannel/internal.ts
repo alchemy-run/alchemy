@@ -1,5 +1,6 @@
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
 import { createPhysicalName } from "alchemy/PhysicalName";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
@@ -145,8 +146,7 @@ export const toDomain = (id: string, requested: string | undefined, existing: st
   });
 
 export const defaultInvoiceMonth = () =>
-  Effect.sync(() => {
-    const now = new Date();
+  Effect.map(DateTime.nowAsDate, (now) => {
     const utcMonthIndex = now.getUTCMonth() + 2;
     const year = now.getUTCFullYear() + Math.floor(utcMonthIndex / 12);
     const month = (utcMonthIndex % 12) + 1;

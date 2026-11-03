@@ -207,7 +207,7 @@ export const list = (
             Effect.gen(function* () {
               const listed = yield* provider
                 .list()
-                .pipe(Effect.timeout(Duration.seconds(options.timeoutSeconds ?? 120)));
+                .pipe(Effect.timeout(Duration.seconds(options.timeoutSeconds ?? 60)));
               return { provider, listed };
             }).pipe(Effect.provide(options.context)),
           );

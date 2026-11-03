@@ -585,7 +585,7 @@ const outbox = (storage: Storage, jobs: Jobs, net: Network, retry: Retry) => {
   const acquire = storage.exclusive(
     Effect.gen(function* () {
       const held = yield* storage.get<number>("bf:q-lease");
-      const now = yield* Effect.sync(() => Date.now());
+      const now = yield* Clock.currentTimeMillis;
       if (held !== undefined && held > now) return false;
       yield* storage.put({ "bf:q-lease": now + OUTBOX_LEASE_MS });
       return true;

@@ -118,12 +118,12 @@ export interface DevContext extends SourceContext {
     readonly assets: WorkerWiring["assets"] | undefined;
     /**
      * The Worker's other runtime settings (crons, Workflows, tail consumers,
-     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Cache API, `request.cf`, Access), spread whole into the runtime
      * Worker.
      */
     readonly options: Pick<
       RuntimeWorker,
-      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "access"
     >;
   };
   /**
