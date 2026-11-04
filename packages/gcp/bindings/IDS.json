@@ -4,6 +4,7 @@
   "resources": {},
   "probes": {
     "resources": {},
-    "enable": ["ids.googleapis.com"]
+    "enable": ["ids.googleapis.com"],
+    "location": "us-central1-a"
   }
 }

@@ -21,6 +21,6 @@
   },
   "roles": {
     "cloudbilling.projects.updateBillingInfo": "roles/billing.projectManager",
-    "cloudbilling.projects.getBillingInfo": "roles/billing.projectManager"
+    "cloudbilling.projects.getBillingInfo": "roles/browser"
   }
 }

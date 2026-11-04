@@ -24,21 +24,21 @@ export default class IDSGeneratedHost extends GCP.Function<IDSGeneratedHost>()(
       fetch: serveProbes({
         CreateEndpoint: probeOutcome(
           Retry.none(
-            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p0({ location: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         DeleteEndpoint: probeOutcome(
-          Retry.none(p1({ endpoint: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p1({ endpoint: "alchemy-missing", location: "us-central1-a" } as never)),
         ),
         GetEndpoint: probeOutcome(
-          Retry.none(p2({ endpoint: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p2({ endpoint: "alchemy-missing", location: "us-central1-a" } as never)),
         ),
-        ListEndpoints: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListEndpoints: probeOutcome(Retry.none(p3({ location: "us-central1-a" } as never))),
         PatchEndpoint: probeOutcome(
           Retry.none(
             p4({
               endpoint: "alchemy-missing",
-              location: "us-central1",
+              location: "us-central1-a",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
