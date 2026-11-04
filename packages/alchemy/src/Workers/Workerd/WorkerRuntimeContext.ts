@@ -1,11 +1,17 @@
 import type * as cf from "@cloudflare/workers-types";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
+import * as Tracer from "effect/Tracer";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import type { FunctionContext, FunctionListener } from "../../Runtime/Function.ts";
-import { packEnvValueKeepRedacted, unpackEnvValue } from "../../RuntimeContext.ts";
+import { packEnvValueKeepRedacted, RuntimeContext, unpackEnvValue } from "../../RuntimeContext.ts";
+import { EventLifetime } from "../EventLifetime.ts";
 import { WorkerEnvironment } from "../WorkerEnvironment.ts";
 import { makeRequestEffect } from "./HttpServer.ts";
 import { ExportedHandlerMethods, isWorkerEvent, type WorkerEvent } from "./WorkerEvent.ts";
@@ -21,6 +27,11 @@ export interface WorkerRuntimeContextOptions {
   readonly type: string;
   /** Services the host provides its init in every phase. */
   readonly hostServices?: Layer.Layer<any, never, any> | undefined;
+  /**
+   * The engine's own per-event services (its execution context): the bridge
+   * provides them to each event, so a listener never keeps init's copy.
+   */
+  readonly eventServices?: ReadonlyArray<Context.Key<any, any>> | undefined;
 }
 
 const makeRequestHandler =
@@ -78,11 +89,39 @@ export const makeWorkerRuntimeContext = (
       return ctx.listen(makeRequestHandler(handler));
     },
     listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
-      Effect.sync(() =>
-        Effect.isEffect(handler)
-          ? listeners.push(handler)
-          : listeners.push(Effect.succeed(handler)),
-      )) as any as FunctionContext["listen"],
+      Effect.gen(function* () {
+        // Listeners (`cron`, `email`, queue consumers, webhook routes) are
+        // registered inside the Worker's init effect, so their requirements
+        // are met by whatever init provided to itself. Capture that context
+        // and run each of the handler's events in it, minus what the bridge
+        // supplies per event. Init's `ConfigProvider` is Platform's config
+        // interceptor; handlers read config through the bridge's runtime
+        // provider.
+        const services = (yield* Effect.context<never>()).pipe(
+          Context.omit(
+            ConfigProvider.ConfigProvider,
+            EventLifetime,
+            Layer.CurrentMemoMap,
+            Logger.CurrentLoggers,
+            RuntimeContext,
+            Scope.Scope,
+            Tracer.ParentSpan,
+            Tracer.Tracer,
+            ...(options.eventServices ?? []),
+          ),
+        );
+        const withServices =
+          (listener: FunctionListener): FunctionListener =>
+          (event) => {
+            const eff = listener(event);
+            return Effect.isEffect(eff) ? Effect.provide(eff, services) : eff;
+          };
+        listeners.push(
+          Effect.isEffect(handler)
+            ? Effect.map(Effect.provide(handler, services), withServices)
+            : Effect.succeed(withServices(handler)),
+        );
+      })) as any as FunctionContext["listen"],
     export: (name: string, value: any) =>
       Effect.sync(() => {
         exports[name] = value;
