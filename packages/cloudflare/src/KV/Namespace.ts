@@ -12,6 +12,7 @@ import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import { isInstantNamespaceLocalId } from "./InstantNamespaceLocal.ts";
+import { NamespaceModeMismatch } from "./NamespaceTypes.ts";
 
 export const isNamespace = (value: unknown): value is Namespace =>
   isResourceOfType(value, "Cloudflare.KV.Namespace");
@@ -251,6 +252,9 @@ export const ProviderLive = () =>
               .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.undefined))
           : yield* findNamespaceByTitle(props.title);
       if (!namespace) return undefined;
+      if (namespace.mode === "instant") {
+        return yield* new NamespaceModeMismatch({ namespaceId: namespace.id, expected: "classic" });
+      }
       return {
         title: namespace.title,
         namespaceId: namespace.id,
