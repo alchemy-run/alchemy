@@ -32,7 +32,8 @@ import { WorkloadIdentityProvider } from "./IAM/WorkloadIdentityProvider.ts";
  * - the host runs as a service account (Cloud Run, Cloud Functions, a GKE
  *   pod): roles are granted to that account, and calls use its
  *   metadata-server credentials;
- * - the host runs as an AWS IAM role (Lambda, ECS, EC2, App Runner): Alchemy
+ * - the host runs as an AWS IAM role (Lambda, ECS, EC2, App Runner, Batch,
+ *   an EKS pod): Alchemy
  *   creates a service account, grants the roles to it, and lets the role
  *   impersonate it through a workload identity pool that trusts the AWS
  *   account. The host exchanges a signed `GetCallerIdentity` request for the
@@ -42,7 +43,7 @@ import { WorkloadIdentityProvider } from "./IAM/WorkloadIdentityProvider.ts";
  *   it through a workload identity pool that trusts the organization's Fly
  *   OIDC issuer. The host exchanges its Machine's OIDC token; no key is
  *   created;
- * - any other host (a Cloudflare Worker, an EKS pod): Alchemy creates a
+ * - any other host (a Cloudflare Worker): Alchemy creates a
  *   service account and key for it, grants the roles to that account, and
  *   binds the key into the host's env;
  * - no host (a script or deploy-time Action): nothing is bound and calls use
@@ -129,15 +130,38 @@ const AWS_ROLE_ARN_ATTRIBUTE: Record<string, string> = {
   "AWS.EC2.Instance": "roleArn",
   "AWS.AutoScaling.LaunchTemplate": "roleArn",
   "AWS.AppRunner.Service": "instanceRoleArn",
+  "AWS.Batch.JobDefinition": "jobRoleArn",
 };
+
+/** An `AWS.EKS.Cluster`, or a cluster connection authenticating as `aws-eks`. */
+const isEksCluster = (cluster: unknown): boolean => {
+  if (isResourceOfType(cluster, "AWS.EKS.Cluster")) return true;
+  const value = cluster as { auth?: { kind?: string }; connection?: { auth?: { kind?: string } } };
+  return value?.auth?.kind === "aws-eks" || value?.connection?.auth?.kind === "aws-eks";
+};
+
+/** A Kubernetes workload on an EKS cluster, which runs as a Pod Identity role. */
+const isEksWorkload = (host: ResourceLike): boolean =>
+  (host.Type === "Kubernetes.Deployment" || host.Type === "Kubernetes.Job") &&
+  isEksCluster(host.Props?.cluster);
 
 /**
  * Whether a host runs its code as an AWS IAM role GCP can federate with:
- * Lambda, ECS, EC2, an EC2 launch template, or App Runner. Not an EKS pod or
- * a Batch job, which keep a key. Deploy-time only.
+ * Lambda, ECS, EC2, an EC2 launch template, App Runner, Batch, or a
+ * Kubernetes workload on EKS (Pod Identity). Deploy-time only.
  */
 export const runsAsAwsRole = (host: ResourceLike): boolean =>
-  Object.hasOwn(AWS_ROLE_ARN_ATTRIBUTE, host.Type);
+  Object.hasOwn(AWS_ROLE_ARN_ATTRIBUTE, host.Type) || isEksWorkload(host);
+
+/** The ARN of the IAM role an AWS host runs as (see {@link runsAsAwsRole}). */
+const awsRoleArnOf = (host: ResourceLike): Output.Output<string> => {
+  const attrs = host as unknown as Record<string, Output.Output<unknown>>;
+  if (isEksWorkload(host)) {
+    // The EKS adapter's identity state: the generated Pod Identity role.
+    return Output.map(attrs.identity!, (identity) => (identity as { roleArn: string }).roleArn);
+  }
+  return attrs[AWS_ROLE_ARN_ATTRIBUTE[host.Type]!]! as Output.Output<string>;
+};
 
 /**
  * Id of the AWS provider in the stack's pool. Fixed so a host's env can name
@@ -289,9 +313,7 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
       const runtime = (yield* CurrentRuntimeContext)!;
 
       if (runsAsAwsRole(host)) {
-        const roleArn = (host as unknown as Record<string, Output.Output<string>>)[
-          AWS_ROLE_ARN_ATTRIBUTE[host.Type]!
-        ]!;
+        const roleArn = awsRoleArnOf(host);
         // One pool and provider serve every AWS host in the stack: a second
         // declaration of the same id resolves to the first.
         const pool = yield* GcpWorkloadIdentityPool("AwsWorkloadIdentityPool", {

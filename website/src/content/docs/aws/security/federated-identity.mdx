@@ -165,13 +165,14 @@ before it expires.
 ## Which runtimes federate
 
 Lambda functions, ECS tasks and services, EC2 instances and launch
-templates, App Runner services, and Fly Services reach GCP this way.
+templates, App Runner services, Batch jobs, EKS pods, and Fly Services
+reach GCP this way.
 Cloud Run services, jobs, and worker pools, Cloud Functions, and Fly
 Services reach AWS this way.
 
 Runtimes without an identity the other cloud can trust still get a key:
-a Cloudflare Worker, a Fly Sprite, an EKS or GKE pod, and an AWS Batch
-job. The binding code is the same either way.
+a Cloudflare Worker, a Fly Sprite, and a GKE pod calling AWS. The
+binding code is the same either way.
 
 ## New grants take a few minutes
 
