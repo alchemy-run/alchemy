@@ -6,7 +6,7 @@ import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { DurableObjectExport } from "./DurableObject.ts";
 import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
 import { WebhookHostLive } from "./WebhookHost.ts";
-import { WorkerTypeId } from "./WorkerRuntime.ts";
+import { WorkerExecutionContext, WorkerTypeId } from "./WorkerRuntime.ts";
 
 export type { WorkerRuntimeContext } from "alchemy/Workers/Workerd/WorkerRuntimeContext";
 
@@ -17,4 +17,5 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext =>
     type: WorkerTypeId,
     // Every Worker can receive webhooks, so event sources need no host wiring.
     hostServices: WebhookHostLive,
+    eventServices: [WorkerExecutionContext],
   });
