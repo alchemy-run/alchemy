@@ -741,9 +741,14 @@ interface ObservedCall {
 }
 
 /** Options for {@link make}. */
-interface StoryOptions<Policies, LE, LR, Systems> {
+interface StoryOptions<Policies, LE, LR, Systems, Parts extends Model.Servable> {
   /** The policies' and projections' Layers. Required when the model has either. */
   readonly layer?: Layer.Layer<Policies, LE, LR>;
+  /**
+   * What the hosted model records in traces, as the model's own `layer`
+   * takes it: `{ attributes: { commands: { WithdrawMoney: ... } } }`.
+   */
+  readonly telemetry?: Model.LayerOptionsOf<Parts>["telemetry"];
   /**
    * External systems to fake. Each call to one waits until the story answers it
    * with `succeed`, `fail` or `die`. Systems not listed are called for real,
@@ -785,11 +790,12 @@ const make =
     LE = never,
     LR = never,
     Systems extends ExternalSystem.Any = never,
+    Parts extends Model.Servable = Model.Servable,
   >(
-    domain: Model.ModelClass<Name, Provided, Policies>,
+    domain: Model.ModelClass<Name, Provided, Policies, Parts>,
     ...[options = {}]: [Policies] extends [never]
-      ? [options?: StoryOptions<Policies, LE, LR, Systems>]
-      : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
+      ? [options?: StoryOptions<Policies, LE, LR, Systems, Parts>]
+      : [options: StoryOptions<Policies, LE, LR, Systems, Parts> & { readonly layer: unknown }]
   ) =>
   <const S extends ReadonlyArray<Step>>(
     ...steps: S & Checked<S>
@@ -868,7 +874,7 @@ const make =
         options.layer ?? (Layer.empty as unknown as Layer.Layer<Policies, LE, LR>)
       ).pipe(Layer.provide(systems));
       const hosted = domain
-        .layer(policies)
+        .layer(policies, { telemetry: options.telemetry })
         .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems)));
 
       // The aggregates the story touched, for the report's "events so far".

@@ -8,33 +8,84 @@ import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
 
 /**
- * Span attributes a declaration adds for its values: a command's input, an
- * event, a rejection. Nothing from a payload is recorded unless you return
- * it here, and a `Redacted` value you return is recorded as `<redacted>`.
+ * Span attributes recorded for a value: a command's input, an event, a
+ * rejection, a query's input. Nothing from a payload is recorded unless you
+ * return it here, and a `Redacted` value you return is recorded as
+ * `<redacted>`.
  */
 export type Attributes<V> = (value: V) => Readonly<Record<string, unknown>>;
+
+/** A declaration with a decoded type: a command, an event or a rejection. */
+interface Tagged {
+  readonly Type: unknown;
+}
+
+type TagOf<T> = T extends { readonly _tag: infer Tag extends string } ? Tag : never;
+
+/** {@link Attributes} for each declaration, by its tag. */
+export type AttributesByTag<T extends Tagged> = {
+  readonly [K in T as TagOf<K["Type"]>]?: Attributes<K["Type"]>;
+};
+
+/**
+ * Span attributes a hosted model records, for its commands' inputs, its
+ * events and its commands' rejections, each by its tag. They record on every
+ * span the value passes through.
+ */
+export interface AttributeOptions<
+  C extends Tagged = Tagged,
+  Ev extends Tagged = Tagged,
+  Rj extends Tagged = Tagged,
+> {
+  readonly commands?: AttributesByTag<C>;
+  readonly events?: AttributesByTag<Ev>;
+  readonly rejections?: AttributesByTag<Rj>;
+}
 
 /**
  * How a hosted model records telemetry. Tuning, not meaning, so it lives on
  * the Layer: `Bank.layer(handlers, { telemetry: { views: false } })`.
  */
-export interface Options {
+export interface Options<
+  C extends Tagged = Tagged,
+  Ev extends Tagged = Tagged,
+  Rj extends Tagged = Tagged,
+> {
   /**
    * Trace every view applying an event. Views apply every event they fold,
    * so this is the busiest span.
    * @default true
    */
   readonly views?: boolean;
+  /**
+   * What to record from a command's input, an event or a rejection, by its
+   * tag. Nothing from a payload is recorded unless you list it here.
+   */
+  readonly attributes?: AttributeOptions<C, Ev, Rj>;
 }
 
 /** @internal */
 export interface Resolved {
   readonly views: boolean;
+  /** A command's attributes, by its tag. */
+  readonly command: (value: { readonly _tag: string }) => Record<string, unknown>;
+  /** An event's attributes, by its tag. */
+  readonly event: (value: { readonly _tag: string }) => Record<string, unknown>;
+  /** A rejection's attributes, by its tag. */
+  readonly rejection: (value: { readonly _tag: string }) => Record<string, unknown>;
 }
+
+const byTag =
+  (attributes: Readonly<Record<string, Attributes<any> | undefined>> | undefined) =>
+  (value: { readonly _tag: string }) =>
+    attributesOf(attributes?.[value._tag], value);
 
 /** @internal */
 export const resolve = (options: Options | undefined): Resolved => ({
   views: options?.views ?? true,
+  command: byTag(options?.attributes?.commands),
+  event: byTag(options?.attributes?.events),
+  rejection: byTag(options?.attributes?.rejections),
 });
 
 /** A span's identity, stored with what it caused so later work can continue or link to it. @internal */
@@ -109,18 +160,20 @@ const flatten = (out: Record<string, unknown>, key: string, value: unknown, dept
 };
 
 /**
- * The attributes a declaration adds for one of its values, if it declares
- * `attributes`. Values are flattened, capped, and `Redacted` values hidden.
+ * The attributes recorded for a value, if any are given for it. Values are
+ * flattened, capped, and `Redacted` values hidden.
  *
  * @internal
  */
-export const attributesOf = (cls: unknown, value: unknown): Record<string, unknown> => {
-  const attributes = (cls as { readonly attributes?: Attributes<any> } | undefined)?.attributes;
+export function attributesOf<V>(
+  attributes: Attributes<V> | undefined,
+  value: V,
+): Record<string, unknown> {
   if (attributes === undefined) return {};
   const out: Record<string, unknown> = {};
   for (const [key, inner] of Object.entries(attributes(value))) flatten(out, key, inner, 0);
   return out;
-};
+}
 
 // ---------------------------------------------------------------- metrics
 

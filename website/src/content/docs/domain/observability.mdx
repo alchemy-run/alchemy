@@ -80,13 +80,21 @@ Every span carries `domain.correlation_id`, the id of the first command in the f
 
 ## Record what matters to you
 
-Nothing from a command or event is recorded unless you ask for it. Return the attributes you want from `attributes`, on the declaration:
+Nothing from a command, event or rejection is recorded unless you ask for it. Return the attributes you want from `telemetry.attributes`, on the model's Layer, by tag:
 
-```typescript title="packages/domain/src/Account/WithdrawMoney.command.ts"
-attributes: (cmd) => ({ "bank.amount": cmd.amount }),
+```typescript title="packages/server/src/BankWorker.ts"
+Bank.layer(BankHandlers, {
+  telemetry: {
+    attributes: {
+      commands: { WithdrawMoney: (cmd) => ({ "bank.amount": cmd.amount }) },
+      events: { MoneyWithdrawn: (e) => ({ "bank.balance_after": e.balanceAfter }) },
+      rejections: { InsufficientFunds: (r) => ({ "bank.requested": r.requested }) },
+    },
+  },
+});
 ```
 
-Commands, events and rejections all accept it. Events and rejections take it as a third argument: `Domain.Event("MoneyWithdrawn", { amount: Cents }, { attributes: (e) => ({ ... }) })`.
+Each function receives the decoded value, typed by its declaration, and a tag the model doesn't have is a type error. What a trace records is tuning, not meaning, so it sits on the Layer with the rest of how the model is hosted. A query takes its own `attributes` on its `toLayer`.
 
 ## Keep secrets out
 
