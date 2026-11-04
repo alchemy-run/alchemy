@@ -3,7 +3,9 @@ title: Plain HTTP and OpenAPI
 description: Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 ---
 
-An Api's typed client speaks Effect RPC. A partner, a script or a public API client often wants plain HTTP and JSON instead, with an OpenAPI document to generate its client from. `toHttpApi` from `@alchemy.run/domain/Http` gives you both from the Api you already have: an Effect `HttpApi` group with one endpoint per call the Api serves, the Layer that serves it, and the OpenAPI document of it.
+An Api's typed client speaks Effect RPC. A script or an internal tool often wants plain HTTP and JSON instead, with an OpenAPI document to generate its client from. `toHttpApi` from `@alchemy.run/domain/Http` gives you both from the Api you already have: an Effect `HttpApi` group with one endpoint per call you expose, the Layer that serves it, and the OpenAPI document of it.
+
+`toHttpApi` is a convenience for internal tools. It publishes the domain's own replies and states as they are, so a field one of them gains later is published too. For a public or partner API, write your own `HttpApi` with its own response schemas (see [Shape a public API](#shape-a-public-api)).
 
 ## Publish an Api
 
@@ -11,10 +13,12 @@ An Api's typed client speaks Effect RPC. A partner, a script or a public API cli
 import * as DomainHttp from "@alchemy.run/domain/Http";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
-export const BankHttp = DomainHttp.toHttpApi(CustomerApi);
+export const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
+  expose: ["DepositMoney", "AccountSummary.get", "AccountSummary.watch"],
+});
 ```
 
-Every call the Api serves becomes an endpoint. The Api is already the list of what a client may reach, so to publish less over HTTP, give HTTP clients their own, smaller Api, as in [Give each kind of client its own Api](/domain/api#give-each-kind-of-client-its-own-api).
+Nothing is published unless `expose` lists it: a command by its name, and a read as `<Name>.<operation>`. A call the Api serves but `expose` leaves out has no endpoint, and a name the Api does not serve is a type error.
 
 `BankHttp` has:
 
@@ -113,26 +117,33 @@ Every call goes through the Api's own handlers, in process, with the HTTP reques
 
 ## Limits
 
-A read's `where` filter is not published, since a filter does not fit in a URL. An endpoint's input and answer are the call's own JSON. To shape a public API differently, write your own `HttpApi` group and call the Api's client from its handlers:
+A read's `where` filter is not published, since a filter does not fit in a URL. An endpoint's input and answer are the call's own JSON.
+
+## Shape a public API
+
+A public or partner API declares each endpoint's response next to it, and its handlers call the Api in process. A field reaches the outside only when you add it here:
 
 ```typescript
-const Partner = HttpApi.make("Partner").add(
-  HttpApiGroup.make("accounts").add(
-    HttpApiEndpoint.get("balance", "/balance/:id", {
-      params: { id: AccountId },
-      success: Schema.Struct({ balance: Schema.Number }),
-    }),
-  ),
-);
+export const Balance = Schema.Struct({ balance: Schema.Number });
 
-const PartnerLive = HttpApiBuilder.group(Partner, "accounts", (handlers) =>
-  handlers.handle("balance", ({ params, request }) =>
-    Effect.gen(function* () {
+export const GetBalance = HttpApiEndpoint.get("GetBalance", "/balance/:id", {
+  params: { id: AccountId },
+  success: Balance,
+});
+
+export class Accounts extends HttpApiGroup.make("Accounts").add(GetBalance) {}
+
+export class PartnerApi extends HttpApi.make("PartnerApi").add(Accounts) {}
+
+export const AccountsLive = HttpApiBuilder.group(PartnerApi, "Accounts", (handlers) =>
+  handlers.handle(
+    "GetBalance",
+    Effect.fn(function* ({ params, request }) {
       const bank = yield* CustomerApi.clientInProcess;
       // the caller's headers, so the view's middleware sees who is asking
       const summary = yield* bank.AccountSummary.get(params.id, { headers: request.headers });
       return { balance: summary?.balance ?? 0 };
-    }).pipe(Effect.scoped, Effect.orDie),
+    }, Effect.scoped, Effect.orDie),
   ),
 );
 ```

@@ -737,6 +737,50 @@ describe.concurrent.each([
       }).pipe(Effect.scoped),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 30_000 },
     );
+
+    // Each handler binds a resource to its RPC's scope and hands
+    // `state.waitUntil` work that uses it 200ms after the reply. The scope
+    // must wait for that work: it sees the resource `open`, and the release
+    // is journaled after it.
+    for (const kind of ["unary", "stream", "during a subscription", "http"] as const) {
+      test(
+        `waitUntil work keeps the RPC's scope open (${kind})`,
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          const object = yield* freshObjects;
+          const { client } = yield* connect(`${url}/rpc/${object("lifetime")}`);
+          const label = kind.replaceAll(" ", "-");
+          if (kind === "http") {
+            const response = yield* requestWorker(
+              HttpClientRequest.get(`${url}/hold/${object("lifetime")}/${label}`),
+            );
+            expect(yield* response.text).toBe("scheduled");
+          } else if (kind === "stream") {
+            expect(yield* client.streamWaitUntil({ label }).pipe(Stream.runCollect)).toEqual(["a"]);
+          } else {
+            if (kind === "during a subscription") {
+              // A subscription on the same socket that never ends.
+              const started = yield* Deferred.make<void>();
+              yield* client.watch({ key: "open" }).pipe(
+                Stream.runForEach(() => Deferred.succeed(started, undefined)),
+                Effect.forkScoped,
+              );
+              yield* Deferred.await(started).pipe(Effect.timeout("10 seconds"));
+            }
+            expect(yield* client.holdLater({ label })).toBe("scheduled");
+          }
+          const entries = yield* client.journal({ label }).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("250 millis"),
+              times: 40,
+              until: (entries) => entries.length >= 2,
+            }),
+          );
+          expect(entries).toEqual([`${label}:open`, `${label}:released`]);
+        }).pipe(Effect.scoped),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 30_000 },
+      );
+    }
   },
   { tags: ["provider:cloudflare", "provider:cloudflare:worker"] },
 );

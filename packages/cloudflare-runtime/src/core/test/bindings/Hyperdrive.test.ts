@@ -43,6 +43,10 @@ const startTcpEcho = (greeting: string) =>
   Effect.acquireRelease(
     Effect.callback<{ host: string; port: number; server: Net.Server }>((resume) => {
       const server = Net.createServer((socket) => {
+        // Drain what the client sends. A local tool's probe (T3 Code, VS Code
+        // port detection) sends `GET /`; left unread, its FIN is never
+        // consumed, the socket never closes, and `server.close` hangs.
+        socket.resume();
         socket.write(greeting);
         socket.end();
       });

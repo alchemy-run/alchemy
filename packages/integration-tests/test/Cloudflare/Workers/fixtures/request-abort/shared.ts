@@ -23,7 +23,9 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
 
 /**
  * The Worker body: `/slow` records `started`, sleeps past the test, and
- * records how its release ran.
+ * records how its release ran. `/slow-background` does the same with a
+ * resource on the event's scope and `waitUntil` work that reads it five
+ * seconds later, after the client has gone.
  */
 export const requestAbortHandler = Effect.gen(function* () {
   const journals = yield* Journal;
@@ -39,6 +41,27 @@ export const requestAbortHandler = Effect.gen(function* () {
       }
       if (url.pathname === "/events") {
         return yield* HttpServerResponse.json((yield* journal.events(id)) ?? []);
+      }
+      if (url.pathname === "/slow-background") {
+        const resource = yield* Effect.acquireRelease(
+          Effect.sync(() => ({ released: false })),
+          (resource) =>
+            Effect.sync(() => {
+              resource.released = true;
+            }).pipe(Effect.andThen(journal.record(id, "resource:released")), Effect.orDie),
+        );
+        yield* Cloudflare.waitUntil(
+          Effect.sleep("5 seconds").pipe(
+            Effect.andThen(
+              Effect.suspend(() =>
+                journal.record(id, `background:${resource.released ? "released" : "open"}`),
+              ),
+            ),
+            Effect.orDie,
+          ),
+        );
+        yield* journal.record(id, "started");
+        return yield* Effect.sleep("2 minutes").pipe(Effect.as(HttpServerResponse.text("done")));
       }
       // A slow provider call that outlasts the test. (A handler that waits
       // on nothing at all is cancelled by workerd as hung.)
