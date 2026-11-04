@@ -12,13 +12,13 @@ import { fileURLToPath } from "node:url";
  * which is exactly what the providers receive in `reconcile` and what the
  * planner diffs (`diffBindings` plans an update whenever a row changes).
  *
- * The live suite is gated behind AWS_TEST_HOSTED_ZONE=<zone-name> because it
- * needs a real Route 53 hosted zone (the shared testing account has none).
- * Under the floci runner (ALCHEMY_TEST_DEV=1) the zone must exist in the
- * emulator, and HTTP checks go through the distribution's local edge port.
+ * The live suite deploys its own Route 53 hosted zone, delegated from the
+ * standing Cloudflare test zone. Under the floci runner (ALCHEMY_TEST_DEV=1)
+ * HTTP checks go through the distribution's local edge port.
  */
 import * as AWS from "@alchemy.run/aws";
 import { Certificate, CertificateProvider } from "@alchemy.run/aws/ACM/Certificate";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as acm from "@distilled.cloud/aws/acm";
@@ -34,8 +34,12 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
+import { bare, cloudflareZoneId, delegate, queryA, waitForAuthoritative, ZONE } from "./dns.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
+});
 
 // Anchor the fixture to the repo root regardless of the runner's cwd.
 const fixtureDir = fileURLToPath(
@@ -344,14 +348,12 @@ function certificateProviderForDiff() {
 }
 
 // ---------------------------------------------------------------------------
-// Live verification — gated on AWS_TEST_HOSTED_ZONE=<zone-name> (e.g.
-// "alchemy-test.example.com"). The shared testing account currently has NO
-// hosted zone, so this cannot run there; it is implemented for an account
-// that has one. The suite also folds in wave-2's deferred gated checks
-// (cloudfrontUrl:false 301 and redirect 301), which need the same zone.
+// Live verification in a stack-owned Route 53 zone delegated from the
+// Cloudflare test zone. Also covers the cloudfrontUrl:false 301 and the
+// redirect-hostname 301.
 // ---------------------------------------------------------------------------
 
-const testZone = process.env.AWS_TEST_HOSTED_ZONE;
+const R53_ZONE = `${testName("aws-router-r53")}.${ZONE}`;
 
 // Under the floci runner the emulator serves each distribution's edge on a
 // local plain-HTTP port (`distribution.url`, as in StaticSite.test.ts), and
@@ -360,7 +362,7 @@ const testZone = process.env.AWS_TEST_HOSTED_ZONE;
 // so emulated requests hit that port and carry the hostname as `Host`.
 const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
 
-describe.skipIf(!testZone)(
+describe.skipIf(!!process.env.FAST)(
   "AWS.Website Router hostname binding (live)",
   {
     tags: [
@@ -378,26 +380,17 @@ describe.skipIf(!testZone)(
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
+          const cfZoneId = yield* cloudflareZoneId;
 
-          const zoneName = testZone!.replace(/\.$/, "");
-          const zone = yield* route53
-            .listHostedZonesByName({ DNSName: `${zoneName}.` })
-            .pipe(
-              Effect.map((response) =>
-                (response.HostedZones ?? []).find((candidate) => candidate.Name === `${zoneName}.`),
-              ),
-            );
-          if (!zone?.Id) {
-            return yield* Effect.die(
-              `AWS_TEST_HOSTED_ZONE=${zoneName} does not resolve to a hosted zone in this account`,
-            );
-          }
-          const hostedZoneId = zone.Id.replace(/^\/hostedzone\//, "");
-          const routerHost = `wave3-router.${zoneName}`;
-          const siteHost = `wave3-docs.${zoneName}`;
-          const redirectHost = `wave3-old.${zoneName}`;
+          const hostedZone = AWS.Route53.HostedZone("Zone", { name: R53_ZONE, forceDestroy: true });
+          const { id: hostedZoneId, nameServers } = yield* stack.deploy(hostedZone);
+          const routerHost = `router.${R53_ZONE}`;
+          const siteHost = `docs.${R53_ZONE}`;
+          const redirectHost = `old.${R53_ZONE}`;
 
           const routerOnly = Effect.gen(function* () {
+            yield* hostedZone;
+            yield* delegate(cfZoneId, R53_ZONE, nameServers);
             const router = yield* AWS.Website.Router("Router", {
               domain: { name: routerHost, hostedZoneId },
               // Wave-2 deferred gated check: default-domain requests 301 to
@@ -443,24 +436,41 @@ describe.skipIf(!testZone)(
           expect(sans).toContain(siteHost);
           expect(sans).toContain(redirectHost);
 
-          // Route 53: A-alias records exist for the bound hostnames.
-          const recordFor = (name: string) =>
+          // Route 53: `A` and `AAAA` alias records at the distribution for the
+          // bound hostnames.
+          const recordFor = (name: string, type: "A" | "AAAA") =>
             route53
               .listResourceRecordSets({
                 HostedZoneId: hostedZoneId,
                 StartRecordName: `${name}.`,
-                StartRecordType: "A",
+                StartRecordType: type,
                 MaxItems: 5,
               })
               .pipe(
                 Effect.map((response) =>
                   (response.ResourceRecordSets ?? []).find(
-                    (recordSet) => recordSet.Name === `${name}.` && recordSet.Type === "A",
+                    (recordSet) => recordSet.Name === `${name}.` && recordSet.Type === type,
                   ),
                 ),
               );
-          expect(yield* recordFor(siteHost)).toBeDefined();
-          expect(yield* recordFor(redirectHost)).toBeDefined();
+          const distributionDomain = bare(deployed.router.distribution.domainName as string);
+          for (const name of [siteHost, redirectHost]) {
+            for (const type of ["A", "AAAA"] as const) {
+              const record = yield* recordFor(name, type);
+              expect(bare(record?.AliasTarget?.DNSName ?? "")).toBe(distributionDomain);
+            }
+          }
+
+          if (!runEmulated) {
+            for (const name of [siteHost, redirectHost]) {
+              yield* waitForAuthoritative(
+                nameServers,
+                name,
+                queryA,
+                (answers) => answers.length > 0,
+              );
+            }
+          }
 
           // Manual-redirect fetch (the platform HttpClient follows redirects,
           // which would hide the 301s under test). Retries ride out DNS/cert/
@@ -536,10 +546,23 @@ describe.skipIf(!testZone)(
           expect(shrunkAliases).not.toContain(redirectHost);
           const shrunkCertificateArn = (shrunk.router.certificate as any).certificateArn as string;
           expect(shrunkCertificateArn).not.toBe(certificateArn);
-          expect(yield* recordFor(siteHost)).toBeUndefined();
-          expect(yield* recordFor(redirectHost)).toBeUndefined();
+          for (const name of [siteHost, redirectHost]) {
+            for (const type of ["A", "AAAA"] as const) {
+              expect(yield* recordFor(name, type)).toBeUndefined();
+            }
+          }
 
           yield* stack.destroy();
+          const zoneGone = yield* route53.getHostedZone({ Id: hostedZoneId }).pipe(
+            Effect.as(false),
+            Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(true)),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (gone) => gone,
+              times: 10,
+            }),
+          );
+          expect(zoneGone).toBe(true);
         }),
       // Two full CloudFront distribution deployments + two ACM issuances +
       // disable→wait→delete on destroy. Same order of budget as the Router
