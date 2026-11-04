@@ -4,6 +4,7 @@ import { profileCommandHint } from "alchemy/Util/interactive";
 import type * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
@@ -43,7 +44,9 @@ interface TailEventMessage {
     timestamp: string;
   }[];
   logs: {
-    message: string[];
+    // The console call's arguments: strings, or the objects a structured
+    // logger hands the console.
+    message: unknown[];
     level: string;
     timestamp: string;
   }[];
@@ -185,7 +188,9 @@ export const CloudflareLogs = Effect.gen(function* () {
         }
 
         for (const log of data.logs) {
-          const msg = log.message.join(" ");
+          const msg = log.message
+            .map((part) => (typeof part === "string" ? part : Formatter.formatJson(part)))
+            .join(" ");
           Queue.offerUnsafe(queue, {
             timestamp: new Date(log.timestamp),
             message: log.level === "log" ? msg : `${log.level}: ${msg}`,
