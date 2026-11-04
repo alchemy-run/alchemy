@@ -1418,7 +1418,9 @@ export const lookupTargetDeletes: string[] = [];
 
 const lookupTargetVariant = (mode: ProviderMode) =>
   Provider.succeed(LookupTarget, {
-    stables: ["name"],
+    // `kind` is an optional stable: undefined on a declared LookupTarget,
+    // as `zoneId` is on an account-level Access identity provider.
+    stables: ["name", "kind"],
     list: () => Effect.succeed([]),
     reconcile: Effect.fn(function* ({ id, news = {} }) {
       const attrs = { name: id, value: news.value ?? id };
