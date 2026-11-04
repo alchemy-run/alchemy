@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
 import {
@@ -86,6 +87,11 @@ export interface Members<
   readonly projections?: J;
   readonly streams?: S;
   readonly sagas?: G;
+  /**
+   * Data for what is built on the model, such as its `description`. Add your
+   * own keys by augmenting {@link Annotations}.
+   */
+  readonly annotations?: Annotations;
 }
 
 /**
@@ -103,6 +109,7 @@ export interface ModelClass<
 > {
   new (_: never): {};
   readonly kind: "Model";
+  readonly annotations: Annotations;
   readonly modelName: Name;
   /** The model's aggregates, in order. */
   readonly aggregates: Parts["aggregates"];
@@ -134,6 +141,7 @@ export interface ModelClass<
  */
 export interface Any extends Servable {
   readonly kind: "Model";
+  readonly annotations: Annotations;
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
 }
@@ -256,6 +264,7 @@ export const make = <
   };
   return class {
     static readonly kind = "Model" as const;
+    static readonly annotations: Annotations = members.annotations ?? {};
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];

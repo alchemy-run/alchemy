@@ -28,6 +28,7 @@ import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import * as Command from "./Command.ts";
 import { DefinitionError, NotInModel, Unreadable, UnroutedCommand } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
@@ -94,6 +95,11 @@ export interface Options<
   readonly streams?: S;
   /** The aggregates a client may read directly, through their `read` contract. Every one that declares `read` by default. */
   readonly aggregates?: A;
+  /**
+   * Data for what is built on the model, such as its `description`. Add your
+   * own keys by augmenting {@link Annotations}.
+   */
+  readonly annotations?: Annotations;
 }
 
 /** What an Api over `M` serves, from the names it lists. */
@@ -355,6 +361,7 @@ export interface ApiClass<
 > extends Effect.Effect<ApiServer, never, Model.Internals | MiddlewareServices<Serves>> {
   new (_: never): {};
   readonly kind: "Api";
+  readonly annotations: Annotations;
   readonly apiName: Name;
   /** The model this Api is over. */
   readonly model: Model.Any;
@@ -1053,6 +1060,7 @@ const build = (
   entries: ReadonlyArray<Servable>,
   unresolved: ReadonlyArray<Unservable>,
   group: RpcGroup.RpcGroup<Rpc.Any>,
+  annotations: Annotations,
 ): unknown => {
   const client = RpcClient.make(group).pipe(
     Effect.map((flat) => nest(entries, flat as unknown as Flat)),
@@ -1091,6 +1099,7 @@ const build = (
     Effectable.Prototype({ label: `alchemy/Domain/Api<${name}>`, evaluate: () => serve }),
     {
       kind: "Api" as const,
+      annotations,
       apiName: name,
       model,
       serves: entries,
@@ -1241,6 +1250,7 @@ export const make = <
     serves,
     unresolved,
     RpcGroup.make(...serves.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
+    options.annotations ?? {},
   ) as ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, A>>>;
 };
 
@@ -1431,6 +1441,7 @@ type RejectionUnion<R> = [R] extends [never]
  */
 export interface Any {
   readonly kind: "Api";
+  readonly annotations: Annotations;
   readonly apiName: string;
   /** The model the Api is over. */
   readonly model: Model.Any;

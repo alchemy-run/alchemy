@@ -48,7 +48,7 @@ class Deposited extends Domain.Event("Deposited", {
 }) {}
 class OverLimit extends Domain.Rejection("OverLimit", { limit: Schema.Int }) {}
 /** Its status is Effect's own `httpApiStatus` annotation, which every HttpApi reads. */
-class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 }) {}
+class NotOwner extends Domain.Rejection("NotOwner", {}, { annotations: { httpApiStatus: 403 } }) {}
 
 class Deposit extends Domain.Command("Deposit", {
   target: WalletId,

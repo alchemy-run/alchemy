@@ -218,7 +218,7 @@ class Frozen extends Schema.TaggedError<Frozen>()("Frozen", { until: Schema.Stri
 class NotOwner extends Domain.Rejection(
   "NotOwner",
   {},
-  { httpApiStatus: 403, description: "Only the vault's owner may do this." },
+  { annotations: { httpApiStatus: 403, description: "Only the vault's owner may do this." } },
 ) {}
 
 class Stored extends Domain.Event("Stored", { item: Schema.String }) {}

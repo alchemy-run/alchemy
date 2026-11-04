@@ -2,6 +2,7 @@ import * as Domain from "@alchemy.run/domain";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 
 // A key of this suite's own, as an app or a library adds one.
 declare module "@alchemy.run/domain" {
@@ -80,6 +81,31 @@ class Refund extends Domain.Saga("Refund", {
   annotations: { description: "Gives a deposit back." },
 }) {}
 
+class NoFunds extends Domain.Rejection(
+  "NoFunds",
+  {},
+  {
+    annotations: { httpApiStatus: 402, description: "The wallet can't cover it." },
+  },
+) {}
+
+class Bank extends Domain.ExternalSystem(
+  "Bank",
+  { payout: { args: { amount: Schema.Int }, success: { reference: Schema.String } } },
+  { annotations: { description: "The bank that pays money out." } },
+) {}
+
+class Wallets extends Domain.Model("Wallets", {
+  aggregates: [Wallet],
+  views: [Balance],
+  annotations: { description: "Wallets and their balances." },
+}) {}
+
+class WalletApi extends Domain.Api("WalletApi", {
+  model: Wallets,
+  annotations: { description: "What a wallet app reaches." },
+}) {}
+
 describe("Domain annotations", { tags: ["unit"] }, () => {
   it("every declaration carries the annotations it declares", () => {
     expect(Deposited.annotations.description).toBe("Money arrived in a wallet.");
@@ -93,6 +119,15 @@ describe("Domain annotations", { tags: ["unit"] }, () => {
     expect(LogBalances.annotations.description).toBe("Logs each new balance.");
     expect(Notify.annotations.description).toBe("Tells the owner about a deposit.");
     expect(Refund.annotations.description).toBe("Gives a deposit back.");
+    expect(NoFunds.annotations.description).toBe("The wallet can't cover it.");
+    expect(Bank.annotations.description).toBe("The bank that pays money out.");
+    expect(Wallets.annotations.description).toBe("Wallets and their balances.");
+    expect(WalletApi.annotations.description).toBe("What a wallet app reaches.");
+  });
+
+  it("a rejection's annotations are its Schema's too", () => {
+    expect(SchemaAST.resolveDescription(NoFunds.ast)).toBe("The wallet can't cover it.");
+    expect(SchemaAST.resolveAt<number>("httpApiStatus")(NoFunds.ast)).toBe(402);
   });
 
   it("a declaration without annotations has none", () => {
