@@ -3,9 +3,10 @@ import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, grantsFor } from "../HttpBinding.ts";
 import type { Database } from "./Database.ts";
+import { DocumentAlreadyExists } from "./DatabaseTypes.ts";
 import type { DocumentSnapshot, ReadDatabaseClient } from "./ReadDatabase.ts";
 import { decodeFields, encodeFields, fieldPath } from "./Values.ts";
-import { DocumentAlreadyExists, type WriteDatabaseClient } from "./WriteDatabase.ts";
+import type { WriteDatabaseClient } from "./WriteDatabase.ts";
 
 // Firestore databases have no resource-level IAM policy: each grant is on
 // the project under an IAM Condition naming the bound database.

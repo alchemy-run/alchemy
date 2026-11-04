@@ -1,18 +1,14 @@
 import type * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Database } from "./Database.ts";
 import { makeFirestoreDatabaseBinding, writeDatabaseIam } from "./DatabaseHttp.ts";
+import { DocumentAlreadyExists } from "./DatabaseTypes.ts";
 import type { DocumentSnapshot } from "./ReadDatabase.ts";
 
-/** `create` found a document already at `path`. */
-export class DocumentAlreadyExists extends Data.TaggedError("GCP.Firestore.DocumentAlreadyExists")<{
-  path: string;
-  message: string;
-}> {}
+export { DocumentAlreadyExists };
 
 /** Write-only client for one Firestore database. */
 export interface WriteDatabaseClient {

@@ -1,20 +1,13 @@
 import type * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Table } from "./Table.ts";
 import { makeBigQueryTableBinding, writeTableIam } from "./TableHttp.ts";
+import { InsertRowsFailed } from "./TableTypes.ts";
 
-/** Per-row errors from a `tabledata.insertAll` request. */
-export class InsertRowsFailed extends Data.TaggedError("GCP.BigQuery.InsertRowsFailed")<{
-  insertErrors: ReadonlyArray<{
-    /** Index of the rejected row in the request. */
-    index: number | undefined;
-    errors: ReadonlyArray<bigquery.ErrorProto>;
-  }>;
-}> {}
+export { InsertRowsFailed };
 
 export interface InsertRowsOptions {
   /**
