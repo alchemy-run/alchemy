@@ -25,12 +25,7 @@ const decode = (content: string | Uint8Array<ArrayBufferLike>) =>
 const writeFixture = Effect.fn(function* (files: Record<string, string>) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  // The real path: the bundler resolves files through symlinks (macOS
-  // temp directories live under `/private/var`), so absolute globs built
-  // from `root` must too.
-  const root = yield* fs.realPath(
-    yield* fs.makeTempDirectory({ prefix: "alchemy-worker-bundle-" }),
-  );
+  const root = yield* fs.makeTempDirectory({ prefix: "alchemy-worker-bundle-" });
   for (const [name, content] of Object.entries(files)) {
     const file = path.join(root, name);
     yield* fs.makeDirectory(path.dirname(file), { recursive: true });
