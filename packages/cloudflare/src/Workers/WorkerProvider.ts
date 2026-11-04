@@ -3794,19 +3794,37 @@ export const LiveWorkerProvider = () =>
         // (adopted classes Alchemy never bound included — an undeclared
         // namespace is rejected, never silently deleted), then this deploy's
         // creates, renames, deletes and incoming transfers are applied on top.
-        const exportsMap = buildDurableObjectExports({
+        // Over Cloudflare's 100-entry limit, the renames and deletes go up
+        // over several uploads first (#2976).
+        const declaredStorage = new Map(
+          currentDoBindings.flatMap((binding) =>
+            binding.storage === undefined ? [] : [[binding.className, binding.storage] as const],
+          ),
+        );
+        const exportStages = yield* planDurableObjectExportStages({
           scriptName: name,
           observedNamespaces,
-          hostedClasses: currentDoBindings.map((binding) => binding.className),
-          declaredStorage: new Map(
-            currentDoBindings.flatMap((binding) =>
-              binding.storage === undefined ? [] : [[binding.className, binding.storage] as const],
-            ),
-          ),
+          hostedDurableObjects: currentDoBindings,
+          declaredStorage,
           renamedClasses,
           deletedClasses,
           transferredClasses,
+          newClasses: [...newClasses, ...newSqliteClasses],
+          entrypointCount: Object.keys(news.entrypoints ?? {}).length,
+          // An intermediate upload wraps the main module in a JavaScript one.
+          stageable: /\.m?js$/.test(bundle.main ?? ""),
         });
+        const exportsMap =
+          exportStages?.exports ??
+          buildDurableObjectExports({
+            scriptName: name,
+            observedNamespaces,
+            hostedClasses: currentDoBindings.map((binding) => binding.className),
+            declaredStorage,
+            renamedClasses,
+            deletedClasses,
+            transferredClasses,
+          });
         Object.assign(
           exportsMap,
           yield* workerEntrypointExports(name, news.entrypoints, Object.keys(exportsMap)),
@@ -3957,6 +3975,90 @@ export const LiveWorkerProvider = () =>
             yield* Effect.logInfo(
               `Cloudflare Worker ${name}: no previous live version to split traffic with; deploying at 100%`,
             );
+          }
+          const stages = exportStages?.stages ?? [];
+          const mainFile = bundle.files?.find((file) => file.name === bundle.main);
+          const hasDefaultExport =
+            stages.length > 0 && mainFile !== undefined
+              ? /\bexport\s+default\b|\bas\s+default\b/.test(
+                  yield* Effect.tryPromise(() => mainFile.text()),
+                )
+              : false;
+          for (const [index, stage] of stages.entries()) {
+            // Each upload records the classes as they are once it lands, and
+            // keeps the deployed Domain version, so a crash between uploads
+            // re-plans only the renames still waiting.
+            yield* session.note(
+              `Renaming Durable Object classes (${index + 1}/${stages.length}) ...`,
+              { kind: "status" },
+            );
+            // The class a binding or container reaches in this upload: a class
+            // waiting for its rename under its old name, a class this deploy
+            // creates or transfers in not at all.
+            const stagedClass = (className: string) => {
+              const alias = stage.aliases.find((rename) => rename.to === className);
+              if (alias) return alias.from;
+              return stage.exports[className]?.state === undefined &&
+                stage.exports[className] !== undefined
+                ? className
+                : undefined;
+            };
+            const stageMain = "__alchemy_durable_object_stage.mjs";
+            yield* putWorkerScript({
+              accountId,
+              scriptName: name,
+              dispatchNamespace,
+              metadata: {
+                ...metadata,
+                mainModule: stageMain,
+                exports: {
+                  ...stage.exports,
+                  ...(yield* workerEntrypointExports(
+                    name,
+                    news.entrypoints,
+                    Object.keys(stage.exports),
+                  )),
+                },
+                tags: Array.from(
+                  new Set([
+                    ...createAlchemyWorkerTags(id),
+                    ...encodeDurableObjectTags(stage.classByLogicalId),
+                    ...(deployedDomainVersion === undefined
+                      ? []
+                      : [DomainVersion.versionTag(deployedDomainVersion)]),
+                    ...(news.tags ?? []),
+                  ]),
+                ),
+                bindings: metadata.bindings?.flatMap((binding) => {
+                  if (
+                    binding.type !== "durable_object_namespace" ||
+                    (binding.scriptName !== undefined && binding.scriptName !== name)
+                  ) {
+                    return [binding];
+                  }
+                  const className = stagedClass(binding.className);
+                  return className === undefined ? [] : [{ ...binding, className }];
+                }),
+                containers: metadata.containers?.flatMap((container) => {
+                  const className = stagedClass(container.className);
+                  return className === undefined ? [] : [{ ...container, className }];
+                }),
+              },
+              files: [
+                new File(
+                  [
+                    durableObjectStageModule({
+                      main: bundle.main!,
+                      hasDefaultExport,
+                      aliases: stage.aliases,
+                    }),
+                  ],
+                  stageMain,
+                  { type: "application/javascript+module" },
+                ),
+                ...(bundle.files ?? []),
+              ],
+            });
           }
           if (transferringIn.size > 0) {
             // A transfer is two-phase under `exports`: this Worker first
@@ -5739,6 +5841,191 @@ const buildDurableObjectExports = (params: {
 };
 
 /**
+ * Cloudflare rejects a script upload whose `exports` map has more than 100
+ * entries (`BadRequest: \`exports\` has 129 entries; the maximum allowed is
+ * 100.`). Live classes, `renamed`/`deleted` tombstones and Worker entrypoints
+ * all count.
+ */
+const MAX_SCRIPT_EXPORTS = 100;
+
+/**
+ * One upload of a deploy whose Durable Object renames and deletes declare
+ * more than {@link MAX_SCRIPT_EXPORTS} exports at once (#2976).
+ */
+type DurableObjectExportStage = {
+  /** The Durable Object exports this upload declares. */
+  exports: Record<string, workers.PutScriptMetadataExport>;
+  /** The class each hosted logical id lives under once this upload lands. */
+  classByLogicalId: ReadonlyArray<{ logicalId: string; className: string }>;
+  /** Renames still waiting: the code's `to` class is exported as `from` too. */
+  aliases: ReadonlyArray<{ from: string; to: string }>;
+};
+
+/**
+ * Split a deploy's renames and deletes over uploads that each declare at most
+ * {@link MAX_SCRIPT_EXPORTS} exports. A tombstone is only declared by the
+ * upload that renames or deletes its class, so a class renamed by an earlier
+ * upload counts once afterwards. An intermediate upload declares the classes
+ * that exist at that point: classes still waiting for their rename stay live
+ * under their old name, and classes this deploy creates or transfers in wait
+ * for the last upload. Returns `undefined` when one upload fits, and the
+ * intermediate uploads plus the last upload's exports otherwise.
+ *
+ * @internal
+ */
+const planDurableObjectExportStages = Effect.fn(function* (params: {
+  scriptName: string;
+  observedNamespaces: readonly ObservedDurableObjectNamespace[];
+  hostedDurableObjects: ReadonlyArray<{ logicalId: string; className: string }>;
+  declaredStorage: ReadonlyMap<string, "sqlite" | "legacy-kv">;
+  renamedClasses: readonly { from: string; to: string }[];
+  deletedClasses: readonly string[];
+  transferredClasses: readonly { from: string; fromScript: string; to: string }[];
+  newClasses: readonly string[];
+  entrypointCount: number;
+  stageable: boolean;
+}) {
+  const { scriptName, entrypointCount } = params;
+  const hostedClasses = params.hostedDurableObjects.map(({ className }) => className);
+  const size = (exports: Record<string, unknown>) => Object.keys(exports).length + entrypointCount;
+  const full = buildDurableObjectExports({
+    scriptName,
+    observedNamespaces: params.observedNamespaces,
+    hostedClasses,
+    declaredStorage: params.declaredStorage,
+    renamedClasses: params.renamedClasses,
+    deletedClasses: params.deletedClasses,
+    transferredClasses: params.transferredClasses,
+  });
+  if (size(full) <= MAX_SCRIPT_EXPORTS) return undefined;
+  if (!params.stageable) {
+    return yield* new TooManyWorkerExports({ scriptName, count: size(full) });
+  }
+
+  // The script's namespaces once `renamed` and `deleted` have landed.
+  const observedAfter = (
+    renamed: readonly { from: string; to: string }[],
+    deleted: readonly string[],
+  ) =>
+    params.observedNamespaces.flatMap((ns) =>
+      ns.script !== scriptName
+        ? [ns]
+        : deleted.includes(ns.class)
+          ? []
+          : [{ ...ns, class: renamed.find((rename) => rename.from === ns.class)?.to ?? ns.class }],
+    );
+  const arriving = new Set([
+    ...params.newClasses,
+    ...params.transferredClasses.map((transfer) => transfer.to),
+  ]);
+  const stage = (
+    applied: { renamed: { from: string; to: string }[]; deleted: string[] },
+    batch: { renamed: { from: string; to: string }[]; deleted: string[] },
+  ): DurableObjectExportStage => {
+    const done = [...applied.renamed, ...batch.renamed];
+    const waiting = params.renamedClasses.filter((rename) => !done.includes(rename));
+    const exports = buildDurableObjectExports({
+      scriptName,
+      observedNamespaces: observedAfter(applied.renamed, applied.deleted),
+      hostedClasses: [
+        ...hostedClasses.filter(
+          (className) =>
+            !arriving.has(className) && !waiting.some((rename) => rename.to === className),
+        ),
+        ...waiting.map((rename) => rename.from),
+      ],
+      declaredStorage: params.declaredStorage,
+      renamedClasses: batch.renamed,
+      deletedClasses: batch.deleted,
+      transferredClasses: [],
+    });
+    return {
+      exports,
+      classByLogicalId: params.hostedDurableObjects.flatMap(({ logicalId, className }) => {
+        const pending = waiting.find((rename) => rename.to === className);
+        if (pending) return [{ logicalId, className: pending.from }];
+        return arriving.has(className) ? [] : [{ logicalId, className }];
+      }),
+      aliases: waiting,
+    };
+  };
+
+  // Deletes go in the first upload: the code no longer exports a deleted
+  // class, so it can't stay live in a later one. A delete swaps a live entry
+  // for a tombstone, so they fit whenever the deployed exports did.
+  const changes = [
+    ...params.deletedClasses.map((className) => ({ delete: className })),
+    ...params.renamedClasses.map((rename) => ({ rename })),
+  ];
+  const stages: DurableObjectExportStage[] = [];
+  const applied = { renamed: [] as { from: string; to: string }[], deleted: [] as string[] };
+  let batch = { renamed: [] as { from: string; to: string }[], deleted: [] as string[] };
+  for (const change of changes) {
+    const next =
+      "rename" in change
+        ? { renamed: [...batch.renamed, change.rename], deleted: batch.deleted }
+        : { renamed: batch.renamed, deleted: [...batch.deleted, change.delete] };
+    if (size(stage(applied, next).exports) <= MAX_SCRIPT_EXPORTS) {
+      batch = next;
+      continue;
+    }
+    if ((batch.renamed.length === 0 && batch.deleted.length === 0) || "delete" in change) {
+      return yield* new TooManyWorkerExports({
+        scriptName,
+        count: size(stage(applied, next).exports),
+      });
+    }
+    stages.push(stage(applied, batch));
+    applied.renamed.push(...batch.renamed);
+    applied.deleted.push(...batch.deleted);
+    batch = { renamed: [change.rename], deleted: [] };
+  }
+  if (batch.renamed.length > 0 || batch.deleted.length > 0) {
+    stages.push(stage(applied, batch));
+    applied.renamed.push(...batch.renamed);
+    applied.deleted.push(...batch.deleted);
+  }
+  const exports = buildDurableObjectExports({
+    scriptName,
+    observedNamespaces: observedAfter(applied.renamed, applied.deleted),
+    hostedClasses,
+    declaredStorage: params.declaredStorage,
+    renamedClasses: [],
+    deletedClasses: [],
+    transferredClasses: params.transferredClasses,
+  });
+  if (size(exports) > MAX_SCRIPT_EXPORTS) {
+    return yield* new TooManyWorkerExports({ scriptName, count: size(exports) });
+  }
+  return { stages, exports };
+});
+
+/**
+ * The entry module of an intermediate rename upload: Cloudflare requires
+ * every live class in `exports` to be exported by the code, so it re-exports
+ * the Worker's main module, exports each class still waiting for its rename
+ * under its old name as well, so its namespace keeps serving the real class.
+ *
+ * @internal
+ */
+const durableObjectStageModule = (params: {
+  main: string;
+  hasDefaultExport: boolean;
+  aliases: ReadonlyArray<{ from: string; to: string }>;
+}) => {
+  const main = JSON.stringify(`./${params.main}`);
+  return [
+    `import * as main from ${main};`,
+    `export * from ${main};`,
+    ...(params.hasDefaultExport ? ["export default main.default;"] : []),
+    ...params.aliases.map(
+      ({ from, to }) => `export { ${JSON.stringify(to)} as ${JSON.stringify(from)} } from ${main};`,
+    ),
+    "",
+  ].join("\n");
+};
+
+/**
  * The `{ type: "worker", cache }` export entries for a Worker's configured
  * entrypoints. Fails when a name is also a Durable Object class: one export
  * name has exactly one type.
@@ -6040,6 +6327,20 @@ class InvalidWorkerTags extends Data.TaggedError("InvalidWorkerTags")<{
   scriptName: string;
   reason: string;
 }> {}
+
+/**
+ * A Worker declares more Durable Object classes and entrypoints than
+ * Cloudflare's 100-entry `exports` limit allows, even with its renames and
+ * deletes spread over several uploads. Checked before any upload.
+ */
+export class TooManyWorkerExports extends Data.TaggedError("TooManyWorkerExports")<{
+  scriptName: string;
+  count: number;
+}> {
+  override get message() {
+    return `Worker '${this.scriptName}' declares ${this.count} exports (Durable Object classes and entrypoints); Cloudflare allows at most ${MAX_SCRIPT_EXPORTS}. Move some Durable Objects to another Worker.`;
+  }
+}
 
 class InvalidWorkerEntrypoints extends Data.TaggedError("InvalidWorkerEntrypoints")<{
   scriptName: string;

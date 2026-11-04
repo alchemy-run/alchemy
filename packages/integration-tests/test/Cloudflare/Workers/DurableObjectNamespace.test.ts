@@ -1599,6 +1599,105 @@ export default { async fetch() { return new Response("${version}"); } };
       { timeout: 120_000 },
     );
 
+    // Reproduces #2976: Cloudflare caps a script's `exports` map at 100
+    // entries, and renaming a class declares both the new live class and a
+    // `renamed` tombstone for the old one. Renaming 55 of 60 classes and
+    // deleting the other 5 in one upload would declare 115 entries, so the
+    // deletes and renames are spread over several uploads that each stay
+    // within the limit. Every renamed namespace keeps its id and its data.
+    test.provider(
+      "renames more classes than fit in one 100-entry exports upload",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const ids = Array.from({ length: 60 }, (_, i) => `DO_${i}`);
+          const deployClasses = (
+            count: number,
+            className: (i: number) => string,
+            version: string,
+          ) =>
+            scratch.deploy(
+              Effect.gen(function* () {
+                return {
+                  worker: yield* Cloudflare.Worker("worker", {
+                    script: `import { DurableObject } from "cloudflare:workers";
+export class ${className(0)} extends DurableObject {
+  async increment() {
+    const next = ((await this.ctx.storage.get("count")) ?? 0) + 1;
+    await this.ctx.storage.put("count", next);
+    return next;
+  }
+}
+${ids
+  .slice(1, count)
+  .map((_, i) => `export class ${className(i + 1)} extends DurableObject {}`)
+  .join("\n")}
+export default {
+  async fetch(request, env) {
+    if (new URL(request.url).pathname === "/increment") {
+      return Response.json({ value: await env.DO_0.getByName("shared").increment() });
+    }
+    return new Response("${version}");
+  },
+};
+`,
+                    env: Object.fromEntries(
+                      ids
+                        .slice(0, count)
+                        .map((id, i) => [
+                          id,
+                          Cloudflare.DurableObject(id, { className: className(i) }),
+                        ]),
+                    ),
+                  }),
+                };
+              }),
+            );
+
+          const v1 = yield* deployClasses(60, (i) => `Class${i}`, "v1");
+          expect(yield* fetchReady(v1.worker.url!, "v1")).toBe("v1");
+          expect(
+            (yield* fetchJsonReady<{ value: number }>(`${v1.worker.url}/increment`)).value,
+          ).toBe(1);
+
+          const v2 = yield* deployClasses(55, (i) => `Class${i}V2`, "v2");
+          expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
+          expect(
+            (yield* fetchJsonReady<{ value: number }>(`${v2.worker.url}/increment`)).value,
+          ).toBe(2);
+          expect(Object.keys(v2.worker.durableObjectNamespaces)).toHaveLength(55);
+          for (let i = 0; i < 55; i++) {
+            expect(v2.worker.durableObjectNamespaces[`Class${i}V2`]).toBe(
+              v1.worker.durableObjectNamespaces[`Class${i}`],
+            );
+          }
+
+          const namespaces = yield* durableObjects.listNamespaces.items({ accountId }).pipe(
+            Stream.runCollect,
+            Effect.map((namespaces) =>
+              namespaces.filter((ns) => ns.script === v2.worker.workerName),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (namespaces) =>
+                namespaces.length === 55 &&
+                namespaces.every(
+                  (ns) => ns.class != null && v2.worker.durableObjectNamespaces[ns.class] === ns.id,
+                ),
+              times: 8,
+            }),
+          );
+          expect(namespaces.map((ns) => ns.id).sort()).toEqual(
+            Object.values(v2.worker.durableObjectNamespaces).sort(),
+          );
+          expect(namespaces.every((ns) => ns.class?.endsWith("V2"))).toBe(true);
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 240_000 },
+    );
+
     // Roll-forward from the legacy tag format: a worker last deployed by an
     // older alchemy carries one `alchemy:do:{logicalId}:{className}` tag per DO.
     // Simulate that by rewriting the live script tags to the legacy format
