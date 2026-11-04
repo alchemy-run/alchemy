@@ -24,7 +24,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { RegionName } from "@distilled.cloud/aws/Region";
+import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Stack from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
@@ -430,7 +430,10 @@ describe.skipIf(!!process.env.FAST)(
 
           // Certificate: issued, SANs cover the bound hostnames.
           const certificateArn = (deployed.router.certificate as any).certificateArn as string;
-          const certificate = yield* acm.describeCertificate({ CertificateArn: certificateArn });
+          // CloudFront viewer certificates always live in us-east-1.
+          const certificate = yield* acm
+            .describeCertificate({ CertificateArn: certificateArn })
+            .pipe(Effect.provideService(Region, Effect.succeed("us-east-1" as const)));
           expect(certificate.Certificate?.Status).toBe("ISSUED");
           const sans = certificate.Certificate?.SubjectAlternativeNames ?? [];
           expect(sans).toContain(siteHost);
