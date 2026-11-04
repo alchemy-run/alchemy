@@ -340,6 +340,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
               // is pinned.
               dns.alias(`AliasRecord${index + 1}`, {
                 name,
+                ipv6: true,
                 target: aliasTarget,
               }),
             { concurrency: "unbounded" },

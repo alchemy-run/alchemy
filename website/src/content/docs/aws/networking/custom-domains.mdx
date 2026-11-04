@@ -34,7 +34,7 @@ const router = yield* AWS.Website.Router("WebsiteRouter", {
 With `hostedZoneId` set, Alchemy requests a DNS-validated ACM certificate
 covering `name` plus every alias, upserts the validation records into your
 zone, waits for issuance, attaches the certificate to the CloudFront
-distribution, and creates an `A` alias record for each hostname. The
+distribution, and creates `A` and `AAAA` alias records for each hostname. The
 resource's `url` output becomes `https://app.example.com`. When a site is
 attached to a `Router`, put `domain` on the Router — passing it to the
 attached `StaticSite` as well is an error.

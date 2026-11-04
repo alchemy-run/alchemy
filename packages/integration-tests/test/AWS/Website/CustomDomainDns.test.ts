@@ -357,17 +357,18 @@ describe.skipIf(!!process.env.FAST)(
             nameServers.map(bare).sort(),
           );
 
-          // An `A` alias record at the distribution in the inferred zone.
+          // `A` and `AAAA` alias records at the distribution in the inferred zone.
           const { ResourceRecordSets } = yield* route53.listResourceRecordSets({
             HostedZoneId: deployed.hostedZoneId,
             StartRecordName: `${R53_SITE}.`,
             StartRecordType: "A",
-            MaxItems: 1,
+            MaxItems: 2,
           });
-          const alias = ResourceRecordSets?.[0];
-          expect(alias?.Name).toBe(`${R53_SITE}.`);
-          expect(alias?.Type).toBe("A");
-          expect(bare(alias?.AliasTarget?.DNSName ?? "")).toBe(bare(deployed.domainName));
+          const aliases = (ResourceRecordSets ?? []).filter((set) => set.Name === `${R53_SITE}.`);
+          expect(aliases.map((set) => set.Type)).toEqual(["A", "AAAA"]);
+          for (const alias of aliases) {
+            expect(bare(alias.AliasTarget?.DNSName ?? "")).toBe(bare(deployed.domainName));
+          }
 
           const { certificate } = yield* viewerCertificateOf(deployed.distributionId);
           expect(certificate.Status).toBe("ISSUED");
