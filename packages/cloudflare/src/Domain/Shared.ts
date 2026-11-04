@@ -338,8 +338,8 @@ const source = (classes: Classes, route: string, impl: ObjectImpl): ObjectImpl =
     const raw = state.raw?.storage;
     // At deploy time the class is declared with a placeholder state.
     if (raw?.kv === undefined) return yield* impl;
-    // A move already under way keeps logging after a restart.
-    Move.resumeSource(raw);
+    // Count its work from now on, and keep logging a move already under way.
+    Move.watchSource(raw);
     const inner = yield* impl;
     return Effect.gen(function* () {
       const instance = (yield* inner) as Record<string, unknown>;

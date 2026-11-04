@@ -67,12 +67,18 @@ interface Source {
   sealing: boolean;
   /** Set once the seal is done: every write is refused. */
   sealed: boolean;
-  /** Calls, alarms and background work under way. */
-  inflight: number;
   readonly proxy: cf.DurableObjectStorage;
 }
 
 const sources = new WeakMap<cf.DurableObjectStorage, Source>();
+
+/**
+ * Calls, alarms and background work under way on each object that may become
+ * a source, counted from the moment it is constructed (see `watchSource`): a
+ * call that began before its move did must hold up the seal as much as one
+ * that began after.
+ */
+const activity = new WeakMap<cf.DurableObjectStorage, { inflight: number }>();
 
 /**
  * The storage an object's code should write through: the raw storage, or, on
@@ -84,24 +90,24 @@ export const liveStorage = (raw: cf.DurableObjectStorage): cf.DurableObjectStora
 
 /** Count `promise` as work under way on a source (its `waitUntil` work): a seal waits for it. */
 export const trackWork = <A>(raw: cf.DurableObjectStorage, promise: Promise<A>): Promise<A> => {
-  const source = sources.get(raw);
-  if (source === undefined) return promise;
-  source.inflight += 1;
+  const counter = activity.get(raw);
+  if (counter === undefined) return promise;
+  counter.inflight += 1;
   return promise.finally(() => {
-    source.inflight -= 1;
+    counter.inflight -= 1;
   });
 };
 
 /** Run `effect` as a call under way on a source: a seal waits for it. */
 export const counted = <A, E, R>(raw: cf.DurableObjectStorage, effect: Effect.Effect<A, E, R>) =>
   Effect.suspend(() => {
-    const source = sources.get(raw);
-    if (source === undefined) return effect;
-    source.inflight += 1;
+    const counter = activity.get(raw);
+    if (counter === undefined) return effect;
+    counter.inflight += 1;
     return Effect.ensuring(
       effect,
       Effect.sync(() => {
-        source.inflight -= 1;
+        counter.inflight -= 1;
       }),
     );
   });
@@ -255,11 +261,13 @@ const tracked = (raw: cf.DurableObjectStorage, source: () => Source): cf.Durable
   });
 
 /**
- * Register `raw` as a source if a move already began on it (it is logging),
- * so a restart keeps logging. Call when the object is constructed: it reads
+ * Watch an object that may become a source: count its work from now on, and
+ * register it as a source if a move already began on it (it is logging), so a
+ * restart keeps logging. Call when the object is constructed: it reads
  * storage synchronously.
  */
-export const resumeSource = (raw: cf.DurableObjectStorage) => {
+export const watchSource = (raw: cf.DurableObjectStorage) => {
+  if (!activity.has(raw)) activity.set(raw, { inflight: 0 });
   if (sources.has(raw) || raw.kv.get(TRACKING) !== true) return;
   register(raw, raw.kv.get<boolean>(SEALED) === true);
 };
@@ -270,9 +278,9 @@ const register = (raw: cf.DurableObjectStorage, sealed: boolean) => {
     seq: raw.kv.get<number>(SEQ) ?? 0,
     sealing: sealed,
     sealed,
-    inflight: 0,
     proxy: tracked(raw, () => source),
   };
+  if (!activity.has(raw)) activity.set(raw, { inflight: 0 });
   sources.set(raw, source);
   return source;
 };
@@ -363,12 +371,13 @@ export const seal = (raw: cf.DurableObjectStorage, sockets: () => ReadonlyArray<
     if (!source.sealed) {
       source.sealing = true;
       const started = yield* Clock.currentTimeMillis;
+      const counter = activity.get(raw)!;
       // This call itself isn't counted (see `counted`): wait for everything else.
-      while (source.inflight > 0) {
+      while (counter.inflight > 0) {
         if ((yield* Clock.currentTimeMillis) - started > SEAL_WAIT_MS) {
           source.sealing = false;
           return yield* new SealTimeout({
-            message: `${source.inflight} calls or background tasks were still running after ${SEAL_WAIT_MS}ms`,
+            message: `${counter.inflight} calls or background tasks were still running after ${SEAL_WAIT_MS}ms`,
           });
         }
         yield* Effect.sleep("5 millis");
