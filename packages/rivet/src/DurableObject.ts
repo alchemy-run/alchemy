@@ -16,9 +16,9 @@ import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runti
 import { RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
 import type { Self } from "alchemy/Self";
 import type * as ConfigError from "effect/Config";
+import * as Config from "effect/Config";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";

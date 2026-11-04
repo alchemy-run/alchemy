@@ -203,10 +203,7 @@ export const makeDurableObjectInstance = ({
 
     // An engine with async storage provides an `InputGate`; the call runs
     // through it so storage can't interleave between calls.
-    return Effect.andThen(
-      event.holdExporters,
-      gateCall(Effect.suspend(() => fn(shape))),
-    )
+    return Effect.andThen(event.holdExporters, gateCall(Effect.suspend(() => fn(shape))))
       .pipe(
         Effect.provide(
           Layer.mergeAll(
