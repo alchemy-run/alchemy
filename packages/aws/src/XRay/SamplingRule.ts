@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface SamplingRuleProps {
@@ -305,7 +306,8 @@ export const SamplingRuleProvider = () =>
           // arn:aws:xray:{region}:{account}:sampling-rule/{name}
           const { accountId, region } = yield* AWSEnvironment.current;
           const ruleArn =
-            live?.RuleARN ?? `arn:aws:xray:${region}:${accountId}:sampling-rule/${ruleName}`;
+            live?.RuleARN ??
+            `arn:${partitionOf(region)}:xray:${region}:${accountId}:sampling-rule/${ruleName}`;
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).

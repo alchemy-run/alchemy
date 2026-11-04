@@ -11,6 +11,7 @@ import {
   LOCAL_ACCOUNT_ID,
   type AwsResolvedCredentials,
 } from "./AuthProvider.ts";
+import { partitionOf, type Partition } from "./Partition.ts";
 
 export const AWS_PROFILE = Config.String("AWS_PROFILE").pipe(Config.withDefault("default"));
 
@@ -50,7 +51,17 @@ export class AWSEnvironment extends Context.Service<
   AWSEnvironment,
   Effect.Effect<AWSEnvironmentShape>
 >()("AWS::Environment") {
-  static current = AWSEnvironment.use((env) => env);
+  /**
+   * The resolved environment, plus the `partition` its region belongs to.
+   * The partition is derived on read, so an environment rebuilt with another
+   * `region` can never carry a stale partition.
+   */
+  static current = AWSEnvironment.use((env) =>
+    Effect.map(env, (env): AWSEnvironmentShape & { readonly partition: Partition } => ({
+      ...env,
+      partition: partitionOf(env.region),
+    })),
+  );
   /**
    * Whether this environment is the floci emulator
    * (dummy account {@link LOCAL_ACCOUNT_ID}). A set `endpoint` is not

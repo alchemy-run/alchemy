@@ -5,6 +5,7 @@ import { toWireSeconds } from "alchemy/Util/Duration";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import * as IAM from "../IAM/index.ts";
@@ -493,7 +494,9 @@ export const Aurora = (id: string, props: AuroraProps) =>
                 ],
               },
               managedPolicyArns: [
-                "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole",
+                AWSBindings.partitionArn(
+                  "iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole",
+                ),
               ],
               tags: mergeTags(commonTags, undefined),
             })

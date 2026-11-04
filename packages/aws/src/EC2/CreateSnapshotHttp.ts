@@ -1,5 +1,6 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { makeVolumeHttpBinding } from "./BindingHttp.ts";
 import { CreateSnapshot } from "./CreateSnapshot.ts";
 
@@ -12,6 +13,6 @@ export const CreateSnapshotHttp = Layer.effect(
     actions: ["ec2:CreateSnapshot", "ec2:CreateTags"],
     // Snapshot creation authorizes against both the source volume and the
     // new snapshot; snapshot ARNs carry no account id.
-    extraResources: ["arn:aws:ec2:*::snapshot/*"],
+    extraResources: [AWSBindings.partitionArn("ec2:*::snapshot/*")],
   }),
 );

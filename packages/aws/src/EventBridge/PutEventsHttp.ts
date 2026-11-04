@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Endpoint } from "./Endpoint.ts";
 import type { EventBus } from "./EventBus.ts";
 import { PutEvents, type PutEventsRequest } from "./PutEvents.ts";
@@ -74,7 +75,7 @@ export const PutEventsHttp = Layer.effect(
         // invalid IAM policy (MalformedPolicyDocumentException).
         const resource = bus
           ? Output.interpolate`${bus.eventBusArn}`
-          : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
+          : (`arn:${partitionOf(region)}:events:${region}:${accountId}:event-bus/default` as const);
 
         yield* bind`AWS.EventBridge.PutEvents(${bus ?? "default"})`({
           policyStatements: [

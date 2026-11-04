@@ -8,6 +8,7 @@ import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /** File format of the hosted threat intelligence list. */
@@ -115,7 +116,7 @@ const threatIntelSetArn = (
   detectorId: string,
   threatIntelSetId: string,
 ) =>
-  `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}/threatintelset/${threatIntelSetId}`;
+  `arn:${partitionOf(region)}:guardduty:${region}:${accountId}:detector/${detectorId}/threatintelset/${threatIntelSetId}`;
 
 /** Statuses that count as "the set is (becoming) active". */
 const ACTIVE_STATUSES = ["ACTIVE", "ACTIVATING"];

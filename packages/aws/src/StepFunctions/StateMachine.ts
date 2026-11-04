@@ -13,6 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { compileProgram, SfnCompileError } from "./Asl/compile.ts";
 import type { SfnEffect } from "./Asl/Program.ts";
@@ -529,7 +530,7 @@ export const StateMachineProvider = () =>
       const createPolicyName = (id: string) => createPhysicalName({ id, maxLength: 128 });
 
       const stateMachineArnOf = (region: string, accountId: string, name: string) =>
-        `arn:aws:states:${region}:${accountId}:stateMachine:${name}`;
+        `arn:${partitionOf(region)}:states:${region}:${accountId}:stateMachine:${name}`;
 
       const describeOrUndefined = Effect.fn(function* (stateMachineArn: string) {
         return yield* sfn

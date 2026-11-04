@@ -24,6 +24,7 @@ import * as Redacted from "effect/Redacted";
 import { makeImageSource, type ImageSourceLike } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { dnsSuffixOf } from "../Partition.ts";
 /**
  * The `aws-eks` {@link ClusterAdapter}: everything platform-specific about
  * running `Kubernetes.*` workloads on Amazon EKS.
@@ -138,7 +139,7 @@ const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {
 
   const presigned = yield* SigV4.sign({
     method: "GET",
-    url: `https://sts.${region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15&X-Amz-Expires=60`,
+    url: `https://sts.${region}.${dnsSuffixOf(region)}/?Action=GetCallerIdentity&Version=2011-06-15&X-Amz-Expires=60`,
     headers: { "x-k8s-aws-id": clusterName },
     accessKeyId: Redacted.value(credentials.accessKeyId),
     secretAccessKey: credentials.secretAccessKey,

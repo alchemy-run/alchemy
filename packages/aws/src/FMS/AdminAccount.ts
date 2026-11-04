@@ -6,19 +6,16 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { Region } from "../Region.ts";
+import { withGlobalRegion } from "../Region.ts";
 
 // FMS admin-account management (get/associate/disassociate AdminAccount) is a
-// global, organization-level operation served exclusively from the us-east-1
-// endpoint — every other region rejects it with `InvalidOperationException:
+// global, organization-level operation served exclusively from the
+// partition's global region (us-east-1 in `aws`) — every other region rejects it with `InvalidOperationException:
 // This operation is not supported in the '<region>' region.` Pin every
 // control-plane call there regardless of the ambient stack region (same
 // pattern as Cost Explorer / ECR Public / WAFv2 CloudFront-scope).
-const FMS_ADMIN_REGION = "us-east-1";
-
-/** Pin an FMS admin-account operation to the us-east-1 endpoint. */
-export const pinFms = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(Region, Effect.succeed(FMS_ADMIN_REGION)));
+/** Pin an FMS admin-account operation to the partition's global region. */
+export const pinFms = withGlobalRegion;
 
 export interface AdminAccountProps {
   /**

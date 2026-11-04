@@ -2,6 +2,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Thing } from "./Thing.ts";
 
 /**
@@ -132,7 +133,9 @@ export const makeIotTopicHttpBinding = <I, A, E, R>(options: {
             {
               Effect: "Allow",
               Action: [...options.actions],
-              Resource: [`arn:aws:iot:${region}:${accountId}:topic/${topicFilter ?? "*"}`],
+              Resource: [
+                `arn:${partitionOf(region)}:iot:${region}:${accountId}:topic/${topicFilter ?? "*"}`,
+              ],
             },
           ],
         });
@@ -172,7 +175,9 @@ export const makeIotClientHttpBinding = <I, A, E, R>(options: {
             {
               Effect: "Allow",
               Action: [...options.actions],
-              Resource: [`arn:aws:iot:${region}:${accountId}:client/${clientIdFilter ?? "*"}`],
+              Resource: [
+                `arn:${partitionOf(region)}:iot:${region}:${accountId}:client/${clientIdFilter ?? "*"}`,
+              ],
             },
           ],
         });

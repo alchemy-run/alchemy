@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -132,7 +133,7 @@ const toTagRecord = (
 // from getDedicatedIpPool, not from listDedicatedIpPools — so the ARN that
 // listTagsForResource requires has to be derived.
 const dedicatedIpPoolArnOf = (region: string, accountId: string, name: string) =>
-  `arn:aws:ses:${region}:${accountId}:dedicated-ip-pool/${name}`;
+  `arn:${partitionOf(region)}:ses:${region}:${accountId}:dedicated-ip-pool/${name}`;
 
 export const DedicatedIpPoolProvider = () =>
   Provider.effect(

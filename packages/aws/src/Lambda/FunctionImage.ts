@@ -11,6 +11,7 @@ import * as Schema from "effect/Schema";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";
+import { partitionOf } from "../Partition.ts";
 import type { FunctionImageConfig } from "./Function.ts";
 
 export class FunctionImageInvalidProps extends Data.TaggedError("FunctionImageInvalidProps")<{
@@ -332,7 +333,7 @@ export const makeFunctionImage = Effect.gen(function* () {
           Action: ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
           Condition: {
             StringLike: {
-              "aws:sourceArn": `arn:aws:lambda:${region}:${accountId}:function:*`,
+              "aws:sourceArn": `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:*`,
             },
           },
         },

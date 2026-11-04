@@ -7,6 +7,7 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /** A Cognito user pool provider entry for an identity pool. */
@@ -138,7 +139,7 @@ const tagRecordOf = (
   );
 
 const identityPoolArnOf = (region: string, accountId: string, id: string) =>
-  `arn:aws:cognito-identity:${region}:${accountId}:identitypool/${id}`;
+  `arn:${partitionOf(region)}:cognito-identity:${region}:${accountId}:identitypool/${id}`;
 
 /** The full desired wire configuration (update resets omitted fields). */
 const desiredConfig = (name: string, news: IdentityPoolProps) => ({

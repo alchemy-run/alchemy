@@ -1,6 +1,7 @@
 import * as appintegrations from "@distilled.cloud/aws/appintegrations";
 import * as Output from "alchemy/Output";
 import * as Layer from "effect/Layer";
+import { partitionOf } from "../Partition.ts";
 import type { Application } from "./Application.ts";
 import { makeAppIntegrationsHttpBinding } from "./BindingHttp.ts";
 import { ListApplicationAssociations } from "./ListApplicationAssociations.ts";
@@ -22,7 +23,7 @@ export const ListApplicationAssociationsHttp = Layer.effect(
     iamActions: ["app-integrations:ListApplicationAssociations"],
     resources: (application, { region, accountId }) => [
       Output.interpolate`${application.applicationArn}`,
-      Output.interpolate`arn:aws:app-integrations:${region}:${accountId}:application-association/${application.applicationId}/*`,
+      Output.interpolate`arn:${partitionOf(region)}:app-integrations:${region}:${accountId}:application-association/${application.applicationId}/*`,
     ],
   }),
 );

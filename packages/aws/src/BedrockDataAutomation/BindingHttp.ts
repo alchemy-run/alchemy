@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -59,7 +60,7 @@ export const makeBdaProjectHttpBinding = <
                 // Cross-region inference profiles live in every region of
                 // the geography (us./eu./apac.), so the profile resource
                 // cannot be pinned to the deploy region.
-                "arn:aws:bedrock:*:*:data-automation-profile/*",
+                AWSBindings.partitionArn("bedrock:*:*:data-automation-profile/*"),
               ],
             },
           ],
@@ -97,7 +98,7 @@ export const makeBdaLibraryHttpBinding = <I extends { libraryArn: string }, A, E
    * APIs check `…:data-automation-library-ingestion-job/{id}` (minted at
    * runtime), not the library ARN.
    */
-  additionalResources?: readonly string[];
+  additionalResources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -165,10 +166,10 @@ export const makeBdaBlueprintOptimizationHttpBinding = <
               Action: [...options.actions],
               Resource: [
                 Output.interpolate`${blueprint.blueprintArn}`,
-                "arn:aws:bedrock:*:*:data-automation-profile/*",
+                AWSBindings.partitionArn("bedrock:*:*:data-automation-profile/*"),
                 // The invoke authorizes against the invocation resource
                 // (minted at runtime), not the blueprint ARN.
-                "arn:aws:bedrock:*:*:blueprint-optimization-invocation/*",
+                AWSBindings.partitionArn("bedrock:*:*:blueprint-optimization-invocation/*"),
               ],
             },
           ],

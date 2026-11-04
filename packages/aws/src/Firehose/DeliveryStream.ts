@@ -19,12 +19,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type DeliveryStreamName = string;
 export type DeliveryStreamArn =
-  `arn:aws:firehose:${RegionID}:${AccountID}:deliverystream/${DeliveryStreamName}`;
+  `arn:${Partition}:firehose:${RegionID}:${AccountID}:deliverystream/${DeliveryStreamName}`;
 
 export type DeliveryStreamStatus =
   | "CREATING"
@@ -725,7 +726,7 @@ export const DeliveryStreamProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
 
           if (!news?.destination?.bucketArn) {
             return yield* new DeliveryStreamValidationError({
@@ -756,7 +757,7 @@ export const DeliveryStreamProvider = () =>
             ? (output?.roleName ?? (yield* createRoleName(id)))
             : undefined;
           const synthesizedRoleArn = roleName
-            ? `arn:aws:iam::${accountId}:role/${roleName}`
+            ? `arn:${partition}:iam::${accountId}:role/${roleName}`
             : undefined;
           const destinationRoleArn = news.destination.roleArn ?? synthesizedRoleArn!;
           const sourceRoleArn = news.source

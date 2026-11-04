@@ -2,6 +2,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { AgentAlias } from "./AgentAlias.ts";
 import type { DataSource } from "./DataSource.ts";
 import type { KnowledgeBase } from "./KnowledgeBase.ts";
@@ -155,7 +156,10 @@ export const makeDataSourceScopedHttpBinding = <
               Action: [...options.actions],
               Resource: [
                 dataSource.knowledgeBaseId.pipe(
-                  Output.map((id) => `arn:aws:bedrock:${region}:${accountId}:knowledge-base/${id}`),
+                  Output.map(
+                    (id) =>
+                      `arn:${partitionOf(region)}:bedrock:${region}:${accountId}:knowledge-base/${id}`,
+                  ),
                 ),
               ],
             },
@@ -251,8 +255,8 @@ export const makeRagHttpBinding = <I, A, E, R>(options: {
           models.length > 0
             ? [...new Set(models.flatMap((id) => bedrockModelArns(region, accountId, id)))]
             : [
-                `arn:aws:bedrock:${region}::foundation-model/*`,
-                `arn:aws:bedrock:${region}:${accountId}:inference-profile/*`,
+                `arn:${partitionOf(region)}:bedrock:${region}::foundation-model/*`,
+                `arn:${partitionOf(region)}:bedrock:${region}:${accountId}:inference-profile/*`,
               ];
         yield* bind`${options.tag}(${knowledgeBase})`({
           policyStatements: [

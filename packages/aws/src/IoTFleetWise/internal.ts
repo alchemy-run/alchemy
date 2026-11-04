@@ -3,13 +3,16 @@ import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * AWS IoT FleetWise is offered only in `us-east-1` and `eu-central-1`
  * (there is no `iotfleetwise.{region}.amazonaws.com` endpoint anywhere
- * else). The providers follow the ambient region when it is one of the
- * supported two and pin `us-east-1` otherwise, mirroring how WAFv2
- * CLOUDFRONT-scoped resources pin their home region.
+ * else). In the `aws` partition the providers follow the ambient region
+ * when it is one of the supported two and pin `us-east-1` otherwise,
+ * mirroring how WAFv2 CLOUDFRONT-scoped resources pin their home region.
+ * Other partitions keep their own region, so the call fails there instead
+ * of sending the stack's credentials to commercial `us-east-1`.
  *
  * @internal
  */
@@ -20,7 +23,8 @@ export const FLEETWISE_HOME_REGION: RegionName = "us-east-1";
 
 /**
  * Run a distilled IoT FleetWise effect in a supported region: the ambient
- * region when FleetWise is offered there, otherwise `us-east-1`.
+ * region when FleetWise is offered there or it is outside the `aws`
+ * partition, otherwise `us-east-1`.
  *
  * `Region`'s service value is an `Effect<RegionName>` (see
  * `@distilled.cloud/aws/Region`), so it is provided as an effect, not a
@@ -39,7 +43,8 @@ export const inFleetWiseRegion = <A, E, R>(
       Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.undefined),
       Effect.orDie,
     );
-    return ambient !== undefined && FLEETWISE_REGIONS.has(ambient)
+    return ambient !== undefined &&
+      (FLEETWISE_REGIONS.has(ambient) || partitionOf(ambient) !== "aws")
       ? yield* effect
       : yield* effect.pipe(Effect.provideService(Region, Effect.succeed(FLEETWISE_HOME_REGION)));
   });

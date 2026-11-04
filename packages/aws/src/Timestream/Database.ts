@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { withWriteEndpoint } from "./internal.ts";
@@ -20,7 +21,7 @@ export class TimestreamDatabaseUnexpectedResponse extends Data.TaggedError(
   readonly cause?: unknown;
 }> {}
 
-export type DatabaseArn = `arn:aws:timestream:${RegionID}:${AccountID}:database/${string}`;
+export type DatabaseArn = `arn:${Partition}:timestream:${RegionID}:${AccountID}:database/${string}`;
 
 export interface DatabaseProps {
   /**
@@ -184,7 +185,7 @@ export const DatabaseProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const databaseName = output?.databaseName ?? (yield* createDatabaseName(id, news));
           const databaseArn =
-            `arn:aws:timestream:${region}:${accountId}:database/${databaseName}` as DatabaseArn;
+            `arn:${partitionOf(region)}:timestream:${region}:${accountId}:database/${databaseName}` as DatabaseArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 

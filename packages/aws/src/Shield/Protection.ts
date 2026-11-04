@@ -8,6 +8,8 @@ import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { AWSEnvironment } from "../Environment.ts";
+import type { Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class ProtectionUnexpectedResponse extends Data.TaggedError("ProtectionUnexpectedResponse")<{
@@ -17,7 +19,8 @@ export class ProtectionUnexpectedResponse extends Data.TaggedError("ProtectionUn
 
 /** Route 53 health check ARNs look like `arn:aws:route53:::healthcheck/{id}`. */
 const healthCheckIdFromArn = (arn: string) => arn.split("/").pop() ?? arn;
-const healthCheckArnFromId = (id: string) => `arn:aws:route53:::healthcheck/${id}`;
+const healthCheckArnFromId = (partition: Partition, id: string) =>
+  `arn:${partition}:route53:::healthcheck/${id}`;
 
 /**
  * How Shield Advanced responds automatically to application-layer (layer 7)
@@ -235,9 +238,10 @@ export const ProtectionProvider = () =>
         }
         for (const observedId of observedIds) {
           if (!desiredIds.includes(observedId)) {
+            const { partition } = yield* AWSEnvironment.current;
             yield* shield.disassociateHealthCheck({
               ProtectionId: protectionId,
-              HealthCheckArn: healthCheckArnFromId(observedId),
+              HealthCheckArn: healthCheckArnFromId(partition, observedId),
             });
           }
         }

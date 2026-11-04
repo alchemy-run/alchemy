@@ -5,6 +5,7 @@ import * as Output from "alchemy/Output";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { Permission } from "../Lambda/Permission.ts";
+import { partitionOf } from "../Partition.ts";
 import { Api } from "./Api.ts";
 import { Integration } from "./Integration.ts";
 import { Route } from "./Route.ts";
@@ -129,7 +130,7 @@ export const HttpApi = (id: string, props: HttpApiProps) =>
           Output.all(props.handler.functionArn, api.apiId),
           ([fnArn, apiId]: [string, string]) => {
             const [, , , region, accountId] = fnArn.split(":");
-            return `arn:aws:execute-api:${region}:${accountId}:${apiId}/*`;
+            return `arn:${partitionOf(region)}:execute-api:${region}:${accountId}:${apiId}/*`;
           },
         ),
       } as any);

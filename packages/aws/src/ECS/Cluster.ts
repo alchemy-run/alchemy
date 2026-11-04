@@ -9,11 +9,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type ClusterName = string;
-export type ClusterArn = `arn:aws:ecs:${RegionID}:${AccountID}:cluster/${ClusterName}`;
+export type ClusterArn = `arn:${Partition}:ecs:${RegionID}:${AccountID}:cluster/${ClusterName}`;
 
 export interface ClusterProps {
   /**
@@ -241,7 +242,7 @@ export const ClusterProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const clusterName = yield* toClusterName(id, news);
           const clusterArn =
-            `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}` as ClusterArn;
+            `arn:${partitionOf(region)}:ecs:${region}:${accountId}:cluster/${clusterName}` as ClusterArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 

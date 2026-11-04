@@ -1,3 +1,4 @@
+import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { decodeFqn, encodeFqn } from "alchemy/FQN";
 import { encodeState, reviveState } from "alchemy/State/StateEncoding";
@@ -8,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * The S3 state store's object layout, read and written directly: what the
@@ -431,7 +433,9 @@ export const setStageAccess = (
     1,
   )(
     Effect.gen(function* () {
-      const arn = `arn:aws:s3:::${location.bucket}/${stagePrefix(location, stack, stage)}*`;
+      // Credentials are partition-scoped, so their region names the bucket's partition.
+      const { region } = yield* yield* Credentials;
+      const arn = `arn:${partitionOf(region)}:s3:::${location.bucket}/${stagePrefix(location, stack, stage)}*`;
       const { version, statements } = yield* readPolicy(location.bucket);
       const resources = (sid: string) =>
         new Set(asArray(statements.find((statement) => statement.Sid === sid)?.Resource));

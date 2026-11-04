@@ -2,6 +2,7 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
+import { partitionOf } from "../Partition.ts";
 import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { GetApiKey, type GetApiKeyRequest } from "./GetApiKey.ts";
 
@@ -20,7 +21,7 @@ export const GetApiKeyHttp = Layer.effect(
         cap: "AWS.ApiGateway.GetApiKey",
         target: "",
         verb: "GET",
-        paths: (region) => [`arn:aws:apigateway:${region}::/apikeys/*`],
+        paths: (region) => [`arn:${partitionOf(region)}:apigateway:${region}::/apikeys/*`],
       });
       return Effect.fn("AWS.ApiGateway.GetApiKey")(function* (request: GetApiKeyRequest) {
         return yield* getApiKey(request);

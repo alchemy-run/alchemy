@@ -8,6 +8,7 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ApplicationProps {
@@ -73,7 +74,7 @@ export const Application = Resource<Application>("AWS.CodeDeploy.Application");
 
 /** Build the ARN for a CodeDeploy application. */
 const applicationArn = (region: string, account: string, name: string): string =>
-  `arn:aws:codedeploy:${region}:${account}:application:${name}`;
+  `arn:${partitionOf(region)}:codedeploy:${region}:${account}:application:${name}`;
 
 /** Convert a CodeDeploy wire tag list into a plain record. */
 const toTagRecord = (

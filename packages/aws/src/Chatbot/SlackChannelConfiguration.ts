@@ -161,9 +161,9 @@ export const SlackChannelConfigurationProvider = () =>
       });
 
       const configurationArn = Effect.fn(function* (configurationName: string) {
-        const { accountId } = yield* AWSEnvironment.current;
+        const { accountId, partition } = yield* AWSEnvironment.current;
         // Chatbot chat-configuration ARNs are global (no region component).
-        return `arn:aws:chatbot::${accountId}:chat-configuration/slack-channel/${configurationName}`;
+        return `arn:${partition}:chatbot::${accountId}:chat-configuration/slack-channel/${configurationName}`;
       });
 
       // describeSlackChannelConfigurations is a filter — an unknown ARN

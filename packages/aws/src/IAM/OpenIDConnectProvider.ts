@@ -81,8 +81,8 @@ export const OpenIDConnectProviderProvider = () =>
       const oidcArnFromUrl = (url: string) =>
         AWSEnvironment.current.pipe(
           Effect.map(
-            ({ accountId }) =>
-              `arn:aws:iam::${accountId}:oidc-provider/${url.replace(/^https?:\/\//, "")}`,
+            ({ accountId, partition }) =>
+              `arn:${partition}:iam::${accountId}:oidc-provider/${url.replace(/^https?:\/\//, "")}`,
           ),
         );
 

@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { AlarmArn } from "./Alarm.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
@@ -100,7 +101,7 @@ export const CompositeAlarmProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:cloudwatch:${env.region}:${env.accountId}:alarm:${alarmName}` as AlarmArn,
+              `arn:${partitionOf(env.region)}:cloudwatch:${env.region}:${env.accountId}:alarm:${alarmName}` as AlarmArn,
           ),
         );
 

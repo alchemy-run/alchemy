@@ -12,11 +12,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type LogGroupName = string;
-export type LogGroupArn = `arn:aws:logs:${RegionID}:${AccountID}:log-group:${LogGroupName}`;
+export type LogGroupArn =
+  `arn:${Partition}:logs:${RegionID}:${AccountID}:log-group:${LogGroupName}`;
 export type LogGroupClass = logs.LogGroupClass;
 
 export interface LogGroupProps {
@@ -194,7 +196,7 @@ export const LogGroupProvider = () =>
               (group) =>
                 Effect.gen(function* () {
                   const tagArn =
-                    `arn:aws:logs:${region}:${accountId}:log-group:${group.logGroupName}` as LogGroupArn;
+                    `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${group.logGroupName}` as LogGroupArn;
                   const tags = yield* logs.listTagsForResource({ resourceArn: tagArn }).pipe(
                     Effect.map((r): Record<string, string> =>
                       Object.fromEntries(
@@ -261,7 +263,7 @@ export const LogGroupProvider = () =>
           // APIs, which reject that suffix with "Invalid resourceArn".
           const arn = normalizeLogGroupArn(
             (output?.logGroupArn ??
-              `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`) as LogGroupArn,
+              `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupName}`) as LogGroupArn,
           );
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

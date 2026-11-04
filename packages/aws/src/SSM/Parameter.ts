@@ -12,6 +12,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -215,7 +216,7 @@ const toTagRecord = (
   );
 
 const parameterArnOf = (region: string, accountId: string, name: string) =>
-  `arn:aws:ssm:${region}:${accountId}:parameter${name.startsWith("/") ? "" : "/"}${name}`;
+  `arn:${partitionOf(region)}:ssm:${region}:${accountId}:parameter${name.startsWith("/") ? "" : "/"}${name}`;
 
 export const ParameterProvider = () =>
   Provider.effect(

@@ -15,6 +15,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -22,7 +23,7 @@ export type VolumeId<ID extends string = string> = `vol-${ID}`;
 export const VolumeId = <ID extends string>(id: ID): ID & VolumeId<ID> =>
   `vol-${id}` as ID & VolumeId<ID>;
 
-export type VolumeArn = `arn:aws:ec2:${RegionID}:${AccountID}:volume/${VolumeId}`;
+export type VolumeArn = `arn:${Partition}:ec2:${RegionID}:${AccountID}:volume/${VolumeId}`;
 
 export interface VolumeProps {
   /**
@@ -463,7 +464,8 @@ const toVolumeAttributes = (
   const volumeId = volume.VolumeId! as VolumeId;
   return {
     volumeId,
-    volumeArn: `arn:aws:ec2:${region}:${accountId}:volume/${volumeId}` as VolumeArn,
+    volumeArn:
+      `arn:${partitionOf(region)}:ec2:${region}:${accountId}:volume/${volumeId}` as VolumeArn,
     availabilityZone: volume.AvailabilityZone!,
     size: volume.Size ?? 0,
     volumeType: volume.VolumeType ?? "gp3",

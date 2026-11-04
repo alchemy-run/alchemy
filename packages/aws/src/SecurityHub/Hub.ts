@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -83,7 +84,7 @@ const HubResource = Resource<Hub>("AWS.SecurityHub.Hub");
 export { HubResource as Hub };
 
 const hubArnFallback = (region: string, accountId: string) =>
-  `arn:aws:securityhub:${region}:${accountId}:hub/default`;
+  `arn:${partitionOf(region)}:securityhub:${region}:${accountId}:hub/default`;
 
 const buildAttrs = (hub: securityhub.DescribeHubResponse) => ({
   hubArn: hub.HubArn!,

@@ -924,7 +924,7 @@ export const ApplicationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
 
           if (!news?.code?.bucketArn || !news.code.fileKey) {
             return yield* new ApplicationValidationError({
@@ -942,7 +942,7 @@ export const ApplicationProvider = () =>
             ? undefined
             : (output?.roleName ?? (yield* createRoleName(id)));
           const serviceExecutionRole =
-            news.serviceExecutionRole ?? `arn:aws:iam::${accountId}:role/${roleName}`;
+            news.serviceExecutionRole ?? `arn:${partition}:iam::${accountId}:role/${roleName}`;
           if (roleName) {
             yield* ensureRole({
               id,

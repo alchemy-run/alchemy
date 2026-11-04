@@ -6,6 +6,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * Unwrap distilled `SensitiveString` values (`string | Redacted<string>`)
@@ -23,7 +24,7 @@ export const asPlain = (
  */
 export const deadlineArnOf = Effect.gen(function* () {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return (path: string) => `arn:aws:deadline:${region}:${accountId}:${path}`;
+  return (path: string) => `arn:${partitionOf(region)}:deadline:${region}:${accountId}:${path}`;
 });
 
 /**

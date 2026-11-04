@@ -7,6 +7,7 @@ import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "al
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -202,7 +203,7 @@ const toTagRecord = (
 ): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const identityArnOf = (region: string, accountId: string, name: string) =>
-  `arn:aws:ses:${region}:${accountId}:identity/${name}`;
+  `arn:${partitionOf(region)}:ses:${region}:${accountId}:identity/${name}`;
 
 const toAttributes = (
   name: string,

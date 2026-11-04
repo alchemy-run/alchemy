@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -239,7 +240,7 @@ const configurationInSync = (
 };
 
 const appMonitorArn = (region: string, accountId: string, name: string) =>
-  `arn:aws:rum:${region}:${accountId}:appmonitor/${name}`;
+  `arn:${partitionOf(region)}:rum:${region}:${accountId}:appmonitor/${name}`;
 
 export const AppMonitorProvider = () =>
   Provider.effect(

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
-import { Region } from "../Region.ts";
+import { withGlobalRegion } from "../Region.ts";
 import type { EmailContact } from "./EmailContact.ts";
 
 /**
@@ -12,12 +12,11 @@ import type { EmailContact } from "./EmailContact.ts";
  * boilerplate.
  *
  * User Notifications Contacts is a global service managed from a single
- * control-plane region (`us-east-1`) — like its sibling `notifications`
+ * control-plane region (the partition's global region, `us-east-1` in
+ * `aws`) — like its sibling `notifications`
  * service — so every operation is resolved with the Region pinned.
  */
-const US_EAST_1 = "us-east-1";
-const pinContactsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(Region, Effect.succeed(US_EAST_1)));
+const pinContactsRegion = withGlobalRegion;
 
 /**
  * Build the impl Effect for a User Notifications Contacts operation scoped

@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * Shared scaffolding for AWS SageMaker Runtime HTTP bindings.
@@ -55,7 +56,8 @@ export const makeEndpointInvocationHttpBinding = <
               Effect: "Allow",
               Action: [...options.actions],
               Resource: sorted.map(
-                (name) => `arn:aws:sagemaker:${region}:${accountId}:endpoint/${name}`,
+                (name) =>
+                  `arn:${partitionOf(region)}:sagemaker:${region}:${accountId}:endpoint/${name}`,
               ),
             },
           ],

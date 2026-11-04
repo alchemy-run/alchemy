@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -77,7 +78,7 @@ const DetectorResource = Resource<Detector>("AWS.GuardDuty.Detector");
 export { DetectorResource as Detector };
 
 export const detectorArn = (region: string, accountId: string, detectorId: string) =>
-  `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}`;
+  `arn:${partitionOf(region)}:guardduty:${region}:${accountId}:detector/${detectorId}`;
 
 const buildAttrs = Effect.fn(function* (detectorId: string, d: guardduty.GetDetectorResponse) {
   const { accountId, region } = yield* AWSEnvironment.current;

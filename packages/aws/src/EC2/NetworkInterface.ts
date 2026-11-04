@@ -10,6 +10,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
@@ -28,7 +29,7 @@ export const NetworkInterfaceId = <ID extends string>(id: ID): ID & NetworkInter
   `eni-${id}` as ID & NetworkInterfaceId<ID>;
 
 export type NetworkInterfaceArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:network-interface/${NetworkInterfaceId}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:network-interface/${NetworkInterfaceId}`;
 
 export interface NetworkInterfaceProps {
   /**
@@ -377,7 +378,7 @@ const toNetworkInterfaceAttributes = (
   return {
     networkInterfaceId: eniId,
     networkInterfaceArn:
-      `arn:aws:ec2:${region}:${accountId}:network-interface/${eniId}` as NetworkInterfaceArn,
+      `arn:${partitionOf(region)}:ec2:${region}:${accountId}:network-interface/${eniId}` as NetworkInterfaceArn,
     subnetId: eni.SubnetId! as SubnetId,
     vpcId: eni.VpcId! as VpcId,
     availabilityZone: eni.AvailabilityZone!,

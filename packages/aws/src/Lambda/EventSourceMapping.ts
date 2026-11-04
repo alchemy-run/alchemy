@@ -12,6 +12,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import { plainJson } from "../internal/Observe.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export type StartingPosition = "TRIM_HORIZON" | "LATEST" | "AT_TIMESTAMP";
@@ -738,7 +739,7 @@ export const EventSourceMappingProvider = () =>
                 Stream.filter((m) => m.EventSourceArn === olds.eventSourceArn && !!m.UUID),
                 Stream.filterEffect((m) =>
                   readMappingTags(
-                    `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${m.UUID}`,
+                    `arn:${partitionOf(region)}:lambda:${region}:${accountId}:event-source-mapping:${m.UUID}`,
                   ).pipe(Effect.map((tags) => hasTags(expectedInternalTags, tags))),
                 ),
                 Stream.runHead,
@@ -748,7 +749,7 @@ export const EventSourceMappingProvider = () =>
           }
           if (!config?.UUID || config.State === "Deleting") return undefined;
           const tags = yield* readMappingTags(
-            `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${config.UUID}`,
+            `arn:${partitionOf(region)}:lambda:${region}:${accountId}:event-source-mapping:${config.UUID}`,
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () =>
               Effect.succeed({} as Record<string, string>),
@@ -844,7 +845,7 @@ export const EventSourceMappingProvider = () =>
                     if (mapping?.UUID) {
                       const { Tags } = yield* lambda
                         .listTags({
-                          Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
+                          Resource: `arn:${partitionOf(region)}:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
                         })
                         .pipe(retryTransient);
                       if (hasTags(expectedInternalTags, Tags)) {
@@ -877,7 +878,7 @@ export const EventSourceMappingProvider = () =>
                           if (mapping?.UUID) {
                             const { Tags } = yield* lambda
                               .listTags({
-                                Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
+                                Resource: `arn:${partitionOf(region)}:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
                               })
                               .pipe(retryTransient);
                             if (hasTags(expectedInternalTags, Tags)) {
@@ -918,7 +919,7 @@ export const EventSourceMappingProvider = () =>
           if (stale !== undefined && stale !== uuid) {
             yield* deleteMapping(stale);
           }
-          const mappingArn = `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${uuid}`;
+          const mappingArn = `arn:${partitionOf(region)}:lambda:${region}:${accountId}:event-source-mapping:${uuid}`;
 
           // Sync configuration — `updateEventSourceMapping` is a full PUT
           // for mutable fields. We always send the full desired config so

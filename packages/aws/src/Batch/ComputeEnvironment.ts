@@ -11,13 +11,14 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { managedPolicyArn, type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { pollBatch, retryBatch } from "./internal.ts";
 
 export type ComputeEnvironmentName = string;
 export type ComputeEnvironmentArn =
-  `arn:aws:batch:${RegionID}:${AccountID}:compute-environment/${ComputeEnvironmentName}`;
+  `arn:${Partition}:batch:${RegionID}:${AccountID}:compute-environment/${ComputeEnvironmentName}`;
 
 /**
  * Raised when networking is left implicit but the account/region has no
@@ -340,9 +341,10 @@ export const ComputeEnvironmentProvider = () =>
             // Concurrent delete of a replaced instance may restore it first.
             Effect.catchTag("EntityAlreadyExistsException", () => Effect.void),
           );
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam.attachRolePolicy({
           RoleName: roleName,
-          PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
+          PolicyArn: managedPolicyArn(partition, "service-role/AWSBatchServiceRole"),
         });
         // IAM propagation before Batch tries to assume the role.
         yield* Effect.sleep("10 seconds");
@@ -351,10 +353,11 @@ export const ComputeEnvironmentProvider = () =>
 
       /** Drop a role restored by {@link restoreServiceRoleIfMissing}. */
       const dropRestoredServiceRole = Effect.fn(function* (roleName: string) {
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam
           .detachRolePolicy({
             RoleName: roleName,
-            PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
+            PolicyArn: managedPolicyArn(partition, "service-role/AWSBatchServiceRole"),
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         yield* iam
@@ -476,7 +479,7 @@ export const ComputeEnvironmentProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.computeEnvironmentName ?? (yield* toName(id, news));
           const arn =
-            `arn:aws:batch:${region}:${accountId}:compute-environment/${name}` as ComputeEnvironmentArn;
+            `arn:${partitionOf(region)}:batch:${region}:${accountId}:compute-environment/${name}` as ComputeEnvironmentArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredState = news.state ?? "ENABLED";

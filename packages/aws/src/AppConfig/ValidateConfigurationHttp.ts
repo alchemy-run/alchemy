@@ -1,5 +1,6 @@
 import * as appconfig from "@distilled.cloud/aws/appconfig";
 import * as Output from "alchemy/Output";
+import { partitionOf } from "../Partition.ts";
 import type { Application } from "./Application.ts";
 import { makeAppConfigHttpBinding } from "./BindingHttp.ts";
 import type { ConfigurationProfile } from "./ConfigurationProfile.ts";
@@ -25,9 +26,9 @@ export const ValidateConfigurationHttp = makeAppConfigHttpBinding(ValidateConfig
     iam: ({ region, accountId }) => ({
       actions: ["appconfig:ValidateConfiguration"],
       resources: [
-        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}`,
-        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}/configurationprofile/${configurationProfile.configurationProfileId}`,
-        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}/configurationprofile/${configurationProfile.configurationProfileId}/hostedconfigurationversion/*`,
+        Output.interpolate`arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${application.applicationId}`,
+        Output.interpolate`arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${application.applicationId}/configurationprofile/${configurationProfile.configurationProfileId}`,
+        Output.interpolate`arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${application.applicationId}/configurationprofile/${configurationProfile.configurationProfileId}/hostedconfigurationversion/*`,
       ],
     }),
   }),

@@ -7,6 +7,7 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Application } from "./Application.ts";
 import type { ConfigurationProfile } from "./ConfigurationProfile.ts";
 import type { Environment } from "./Environment.ts";
@@ -76,7 +77,7 @@ export const GetConfigurationHttp = Layer.effect(
                 Effect: "Allow",
                 Action: ["appconfig:StartConfigurationSession", "appconfig:GetLatestConfiguration"],
                 Resource: [
-                  Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}/environment/${environment.environmentId}/configuration/${configurationProfile.configurationProfileId}`,
+                  Output.interpolate`arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${application.applicationId}/environment/${environment.environmentId}/configuration/${configurationProfile.configurationProfileId}`,
                 ],
               },
             ],

@@ -8,6 +8,7 @@ import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "al
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface CustomVerificationEmailTemplateProps {
@@ -121,7 +122,7 @@ const toTagRecord = (
 // getCustomVerificationEmailTemplate returns no ARN, so the ARN
 // listTagsForResource needs is derived — verified live against SES.
 const templateArnOf = (region: string, accountId: string, name: string) =>
-  `arn:aws:ses:${region}:${accountId}:custom-verification-email-template/${name}`;
+  `arn:${partitionOf(region)}:ses:${region}:${accountId}:custom-verification-email-template/${name}`;
 
 export const CustomVerificationEmailTemplateProvider = () =>
   Provider.effect(

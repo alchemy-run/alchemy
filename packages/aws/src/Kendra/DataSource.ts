@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class KendraDataSourceInvalidProps extends Data.TaggedError("KendraDataSourceInvalidProps")<{
@@ -175,7 +176,7 @@ const fetchTags = Effect.fn(function* (arn: string) {
 const currentArnOf = Effect.gen(function* () {
   const { accountId, region } = yield* AWSEnvironment.current;
   return (indexId: string, dataSourceId: string) =>
-    `arn:aws:kendra:${region}:${accountId}:index/${indexId}/data-source/${dataSourceId}`;
+    `arn:${partitionOf(region)}:kendra:${region}:${accountId}:index/${indexId}/data-source/${dataSourceId}`;
 });
 
 interface DataSourceState {

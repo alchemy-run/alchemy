@@ -8,6 +8,7 @@ import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "al
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface EmailTemplateProps {
@@ -87,7 +88,7 @@ const toTagRecord = (
 ): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const templateArnOf = (region: string, accountId: string, name: string) =>
-  `arn:aws:ses:${region}:${accountId}:template/${name}`;
+  `arn:${partitionOf(region)}:ses:${region}:${accountId}:template/${name}`;
 
 const toContent = (props: EmailTemplateProps): sesv2.EmailTemplateContent => ({
   Subject: props.subject,

@@ -1,5 +1,6 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Layer from "effect/Layer";
+import { partitionOf } from "../Partition.ts";
 import { makeEventBridgeAccountHttpBinding } from "./BindingHttp.ts";
 import { DescribeReplay } from "./DescribeReplay.ts";
 
@@ -15,6 +16,8 @@ export const DescribeReplayHttp = Layer.effect(
     tag: "AWS.EventBridge.DescribeReplay",
     operation: eventbridge.describeReplay,
     actions: ["events:DescribeReplay"],
-    resources: ({ accountId, region }) => [`arn:aws:events:${region}:${accountId}:replay/*`],
+    resources: ({ accountId, region }) => [
+      `arn:${partitionOf(region)}:events:${region}:${accountId}:replay/*`,
+    ],
   }),
 );

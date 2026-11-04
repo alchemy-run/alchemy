@@ -1,6 +1,7 @@
 import type * as iam from "@distilled.cloud/aws/iam";
 import { toWireDays, toWireSeconds } from "alchemy/Util/Duration";
 import * as Redacted from "effect/Redacted";
+import type { Partition } from "../Partition.ts";
 import type { PolicyDocument } from "./Policy.ts";
 
 /**
@@ -59,14 +60,16 @@ export const normalizeIamPath = (value: string | undefined) => {
 };
 
 export const policyArnFromParts = ({
+  partition,
   accountId,
   path,
   policyName,
 }: {
+  partition: Partition;
   accountId: string;
   path: string | undefined;
   policyName: string;
-}) => `arn:aws:iam::${accountId}:policy${normalizeIamPath(path)}${policyName}`;
+}) => `arn:${partition}:iam::${accountId}:policy${normalizeIamPath(path)}${policyName}`;
 
 export const oldestNondefaultPolicyVersion = (versions: iam.PolicyVersion[] | undefined) =>
   [...(versions ?? [])]

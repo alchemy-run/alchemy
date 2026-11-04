@@ -9,6 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
@@ -27,7 +28,7 @@ export const EgressOnlyInternetGatewayId = <ID extends string>(
 
 export type EgressOnlyInternetGatewayArn<
   ID extends EgressOnlyInternetGatewayId = EgressOnlyInternetGatewayId,
-> = `arn:aws:ec2:${RegionID}:${AccountID}:egress-only-internet-gateway/${ID}`;
+> = `arn:${Partition}:ec2:${RegionID}:${AccountID}:egress-only-internet-gateway/${ID}`;
 
 export interface EgressOnlyInternetGatewayProps {
   /**
@@ -181,7 +182,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
             egressOnlyInternetGatewayId:
               gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
             egressOnlyInternetGatewayArn:
-              `arn:aws:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
+              `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
             attachments: gw.Attachments?.map((a) => ({
               state: a.State as "attaching" | "attached" | "detaching" | "detached",
               vpcId: a.VpcId as VpcId,
@@ -211,7 +212,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
                       egressOnlyInternetGatewayId:
                         gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
                       egressOnlyInternetGatewayArn:
-                        `arn:aws:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
+                        `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
                       attachments: gw.Attachments?.map((a) => ({
                         state: a.State as "attaching" | "attached" | "detaching" | "detached",
                         vpcId: a.VpcId as VpcId,

@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -640,7 +641,7 @@ export const TaskDefinitionProvider = () =>
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             logGroup = {
               logGroupName,
-              logGroupArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`,
+              logGroupArn: `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupName}`,
             };
           }
 

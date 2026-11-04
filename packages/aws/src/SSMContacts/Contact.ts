@@ -14,6 +14,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /** The kind of contact: a person, an escalation plan, or an on-call schedule. */
@@ -156,7 +157,7 @@ const parsePolicy = (policy: string): unknown => {
 /** Builds the ARN of a contact from its alias in the ambient account/region. */
 export const contactArn = Effect.fn(function* (alias: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return `arn:aws:ssm-contacts:${region}:${accountId}:contact/${alias}`;
+  return `arn:${partitionOf(region)}:ssm-contacts:${region}:${accountId}:contact/${alias}`;
 });
 
 export const ContactProvider = () =>

@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readLexTags,
@@ -170,7 +171,7 @@ const findAliasByName = Effect.fn(function* (botId: string, botAliasName: string
 
 const aliasArnOf = Effect.fn(function* (botId: string, botAliasId: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return `arn:aws:lex:${region}:${accountId}:bot-alias/${botId}/${botAliasId}`;
+  return `arn:${partitionOf(region)}:lex:${region}:${accountId}:bot-alias/${botId}/${botAliasId}`;
 });
 
 /**

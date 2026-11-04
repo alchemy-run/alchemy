@@ -1,5 +1,6 @@
 import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { makeFleetWiseResourceHttpBinding } from "./BindingHttp.ts";
 import { GetVehicleStatus } from "./GetVehicleStatus.ts";
 import type { Vehicle } from "./Vehicle.ts";
@@ -14,6 +15,9 @@ export const GetVehicleStatusHttp = Layer.effect(
     identifier: (vehicle: Vehicle) => vehicle.vehicleName,
     // GetVehicleStatus authorizes on both the vehicle and its associated
     // campaigns — the campaign ARNs are unknowable at deploy time.
-    resources: (vehicle: Vehicle) => [vehicle.vehicleArn, "arn:aws:iotfleetwise:*:*:campaign/*"],
+    resources: (vehicle: Vehicle) => [
+      vehicle.vehicleArn,
+      AWSBindings.partitionArn("iotfleetwise:*:*:campaign/*"),
+    ],
   }),
 );

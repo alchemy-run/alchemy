@@ -19,6 +19,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -30,7 +31,7 @@ export class VpcUnexpectedResponse extends Data.TaggedError("VpcUnexpectedRespon
 export type VpcId = `vpc-${string}`;
 export const VpcId = <const S extends string>(value: S): S & VpcId => value as S & VpcId;
 
-export type VpcArn = `arn:aws:ec2:${RegionID}:${AccountID}:vpc/${VpcId}`;
+export type VpcArn = `arn:${Partition}:ec2:${RegionID}:${AccountID}:vpc/${VpcId}`;
 
 export interface VpcProps {
   /**
@@ -343,7 +344,7 @@ const vpcToAttributes = (
   const vpcId = vpc.VpcId! as VpcId;
   return {
     vpcId,
-    vpcArn: `arn:aws:ec2:${region}:${accountId}:vpc/${vpcId}` as VpcArn,
+    vpcArn: `arn:${partitionOf(region)}:ec2:${region}:${accountId}:vpc/${vpcId}` as VpcArn,
     cidrBlock: vpc.CidrBlock!,
     dhcpOptionsId: vpc.DhcpOptionsId!,
     state: vpc.State!,

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -251,7 +252,7 @@ export const AccessPointProvider = () =>
       });
 
       const accessPointArn = (region: string, accountId: string, name: string) =>
-        `arn:aws:s3:${region}:${accountId}:accesspoint/${name}`;
+        `arn:${partitionOf(region)}:s3:${region}:${accountId}:accesspoint/${name}`;
 
       const observeAccessPoint = (accountId: string, name: string) =>
         s3control

@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readLexTags,
@@ -178,7 +179,7 @@ const findBotByName = Effect.fn(function* (botName: string) {
 
 const botArnOf = Effect.fn(function* (botId: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return `arn:aws:lex:${region}:${accountId}:bot/${botId}`;
+  return `arn:${partitionOf(region)}:lex:${region}:${accountId}:bot/${botId}`;
 });
 
 const attributesOf = Effect.fn(function* (bot: lexm.DescribeBotResponse) {

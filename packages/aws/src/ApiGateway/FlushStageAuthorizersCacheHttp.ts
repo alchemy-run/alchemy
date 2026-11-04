@@ -3,6 +3,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
+import { partitionOf } from "../Partition.ts";
 import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { FlushStageAuthorizersCache } from "./FlushStageAuthorizersCache.ts";
 import type { ApiGatewayStage } from "./Stage.ts";
@@ -27,7 +28,7 @@ export const FlushStageAuthorizersCacheHttp = Layer.effect(
         target: stage,
         verb: "DELETE",
         paths: (region) => [
-          Output.interpolate`arn:aws:apigateway:${region}::/restapis/${stage.restApiId}/stages/${stage.stageName}/cache/authorizers`,
+          Output.interpolate`arn:${partitionOf(region)}:apigateway:${region}::/restapis/${stage.restApiId}/stages/${stage.stageName}/cache/authorizers`,
         ],
       });
       return Effect.fn(`AWS.ApiGateway.FlushStageAuthorizersCache(${stage.LogicalId})`)(

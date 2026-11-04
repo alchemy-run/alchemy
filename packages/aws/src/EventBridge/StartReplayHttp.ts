@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Archive } from "./Archive.ts";
 import { StartReplay, type StartReplayRequest } from "./StartReplay.ts";
 
@@ -34,7 +35,7 @@ export const StartReplayHttp = Layer.effect(
               Effect: "Allow",
               Action: ["events:StartReplay"],
               Resource: [
-                `arn:aws:events:${region}:${accountId}:replay/*`,
+                `arn:${partitionOf(region)}:events:${region}:${accountId}:replay/*`,
                 // StartReplay also authorizes against the source archive.
                 archive.archiveArn,
                 // ...and against the DESTINATION event bus. EventBridge

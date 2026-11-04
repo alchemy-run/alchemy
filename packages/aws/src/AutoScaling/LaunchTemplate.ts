@@ -26,6 +26,7 @@ import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { AWSEnvironment } from "../index.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -44,7 +45,7 @@ export class LaunchTemplateConflict extends Data.TaggedError("LaunchTemplateConf
 export type LaunchTemplateId = `lt-${string}`;
 export type LaunchTemplateName = string;
 export type LaunchTemplateArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:launch-template/${LaunchTemplateId}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:launch-template/${LaunchTemplateId}`;
 
 export interface LaunchTemplateProps extends PlatformProps {
   /**
@@ -292,7 +293,7 @@ export const LaunchTemplateProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:ec2:${env.region}:${env.accountId}:launch-template/${launchTemplateId}` as LaunchTemplateArn,
+              `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:launch-template/${launchTemplateId}` as LaunchTemplateArn,
           ),
         );
 

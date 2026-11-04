@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export type PlatformApplicationArn = string;
@@ -241,7 +242,7 @@ const toApplicationArn = Effect.fn(function* (
 ) {
   const name = yield* toApplicationName(id, props);
   const { accountId, region } = yield* AWSEnvironment.current;
-  return `arn:aws:sns:${region}:${accountId}:app/${props.platform}/${name}`;
+  return `arn:${partitionOf(region)}:sns:${region}:${accountId}:app/${props.platform}/${name}`;
 });
 
 const toAttributeMap = (

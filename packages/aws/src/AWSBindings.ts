@@ -7,7 +7,7 @@ import * as Binding from "alchemy/Binding";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { isResourceOfType, type ResourceLike } from "alchemy/Resource";
-import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
+import { type BaseRuntimeContext, CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -24,6 +24,7 @@ import { AccessKey } from "./IAM/AccessKey.ts";
 import type { PolicyStatement } from "./IAM/Policy.ts";
 import { Role } from "./IAM/Role.ts";
 import { User } from "./IAM/User.ts";
+import { globalRegionOf } from "./Partition.ts";
 import { CurrentRegion } from "./Region.ts";
 
 /**
@@ -70,6 +71,18 @@ export interface HostBinding {
   /** Env vars the binding reads at runtime. */
   readonly env?: Record<string, unknown>;
 }
+
+/**
+ * `arn:<partition>:<rest>` in the partition of the environment the stack
+ * deploys to, resolved at deploy. Use it for a binding ARN with no region to
+ * derive the partition from, e.g. `partitionArn("ec2:*::snapshot/*")`.
+ */
+export const partitionArn = (rest: string): Output.Output<string> =>
+  Output.fromEffect(
+    Effect.suspend(() =>
+      Effect.map(AWSEnvironment.current, ({ partition }) => `arn:${partition}:${rest}`),
+    ),
+  ) as Output.Output<string>;
 
 /** The VPC a host must attach to, e.g. to reach a VPC-only database. */
 export interface HostVpc {
@@ -290,9 +303,10 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
         yield* runtime.set(
           WEB_IDENTITY_ROLE_ENV,
           Output.fromEffect(
-            AWSEnvironment.use((env) =>
-              Effect.map(env, ({ accountId }) => `arn:aws:iam::${accountId}:role/${roleName}`),
-            ).pipe(Effect.orDie),
+            Effect.map(
+              AWSEnvironment.current,
+              ({ accountId, partition }) => `arn:${partition}:iam::${accountId}:role/${roleName}`,
+            ),
           ) as Output.Output<string>,
         );
         yield* runtime.set(
@@ -383,6 +397,15 @@ const googleIdToken = Effect.gen(function* () {
 }).pipe(Effect.provide(FetchHttpClient.layer));
 
 /**
+ * The region a host calls STS in: the global region of its stack's
+ * partition, so a stack in `aws-eusc` never signs in to the `aws` partition.
+ */
+const stsRegionOf = (runtime: BaseRuntimeContext) =>
+  Effect.map(runtime.get<string>(KEY_ENV.region), (region) =>
+    globalRegionOf(region ?? "us-east-1"),
+  );
+
+/**
  * Resolve an operation on a host that runs as a Google service account: the
  * Role {@link Bind} created for it is assumed with the host's Google ID token
  * (`AssumeRoleWithWebIdentity`). Credentials are cached and re-assumed with a
@@ -397,12 +420,13 @@ const withWebIdentity = Effect.fn(function* <Op>(
   if (runtime === undefined || roleArn === undefined) {
     return yield* operation as Effect.Effect<Op>;
   }
+  const stsRegion = yield* stsRegionOf(runtime);
   const credentials = fromWebToken({
     roleArn,
     webIdentityToken: googleIdToken,
     roleSessionName: "alchemy",
-    // STS is global; operations provide their own Region.
-    region: "us-east-1",
+    // Operations provide their own Region.
+    region: stsRegion,
   });
   const callRegion =
     region !== undefined
@@ -459,6 +483,7 @@ export const withCredentials: <Op>(
     return yield* operation as Effect.Effect<Op>;
   }
 
+  const stsRegion = yield* stsRegionOf(runtime);
   // The created user's key signs `AssumeRole`; read on each refresh.
   const base = Layer.succeed(
     Credentials,
@@ -470,15 +495,15 @@ export const withCredentials: <Op>(
         accessKeyId: Redacted.make((yield* runtime.get<string>(KEY_ENV.accessKeyId)) ?? ""),
         secretAccessKey: Redacted.isRedacted(secret) ? secret : Redacted.make(secret ?? ""),
         sessionToken: undefined,
-        // STS is global; operations provide their own Region.
-        region: "us-east-1",
+        // Operations provide their own Region.
+        region: stsRegion,
       } satisfies ResolvedCredentials;
     }),
   );
   const credentials = yield* makeAssumeRoleResolver({
     roleArn: Effect.succeed(roleArn),
     base,
-    region: "us-east-1",
+    region: stsRegion,
   });
   const callRegion =
     region !== undefined

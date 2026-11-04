@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { plainJson } from "../internal/Observe.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
@@ -19,7 +20,7 @@ import type { LoadBalancer, LoadBalancerArn } from "./LoadBalancer.ts";
 import type { TargetGroup, TargetGroupArn } from "./TargetGroup.ts";
 
 export type ListenerArn =
-  `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:listener/${string}`;
+  `arn:${Partition}:elasticloadbalancing:${RegionID}:${AccountID}:listener/${string}`;
 
 export interface ListenerProps {
   /** The load balancer this listener belongs to. Changing it replaces the listener. */

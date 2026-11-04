@@ -5,17 +5,15 @@ import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-/** ARN partition — the testing account is on the standard AWS partition. */
-const PARTITION = "aws";
+import { partitionOf } from "../Partition.ts";
 
 /** `arn:aws:glue:{region}:{account}:catalog` */
 export const catalogArn = (region: string, accountId: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:catalog`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:catalog`;
 
 /** `arn:aws:glue:{region}:{account}:database/{name}` */
 export const databaseArn = (region: string, accountId: string, databaseName: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:database/${databaseName}`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:database/${databaseName}`;
 
 /** `arn:aws:glue:{region}:{account}:table/{database}/{table}` */
 export const tableArn = (
@@ -23,19 +21,19 @@ export const tableArn = (
   accountId: string,
   databaseName: string,
   tableName: string,
-) => `arn:${PARTITION}:glue:${region}:${accountId}:table/${databaseName}/${tableName}`;
+) => `arn:${partitionOf(region)}:glue:${region}:${accountId}:table/${databaseName}/${tableName}`;
 
 /** `arn:aws:glue:{region}:{account}:crawler/{name}` */
 export const crawlerArn = (region: string, accountId: string, crawlerName: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:crawler/${crawlerName}`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:crawler/${crawlerName}`;
 
 /** `arn:aws:glue:{region}:{account}:job/{name}` */
 export const jobArn = (region: string, accountId: string, jobName: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:job/${jobName}`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:job/${jobName}`;
 
 /** `arn:aws:glue:{region}:{account}:connection/{name}` */
 export const connectionArn = (region: string, accountId: string, connectionName: string) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:connection/${connectionName}`;
+  `arn:${partitionOf(region)}:glue:${region}:${accountId}:connection/${connectionName}`;
 
 /**
  * Fetch the observed Glue tags for a resource ARN as a plain record. Glue's

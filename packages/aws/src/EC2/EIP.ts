@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -16,7 +17,7 @@ export class EIPUnexpectedResponse extends Data.TaggedError("EIPUnexpectedRespon
   readonly cause?: unknown;
 }> {}
 
-export type EIPArn = `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
+export type EIPArn = `arn:${Partition}:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
 
 export type AllocationId<ID extends string = string> = `eipalloc-${ID}`;
 export const AllocationId = <ID extends string>(id: ID): ID & AllocationId<ID> =>
@@ -66,7 +67,7 @@ export interface EIP extends Resource<
     /**
      * The Amazon Resource Name (ARN) of the Elastic IP.
      */
-    eipArn: `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${string}`;
+    eipArn: `arn:${Partition}:ec2:${RegionID}:${AccountID}:elastic-ip/${string}`;
 
     /**
      * The Elastic IP address.
@@ -199,7 +200,7 @@ export const EIPProvider = () =>
               .map((address): EIP["Attributes"] => ({
                 allocationId: address.AllocationId as AllocationId,
                 eipArn:
-                  `arn:aws:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
+                  `arn:${partitionOf(region)}:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
                 publicIp: address.PublicIp!,
                 publicIpv4Pool: address.PublicIpv4Pool,
                 domain: (address.Domain as "vpc" | "standard") ?? "vpc",
@@ -228,7 +229,7 @@ export const EIPProvider = () =>
           return {
             allocationId: address.AllocationId as AllocationId,
             eipArn:
-              `arn:aws:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
+              `arn:${partitionOf(region)}:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
             publicIp: address.PublicIp!,
             publicIpv4Pool: address.PublicIpv4Pool,
             domain: (address.Domain as "vpc" | "standard") ?? "vpc",
@@ -324,7 +325,8 @@ export const EIPProvider = () =>
 
           return {
             allocationId,
-            eipArn: `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
+            eipArn:
+              `arn:${partitionOf(region)}:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
             publicIp: address.PublicIp!,
             publicIpv4Pool: address.PublicIpv4Pool,
             domain: (address.Domain as "vpc" | "standard") ?? "vpc",

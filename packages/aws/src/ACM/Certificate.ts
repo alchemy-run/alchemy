@@ -1,5 +1,5 @@
 import * as acm from "@distilled.cloud/aws/acm";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
+import { Region as AwsRegion, type RegionName } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import type { DnsRecord } from "alchemy/DNS/Adapter";
@@ -11,7 +11,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { globalRegionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
+import { withGlobalRegion } from "../Region.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
 
 export class CertificateNotReady extends Data.TaggedError("CertificateNotReady")<{
@@ -98,11 +100,11 @@ export interface CertificateProps {
   /**
    * AWS region to request the certificate in.
    *
-   * Defaults to `us-east-1` (the region CloudFront viewer certificates must
-   * live in). Set this to the region of a regional consumer — e.g. an ALB
-   * HTTPS listener requires the certificate in the load balancer's own
-   * region. Changing the region replaces the certificate.
-   * @default "us-east-1"
+   * Defaults to the partition's global region: `us-east-1` in `aws`, the
+   * region CloudFront viewer certificates must live in. Set this to the
+   * region of a regional consumer — e.g. an ALB HTTPS listener requires the
+   * certificate in the load balancer's own region. Changing the region replaces the certificate.
+   * @default the partition's global region, `us-east-1` in `aws`
    */
   region?: string;
   /**
@@ -231,8 +233,9 @@ export class CertificateCaaError extends Data.TaggedError("CertificateCaaError")
 /**
  * An ACM certificate for CloudFront and other AWS endpoints.
  *
- * `Certificate` requests an ACM certificate in `us-east-1`, which is the
- * region required for CloudFront viewer certificates. With DNS validation,
+ * `Certificate` requests an ACM certificate in the partition's global region,
+ * `us-east-1` in `aws`, which is the region required for CloudFront viewer
+ * certificates. With DNS validation,
  * the provider creates or updates the Route 53 validation records
  * (`hostedZoneId`, or the inferred public zone) and waits for the
  * certificate to be issued. With `dnsValidation: "external"` the records
@@ -441,7 +444,8 @@ export const CertificateProvider = () =>
         stables: ["certificateArn"],
         list: () =>
           Effect.gen(function* () {
-            // ACM certificates default to us-east-1 (CloudFront), but a
+            // ACM certificates default to the partition's global region
+            // (us-east-1 in `aws`, for CloudFront), but a
             // `region` prop can place them in the ambient region (e.g. for
             // ALB listeners) — enumerate both and dedupe by ARN, then
             // hydrate each to the full Attributes shape via describe + tags.
@@ -483,12 +487,23 @@ export const CertificateProvider = () =>
             );
             return rows.filter((row): row is ReturnType<typeof toAttrs> => row !== undefined);
           }),
-        diff: Effect.fn(function* ({ olds, news: _news, oldBindings, newBindings: _newBindings }) {
+        diff: Effect.fn(function* ({
+          olds,
+          news: _news,
+          output,
+          oldBindings,
+          newBindings: _newBindings,
+        }) {
           if (!isResolved(_news) || !isResolved(_newBindings)) {
             return undefined;
           }
           const news = _news as typeof olds;
           const newBindings = _newBindings as ResourceBinding<CertificateBinding>[];
+          // An omitted region is the global region of the certificate's
+          // partition, which its ARN names.
+          const home = globalRegionOf(
+            (output && regionOfCertificateArn(output.certificateArn)) ?? "us-east-1",
+          );
           if (
             olds.domainName !== news.domainName ||
             // ACM certificates are immutable: the SAN set — declared props
@@ -507,7 +522,7 @@ export const CertificateProvider = () =>
               olds.hostedZoneId !== news.hostedZoneId) ||
             olds.keyAlgorithm !== news.keyAlgorithm ||
             // Certificates cannot move regions — a region change replaces.
-            (olds.region ?? ACM_REGION) !== (news.region ?? ACM_REGION) ||
+            (olds.region ?? home) !== (news.region ?? home) ||
             // Exportability is fixed at request time — ACM rejects
             // `UpdateCertificateOptions` for it ("Export option for
             // certificates cannot be updated").
@@ -745,7 +760,6 @@ export const waitForRoute53Change = Effect.fn(function* (changeId: string) {
     );
 });
 
-const ACM_REGION = "us-east-1" as const;
 const defaultValidationMethod = "DNS" as const;
 
 /**
@@ -753,25 +767,21 @@ const defaultValidationMethod = "DNS" as const;
  * (`arn:aws:acm:{region}:{account}:certificate/...`).
  */
 const regionOfCertificateArn = (certificateArn: string) =>
-  certificateArn.split(":")[3] || ACM_REGION;
+  certificateArn.split(":")[3] || undefined;
 
-const withAcmRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  // `AwsRegion`'s service value is an `Effect<RegionName>` (see
-  // `@distilled.cloud/aws/Region`), so it must be provided as an effect, not a
-  // bare string — providing a raw string yields a primitive into the run loop.
-  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(ACM_REGION)));
+const withAcmRegion = withGlobalRegion;
 
 /**
  * Pin ACM calls to the certificate's region: the props-requested region for
- * new certificates (default `us-east-1`), or the region parsed from an
- * existing certificate's ARN.
+ * new certificates (default: the partition's global region), or the region
+ * parsed from an existing certificate's ARN.
  */
 const withCertRegion =
   (region: string | undefined) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(
-      Effect.provideService(AwsRegion, Effect.succeed((region ?? ACM_REGION) as typeof ACM_REGION)),
-    );
+    region === undefined
+      ? withGlobalRegion(effect)
+      : effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(region as RegionName)));
 
 const normalizeHostedZoneId = (hostedZoneId: string) => hostedZoneId.replace(/^\/hostedzone\//, "");
 

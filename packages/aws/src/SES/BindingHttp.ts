@@ -3,6 +3,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { ConfigurationSet } from "./ConfigurationSet.ts";
 import type { EmailIdentity } from "./EmailIdentity.ts";
 import type { EmailTemplate } from "./EmailTemplate.ts";
@@ -177,7 +178,7 @@ export const makeVerificationScopedHttpBinding = <
             accountId: string;
             region: string;
           }>;
-          const base = `arn:aws:ses:${region}:${accountId}`;
+          const base = `arn:${partitionOf(region)}:ses:${region}:${accountId}`;
           const name = identity.emailIdentity;
           resources.push(
             `${base}:identity/${name}`,

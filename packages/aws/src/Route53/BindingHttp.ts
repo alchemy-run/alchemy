@@ -1,6 +1,9 @@
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
+import { AWSEnvironment } from "../Environment.ts";
+import type { Partition } from "../Partition.ts";
 import type { HealthCheck } from "./HealthCheck.ts";
 import type { HostedZone } from "./HostedZone.ts";
 
@@ -50,6 +53,9 @@ export const makeRoute53ZoneHttpBinding = <I, A, E, R>(options: {
     return Effect.fn(function* (zone: HostedZone) {
       const zoneId = yield* zone.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const { partition } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          partition: Partition;
+        }>;
         yield* bind`${options.tag}(${zone})`({
           policyStatements: [
             {
@@ -57,7 +63,7 @@ export const makeRoute53ZoneHttpBinding = <I, A, E, R>(options: {
               Action: [...options.actions],
               Resource: options.wildcardIam
                 ? ["*"]
-                : [Output.interpolate`arn:aws:route53:::hostedzone/${zone.id}`],
+                : [Output.interpolate`arn:${partition}:route53:::hostedzone/${zone.id}`],
             },
           ],
         });
@@ -99,12 +105,17 @@ export const makeRoute53HealthCheckHttpBinding = <
     return Effect.fn(function* (healthCheck: HealthCheck) {
       const healthCheckId = yield* healthCheck.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const { partition } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          partition: Partition;
+        }>;
         yield* bind`${options.tag}(${healthCheck})`({
           policyStatements: [
             {
               Effect: "Allow",
               Action: [...options.actions],
-              Resource: [Output.interpolate`arn:aws:route53:::healthcheck/${healthCheck.id}`],
+              Resource: [
+                Output.interpolate`arn:${partition}:route53:::healthcheck/${healthCheck.id}`,
+              ],
             },
           ],
         });
@@ -136,7 +147,7 @@ export const makeRoute53AccountHttpBinding = <I, A, E, R>(options: {
    * IAM resources the actions are granted on.
    * @default ["*"]
    */
-  resources?: readonly string[];
+  resources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;

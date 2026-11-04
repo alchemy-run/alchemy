@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import { bedrockModelArns } from "./ModelArns.ts";
 
 /**
@@ -315,7 +316,7 @@ export const AgentProvider = () =>
                   Condition: {
                     StringEquals: { "aws:SourceAccount": accountId },
                     ArnLike: {
-                      "aws:SourceArn": `arn:aws:bedrock:${region}:${accountId}:agent/*`,
+                      "aws:SourceArn": `arn:${partitionOf(region)}:bedrock:${region}:${accountId}:agent/*`,
                     },
                   },
                 },
@@ -357,7 +358,7 @@ export const AgentProvider = () =>
             const summaries = Array.from(pages).flatMap((page) => page.agentSummaries ?? []);
             return summaries.map((s) => ({
               agentId: s.agentId,
-              agentArn: `arn:aws:bedrock:${region}:${accountId}:agent/${s.agentId}`,
+              agentArn: `arn:${partitionOf(region)}:bedrock:${region}:${accountId}:agent/${s.agentId}`,
               agentName: s.agentName,
               agentVersion: "DRAFT",
               agentResourceRoleArn: "",

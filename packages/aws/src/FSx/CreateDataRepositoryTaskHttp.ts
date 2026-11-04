@@ -1,5 +1,6 @@
 import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { makeFSxFileSystemHttpBinding } from "./BindingHttp.ts";
 import { CreateDataRepositoryTask } from "./CreateDataRepositoryTask.ts";
 
@@ -11,6 +12,6 @@ export const CreateDataRepositoryTaskHttp = Layer.effect(
     actions: ["fsx:CreateDataRepositoryTask", "fsx:TagResource"],
     // The operation also authorizes on the new task's own ARN, which is
     // unknowable at deploy time.
-    extraResourceArns: ["arn:aws:fsx:*:*:task/*"],
+    extraResourceArns: [AWSBindings.partitionArn("fsx:*:*:task/*")],
   }),
 );

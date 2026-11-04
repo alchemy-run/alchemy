@@ -167,9 +167,9 @@ export const CustomActionProvider = () =>
       });
 
       const actionArn = Effect.fn(function* (actionName: string) {
-        const { accountId } = yield* AWSEnvironment.current;
+        const { accountId, partition } = yield* AWSEnvironment.current;
         // Chatbot custom action ARNs are global (no region component).
-        return `arn:aws:chatbot::${accountId}:custom-action/${actionName}`;
+        return `arn:${partition}:chatbot::${accountId}:custom-action/${actionName}`;
       });
 
       const observeAction = (arn: string) =>

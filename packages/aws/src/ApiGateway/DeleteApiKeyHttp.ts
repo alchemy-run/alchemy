@@ -2,6 +2,7 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
+import { partitionOf } from "../Partition.ts";
 import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { DeleteApiKey, type DeleteApiKeyRequest } from "./DeleteApiKey.ts";
 
@@ -20,7 +21,7 @@ export const DeleteApiKeyHttp = Layer.effect(
         cap: "AWS.ApiGateway.DeleteApiKey",
         target: "",
         verb: "DELETE",
-        paths: (region) => [`arn:aws:apigateway:${region}::/apikeys/*`],
+        paths: (region) => [`arn:${partitionOf(region)}:apigateway:${region}::/apikeys/*`],
       });
       return Effect.fn("AWS.ApiGateway.DeleteApiKey")(function* (request: DeleteApiKeyRequest) {
         return yield* deleteApiKey(request);

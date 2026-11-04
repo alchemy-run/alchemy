@@ -16,6 +16,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { tagListRecord } from "../internal/Observe.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { getDefaultVpcScope } from "./defaultVpcScope.ts";
@@ -52,7 +53,7 @@ export interface InternetGateway extends Resource<
     /**
      * The Amazon Resource Name (ARN) of the internet gateway.
      */
-    internetGatewayArn: `arn:aws:ec2:${RegionID}:${AccountID}:internet-gateway/${string}`;
+    internetGatewayArn: `arn:${Partition}:ec2:${RegionID}:${AccountID}:internet-gateway/${string}`;
     /**
      * The ID of the VPC the internet gateway is attached to (if any).
      */
@@ -178,7 +179,7 @@ export const InternetGatewayProvider = () =>
         const internetGatewayId = igw.InternetGatewayId as InternetGatewayId;
         return {
           internetGatewayId,
-          internetGatewayArn: `arn:aws:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}`,
+          internetGatewayArn: `arn:${partitionOf(region)}:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}`,
           vpcId: igw.Attachments?.find((a) => a.State === "available" || a.State === "attaching")
             ?.VpcId as VpcId | undefined,
           ownerId: igw.OwnerId,
@@ -239,7 +240,7 @@ export const InternetGatewayProvider = () =>
                       return {
                         internetGatewayId,
                         internetGatewayArn:
-                          `arn:aws:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}` as const,
+                          `arn:${partitionOf(region)}:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}` as const,
                         vpcId: attachedVpcId,
                         ownerId: igw.OwnerId,
                         attachments: igw.Attachments?.map((a) => ({
