@@ -24,7 +24,7 @@ Every hub has the same five parts, in order:
 2. **The What is link**, right after the intro, on its own line:
    "**New to X?** Start with [What is X?](/x/what-is-x)." Nothing more: the
    page title says what it is.
-3. **`## A taste`**: two or three small, complete snippets that declare a
+3. **`## A quick example`**: two or three small, complete snippets that declare a
    resource, write a runtime and deploy the Stack, each led by one line.
    Lead-in lines, not headings.
 4. **`## Where to start`**: two bold lead-ins, one line each:
