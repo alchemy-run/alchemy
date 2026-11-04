@@ -9,6 +9,8 @@ GitHub hosts git repositories and the work around them: reviewing changes in pul
 
 Actions builds, tests and deploys on every push, using credentials kept in its secrets and variables. Environments guard production behind reviews. Webhooks tell other systems when something happens in a repository.
 
+**New to GitHub as infrastructure?** [What is GitHub?](/github/what-is-github) walks through repositories, Actions, secrets, environments, OIDC, webhooks and comments, once each, and shows how Alchemy models every one.
+
 ## A taste
 
 A repository, with its settings kept in code:
@@ -39,8 +41,6 @@ yield* GitHub.Comment("preview-comment", {
 ```
 
 ## Where to start
-
-**New to GitHub as infrastructure?** [What is GitHub?](/github/what-is-github) walks through repositories, Actions, secrets, environments, OIDC, webhooks and comments, once each, and shows how Alchemy models every one.
 
 **Want to build?** Connect your token in [Setup](/github/setup), then [CI](/environments/ci) walks through a GitHub Actions workflow with a stage per pull request.
 

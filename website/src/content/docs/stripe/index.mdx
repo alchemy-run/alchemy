@@ -9,6 +9,8 @@ Stripe is financial infrastructure for the internet: payments, subscriptions and
 
 It keeps what you sell, products and their prices, who buys it, and the record of every payment and subscription. Its hosted pages, Checkout and the Billing Portal, collect card details so you never touch them, and webhooks tell your app what happened.
 
+**New to Stripe?** [What is Stripe?](/stripe/what-is-stripe) walks through accounts, keys, products, prices, customers, Checkout, subscriptions, webhooks and Connect, once each, and shows how Alchemy models every one.
+
 ## A taste
 
 ```typescript title="src/api.ts"
@@ -65,8 +67,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
 Resources like `Product`, `Price`, `Coupon` and `WebhookEndpoint` are managed by the Stack: Alchemy creates, updates and deletes them, and deactivates the ones Stripe won't delete. Bindings like `CreateCustomer` and `CreateCheckoutSession` are what the Worker calls while it runs. Each one adds the permission it needs to a [`RestrictedApiKey`](/stripe/accounts-and-keys), and you provide its `*Http` Layer once. And an output like `price.id` is yielded in Construction to get an accessor, then yielded again inside a handler, which is how a resource's id reaches the running Worker.
 
 ## Where to start
-
-**New to Stripe?** [What is Stripe?](/stripe/what-is-stripe) walks through accounts, keys, products, prices, customers, Checkout, subscriptions, webhooks and Connect, once each, and shows how Alchemy models every one.
 
 **Want to build?** Connect your account in [Setup](/stripe/setup), then [Sell a subscription](/stripe/guides/subscriptions) builds Checkout, the Billing Portal and webhooks in one Worker. Paying other businesses? [Onboard merchants with Connect](/stripe/guides/connect).
 

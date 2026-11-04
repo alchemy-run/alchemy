@@ -9,6 +9,8 @@ Kubernetes is the open-source standard for running containers across a cluster o
 
 You describe what should exist, three copies of this server, a job every night, an address in front of them, and the cluster works continuously to make it so, restarting what crashes and moving what was on a machine that died. It runs anywhere, from your laptop to your own servers to EKS, GKE or AKS.
 
+**New to Kubernetes?** [What is Kubernetes?](/kubernetes/what-is-kubernetes) walks through clusters, objects, namespaces, Pods, Deployments, Services, Jobs, images and server-side apply, once each, and shows how Alchemy models every one.
+
 ## A taste
 
 A cluster to deploy to. `LocalCluster` starts one on your machine, so you can try everything without a hosted cluster:
@@ -54,8 +56,6 @@ export default Alchemy.Stack(
 When you're ready, point the same resources at a real cluster.
 
 ## Where to start
-
-**New to Kubernetes?** [What is Kubernetes?](/kubernetes/what-is-kubernetes) walks through clusters, objects, namespaces, Pods, Deployments, Services, Jobs, images and server-side apply, once each, and shows how Alchemy models every one.
 
 **Want to build?** The [tutorial](/kubernetes/tutorial/part-1) goes from an empty directory to a local cluster running a service, Effect Jobs, a CronJob and a Helm chart, and ends on a cluster of your own. Start with [Setup](/kubernetes/setup).
 

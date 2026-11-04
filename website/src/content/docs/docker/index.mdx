@@ -7,6 +7,8 @@ import HubMap from "../../../components/HubMap.astro";
 
 Docker packages a program with everything it needs into an image, and runs images as isolated containers. An image runs the same on a laptop, in CI or on any cloud.
 
+**New to Docker?** [What is Docker?](/docker/what-is-docker) walks through the engine, contexts, images, registries, containers, networks, volumes and Swarm, once each, and shows how Alchemy models every one.
+
 ## A taste
 
 Postgres with a named volume, a network alias and a published port:
@@ -29,8 +31,6 @@ const postgres = yield* Docker.Container("postgres", {
 `password` can be `Redacted`. It reaches the container through its environment, never on the command line.
 
 ## Where to start
-
-**New to Docker?** [What is Docker?](/docker/what-is-docker) walks through the engine, contexts, images, registries, containers, networks, volumes and Swarm, once each, and shows how Alchemy models every one.
 
 **Want to build?** Connect Alchemy to your engine in [Setup](/docker/setup), then [Run local services](/docker/local-services) builds Postgres on a network and a volume, step by step.
 

@@ -10,7 +10,7 @@ this platform with Alchemy feel like, and where do I go next? It never explains
 the platform's concepts. That's the What is page's job, and it is the only page
 that draws the platform. The hub has no diagram.
 
-Every hub has the same four parts, in order:
+Every hub has the same five parts, in order:
 
 1. **One paragraph on what the platform is**, technical and at a high level,
    and what it's known for. A second paragraph is fine when it adds what the
@@ -21,16 +21,18 @@ Every hub has the same four parts, in order:
 
    Never describe the package ("`@alchemy.run/fly` puts Fly in one typed
    program"). Never use trivia (see SKILL.md rules).
-2. **`## A taste`**: two or three small, complete snippets that declare a
+2. **The What is link**, right after the intro, on its own line:
+   "**New to X?** [What is X?](/x/what-is-x) walks through …, once each, and
+   shows how Alchemy models every one."
+3. **`## A taste`**: two or three small, complete snippets that declare a
    resource, write a runtime and deploy the Stack, each led by one line.
    Lead-in lines, not headings.
-3. **`## Where to start`**: three bold lead-ins, one line each:
-   - **New to X?** [What is X?](/x/what-is-x) and what it walks through.
+4. **`## Where to start`**: two bold lead-ins, one line each:
    - **Want to build?** Setup, then the tutorial (or the main guide when there's
      no tutorial).
    - **Looking for something specific?** "Every section of these docs is listed
      below, and every resource is in the generated [API reference](/providers)."
-4. **`## The docs`** with `<HubMap />` (import it from
+5. **`## The docs`** with `<HubMap />` (import it from
    `../../../components/HubMap.astro`). It draws one card per sidebar section
    from the sidebar itself, so it never needs editing. Don't write a prose list
    of chapter links.

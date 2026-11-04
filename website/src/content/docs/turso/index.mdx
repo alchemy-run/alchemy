@@ -7,6 +7,8 @@ import HubMap from "../../../components/HubMap.astro";
 
 Turso is a database platform built on libSQL, its open-source fork of SQLite. Its databases are cheap enough to have thousands, one per customer, user or pull request, and can sync to replicas embedded in your app.
 
+**New to Turso?** [What is Turso?](/turso/what-is-turso) walks through organizations, groups, databases, tokens, connections and databases per tenant, once each, and shows how Alchemy models every one.
+
 ## A taste
 
 Every database lives in a group. The group decides where its databases run.
@@ -48,8 +50,6 @@ const sql = yield* SQL.LibSQL(tenants.connect(acme.name));
 See [Database per tenant](/turso/database-per-tenant).
 
 ## Where to start
-
-**New to Turso?** [What is Turso?](/turso/what-is-turso) walks through organizations, groups, databases, tokens, connections and databases per tenant, once each, and shows how Alchemy models every one.
 
 **Want to build?** The [tutorial](/turso/tutorial/part-1) builds a database per tenant, step by step. Start with [Setup](/turso/setup) to connect your organization.
 

@@ -9,6 +9,8 @@ Axiom is a platform for event data and observability. It stores logs, traces and
 
 You send it OpenTelemetry and query it with APL. Monitors alert you when something crosses a line, and dashboards show what's happening.
 
+**New to Axiom?** [What is Axiom?](/axiom/what-is-axiom) walks through datasets, ingest, tokens, APL, monitors, notifiers and dashboards, once each, and shows how Alchemy models every one.
+
 ## A taste
 
 A Dataset holds one kind of telemetry, and exposes its OTLP endpoint:
@@ -52,8 +54,6 @@ yield* Axiom.Monitor("panics", {
 Point a Worker or Lambda's OpenTelemetry exporter at the dataset endpoints, and Effect's traces and logs flow into Axiom with no code changes. See [Observability](/testing/observability).
 
 ## Where to start
-
-**New to Axiom?** [What is Axiom?](/axiom/what-is-axiom) walks through datasets, ingest, tokens, APL, monitors, notifiers and dashboards, once each, and shows how Alchemy models every one.
 
 **Want to build?** Connect your organization in [Setup](/axiom/setup), then [Observability with Axiom](/cloudflare/observability/axiom-observability) takes a Worker from no telemetry to a monitor that pages you.
 

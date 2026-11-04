@@ -7,6 +7,8 @@ import HubMap from "../../../components/HubMap.astro";
 
 PlanetScale is likely the fastest managed Postgres and MySQL you can buy, at a price that undercuts the large clouds. Its Metal clusters run on local NVMe drives instead of network storage. Its MySQL is built on Vitess, which shards a database across many servers so it can outgrow one machine. And every database can be branched like code, so schema changes are tested and deployed like a pull request.
 
+**New to PlanetScale?** [What is PlanetScale?](/planetscale/what-is-planetscale) walks through organizations, databases, engines, branches, credentials, connections, migrations and backups, once each, and shows how Alchemy models every one.
+
 ## A taste
 
 A database, a branch for this stage, and a role to connect with:
@@ -34,8 +36,6 @@ const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", { o
 ```
 
 ## Where to start
-
-**New to PlanetScale?** [What is PlanetScale?](/planetscale/what-is-planetscale) walks through organizations, databases, engines, branches, credentials, connections, migrations and backups, once each, and shows how Alchemy models every one.
 
 **Want to build?** Connect your organization in [Setup](/planetscale/setup), then give every pull request its own database branch with [Preview branches per PR](/planetscale/guides/preview-branches).
 

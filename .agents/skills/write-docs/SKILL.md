@@ -72,6 +72,9 @@ Each of these was a correction. Don't relearn them.
   customer counts, service or region counts, founding history, or lines like
   "from a weekend project to a bank". Keep a number only when it changes how the
   platform behaves for the reader, like Cloudflare's 340+ cities for latency.
+  The same goes for superlatives: "the largest public cloud" says nothing about
+  AWS a reader can use. Keep one only when it's the platform's defining trait
+  and the user asked for it (Cloudflare's network, PlanetScale's speed).
 - **Say what the platform is known for**, not a short list of the services we
   happen to support ("Google Cloud is a set of services for running code" was
   rejected as too small).

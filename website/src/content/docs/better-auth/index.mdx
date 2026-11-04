@@ -9,6 +9,8 @@ import HubMap from "../../../components/HubMap.astro";
 
 It supports email and password, OAuth providers like GitHub and Google, and plugins for two-factor sign-in, passkeys and organizations.
 
+**New to Better Auth?** [What is Better Auth?](/better-auth/what-is-better-auth) walks through the auth server, users, sessions, sign-in providers, the database and middleware, once each, and shows how Alchemy models every one.
+
 ## A taste
 
 An Auth service is a Better Auth configuration:
@@ -25,8 +27,6 @@ const makeAuth = BetterAuth({
 Alchemy binds its database, applies its migrations on deploy, and serves its routes from your Worker or Lambda. Pick a [sign-in provider](/better-auth/sign-in-providers/email-password) and a [database](/better-auth/databases) to go with it.
 
 ## Where to start
-
-**New to Better Auth?** [What is Better Auth?](/better-auth/what-is-better-auth) walks through the auth server, users, sessions, sign-in providers, the database and middleware, once each, and shows how Alchemy models every one.
 
 **Want to build?** The [tutorial](/better-auth/tutorial/part-1) builds an app with browser sign-in, session middleware and GitHub sign-in, in six parts.
 
