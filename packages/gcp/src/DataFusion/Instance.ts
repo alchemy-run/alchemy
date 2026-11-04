@@ -20,8 +20,8 @@ import {
 import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
-/** Instance ids: a lowercase letter, then lowercase letters, digits and hyphens, up to 63. */
-const MAX_INSTANCE_ID_LENGTH = 63;
+/** Instance ids: a lowercase letter, then lowercase letters, digits and hyphens, "maximum 30 characters". */
+const MAX_INSTANCE_ID_LENGTH = 30;
 
 export type InstanceProps = {
   /**
