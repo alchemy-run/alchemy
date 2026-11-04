@@ -480,13 +480,19 @@ const clashes = (flag: Flag.Flag<unknown>) => {
   }
 };
 
-/** The flag a store contributes, under the combinators it is wrapped in. */
-const single = (flag: Param.Param<"flag", unknown>): Param.Single<"flag", unknown> | undefined =>
-  Param.isSingle(flag)
-    ? flag
-    : Predicate.hasProperty(flag, "param")
-      ? single(flag.param as Param.Param<"flag", unknown>)
-      : undefined;
+/**
+ * The flag a store contributes, under the combinators it is wrapped in, and
+ * whether one of them already makes it optional, as a default does.
+ */
+const unwrap = (
+  param: Param.Param<"flag", unknown>,
+  optional = false,
+): { readonly single?: Param.Single<"flag", unknown>; readonly optional: boolean } =>
+  Param.isSingle(param)
+    ? { single: param, optional }
+    : Predicate.hasProperty(param, "param")
+      ? unwrap(param.param as Param.Param<"flag", unknown>, optional || param._tag === "Optional")
+      : { optional };
 
 /**
  * The flags of every provider's state store, such as `--name` or `--domain`,
@@ -504,6 +510,7 @@ export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Cont
     {
       readonly flag: Flag.Flag<unknown>;
       readonly name: string;
+      readonly type: string | undefined;
       readonly descriptions: Map<string, Array<string>>;
     }
   >();
@@ -512,26 +519,31 @@ export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Cont
   for (const provider of contributions) {
     for (const [backend, store] of Object.entries(provider.stateStores ?? {})) {
       for (const [option, flag] of Object.entries(store.flags ?? {})) {
-        const { name = option, aliases = [], description = Option.none() } = single(flag) ?? {};
+        const { single, optional } = unwrap(flag);
+        const name = single?.name ?? option;
+        const type = single?.primitiveType._tag;
         const shared = declared.get(option);
-        const problem =
-          aliases.length > 0
+        const problem = optional
+          ? "state store flags can't have a default, alchemy state makes them optional"
+          : (single?.aliases.length ?? 0) > 0
             ? "state store flags can't have aliases"
             : shared !== undefined && shared.name !== name
-              ? `another state store sets '${option}' with --${shared.name}`
-              : shared === undefined && names.has(name)
-                ? `another state store sets '${names.get(name)}' with it`
-                : shared === undefined && clashes(flag)
-                  ? "alchemy state already has that flag"
-                  : undefined;
+              ? `'${option}' is already set with --${shared.name}`
+              : shared !== undefined && shared.type !== type
+                ? `another state store parses it as ${shared.type}`
+                : shared === undefined && names.has(name)
+                  ? `it already sets '${names.get(name)}'`
+                  : shared === undefined && clashes(flag)
+                    ? "alchemy state already has that flag"
+                    : undefined;
         if (problem !== undefined) {
           Effect.runSync(
             Effect.logWarning(`Ignoring --${name} from the '${backend}' state store: ${problem}.`),
           );
           continue;
         }
-        const entry = shared ?? { flag, name, descriptions: new Map() };
-        const text = Option.getOrElse(description, () => "");
+        const entry = shared ?? { flag, name, type, descriptions: new Map() };
+        const text = Option.getOrElse(single?.description ?? Option.none(), () => "");
         entry.descriptions.set(text, [...(entry.descriptions.get(text) ?? []), backend]);
         declared.set(option, entry);
         names.set(name, option);
@@ -544,8 +556,8 @@ export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Cont
         [...descriptions]
           .map(([text, backends]) =>
             descriptions.size === 1
-              ? `${text} (--backend ${backends.join(", ")})`
-              : `--backend ${backends.join(", ")}: ${text}`,
+              ? `${text} (--backend ${backends.join(", ")})`.trim()
+              : `--backend ${backends.join(", ")}: ${text}`.trim(),
           )
           .join("; "),
       ),

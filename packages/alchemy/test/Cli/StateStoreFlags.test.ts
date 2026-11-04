@@ -63,6 +63,21 @@ describe("state store flags", { tags: ["unit"] }, () => {
     expect(Object.keys(flags)).toEqual(["name", "url"]);
   });
 
+  it("leaves out a flag with a default, which would always be set", () => {
+    const flags = storeOptionFlags([
+      provider("fake", { fake: { region: Flag.String("region").pipe(Flag.withDefault("eu")) } }),
+    ]);
+    expect(Object.keys(flags)).toEqual([]);
+  });
+
+  it("leaves out a shared flag another store parses differently", () => {
+    const flags = storeOptionFlags([
+      provider("one", { one: { port: Flag.String("port") } }),
+      provider("two", { two: { port: Flag.Int("port") } }),
+    ]);
+    expect(Object.keys(flags)).toEqual(["port"]);
+  });
+
   it("leaves out a different flag for an option another store already sets", () => {
     const flags = storeOptionFlags([
       provider("one", { one: { name: Flag.String("name") } }),

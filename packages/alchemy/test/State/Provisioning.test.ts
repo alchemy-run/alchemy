@@ -15,34 +15,37 @@ const hint = (store: Provisioning.StoreRef) =>
 describe("missing store hint", { tags: ["unit"] }, () => {
   it.effect("names every flag that addresses the store", () =>
     Effect.gen(function* () {
-      expect(
-        yield* hint({
-          backend: "cloudflare",
-          label: "Cloudflare State Store 'w'",
-          flags: { name: "w", domain: "state.example.com" },
-        }),
-      ).toBe("alchemy state bootstrap --backend cloudflare --name w --domain state.example.com");
+      const command = yield* hint({
+        backend: "cloudflare",
+        label: "Cloudflare State Store 'w'",
+        flags: { name: "w", domain: "state.example.com" },
+      });
+      expect(command).toBe(
+        "alchemy state bootstrap --backend cloudflare --name w --domain state.example.com",
+      );
     }),
   );
 
   it.effect("leaves out flags that aren't set", () =>
     Effect.gen(function* () {
-      expect(
-        yield* hint({ backend: "aws", label: "DynamoDB state table", flags: { name: undefined } }),
-      ).toBe("alchemy state bootstrap --backend aws");
+      const command = yield* hint({
+        backend: "aws",
+        label: "DynamoDB state table",
+        flags: { name: undefined },
+      });
+      expect(command).toBe("alchemy state bootstrap --backend aws");
     }),
   );
 
   it.effect("asks for the configured bootstrap when only the stack describes the store", () =>
     Effect.gen(function* () {
-      expect(
-        yield* hint({
-          backend: "cloudflare",
-          label: "Cloudflare State Store 'w'",
-          flags: { name: "w" },
-          configured: true,
-        }),
-      ).toBe("alchemy state bootstrap");
+      const command = yield* hint({
+        backend: "cloudflare",
+        label: "Cloudflare State Store 'w'",
+        flags: { name: "w" },
+        configured: true,
+      });
+      expect(command).toBe("alchemy state bootstrap");
     }),
   );
 });
