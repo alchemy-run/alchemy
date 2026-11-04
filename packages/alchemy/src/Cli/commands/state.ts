@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 import { CliError, Command, Flag, Param } from "effect/cli";
 import * as Argument from "effect/cli/Argument";
 import * as Console from "effect/Console";
@@ -493,93 +494,94 @@ const clashes = (flag: Flag.Flag<unknown>) => {
   throw built.failure;
 };
 
-/**
- * The flag a store contributes, under the combinators it is wrapped in, and
- * whether one of them already makes it optional, as a default does.
- */
-const unwrap = (
-  param: Param.Param<"flag", unknown>,
-  optional = false,
-): { readonly single?: Param.Single<"flag", unknown>; readonly optional: boolean } =>
-  Param.isSingle(param)
-    ? { single: param, optional }
-    : Predicate.hasProperty(param, "param")
-      ? unwrap(param.param as Param.Param<"flag", unknown>, optional || param._tag === "Optional")
-      : { optional };
+/** A store's flag, read through the combinators it is wrapped in. */
+const readFlag = (backend: string, option: string, flag: Flag.Flag<unknown>) => {
+  let param: Param.Param<"flag", unknown> = flag;
+  // A default wraps the flag in `optional`, so either means it is always set.
+  let optional = false;
+  while (!Param.isSingle(param) && Predicate.hasProperty(param, "param")) {
+    optional ||= param._tag === "Optional";
+    param = param.param as Param.Param<"flag", unknown>;
+  }
+  const single = Param.isSingle(param) ? param : undefined;
+  return {
+    backend,
+    option,
+    flag,
+    optional,
+    name: single?.name ?? option,
+    type: single?.primitiveType._tag,
+    aliases: single?.aliases ?? [],
+    description: single === undefined ? "" : Option.getOrElse(single.description, () => ""),
+  };
+};
+
+type StoreFlag = ReturnType<typeof readFlag>;
+
+/** Why a store's flag can't join the ones already accepted, if it can't. */
+const rejection = (flag: StoreFlag, accepted: ReadonlyArray<StoreFlag>) => {
+  if (flag.optional) return "state store flags can't be optional or have a default";
+  if (flag.aliases.length > 0) return "state store flags can't have aliases";
+  const shared = accepted.find((other) => other.option === flag.option);
+  if (shared !== undefined) {
+    if (shared.name !== flag.name) return `'${flag.option}' is already set with --${shared.name}`;
+    if (shared.type !== flag.type) return `another state store parses it as ${shared.type}`;
+    return undefined;
+  }
+  const sameName = accepted.find((other) => other.name === flag.name);
+  if (sameName !== undefined) return `it already sets '${sameName.option}'`;
+  if (clashes(flag.flag)) return "alchemy state already has that flag";
+  return undefined;
+};
+
+/** One optional flag for the stores sharing an option, its help listing each one. */
+const sharedFlag = (stores: Arr.NonEmptyReadonlyArray<StoreFlag>) => {
+  const help = Object.entries(Arr.groupBy(stores, (store) => store.description))
+    .map(([description, same]) =>
+      `${description} (--backend ${same.map((store) => store.backend).join(", ")})`.trim(),
+    )
+    .join("; ");
+  return stores[0].flag.pipe(
+    Flag.withDescription(help),
+    Flag.optional,
+    Flag.map(Option.getOrUndefined),
+  );
+};
 
 /**
  * The flags of every provider's state store, such as `--name` or `--domain`,
- * each optional so a flag not given is `undefined`. Stores that take the same
- * option as the same flag share it, and its help lists each store's
- * description. A flag that can't be added is left out with a warning. Which
- * ones a backend takes is checked when the store is opened.
+ * each optional so a flag not given is `undefined`. Stores that set the same
+ * option with the same flag share it. A flag that can't be added is left out
+ * with a warning, and `ignored` lists it so the CLI refuses that option for
+ * its store. Which ones a backend takes is checked when the store is opened.
  *
  * @internal exported for tests.
  */
 export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Contributions>) => {
-  // option -> its flag, and description -> the backends that describe it that way
-  const declared = new Map<
-    string,
-    {
-      readonly flag: Flag.Flag<unknown>;
-      readonly name: string;
-      readonly type: string | undefined;
-      readonly descriptions: Map<string, Array<string>>;
-    }
-  >();
-  // flag name -> the option it sets
-  const names = new Map<string, string>();
+  const accepted: Array<StoreFlag> = [];
   // backend -> the options whose flag was left out
   const ignored: Record<string, Array<string>> = {};
   for (const provider of contributions) {
     for (const [backend, store] of Object.entries(provider.stateStores ?? {})) {
       for (const [option, flag] of Object.entries(store.flags ?? {})) {
-        const { single, optional } = unwrap(flag);
-        const name = single?.name ?? option;
-        const type = single?.primitiveType._tag;
-        const shared = declared.get(option);
-        const problem = optional
-          ? "state store flags can't be optional or have a default, alchemy state makes them optional"
-          : (single?.aliases.length ?? 0) > 0
-            ? "state store flags can't have aliases"
-            : shared !== undefined && shared.name !== name
-              ? `'${option}' is already set with --${shared.name}`
-              : shared !== undefined && shared.type !== type
-                ? `another state store parses it as ${shared.type}`
-                : shared === undefined && names.has(name)
-                  ? `it already sets '${names.get(name)}'`
-                  : shared === undefined && clashes(flag)
-                    ? "alchemy state already has that flag"
-                    : undefined;
-        if (problem !== undefined) {
-          Effect.runSync(
-            Effect.logWarning(`Ignoring --${name} from the '${backend}' state store: ${problem}.`),
-          );
-          ignored[backend] = [...(ignored[backend] ?? []), option];
+        const read = readFlag(backend, option, flag);
+        const problem = rejection(read, accepted);
+        if (problem === undefined) {
+          accepted.push(read);
           continue;
         }
-        const entry = shared ?? { flag, name, type, descriptions: new Map() };
-        const text = Option.getOrElse(single?.description ?? Option.none(), () => "");
-        entry.descriptions.set(text, [...(entry.descriptions.get(text) ?? []), backend]);
-        declared.set(option, entry);
-        names.set(name, option);
+        Effect.runSync(
+          Effect.logWarning(
+            `Ignoring --${read.name} from the '${backend}' state store: ${problem}.`,
+          ),
+        );
+        ignored[backend] = [...(ignored[backend] ?? []), option];
       }
     }
   }
-  const flags = Record.map(Object.fromEntries(declared), ({ flag, descriptions }) =>
-    flag.pipe(
-      Flag.withDescription(
-        [...descriptions]
-          .map(([text, backends]) =>
-            descriptions.size === 1
-              ? `${text} (--backend ${backends.join(", ")})`.trim()
-              : `--backend ${backends.join(", ")}${text === "" ? "" : `: ${text}`}`,
-          )
-          .join("; "),
-      ),
-      Flag.optional,
-      Flag.map(Option.getOrUndefined),
-    ),
+  const flags = Record.map(
+    Arr.groupBy(accepted, (flag) => flag.option),
+    sharedFlag,
   );
   return { flags, ignored };
 };
