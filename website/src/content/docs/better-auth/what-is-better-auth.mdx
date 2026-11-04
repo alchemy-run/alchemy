@@ -5,8 +5,6 @@ description: The concepts behind Better Auth — the auth server, users, account
 
 import DAG from "../../../components/DAG.astro";
 
-[Better Auth](https://better-auth.com) is a TypeScript library that runs sign-in inside your own app. Your users, their sessions and their linked accounts live in your own database, not a third party's, and the routes that sign people in and out are served by your own server.
-
 This page introduces the concepts Better Auth is built on, once each, and how Alchemy models them. The examples follow one small app: a Worker with email and password sign-in, GitHub sign-in, and an API that only signed-in users may call.
 
 Here is the whole picture, which the rest of this page explains piece by piece. A browser signs in through the auth routes. Better Auth checks the credentials, stores a session in your database and sets a cookie. Your API's middleware reads the cookie and gives each handler the current user.

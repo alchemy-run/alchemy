@@ -42,7 +42,9 @@ Every hub has the same five parts, in order:
 `<provider>/what-is-<provider>.mdx`, titled "What is X?". The model is
 `domain/what-is-ddd.mdx` and `aws/what-is-aws.mdx`.
 
-1. A paragraph on what the platform is.
+1. **No opening description.** The hub, the page right before it, already says
+   what the platform is. Start with the framing line, so the two pages never
+   open the same way.
 2. One framing line: "This page introduces the concepts you meet on X, once
    each, and how Alchemy models them. The examples follow one small app: …"
 3. "Here is the whole picture…", then a DAG of that app showing the platform's

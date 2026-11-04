@@ -5,8 +5,6 @@ description: The concepts behind Google Cloud — organizations, projects, APIs,
 
 import DAG from "../../../components/DAG.astro";
 
-Google Cloud (GCP) is a set of services, Cloud Run, Firestore, Cloud Storage, Pub/Sub, BigQuery, Cloud SQL and many more, that create **resources** in your **project**. Every call to a resource is checked by **IAM**, which decides which **principal** holds which **role** on it.
-
 This page introduces the concepts you meet on GCP, once each, and how Alchemy models them. The examples follow one small app: a Cloud Run service that stores links in Firestore and publishes an event to Pub/Sub for a worker.
 
 Here is the whole picture, which the rest of this page explains piece by piece. Your profile deploys into a project. Service accounts and topics belong to the whole project, while the service, the database and the worker live in one region. The service runs as its own service account, which holds a role on each resource it uses.

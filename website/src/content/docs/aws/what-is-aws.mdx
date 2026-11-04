@@ -5,8 +5,6 @@ description: The concepts behind AWS — accounts, regions, IAM identities and p
 
 import DAG from "../../../components/DAG.astro";
 
-Amazon Web Services (AWS) is a cloud of a few hundred services: databases, queues, object storage, functions, containers, virtual machines, networks, DNS and more. Each service creates **resources** in your **account**, and every call to a resource is checked against **IAM**, the service that decides who may do what.
-
 This page introduces the concepts you meet on AWS, once each, and how Alchemy models them. The examples follow one small app: a Lambda Function that stores files in an S3 Bucket and queues jobs for a second Function.
 
 Here is the whole picture, which the rest of this page explains piece by piece. Your profile signs you in to an account and sets a default region. Inside it, a Function runs as a role, and the role's policy lets it reach the Bucket and the Queue. The Queue in turn invokes the worker.

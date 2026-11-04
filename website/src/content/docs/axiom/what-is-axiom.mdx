@@ -5,8 +5,6 @@ description: The concepts behind Axiom — organizations, datasets, OpenTelemetr
 
 import DAG from "../../../components/DAG.astro";
 
-Axiom stores the events your systems emit, logs, traces and metrics, and lets you query them fast and cheaply, however many there are. You send it OpenTelemetry, which Effect already produces, and query it with **APL**. On top of the data, **monitors** alert you, and **dashboards** show you what's happening.
-
 This page introduces the concepts you meet on Axiom, once each, and how Alchemy models them. The examples follow one setup: a Worker sending its traces and logs to Axiom, with a monitor that pages you on panics.
 
 Here is the whole picture, which the rest of this page explains piece by piece. The Worker sends telemetry with an ingest token. Axiom stores it in datasets. A monitor queries a dataset every minute and notifies Slack when it matches.

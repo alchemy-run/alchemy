@@ -5,8 +5,6 @@ description: The concepts behind Hetzner Cloud — projects, locations, Servers,
 
 import DAG from "../../../components/DAG.astro";
 
-Hetzner Cloud rents you virtual machines, called **Servers**, by the hour, at a fraction of what the large clouds charge. Around them it offers just what servers need: disks, private networks, firewalls, load balancers, IP addresses and DNS. There are no managed queues or functions. You run your own programs on your own machines.
-
 This page introduces the concepts you meet on Hetzner, once each, and how Alchemy models them. The examples follow one small app: an API running on a Server, keeping its data on a Volume, behind a firewall and a domain.
 
 Here is the whole picture, which the rest of this page explains piece by piece. Your API token reaches one project. Inside it, a Server runs your Service, a Volume holds its data, a firewall guards it, and DNS points your domain at it.

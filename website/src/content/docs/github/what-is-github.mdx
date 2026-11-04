@@ -5,8 +5,6 @@ description: The concepts behind GitHub as infrastructure — accounts and organ
 
 import DAG from "../../../components/DAG.astro";
 
-GitHub hosts your code, and it's also part of how your code reaches production. **Actions** builds, tests and deploys on every push. Its **secrets** hold the credentials those deploys use. **Webhooks** tell your services when something happens in a repository. All of that is configuration, and Alchemy lets you declare it in the same Stack as the infrastructure it deploys.
-
 This page introduces the concepts you meet on GitHub, once each, and how Alchemy models them. The examples follow one setup: a repository whose Actions workflow deploys to a cloud with a credential the Stack created, and comments each preview's URL on its pull request.
 
 Here is the whole picture, which the rest of this page explains piece by piece. The Stack stores a cloud role in the repository's Actions secrets. A workflow run uses it to deploy, a production environment keeps its own secret for production jobs, and the run comments on the pull request.

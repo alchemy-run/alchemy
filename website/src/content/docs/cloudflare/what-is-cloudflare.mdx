@@ -5,8 +5,6 @@ description: The concepts behind Cloudflare — accounts, zones, the global netw
 
 import DAG from "../../../components/DAG.astro";
 
-Cloudflare runs one network in more than 340 cities, and it runs your code on every machine in it. A request reaches the nearest city, and your **Worker** answers it there. Around Workers sit storage, databases, queues and stateful objects, which a Worker reaches through **bindings**.
-
 This page introduces the concepts you meet on Cloudflare, once each, and how Alchemy models them. The examples follow one small app: a Worker that stores uploads in R2, counts visits in a Durable Object, and queues jobs for a consumer.
 
 Here is the whole picture, which the rest of this page explains piece by piece. Everything lives in your account. A zone holds your domain, which routes requests to a Worker in every city. The Worker reaches a Bucket, Durable Objects and a Queue through bindings, and each Durable Object lives in one city.

@@ -5,8 +5,6 @@ description: The concepts behind Prisma's data platform — workspaces, projects
 
 import DAG from "../../../components/DAG.astro";
 
-Prisma's data platform runs two things for you: **Prisma Postgres**, a serverless Postgres database, and **Prisma Compute**, a runtime for the apps that use it. A **project** holds both, so an app and its database are deployed side by side, and the app finds its database without any configuration.
-
 This page introduces the concepts you meet on Prisma's platform, once each, and how Alchemy models them. The examples follow one small app: an API on Compute with a Postgres database, and a branch per preview.
 
 Here is the whole picture, which the rest of this page explains piece by piece. A workspace holds the project. Each branch of the project has its own database and app, and the app receives its database's `DATABASE_URL`.

@@ -5,8 +5,6 @@ description: The concepts behind Fly.io — organizations, Apps, Machines, regio
 
 import DAG from "../../../components/DAG.astro";
 
-Fly.io runs your programs as small virtual machines in data centers around the world. You choose the regions, Fly starts the machines there, and its proxy sends each request to the nearest one that's running. It's a whole server per instance, with a disk if you want one, close to your users.
-
 This page introduces the concepts you meet on Fly, once each, and how Alchemy models them. The examples follow one small app: an API Service in two regions that stores files on a Volume and keeps its data in Postgres.
 
 Here is the whole picture, which the rest of this page explains piece by piece. Everything in an organization shares one private network. The App's Machines run in two regions, each with its own Volume, and reach Postgres over the private network. Fly's proxy sends each request to the nearest Machine.

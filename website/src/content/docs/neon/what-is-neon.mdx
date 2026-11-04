@@ -5,9 +5,7 @@ description: The concepts behind Neon — organizations, projects, branches, com
 
 import DAG from "../../../components/DAG.astro";
 
-Neon is serverless Postgres. It keeps your data in storage separate from the **compute** that runs queries, which lets it do two things an ordinary database can't: start and stop compute with demand, down to nothing when idle, and **branch** a whole database, data included, in a second.
-
-Around the database, Neon also runs Functions, object storage, user sign-in, an HTTP Data API and an AI gateway, each attached to a branch. This page introduces each concept once, and how Alchemy models it. The examples follow one small app: an upload service with a database, a bucket and a Function, branched per preview.
+This page introduces the concepts you meet on Neon, once each, and how Alchemy models them. The examples follow one small app: an upload service with a database, a bucket and a Function, branched per preview.
 
 Here is the whole picture, which the rest of this page explains piece by piece. A project holds a branch. The branch has a compute that serves Postgres, and the Function, bucket and Auth that belong to it.
 

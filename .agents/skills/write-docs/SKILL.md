@@ -66,7 +66,9 @@ Each of these was a correction. Don't relearn them.
   puts X in one typed program".
 - **The hub and What is never overlap.** The hub is intro, quick example, where to
   start, and the `<HubMap />` docs map, with no diagram. What is explains and
-  draws the platform. A hub diagram that repeated What is was rejected.
+  draws the platform. A hub diagram that repeated What is was rejected, and so
+  was a What is page that opened with the same introduction as the hub. Pages
+  that follow each other never repeat each other.
   More: [Hub](references/page-shapes.md#hub).
 - **Technical documentation, not news.** No ownership, acquisitions, user or
   customer counts, service or region counts, founding history, or lines like
