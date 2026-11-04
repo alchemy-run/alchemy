@@ -191,7 +191,14 @@ export const JobProvider = () =>
           name: news.bucket.bucket,
           member: `service-${number}@gcp-sa-storagebatchoperations.iam.gserviceaccount.com`,
           add: ["roles/storage.objectUser"],
-        });
+        }).pipe(
+          // The agent exists once Storage Intelligence is on; without it the
+          // create below fails with the API's own explanation.
+          Effect.catchIf(
+            (error) => error._tag === "BadRequest" && /does not exist/i.test(error.message ?? ""),
+            () => Effect.void,
+          ),
+        );
         const operation = yield* sbo
           .createProjectsLocationsJobs({
             parent: `projects/${env.project}/locations/${LOCATION}`,
