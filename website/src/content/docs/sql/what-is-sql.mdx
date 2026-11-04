@@ -3,25 +3,22 @@ title: How SQL works in Alchemy
 description: The concepts behind SQL in Alchemy — databases and engines, clients, connections and pools, request scope, migrations and their history — and how they fit together on every cloud.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Phases from "../../../components/diagrams/Phases.astro";
 
 Alchemy works with SQL databases on every cloud: D1 and Durable Objects on Cloudflare, Aurora and DSQL on AWS, Cloud SQL and Spanner on GCP, Neon, PlanetScale, Turso, Prisma Postgres, and Postgres or MySQL you run yourself. Each is a different service, but the way your code uses them is the same. You declare the database, its schema changes are applied on deploy, and a client in your code queries it over a connection that lasts one request.
 
 Take one app: a Worker that queries Postgres with Drizzle, with migrations applied on every deploy. The deploy applies new migrations to the database. While the app runs, a client opens a connection per request and queries it.
 
-<DAG
-  nodes={[
-    { id: "files", label: "migrations/", type: "committed .sql files", layer: 0 },
-    { id: "db", label: "Database", type: "Postgres · MySQL · SQLite", tone: "accent", layer: 1 },
-    { id: "conn", label: "connection", type: "one per request", layer: 2 },
-    { id: "client", label: "client", type: "Effect SQL · Drizzle · Prisma", layer: 3 },
+<Phases
+  phases={[
+    { label: "alchemy deploy", type: "on your machine" },
+    { label: "each request", type: "in your app" },
   ]}
-  edges={[
-    { from: "files", to: "db", label: "deploy" },
-    { from: "db", to: "conn" },
-    { from: "conn", to: "client" },
+  rows={[
+    { code: 'migrations: "./migrations"', cells: ["applies the .sql files not yet applied", ""] },
+    { code: "db.select().from(users)", cells: ["", "opens a connection, queries, closes it"] },
   ]}
-  caption="Deploys change the schema. Requests query through a connection that lives as long as they do."
+  caption="Deploys change the schema. Requests query it over a connection that lives as long as they do."
 />
 
 ## Databases and engines

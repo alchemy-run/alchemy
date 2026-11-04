@@ -30,7 +30,7 @@ def shoot(paths, tmp):
             subprocess.Popen(
                 [CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars",
                  "--virtual-time-budget=6000", "--force-device-scale-factor=2",
-                 "--window-size=1300,9000", f"--screenshot={out}",
+                 "--window-size=1300,8000", f"--screenshot={out}",
                  f"http://localhost:4321/{p.strip('/')}/"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )

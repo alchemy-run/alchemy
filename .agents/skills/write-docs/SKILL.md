@@ -24,7 +24,7 @@ from JSDoc (see AGENTS.md "Documentation Generation").
 - `domain/what-is-ddd.mdx`: the original mental-model page. Copy its build-up
   of ideas, not its "This page introduces…" opening, which predates the rule.
 - `aws/index.mdx`, `aws/what-is-aws.mdx`, `aws/accounts-and-regions.mdx`, `aws/iam.mdx`: hub, What is, and access chapters.
-- `aws/networking/index.mdx`, `cloudflare/compute/durable-objects.mdx`: chapter diagrams that draw containment as borders.
+- `aws/networking/index.mdx`: containment as borders. `aws/compute/choosing-a-runtime.mdx`, `aws/messaging/sqs.mdx`, `aws/compute/lambda.mdx`, `cloudflare/compute/durable-objects.mdx`: diagrams built for their question.
 - `cloudflare/accounts-and-tokens.mdx`, `fly/organizations-and-tokens.mdx`: short access pages.
 - `aws/security/secrets-env.mdx`: a concept chapter that builds one idea at a time.
 
@@ -110,6 +110,13 @@ Each of these was a correction. Don't relearn them.
   and a Durable Object namespace; a Neon project around its branches. A request
   flowing through boxes was rejected. Each platform has its own model, so draw
   that one. Use `groups` on `DAG`.
+- **Pick the visual by the question.** A `DAG` was the only tool, and it was
+  "so overused": a box-and-arrow picture of SQS, Lambda or KV showed nothing a
+  reader didn't already know. Sequence diagrams, timelines, maps, logs, state
+  machines, record layouts, matrices, phase tables and branch graphs each answer
+  a different question. The `Responsibility` chart for choosing a runtime was
+  the one the user called great: it shows the idea itself.
+  More: [Diagrams](references/structure.md#diagrams).
 - **Containment is a border, never an arrow.** Whenever one thing holds another
   (an organization its accounts, a Bucket its objects, a cluster its instances,
   a namespace its objects, a role its policies), draw the holder as a border

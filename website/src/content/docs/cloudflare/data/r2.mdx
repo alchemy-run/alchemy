@@ -3,7 +3,7 @@ title: R2
 description: How R2 Buckets store objects under keys with no egress fees, how Workers read and write them through access-scoped bindings, and how to share, serve, expire and delete what you store.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Records from "../../../../components/diagrams/Records.astro";
 
 R2 stores files, called **objects**, in **Buckets**. An object is any sequence of bytes, up to five terabytes, stored under a key you choose. R2 speaks the same API as Amazon S3, so existing S3 tools and libraries work with it, and it charges nothing for data read out of it.
 
@@ -11,15 +11,17 @@ R2 stores files, called **objects**, in **Buckets**. An object is any sequence o
 
 A Bucket is a flat map from keys to objects. Keys can contain slashes, like `avatars/sam.png`, and listing by a prefix like `avatars/` makes them behave like folders, but there are no real directories.
 
-<DAG
-  nodes={[
-    { id: "worker", label: "Worker", type: "binding", col: 0, row: 0 },
-    { id: "a", label: "avatars/sam.png", type: "object", col: 1, row: 0 },
-    { id: "b", label: "reports/q1.pdf", type: "object", col: 2, row: 0 },
+<Records
+  title="Uploads · R2 Bucket"
+  columns={["key", "size"]}
+  rows={[
+    ["avatars/ana.png", "48 KB"],
+    ["avatars/sam.png", "51 KB"],
+    ["reports/q1.pdf", "2 MB"],
+    ["reports/q2.pdf", "2 MB"],
   ]}
-  groups={[{ id: "bucket", label: "Uploads · R2 Bucket", nodes: ["a", "b"] }]}
-  edges={[{ from: "worker", to: "bucket" }]}
-  caption="Objects sit directly in the Bucket. Slashes are part of the key, not folders."
+  query={{ label: 'list({ prefix: "avatars/" })', rows: [0, 1], prefix: "avatars/" }}
+  caption="Objects sit directly in the Bucket, stored flat by key. A prefix only looks like a folder when you list by it."
 />
 
 A Bucket's data lives in one region, chosen when it's created, near the first requests or where you hint. R2 caches reads at the edge, and moving data out is free, so serving large files from it costs only the requests.

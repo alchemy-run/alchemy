@@ -3,7 +3,7 @@ title: SQS
 description: How SQS Queues hand work from producers to consumers, how visibility timeouts, retries and dead-letter queues keep messages from being lost, and how runtimes send to and consume from a Queue.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 SQS is a message queue. A **producer** puts a message on a Queue and moves on. A **consumer** takes messages off later, does the work, and deletes them. The two never wait for each other, so a slow job doesn't slow down the request that asked for it, and a burst of work waits in the Queue instead of overwhelming whatever does it.
 
@@ -11,18 +11,23 @@ SQS is a message queue. A **producer** puts a message on a Queue and moves on. A
 
 A message stays on the Queue until a consumer deletes it. Receiving it doesn't remove it. It only hides it from other consumers for the **visibility timeout**, 30 seconds by default.
 
-<DAG
-  nodes={[
-    { id: "producer", label: "Api", type: "producer", layer: 0 },
-    { id: "queue", label: "Jobs", type: "SQS Queue", tone: "accent", layer: 1 },
-    { id: "consumer", label: "Worker", type: "consumer", layer: 2 },
+<Sequence
+  actors={[
+    { id: "api", label: "Api", type: "producer" },
+    { id: "queue", label: "Jobs", type: "SQS Queue", tone: "accent" },
+    { id: "w1", label: "Worker", type: "consumer" },
+    { id: "w2", label: "Worker", type: "another consumer" },
   ]}
-  edges={[
-    { from: "producer", to: "queue", label: "send" },
-    { from: "queue", to: "consumer", label: "receive" },
-    { from: "consumer", to: "queue", label: "delete", dashed: true },
+  steps={[
+    { from: "api", to: "queue", label: "SendMessage" },
+    { from: "queue", to: "w1", label: "ReceiveMessage" },
+    { note: "hidden from other consumers for 30s", over: "queue" },
+    { from: "w1", to: "queue", label: "DeleteMessage", dashed: true },
+    { divider: "or, if the Worker crashes first" },
+    { note: "30s pass: visible again", over: "queue" },
+    { from: "queue", to: "w2", label: "ReceiveMessage", tone: "warn" },
   ]}
-  caption="The consumer deletes a message only after it has done the work."
+  caption="Receiving a message hides it. Deleting it removes it. A message nobody deletes comes back, so the same job can run twice."
 />
 
 If the consumer finishes, it deletes the message and it's gone. If the consumer crashes or times out, the message becomes visible again and another consumer receives it. So a message is never lost to a failure, but it can be delivered more than once. Write consumers so that doing a job twice is safe: check whether it's done already, or make the work idempotent.

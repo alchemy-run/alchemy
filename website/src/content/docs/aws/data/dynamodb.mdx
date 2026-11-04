@@ -3,7 +3,7 @@ title: DynamoDB
 description: How DynamoDB Tables store items under partition and sort keys, how to design keys and indexes for the reads you need, and how runtimes read, write and react to items through bindings.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Records from "../../../../components/diagrams/Records.astro";
 
 DynamoDB is a database of **items** looked up by **key**. A read or write by key takes a few milliseconds whether the table holds a hundred items or a billion, and you never size a server for it: by default you pay per request.
 
@@ -15,20 +15,20 @@ An item is a set of attributes, like a row without a fixed schema. Every item ha
 
 A table can also have a **sort key**. Then the partition key and the sort key together identify an item, and the items in one partition are kept in order by the sort key.
 
-<DAG
-  nodes={[
-    { id: "a", label: "profile", type: "sort key", col: 0, row: 0 },
-    { id: "b", label: "order#0104", type: "sort key", col: 1, row: 0 },
-    { id: "c", label: "order#0211", type: "sort key", col: 2, row: 0 },
-    { id: "d", label: "profile", type: "sort key", col: 0, row: 1 },
+<Records
+  title="Orders · DynamoDB Table"
+  columns={["pk", "sk", "total"]}
+  keys={2}
+  group={0}
+  rows={[
+    ["user#ana", "order#0301", "$8"],
+    ["user#ana", "profile", ""],
+    ["user#sam", "order#0104", "$20"],
+    ["user#sam", "order#0211", "$35"],
+    ["user#sam", "profile", ""],
   ]}
-  groups={[
-    { id: "table", label: "Orders · DynamoDB Table", nodes: [] },
-    { id: "sam", label: "partition user#sam", parent: "table", nodes: ["a", "b", "c"], dashed: true },
-    { id: "ana", label: "partition user#ana", parent: "table", nodes: ["d"], dashed: true },
-  ]}
-  edges={[]}
-  caption="Items with the same partition key live together, sorted by their sort keys. One partition holds a user's profile and orders."
+  query={{ label: 'Query pk = "user#sam", sk begins_with "order#"', rows: [2, 3] }}
+  caption="Items with the same partition key live together, sorted by sort key. Sam's orders are one query: one partition, a range of sort keys."
 />
 
 Two kinds of read are fast. **Get** one item by its full key. **Query** one partition, optionally narrowing by a range of sort keys: "Sam's orders in 2026". Anything else means a **scan**, which reads the whole table. So list the reads your app needs before you choose the keys, and pick keys that turn each one into a get or a query.

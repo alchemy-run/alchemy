@@ -3,7 +3,7 @@ title: Phases
 description: Alchemy programs run in two phases — Construction drives the deploy, Runtime handles requests. Knowing which is which is the key to writing Workers and Lambda Functions.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Phases from "../../../components/diagrams/Phases.astro";
 
 Every alchemy program runs in two phases — plantime builds the plan,
 runtime serves requests. [Runtime](/infrastructure-as-effects/runtime)
@@ -55,24 +55,17 @@ can run.
 
 ## What runs when
 
-<DAG
-  caption="Plantime (top) records bindings and builds the plan. Runtime (bottom) starts on cold start and runs the handler per request."
-  nodes={[
-    { id: "Plan", label: "alchemy deploy", type: "plantime", tone: "accent" },
-    { id: "ConstructP", label: "construct()", type: "records bindings" },
-    { id: "Apply", label: "apply", type: "create / update" },
-    { id: "Deploy", label: "deployed", type: "Worker / Lambda" },
-    { id: "Cold", label: "cold start", type: "runtime", tone: "accent", layer: 0 },
-    { id: "ConstructR", label: "construct()", type: "builds SDK clients", layer: 1 },
-    { id: "Runtime", label: "fetch()", type: "per request", layer: 2 },
+<Phases
+  phases={[
+    { label: "plantime", type: "alchemy deploy" },
+    { label: "cold start", type: "in the Worker or Lambda" },
+    { label: "each request", type: "fetch()" },
   ]}
-  edges={[
-    { from: "Plan", to: "ConstructP" },
-    { from: "ConstructP", to: "Apply" },
-    { from: "Apply", to: "Deploy" },
-    { from: "Cold", to: "ConstructR" },
-    { from: "ConstructR", to: "Runtime" },
+  rows={[
+    { code: "Construction", cells: ["records bindings", "builds SDK clients", ""] },
+    { code: "handler body", cells: ["", "", "runs, with the clients"] },
   ]}
+  caption="Construction runs twice: at plantime to learn the bindings, and at cold start to build real clients. The handler body only ever runs per request."
 />
 
 - At **plantime**, the constructor runs to discover bindings — alchemy needs

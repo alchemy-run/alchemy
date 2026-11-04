@@ -3,7 +3,7 @@ title: Durable Objects
 description: Durable Objects are globally-unique stateful instances with transactional storage — define one as an Effect, persist state per key, expose typed RPC methods, and stream values back to the caller.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import WorldMap from "../../../../components/diagrams/WorldMap.astro";
 
 A Worker runs wherever the request is and remembers nothing between requests. Some things need the opposite: one place that sees every request about them, in order, and keeps their state. A chat room, a game, a counter, a document being edited, a user's session.
 
@@ -13,23 +13,20 @@ A Durable Object is that place.
 
 A Durable Object is a class, and it has one **instance** per name. Every request for `"lobby"`, from any Worker in any city, reaches the same instance, wherever in the world it's running.
 
-<DAG
-  nodes={[
-    { id: "a", label: "Worker", type: "in Tokyo", col: 0, row: 0 },
-    { id: "lobby", label: "SQLite", type: "lobby's storage", tone: "accent", col: 1, row: 0 },
-    { id: "kitchen", label: "SQLite", type: "kitchen's storage", col: 1, row: 1 },
-    { id: "b", label: "Worker", type: "in Paris", col: 2, row: 0 },
+<WorldMap
+  places={[
+    { id: "tyo", label: "Worker", type: "Tokyo", lat: 35.7, lon: 139.7 },
+    { id: "sfo", label: "Worker", type: "San Francisco", lat: 37.8, lon: -122.4 },
+    { id: "sao", label: "Worker", type: "São Paulo", lat: -23.5, lon: -46.6, place: "below" },
+    { id: "lobby", label: "lobby", type: "the one instance", lat: 50.1, lon: 8.7, tone: "accent" },
   ]}
-  groups={[
-    { id: "ns", label: "Counter namespace", nodes: [] },
-    { id: "lobbyObj", label: "lobby", parent: "ns", nodes: ["lobby"], dashed: true },
-    { id: "kitchenObj", label: "kitchen", parent: "ns", nodes: ["kitchen"], dashed: true },
+  links={[
+    { from: "tyo", to: "lobby", bend: 0.18 },
+    { from: "sfo", to: "lobby", bend: 0.18 },
+    { from: "sao", to: "lobby", label: 'getByName("lobby")', bend: -0.2 },
   ]}
-  edges={[
-    { from: "a", to: "lobbyObj" },
-    { from: "b", to: "lobbyObj" },
-  ]}
-  caption="A namespace holds one instance per name. Every Worker that names the lobby reaches the same instance, wherever it runs, and each instance owns its own storage."
+  crop={{ west: -130, east: 160, north: 70, south: -40 }}
+  caption="Every Worker that names the lobby reaches the same instance, in one city, wherever the Worker runs."
 />
 
 You never create an instance. Every name exists, and the first call to one starts it. Because there's only ever one lobby, it can count its visitors or order its messages without coordinating with anything else.

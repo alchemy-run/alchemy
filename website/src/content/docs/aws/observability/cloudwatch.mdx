@@ -3,7 +3,7 @@ title: CloudWatch
 description: How CloudWatch collects logs and metrics from every AWS service, and how alarms and dashboards declared next to your resources watch them.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
 
 CloudWatch is where AWS reports on itself. Every service publishes **metrics** to it without being asked: a Function's invocations and errors, a Queue's depth, a Table's throttled requests. Every Function writes its **logs** to it. **Alarms** watch metrics and tell you when something crosses a line, and **dashboards** put the metrics you care about on one screen.
 
@@ -53,18 +53,18 @@ The dimension comes from the Function itself, so the alarm follows it across ren
 
 An alarm acts by publishing to an [SNS Topic](/aws/messaging/sns). Subscribe your email, a chat webhook or a pager to the Topic:
 
-<DAG
-  nodes={[
-    { id: "metric", label: "Errors", type: "AWS/Lambda", layer: 0 },
-    { id: "alarm", label: "ApiErrors", type: "Alarm", tone: "accent", layer: 1 },
-    { id: "topic", label: "Alerts", type: "SNS Topic", layer: 2 },
-    { id: "you", label: "you", type: "email · chat · pager", layer: 3 },
+<StateMachine
+  states={[
+    { id: "insufficient", label: "INSUFFICIENT_DATA", col: 0, row: 0, start: true },
+    { id: "ok", label: "OK", col: 1, row: 0 },
+    { id: "alarm", label: "ALARM", type: "publishes to Alerts", col: 2, row: 0, tone: "danger" },
   ]}
-  edges={[
-    { from: "metric", to: "alarm" },
-    { from: "alarm", to: "topic", label: "ALARM" },
-    { from: "topic", to: "you" },
+  transitions={[
+    { from: "insufficient", to: "ok", label: "data arrives" },
+    { from: "ok", to: "alarm", label: "Errors ≥ 1 in a minute", bend: 0.3 },
+    { from: "alarm", to: "ok", label: "back under", bend: 0.3 },
   ]}
+  caption="An alarm watches one metric and changes state when it crosses the threshold. Moving into ALARM runs its actions, here a publish to the Alerts Topic."
 />
 
 ```typescript title="alchemy.run.ts"

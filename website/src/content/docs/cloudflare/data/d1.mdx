@@ -3,7 +3,7 @@ title: D1
 description: How D1 runs a SQLite database for your app, where its primary and read replicas live, how migrations are applied on deploy, and how Workers query it through a binding or Effect SQL.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import WorldMap from "../../../../components/diagrams/WorldMap.astro";
 
 D1 is a SQL database Cloudflare runs for you, built on SQLite. You write ordinary SQL against tables you define, and there's no server to size: you pay for the rows you read and write and the data you store.
 
@@ -11,24 +11,21 @@ D1 is a SQL database Cloudflare runs for you, built on SQLite. You write ordinar
 
 A D1 database has one **primary** copy, in one location. Every write goes to it, in order, so there's no conflict to resolve. Workers in any city reach it through a binding.
 
-<DAG
-  nodes={[
-    { id: "a", label: "Worker", type: "in Paris", col: 0, row: 0 },
-    { id: "primary", label: "primary", type: "reads and writes", tone: "accent", col: 1, row: 0 },
-    { id: "replica", label: "read replica", type: "reads", col: 1, row: 1 },
-    { id: "b", label: "Worker", type: "in Tokyo", col: 2, row: 1 },
+<WorldMap
+  places={[
+    { id: "par", label: "Worker", type: "Madrid", lat: 40.4, lon: -3.7, place: "below" },
+    { id: "primary", label: "primary", type: "weur", lat: 52.4, lon: 4.9, tone: "accent" },
+    { id: "replica", label: "read replica", type: "apac", lat: 1.3, lon: 103.8, place: "below" },
+    { id: "tyo", label: "Worker", type: "Tokyo", lat: 35.7, lon: 139.7, place: "right" },
   ]}
-  groups={[
-    { id: "weur", label: "weur", nodes: ["primary"], dashed: true },
-    { id: "apac", label: "apac", nodes: ["replica"], dashed: true },
+  links={[
+    { from: "par", to: "primary", bend: 0.3 },
+    { from: "tyo", to: "primary", label: "writes", bend: 0.2 },
+    { from: "tyo", to: "replica", label: "reads", bend: -0.25 },
+    { from: "primary", to: "replica", dashed: true, bend: -0.2 },
   ]}
-  edges={[
-    { from: "a", to: "primary", label: "writes" },
-    { from: "b", to: "replica", label: "reads" },
-    { from: "b", to: "primary", label: "writes" },
-    { from: "primary", to: "replica", label: "replicates", dashed: true },
-  ]}
-  caption="Writes go to the primary, in one region. With read replication on, reads can be served by a replica nearby."
+  crop={{ west: -30, east: 160, north: 70, south: -15 }}
+  caption="Every write goes to the primary, in one location. With read replication on, a Worker far away can read from a replica near it."
 />
 
 A database holds up to 10 GB. That's a lot for one app's data, and a hint about how D1 is meant to be used: many small databases, one per app, per tenant or per user, rather than one huge one.

@@ -3,7 +3,7 @@ title: Queues
 description: How Cloudflare Queues carry messages from producer Workers to a consumer in batches, with retries and dead-letter queues, and how platform events like Workflow completions arrive on a Queue.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
 
 A Queue carries messages from one Worker to another. The **producer** sends a message and returns at once. Cloudflare holds it, and delivers it in a **batch** to the **consumer** Worker, which does the work. A slow job no longer slows the request that asked for it, and a burst of work waits in the Queue instead of overwhelming the consumer.
 
@@ -11,20 +11,22 @@ A Queue carries messages from one Worker to another. The **producer** sends a me
 
 The consumer receives messages in batches, a few or a hundred at a time. When it finishes a batch, the messages are **acknowledged** and removed. When it fails, they're **retried** later. After too many attempts, a message moves to a **dead-letter queue**, if the Queue has one, or is dropped.
 
-<DAG
-  nodes={[
-    { id: "api", label: "Api", type: "producer", layer: 0 },
-    { id: "queue", label: "Jobs", type: "Queue", tone: "accent", layer: 1 },
-    { id: "worker", label: "Consumer", type: "Worker", layer: 2 },
-    { id: "dlq", label: "DeadLetters", type: "Queue", layer: 2 },
+<StateMachine
+  states={[
+    { id: "queued", label: "queued", col: 0, row: 0, start: true },
+    { id: "batch", label: "in a batch", type: "with the consumer", col: 1, row: 0, tone: "accent" },
+    { id: "acked", label: "acknowledged", type: "removed", col: 2, row: 0, end: true },
+    { id: "retry", label: "waiting", type: "retryDelay", col: 1, row: 1, tone: "warn" },
+    { id: "dlq", label: "DeadLetters", type: "dead-letter queue", col: 2, row: 1, end: true, tone: "danger" },
   ]}
-  edges={[
-    { from: "api", to: "queue", label: "send" },
-    { from: "queue", to: "worker", label: "batch" },
-    { from: "worker", to: "queue", label: "retry", dashed: true },
-    { from: "queue", to: "dlq", label: "after maxRetries", dashed: true },
+  transitions={[
+    { from: "queued", to: "batch", label: "delivered" },
+    { from: "batch", to: "acked", label: "batch succeeds" },
+    { from: "batch", to: "retry", label: "batch fails", bend: 0.7 },
+    { from: "retry", to: "batch", label: "retried", bend: 0.7 },
+    { from: "retry", to: "dlq", label: "after maxRetries" },
   ]}
-  caption="Failed batches come back for another try. Messages that keep failing move aside."
+  caption="A message leaves only when its batch succeeds. A failed batch comes back after a delay, and a message that keeps failing moves to the dead-letter queue."
 />
 
 So a message is never lost to a failed consumer, but it can be delivered more than once. Make the work safe to repeat: check whether it's done already, or write results under a key derived from the message.

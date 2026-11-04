@@ -4,6 +4,7 @@ description: How IAM identities, roles, trust, resource-based policies and tag-b
 ---
 
 import DAG from "../../../components/DAG.astro";
+import Matrix from "../../../components/diagrams/Matrix.astro";
 
 IAM is the part of AWS that answers one question on every request: may this identity do this action on this resource? Nothing is allowed until a policy says so.
 
@@ -70,23 +71,30 @@ This one lets CloudFront read the site's files, but only on behalf of one distri
 
 Within one account, either kind of policy can allow a request. Across accounts, both must: the caller's identity policy has to allow the call, and the resource's policy has to allow the caller's account.
 
-<DAG
-  nodes={[
-    { id: "caller", label: "Role", type: "the caller", col: 0, row: 0 },
-    { id: "identity", label: "identity policy", type: "s3:GetObject?", col: 0, row: 1 },
-    { id: "bucket", label: "Bucket", type: "the target", col: 2, row: 0 },
-    { id: "resource", label: "bucket policy", type: "trusts 1111?", col: 2, row: 1 },
+<Matrix
+  panels={[
+    {
+      title: "Within one account",
+      rowsLabel: "identity policy",
+      colsLabel: "bucket policy",
+      cols: ["allows", "says nothing"],
+      rows: [
+        { label: "allows", cells: [{ text: "allowed", yes: true }, { text: "allowed", yes: true }] },
+        { label: "says nothing", cells: [{ text: "allowed", yes: true }, { text: "denied" }] },
+      ],
+    },
+    {
+      title: "Across accounts",
+      rowsLabel: "identity policy",
+      colsLabel: "bucket policy",
+      cols: ["allows", "says nothing"],
+      rows: [
+        { label: "allows", cells: [{ text: "allowed", yes: true }, { text: "denied" }] },
+        { label: "says nothing", cells: [{ text: "denied" }, { text: "denied" }] },
+      ],
+    },
   ]}
-  groups={[
-    { id: "a1", label: "Account 1111", nodes: ["caller", "identity"] },
-    { id: "a2", label: "Account 2222", nodes: ["bucket", "resource"] },
-  ]}
-  edges={[
-    { from: "caller", to: "bucket", label: "s3:GetObject" },
-    { from: "identity", to: "caller", label: "allows?", dashed: true },
-    { from: "resource", to: "bucket", label: "allows?", dashed: true },
-  ]}
-  caption="A call across accounts needs both policies to allow it: the caller's identity policy and the bucket's policy. Within one account, either is enough."
+  caption="Within one account, either policy can allow a call. Across accounts, both must. An explicit deny in either one always wins."
 />
 
 Services that call your resources, like CloudFront, EventBridge, SNS or S3 notifications, have no identity policy in your account. A resource policy is the only way to let them in.

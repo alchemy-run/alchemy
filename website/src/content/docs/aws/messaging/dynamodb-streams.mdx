@@ -3,7 +3,7 @@ title: DynamoDB Streams
 description: How a DynamoDB Stream records every change to a table in order, what each change record carries, and how a Function consumes changes and checkpoints at the first failure.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Log from "../../../../components/diagrams/Log.astro";
 
 A DynamoDB Stream is a table's own change log. Every insert, update and delete becomes a **change record**, kept for 24 hours, in the order the changes happened to each item. A Function reading the stream sees every change to the table, including ones made by code that never told anyone.
 
@@ -11,20 +11,18 @@ A DynamoDB Stream is a table's own change log. Every insert, update and delete b
 
 The table writes the record as part of the change, so there's no second write to forget or to fail. Records for one item stay in order. Records for different items may be read in parallel.
 
-<DAG
-  nodes={[
-    { id: "api", label: "Api", type: "PutItem", col: 0, row: 0 },
-    { id: "items", label: "items", type: "the data", col: 1, row: 0 },
-    { id: "stream", label: "stream", type: "change records", col: 1, row: 1 },
-    { id: "consumer", label: "Indexer", type: "Lambda Function", tone: "accent", col: 2, row: 1 },
+<Log
+  lanes={[
+    {
+      id: "stream",
+      label: "Orders",
+      type: "table stream",
+      records: ["INSERT #1", "MODIFY #1", "INSERT #2", "MODIFY #2", "REMOVE #1"],
+    },
   ]}
-  groups={[{ id: "table", label: "Orders · DynamoDB Table", nodes: ["items", "stream"] }]}
-  edges={[
-    { from: "api", to: "items" },
-    { from: "items", to: "stream" },
-    { from: "stream", to: "consumer", dashed: true },
-  ]}
-  caption="The table records its own changes in its stream. The consumer reads them shortly after."
+  cursors={[{ lane: "stream", at: 3, label: "Indexer" }]}
+  writer="every write"
+  caption="Every write to the table appends a change record, as part of the write. Records for one item stay in order, and the consumer reads them shortly after."
 />
 
 Each record says what happened, `INSERT`, `MODIFY` or `REMOVE`, the item's keys, and, depending on the stream's **view type**, the item as it was before, after, or both.

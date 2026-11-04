@@ -3,24 +3,28 @@ title: How commands work
 description: How Command puts local processes into a Stack — builds that produce assets, one-off commands run for their effects, dev servers — and how memoization decides when each runs again.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Timeline from "../../../components/diagrams/Timeline.astro";
 
 Not everything a deploy needs happens in a cloud. A frontend has to be built before it's uploaded. Code generation has to run before a bundle that imports it. A dev server has to be running while you develop. Command puts those local processes into your Stack, as resources, so they run in the right order and only when they need to.
 
 A build runs before the site that uploads its output. An exec runs before what depends on its effects. A dev server runs only under `alchemy dev`.
 
-<DAG
-  nodes={[
-    { id: "build", label: "vite-build", type: "Command.Build", tone: "accent", layer: 0 },
-    { id: "site", label: "Site", type: "uploads dist/", layer: 1 },
-    { id: "exec", label: "codegen", type: "Command.Exec", tone: "accent", layer: 0 },
-    { id: "api", label: "Api", type: "imports generated code", layer: 1 },
+<Timeline
+  end={10}
+  lanes={[
+    { id: "build", label: "vite-build", type: "Command.Build" },
+    { id: "site", label: "Site", type: "uploads dist/" },
+    { id: "codegen", label: "codegen", type: "Command.Exec" },
+    { id: "api", label: "Api", type: "imports the code" },
   ]}
-  edges={[
-    { from: "build", to: "site", label: "outdir" },
-    { from: "exec", to: "api" },
+  bars={[
+    { lane: "build", start: 0, end: 5, label: "npm run build" },
+    { lane: "site", start: 5, end: 8, label: "upload dist/" },
+    { lane: "codegen", start: 0, end: 2.5, label: "generate" },
+    { lane: "api", start: 2.5, end: 6.5, label: "bundle and deploy" },
   ]}
-  caption="Commands are resources, so whatever uses their result waits for them."
+  ticks={[{ at: 0, label: "alchemy deploy" }, { at: 10, label: "" }]}
+  caption="Whatever uses a command's result waits for it, and independent commands run at the same time. A dev server only runs under alchemy dev."
 />
 
 ## Builds produce an asset

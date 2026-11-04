@@ -3,7 +3,7 @@ title: S3
 description: How S3 Buckets hold objects under keys, how a runtime reads and writes them through bindings, and how to share, react to and serve the objects you store.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Records from "../../../../components/diagrams/Records.astro";
 
 S3 stores files, called **objects**, in containers called **Buckets**. An object is any sequence of bytes, from a few characters to five terabytes, stored under a **key** you choose. Buckets hold as many objects as you put in them, and you pay for what you store and transfer.
 
@@ -13,15 +13,19 @@ A Bucket is a flat map from keys to objects. A key is just a string: `avatars/sa
 
 There are no real folders. A key with slashes in it looks like a path, and S3 can list every key that starts with a **prefix** like `reports/2026/`, so slashes work like folders when you list. But `reports/2026/q1.pdf` is one key, not a file inside two directories.
 
-<DAG
-  nodes={[
-    { id: "a", label: "avatars/sam.png", type: "object", col: 0, row: 0 },
-    { id: "b", label: "reports/q1.pdf", type: "object", col: 1, row: 0 },
-    { id: "c", label: "hello.txt", type: "object", col: 2, row: 0 },
+<Records
+  title="Files · S3 Bucket"
+  columns={["key", "size"]}
+  rows={[
+    ["avatars/ana.png", "48 KB"],
+    ["avatars/sam.png", "51 KB"],
+    ["hello.txt", "12 B"],
+    ["reports/2026/q1.pdf", "2 MB"],
+    ["reports/2026/q2.pdf", "2 MB"],
+    ["reports/2027/q1.pdf", "1 MB"],
   ]}
-  groups={[{ id: "bucket", label: "Files · S3 Bucket", nodes: ["a", "b", "c"] }]}
-  edges={[]}
-  caption="Every object sits directly in the Bucket. Slashes are part of the key, not folders."
+  query={{ label: 'List prefix "reports/2026/"', rows: [3, 4], prefix: "reports/2026/" }}
+  caption="Keys are stored flat, in order. Listing a prefix returns every key that starts with it: there's no folder in between."
 />
 
 Writing a key that already exists replaces its object as a whole. S3 never changes part of an object. To keep the old copy as well, turn on versioning, and each write becomes a new **version** of the key.

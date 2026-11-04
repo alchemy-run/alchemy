@@ -3,7 +3,7 @@ title: K2 streams
 description: Cloudflare K2 is a durable, replayable log. Produce records from Workers with the WriteStream binding, then consume them from a long-running host with consumeStreamRecords.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Log from "../../../../components/diagrams/Log.astro";
 
 A K2 **stream** is a durable, ordered log of records stored on R2. Producers
 append records; readers consume them through **subscriptions**. Each
@@ -16,15 +16,23 @@ replay history, or when you want a log you can read at your own pace. Reach
 for [Queues](/cloudflare/messaging/queues) when each message is a unit of work
 that one consumer handles once, with retries and a dead-letter queue.
 
-<DAG
-  nodes={[
-    { id: "api", label: "Api", type: "producer", col: 0, row: 0 },
-    { id: "s1", label: "billing", type: "at position 812", tone: "accent", col: 1, row: 0 },
-    { id: "s2", label: "analytics", type: "at position 40", tone: "accent", col: 2, row: 0 },
+<Log
+  lanes={[
+    {
+      id: "orders",
+      label: "Orders",
+      type: "K2 stream",
+      records: ["placed", "paid", "placed", "shipped", "paid", "placed", "shipped", "paid"],
+      first: 36,
+    },
   ]}
-  groups={[{ id: "stream", label: "Orders · K2 stream on R2", nodes: ["s1", "s2"] }]}
-  edges={[{ from: "api", to: "stream", label: "send" }]}
-  caption="A stream keeps records for its retention period. Each subscription reads every record at its own pace."
+  expired={2}
+  cursors={[
+    { lane: "orders", at: 4, label: "analytics" },
+    { lane: "orders", at: 8, label: "billing · caught up", below: true },
+  ]}
+  writer="Api · send"
+  caption="Records stay for the retention period whether or not anyone has read them. Each subscription reads every record, at its own position."
 />
 
 | | Queues | K2 |

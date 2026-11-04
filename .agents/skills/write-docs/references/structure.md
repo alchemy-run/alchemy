@@ -54,51 +54,71 @@ to its provider's existing slugs (e.g. after `"<provider>/what-is-<provider>"`).
 
 ## Diagrams
 
-Use `website/src/components/DAG.astro`. Hubs have no diagram; their docs map is
-`website/src/components/HubMap.astro`, drawn from the sidebar. Never embed images or ASCII art. A
-What is page's diagram shows the platform's structure (see SKILL.md), drawn
-with `groups` on the grid.
+**Pick the visual by the question the section answers**, never by habit. A
+`DAG` only answers "what connects to what". These docs ask more questions than
+that, and each has its own component in `website/src/components/diagrams/`
+(plus `DAG.astro`, `Responsibility.astro` and `HubMap.astro` in
+`website/src/components/`). They share one look (`diagrams/diagram.css`), so
+mixing them on a page is fine.
 
-- **Not every idea is a graph.** Pick the visual for what the section explains.
-  A spectrum of who manages what (choosing a runtime) is
-  `website/src/components/Responsibility.astro`: runtimes as columns, layers as
-  rows, the cells you manage filled. A group of boxes with no edges says
-  nothing; when a `DAG` would have no arrows and no meaningful borders, it's
-  the wrong component. Build a small purpose-made one instead.
+| The section answers | Component | Good example |
+| --- | --- | --- |
+| What holds what? What is the platform made of? | `DAG` with `groups` (borders) | `aws/what-is-aws`, `aws/networking` |
+| What connects to what, and what flows where? | `DAG` (arrows) | `aws/messaging/sns`, `aws/frontend/websites` |
+| Who manages each layer, you or the platform? | `Responsibility` | `aws/compute/choosing-a-runtime` |
+| What happens, in what order, between whom? | `Sequence` | `aws/messaging/sqs`, `acme/what-is-acme` |
+| What runs when? Concurrency, waiting, propagation | `Timeline` | `aws/compute/lambda`, `cloudflare/data/kv` |
+| Where in the world does it run? | `WorldMap` | `cloudflare/compute/durable-objects`, `cloudflare/data/hyperdrive` |
+| What is ordered, and who has read how far? | `Log` | `cloudflare/messaging/k2`, `aws/messaging/kinesis` |
+| What states does it move through? | `StateMachine` | `cloudflare/messaging/queues`, `aws/observability/cloudwatch` |
+| How is data laid out, and what does a query read? | `Records` | `aws/data/dynamodb`, `aws/data/s3` |
+| When does each combination work? | `Matrix` | `aws/iam` (across accounts) |
+| What does the same code do in each phase? | `Phases` | `aws/security/secrets-env`, `infrastructure-as-effects/phases` |
+| How do copies relate over time? | `BranchGraph` | `neon/data/branching` |
+
+Each component's JSDoc has its props and a usage example. Read it before using
+one.
+
+Rules for every diagram:
+
+- **One idea per diagram**, the one its section explains. If the caption needs
+  "and also", draw two, or cut one.
+- **Show the behaviour, not the boxes.** A Lambda section is about one
+  invocation per environment, so draw environments over time (`Timeline`), not
+  a box called "environment". An SQS section is about receive, hide and delete,
+  so draw the messages (`Sequence`). Ask what a reader would get wrong, and draw
+  that.
+- **Use real names and values** from the page's own example: `"user#sam"`,
+  `getByName("lobby")`, `weur`, `maxRetries`, offsets, sizes, cities.
+- **Containment is a border, never an arrow.** Arrows are only for things that
+  move or call. Group ids and node ids must differ.
+- **A diagram with no arrows and no meaningful borders is the wrong
+  component.** Use a purpose-made one, or build a new one in
+  `diagrams/` in the same style when no existing one answers the question.
+- **Keep it compact.** Two or three columns read better than a row of five.
+  Crop a `WorldMap` to the region that matters (`crop`), and set `center={180}`
+  for a route across the Pacific.
+- **Keep labels short**: about 16 characters for a box label and 20 for its
+  type. A label that doesn't fit a short bar or edge belongs in a `legend` or
+  the caption.
+- **The caption says what the picture means**, in a sentence or two.
+- **Look at it.** Run `scripts/diagram-sheet.py /tmp/sheet.png <path>…` against
+  the dev server and read the sheet. Overlapping labels, overflowing text,
+  missing edges and clipped bottoms don't show up any other way.
+
+### DAG details
+
 - **Auto layout** (`layer` on nodes) suits a left-to-right flow. **Grid layout**
   (`col` and `row` on every node) suits anything with borders or two dimensions.
 - **Boundaries are `groups`**: `{ id, label, nodes, parent?, dashed? }`. Nest a
   region inside an account with `parent`, and draw the inner one `dashed`. An
-  edge can point at a group's `id`, and it ends at the border (`profile` →
-  `account`, labelled "deploy"). Leave a free row or column where a border needs
-  room.
-- **Borders for containment, arrows for flow.** Never draw "A contains B" as an
-  arrow from A to B. Group ids and node ids must differ.
-- **Keep it compact.** Two or three columns read better than a row of five,
-  which shrinks to fit the column. Wrap a long sequence into two rows. A small
-  diagram stays at its natural size rather than stretching to the column.
+  edge can point at a group's `id`, and it ends at the border.
 - **Routing on the grid.** A straight edge runs along a row or a column. An
   elbow leaves the source's top or bottom and turns into the target's side; with
   `exit: "side"` it leaves the side and turns into the target's top or bottom.
-  Pick whichever keeps lines off other nodes and from sharing a segment. An edge
-  to a group from above or below runs vertically into its border.
-- **Group borders size themselves** to their label, and a label moves clear of
-  an edge running through it. Keep node labels to about 16 characters and types
-  to about 20 (`postgres:18`, not `postgres:18-alpine`), or they overflow the
-  node. A one-node group needs a short label (`weur`, not `Western Europe`) when
-  an edge crosses its top.
 - **An edge crossing two borders has no room for a label.** Drop the label and
   let the caption say it, or move the target a column further out.
-- **Edge labels are platform terms** (`s3:PutObject`, `runs as`, `flycast`).
-  Labels on vertical edges sit beside the line.
 - **`tone: "accent"`** marks the one node the diagram is about.
-- **The caption says what the picture means**, in a sentence or two ("IAM roles
-  belong to the account and work in every region. The rest lives in one
-  region.").
-- **Look at it.** Run `scripts/diagram-sheet.py /tmp/sheet.png <path>…` against
-  the dev server and read the sheet. Overlapping labels, labels on borders,
-  overflowing text, missing edges and cramped short edges don't show up any
-  other way.
 
 ## Build
 

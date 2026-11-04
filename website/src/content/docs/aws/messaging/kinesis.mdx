@@ -3,7 +3,7 @@ title: Kinesis
 description: How Kinesis Data Streams keep records in order per partition key across shards, how runtimes write records and consume them in batches, and how retention, replay and checkpoints work.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Log from "../../../../components/diagrams/Log.astro";
 
 Kinesis Data Streams is an ordered log of **records**. Producers append records, and they stay in the stream for a retention period, 24 hours by default, whether or not anyone has read them. Consumers read the log in order, each keeping its own place, so several consumers can read the same records independently and any of them can go back and read again.
 
@@ -11,22 +11,17 @@ Kinesis Data Streams is an ordered log of **records**. Producers append records,
 
 A stream is split into **shards**. Each record carries a **partition key**, and Kinesis sends every record with the same key to the same shard. Within a shard, records are kept in the order they arrived.
 
-<DAG
-  nodes={[
-    { id: "a", label: "order#1", type: "partition key", col: 0, row: 0 },
-    { id: "b", label: "order#2", type: "partition key", col: 0, row: 1 },
-    { id: "s1", label: "shard 1", type: "ordered", tone: "accent", col: 1, row: 0 },
-    { id: "s2", label: "shard 2", type: "ordered", tone: "accent", col: 1, row: 1 },
-    { id: "c", label: "Audit", type: "consumer", col: 2, row: 0 },
+<Log
+  lanes={[
+    { id: "s1", label: "shard 1", records: ["#1 placed", "#3 placed", "#1 paid", "#1 shipped"] },
+    { id: "s2", label: "shard 2", records: ["#2 placed", "#2 paid", "#4 placed"] },
   ]}
-  groups={[{ id: "stream", label: "Orders · Kinesis stream", nodes: ["s1", "s2"] }]}
-  edges={[
-    { from: "a", to: "s1" },
-    { from: "b", to: "s2" },
-    { from: "s1", to: "c" },
-    { from: "s2", to: "c", exit: "side" },
+  cursors={[
+    { lane: "s1", at: 2, label: "Audit" },
+    { lane: "s2", at: 1, label: "Audit" },
   ]}
-  caption="A stream is made of shards. Records with the same key share a shard and stay in order, and different shards are read in parallel."
+  writer="PutRecord"
+  caption="The partition key picks the shard, so every record for order #1 is in shard 1, in order. A consumer reads each shard in parallel, at its own position."
 />
 
 So the guarantee is per key: every event for `order#1` arrives in the order it happened. Events for different orders may interleave. Choose the partition key as the thing whose history must stay in order, usually an entity's id.

@@ -3,7 +3,7 @@ title: KV
 description: How Workers KV replicates values to every city for fast reads, what eventual consistency means for writes, and how Workers read, write, list and expire keys through access-scoped bindings.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Workers KV is a key-value store copied to every city in Cloudflare's network. A Worker reads a key from the copy nearest the request, so reads are fast everywhere. Writes go to a central store and spread out from there.
 
@@ -11,24 +11,23 @@ Workers KV is a key-value store copied to every city in Cloudflare's network. A 
 
 A value written in one city reaches the others within about a minute. Until it does, a read elsewhere can return the old value, or nothing.
 
-<DAG
-  nodes={[
-    { id: "w", label: "Worker", type: "put", col: 0, row: 0 },
-    { id: "central", label: "Cache", type: "KV Namespace", tone: "accent", col: 1, row: 0 },
-    { id: "tokyo", label: "copy", type: "cached", col: 2, row: 0 },
-    { id: "nyc", label: "copy", type: "cached", col: 2, row: 1 },
+<Timeline
+  end={60}
+  lanes={[
+    { id: "par", label: "Paris", type: "writes" },
+    { id: "tyo", label: "Tokyo" },
+    { id: "nyc", label: "New York" },
   ]}
-  groups={[
-    { id: "cityPar", label: "Paris", nodes: ["w"], dashed: true },
-    { id: "cityTyo", label: "Tokyo", nodes: ["tokyo"], dashed: true },
-    { id: "cityNyc", label: "New York", nodes: ["nyc"], dashed: true },
+  bars={[
+    { lane: "par", start: 0, end: 60, label: "reads v2" },
+    { lane: "tyo", start: 0, end: 22, label: "still reads v1", tone: "muted" },
+    { lane: "tyo", start: 22, end: 60, label: "reads v2" },
+    { lane: "nyc", start: 0, end: 41, label: "still reads v1", tone: "muted" },
+    { lane: "nyc", start: 41, end: 60, label: "reads v2" },
   ]}
-  edges={[
-    { from: "w", to: "central" },
-    { from: "central", to: "tokyo" },
-    { from: "central", to: "nyc" },
-  ]}
-  caption="Writes reach every city within about a minute. Reads come from the nearest copy."
+  marks={[{ at: 0, label: "put v2" }]}
+  ticks={[{ at: 0, label: "0s" }, { at: 30, label: "30s" }, { at: 60, label: "about a minute" }]}
+  caption="A write is read back at once where it was made. Other cities see it within about a minute, and until then they read the old value."
 />
 
 So KV fits data that's read far more often than it's written, where a moment of staleness is fine: configuration, feature flags, sessions, cached API responses, redirects. For relational data, use [D1](/cloudflare/data/d1). For state that must be consistent the instant it's written, use a [Durable Object](/cloudflare/compute/durable-objects).

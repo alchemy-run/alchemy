@@ -3,7 +3,7 @@ title: S3 events
 description: How a Bucket notifies a Function when objects are created or deleted, what each notification carries, and how to process notifications as an Effect Stream.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 A Bucket can tell you when something happens to its objects. Each time an object is created, deleted or restored, S3 sends a **notification** naming the Bucket, the key and the event. A Function that receives them can make a thumbnail of every uploaded image, index every new document or scan every file for viruses, without the uploader doing anything but upload.
 
@@ -11,17 +11,22 @@ A Bucket can tell you when something happens to its objects. Each time an object
 
 Notifications are pushed. S3 invokes the Function directly, with a batch of notifications, shortly after each change.
 
-<DAG
-  nodes={[
-    { id: "upload", label: "upload", type: "PutObject", layer: 0 },
-    { id: "bucket", label: "Uploads", type: "S3 Bucket", tone: "accent", layer: 1 },
-    { id: "fn", label: "Thumbnails", type: "Lambda Function", layer: 2 },
+<Sequence
+  actors={[
+    { id: "client", label: "uploader", type: "your app" },
+    { id: "bucket", label: "Uploads", type: "S3 Bucket", tone: "accent" },
+    { id: "fn", label: "Thumbnails", type: "Lambda Function" },
   ]}
-  edges={[
-    { from: "upload", to: "bucket" },
+  steps={[
+    { from: "client", to: "bucket", label: "PutObject photo.jpg" },
+    { from: "bucket", to: "client", label: "200 OK, stored", dashed: true },
     { from: "bucket", to: "fn", label: "s3:ObjectCreated", dashed: true },
+    { from: "fn", to: "bucket", label: "GetObject photo.jpg" },
+    { from: "fn", to: "bucket", label: "PutObject thumbs/photo.jpg" },
+    { divider: "occasionally" },
+    { from: "bucket", to: "fn", label: "the same notification again", dashed: true, tone: "warn" },
   ]}
-  caption="S3 invokes the Function after the object is stored."
+  caption="S3 answers the upload first and invokes the Function shortly after. A notification can arrive twice, so writing the thumbnail again must be safe."
 />
 
 S3 delivers each notification at least once, and occasionally more than once, so processing the same key twice should be safe. Write the thumbnail under a key derived from the original's, and a second run just replaces it.

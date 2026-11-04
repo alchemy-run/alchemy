@@ -3,7 +3,7 @@ title: Workers
 description: Cloudflare Workers are the compute Runtime of every Alchemy app — declare the Worker and its handler in one file, bind resources with full type safety, and call other Workers over schemaless RPC.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import WorldMap from "../../../../components/diagrams/WorldMap.astro";
 
 A Worker is a program Cloudflare runs on every machine in its network. A request goes to the city nearest the person who sent it, and a Worker there handles it. There's no region to choose, no server to size, and nothing running while nobody calls it.
 
@@ -11,25 +11,20 @@ A Worker is a program Cloudflare runs on every machine in its network. A request
 
 Workers run in **isolates**: lightweight sandboxes inside one V8 process, the JavaScript engine Chrome uses. Starting an isolate takes milliseconds, so a Worker can start for the first request in a city and still answer quickly. Many Workers, from many customers, share one process, each isolated from the others.
 
-<DAG
-  nodes={[
-    { id: "tokyo", label: "request", type: "from Tokyo", col: 0, row: 0 },
-    { id: "paris", label: "request", type: "from Paris", col: 0, row: 1 },
-    { id: "w1", label: "Worker", type: "isolate", tone: "accent", col: 1, row: 0 },
-    { id: "w2", label: "Worker", type: "isolate", tone: "accent", col: 1, row: 1 },
-    { id: "r2", label: "Uploads", type: "R2 Bucket", col: 2, row: 0 },
+<WorldMap
+  places={[
+    { id: "tyo", label: "Worker", type: "isolate in Tokyo", lat: 35.7, lon: 139.7, tone: "accent" },
+    { id: "par", label: "Worker", type: "isolate in Paris", lat: 48.9, lon: 2.4, tone: "accent" },
+    { id: "sao", label: "Worker", type: "isolate in São Paulo", lat: -23.5, lon: -46.6, tone: "accent", place: "below" },
+    { id: "r2", label: "Uploads", type: "R2 Bucket", lat: 39, lon: -77.5, place: "below" },
   ]}
-  groups={[
-    { id: "cityTyo", label: "Tokyo", nodes: ["w1"], dashed: true },
-    { id: "cityPar", label: "Paris", nodes: ["w2"], dashed: true },
+  links={[
+    { from: "tyo", to: "r2", bend: 0.15 },
+    { from: "par", to: "r2", bend: -0.2 },
+    { from: "sao", to: "r2", label: "binding", bend: 0.2 },
   ]}
-  edges={[
-    { from: "tokyo", to: "w1" },
-    { from: "paris", to: "w2" },
-    { from: "w1", to: "r2", label: "binding" },
-    { from: "w2", to: "r2", label: "binding", exit: "side" },
-  ]}
-  caption="The same Worker runs in the city nearest each request, and reaches shared resources through bindings."
+  crop={{ west: -130, east: 160, north: 70, south: -40 }}
+  caption="The same Worker runs in an isolate in the city nearest each request. Nothing stays in the isolate, so what must be shared lives in a resource it reaches through a binding."
 />
 
 So a Worker keeps nothing between requests that it can count on. Two requests may run in two cities, in two isolates. Anything that must be remembered lives in a resource the Worker reaches through a binding: a [KV Namespace](/cloudflare/data/kv), an [R2 Bucket](/cloudflare/data/r2), a [D1 database](/cloudflare/data/d1), or a [Durable Object](/cloudflare/compute/durable-objects) when one place has to see every request.

@@ -1,0 +1,118 @@
+---
+/**
+ * `<Phases />` — the same code in different phases. One column per phase
+ * (deploy on your machine, start-up in the cloud, each request), one row per
+ * line of code, each cell what that line does in that phase. Use it when one
+ * line means two things depending on when it runs: `Config.Redacted` reads
+ * `.env` at deploy and the environment at run time; a migration applies at
+ * deploy and a connection opens per request.
+ *
+ *   <Phases
+ *     phases={[
+ *       { label: "alchemy deploy", type: "on your machine" },
+ *       { label: "the Function starts", type: "in AWS" },
+ *     ]}
+ *     rows={[
+ *       { code: 'Config.Redacted("API_KEY")', cells: ["reads .env", "reads its environment variable"] },
+ *     ]}
+ *   />
+ *
+ * A cell may be "" when the line does nothing in that phase.
+ */
+import "./diagram.css";
+
+interface Props {
+  phases: { label: string; type?: string }[];
+  rows: { code: string; cells: string[] }[];
+  caption?: string;
+}
+
+const { phases, rows, caption } = Astro.props as Props;
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-ph" style={`grid-template-columns: max-content repeat(${phases.length}, minmax(9rem, 1fr))`}>
+    <div />
+    {
+      phases.map((p, i) => (
+        <div class="alc-ph__head">
+          <span class="alc-ph__label">{p.label}</span>
+          {p.type && <span class="alc-ph__type">{p.type}</span>}
+          {i < phases.length - 1 && <span class="alc-ph__then" aria-hidden="true">→</span>}
+        </div>
+      ))
+    }
+    {
+      rows.map((r) => (
+        <>
+          <code class="alc-ph__code">{r.code}</code>
+          {r.cells.map((c) => (
+            <div class:list={["alc-ph__cell", c === "" && "alc-ph__cell--none"]}>{c || "—"}</div>
+          ))}
+        </>
+      ))
+    }
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>
+
+<style>
+  .alc-ph {
+    display: grid;
+    gap: 0.5rem 0.75rem;
+    max-width: 40rem;
+    margin-inline: auto;
+    font-family: var(--alc-font-mono);
+  }
+  .alc-ph__head {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--alc-accent);
+    background: color-mix(in srgb, var(--alc-accent-soft) 60%, var(--alc-bg-elev-2));
+  }
+  .alc-ph__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--alc-fg-1);
+  }
+  .alc-ph__type {
+    font-size: 10.5px;
+    color: var(--alc-fg-3);
+  }
+  .alc-ph__then {
+    position: absolute;
+    right: -0.75rem;
+    top: 50%;
+    transform: translate(50%, -50%);
+    color: var(--alc-accent);
+    font-size: 14px;
+  }
+  .alc-ph__code {
+    display: flex;
+    align-items: center;
+    font-size: 11.5px;
+    color: var(--alc-fg-1);
+    padding-right: 0.5rem;
+    background: none;
+    white-space: nowrap;
+  }
+  .alc-ph__cell {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--alc-hairline-2);
+    background: var(--alc-bg-elev-2);
+    font-size: 11px;
+    color: var(--alc-fg-2);
+  }
+  .alc-ph__cell--none {
+    border-style: dashed;
+    background: none;
+    color: var(--alc-fg-4);
+    justify-content: center;
+  }
+</style>

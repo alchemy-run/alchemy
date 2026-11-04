@@ -3,25 +3,29 @@ title: What is a git host?
 description: The concepts behind hosting git — objects, refs, packs, the smart HTTP protocol, pushes and their verification, repositories, names and pull requests — and how @alchemy.run/git builds a host from them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Sequence from "../../../components/diagrams/Sequence.astro";
 
 A git host is the server your `git clone` and `git push` talk to. It stores repositories, sends a client the objects it's missing, accepts new ones, and moves branches only when the push is valid. Around that, most hosts add names like `acme/api`, an API, and pull requests.
 
 Take one host: a Worker serving git over HTTP, with each repository in a Durable Object and its bulk bytes in R2. A client speaks git's HTTP protocol to the Worker. The Worker checks who's calling, resolves the name to a repository, and the repository stores objects and moves refs, keeping large packs in a blob store.
 
-<DAG
-  nodes={[
-    { id: "client", label: "git client", type: "clone · push", layer: 0 },
-    { id: "worker", label: "Worker", type: "smart HTTP · REST · your auth", tone: "accent", layer: 1 },
-    { id: "registry", label: "Registry", type: "acme/api → repo", layer: 2 },
-    { id: "repo", label: "Repository", type: "refs · objects", layer: 2 },
-    { id: "blobs", label: "Blob Store", type: "packs · bundles", layer: 3 },
+<Sequence
+  actors={[
+    { id: "client", label: "git client", type: "git push" },
+    { id: "worker", label: "Worker", type: "smart HTTP" },
+    { id: "registry", label: "Registry", type: "names" },
+    { id: "repo", label: "Repository", type: "Durable Object", tone: "accent" },
+    { id: "blobs", label: "Blob Store", type: "R2" },
   ]}
-  edges={[
-    { from: "client", to: "worker" },
-    { from: "worker", to: "registry" },
-    { from: "worker", to: "repo" },
-    { from: "repo", to: "blobs" },
+  steps={[
+    { from: "client", to: "worker", label: "push to acme/api" },
+    { note: "checks who's calling", over: "worker" },
+    { from: "worker", to: "registry", label: "resolve acme/api" },
+    { from: "registry", to: "worker", label: "repository id", dashed: true },
+    { from: "worker", to: "repo", label: "receive pack" },
+    { from: "repo", to: "blobs", label: "store large pack" },
+    { note: "moves refs if the push is valid", over: "repo" },
+    { from: "repo", to: "client", label: "refs updated", dashed: true },
   ]}
   caption="One decision per box: who may call, how names resolve, where refs live, where bytes go."
 />

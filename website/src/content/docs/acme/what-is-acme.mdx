@@ -3,28 +3,29 @@ title: What is ACME?
 description: The concepts behind ACME certificates — certificate authorities, accounts, orders, challenges and DNS-01 validation, certificates and keys, renewal and revocation — and how @alchemy.run/acme models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Sequence from "../../../components/diagrams/Sequence.astro";
 
 A TLS certificate proves to a browser that a server really is `example.com`. **ACME** is the protocol certificate authorities like Let's Encrypt and ZeroSSL use to issue those certificates automatically: you prove you control a domain, and the authority signs a certificate for it, for free, in under a minute.
 
 Take one certificate: a wildcard for `*.example.com`, validated through a Cloudflare zone and installed on a Fly app. An account asks the authority for a certificate. The authority sets a challenge, which is answered with a DNS record. Once it sees the record, the authority signs the certificate, which goes to whatever serves the domain.
 
-<DAG
-  nodes={[
-    { id: "account", label: "Account", type: "key registered with the CA", layer: 0 },
-    { id: "ca", label: "Let's Encrypt", type: "certificate authority", tone: "accent", layer: 1 },
-    { id: "dns", label: "_acme-challenge", type: "TXT record", layer: 2 },
-    { id: "cert", label: "*.example.com", type: "certificate + key", layer: 3 },
-    { id: "fly", label: "Fly app", type: "serves TLS", layer: 4 },
+<Sequence
+  actors={[
+    { id: "acct", label: "Account", type: "your ACME key" },
+    { id: "ca", label: "Let's Encrypt", type: "authority", tone: "accent" },
+    { id: "dns", label: "example.com", type: "Cloudflare zone" },
+    { id: "fly", label: "Fly app", type: "serves TLS" },
   ]}
-  edges={[
-    { from: "account", to: "ca", label: "order" },
-    { from: "ca", to: "dns", label: "challenge" },
-    { from: "dns", to: "ca", label: "validated", dashed: true },
-    { from: "ca", to: "cert" },
-    { from: "cert", to: "fly" },
+  steps={[
+    { from: "acct", to: "ca", label: "order *.example.com" },
+    { from: "ca", to: "acct", label: "challenge: put this TXT value", dashed: true },
+    { from: "acct", to: "dns", label: "create _acme-challenge TXT" },
+    { from: "ca", to: "dns", label: "look up _acme-challenge" },
+    { from: "acct", to: "ca", label: "finalize with a CSR" },
+    { from: "ca", to: "acct", label: "signed certificate", dashed: true },
+    { from: "acct", to: "fly", label: "install certificate + key" },
   ]}
-  caption="Prove control of the domain with a DNS record, and the authority signs the certificate."
+  caption="The authority asks for proof, checks the DNS record itself, and only then signs the certificate."
 />
 
 ## Certificate authorities
