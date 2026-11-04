@@ -16,15 +16,13 @@ export default class SafeBrowsingGeneratedHost extends GCP.Function<SafeBrowsing
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.SafeBrowsing.BatchHashListGet();
-    const p1 = yield* GCP.SafeBrowsing.ListHashLists();
-    const p2 = yield* GCP.SafeBrowsing.SearchHashe();
-    const p3 = yield* GCP.SafeBrowsing.SearchUrl();
+    const p1 = yield* GCP.SafeBrowsing.SearchHashe();
+    const p2 = yield* GCP.SafeBrowsing.SearchUrl();
     return {
       fetch: serveProbes({
         BatchHashListGet: probeOutcome(Retry.none(p0({} as never))),
-        ListHashLists: probeOutcome(Retry.none(p1({} as never))),
-        SearchHashe: probeOutcome(Retry.none(p2({} as never))),
-        SearchUrl: probeOutcome(Retry.none(p3({} as never))),
+        SearchHashe: probeOutcome(Retry.none(p1({} as never))),
+        SearchUrl: probeOutcome(Retry.none(p2({} as never))),
       }),
     };
   }).pipe(
@@ -32,7 +30,6 @@ export default class SafeBrowsingGeneratedHost extends GCP.Function<SafeBrowsing
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.SafeBrowsing.BatchHashListGetHttp,
-          GCP.SafeBrowsing.ListHashListsHttp,
           GCP.SafeBrowsing.SearchHasheHttp,
           GCP.SafeBrowsing.SearchUrlHttp,
         ),

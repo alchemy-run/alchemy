@@ -158,7 +158,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "GetTemplate (dataflow.projects.templates.get)",
-        () => probe("GetTemplate", true),
+        () => probe("GetTemplate", false),
         {
           tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
           timeout: 600_000,

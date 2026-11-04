@@ -25,32 +25,32 @@ export default class StorageBatchOperationsGeneratedHost extends GCP.Function<St
     return {
       fetch: serveProbes({
         CancelJob: probeOutcome(
-          Retry.none(p0({ job: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p0({ job: "alchemy-missing", location: "global" } as never)),
         ),
         CreateJob: probeOutcome(
           Retry.none(
-            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p1({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         DeleteJob: probeOutcome(
-          Retry.none(p2({ job: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p2({ job: "alchemy-missing", location: "global" } as never)),
         ),
         GetJob: probeOutcome(
-          Retry.none(p3({ job: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p3({ job: "alchemy-missing", location: "global" } as never)),
         ),
         GetJobBucketOperation: probeOutcome(
           Retry.none(
             p4({
               job: "alchemy-missing",
               bucketOperation: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
             } as never),
           ),
         ),
         ListJobBucketOperations: probeOutcome(
-          Retry.none(p5({ job: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p5({ job: "alchemy-missing", location: "global" } as never)),
         ),
-        ListJobs: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListJobs: probeOutcome(Retry.none(p6({ location: "global" } as never))),
       }),
     };
   }).pipe(

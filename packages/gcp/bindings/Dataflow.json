@@ -25,6 +25,9 @@
   },
   "probes": {
     "resources": {},
-    "enable": ["dataflow.googleapis.com"]
+    "enable": ["dataflow.googleapis.com"],
+    "args": {
+      "GetTemplate": "{ gcsPath: \"gs://dataflow-templates/latest/Word_Count\" }"
+    }
   }
 }

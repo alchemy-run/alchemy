@@ -4,6 +4,7 @@
   "resources": {},
   "probes": {
     "resources": {},
-    "enable": ["lustre.googleapis.com"]
+    "enable": ["lustre.googleapis.com"],
+    "location": "us-central1-a"
   }
 }

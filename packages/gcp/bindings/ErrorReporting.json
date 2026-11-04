@@ -16,6 +16,9 @@
   },
   "probes": {
     "resources": {},
-    "enable": ["clouderrorreporting.googleapis.com"]
+    "enable": ["clouderrorreporting.googleapis.com"],
+    "args": {
+      "ListEvents": "{ groupId: \"alchemy-missing-group\" }"
+    }
   }
 }

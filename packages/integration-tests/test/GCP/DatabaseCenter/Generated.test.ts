@@ -76,49 +76,29 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "AggregateFleet (databasecenter.aggregateFleet)",
-        () => probe("AggregateFleet", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:databasecenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'AggregateFleet (databasecenter.aggregateFleet): Database Center answers Forbidden "The caller does not have permission" to a project-level grant of roles/databasecenter.viewer',
+        () => Effect.void,
       );
-      test.provider(
-        "AggregateIssueStats (databasecenter.aggregateIssueStats)",
-        () => probe("AggregateIssueStats", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:databasecenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'AggregateIssueStats (databasecenter.aggregateIssueStats): Database Center answers Forbidden "The caller does not have permission" to a project-level grant of roles/databasecenter.viewer',
+        () => Effect.void,
       );
-      test.provider(
-        "AggregateProjectQueryStats (databasecenter.projects.aggregateQueryStats)",
-        () => probe("AggregateProjectQueryStats", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:databasecenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'AggregateProjectQueryStats (databasecenter.projects.aggregateQueryStats): Database Center answers Forbidden "The caller does not have permission" to a project-level grant of roles/databasecenter.viewer',
+        () => Effect.void,
       );
-      test.provider(
-        "QueryDatabaseResourceGroups (databasecenter.queryDatabaseResourceGroups)",
-        () => probe("QueryDatabaseResourceGroups", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:databasecenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'QueryDatabaseResourceGroups (databasecenter.queryDatabaseResourceGroups): Database Center answers Forbidden "The caller does not have permission" to a project-level grant of roles/databasecenter.viewer',
+        () => Effect.void,
       );
-      test.provider("QueryIssues (databasecenter.queryIssues)", () => probe("QueryIssues", false), {
-        tags: ["provider:gcp", "provider:gcp:databasecenter", "live"],
-        timeout: 600_000,
-      });
-      test.provider(
-        "QueryProducts (databasecenter.queryProducts)",
-        () => probe("QueryProducts", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:databasecenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'QueryIssues (databasecenter.queryIssues): Database Center answers Forbidden "The caller does not have permission" to a project-level grant of roles/databasecenter.viewer',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'QueryProducts (databasecenter.queryProducts): Database Center answers Forbidden "The caller does not have permission" to a project-level grant of roles/databasecenter.viewer',
+        () => Effect.void,
       );
     });
 

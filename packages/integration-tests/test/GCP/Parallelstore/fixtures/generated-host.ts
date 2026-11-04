@@ -26,30 +26,30 @@ export default class ParallelstoreGeneratedHost extends GCP.Function<Parallelsto
       fetch: serveProbes({
         CreateInstance: probeOutcome(
           Retry.none(
-            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p0({ location: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         DeleteInstance: probeOutcome(
-          Retry.none(p1({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p1({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
         ),
         ExportInstanceData: probeOutcome(
-          Retry.none(p2({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p2({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
         ),
         GetInstance: probeOutcome(
-          Retry.none(p3({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p3({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
         ),
         ImportInstanceData: probeOutcome(
           Retry.none(
             p4({
               instance: "alchemy-missing",
-              location: "us-central1",
+              location: "us-central1-a",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        ListInstances: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListInstances: probeOutcome(Retry.none(p5({ location: "us-central1-a" } as never))),
         PatchInstance: probeOutcome(
-          Retry.none(p6({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p6({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
         ),
       }),
     };

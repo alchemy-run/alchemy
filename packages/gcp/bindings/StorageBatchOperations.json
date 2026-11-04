@@ -4,6 +4,7 @@
   "resources": {},
   "probes": {
     "resources": {},
-    "enable": ["storagebatchoperations.googleapis.com"]
+    "enable": ["storagebatchoperations.googleapis.com"],
+    "location": "global"
   }
 }

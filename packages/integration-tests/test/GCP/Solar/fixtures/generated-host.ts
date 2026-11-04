@@ -17,22 +17,24 @@ export default class SolarGeneratedHost extends GCP.Function<SolarGeneratedHost>
   Effect.gen(function* () {
     const p0 = yield* GCP.Solar.FindBuildingInsightClosest();
     const p1 = yield* GCP.Solar.GetDataLayer();
-    const p2 = yield* GCP.Solar.GetGeoTiff();
     return {
       fetch: serveProbes({
         FindBuildingInsightClosest: probeOutcome(Retry.none(p0({} as never))),
-        GetDataLayer: probeOutcome(Retry.none(p1({} as never))),
-        GetGeoTiff: probeOutcome(Retry.none(p2({} as never))),
+        GetDataLayer: probeOutcome(
+          Retry.none(
+            p1({
+              "location.latitude": 37.445,
+              "location.longitude": -122.139,
+              radiusMeters: 50,
+            } as never),
+          ),
+        ),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.Solar.FindBuildingInsightClosestHttp,
-          GCP.Solar.GetDataLayerHttp,
-          GCP.Solar.GetGeoTiffHttp,
-        ),
+        Layer.mergeAll(GCP.Solar.FindBuildingInsightClosestHttp, GCP.Solar.GetDataLayerHttp),
       ),
     ),
   ),

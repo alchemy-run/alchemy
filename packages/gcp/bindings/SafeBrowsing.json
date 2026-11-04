@@ -5,6 +5,9 @@
   "resources": {},
   "probes": {
     "resources": {},
-    "enable": ["safebrowsing.googleapis.com"]
+    "enable": ["safebrowsing.googleapis.com"],
+    "skip": {
+      "ListHashLists": "answers BadRequest \"Request contains an invalid argument.\" to OAuth callers on the testing project"
+    }
   }
 }

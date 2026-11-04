@@ -18,7 +18,7 @@ export const GetProjectBillingInfoHttp = Layer.effect(
       {
         operation: cloudbilling.getBillingInfoProjects,
         param: "name",
-        role: "roles/billing.viewer",
+        role: "roles/resourcemanager.folderViewer",
       },
     ],
   }),

@@ -33,46 +33,44 @@ export default class DomainsGeneratedHost extends GCP.Function<DomainsGeneratedH
     return {
       fetch: serveProbes({
         ConfigureRegistrationContactSettings: probeOutcome(
-          Retry.none(p0({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p0({ registration: "alchemy-missing", location: "global" } as never)),
         ),
         ConfigureRegistrationDnsSettings: probeOutcome(
-          Retry.none(p1({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p1({ registration: "alchemy-missing", location: "global" } as never)),
         ),
         ConfigureRegistrationManagementSettings: probeOutcome(
-          Retry.none(p2({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p2({ registration: "alchemy-missing", location: "global" } as never)),
         ),
         DeleteRegistration: probeOutcome(
-          Retry.none(p3({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p3({ registration: "alchemy-missing", location: "global" } as never)),
         ),
         ExportRegistration: probeOutcome(
-          Retry.none(p4({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p4({ registration: "alchemy-missing", location: "global" } as never)),
         ),
         GetRegistration: probeOutcome(
-          Retry.none(p5({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p5({ registration: "alchemy-missing", location: "global" } as never)),
         ),
         ImportRegistration: probeOutcome(
           Retry.none(
-            p6({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p6({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         InitiateRegistrationPushTransfer: probeOutcome(
-          Retry.none(p7({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p7({ registration: "alchemy-missing", location: "global" } as never)),
         ),
-        ListRegistrations: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListRegistrations: probeOutcome(Retry.none(p8({ location: "global" } as never))),
         PatchRegistration: probeOutcome(
-          Retry.none(p9({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p9({ registration: "alchemy-missing", location: "global" } as never)),
         ),
-        RegisterRegistration: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        RegisterRegistration: probeOutcome(Retry.none(p10({ location: "global" } as never))),
         RenewRegistrationDomain: probeOutcome(
-          Retry.none(p11({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p11({ registration: "alchemy-missing", location: "global" } as never)),
         ),
         ResetRegistrationAuthorizationCode: probeOutcome(
-          Retry.none(p12({ registration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p12({ registration: "alchemy-missing", location: "global" } as never)),
         ),
-        SearchRegistrationDomains: probeOutcome(
-          Retry.none(p13({ location: "us-central1" } as never)),
-        ),
-        TransferRegistration: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+        SearchRegistrationDomains: probeOutcome(Retry.none(p13({ location: "global" } as never))),
+        TransferRegistration: probeOutcome(Retry.none(p14({ location: "global" } as never))),
       }),
     };
   }).pipe(

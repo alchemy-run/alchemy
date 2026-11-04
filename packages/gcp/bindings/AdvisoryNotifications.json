@@ -4,6 +4,9 @@
   "resources": {},
   "probes": {
     "resources": {},
-    "enable": ["advisorynotifications.googleapis.com"]
+    "enable": ["advisorynotifications.googleapis.com"],
+    "locations": {
+      "ListNotifications": "global"
+    }
   }
 }

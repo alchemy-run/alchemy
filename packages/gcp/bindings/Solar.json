@@ -5,6 +5,12 @@
   "resources": {},
   "probes": {
     "resources": {},
-    "enable": ["solar.googleapis.com"]
+    "enable": ["solar.googleapis.com"],
+    "args": {
+      "GetDataLayer": "{ \"location.latitude\": 37.445, \"location.longitude\": -122.139, radiusMeters: 50 }"
+    },
+    "skip": {
+      "GetGeoTiff": "takes the id of a GeoTIFF from a GetDataLayer response; the ids expire within an hour"
+    }
   }
 }

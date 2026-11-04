@@ -76,61 +76,33 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "CreateInstance (firebasedatabase.projects.locations.instances.create)",
-        () => probe("CreateInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebasedatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'CreateInstance (firebasedatabase.projects.locations.instances.create): needs a Firebase project: the testing project answers NotFound "Project does not exist."',
+        () => Effect.void,
       );
-      test.provider(
-        "DeleteInstance (firebasedatabase.projects.locations.instances.delete)",
-        () => probe("DeleteInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebasedatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'DeleteInstance (firebasedatabase.projects.locations.instances.delete): needs a Firebase project: the testing project answers NotFound "Project does not exist."',
+        () => Effect.void,
       );
-      test.provider(
-        "DisableInstance (firebasedatabase.projects.locations.instances.disable)",
-        () => probe("DisableInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebasedatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'DisableInstance (firebasedatabase.projects.locations.instances.disable): needs a Firebase project: the testing project answers NotFound "Project does not exist."',
+        () => Effect.void,
       );
-      test.provider(
-        "GetInstance (firebasedatabase.projects.locations.instances.get)",
-        () => probe("GetInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebasedatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetInstance (firebasedatabase.projects.locations.instances.get): needs a Firebase project: the testing project answers NotFound "Project does not exist."',
+        () => Effect.void,
       );
-      test.provider(
-        "ListInstances (firebasedatabase.projects.locations.instances.list)",
-        () => probe("ListInstances", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebasedatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ListInstances (firebasedatabase.projects.locations.instances.list): needs a Firebase project: the testing project answers NotFound "Project does not exist."',
+        () => Effect.void,
       );
-      test.provider(
-        "ReenableInstance (firebasedatabase.projects.locations.instances.reenable)",
-        () => probe("ReenableInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebasedatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ReenableInstance (firebasedatabase.projects.locations.instances.reenable): needs a Firebase project: the testing project answers NotFound "Project does not exist."',
+        () => Effect.void,
       );
-      test.provider(
-        "UndeleteInstance (firebasedatabase.projects.locations.instances.undelete)",
-        () => probe("UndeleteInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebasedatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'UndeleteInstance (firebasedatabase.projects.locations.instances.undelete): needs a Firebase project: the testing project answers NotFound "Project does not exist."',
+        () => Effect.void,
       );
     });
   },

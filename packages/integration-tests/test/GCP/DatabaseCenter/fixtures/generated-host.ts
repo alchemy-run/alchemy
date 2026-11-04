@@ -2,7 +2,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -15,34 +14,8 @@ export default class DatabaseCenterGeneratedHost extends GCP.Function<DatabaseCe
   "DatabaseCenterGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.DatabaseCenter.AggregateFleet();
-    const p1 = yield* GCP.DatabaseCenter.AggregateIssueStats();
-    const p2 = yield* GCP.DatabaseCenter.AggregateProjectQueryStats();
-    const p3 = yield* GCP.DatabaseCenter.QueryDatabaseResourceGroups();
-    const p4 = yield* GCP.DatabaseCenter.QueryIssues();
-    const p5 = yield* GCP.DatabaseCenter.QueryProducts();
     return {
-      fetch: serveProbes({
-        AggregateFleet: probeOutcome(Retry.none(p0({} as never))),
-        AggregateIssueStats: probeOutcome(Retry.none(p1({} as never))),
-        AggregateProjectQueryStats: probeOutcome(Retry.none(p2({} as never))),
-        QueryDatabaseResourceGroups: probeOutcome(Retry.none(p3({} as never))),
-        QueryIssues: probeOutcome(Retry.none(p4({} as never))),
-        QueryProducts: probeOutcome(Retry.none(p5({} as never))),
-      }),
+      fetch: serveProbes({}),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.DatabaseCenter.AggregateFleetHttp,
-          GCP.DatabaseCenter.AggregateIssueStatsHttp,
-          GCP.DatabaseCenter.AggregateProjectQueryStatsHttp,
-          GCP.DatabaseCenter.QueryDatabaseResourceGroupsHttp,
-          GCP.DatabaseCenter.QueryIssuesHttp,
-          GCP.DatabaseCenter.QueryProductsHttp,
-        ),
-      ),
-    ),
-  ),
+  }),
 ) {}

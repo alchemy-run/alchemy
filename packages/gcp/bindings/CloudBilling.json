@@ -3,7 +3,7 @@
   "module": "cloudbilling_v1",
   "resources": {},
   "permissions": {
-    "cloudbilling.projects.getBillingInfo": "billing.resourceAssociations.list",
+    "cloudbilling.projects.getBillingInfo": "resourcemanager.projects.get",
     "cloudbilling.projects.updateBillingInfo": "resourcemanager.projects.createBillingAssignment",
     "cloudbilling.services.list": "serviceusage.services.use"
   },
@@ -15,5 +15,8 @@
   "probes": {
     "resources": {},
     "enable": ["cloudbilling.googleapis.com"]
+  },
+  "roles": {
+    "cloudbilling.projects.updateBillingInfo": "roles/billing.projectManager"
   }
 }

@@ -22,7 +22,7 @@ export default class AdvisoryNotificationsGeneratedHost extends GCP.Function<Adv
         GetNotification: probeOutcome(
           Retry.none(p0({ notification: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListNotifications: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListNotifications: probeOutcome(Retry.none(p1({ location: "global" } as never))),
       }),
     };
   }).pipe(

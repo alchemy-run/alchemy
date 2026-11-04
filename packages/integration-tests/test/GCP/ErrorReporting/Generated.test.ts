@@ -94,7 +94,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListEvents (clouderrorreporting.projects.events.list)",
-        () => probe("ListEvents", true),
+        () => probe("ListEvents", false),
         {
           tags: ["provider:gcp", "provider:gcp:errorreporting", "live"],
           timeout: 600_000,

@@ -12,6 +12,9 @@
   },
   "probes": {
     "resources": {},
-    "enable": ["databasecenter.googleapis.com"]
+    "enable": ["databasecenter.googleapis.com"],
+    "untestable": {
+      "project": "Database Center answers Forbidden \"The caller does not have permission\" to a project-level grant of roles/databasecenter.viewer"
+    }
   }
 }

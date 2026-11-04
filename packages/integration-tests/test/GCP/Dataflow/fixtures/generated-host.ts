@@ -65,7 +65,9 @@ export default class DataflowGeneratedHost extends GCP.Function<DataflowGenerate
             } as never),
           ),
         ),
-        GetTemplate: probeOutcome(Retry.none(p11({} as never))),
+        GetTemplate: probeOutcome(
+          Retry.none(p11({ gcsPath: "gs://dataflow-templates/latest/Word_Count" } as never)),
+        ),
         LaunchFlexTemplate: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
         LaunchTemplate: probeOutcome(Retry.none(p13({} as never))),
         LeaseJobWorkItem: probeOutcome(Retry.none(p14({ jobId: "alchemy-missing" } as never))),

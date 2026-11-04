@@ -4,6 +4,7 @@
   "resources": {},
   "probes": {
     "resources": {},
-    "enable": ["domains.googleapis.com"]
+    "enable": ["domains.googleapis.com"],
+    "location": "global"
   }
 }

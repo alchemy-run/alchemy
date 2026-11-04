@@ -84,14 +84,14 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider("GetDataLayer (solar.dataLayers.get)", () => probe("GetDataLayer", true), {
+      test.provider("GetDataLayer (solar.dataLayers.get)", () => probe("GetDataLayer", false), {
         tags: ["provider:gcp", "provider:gcp:solar", "live"],
         timeout: 600_000,
       });
-      test.provider("GetGeoTiff (solar.geoTiff.get)", () => probe("GetGeoTiff", true), {
-        tags: ["provider:gcp", "provider:gcp:solar", "live"],
-        timeout: 600_000,
-      });
+      test.provider.skip(
+        "GetGeoTiff (solar.geoTiff.get): takes the id of a GeoTIFF from a GetDataLayer response; the ids expire within an hour",
+        () => Effect.void,
+      );
     });
   },
 );

@@ -4,6 +4,9 @@
   "resources": {},
   "probes": {
     "resources": {},
-    "enable": ["firebasedatabase.googleapis.com"]
+    "enable": ["firebasedatabase.googleapis.com"],
+    "untestable": {
+      "project": "needs a Firebase project: the testing project answers NotFound \"Project does not exist.\""
+    }
   }
 }

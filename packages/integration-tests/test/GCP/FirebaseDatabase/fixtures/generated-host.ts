@@ -2,7 +2,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -15,51 +14,8 @@ export default class FirebaseDatabaseGeneratedHost extends GCP.Function<Firebase
   "FirebaseDatabaseGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.FirebaseDatabase.CreateInstance();
-    const p1 = yield* GCP.FirebaseDatabase.DeleteInstance();
-    const p2 = yield* GCP.FirebaseDatabase.DisableInstance();
-    const p3 = yield* GCP.FirebaseDatabase.GetInstance();
-    const p4 = yield* GCP.FirebaseDatabase.ListInstances();
-    const p5 = yield* GCP.FirebaseDatabase.ReenableInstance();
-    const p6 = yield* GCP.FirebaseDatabase.UndeleteInstance();
     return {
-      fetch: serveProbes({
-        CreateInstance: probeOutcome(
-          Retry.none(
-            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        DeleteInstance: probeOutcome(
-          Retry.none(p1({ instance: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        DisableInstance: probeOutcome(
-          Retry.none(p2({ instance: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        GetInstance: probeOutcome(
-          Retry.none(p3({ instance: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListInstances: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ReenableInstance: probeOutcome(
-          Retry.none(p5({ instance: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        UndeleteInstance: probeOutcome(
-          Retry.none(p6({ instance: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-      }),
+      fetch: serveProbes({}),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.FirebaseDatabase.CreateInstanceHttp,
-          GCP.FirebaseDatabase.DeleteInstanceHttp,
-          GCP.FirebaseDatabase.DisableInstanceHttp,
-          GCP.FirebaseDatabase.GetInstanceHttp,
-          GCP.FirebaseDatabase.ListInstancesHttp,
-          GCP.FirebaseDatabase.ReenableInstanceHttp,
-          GCP.FirebaseDatabase.UndeleteInstanceHttp,
-        ),
-      ),
-    ),
-  ),
+  }),
 ) {}

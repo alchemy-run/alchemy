@@ -23,7 +23,7 @@ export type GetProjectBillingInfoShape = () => Effect.Effect<
  * Gets the billing information for a project.
  *
  * A call on the stack's project, so it takes no resource.
- * Provide {@link GetProjectBillingInfoHttp}. The host gets `roles/billing.viewer` on the project.
+ * Provide {@link GetProjectBillingInfoHttp}. The host gets `roles/resourcemanager.folderViewer` on the project.
  *
  * ### Usage
  * **Example:** Call `projects.getBillingInfo`

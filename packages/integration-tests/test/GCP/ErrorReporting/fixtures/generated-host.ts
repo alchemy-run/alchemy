@@ -25,7 +25,7 @@ export default class ErrorReportingGeneratedHost extends GCP.Function<ErrorRepor
       fetch: serveProbes({
         DeleteProjectEvents: probeOutcome(Retry.none(p0({} as never))),
         GetGroup: probeOutcome(Retry.none(p1({ group: "alchemy-missing" } as never))),
-        ListEvents: probeOutcome(Retry.none(p2({} as never))),
+        ListEvents: probeOutcome(Retry.none(p2({ groupId: "alchemy-missing-group" } as never))),
         ListGroupStats: probeOutcome(Retry.none(p3({} as never))),
         ReportEvent: probeOutcome(Retry.none(p4({} as never))),
         UpdateGroup: probeOutcome(Retry.none(p5({ group: "alchemy-missing" } as never))),
