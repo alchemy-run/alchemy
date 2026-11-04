@@ -137,9 +137,7 @@ export type GetBindingType<T> =
                                                         // `StreamNs.StreamBinding`).
                                                         T extends StreamNs.StreamBinding
                                                         ? StreamBinding
-                                                        : T extends
-                                                              | HyperdriveNs.Connection
-                                                              | HyperdriveNs.ConnectionLookup
+                                                        : T extends HyperdriveNs.Connection
                                                           ? Hyperdrive
                                                           : T extends VersionMetadataBinding
                                                             ? WorkerVersionMetadata
