@@ -1,4 +1,4 @@
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
+import { resolveNs } from "node:dns/promises";
 import { fileURLToPath } from "node:url";
 /**
  * Custom domains on AWS website composites through each DNS host `domain.dns`
@@ -19,8 +19,6 @@ import { fileURLToPath } from "node:url";
  */
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Hetzner from "@alchemy.run/hetzner";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -31,12 +29,23 @@ import * as route53 from "@distilled.cloud/aws/route-53";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import * as zones from "@distilled.cloud/hetzner/zones";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
+import {
+  bare,
+  cloudflareZoneId,
+  cnameTo,
+  delegate,
+  NotYet,
+  queryA,
+  queryCname,
+  waitForAuthoritative,
+  ZONE,
+} from "./dns.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers(), Hetzner.providers()),
@@ -47,34 +56,19 @@ const fixtureDir = fileURLToPath(
   new URL("../../../../../examples/aws-static-site/site", import.meta.url),
 );
 
-const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
-
-const CF_SITE = `aws-site-cf.${ZONE}`;
-const CF_SITE_ALIAS = `aws-site-cf-alias.${ZONE}`;
-const ROUTER_HOST = `aws-site-router.${ZONE}`;
-const ROUTER_DOCS_HOST = `aws-site-router-docs.${ZONE}`;
-const R53_ZONE = `aws-site-r53.${ZONE}`;
+const CF_SITE = `${testName("aws-site-cf")}.${ZONE}`;
+const CF_SITE_ALIAS = `${testName("aws-site-cf-alias")}.${ZONE}`;
+const ROUTER_HOST = `${testName("aws-site-router")}.${ZONE}`;
+const ROUTER_DOCS_HOST = `${testName("aws-site-router-docs")}.${ZONE}`;
+const R53_ZONE = `${testName("aws-site-r53")}.${ZONE}`;
 const R53_SITE = `www.${R53_ZONE}`;
 // Hetzner DNS only hosts registrable apex zones ("unsupported tld" for a
 // subdomain zone), so the Hetzner zone is the apex itself and Cloudflare
 // delegates just this subdomain to Hetzner's nameservers. Zone names are
 // unique per Hetzner account: a concurrent suite owning the same apex zone
 // makes this test's zone read as unowned.
-const HZ_DELEGATED = `aws-site-hz.${ZONE}`;
+const HZ_DELEGATED = `${testName("aws-site-hz")}.${ZONE}`;
 const HZ_SITE = `www.${HZ_DELEGATED}`;
-
-class NotYet extends Data.TaggedError("NotYet")<{ readonly what: string }> {}
-
-const bare = (name: string) => name.replace(/\.$/, "").toLowerCase();
-
-const cloudflareZoneId = Effect.gen(function* () {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  const zone = yield* findZoneByName({ accountId, name: ZONE });
-  if (!zone) {
-    return yield* Effect.die(new Error(`zone "${ZONE}" not found in account`));
-  }
-  return zone.id;
-});
 
 const listCloudflareRecords = (zoneId: string, name: string, type: "CNAME" | "NS") =>
   dns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
@@ -82,62 +76,7 @@ const listCloudflareRecords = (zoneId: string, name: string, type: "CNAME" | "NS
     Effect.map((chunk) => Array.from(chunk)),
   );
 
-/** NS records in the Cloudflare zone delegating `name` to `nameServers`. */
-const delegate = (zoneId: string, name: string, nameServers: readonly string[]) =>
-  Effect.forEach(nameServers, (nameServer, index) =>
-    Cloudflare.DNS.Record(`Delegation${index + 1}`, {
-      zoneId,
-      name,
-      type: "NS",
-      content: bare(nameServer),
-    }),
-  );
-
 const cloudflareNameServers = Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
-
-/**
- * Wait until every authoritative nameserver answers `name` acceptably, so
- * the first HTTPS request never resolves (and negatively caches) the
- * hostname before it exists.
- */
-const waitForAuthoritative = (
-  nameServers: readonly string[],
-  name: string,
-  query: (resolver: Resolver, name: string) => Promise<string[]>,
-  accept: (answers: string[]) => boolean,
-) =>
-  Effect.gen(function* () {
-    const servers = (yield* Effect.forEach(nameServers, (nameServer) =>
-      Effect.tryPromise(() => resolve4(bare(nameServer))).pipe(Effect.orDie),
-    )).flat();
-    yield* Effect.forEach(
-      servers,
-      (server) =>
-        Effect.gen(function* () {
-          const resolver = yield* Effect.sync(() => {
-            const r = new Resolver();
-            r.setServers([server]);
-            return r;
-          });
-          const answers = yield* Effect.tryPromise(() => query(resolver, name)).pipe(
-            Effect.orElseSucceed(() => [] as string[]),
-          );
-          if (!accept(answers)) {
-            return yield* new NotYet({ what: `${name} @ ${server}` });
-          }
-        }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
-      { discard: true },
-    );
-  });
-
-const cnameTo =
-  (target: string) =>
-  (answers: string[]): boolean =>
-    answers.some((answer) => bare(answer) === bare(target));
-
-const queryCname = (resolver: Resolver, name: string) => resolver.resolveCname(name);
-
-const queryA = (resolver: Resolver, name: string) => resolver.resolve4(name);
 
 /** `https://{hostname}/` answers 200 — bounded through the edge rollout. */
 const expectServesHttps = (hostname: string) =>
@@ -357,17 +296,18 @@ describe.skipIf(!!process.env.FAST)(
             nameServers.map(bare).sort(),
           );
 
-          // An `A` alias record at the distribution in the inferred zone.
+          // `A` and `AAAA` alias records at the distribution in the inferred zone.
           const { ResourceRecordSets } = yield* route53.listResourceRecordSets({
             HostedZoneId: deployed.hostedZoneId,
             StartRecordName: `${R53_SITE}.`,
             StartRecordType: "A",
-            MaxItems: 1,
+            MaxItems: 2,
           });
-          const alias = ResourceRecordSets?.[0];
-          expect(alias?.Name).toBe(`${R53_SITE}.`);
-          expect(alias?.Type).toBe("A");
-          expect(bare(alias?.AliasTarget?.DNSName ?? "")).toBe(bare(deployed.domainName));
+          const aliases = (ResourceRecordSets ?? []).filter((set) => set.Name === `${R53_SITE}.`);
+          expect(aliases.map((set) => set.Type)).toEqual(["A", "AAAA"]);
+          for (const alias of aliases) {
+            expect(bare(alias.AliasTarget?.DNSName ?? "")).toBe(bare(deployed.domainName));
+          }
 
           const { certificate } = yield* viewerCertificateOf(deployed.distributionId);
           expect(certificate.Status).toBe("ISSUED");
@@ -396,7 +336,7 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 2_400_000 },
     );
 
-    test.provider.skipIf(!process.env.HCLOUD_TOKEN)(
+    test.provider(
       "StaticSite on Hetzner DNS serves a delegated subdomain over HTTPS",
       (stack) =>
         Effect.gen(function* () {
