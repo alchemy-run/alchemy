@@ -43,6 +43,7 @@ import {
   makeEventLifetime,
 } from "./WorkerRuntime.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
+import { workersLogger } from "./WorkersLogger.ts";
 
 /**
  * The isolate-lifetime artifacts produced by a single layer build: the built
@@ -265,8 +266,10 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
     platformServices,
     FetchHttpClient.layer,
     SecureRandom.layerWebCrypto,
-    // TODO(sam): wire this up to telemetry more directly
-    Logger.layer([Logger.consolePretty()]),
+    // The default for every event. A `Logger.layer` registered through
+    // `Telemetry.layer` is built per event over this context, so it replaces
+    // this logger (or adds to it, with `mergeWithExisting`).
+    Logger.layer([workersLogger]),
   );
 
   // Private scope for the isolate-lifetime layer build. Never closed —

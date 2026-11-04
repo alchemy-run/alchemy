@@ -47,3 +47,4 @@ export * from "./WorkerBridge.ts";
 export * from "./WorkerEntrypoint.ts";
 export * from "./WorkerLoader.ts";
 export * from "./WorkerProvider.ts";
+export * from "./WorkersLogger.ts";
