@@ -4,6 +4,7 @@ import * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type { Servable } from "./Api.ts";
@@ -259,14 +260,28 @@ export interface Operation {
   readonly rpc: Rpc.AnyWithProps;
   /** Whether the call answers with a stream of values (`watch`, `events`). */
   readonly stream: boolean;
+  /**
+   * What the entry declares it does: a command's `description` (or its Schema
+   * `description` annotation), or the read contract's `description`.
+   */
+  readonly description: string | undefined;
 }
+
+/** The description an entry declares, if any. */
+const describedBy = (served: Servable): string | undefined =>
+  served.kind === "Command"
+    ? (served.description ?? SchemaAST.resolveDescription(served.ast))
+    : served.kind === "Aggregate"
+      ? served.definition.read?.description
+      : served.definition.description;
 
 /** Every call an Api serves, in the order it serves them. */
 export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Operation> =>
   serves.flatMap((served): ReadonlyArray<Operation> => {
+    const description = describedBy(served);
     if (served.kind === "Command") {
       const rpc = served.rpc as Rpc.AnyWithProps;
-      return [{ served, name: served.tag, operation: "send", rpc, stream: false }];
+      return [{ served, name: served.tag, operation: "send", rpc, stream: false, description }];
     }
     const name = nameOf(served);
     return Object.entries(readRpcs(served)).flatMap(([call, read]) => {
@@ -276,7 +291,14 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
       const operation =
         (call as keyof ReadRpcs) === "get" && served.kind === "Stream" ? "peek" : call;
       return [
-        { served, name, operation, rpc, stream: RpcSchema.isStreamSchema(rpc.successSchema) },
+        {
+          served,
+          name,
+          operation,
+          rpc,
+          stream: RpcSchema.isStreamSchema(rpc.successSchema),
+          description,
+        },
       ];
     });
   });

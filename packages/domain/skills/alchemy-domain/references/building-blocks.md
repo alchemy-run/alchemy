@@ -44,7 +44,6 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   reply: { balance: Cents },               // optional typed reply
   attributes: (cmd) => ({ "bank.amount": cmd.amount }),  // optional: what its spans record
   description: "Take money out of an account, within the balance and the daily limit.",  // optional
-  examples: [{ target: "a-1", input: { amount: 2_000 } }],  // optional: example calls, in wire form
 }) {}
 ```
 
@@ -348,7 +347,7 @@ More: [Api](https://alchemy.run/domain/api).
 
 An Api is the domain's interface for its own clients. For a public or partner API, write a separate `HttpApi` with its own response schemas that calls the Api in process; see [hosting.md](hosting.md#public-and-partner-apis). `toHttpApi`, `toMcp` and `toCli` publish only the calls their `expose` option lists, as the domain shapes them, which is convenient for internal tools only; see [hosting.md](hosting.md#conveniences-for-internal-tools).
 
-Give every entry a `description` (and optional `examples`, in wire form) on its declaration: a command in its options, a view or stream next to its `middleware`, an aggregate in its `read` contract. A read's example names a key: `examples: [{ key: "a-1" }]`. Tools, CLIs and API docs built from an Api read them with `Domain.descriptionOf(entry)` and `Domain.examplesOf(entry)`; write the text for the person or agent who calls the entry.
+Give every entry a `description` on its declaration: a command in its options, a view or stream next to its `middleware`, an aggregate in its `read` contract. An Api's MCP tools and CLI help show it; write it for the person or agent who calls the entry.
 
 ## Model
 

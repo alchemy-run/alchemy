@@ -101,20 +101,25 @@ export const toolName = (op: {
 }): string => `${op.api}_${op.name}_${op.operation}`.replace(unsafe, "_");
 
 /**
- * What the model reads about the tool: a command's Schema `description`
- * annotation, or a sentence built from the call.
+ * What the model reads about the tool: what the call does (`Get the current
+ * AccountSummary of a key.`), then the entry's `description`, if it has one.
+ * A command's description replaces the sentence.
  */
-const toolDescription = (op: Operation): string =>
-  (op.served.kind === "Command" ? SchemaAST.resolveDescription(op.served.ast) : undefined) ??
-  (op.operation === "send"
-    ? `Send the ${op.name} command.`
-    : op.operation === "peek"
-      ? `Get the latest entry of the ${op.name} stream for a key.`
-      : op.operation === "list"
-        ? `List a page of the ${op.name} entries of a key.`
-        : op.operation === "snapshot"
-          ? `Get the current ${op.name} of a key, with the cursor it is valid at.`
-          : `Get the current ${op.name} of a key.`);
+const toolDescription = (op: Operation): string => {
+  if (op.operation === "send") return op.description ?? `Send the ${op.name} command.`;
+  const call = callSentence(op);
+  return op.description === undefined ? call : `${call} ${op.description}`;
+};
+
+/** What a read call does, as a sentence. */
+const callSentence = (op: Operation): string =>
+  op.operation === "peek"
+    ? `Get the latest entry of the ${op.name} stream for a key.`
+    : op.operation === "list"
+      ? `List a page of the ${op.name} entries of a key.`
+      : op.operation === "snapshot"
+        ? `Get the current ${op.name} of a key, with the cursor it is valid at.`
+        : `Get the current ${op.name} of a key.`;
 
 /**
  * A call that returns once. A stream (`watch`, `events`) is not one tool

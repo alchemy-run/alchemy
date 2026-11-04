@@ -199,7 +199,7 @@ export interface Definition<
   Computed extends Record<string, unknown>,
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-> extends Read.Contract<Key.RefOf<Key>, StateType<S> | null, Ms, Rejects, Key.EncodedIdOf<Key>> {
+> extends Read.Contract<Key.RefOf<Key>, StateType<S> | null, Ms, Rejects> {
   /** The aggregates and views this view consumes. */
   readonly from: From;
   /**
@@ -451,14 +451,12 @@ export interface ViewKey<Name extends string> {
  * ```
  *
  * ### Describing it
- * `description` says what the view answers, and `examples` name keys to read,
- * in wire form. Tools, CLIs and API docs built from an Api read them with
- * `Domain.descriptionOf` and `Domain.examplesOf`.
+ * `description` says what the view answers. An Api's MCP tools and CLI
+ * subcommand for it show it.
  *
  * **Example:** A described view
  * ```typescript
  * description: "An account's balance and owner.",
- * examples: [{ key: "a-1" }],
  * ```
  *
  * ### Validating reads

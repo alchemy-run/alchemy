@@ -26,8 +26,7 @@ export interface Any extends Schema.Top {
   readonly reply: Schema.Top | undefined;
   readonly middleware: Middleware.List;
   readonly rpc: Rpc.Any;
-  readonly description?: string | undefined;
-  readonly examples?: ReadonlyArray<unknown>;
+  readonly description: string | undefined;
   new (...args: any[]): { readonly _tag: string };
 }
 
@@ -50,14 +49,6 @@ export type PayloadFields<Target extends TargetSchema, F extends Fields> = {
   readonly commandId: Schema.optional<typeof Schema.String>;
   readonly input: Schema.Struct<F>;
 };
-
-/**
- * An example call of a command, in wire form: what a client sends, with the
- * target and each field encoded (a branded id or a date is a string).
- */
-export type Example<Target extends TargetSchema, F extends Fields> = Schema.Struct<
-  PayloadFields<Target, F>
->["Encoded"];
 
 /** What a client receives: the reply and the position of the committed events. */
 export type SuccessFields<Reply extends Schema.Top | undefined> = {
@@ -107,8 +98,6 @@ export interface CommandClass<
   readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;
   /** What the command does, for the people and agents who send it. */
   readonly description: string | undefined;
-  /** Example calls, in wire form. */
-  readonly examples: ReadonlyArray<Example<Target, F>>;
 }
 
 interface Options {
@@ -120,7 +109,6 @@ interface Options {
   readonly reply?: Fields;
   readonly attributes?: Telemetry.Attributes<any>;
   readonly description?: string;
-  readonly examples?: ReadonlyArray<unknown>;
 }
 
 const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
@@ -140,7 +128,6 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
     static readonly rpc = rpc;
     static readonly attributes = options.attributes;
     static readonly description = options.description;
-    static readonly examples = options.examples ?? [];
   };
 };
 
@@ -198,9 +185,8 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
  * ```
  *
  * ### Describing it
- * `description` says what the command does, and `examples` show calls in
- * wire form. They change nothing at runtime: tools, CLIs and API docs built
- * from an Api read them with `Domain.descriptionOf` and `Domain.examplesOf`.
+ * `description` says what the command does. An Api's MCP tool and CLI
+ * subcommand for it show it.
  *
  * **Example:** A described command
  * ```typescript
@@ -209,7 +195,6 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
  *   input: { amount: Schema.Int },
  *   events: [MoneyWithdrawn],
  *   description: "Take money out of an account. The amount is in cents.",
- *   examples: [{ target: "a-1", input: { amount: 2_000 } }],
  * }) {}
  * ```
  *
@@ -257,16 +242,10 @@ export const make = <
      */
     readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
     /**
-     * What the command does, for the people and agents who send it. Surfaces
-     * built from an Api (tool lists, CLI help, API docs) show it. Read it
-     * back with `Domain.descriptionOf`.
+     * What the command does, for the people and agents who send it: an Api's
+     * MCP tool and CLI subcommand describe themselves with it.
      */
     readonly description?: string;
-    /**
-     * Example calls, in wire form: the target and the input as a client
-     * sends them. Read them back with `Domain.examplesOf`.
-     */
-    readonly examples?: ReadonlyArray<Example<NoInfer<Target>, NoInfer<F>>>;
   },
 ): CommandClass<
   Tag,

@@ -28,13 +28,6 @@ export type IdOf<K> = K extends Aggregate.Any
     ? K["Type"]
     : never;
 
-/** The id of one instance of a key in wire form, as a client sends it. */
-export type EncodedIdOf<K> = K extends Aggregate.Any
-  ? K["definition"]["id"]["Encoded"]
-  : K extends EffectSchema.Top
-    ? K["Encoded"]
-    : never;
-
 /** Is this key an aggregate (and not a Schema)? @internal */
 export const isAggregate = (key: Any): key is Aggregate.Any =>
   (key as { readonly kind?: unknown }).kind === "Aggregate";

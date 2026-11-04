@@ -112,7 +112,7 @@ Reading an aggregate directly is handy for an account's own screen. For anything
 
 ## Describe each entry
 
-Every kind of entry takes a `description` and `examples`. Write them once, on the declaration, and each surface built from the Api shows the same text: a tool list for an agent, CLI help, or API docs.
+Every kind of entry takes a `description`. Write it once, on the declaration, and each surface built from the Api shows the same text: an MCP tool for an agent, or CLI help.
 
 ```typescript title="src/WithdrawMoney.command.ts"
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
@@ -121,22 +121,13 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   events: [MoneyWithdrawn],
   rejects: [NotOpen, InsufficientFunds],
   description: "Take money out of an account. The amount is in cents.",
-  examples: [{ target: "a-1", input: { amount: 2_000 } }],
 }) {}
 ```
 
-An example is in wire form: what a client sends, with each field encoded, so a branded id or a date is a string. A command's example is a call: its target and its input. A read's example names a key. A view and a stream take both fields next to their middleware; an aggregate takes them in its `read` contract.
+A command's MCP tool and CLI subcommand show its description as is. A view and a stream take it next to their middleware, and an aggregate in its `read` contract. Their read tools follow the call with it: "Get the current AccountSummary of a key. An account's balance and owner."
 
 ```typescript title="src/AccountSummary.view.ts"
 description: "An account's balance and owner.",
-examples: [{ key: "a-1" }],
-```
-
-`Domain.descriptionOf` and `Domain.examplesOf` read them back from any entry. Both are plain data and change nothing at runtime.
-
-```typescript
-Domain.descriptionOf(WithdrawMoney); // "Take money out of an account. The amount is in cents."
-Domain.examplesOf(AccountSummary); // [{ key: "a-1" }]
 ```
 
 ## List what a client may reach
