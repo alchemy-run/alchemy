@@ -1602,11 +1602,13 @@ export default { async fetch() { return new Response("${version}"); } };
     // Reproduces #2976: Cloudflare caps a script's `exports` map at 100
     // entries, and renaming a class declares both the new live class and a
     // `renamed` tombstone for the old one. Renaming 55 of 60 classes and
-    // deleting the other 5 in one upload would declare 115 entries, so the
-    // deletes and renames are spread over several uploads that each stay
-    // within the limit. Every renamed namespace keeps its id and its data.
+    // deleting the other 5 in one deploy would declare 115 entries: the
+    // deploy fails before anything is uploaded, and the deployed Worker keeps
+    // serving its data. A tombstone only counts in the deploy that declares
+    // it, so the same renames spread over two deploys go through, and every
+    // renamed namespace keeps its id and data.
     test.provider(
-      "renames more classes than fit in one 100-entry exports upload",
+      "renaming more classes than fit in 100 exports fails before uploading",
       (scratch) =>
         Effect.gen(function* () {
           yield* scratch.destroy();
@@ -1661,6 +1663,14 @@ export default {
             (yield* fetchJsonReady<{ value: number }>(`${v1.worker.url}/increment`)).value,
           ).toBe(1);
 
+          const error = yield* deployClasses(55, (i) => `Class${i}V2`, "v2").pipe(Effect.flip);
+          expect(error._tag).toBe("TooManyWorkerExports");
+          expect(error.message).toContain("115 exports");
+          expect(yield* fetchReady(v1.worker.url!, "v1")).toBe("v1");
+
+          // Half the renames first (60 live + 30 tombstones), then the rest
+          // and the deletes (55 live + 25 + 5 tombstones).
+          yield* deployClasses(60, (i) => (i < 30 ? `Class${i}V2` : `Class${i}`), "v2a");
           const v2 = yield* deployClasses(55, (i) => `Class${i}V2`, "v2");
           expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
           expect(
