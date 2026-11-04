@@ -23,7 +23,7 @@ class PauseHold extends Domain.Command("PauseHold", {
 }) {}
 class ResumeHold extends Domain.Command("ResumeHold", {
   target: Schema.String,
-  events: [HoldResumed, HoldArmed],
+  events: [HoldResumed],
 }) {}
 class ExpireHold extends Domain.Command("ExpireHold", {
   target: Schema.String,
@@ -41,10 +41,9 @@ class Hold extends Domain.Aggregate("Hold", {
   decide: {
     PlaceHold: (_state, { expiresAt }) => [new HoldArmed({ expiresAt })],
     PauseHold: (state) => (state.status === "held" ? [new HoldPaused()] : []),
-    ResumeHold: (state) =>
-      state.status === "paused"
-        ? [new HoldResumed(), new HoldArmed({ expiresAt: state.expiresAt })]
-        : [],
+    // The bug: a resume trusts the expiry timer armed before the pause. A
+    // timer that fired during the pause recorded nothing, so none is left.
+    ResumeHold: (state) => (state.status === "paused" ? [new HoldResumed()] : []),
     // A paused hold does not expire: the command runs and records nothing.
     ExpireHold: (state) => (state.status === "held" ? [new HoldExpired()] : []),
   },
@@ -61,13 +60,10 @@ const HoldExpiryLive = HoldExpiry.toLayer(
   Effect.gen(function* () {
     const holds = yield* Hold;
     return Effect.fn(function* ({ source, event }) {
-      yield* holds
-        .schedule(source, new ExpireHold(), {
-          at: DateTime.makeUnsafe(event.expiresAt),
-          commandId: `expire:${source.id}`,
-        })
-        // The bug: a resume after the stale run lands here, and no timer is armed.
-        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+      yield* holds.schedule(source, new ExpireHold(), {
+        at: DateTime.makeUnsafe(event.expiresAt),
+        commandId: `expire:${source.id}`,
+      });
     });
   }),
 );
@@ -147,13 +143,12 @@ describe("the docs example", { tags: ["unit", "local"] }, () => {
       verdicts: report.ruleVerdicts.map((v) => [v.rule, v.verdict]),
     }).toEqual({
       coverage: { _tag: "Exhausted" },
-      states: 15,
+      states: 11,
       complete: true,
       proof: false,
       verdicts: [
         ["DEFECT", "HELD"],
         ["DEAD-LETTER", "HELD"],
-        ["TIMER-REARM", "BROKEN"],
         ["HELD-HAS-TIMER", "BROKEN"],
       ],
     });
@@ -165,7 +160,6 @@ describe("the docs example", { tags: ["unit", "local"] }, () => {
       "HoldExpiry ← HoldArmed (Hold/h1#1)",
       "timer ExpireHold on Hold/h1 at +1d",
       "resume",
-      "HoldExpiry ← HoldArmed (Hold/h1#4)",
     ]);
     const out = await Explore.toStory(scenario, broken, {
       ref: (aggregate, id) => `${aggregate}.ref(${JSON.stringify(id)})`,
@@ -180,7 +174,7 @@ describe("the docs example", { tags: ["unit", "local"] }, () => {
   it("the Effect form gives the same report", async () => {
     const report = await Effect.runPromise(Explore.explore(scenario));
     expect(report.vacuous).toEqual([]);
-    expect(report.violations.map((v) => v.rule).sort()).toEqual(["HELD-HAS-TIMER", "TIMER-REARM"]);
+    expect(report.violations.map((v) => v.rule).sort()).toEqual(["HELD-HAS-TIMER"]);
   });
 
   it("the swarm finds it from a seed", async () => {

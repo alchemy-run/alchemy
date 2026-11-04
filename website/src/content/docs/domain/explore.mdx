@@ -13,7 +13,7 @@ A green run is not a proof. Every report has `proof: false`. See [Know what a gr
 
 ## Write a scenario
 
-A scenario names the model, the actors that can send commands, the fakes for what is outside the model, the rules, and the bounds. This model has a bug. The hold's expiry has a fixed command id. A paused hold ignores the expiry, so the command runs and records nothing. A later resume asks for the same id, gets `AlreadyExecuted`, and the policy swallows it. The hold now never expires.
+A scenario names the model, the actors that can send commands, the fakes for what is outside the model, the rules, and the bounds. This model has a bug. A paused hold ignores its expiry, so an expiry that comes during the pause runs and records nothing. `ResumeHold` records only `HoldResumed`: it trusts the expiry armed before the pause and arms none. The hold now never expires.
 
 ```typescript
 import * as Domain from "@alchemy.run/domain";
@@ -30,8 +30,7 @@ const HoldExpiryLive = HoldExpiry.toLayer(
         .schedule(source, new ExpireHold(), {
           at: DateTime.makeUnsafe(event.expiresAt),
           commandId: `expire:${source.id}`,
-        })
-        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+        });
     });
   }),
 );
@@ -89,7 +88,7 @@ const scenario: Explore.Scenario = {
 const report = await Explore.run(scenario);
 ```
 
-The run takes milliseconds. It visits 15 states, ends `Exhausted`, and breaks `HELD-HAS-TIMER` and the derived rule `TIMER-REARM`:
+The run takes milliseconds. It visits 11 states, ends `Exhausted`, and breaks `HELD-HAS-TIMER`:
 
 ```text
 HELD-HAS-TIMER: h1 is held and has no expiry timer
@@ -98,8 +97,9 @@ HELD-HAS-TIMER: h1 is held and has no expiry timer
   HoldExpiry ← HoldArmed (Hold/h1#1)
   timer ExpireHold on Hold/h1 at +1d
   resume
-  HoldExpiry ← HoldArmed (Hold/h1#4)
 ```
+
+The fix: `ResumeHold` records `HoldArmed` again, so the policy arms the expiry once more.
 
 `Explore.run` returns a Promise. `Explore.explore` is the Effect form: it fails with `ExploreError` on an engine error, and a broken rule stays data in the report.
 
@@ -120,13 +120,12 @@ Use `quiescent` for a rule that a lag can break. A `state` rule on a view fails 
 
 Rules read a `Snapshot`: `state`, `version`, `instances`, `timers`, `work`, `dead`, `fake`, `budget`, `view`, `clock` and `quiescent`.
 
-Three derived rules run with no code from you. Turn one off in `derived`.
+Two derived rules run with no code from you. Turn one off in `derived`.
 
 | Rule          | Breaks when                                                                                     |
 | ------------- | ----------------------------------------------------------------------------------------------- |
 | `DEFECT`      | A command, policy, view or projection dies of a defect                                          |
 | `DEAD-LETTER` | A delivery fails more than `maxTries` times                                                     |
-| `TIMER-REARM` | `schedule` answered `AlreadyExecuted` to a new input, the command had run stale before it, and the run went on |
 
 `host.retryDefects` names the `_tag`s of a deliberate die that means "retry this delivery": a policy handler has no error channel. The report lists each one.
 

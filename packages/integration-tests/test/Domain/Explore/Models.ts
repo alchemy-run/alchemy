@@ -49,7 +49,6 @@ const fakeScenario = (
   rules,
   bounds: { depth: 10 },
   startTimeMillis: T0,
-  derived: { timerRearm: false },
   ...extra,
 });
 
@@ -184,11 +183,15 @@ class Freeze extends Domain.Command("Freeze", {
   input: {},
   events: [Frozen],
 }) {}
-/** The unfreeze arms the same deadline again. */
+/**
+ * The bug: the unfreeze trusts the timer armed before the freeze and arms
+ * nothing. A timer that fired during the freeze ran stale, so the job is left
+ * with no timer.
+ */
 class Unfreeze extends Domain.Command("Unfreeze", {
   target: Schema.String,
   input: {},
-  events: [Unfrozen, Armed],
+  events: [Unfrozen],
 }) {}
 export class Fire extends Domain.Command("Fire", {
   target: Schema.String,
@@ -216,10 +219,7 @@ export class Job extends Domain.Aggregate("Job", {
   decide: {
     Arm: (_s, c) => [new Armed({ deadline: c.deadline })],
     Freeze: (s) => (s.frozen ? [] : [new Frozen({})]),
-    Unfreeze: (s) =>
-      s.frozen && s.deadline !== null
-        ? [new Unfrozen({}), new Armed({ deadline: s.deadline })]
-        : [],
+    Unfreeze: (s) => (s.frozen ? [new Unfrozen({})] : []),
     // Stale (frozen, or another deadline): records nothing.
     Fire: (s, c) =>
       s.frozen || s.fired || s.deadline !== c.deadline ? [] : [new Fired({ deadline: c.deadline })],
@@ -237,18 +237,16 @@ export class Job extends Domain.Aggregate("Job", {
   },
 }) {}
 
-/** The bug: a deterministic timer id, and a swallowed AlreadyExecuted. */
+/** One timer per deadline, named by it. */
 export class JobTimers extends Domain.Policy("JobTimers", { from: Job, key: Job, on: [Armed] }) {}
 export const JobTimersLive = JobTimers.toLayer(
   Effect.gen(function* () {
     const jobs = yield* Job;
     return Effect.fn(function* ({ source, event }) {
-      yield* jobs
-        .schedule(source.id, new Fire({ deadline: event.deadline }), {
-          at: DateTime.makeUnsafe(event.deadline),
-          commandId: `fire:${source.id}:${event.deadline}`,
-        })
-        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+      yield* jobs.schedule(source.id, new Fire({ deadline: event.deadline }), {
+        at: DateTime.makeUnsafe(event.deadline),
+        commandId: `fire:${source.id}:${event.deadline}`,
+      });
     });
   }),
 );

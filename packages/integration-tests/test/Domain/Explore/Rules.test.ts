@@ -3,26 +3,21 @@ import { run, type Rule } from "@alchemy.run/domain/Explore";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as M from "./Models.ts";
 
-describe("TIMER-REARM (derived, refined)", { tags: ["unit", "local"] }, () => {
-  it("finds the stale re-arm with no domain text, in 6 moves", async () => {
-    const r = await run(M.jobScenario());
-    const v = r.violations.find((x) => x.rule === "TIMER-REARM")!;
-    expect(v.trace.steps.length).toBe(6);
+describe("the timer lost in a freeze", { tags: ["unit", "local"] }, () => {
+  it("finds the unfreeze that trusts a timer that already ran stale", async () => {
+    const r = await run(M.jobScenario({ rules: [M.JOB_ARMED] }));
+    const v = r.violations.find((x) => x.rule === "JOB-ARMED")!;
     expect(v.path.map((p) => p.label)).toContain("freeze@J1");
+    // The fire ran stale (during the freeze), before the unfreeze.
+    const fire = v.path.findIndex((p) => p.kind === "timer");
+    const unfreeze = v.path.findIndex((p) => p.label === "unfreeze@J1");
+    expect(fire).toBeGreaterThanOrEqual(0);
+    expect(fire).toBeLessThan(unfreeze);
   });
 
   it("a redelivery of the input that armed the timer is not a break", async () => {
-    const r = await run(M.jobScenario({ freeze: false, redeliveries: 2 }));
+    const r = await run(M.jobScenario({ freeze: false, redeliveries: 2, rules: [M.JOB_ARMED] }));
     expect(r.violations.map((v) => v.rule)).toEqual([]);
-  });
-
-  it("a re-arm AFTER the command already served the input is not a break", async () => {
-    const r = await run(M.jobScenario());
-    const v = r.violations.find((x) => x.rule === "TIMER-REARM")!;
-    // The fire ran stale (before the unfreeze), never after it.
-    const fire = v.path.findIndex((p) => p.kind === "timer");
-    const unfreeze = v.path.findIndex((p) => p.label === "unfreeze@J1");
-    expect(fire).toBeLessThan(unfreeze);
   });
 });
 
@@ -70,7 +65,7 @@ describe("eventually", { tags: ["unit", "local"] }, () => {
         ? undefined
         : "an unfrozen job did not fire within 2 days",
   };
-  it("states the business fact without a timer id, and still finds the stale re-arm", async () => {
+  it("states the business fact without a timer id, and still finds the lost timer", async () => {
     const r = await run(M.jobScenario({ rules: [FIRES] }));
     expect(r.violations.map((v) => v.rule)).toContain("FIRES-WITHIN-2D");
   });

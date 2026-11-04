@@ -38,7 +38,7 @@ More: [Explore a model](https://alchemy.run/domain/explore).
 - A `state` rule on a view or a timer fails on normal lag. Use `quiescent`.
 - A rule must state a business fact, not an implementation detail. Read timers by command (`s.timers({ agg, id, command })`), not by id format.
 - Give every rule `reachable` (a `state` or `step` trigger) and `source` (where the fact comes from).
-- Derived rules run with no code: `DEFECT`, `DEAD-LETTER`, `TIMER-REARM`. Turn one off in `derived`.
+- Derived rules run with no code: `DEFECT`, `DEAD-LETTER`. Turn one off in `derived`.
 
 More: [Explore a model: Choose a rule kind](https://alchemy.run/domain/explore#choose-a-rule-kind).
 

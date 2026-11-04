@@ -217,13 +217,6 @@ describe("identity", { tags: ["unit", "local"] }, () => {
 });
 
 describe("honest text", { tags: ["unit", "local"] }, () => {
-  it("TIMER-REARM names a trigger", async () => {
-    const r = await run(M.jobScenario({ freeze: false }));
-    expect(r.ruleVerdicts.find((v) => v.rule === "TIMER-REARM")).toMatchObject({
-      verdict: "VACUOUS",
-      witnessed: false,
-    });
-  });
   it("effectsExecuted says it is a declaration, and a refused setup ran nothing", async () => {
     expect((await run(M.twoBits)).effectsExecuted).toMatchObject({
       basis: "declared by the scenario, not measured",
@@ -236,61 +229,5 @@ describe("honest text", { tags: ["unit", "local"] }, () => {
   });
   it("only bfs and swarm run", async () => {
     await expect(run(M.twoBits, { search: { kind: "dfs" } } as never)).rejects.toThrow(/search/);
-  });
-});
-
-describe("TIMER-REARM reports only what it can judge", { tags: ["unit", "local"] }, () => {
-  const rearm = (scenario: Scenario): Scenario => ({
-    ...scenario,
-    actors: [
-      ...scenario.actors,
-      {
-        key: "again",
-        enabled: (s) => s.budget("again") > 0 && s.state("Job", "J1")?.fired === true,
-        run: (ctx) =>
-          Effect.gen(function* () {
-            spend("again");
-            yield* send(ctx, M.Job, "J1", new M.Arm({ deadline: M.T0 + 24 * 3_600_000 }), {
-              commandId: "api:again",
-            });
-          }),
-      },
-    ],
-    bounds: { ...scenario.bounds, budgets: { ...scenario.bounds.budgets, again: 1 } },
-  });
-  it("a command that already ran and recorded events is no break", async () => {
-    const r = await run(rearm(M.jobScenario({ freeze: false })));
-    expect(r.violations.map((v) => v.rule)).not.toContain("TIMER-REARM");
-    expect(r.ruleVerdicts.find((v) => v.rule === "TIMER-REARM")?.witnessed).toBe(true);
-  });
-  it("the input on another stream is not judged", async () => {
-    class Arming extends Domain.Policy("Arming", { from: M.Src, key: M.Src, on: [M.Go] }) {}
-    const ArmingLive = Arming.toLayer(
-      Effect.gen(function* () {
-        const jobs = yield* M.Job;
-        return Effect.fn(function* () {
-          yield* jobs
-            .schedule("J1", new M.Fire({ deadline: M.T0 }), {
-              at: DateTime.makeUnsafe(M.T0 + 1),
-              commandId: "same",
-            })
-            .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
-        });
-      }),
-    );
-    class Model extends Domain.Model("Cross", { aggregates: [M.Job, M.Src], policies: [Arming] }) {}
-    const r = await run({
-      ...M.twoBits,
-      name: "cross",
-      derived: {},
-      model: Model,
-      layer: Model.layer(ArmingLive),
-      actors: ["s1", "s2"].map((id) => ({
-        key: id,
-        enabled: (s) => s.state("Src", id) === undefined,
-        run: (ctx) => send(ctx, M.Src, id, new M.Start({}), { commandId: `api:${id}` }),
-      })),
-    });
-    expect(r.violations.map((v) => v.rule)).not.toContain("TIMER-REARM");
   });
 });

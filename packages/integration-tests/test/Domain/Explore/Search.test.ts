@@ -81,7 +81,7 @@ describe("determinism and replay", { tags: ["unit", "local"] }, () => {
     const b = await run(M.jobScenario({ rules: [M.JOB_ARMED] }), opts);
     expect(a.coverage._tag).toBe("Sampled");
     expect(b.violations.map((v) => v.trace)).toEqual(a.violations.map((v) => v.trace));
-    expect(a.violations.map((v) => v.rule).sort()).toEqual(["JOB-ARMED", "TIMER-REARM"]);
+    expect(a.violations.map((v) => v.rule).sort()).toEqual(["JOB-ARMED"]);
   });
 
   it("replay on a fresh build checks every digest and the rule; a changed trace is refused", async () => {

@@ -210,7 +210,6 @@ export interface Step {
   readonly failures: StepLog["failures"];
   readonly defects: StepLog["defects"];
   readonly sends: ReadonlyArray<Send>;
-  readonly refusedSchedules: StepLog["refusedSchedules"];
   readonly ok: boolean;
 }
 
@@ -295,7 +294,6 @@ export interface Scenario {
   readonly derived?: {
     readonly defect?: boolean;
     readonly deadLetter?: boolean;
-    readonly timerRearm?: boolean;
   };
   /** Plain data the report keeps (assumptions, notes). */
   readonly notes?: ReadonlyArray<string>;
@@ -322,38 +320,12 @@ export const DERIVED: ReadonlyArray<Rule> = [
       return d ? `${d.kind} ${d.target} on ${d.tag} (${d.source}#${d.seq}): ${d.error}` : undefined;
     },
   },
-  {
-    id: "TIMER-REARM",
-    text: "DERIVED: a new input asked to schedule a command that had already run stale (no events) BEFORE that input committed, and went on: the command will never run for it.",
-    source:
-      "engine: schedule() answered AlreadyExecuted to an input of the same stream that did not arm it, the command had run stale before that input, and the run succeeded",
-    reachable: {
-      text: "a schedule() answered AlreadyExecuted",
-      step: (_s, step) => step.refusedSchedules.length > 0,
-    },
-    kind: "step",
-    check: (_s, step) => {
-      if (!step.ok) return undefined;
-      const r = step.refusedSchedules.find(
-        (x) => x.sameStream && x.stale && !x.repeat && !x.served,
-      );
-      return r
-        ? `${r.agg}/${r.id}: schedule(${r.commandId}) by ${r.input} answered AlreadyExecuted and was swallowed`
-        : undefined;
-    },
-  },
 ];
 
 export const rulesOf = (scenario: Scenario): ReadonlyArray<Rule> => {
   const d = scenario.derived ?? {};
   return [
-    ...DERIVED.filter((r) =>
-      r.id === "DEFECT"
-        ? d.defect !== false
-        : r.id === "DEAD-LETTER"
-          ? d.deadLetter !== false
-          : d.timerRearm !== false,
-    ),
+    ...DERIVED.filter((r) => (r.id === "DEFECT" ? d.defect !== false : d.deadLetter !== false)),
     ...scenario.rules,
   ];
 };
@@ -450,7 +422,6 @@ export const build = async (scenario: Scenario): Promise<Built> => {
   const setup = checkSetup(scenario);
   if (setup.errors.length > 0) throw new EngineFault("Unsupported", setup.errors.join("; "));
   const rt = new Rt(scenario.host ?? {});
-  rt.armedByOn = scenario.derived?.timerRearm !== false;
   rt.world = freshWorld(scenario);
   const scope = Scope.makeUnsafe();
   const close = () => Effect.runPromise(Scope.close(scope, Exit.void));
@@ -956,7 +927,6 @@ export const stepOf = (move: Move, leaf: Leaf): Step => ({
   failures: leaf.log.failures,
   defects: leaf.log.defects,
   sends: leaf.log.sends,
-  refusedSchedules: leaf.log.refusedSchedules,
   ok: leaf.log.ok,
 });
 

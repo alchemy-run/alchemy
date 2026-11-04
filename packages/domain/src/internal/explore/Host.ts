@@ -47,10 +47,10 @@ export interface Inst {
   version: number;
   /** commandId → the full result: a seen id answers its old receipt. */
   receipts: Record<string, SendResult>;
-  /** Ids cancelled and not scheduled again since. */
+  /** Scheduled command ids cancelled and not scheduled again since. */
   cancelled: Record<string, true>;
-  /** commandId → the inputs that scheduled it (for the derived TIMER-REARM rule). */
-  armedBy: Record<string, Array<string>>;
+  /** Scheduled command id → its latest arming: the id it commits with, and when it is due. */
+  armed: Record<string, { readonly commandId: string; readonly at: number }>;
 }
 
 export interface WorkItem {
@@ -173,21 +173,6 @@ export interface StepLog {
   faults: Array<{ where: string; point: "before-commit" | "after-commit" }>;
   sends: Array<Send>;
   enqueued: Array<{ pk: string; source: string; seq: number; tag: string }>;
-  /**
-   * schedule() answered AlreadyExecuted. `repeat`: the same input armed it before.
-   * `sameStream`: the input and the command share a stream, so their order is known.
-   * `served`: the command ran after the input committed. `stale`: it ran and recorded no event.
-   */
-  refusedSchedules: Array<{
-    agg: string;
-    id: string;
-    commandId: string;
-    input: string;
-    repeat: boolean;
-    sameStream: boolean;
-    served: boolean;
-    stale: boolean;
-  }>;
   /** The move's main effect succeeded. */
   ok: boolean;
 }
@@ -201,7 +186,6 @@ export const emptyLog = (): StepLog => ({
   faults: [],
   sends: [],
   enqueued: [],
-  refusedSchedules: [],
   ok: true,
 });
 
@@ -246,7 +230,7 @@ export class Rt {
   world!: World;
   log: StepLog = emptyLog();
   by: By = { kind: "engine", name: "" };
-  /** The input being handled (`policy|source#seq`, `actor:key`, `timer:key`): TIMER-REARM's repeat test. */
+  /** The input being handled (`policy|source#seq`, `actor:key`, `timer:key`). */
   input = "";
   /** The source stream and seq of the delivery being handled (policy runs). */
   inputSource: string | undefined;
@@ -270,7 +254,6 @@ export class Rt {
   readonly views = new Map<string, ViewKit>();
   readonly projections = new Map<string, ProjectionKit>();
   readonly setup: Array<string> = [];
-  armedByOn = true;
 
   constructor(profile: HostProfile) {
     this.profile = profile;
@@ -389,7 +372,13 @@ const clone = <A>(a: A): A => JSON.parse(JSON.stringify(a));
 
 const ensureInst = (rt: Rt, agg: string, id: string): Inst => {
   const byId = (rt.world.aggs[agg] ??= {});
-  return (byId[id] ??= { state: null, version: 0, receipts: {}, cancelled: {}, armedBy: {} });
+  return (byId[id] ??= {
+    state: null,
+    version: 0,
+    receipts: {},
+    cancelled: {},
+    armed: {},
+  });
 };
 
 const enqueue = (rt: Rt, kind: "policy" | "view", target: string, d: Delivery) => {
@@ -508,33 +497,16 @@ export const exploreHost = (rt: Rt): ModelHost => ({
         });
       return {
         send,
-        schedule: (id, command, meta, due) =>
+        schedule: (id, scheduled, command, meta, due) =>
           Effect.suspend(() => {
-            const fields = { aggregate: name, id, commandId: meta.commandId };
-            const found = rt.world.aggs[name]?.[id];
-            if (found?.receipts[meta.commandId]) {
-              const receipt = found.receipts[meta.commandId]!;
-              const ranAt = receipt._tag === "Accepted" ? receipt.receipt.version : -1;
-              rt.log.refusedSchedules.push({
-                sameStream: rt.inputSource === `${name}/${id}`,
-                served: ranAt >= rt.inputSeq,
-                stale: receipt._tag === "Accepted" && receipt.receipt.events.length === 0,
-                agg: name,
-                id,
-                commandId: meta.commandId,
-                input: rt.input,
-                repeat: (found.armedBy[meta.commandId] ?? []).includes(rt.input),
-              });
-              return Effect.fail(new AlreadyExecuted(fields));
-            }
             const inst = ensureInst(rt, name, id);
-            delete inst.cancelled[meta.commandId];
-            if (rt.armedByOn) {
-              const by = (inst.armedBy[meta.commandId] ??= []);
-              if (!by.includes(rt.input)) by.push(rt.input);
-            }
+            // The same arming again (a policy or step ran again): leave it as it is.
+            const armed = inst.armed[scheduled];
+            if (armed?.commandId === meta.commandId) return Effect.succeed(armed.at);
+            delete inst.cancelled[scheduled];
             const at = "at" in due ? (due.at as number) : rt.world.clock + due.afterMillis;
-            rt.world.timers[`${name}/${id}/${meta.commandId}`] = {
+            inst.armed[scheduled] = { commandId: meta.commandId, at };
+            rt.world.timers[`${name}/${id}/${scheduled}`] = {
               agg: name,
               id,
               command: clone(command),
@@ -547,17 +519,18 @@ export const exploreHost = (rt: Rt): ModelHost => ({
             };
             return Effect.succeed(at);
           }),
-        unschedule: (id, commandId) =>
+        unschedule: (id, scheduled) =>
           Effect.suspend(
             (): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
-              const key = `${name}/${id}/${commandId}`;
-              const fields = { aggregate: name, id, commandId };
+              const key = `${name}/${id}/${scheduled}`;
+              const fields = { aggregate: name, id, commandId: scheduled };
               const found = rt.world.aggs[name]?.[id];
-              if (found?.receipts[commandId]) return Effect.fail(new AlreadyExecuted(fields));
-              if (found?.cancelled[commandId]) return Effect.fail(new AlreadyCancelled(fields));
-              if (!rt.world.timers[key]) return Effect.fail(new NotScheduled(fields));
+              const armed = found?.armed[scheduled];
+              if (!armed) return Effect.fail(new NotScheduled(fields));
+              if (found?.receipts[armed.commandId]) return Effect.fail(new AlreadyExecuted(fields));
+              if (found?.cancelled[scheduled]) return Effect.fail(new AlreadyCancelled(fields));
               delete rt.world.timers[key];
-              ensureInst(rt, name, id).cancelled[commandId] = true;
+              ensureInst(rt, name, id).cancelled[scheduled] = true;
               return Effect.void;
             },
           ),
