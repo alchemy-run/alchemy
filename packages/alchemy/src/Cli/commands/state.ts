@@ -461,12 +461,17 @@ const stateSubcommands = [
 /**
  * Whether a store's flag clashes with one of `alchemy state`'s own flags or
  * its subcommands', found the way effect finds them: by building the command.
+ * Effect only checks direct subcommands, so `unsafe nuke` is listed too.
  */
 const clashes = (flag: Flag.Flag<unknown>) => {
   try {
     Command.make("state", {}).pipe(
       Command.withSharedFlags({ flag }),
-      Command.withSubcommands([Command.make("state", stateFlags), ...stateSubcommands]),
+      Command.withSubcommands([
+        Command.make("state", stateFlags),
+        ...stateSubcommands,
+        nukeCommand,
+      ]),
     );
     return false;
   } catch (error) {
@@ -486,33 +491,50 @@ const single = (flag: Param.Param<"flag", unknown>): Param.Single<"flag", unknow
 /**
  * The flags of every provider's state store, such as `--name` or `--domain`,
  * each optional so a flag not given is `undefined`. Stores that take the same
- * flag share it, and its help lists each store's description. Which ones a
- * backend takes is checked when the store is opened.
+ * option as the same flag share it, and its help lists each store's
+ * description. A flag that can't be added is left out with a warning. Which
+ * ones a backend takes is checked when the store is opened.
+ *
+ * @internal exported for tests.
  */
-const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Contributions>) => {
+export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Contributions>) => {
   // option -> its flag, and description -> the backends that describe it that way
   const declared = new Map<
     string,
-    { readonly flag: Flag.Flag<unknown>; readonly descriptions: Map<string, Array<string>> }
+    {
+      readonly flag: Flag.Flag<unknown>;
+      readonly name: string;
+      readonly descriptions: Map<string, Array<string>>;
+    }
   >();
+  // flag name -> the option it sets
+  const names = new Map<string, string>();
   for (const provider of contributions) {
     for (const [backend, store] of Object.entries(provider.stateStores ?? {})) {
       for (const [option, flag] of Object.entries(store.flags ?? {})) {
-        if (clashes(flag)) {
+        const { name = option, aliases = [], description = Option.none() } = single(flag) ?? {};
+        const shared = declared.get(option);
+        const problem =
+          aliases.length > 0
+            ? "state store flags can't have aliases"
+            : shared !== undefined && shared.name !== name
+              ? `another state store sets '${option}' with --${shared.name}`
+              : shared === undefined && names.has(name)
+                ? `another state store sets '${names.get(name)}' with it`
+                : shared === undefined && clashes(flag)
+                  ? "alchemy state already has that flag"
+                  : undefined;
+        if (problem !== undefined) {
           Effect.runSync(
-            Effect.logWarning(
-              `Ignoring --${single(flag)?.name} from the '${backend}' state store: alchemy state already has that flag.`,
-            ),
+            Effect.logWarning(`Ignoring --${name} from the '${backend}' state store: ${problem}.`),
           );
           continue;
         }
-        const entry = declared.get(option) ?? { flag, descriptions: new Map() };
-        const description = Option.getOrElse(single(flag)?.description ?? Option.none(), () => "");
-        entry.descriptions.set(description, [
-          ...(entry.descriptions.get(description) ?? []),
-          backend,
-        ]);
+        const entry = shared ?? { flag, name, descriptions: new Map() };
+        const text = Option.getOrElse(description, () => "");
+        entry.descriptions.set(text, [...(entry.descriptions.get(text) ?? []), backend]);
         declared.set(option, entry);
+        names.set(name, option);
       }
     }
   }
@@ -520,7 +542,11 @@ const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Contributio
     flag.pipe(
       Flag.withDescription(
         [...descriptions]
-          .map(([description, backends]) => `${description} (--backend ${backends.join(", ")})`)
+          .map(([text, backends]) =>
+            descriptions.size === 1
+              ? `${text} (--backend ${backends.join(", ")})`
+              : `--backend ${backends.join(", ")}: ${text}`,
+          )
           .join("; "),
       ),
       Flag.optional,

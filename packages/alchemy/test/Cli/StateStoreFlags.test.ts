@@ -1,35 +1,73 @@
-import { expect, it } from "@alchemy.run/test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
-import { stateCommand } from "@/Cli/commands/state.ts";
-import * as Contributions from "@/Contributions.ts";
+import { stateCommand, storeOptionFlags } from "@/Cli/commands/state.ts";
+import type * as Contributions from "@/Contributions.ts";
 
-const withFlags = (flags: Contributions.StateStoreFlags) =>
-  Contributions.make({
-    name: "fake",
-    stateStores: {
-      fake: {
-        description: "Fake store",
-        flags,
-        load: Effect.die("not loaded"),
-      },
-    },
+const provider = (
+  name: string,
+  stores: Readonly<Record<string, Contributions.StateStoreFlags>>,
+): Contributions.Contributions => ({
+  name,
+  stateStores: Object.fromEntries(
+    Object.entries(stores).map(([backend, flags]) => [
+      backend,
+      { description: `${backend} store`, flags, load: Effect.die("not loaded") },
+    ]),
+  ),
+});
+
+describe("state store flags", { tags: ["unit"] }, () => {
+  it("keeps a store's own flags", () => {
+    const flags = storeOptionFlags([provider("fake", { fake: { region: Flag.String("region") } })]);
+    expect(Object.keys(flags)).toEqual(["region"]);
   });
 
-it(
-  "leaves out a store flag that clashes with alchemy state's own",
-  () => {
-    // `--profile` is `alchemy state`'s own flag and `--stack` a subcommand's;
-    // either would otherwise fail building the whole command.
-    expect(() =>
-      stateCommand([
-        withFlags({
+  it("leaves out a flag that clashes with alchemy state's own", () => {
+    // `--profile` is `alchemy state`'s own, `--stack` a subcommand's and
+    // `--yes` `unsafe nuke`'s; any would fail building the whole command.
+    const contributions = [
+      provider("fake", {
+        fake: {
           profile: Flag.String("profile"),
           stack: Flag.String("stack"),
+          yes: Flag.String("yes"),
           region: Flag.String("region"),
-        }),
-      ]),
-    ).not.toThrow();
-  },
-  { tags: ["unit"] },
-);
+        },
+      }),
+    ];
+    expect(Object.keys(storeOptionFlags(contributions))).toEqual(["region"]);
+    expect(() => stateCommand(contributions)).not.toThrow();
+  });
+
+  it("leaves out a flag with an alias", () => {
+    const flags = storeOptionFlags([
+      provider("fake", { fake: { region: Flag.String("region").pipe(Flag.withAlias("c")) } }),
+    ]);
+    expect(Object.keys(flags)).toEqual([]);
+  });
+
+  it("shares a flag stores take for the same option", () => {
+    const flags = storeOptionFlags([
+      provider("one", { one: { name: Flag.String("name") } }),
+      provider("two", { two: { name: Flag.String("name") } }),
+    ]);
+    expect(Object.keys(flags)).toEqual(["name"]);
+  });
+
+  it("leaves out a flag another store uses for a different option", () => {
+    const flags = storeOptionFlags([
+      provider("one", { one: { name: Flag.String("name") } }),
+      provider("two", { two: { workerName: Flag.String("name"), url: Flag.String("url") } }),
+    ]);
+    expect(Object.keys(flags)).toEqual(["name", "url"]);
+  });
+
+  it("leaves out a different flag for an option another store already sets", () => {
+    const flags = storeOptionFlags([
+      provider("one", { one: { name: Flag.String("name") } }),
+      provider("two", { two: { name: Flag.String("store-name") } }),
+    ]);
+    expect(Object.keys(flags)).toEqual(["name"]);
+  });
+});

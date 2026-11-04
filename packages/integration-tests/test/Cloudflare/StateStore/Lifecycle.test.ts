@@ -65,11 +65,7 @@ test.provider(
       // Never the default store, which every other run on the account uses.
       const worker = "alchemy-state-store-lifecycle";
       // `--name` is the store's full Worker name.
-      const target = {
-        type: "provider",
-        backend: "cloudflare",
-        name: worker,
-      } as const;
+      const target = { type: "provider", backend: "cloudflare", name: worker } as const;
       const alchemist = Alchemist.layer();
       const defaultStacks = () =>
         Effect.flatMap(
@@ -329,7 +325,8 @@ test.provider(
       expect(yield* configless.get({ stack: "domain", stage: "test", fqn: "domain/a" })).toEqual(
         record,
       );
-      const cached = yield* readStoreCredentials(yield* CredentialsStore, profile, workerName);
+      const credentialsStore = yield* CredentialsStore;
+      const cached = yield* readStoreCredentials(credentialsStore, profile, workerName);
       expect(cached?.url).toBe(`https://${domain}`);
 
       yield* teardownStateStore({ workerName });

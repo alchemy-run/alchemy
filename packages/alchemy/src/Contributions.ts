@@ -241,14 +241,40 @@ export interface TestServices {
 
 /** Declare a provider; the identity function, keeping its literal type. */
 /**
- * Each state store's `load` checked against its flags: the store must accept
- * what they parse into.
+ * Keys a store option can't take: the ones `Alchemist.State` sources and
+ * lifecycle inputs already use, which the options are spread next to.
+ */
+type ReservedStateStoreOptionKey =
+  | "type"
+  | "backend"
+  | "profile"
+  | "envFile"
+  | "force"
+  | "limit"
+  | "since";
+
+/**
+ * Each state store checked against its flags: every flag sets an option the
+ * store declares, under a key that isn't reserved, and the store accepts the
+ * value the flag parses into.
  */
 type CheckedStateStores<P> = P extends { readonly stateStores: infer Stores }
   ? {
       readonly stateStores: {
-        readonly [K in keyof Stores]: Stores[K] extends { readonly flags: infer Flags }
-          ? { readonly load: Lazy<StateStoreImpl<StateStoreFlagValues<Flags>>> }
+        readonly [K in keyof Stores]: Stores[K] extends {
+          readonly flags: infer Flags;
+          readonly load: Lazy<StateStoreImpl<infer Options>>;
+        }
+          ? {
+              readonly flags: {
+                readonly [F in keyof Flags]: F extends ReservedStateStoreOptionKey
+                  ? never
+                  : F extends keyof Options
+                    ? Flags[F]
+                    : never;
+              };
+              readonly load: Lazy<StateStoreImpl<StateStoreFlagValues<Flags>>>;
+            }
           : unknown;
       };
     }
