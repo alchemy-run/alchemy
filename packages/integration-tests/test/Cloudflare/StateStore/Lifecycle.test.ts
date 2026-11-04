@@ -68,7 +68,7 @@ test.provider(
       const target = {
         type: "provider",
         backend: "cloudflare",
-        options: { name: worker },
+        name: worker,
       } as const;
       const alchemist = Alchemist.layer();
       const defaultStacks = () =>
@@ -323,7 +323,8 @@ test.provider(
       const configless = yield* Alchemist.State.store({
         type: "provider",
         backend: "cloudflare",
-        options: { name: workerName, domain },
+        name: workerName,
+        domain,
       }).pipe(Effect.provide(Alchemist.layer()));
       expect(yield* configless.get({ stack: "domain", stage: "test", fqn: "domain/a" })).toEqual(
         record,

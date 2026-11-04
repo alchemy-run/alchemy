@@ -1,4 +1,4 @@
-import { Command, Flag } from "effect/cli";
+import { CliError, Command, Flag, Param } from "effect/cli";
 import * as Argument from "effect/cli/Argument";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
@@ -27,23 +27,6 @@ const backend = Flag.String("backend").pipe(
   ),
   Flag.withDefault("configured"),
 );
-/**
- * The flags of every provider's state store, such as `--name` or `--domain`,
- * each optional so a flag not given is `undefined`. Stores that take the same
- * flag share it, and the first one provides its help. Which ones a backend
- * takes is checked when the store is opened.
- */
-const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Contributions>) =>
-  Record.map(
-    contributions
-      .flatMap((provider) => Object.values(provider.stateStores ?? {}))
-      .reduce<Record<string, Flag.Flag<unknown>>>(
-        (flags, store) => Record.union(flags, store.flags ?? {}, (first) => first),
-        {},
-      ),
-    (flag) => flag.pipe(Flag.optional, Flag.map(Option.getOrUndefined)),
-  );
-
 /** The store options `alchemy state` was given, shared with its subcommands. */
 class StoreOptions extends Context.Service<StoreOptions, Contributions.StateStoreOptions>()(
   "alchemy/Cli/state/StoreOptions",
@@ -106,9 +89,9 @@ const lifecycleSource = Effect.fn(function* (
 ) {
   const options = yield* StoreOptions;
   const source: Alchemist.State.ProviderSource = {
+    ...options,
     type: "provider",
     backend: args.backend,
-    options,
     profile: args.profile,
     envFile: Option.getOrUndefined(args.envFile),
   };
@@ -463,14 +446,97 @@ const unsafeCommand = Command.make("unsafe", {}).pipe(
   Command.unlisted,
 );
 
+const stateFlags = { main: config, envFile, profile, backend };
+const stateSubcommands = [
+  listCommand,
+  readCommand,
+  deleteCommand,
+  bootstrapCommand,
+  teardownCommand,
+  migrateCommand,
+  logsCommand,
+  unsafeCommand,
+] as const;
+
 /**
- * `alchemy state`, sharing a `--<option>` flag with every subcommand for each
- * option the loaded providers' state stores declare.
+ * Whether a store's flag clashes with one of `alchemy state`'s own flags or
+ * its subcommands', found the way effect finds them: by building the command.
+ */
+const clashes = (flag: Flag.Flag<unknown>) => {
+  try {
+    Command.make("state", {}).pipe(
+      Command.withSharedFlags({ flag }),
+      Command.withSubcommands([Command.make("state", stateFlags), ...stateSubcommands]),
+    );
+    return false;
+  } catch (error) {
+    if (error instanceof CliError.DuplicateOption) return true;
+    throw error;
+  }
+};
+
+/** The flag a store contributes, under the combinators it is wrapped in. */
+const single = (flag: Param.Param<"flag", unknown>): Param.Single<"flag", unknown> | undefined =>
+  Param.isSingle(flag)
+    ? flag
+    : Predicate.hasProperty(flag, "param")
+      ? single(flag.param as Param.Param<"flag", unknown>)
+      : undefined;
+
+/**
+ * The flags of every provider's state store, such as `--name` or `--domain`,
+ * each optional so a flag not given is `undefined`. Stores that take the same
+ * flag share it, and its help lists each store's description. Which ones a
+ * backend takes is checked when the store is opened.
+ */
+const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Contributions>) => {
+  // option -> its flag, and description -> the backends that describe it that way
+  const declared = new Map<
+    string,
+    { readonly flag: Flag.Flag<unknown>; readonly descriptions: Map<string, Array<string>> }
+  >();
+  for (const provider of contributions) {
+    for (const [backend, store] of Object.entries(provider.stateStores ?? {})) {
+      for (const [option, flag] of Object.entries(store.flags ?? {})) {
+        if (clashes(flag)) {
+          Effect.runSync(
+            Effect.logWarning(
+              `Ignoring --${single(flag)?.name} from the '${backend}' state store: alchemy state already has that flag.`,
+            ),
+          );
+          continue;
+        }
+        const entry = declared.get(option) ?? { flag, descriptions: new Map() };
+        const description = Option.getOrElse(single(flag)?.description ?? Option.none(), () => "");
+        entry.descriptions.set(description, [
+          ...(entry.descriptions.get(description) ?? []),
+          backend,
+        ]);
+        declared.set(option, entry);
+      }
+    }
+  }
+  return Record.map(Object.fromEntries(declared), ({ flag, descriptions }) =>
+    flag.pipe(
+      Flag.withDescription(
+        [...descriptions]
+          .map(([description, backends]) => `${description} (--backend ${backends.join(", ")})`)
+          .join("; "),
+      ),
+      Flag.optional,
+      Flag.map(Option.getOrUndefined),
+    ),
+  );
+};
+
+/**
+ * `alchemy state`, sharing a flag with every subcommand for each one the
+ * loaded providers' state stores contribute.
  */
 export const stateCommand = (contributions: ReadonlyArray<Contributions.Contributions>) =>
   Command.make(
     "state",
-    { main: config, envFile, profile, backend },
+    stateFlags,
     instrumentCommand("state")(
       Effect.fn(function* (args) {
         if (!(yield* Interaction.Interaction).terminal.input) {
@@ -482,16 +548,7 @@ export const stateCommand = (contributions: ReadonlyArray<Contributions.Contribu
   ).pipe(
     Command.withDescription("Inspect and manage deployment state"),
     Command.withSharedFlags({ storeOptions: storeOptionFlags(contributions) }),
-    Command.withSubcommands([
-      listCommand,
-      readCommand,
-      deleteCommand,
-      bootstrapCommand,
-      teardownCommand,
-      migrateCommand,
-      logsCommand,
-      unsafeCommand,
-    ]),
+    Command.withSubcommands(stateSubcommands),
     // After the subcommands, so their handlers get the shared store options too.
     Command.provideSync(StoreOptions, ({ storeOptions }) => storeOptions),
   );

@@ -77,8 +77,8 @@ export interface GcpStateStoreOptions {
  * provision it ahead of time (CI).
  */
 export const lifecycle: StateStoreLifecycle<GcpStateStoreOptions> = {
-  bootstrap: ({ options }) =>
-    bootstrapStateBucket(options?.name).pipe(
+  bootstrap: ({ name }) =>
+    bootstrapStateBucket(name).pipe(
       Effect.map(({ bucketName, project, region, existed }) => ({
         status: existed ? ("adopted" as const) : ("created" as const),
         store: bucketName,
@@ -86,8 +86,8 @@ export const lifecycle: StateStoreLifecycle<GcpStateStoreOptions> = {
       })),
       Effect.provide(environment),
     ),
-  teardown: ({ options }) =>
-    teardownStateBucket(options?.name).pipe(
+  teardown: ({ name }) =>
+    teardownStateBucket(name).pipe(
       Effect.map(({ bucketName, deleted }) => ({ deleted: deleted ? [bucketName] : [] })),
       Effect.provide(environment),
     ),

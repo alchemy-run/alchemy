@@ -433,7 +433,7 @@ describe("Alchemist.State lifecycle", { tags: ["unit", "local"] }, () =>
           Alchemist.State.bootstrap({
             type: "provider",
             backend: "aws",
-            options: { domain: "state.example.com" },
+            domain: "state.example.com",
           }),
         );
         expect(contributionErrorMessage(error)).toBe(

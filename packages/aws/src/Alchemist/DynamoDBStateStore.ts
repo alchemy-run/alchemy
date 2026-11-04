@@ -110,8 +110,8 @@ export interface DynamoDBStateStoreOptions {
  * bootstrapping is only needed to provision it ahead of time.
  */
 export const lifecycle: StateStoreLifecycle<DynamoDBStateStoreOptions> = {
-  bootstrap: ({ options }) =>
-    bootstrapStateTable(options?.name).pipe(
+  bootstrap: ({ name }) =>
+    bootstrapStateTable(name).pipe(
       Effect.map(({ tableName, accountId, region, existed }) => ({
         status: existed ? ("adopted" as const) : ("created" as const),
         store: tableName,
@@ -119,7 +119,7 @@ export const lifecycle: StateStoreLifecycle<DynamoDBStateStoreOptions> = {
       })),
       Effect.provide(environment),
     ),
-  teardown: ({ options }) => teardownStateTable(options?.name).pipe(Effect.provide(environment)),
+  teardown: ({ name }) => teardownStateTable(name).pipe(Effect.provide(environment)),
 };
 
 /** The state store AWS contributes, as `--backend aws`. */

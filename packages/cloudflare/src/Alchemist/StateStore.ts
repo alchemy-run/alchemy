@@ -58,9 +58,9 @@ export interface CloudflareStateStoreOptions {
 
 /** The state-store Worker's lifecycle, for `Alchemist.State` and `alchemy state`. */
 export const lifecycle: StateStoreLifecycle<CloudflareStateStoreOptions> = {
-  bootstrap: ({ options, force }) =>
+  bootstrap: ({ name, domain, force }) =>
     Effect.gen(function* () {
-      const { layer, accountId, workerName, profile } = yield* stateStoreScope(options?.name);
+      const { layer, accountId, workerName, profile } = yield* stateStoreScope(name);
       return yield* Effect.gen(function* () {
         const existed = yield* workers.getScriptSetting({ accountId, scriptName: workerName }).pipe(
           Effect.as(true),
@@ -70,7 +70,7 @@ export const lifecycle: StateStoreLifecycle<CloudflareStateStoreOptions> = {
         );
         const store = yield* bootstrapStateStore({
           workerName,
-          domain: options?.domain,
+          domain,
           force,
           profile,
         });
@@ -85,15 +85,15 @@ export const lifecycle: StateStoreLifecycle<CloudflareStateStoreOptions> = {
         };
       }).pipe(Effect.provide(layer));
     }),
-  teardown: ({ options }) =>
+  teardown: ({ name }) =>
     Effect.gen(function* () {
-      const { layer, workerName, profile } = yield* stateStoreScope(options?.name);
+      const { layer, workerName, profile } = yield* stateStoreScope(name);
       yield* Effect.provide(teardownStateStore({ workerName, profile }), layer);
       return { deleted: [workerName] };
     }),
-  logs: ({ options, limit, since }) =>
+  logs: ({ name, limit, since }) =>
     Effect.gen(function* () {
-      const { layer, accountId, workerName } = yield* stateStoreScope(options?.name);
+      const { layer, accountId, workerName } = yield* stateStoreScope(name);
       const lines = yield* Effect.gen(function* () {
         const telemetry = yield* CloudflareLogs;
         return yield* telemetry.queryLogs({
@@ -106,10 +106,10 @@ export const lifecycle: StateStoreLifecycle<CloudflareStateStoreOptions> = {
       }).pipe(Effect.provide(layer));
       return lines.map(logEntry).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     }),
-  tailLogs: ({ options }) =>
+  tailLogs: ({ name }) =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const { layer, accountId, workerName } = yield* stateStoreScope(options?.name);
+        const { layer, accountId, workerName } = yield* stateStoreScope(name);
         const telemetry = yield* Effect.provide(CloudflareLogs, layer);
         return telemetry
           .tailScript({ accountId, scriptName: workerName })

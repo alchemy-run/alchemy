@@ -313,17 +313,18 @@ const program = Effect.gen(function* () {
 ```
 
 `Alchemist.State.layer(source)` provides the same store as a `State` layer.
-The backend is the provider's name: `cloudflare`, `aws` or `gcp`. Pass
-`options` for what the profile can't tell the store, the same ones the CLI
-takes as flags: `{ name }` for a [named store](#more-than-one-store-per-account),
-and `{ domain }` for a Cloudflare store on a
+The backend is the provider's name: `cloudflare`, `aws` or `gcp`. Next to
+it go the store's options, for what the profile can't tell it, the same ones
+the CLI takes as flags: `name` for a [named store](#more-than-one-store-per-account),
+and `domain` for a Cloudflare store on a
 [custom domain](#serve-it-on-your-own-domain):
 
 ```typescript
 const source = {
   type: "provider",
   backend: "cloudflare",
-  options: { name: "team-a", domain: "alchemy-state.example.com" },
+  name: "team-a",
+  domain: "alchemy-state.example.com",
 } as const;
 ```
 

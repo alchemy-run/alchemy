@@ -130,13 +130,25 @@ export interface StateStore {
    * },
    * ```
    *
-   * Stores that take the same flag share it on the command line, so the
-   * first one declared provides its help text.
+   * Stores that take the same flag share it on the command line, and its help
+   * lists each store's description. A flag that clashes with one of
+   * `alchemy state`'s own is left out, with a warning.
+   *
+   * {@link make} checks the store's options interface against these: each
+   * flag's value must be what the store accepts under the same key.
    */
-  readonly flags?: Readonly<Record<string, Flag.Flag<unknown>>>;
+  readonly flags?: StateStoreFlags;
   /** The store itself, loaded when it's used. */
   readonly load: Lazy<StateStoreImpl<any>>;
 }
+
+/** A state store's CLI flags, by the option key each parses into. */
+export type StateStoreFlags = Readonly<Record<string, Flag.Flag<unknown>>>;
+
+/** What a store's {@link StateStoreFlags} parse into: each optional, by key. */
+export type StateStoreFlagValues<Flags> = {
+  readonly [K in keyof Flags]?: Flags[K] extends Flag.Flag<infer A> ? A : never;
+};
 
 /**
  * A provider's state store. `Options` is the store's own options interface,
@@ -158,31 +170,29 @@ export interface StateStoreImpl<Options = StateStoreOptions> {
  */
 export type StateStoreOptions = Readonly<Record<string, unknown>>;
 
-/** Which store a lifecycle operation acts on, under the profile core resolved. */
-export interface StateStoreTarget<Options = StateStoreOptions> {
-  /** The store's own options; defaults for any not given. */
-  readonly options?: Options;
-}
-
+/**
+ * A store's lifecycle operations. Each takes the store's own options spread
+ * into its input, defaults for any not given.
+ */
 export interface StateStoreLifecycle<Options = StateStoreOptions> {
   /** Provision the store, or adopt it when it exists. Idempotent. */
   readonly bootstrap?: (
-    input: StateStoreTarget<Options> & {
+    input: Options & {
       /** Redeploy an existing store instead of adopting it. */
       readonly force?: boolean;
     },
   ) => Effect.Effect<StateStoreBootstrap, ContributionFailure, ContributionServices>;
   /** Delete the store and its backing resources. Idempotent. */
   readonly teardown?: (
-    input: StateStoreTarget<Options>,
+    input: Options,
   ) => Effect.Effect<StateStoreTeardown, ContributionFailure, ContributionServices>;
   /** The store's past log entries, oldest first. */
   readonly logs?: (
-    input: StateStoreTarget<Options> & { readonly limit?: number; readonly since?: Date },
+    input: Options & { readonly limit?: number; readonly since?: Date },
   ) => Effect.Effect<ReadonlyArray<StateStoreLogEntry>, ContributionFailure, ContributionServices>;
   /** The store's log entries as they happen. */
   readonly tailLogs?: (
-    input: StateStoreTarget<Options>,
+    input: Options,
   ) => Stream.Stream<StateStoreLogEntry, ContributionFailure, ContributionServices>;
 }
 
@@ -230,7 +240,23 @@ export interface TestServices {
 }
 
 /** Declare a provider; the identity function, keeping its literal type. */
-export const make = <const P extends Contributions>(provider: P): P => provider;
+/**
+ * Each state store's `load` checked against its flags: the store must accept
+ * what they parse into.
+ */
+type CheckedStateStores<P> = P extends { readonly stateStores: infer Stores }
+  ? {
+      readonly stateStores: {
+        readonly [K in keyof Stores]: Stores[K] extends { readonly flags: infer Flags }
+          ? { readonly load: Lazy<StateStoreImpl<StateStoreFlagValues<Flags>>> }
+          : unknown;
+      };
+    }
+  : unknown;
+
+export const make = <const P extends Contributions>(
+  provider: P & NoInfer<CheckedStateStores<P>>,
+): P => provider;
 
 export class ContributionError extends Data.TaggedError("ContributionError")<{
   readonly message: string;

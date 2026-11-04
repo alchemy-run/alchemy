@@ -134,7 +134,8 @@ and `alchemy state` takes it with `--backend`:
 ```
 
 Each flag parses into the store's options under its key, and the store
-types those options itself:
+types those options itself. `Contributions.make` checks the two agree: a
+flag whose value the store doesn't accept under that key is a type error.
 
 ```typescript
 export interface StripeStateStoreOptions {
@@ -149,7 +150,9 @@ isn't given is `undefined`, so the store falls back to its own default: a missin
 name is a separate store. With the store contributed,
 `alchemy state list --backend stripe --name team-a` opens it from the
 profile alone, and an option the store has no flag for is an error. Stores
-that take the same flag share it on the command line.
+that take the same flag share it on the command line, and its help lists
+each store's description. A flag that clashes with one of `alchemy state`'s
+own, such as `--profile`, is left out with a warning.
 
 ## Add a store lifecycle
 
@@ -171,7 +174,8 @@ optional, and `alchemy state` reports the ones a store doesn't have:
 | `logs`      | `alchemy state logs`         |
 | `tailLogs`  | `alchemy state logs --tail`  |
 
-Each operation receives the store's `options`, and Alchemy provides the
+Each operation receives the store's options spread into its input, as in
+`bootstrap: ({ name, force }) => ...`, and Alchemy provides the
 profile's config and the provider's `auth`. The built-in stores are
 the reference:
 [`AWS/Alchemist/StateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/AWS/Alchemist/StateStore.ts)

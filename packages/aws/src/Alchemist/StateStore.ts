@@ -66,8 +66,8 @@ export interface S3StateStoreOptions {
  * needed to provision it ahead of time. S3 keeps no log stream to show.
  */
 export const lifecycle: StateStoreLifecycle<S3StateStoreOptions> = {
-  bootstrap: ({ options }) =>
-    bootstrapStateBucket(options?.name).pipe(
+  bootstrap: ({ name }) =>
+    bootstrapStateBucket(name).pipe(
       Effect.map(({ bucketName, accountId, region, existed }) => ({
         status: existed ? ("adopted" as const) : ("created" as const),
         store: bucketName,
@@ -75,8 +75,8 @@ export const lifecycle: StateStoreLifecycle<S3StateStoreOptions> = {
       })),
       Effect.provide(environment),
     ),
-  teardown: ({ options }) =>
-    teardownStateBucket(options?.name).pipe(
+  teardown: ({ name }) =>
+    teardownStateBucket(name).pipe(
       Effect.map(({ bucketName, deleted }) => ({ deleted: deleted ? [bucketName] : [] })),
       Effect.provide(environment),
     ),
