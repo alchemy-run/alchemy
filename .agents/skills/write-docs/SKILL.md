@@ -161,7 +161,9 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
   the Tunnel as an arrow through a dotted gap in the wall.
 - **Containment is a border, never an arrow.** An organization around its OUs
   and accounts, a Bucket around its objects, a branch around its database. An
-  arrow is only for something that moves or calls.
+  arrow is only for something that moves or calls. Never write containment into a
+  label either ("subnet in your VPC"): draw every layer, and don't drop
+  layers to make a smaller copy of a diagram the chapter already draws.
 - **A property is not a node.** An instance's type and image, or a Worker's
   tokens, go inside its box (`specs`), not in boxes of their own with arrows.
 - **Draw the platform's real model, in full.** An AWS organization is a tree of

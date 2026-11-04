@@ -143,12 +143,14 @@ Choose it for GPUs, custom daemons, software that expects a host, or steady load
 
 <Tree
   nodes={[
-    { id: "subnet", label: "subnet", type: "in your VPC", dashed: true },
+    { id: "vpc", label: "VPC", type: "your network" },
+    { id: "subnet", label: "public subnet", type: "us-east-1a", parent: "vpc", dashed: true },
+    { id: "sg", label: "security group", type: "allows :3000 in", parent: "subnet", dashed: true },
     {
       id: "i",
       label: "Server",
       type: "EC2 instance",
-      parent: "subnet",
+      parent: "sg",
       tone: "accent",
       specs: [
         ["type", "g5.xlarge · 1 GPU"],
