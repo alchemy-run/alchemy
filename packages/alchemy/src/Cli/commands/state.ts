@@ -8,7 +8,7 @@ import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
 import * as Stream from "effect/Stream";
 import * as Alchemist from "../../Alchemist/index.ts";
-import type { Contributions, StateStoreLogEntry } from "../../Contributions.ts";
+import type * as Contributions from "../../Contributions.ts";
 import * as Interaction from "../../Interaction.ts";
 import * as State from "../../State/index.ts";
 import {
@@ -28,43 +28,22 @@ const backend = Flag.String("backend").pipe(
   Flag.withDefault("configured"),
 );
 /**
- * One `--<option>` flag for every option a provider's state store declares,
- * such as `--name` or `--domain`. Which ones a backend takes is checked when
- * the store is opened.
+ * The flags of every provider's state store, such as `--name` or `--domain`.
+ * Stores that take the same flag share it, and the first one provides its
+ * help. Which ones a backend takes is checked when the store is opened.
  */
-const storeOptionFlags = (contributions: ReadonlyArray<Contributions>) => {
-  // option -> description -> the backends that describe it that way
-  const declared = new Map<string, Map<string, Array<string>>>();
-  for (const provider of contributions) {
-    for (const [backend, store] of Object.entries(provider.stateStores ?? {})) {
-      for (const [option, { description }] of Object.entries(store.options ?? {})) {
-        const descriptions = declared.get(option) ?? new Map<string, Array<string>>();
-        descriptions.set(description, [...(descriptions.get(description) ?? []), backend]);
-        declared.set(option, descriptions);
-      }
-    }
-  }
-  return Object.fromEntries(
-    [...declared].map(([option, descriptions]) => [
-      option,
-      Flag.String(option).pipe(
-        Flag.withDescription(
-          [...descriptions]
-            .map(([description, backends]) => `${description} (--backend ${backends.join(", ")})`)
-            .join("; "),
-        ),
-        Flag.optional,
-        Flag.map(Option.getOrUndefined),
-      ),
-    ]),
-  );
-};
+const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Contributions>) =>
+  contributions
+    .flatMap((provider) => Object.values(provider.stateStores ?? {}))
+    .reduce<Record<string, Flag.Flag<unknown>>>(
+      (flags, store) => Record.union(flags, store.flags ?? {}, (first) => first),
+      {},
+    );
 
 /** The store options `alchemy state` was given, shared with its subcommands. */
-class StoreOptions extends Context.Service<
-  StoreOptions,
-  Readonly<Record<string, string | undefined>>
->()("alchemy/Cli/state/StoreOptions") {}
+class StoreOptions extends Context.Service<StoreOptions, Contributions.StateStoreOptions>()(
+  "alchemy/Cli/state/StoreOptions",
+) {}
 
 const config = Flag.File("config").pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
@@ -451,7 +430,7 @@ const logsCommand = Command.make(
   instrumentCommand("state.logs")(
     Effect.fn(function* ({ tail, limit, since, ...args }) {
       const target = yield* lifecycleSource(args);
-      const format = (entry: StateStoreLogEntry) =>
+      const format = (entry: Contributions.StateStoreLogEntry) =>
         `${formatLocalTimestamp(entry.timestamp)} ${entry.message}`;
       if (tail) {
         yield* Interaction.info(`Tailing the ${args.backend} state store...`);
@@ -484,7 +463,7 @@ const unsafeCommand = Command.make("unsafe", {}).pipe(
  * `alchemy state`, sharing a `--<option>` flag with every subcommand for each
  * option the loaded providers' state stores declare.
  */
-export const stateCommand = (contributions: ReadonlyArray<Contributions>) =>
+export const stateCommand = (contributions: ReadonlyArray<Contributions.Contributions>) =>
   Command.make(
     "state",
     { main: config, envFile, profile, backend },

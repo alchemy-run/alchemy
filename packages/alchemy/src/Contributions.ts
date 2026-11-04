@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import type * as Command from "effect/cli/Command";
+import type * as Flag from "effect/cli/Flag";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -116,71 +117,74 @@ export interface StateStore {
   /** Shown when listing stores; no provider code loads to show it. */
   readonly description: string;
   /**
-   * What a profile alone can't tell the store, by option name: a store other
-   * than the account's default, or where it is served. The CLI takes each as
-   * `--<name> <value>` with `--backend`, and the store reads it from
-   * {@link StateStoreOptions}. Metadata only, so `alchemy state` builds its
-   * flags without loading the store:
+   * The flags `alchemy state` takes for this store with `--backend`, for what
+   * a profile alone can't tell it: a store other than the default, or where
+   * it is served. Each parses into the store's options under its key. Flags
+   * are built without loading the store, and leaving one out should parse to
+   * `undefined` so the store uses its default:
    *
    * ```ts
-   * options: {
-   *   name: { description: "The store's Worker name" },
-   *   domain: { description: "Hostname the store is served on" },
+   * flags: {
+   *   domain: Flag.String("domain").pipe(
+   *     Flag.withDescription("Hostname the store is served on"),
+   *     Flag.withDefault(undefined),
+   *   ),
    * },
    * ```
+   *
+   * Stores that take the same flag share it on the command line, so the
+   * first one declared provides its help text.
    */
-  readonly options?: Readonly<Record<string, StateStoreOption>>;
+  readonly flags?: Readonly<Record<string, Flag.Flag<unknown>>>;
   /** The store itself, loaded when it's used. */
-  readonly load: Lazy<StateStoreImpl>;
-}
-
-/** One setting a state store takes from the CLI, see {@link StateStore.options}. */
-export interface StateStoreOption {
-  /** Shown in `alchemy state` help. */
-  readonly description: string;
-}
-
-export interface StateStoreImpl {
-  /** The store's `State` layer: the provider's own `state` function. */
-  readonly layer: (
-    options?: StateStoreOptions,
-  ) => Layer.Layer<State, ContributionFailure, ContributionServices>;
-  /** Provisioning, teardown and logs, for the operations the store supports. */
-  readonly lifecycle?: StateStoreLifecycle;
+  readonly load: Lazy<StateStoreImpl<any>>;
 }
 
 /**
- * The values given for a store's {@link StateStore.options}, by option name.
- * Only declared options appear, and only when they were set; the store uses
- * its default for any that is missing.
+ * A provider's state store. `Options` is the store's own options interface,
+ * what its layer and lifecycle accept; the CLI fills it from the store's
+ * {@link StateStore.flags}.
  */
-export type StateStoreOptions = Readonly<Record<string, string | undefined>>;
-
-/** Which store a lifecycle operation acts on, under the profile core resolved. */
-export interface StateStoreTarget {
-  /** The store's {@link StateStore.options}; defaults for any not given. */
-  readonly options?: StateStoreOptions;
+export interface StateStoreImpl<Options = StateStoreOptions> {
+  /** The store's `State` layer: the provider's own `state` function. */
+  readonly layer: (
+    options?: Options,
+  ) => Layer.Layer<State, ContributionFailure, ContributionServices>;
+  /** Provisioning, teardown and logs, for the operations the store supports. */
+  readonly lifecycle?: StateStoreLifecycle<Options>;
 }
 
-export interface StateStoreLifecycle {
+/**
+ * Options given to a store, by key. Only keys the store has flags for appear,
+ * and only when they were set; the store uses its default for the rest.
+ */
+export type StateStoreOptions = Readonly<Record<string, unknown>>;
+
+/** Which store a lifecycle operation acts on, under the profile core resolved. */
+export interface StateStoreTarget<Options = StateStoreOptions> {
+  /** The store's own options; defaults for any not given. */
+  readonly options?: Options;
+}
+
+export interface StateStoreLifecycle<Options = StateStoreOptions> {
   /** Provision the store, or adopt it when it exists. Idempotent. */
   readonly bootstrap?: (
-    input: StateStoreTarget & {
+    input: StateStoreTarget<Options> & {
       /** Redeploy an existing store instead of adopting it. */
       readonly force?: boolean;
     },
   ) => Effect.Effect<StateStoreBootstrap, ContributionFailure, ContributionServices>;
   /** Delete the store and its backing resources. Idempotent. */
   readonly teardown?: (
-    input: StateStoreTarget,
+    input: StateStoreTarget<Options>,
   ) => Effect.Effect<StateStoreTeardown, ContributionFailure, ContributionServices>;
   /** The store's past log entries, oldest first. */
   readonly logs?: (
-    input: StateStoreTarget & { readonly limit?: number; readonly since?: Date },
+    input: StateStoreTarget<Options> & { readonly limit?: number; readonly since?: Date },
   ) => Effect.Effect<ReadonlyArray<StateStoreLogEntry>, ContributionFailure, ContributionServices>;
   /** The store's log entries as they happen. */
   readonly tailLogs?: (
-    input: StateStoreTarget,
+    input: StateStoreTarget<Options>,
   ) => Stream.Stream<StateStoreLogEntry, ContributionFailure, ContributionServices>;
 }
 

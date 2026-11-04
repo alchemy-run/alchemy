@@ -70,7 +70,13 @@ const environment = stateEnvironment();
  * also creates its bucket on first use, so bootstrapping is only needed to
  * provision it ahead of time (CI).
  */
-export const lifecycle: StateStoreLifecycle = {
+/** The Cloud Storage state store's options. */
+export interface GcpStateStoreOptions {
+  /** A store other than the default, by name. */
+  readonly name?: string;
+}
+
+export const lifecycle: StateStoreLifecycle<GcpStateStoreOptions> = {
   bootstrap: ({ options }) =>
     bootstrapStateBucket(options?.name).pipe(
       Effect.map(({ bucketName, project, region, existed }) => ({
@@ -88,7 +94,7 @@ export const lifecycle: StateStoreLifecycle = {
 };
 
 /** The state store GCP contributes. */
-export const stateStore: StateStoreImpl = {
+export const stateStore: StateStoreImpl<GcpStateStoreOptions> = {
   layer: (options) => state({ name: options?.name }),
   lifecycle,
 };

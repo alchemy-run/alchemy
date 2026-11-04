@@ -43,7 +43,7 @@ export type StateSource =
       /**
        * The store's own options, such as a store other than the account's
        * default or the hostname it is served on. Each must be one the
-       * backend declares.
+       * backend has a flag for.
        */
       readonly options?: Contributions.StateStoreOptions;
     } & Pick<Target, "profile" | "envFile">);
@@ -65,9 +65,9 @@ const findBackend = Effect.fn(function* (backend: string) {
   return store;
 });
 
-/** The options a source sets, failing on any its backend doesn't declare. */
+/** The options a source sets, failing on any its backend has no flag for. */
 const storeOptions = Effect.fn(function* (source: ProviderSource, store: Contributions.StateStore) {
-  const declared = store.options ?? {};
+  const declared = store.flags ?? {};
   const given = Record.filter(source.options ?? {}, Predicate.isNotUndefined);
   const unknown = Record.findFirst(given, (_, option) => !Record.has(declared, option));
   if (Option.isSome(unknown)) {

@@ -103,7 +103,13 @@ const environment = stateEnvironment();
  * `alchemy state`. The store also creates its table on first use, so
  * bootstrapping is only needed to provision it ahead of time.
  */
-export const lifecycle: StateStoreLifecycle = {
+/** The DynamoDB state store's options. */
+export interface DynamoDBStateStoreOptions {
+  /** A store other than the default, by name. */
+  readonly name?: string;
+}
+
+export const lifecycle: StateStoreLifecycle<DynamoDBStateStoreOptions> = {
   bootstrap: ({ options }) =>
     bootstrapStateTable(options?.name).pipe(
       Effect.map(({ tableName, accountId, region, existed }) => ({
@@ -117,7 +123,7 @@ export const lifecycle: StateStoreLifecycle = {
 };
 
 /** The state store AWS contributes, as `--backend aws`. */
-export const stateStore: StateStoreImpl = {
+export const stateStore: StateStoreImpl<DynamoDBStateStoreOptions> = {
   layer: (options) => dynamoDBState({ name: options?.name }),
   lifecycle,
 };

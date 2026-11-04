@@ -1,4 +1,5 @@
 import * as Contributions from "alchemy/Contributions";
+import * as Flag from "effect/cli/Flag";
 
 export default Contributions.make({
   name: "cloudflare",
@@ -9,11 +10,15 @@ export default Contributions.make({
   stateStores: {
     cloudflare: {
       description: "State-store Worker in the profile's Cloudflare account",
-      options: {
-        name: { description: "The store's full Worker name, for a store other than the default" },
-        domain: {
-          description: "Hostname the store is served on, when it has a custom domain",
-        },
+      flags: {
+        name: Flag.String("name").pipe(
+          Flag.withDescription("The store's full Worker name, for a store other than the default"),
+          Flag.withDefault(undefined),
+        ),
+        domain: Flag.String("domain").pipe(
+          Flag.withDescription("Hostname the store is served on, when it has a custom domain"),
+          Flag.withDefault(undefined),
+        ),
       },
       load: Contributions.lazy(
         () => import("./Alchemist/StateStore.ts"),

@@ -59,7 +59,13 @@ const environment = stateEnvironment();
  * The store also creates its bucket on first use, so bootstrapping is only
  * needed to provision it ahead of time. S3 keeps no log stream to show.
  */
-export const lifecycle: StateStoreLifecycle = {
+/** The S3 state store's options. */
+export interface S3StateStoreOptions {
+  /** A store other than the default, by name. */
+  readonly name?: string;
+}
+
+export const lifecycle: StateStoreLifecycle<S3StateStoreOptions> = {
   bootstrap: ({ options }) =>
     bootstrapStateBucket(options?.name).pipe(
       Effect.map(({ bucketName, accountId, region, existed }) => ({
@@ -77,7 +83,7 @@ export const lifecycle: StateStoreLifecycle = {
 };
 
 /** The S3 state store AWS contributes, as `--backend aws-s3`. */
-export const s3StateStore: StateStoreImpl = {
+export const s3StateStore: StateStoreImpl<S3StateStoreOptions> = {
   layer: (options) => s3State({ name: options?.name }),
   lifecycle,
 };

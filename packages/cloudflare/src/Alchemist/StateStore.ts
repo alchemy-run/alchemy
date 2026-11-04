@@ -48,8 +48,16 @@ const logEntry = (line: {
   readonly message: string;
 }): StateStoreLogEntry => ({ timestamp: line.timestamp, message: line.message });
 
+/** The state-store Worker's options. */
+export interface CloudflareStateStoreOptions {
+  /** The store's full Worker name, for a store other than the default. */
+  readonly name?: string;
+  /** Hostname the store is served on, when it has a custom domain. */
+  readonly domain?: string;
+}
+
 /** The state-store Worker's lifecycle, for `Alchemist.State` and `alchemy state`. */
-export const lifecycle: StateStoreLifecycle = {
+export const lifecycle: StateStoreLifecycle<CloudflareStateStoreOptions> = {
   bootstrap: ({ options, force }) =>
     Effect.gen(function* () {
       const { layer, accountId, workerName, profile } = yield* stateStoreScope(options?.name);
@@ -111,9 +119,7 @@ export const lifecycle: StateStoreLifecycle = {
 };
 
 /** The state store Cloudflare contributes. */
-export const stateStore: StateStoreImpl = {
-  // `--name` is the store's full Worker name; `--domain` the hostname it is
-  // served on, as `Cloudflare.state({ domain })` configures it.
+export const stateStore: StateStoreImpl<CloudflareStateStoreOptions> = {
   layer: (options) => state({ workerName: options?.name, domain: options?.domain }),
   lifecycle,
 };

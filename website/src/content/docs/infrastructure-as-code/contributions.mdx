@@ -116,24 +116,41 @@ import { state } from "./State.ts";
 export const stateStore: StateStoreImpl = { layer: state };
 ```
 
-`state` returns a `State` layer from the store's options. Declare the ones a
-profile alone can't tell it, and the CLI takes each as a flag with
-`--backend`:
+`state` returns a `State` layer from the store's own options interface.
+For the ones a profile alone can't tell it, contribute an effect CLI flag,
+and `alchemy state` takes it with `--backend`:
 
 ```diff lang="typescript"
++import * as Flag from "effect/cli/Flag";
+
    stripe: {
      description: "State in the profile's Stripe account",
-+    options: {
-+      name: { description: "A store other than the account's default, by name" },
++    flags: {
++      name: Flag.String("name").pipe(
++        Flag.withDescription("A store other than the account's default, by name"),
++        Flag.withDefault(undefined),
++      ),
 +    },
      load: Contributions.lazy(
 ```
 
-An option that isn't given is missing from the map, so the store falls back
-to its default: a missing `name` is the account's default store, and any
-other name is a separate store. With the store contributed,
+Each flag parses into the store's options under its key, and the store
+types those options itself:
+
+```typescript
+export interface StripeStateStoreOptions {
+  readonly name?: string;
+}
+
+export const stateStore: StateStoreImpl<StripeStateStoreOptions> = { layer: state };
+```
+
+A flag that isn't given is `undefined`, so the store falls back to its
+default: a missing `name` is the account's default store, and any other
+name is a separate store. With the store contributed,
 `alchemy state list --backend stripe --name team-a` opens it from the
-profile alone, and an option the store doesn't declare is an error.
+profile alone, and an option the store has no flag for is an error. Stores
+that take the same flag share it on the command line.
 
 ## Add a store lifecycle
 
@@ -141,8 +158,8 @@ A store that needs provisioning adds a `lifecycle`. Each operation is
 optional, and `alchemy state` reports the ones a store doesn't have:
 
 ```diff lang="typescript"
--export const stateStore: StateStoreImpl = { layer: state };
-+export const stateStore: StateStoreImpl = {
+-export const stateStore: StateStoreImpl<StripeStateStoreOptions> = { layer: state };
++export const stateStore: StateStoreImpl<StripeStateStoreOptions> = {
 +  layer: state,
 +  lifecycle: { bootstrap, teardown },
 +};
