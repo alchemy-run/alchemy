@@ -4,23 +4,27 @@ description: How Lambda Functions, Lambda Web Functions, ECS, EKS and EC2 differ
 ---
 
 import DAG from "../../../../components/DAG.astro";
+import Responsibility from "../../../../components/Responsibility.astro";
 
 AWS gives you several places to run code. They differ in one main way: how much of the machine AWS manages for you, and so how much you decide yourself. Every one of them runs the same kind of Alchemy program, takes the same bindings, and gets its IAM role from them.
 
-<DAG
-  nodes={[
-    { id: "lambda", label: "Lambda Function", type: "per invocation", col: 0, row: 0 },
-    { id: "web", label: "Web Function", type: "HTTP server", col: 0, row: 1 },
-    { id: "ecs", label: "ECS", type: "containers", col: 1, row: 0 },
-    { id: "eks", label: "EKS", type: "Kubernetes", col: 1, row: 1 },
-    { id: "ec2", label: "EC2", type: "machines", col: 2, row: 0 },
+<Responsibility
+  platform="AWS"
+  columns={[
+    { label: "Lambda", type: "per invocation" },
+    { label: "Web Function", type: "HTTP server" },
+    { label: "ECS", type: "on Fargate" },
+    { label: "EKS", type: "Auto Mode" },
+    { label: "EC2", type: "a machine" },
   ]}
-  groups={[
-    { id: "fn", label: "Functions", nodes: ["lambda", "web"] },
-    { id: "ctr", label: "Containers", nodes: ["ecs", "eks"] },
-    { id: "vm", label: "Machines", nodes: ["ec2"] },
+  rows={[
+    { label: "your program", you: [true, true, true, true, true] },
+    { label: "scaling", you: [false, false, true, true, true] },
+    { label: "image & runtime", you: [false, false, true, true, true] },
+    { label: "orchestration", you: [false, false, false, true, true] },
+    { label: "OS & patching", you: [false, false, false, false, true] },
+    { label: "hardware", you: [false, false, false, false, false] },
   ]}
-  edges={[]}
   caption="From left to right, AWS manages less and you decide more."
 />
 

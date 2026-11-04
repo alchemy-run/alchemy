@@ -59,6 +59,12 @@ Use `website/src/components/DAG.astro`. Hubs have no diagram; their docs map is
 What is page's diagram shows the platform's structure (see SKILL.md), drawn
 with `groups` on the grid.
 
+- **Not every idea is a graph.** Pick the visual for what the section explains.
+  A spectrum of who manages what (choosing a runtime) is
+  `website/src/components/Responsibility.astro`: runtimes as columns, layers as
+  rows, the cells you manage filled. A group of boxes with no edges says
+  nothing; when a `DAG` would have no arrows and no meaningful borders, it's
+  the wrong component. Build a small purpose-made one instead.
 - **Auto layout** (`layer` on nodes) suits a left-to-right flow. **Grid layout**
   (`col` and `row` on every node) suits anything with borders or two dimensions.
 - **Boundaries are `groups`**: `{ id, label, nodes, parent?, dashed? }`. Nest a
