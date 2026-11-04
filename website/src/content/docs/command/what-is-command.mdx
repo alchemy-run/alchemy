@@ -7,9 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 Not everything a deploy needs happens in a cloud. A frontend has to be built before it's uploaded. Code generation has to run before a bundle that imports it. A dev server has to be running while you develop. Command puts those local processes into your Stack, as resources, so they run in the right order and only when they need to.
 
-This page introduces the three kinds of command once each, then how Alchemy decides whether to run one again.
-
-Here is the whole picture. A build runs before the site that uploads its output. An exec runs before what depends on its effects. A dev server runs only under `alchemy dev`.
+A build runs before the site that uploads its output. An exec runs before what depends on its effects. A dev server runs only under `alchemy dev`.
 
 <DAG
   nodes={[

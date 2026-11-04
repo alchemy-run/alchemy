@@ -7,7 +7,7 @@ import DAG from "../../../../components/DAG.astro";
 
 A custom domain needs three things. **DNS** has to send the name to the thing serving it. A **certificate** has to prove to browsers that you own the name. And the thing serving it, CloudFront, a load balancer or API Gateway, has to accept the name and present the certificate.
 
-On AWS, DNS is **Route 53** and certificates come from **ACM**. This chapter starts with how the three fit together, then covers the `domain` prop that sets them all up, domains whose DNS lives somewhere else, and the pieces underneath for when you build it yourself.
+On AWS, DNS is **Route 53** and certificates come from **ACM**.
 
 ## Zone, certificate, record
 

@@ -7,7 +7,7 @@ import DAG from "../../../../components/DAG.astro";
 
 DynamoDB is a database of **items** looked up by **key**. A read or write by key takes a few milliseconds whether the table holds a hundred items or a billion, and you never size a server for it: by default you pay per request.
 
-That speed comes from one rule: you can only look items up by their keys. So designing a table starts from the questions you'll ask it. This chapter starts there, with keys, then builds a table piece by piece: declaring it, reading and writing items, querying a partition, adding indexes for other questions, expiring items and reacting to changes. It ends with how changes to a table are deployed.
+That speed comes from one rule: you can only look items up by their keys. So designing a table starts from the questions you'll ask it.
 
 ## A table is items under keys
 

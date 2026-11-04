@@ -7,9 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 A git host is the server your `git clone` and `git push` talk to. It stores repositories, sends a client the objects it's missing, accepts new ones, and moves branches only when the push is valid. Around that, most hosts add names like `acme/api`, an API, and pull requests.
 
-This page introduces the concepts a git host is built from, once each, and how `@alchemy.run/git` builds one out of them. The examples follow one host: a Worker serving git over HTTP, with each repository in a Durable Object and its bulk bytes in R2.
-
-Here is the whole picture, which the rest of this page explains piece by piece. A client speaks git's HTTP protocol to the Worker. The Worker checks who's calling, resolves the name to a repository, and the repository stores objects and moves refs, keeping large packs in a blob store.
+Take one host: a Worker serving git over HTTP, with each repository in a Durable Object and its bulk bytes in R2. A client speaks git's HTTP protocol to the Worker. The Worker checks who's calling, resolves the name to a repository, and the repository stores objects and moves refs, keeping large packs in a blob store.
 
 <DAG
   nodes={[

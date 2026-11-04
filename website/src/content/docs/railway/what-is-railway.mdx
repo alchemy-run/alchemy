@@ -5,9 +5,9 @@ description: The concepts behind Railway — workspaces, projects, environments,
 
 import DAG from "../../../components/DAG.astro";
 
-This page introduces the concepts you meet on Railway, once each, and how Alchemy models them. The examples follow one small app: an API service with a Postgres database and a Volume, in one project.
+Railway runs containers for you. You put **services** in a **project**: your API, a worker, a Postgres database, a Redis cache. Railway builds each one, runs it, gives it a URL, and connects the services in a project over a private network. You pay for the CPU and memory they actually use.
 
-Here is the whole picture, which the rest of this page explains piece by piece. A workspace holds the project. The project runs a full copy of its services in each environment, and services in one environment reach each other over its private network.
+Take one small app: an API service with a Postgres database and a Volume, in one project. A workspace holds the project. The project runs a full copy of its services in each environment, and services in one environment reach each other over its private network.
 
 <DAG
   nodes={[
@@ -126,7 +126,7 @@ export default Alchemy.Stack(
 
 ## How @alchemy.run/railway models these concepts
 
-Each concept on this page is something your Stack declares.
+Each of these concepts is something your Stack declares.
 
 Your API token picks the workspace, and `Railway.providers()` deploys into it. A project and its environments are declarations. A service is your program, an image or a repository, running in the project. Databases, volumes, buckets, variables and domains are declarations like any other, and bindings hand a service the connection details for what it uses.
 

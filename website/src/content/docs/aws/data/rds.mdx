@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 RDS runs relational databases for you: Postgres, MySQL, MariaDB and others, with backups, patching and failover handled by AWS. **Aurora** is AWS's own engine behind the Postgres and MySQL interfaces. It separates compute from storage, so a cluster's instances share one copy of the data, replicated across three Availability Zones.
 
-This chapter starts with the parts an Aurora database is made of and where it lives, then builds one piece by piece: creating the cluster, running migrations, connecting from a runtime with a driver or without one, and adding readers, a proxy and capacity. It ends with how to keep the data safe across deploys.
-
 ## A cluster is storage plus instances
 
 An Aurora **cluster** owns the storage: one volume, grown automatically, kept in six copies across three zones. **Instances** are the compute that run queries against it. One instance is the **writer**. Others are **readers**, which serve reads from the same storage and take over if the writer fails.

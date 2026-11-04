@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 A Queue carries messages from one Worker to another. The **producer** sends a message and returns at once. Cloudflare holds it, and delivers it in a **batch** to the **consumer** Worker, which does the work. A slow job no longer slows the request that asked for it, and a burst of work waits in the Queue instead of overwhelming the consumer.
 
-This chapter starts with how messages are delivered and retried, then builds a jobs Queue piece by piece: declaring it, sending to it, consuming from it, tuning batches, and catching messages that keep failing. It ends with streams of messages and with events Cloudflare itself sends to a Queue.
-
 ## Delivered at least once, in batches
 
 The consumer receives messages in batches, a few or a hundred at a time. When it finishes a batch, the messages are **acknowledged** and removed. When it fails, they're **retried** later. After too many attempts, a message moves to a **dead-letter queue**, if the Queue has one, or is dropped.

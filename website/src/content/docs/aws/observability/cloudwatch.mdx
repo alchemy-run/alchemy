@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 CloudWatch is where AWS reports on itself. Every service publishes **metrics** to it without being asked: a Function's invocations and errors, a Queue's depth, a Table's throttled requests. Every Function writes its **logs** to it. **Alarms** watch metrics and tell you when something crosses a line, and **dashboards** put the metrics you care about on one screen.
 
-This chapter starts with where metrics and logs come from, then builds monitoring for an API piece by piece: an alarm on its errors, a notification when the alarm fires, a dashboard, and a single alarm that combines several. It ends with your own application's telemetry.
-
 ## Metrics come from every service
 
 A **metric** is a series of numbers over time, identified by a **namespace**, a name and **dimensions**. Lambda reports `Errors` in the `AWS/Lambda` namespace, with a `FunctionName` dimension for each Function. SQS reports `ApproximateNumberOfMessagesVisible` per `QueueName`.

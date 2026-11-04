@@ -9,8 +9,6 @@ ECS runs containers. You describe a container, its image, CPU and memory, and EC
 
 A container is a whole process, so it fits work that doesn't fit an invocation: a server that holds WebSockets or database connections open, a worker that loops forever, a job that runs for hours, a program that already ships as an image.
 
-This chapter starts with the four pieces ECS is made of, then runs a server, your own Effect program, one-off and scheduled jobs, and background work inside a container. It ends with how containers are deployed and how to pay less for them.
-
 ## Clusters, task definitions, tasks and services
 
 A **task definition** is a blueprint: which image, how much CPU and memory, which ports, which IAM role. A **task** is a running container started from it, and it runs until its process exits. A **service** keeps a number of tasks running, replaces any that stop, and optionally puts a load balancer in front of them. All of them run in a **cluster**.

@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 Workers KV is a key-value store copied to every city in Cloudflare's network. A Worker reads a key from the copy nearest the request, so reads are fast everywhere. Writes go to a central store and spread out from there.
 
-This chapter starts with what that design means for reads and writes, then declares a namespace and builds a cache piece by piece: reading and writing values, typed reads, metadata and expiry, and listing keys. It ends with the access levels a Worker can ask for.
-
 ## Fast reads, eventual writes
 
 A value written in one city reaches the others within about a minute. Until it does, a read elsewhere can return the old value, or nothing.

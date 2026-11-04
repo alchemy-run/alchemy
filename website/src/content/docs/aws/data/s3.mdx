@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 S3 stores files, called **objects**, in containers called **Buckets**. An object is any sequence of bytes, from a few characters to five terabytes, stored under a **key** you choose. Buckets hold as many objects as you put in them, and you pay for what you store and transfer.
 
-This chapter starts with what a Bucket is and how objects are addressed, then builds the file store from the [tutorial](/aws/tutorial/part-2) piece by piece: writing, reading and listing objects, handing out links that work without credentials, and reacting to new uploads. It ends with serving files publicly and deleting a Bucket.
-
 ## A Bucket holds objects under keys
 
 A Bucket is a flat map from keys to objects. A key is just a string: `avatars/sam.png`, `reports/2026/q1.pdf`, `hello.txt`.

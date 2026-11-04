@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 A Worker is a program Cloudflare runs on every machine in its network. A request goes to the city nearest the person who sent it, and a Worker there handles it. There's no region to choose, no server to size, and nothing running while nobody calls it.
 
-This chapter starts with how a Worker runs, then declares one and builds it out: binding resources, calling other Workers, serving static assets, putting it on your domain, and configuring it. It ends with background work and versions.
-
 ## How a Worker runs
 
 Workers run in **isolates**: lightweight sandboxes inside one V8 process, the JavaScript engine Chrome uses. Starting an isolate takes milliseconds, so a Worker can start for the first request in a city and still answer quickly. Many Workers, from many customers, share one process, each isolated from the others.

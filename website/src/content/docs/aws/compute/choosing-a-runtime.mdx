@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 AWS gives you several places to run code. They differ in one main way: how much of the machine AWS manages for you, and so how much you decide yourself. Every one of them runs the same kind of Alchemy program, takes the same bindings, and gets its IAM role from them.
 
-This chapter walks from the most managed runtime to the least, says what each one is good at, and ends with how to mix them in one app.
-
 <DAG
   nodes={[
     { id: "lambda", label: "Lambda Function", type: "per invocation", col: 0, row: 0 },

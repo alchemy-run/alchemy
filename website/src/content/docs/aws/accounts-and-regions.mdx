@@ -7,8 +7,6 @@ import DAG from "../../../components/DAG.astro";
 
 Every AWS resource lives in one account and, for most services, one region. Before you create anything, you decide which account and which region it goes to.
 
-This chapter starts with what an account is for and how to lay accounts out, then covers regions and Availability Zones, and ends with how a profile and a stage decide where each deploy lands.
-
 ## An account is an isolation boundary
 
 An AWS account holds resources, the identities that may use them, and the bill for both. Two accounts share nothing unless you set it up: a role in one can't read a Bucket in the other, and a runaway Lambda in one never touches the other's quotas.

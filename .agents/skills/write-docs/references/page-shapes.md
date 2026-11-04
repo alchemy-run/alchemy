@@ -42,21 +42,22 @@ Every hub has the same five parts, in order:
 `<provider>/what-is-<provider>.mdx`, titled "What is X?". The model is
 `domain/what-is-ddd.mdx` and `aws/what-is-aws.mdx`.
 
-1. **No opening description.** The hub, the page right before it, already says
-   what the platform is. Start with the framing line, so the two pages never
-   open the same way.
-2. One framing line: "This page introduces the concepts you meet on X, once
-   each, and how Alchemy models them. The examples follow one small app: …"
-3. "Here is the whole picture…", then a DAG of that app showing the platform's
+1. **A paragraph on the platform's model**: how its pieces fit, in its own
+   terms (AWS: each service creates resources in your account, and IAM checks
+   every call). It may overlap the hub's introduction; never write a sentence
+   about the page instead.
+2. **The example app and the whole picture, in one paragraph**: "Take one small
+   app: a Lambda Function that stores files in an S3 Bucket… Your profile signs
+   you in to an account…", then a DAG of that app showing the platform's
    boundaries (account, region, organization) as `groups`.
-4. **One `##` per concept, in the order a newcomer meets them**: account or
+3. **One `##` per concept, in the order a newcomer meets them**: account or
    organization, access, regions, compute, storage, messaging, networking,
    observability, then state ("Alchemy's record in your account"). Each section
    bolds the term, explains it in platform terms, shows the smallest snippet
    if there is an Alchemy resource for it, and ends with a "See [chapter]" link.
-5. **"How @alchemy.run/x models these concepts"**: one paragraph mapping
+4. **"How @alchemy.run/x models these concepts"**: one paragraph mapping
    concepts to resources, bindings and profiles.
-6. A "Next" line pointing to the tutorial or getting started.
+5. A "Next" line pointing to the tutorial or getting started.
 
 The examples are illustrative. Don't claim they match a tutorial unless you
 checked.

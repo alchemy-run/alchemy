@@ -5,8 +5,6 @@ description: Send email with SES — verify identities, send from a Lambda with 
 
 SES sends email for you. Before it sends from an address, you prove you own it: the address, or the whole domain, becomes a verified **identity**. A runtime then sends through that identity with a binding, and SES handles delivery, bounces and complaints.
 
-This chapter starts with identities and the sandbox every new account begins in, then verifies a domain and sends from a Lambda Function. It goes on to the pieces you need as volume grows: letting other accounts send as you, contact lists, dedicated IPs, tenants, regions, account settings and deliverability.
-
 ## Identities and reputation
 
 An identity is a domain like `mail.example.com` or a single address. A domain identity is verified with **DKIM**: SES gives you three keys to publish as DNS records, and signs every message with them, so receiving servers can check the mail really came from your domain.

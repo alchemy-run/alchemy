@@ -5,9 +5,9 @@ description: The concepts behind AWS — accounts, regions, IAM identities and p
 
 import DAG from "../../../components/DAG.astro";
 
-This page introduces the concepts you meet on AWS, once each, and how Alchemy models them. The examples follow one small app: a Lambda Function that stores files in an S3 Bucket and queues jobs for a second Function.
+Amazon Web Services (AWS) is a cloud platform with services for databases, queues, object storage, functions, containers, virtual machines, networks, DNS and more. Each service creates **resources** in your **account**, and every call to a resource is checked against **IAM**, the service that decides who may do what.
 
-Here is the whole picture, which the rest of this page explains piece by piece. Your profile signs you in to an account and sets a default region. Inside it, a Function runs as a role, and the role's policy lets it reach the Bucket and the Queue. The Queue in turn invokes the worker.
+Take one small app: a Lambda Function that stores files in an S3 Bucket and queues jobs for a second Function. Your profile signs you in to an account and sets a default region. Inside it, a Function runs as a role, and the role's policy lets it reach the Bucket and the Queue. The Queue in turn invokes the worker.
 
 <DAG
   nodes={[
@@ -238,7 +238,7 @@ export default Alchemy.Stack(
 
 ## How @alchemy.run/aws models these concepts
 
-Each concept on this page is something your Stack declares or something Alchemy does for you.
+Each of these concepts is something your Stack declares or something Alchemy does for you.
 
 Your profile signs in to the account and sets the default region, and `AWS.providers()` deploys there. Every resource is a declaration like `AWS.SQS.Queue("Jobs")`, named and tagged per stage. Every runtime is a class that holds its own code, and its execution role is generated from the bindings it uses. Event sources are bindings too. Networks, edge and monitoring are resources like any other, declared next to the code that needs them.
 

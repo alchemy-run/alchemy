@@ -5,9 +5,9 @@ description: The concepts behind Hetzner Cloud — projects, locations, Servers,
 
 import DAG from "../../../components/DAG.astro";
 
-This page introduces the concepts you meet on Hetzner, once each, and how Alchemy models them. The examples follow one small app: an API running on a Server, keeping its data on a Volume, behind a firewall and a domain.
+Hetzner Cloud rents you virtual machines, called **Servers**, by the hour, at a fraction of what the large clouds charge. Around them it offers just what servers need: disks, private networks, firewalls, load balancers, IP addresses and DNS. There are no managed queues or functions. You run your own programs on your own machines.
 
-Here is the whole picture, which the rest of this page explains piece by piece. Your API token reaches one project. Inside it, a Server runs your Service, a Volume holds its data, a firewall guards it, and DNS points your domain at it.
+Take one small app: an API running on a Server, keeping its data on a Volume, behind a firewall and a domain. Your API token reaches one project. Inside it, a Server runs your Service, a Volume holds its data, a firewall guards it, and DNS points your domain at it.
 
 <DAG
   nodes={[
@@ -114,7 +114,7 @@ export default Alchemy.Stack(
 
 ## How @alchemy.run/hetzner models these concepts
 
-Each concept on this page is something your Stack declares.
+Each of these concepts is something your Stack declares.
 
 Your API token picks the project, and `Hetzner.providers()` deploys into it. A Server is a declaration. A Service is your program on a Server, deployed over SSH and run by systemd. Volumes, networks, firewalls, load balancers, addresses and DNS records are declarations like any other, next to the Server they serve.
 

@@ -5,9 +5,9 @@ description: The concepts behind Kubernetes — clusters, nodes, the API server,
 
 import DAG from "../../../components/DAG.astro";
 
-This page introduces the concepts you meet on Kubernetes, once each, and how Alchemy models them. The examples follow one small app: a web server with two replicas behind a Service, and a nightly job, on a cluster that might be on your laptop or in a cloud.
+Kubernetes runs containers on a group of machines and keeps them running. You tell it what should exist: three copies of this server, a job that runs every night, an address in front of the server. It works continuously to make the cluster match, restarting what crashes and rescheduling what was on a machine that died.
 
-Here is the whole picture, which the rest of this page explains piece by piece. You send objects to the cluster's API server, which keeps them in a namespace. The Deployment creates Pods, the Service selects them, and the CronJob creates a Job on schedule.
+Take one small app: a web server with two replicas behind a Service, and a nightly job, on a cluster that might be on your laptop or in a cloud. You send objects to the cluster's API server, which keeps them in a namespace. The Deployment creates Pods, the Service selects them, and the CronJob creates a Job on schedule.
 
 <DAG
   nodes={[
@@ -112,7 +112,7 @@ See [Helm charts](/kubernetes/objects/helm-charts) and [Manifests](/kubernetes/o
 
 ## How @alchemy.run/kubernetes models these concepts
 
-Each concept on this page is something your Stack declares.
+Each of these concepts is something your Stack declares.
 
 A cluster is a value every resource takes, from a local cluster, a kubeconfig, or a managed cluster declared in the same Stack, like EKS. Deployments and Jobs are resources that build their images and create the objects around them. Anything else is a Manifest or a Helm chart. Alchemy applies them all with server-side apply, records them in its state, and deletes them on destroy, so there's no YAML to keep and no `kubectl apply` to run.
 

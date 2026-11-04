@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 A Bucket can tell you when something happens to its objects. Each time an object is created, deleted or restored, S3 sends a **notification** naming the Bucket, the key and the event. A Function that receives them can make a thumbnail of every uploaded image, index every new document or scan every file for viruses, without the uploader doing anything but upload.
 
-This chapter starts with how a notification reaches a Function, then builds a thumbnail worker piece by piece: subscribing, choosing which events to receive, and processing each object. It ends with what to watch for when the Function writes back to the same Bucket.
-
 ## S3 invokes the Function
 
 Notifications are pushed. S3 invokes the Function directly, with a batch of notifications, shortly after each change.

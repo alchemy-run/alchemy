@@ -9,8 +9,6 @@ EventBridge routes **events**. A producer puts an event on a **bus**, and **rule
 
 AWS services publish their own events to every account's default bus: an object created, an instance stopped, a task that failed. **EventBridge Scheduler** is the same idea driven by time: it invokes a target on a rate, a cron expression or a single date.
 
-This chapter starts with how events are matched, then builds an orders bus piece by piece: publishing events, consuming them in a Function, routing them with no code at all, and reacting to AWS's own events. It ends with schedules.
-
 ## Rules match events by content
 
 Every event has a `source`, a `detail-type` and a JSON `detail`. A rule's **event pattern** lists the values it matches, and a matching event goes to the rule's targets:

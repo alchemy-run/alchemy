@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 A **VPC** is a private network of your own inside an AWS region. Containers, virtual machines, databases and caches run inside one, and the VPC decides what can reach them: from the internet, from each other, and from AWS's own services.
 
-This chapter starts with which parts of an app need a VPC, then explains the pieces a VPC is made of: subnets, route tables, gateways, security groups and endpoints. It builds the usual layout with the `Network` helper, then the same layout by hand.
-
 ## Who needs a VPC
 
 Serverless services don't live in your VPC. A Lambda Function, a Bucket, a Table and a Queue are reached over AWS's own endpoints, and a Function serves HTTP from its Function URL. An app made only of those needs no network at all.

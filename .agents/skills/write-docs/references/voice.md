@@ -10,9 +10,10 @@ one or two short lines, then a snippet, all the way down. Let the code speak.
 - **Instructions and observations, not internals.** Don't narrate what Alchemy
   does inside ("the adapter decides", "the engine reconciles", "synthesizes").
   Never call Alchemy "the engine". Say what the reader does and sees.
-- **Don't explain why a limitation exists** or talk about the docs' own
-  structure ("this page", "Part 5 is where…"). The exception is the What is
-  page's one framing line ("This page introduces the concepts…, once each").
+- **Never talk about the page itself.** No "This page introduces…", "This
+  chapter starts with…", "the rest of this page explains…", "Each concept on
+  this page…". Say the thing. A short repeat of the hub's introduction is better
+  than a sentence about the page. Don't explain why a limitation exists, either.
 - **Plain words.** create, not mint or provision. copy, not fork. give the Worker,
   not bind into. only works on, not scoped to. while it runs, not at runtime.
   cancel, not revoke (in prose; API names stay as they are).

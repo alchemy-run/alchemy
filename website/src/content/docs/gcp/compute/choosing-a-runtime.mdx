@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 Google Cloud gives you several places to run code. Most of them are Cloud Run underneath: containers that Google starts, scales and stops for you. They differ in what starts them and how long they live. Every one runs the same kind of Alchemy program, takes the same bindings, and runs as a service account of its own.
 
-This chapter walks through each runtime, says what it's good at, and ends with how to mix them in one app.
-
 ## The same program on every runtime
 
 Whichever you pick, you declare it with an id, its configuration and an Effect. Construction binds what it uses. A runtime that answers HTTP returns `fetch`, and one that runs to completion returns `run`:

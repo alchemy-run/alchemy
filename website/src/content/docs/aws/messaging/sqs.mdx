@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 SQS is a message queue. A **producer** puts a message on a Queue and moves on. A **consumer** takes messages off later, does the work, and deletes them. The two never wait for each other, so a slow job doesn't slow down the request that asked for it, and a burst of work waits in the Queue instead of overwhelming whatever does it.
 
-This chapter starts with how a message moves through a Queue, then builds a jobs queue piece by piece: declaring it, sending to it, consuming from it, and handling the messages that fail. It ends with ordered queues and sending many messages at once.
-
 ## A message is received, then deleted
 
 A message stays on the Queue until a consumer deletes it. Receiving it doesn't remove it. It only hides it from other consumers for the **visibility timeout**, 30 seconds by default.

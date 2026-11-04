@@ -7,9 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 A TLS certificate proves to a browser that a server really is `example.com`. **ACME** is the protocol certificate authorities like Let's Encrypt and ZeroSSL use to issue those certificates automatically: you prove you control a domain, and the authority signs a certificate for it, for free, in under a minute.
 
-This page introduces the concepts ACME is built on, once each, and how Alchemy models them. The examples follow one certificate: a wildcard for `*.example.com`, validated through a Cloudflare zone and installed on a Fly app.
-
-Here is the whole picture, which the rest of this page explains piece by piece. An account asks the authority for a certificate. The authority sets a challenge, which is answered with a DNS record. Once it sees the record, the authority signs the certificate, which goes to whatever serves the domain.
+Take one certificate: a wildcard for `*.example.com`, validated through a Cloudflare zone and installed on a Fly app. An account asks the authority for a certificate. The authority sets a challenge, which is answered with a DNS record. Once it sees the record, the authority signs the certificate, which goes to whatever serves the domain.
 
 <DAG
   nodes={[

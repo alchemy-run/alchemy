@@ -7,8 +7,6 @@ import DAG from "../../../components/DAG.astro";
 
 IAM is the part of AWS that answers one question on every request: may this identity do this action on this resource? Nothing is allowed until a policy says so.
 
-This chapter explains the pieces IAM uses to answer that question: identities, policies, roles and trust, the policies a resource carries itself, and tags as attributes. Along the way it shows how Alchemy writes those policies for you from the calls your code makes. It ends with the policies and roles you still write yourself.
-
 ## Every request has an identity
 
 When your code calls `s3:PutObject`, AWS first works out who is asking. The caller signs each request with credentials, and the credentials belong to an **identity**.

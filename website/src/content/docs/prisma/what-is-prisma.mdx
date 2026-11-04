@@ -5,9 +5,9 @@ description: The concepts behind Prisma's data platform — workspaces, projects
 
 import DAG from "../../../components/DAG.astro";
 
-This page introduces the concepts you meet on Prisma's platform, once each, and how Alchemy models them. The examples follow one small app: an API on Compute with a Postgres database, and a branch per preview.
+Prisma's data platform runs two things for you: **Prisma Postgres**, a serverless Postgres database, and **Prisma Compute**, a runtime for the apps that use it. A **project** holds both, so an app and its database are deployed side by side, and the app finds its database without any configuration.
 
-Here is the whole picture, which the rest of this page explains piece by piece. A workspace holds the project. Each branch of the project has its own database and app, and the app receives its database's `DATABASE_URL`.
+Take one small app: an API on Compute with a Postgres database, and a branch per preview. A workspace holds the project. Each branch of the project has its own database and app, and the app receives its database's `DATABASE_URL`.
 
 <DAG
   nodes={[
@@ -103,7 +103,7 @@ Under `alchemy dev`, the same Stack runs against a local Postgres, started for y
 
 ## How @alchemy.run/prisma models these concepts
 
-Each concept on this page is something your Stack declares.
+Each of these concepts is something your Stack declares.
 
 Your token picks the workspace, and `Prisma.providers()` deploys into it. A project, its databases, connections and branches are declarations. A Compute app is built and deployed from a directory or an Effect program. Inside any runtime, a Compute app, a Lambda Function or a Cloudflare Worker, `Prisma.Connect` turns a connection into a database URL for Prisma ORM, Effect SQL or Drizzle.
 

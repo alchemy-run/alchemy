@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 A DynamoDB Stream is a table's own change log. Every insert, update and delete becomes a **change record**, kept for 24 hours, in the order the changes happened to each item. A Function reading the stream sees every change to the table, including ones made by code that never told anyone.
 
-This chapter starts with what a change record carries, then builds a consumer piece by piece: subscribing to a table, choosing what each record includes, starting from the right place, and handling failures. It ends with what streams are good for.
-
 ## Every write becomes a change record
 
 The table writes the record as part of the change, so there's no second write to forget or to fail. Records for one item stay in order. Records for different items may be read in parallel.

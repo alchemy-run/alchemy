@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 Kinesis Data Streams is an ordered log of **records**. Producers append records, and they stay in the stream for a retention period, 24 hours by default, whether or not anyone has read them. Consumers read the log in order, each keeping its own place, so several consumers can read the same records independently and any of them can go back and read again.
 
-This chapter starts with how a stream keeps records in order, then builds an audit stream piece by piece: declaring it, writing records, consuming them, and handling failures without losing order. It ends with when to use a stream rather than a queue.
-
 ## Shards keep records in order
 
 A stream is split into **shards**. Each record carries a **partition key**, and Kinesis sends every record with the same key to the same shard. Within a shard, records are kept in the order they arrived.

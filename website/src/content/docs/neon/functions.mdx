@@ -7,8 +7,6 @@ import DAG from "../../../components/DAG.astro";
 
 A Neon Function is a Node.js program Neon runs for a branch. It answers HTTP at a public URL, and it already holds credentials for its own branch's database and storage, so it can query Postgres and read files without any secret of yours.
 
-This chapter starts with how a Function relates to its branch, then declares one in native and Effect form, binds the branch's resources, and subscribes to uploads and schedules. It ends with deploying a prebuilt app and the one rule every Function follows: authenticate the caller.
-
 ## A Function belongs to a branch
 
 A Function is declared on a branch, and reaches that branch's database and buckets with credentials Neon gives it. A preview branch gets its own copy of the Function, talking to its own data.

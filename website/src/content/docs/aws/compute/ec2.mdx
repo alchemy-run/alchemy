@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 EC2 gives you a virtual machine, called an **instance**. You choose its size, its operating system and its disk, and it runs until you stop it. Everything on it is yours to control: the kernel, the daemons, the GPUs, the software that expects a host. So is everything that keeps it healthy: patching, restarts, and replacing it when it fails.
 
-This chapter starts with what an instance is made of, then launches one, runs your own Effect program on it, gives it permissions, and connects to it. It ends with where it sits on the network.
-
 ## An instance is an image, a type and a subnet
 
 An **image** (AMI) is the disk an instance boots from: an operating system and whatever is installed on it. An **instance type** is its size: `t3.micro` has 2 vCPUs and 1 GB of memory, `g5.xlarge` has a GPU. A **subnet** is where it sits on your [network](/aws/networking), and **security groups** decide what can reach it.

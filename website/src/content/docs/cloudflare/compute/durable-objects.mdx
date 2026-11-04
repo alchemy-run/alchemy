@@ -7,7 +7,7 @@ import DAG from "../../../../components/DAG.astro";
 
 A Worker runs wherever the request is and remembers nothing between requests. Some things need the opposite: one place that sees every request about them, in order, and keeps their state. A chat room, a game, a counter, a document being edited, a user's session.
 
-A Durable Object is that place. This chapter starts with how one works, then builds a `Counter` piece by piece: declaring the class, keeping its state, calling it from a Worker, and streaming values back. It ends with where instances run, scheduled work, and containers.
+A Durable Object is that place.
 
 ## One instance per name
 

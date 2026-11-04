@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 A Lambda Web Function runs an HTTP server on Lambda. Where a [Lambda Function](/aws/compute/lambda) runs one invocation at a time per environment, a Web Function's environment is a long-running server that takes many requests at once, up to 128. Responses stream to the client as your server writes them, and there's nothing to run while nobody calls it.
 
-This chapter starts with the pieces a Web Function is made of, then builds one: serving and streaming, using AWS resources, bringing a server you already have, and tuning how it scales. It ends with rolling out changes, serving from several Regions, and controlling who may call it.
-
 ## Environments, endpoints and revisions
 
 Your server runs in **environments**, each a copy of your code with 2 GB of memory and 2 vCPUs. Lambda starts more as traffic grows and stops them as it falls. Because each one serves many requests, a spike starts few environments, and requests share warm connection pools.

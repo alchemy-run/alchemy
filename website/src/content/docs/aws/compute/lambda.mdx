@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 A Lambda Function is code that AWS runs when something invokes it: an HTTP request, a message on a queue, a new object in a Bucket, a schedule. You don't run a server. AWS starts environments for your code as invocations arrive, and you pay only for the time they spend running.
 
-This chapter starts with how Lambda runs your code, then builds a Function piece by piece: declaring it, serving HTTP, being invoked by events and by other code, and configuring it per stage. It ends with what happens when an invocation runs out of time, and when another runtime fits better.
-
 ## How Lambda runs your code
 
 Lambda runs your code in **execution environments**: small, isolated sandboxes, each holding one copy of your Function. An environment handles one invocation at a time. When invocations arrive faster than the existing environments can finish them, Lambda starts more, and when traffic drops, it stops them.

@@ -9,8 +9,6 @@ EKS is AWS's managed Kubernetes. AWS runs the Kubernetes control plane, and your
 
 Choose EKS when you want Kubernetes itself: Helm charts, operators, raw manifests, or a team that already runs on it. For containers without Kubernetes, [ECS](/aws/compute/ecs) has less to learn and less to pay for.
 
-This chapter starts with the Kubernetes objects you'll use, then creates a cluster and runs a server, your own Effect program, jobs, raw manifests and Helm charts on it. It ends with what EKS adds to Kubernetes on AWS, and clusters you don't manage.
-
 ## Clusters, Pods, Deployments and Jobs
 
 A **cluster** is one Kubernetes installation: an API server and the **nodes** that run containers. A **Pod** is one or more containers scheduled together onto a node. A **Deployment** keeps a number of identical Pods running and replaces any that fail, and a **Service** gives them one stable address, public if it's a `LoadBalancer`. A **Job** runs a Pod until it finishes, and a **CronJob** runs one on a schedule.

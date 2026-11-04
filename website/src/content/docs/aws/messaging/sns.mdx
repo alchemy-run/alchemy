@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 SNS broadcasts messages. A publisher sends a message to a **Topic** once, and SNS pushes a copy to every **subscription**: a Lambda Function, an SQS Queue, an HTTPS endpoint, an email address. The publisher doesn't know who's listening, so adding a subscriber never changes the code that publishes.
 
-This chapter starts with how a Topic differs from a Queue, then builds an order-events Topic piece by piece: declaring it, publishing to it, subscribing a Function, fanning out to Queues, and filtering what each subscriber sees. It ends with choosing between SNS, SQS and EventBridge.
-
 ## A Topic delivers a copy to everyone
 
 A [Queue](/aws/messaging/sqs) hands each message to one consumer. A Topic hands each message to every subscriber, each with its own copy.

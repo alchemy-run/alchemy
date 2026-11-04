@@ -7,9 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 Alchemy works with SQL databases on every cloud: D1 and Durable Objects on Cloudflare, Aurora and DSQL on AWS, Cloud SQL and Spanner on GCP, Neon, PlanetScale, Turso, Prisma Postgres, and Postgres or MySQL you run yourself. Each is a different service, but the way your code uses them is the same. You declare the database, its schema changes are applied on deploy, and a client in your code queries it over a connection that lasts one request.
 
-This page introduces each piece once. The examples follow one app: a Worker that queries Postgres with Drizzle, with migrations applied on every deploy.
-
-Here is the whole picture, which the rest of this page explains piece by piece. The deploy applies new migrations to the database. While the app runs, a client opens a connection per request and queries it.
+Take one app: a Worker that queries Postgres with Drizzle, with migrations applied on every deploy. The deploy applies new migrations to the database. While the app runs, a client opens a connection per request and queries it.
 
 <DAG
   nodes={[

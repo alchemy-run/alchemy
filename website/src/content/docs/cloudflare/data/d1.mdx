@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 D1 is a SQL database Cloudflare runs for you, built on SQLite. You write ordinary SQL against tables you define, and there's no server to size: you pay for the rows you read and write and the data you store.
 
-This chapter starts with where a D1 database lives, then creates one, applies migrations, and queries it from a Worker, first with prepared statements and then with Effect SQL. It ends with read replicas and when to reach for a different database.
-
 ## One primary, near its users
 
 A D1 database has one **primary** copy, in one location. Every write goes to it, in order, so there's no conflict to resolve. Workers in any city reach it through a binding.

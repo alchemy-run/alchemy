@@ -13,8 +13,6 @@ import DAG from "../../../../components/DAG.astro";
 
 A Worker can talk to Postgres or MySQL, but opening a database connection takes several round trips, and a Worker in Sydney talking to a database in Virginia pays for each one, on every request. Hyperdrive removes that cost. It keeps a pool of open connections next to your database, and gives the Worker a connection string that reaches it over Cloudflare's network.
 
-This chapter starts with how a query travels through Hyperdrive, then sets one up in front of a database on Neon or PlanetScale, binds it into a Worker and queries it. It ends with how it behaves under `alchemy dev`.
-
 ## How a query travels
 
 The Worker connects to Hyperdrive in its own city, which is quick. Hyperdrive sends the query to its pool near the database, which already holds open connections, and the query runs at once.

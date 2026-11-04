@@ -5,9 +5,9 @@ description: The concepts behind Turso — organizations, groups, locations, SQL
 
 import DAG from "../../../components/DAG.astro";
 
-This page introduces the concepts you meet on Turso, once each, and how Alchemy models them. The examples follow one small app: a Worker with a database of its own, plus a database per customer.
+Turso hosts SQLite databases for you. Each database is a whole SQLite file, run by Turso and reached over the network, and making one is so cheap that you can have thousands: one per customer, one per pull request, one per user.
 
-Here is the whole picture, which the rest of this page explains piece by piece. An organization holds a group in one location. The group holds the app's database and one database per tenant, and Workers reach them with tokens.
+Take one small app: a Worker with a database of its own, plus a database per customer. An organization holds a group in one location. The group holds the app's database and one database per tenant, and Workers reach them with tokens.
 
 <DAG
   nodes={[
@@ -95,7 +95,7 @@ See [Preview databases](/turso/preview-databases).
 
 ## How @alchemy.run/turso models these concepts
 
-Each concept on this page is something your Stack declares.
+Each of these concepts is something your Stack declares.
 
 Your API token picks the organization, and `Turso.providers()` deploys into it. Groups, databases and tokens are declarations, and migrations run on deploy. Bindings give a Worker a connection to one database, or the right to manage every database in a group.
 

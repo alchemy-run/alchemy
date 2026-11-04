@@ -5,9 +5,9 @@ description: The concepts behind PlanetScale — organizations, databases, the P
 
 import DAG from "../../../components/DAG.astro";
 
-This page introduces the concepts you meet on PlanetScale, once each, and how Alchemy models them. The examples follow one small app: a Postgres database with a production branch, a branch per preview stage, and a role for the app to connect with.
+PlanetScale runs databases for you: Postgres, or MySQL on Vitess. It runs each one as a **cluster** with replicas across zones, and lets you **branch** a database the way you branch code, so every pull request can have its own copy of the schema to test against.
 
-Here is the whole picture, which the rest of this page explains piece by piece. An organization holds the database. The database has a production branch and a branch per preview, and each branch has its own roles, which hand connection details to the app.
+Take one small app: a Postgres database with a production branch, a branch per preview stage, and a role for the app to connect with. An organization holds the database. The database has a production branch and a branch per preview, and each branch has its own roles, which hand connection details to the app.
 
 <DAG
   nodes={[
@@ -108,7 +108,7 @@ See [Backups & restores](/planetscale/data/backups).
 
 ## How @alchemy.run/planetscale models these concepts
 
-Each concept on this page is something your Stack declares.
+Each of these concepts is something your Stack declares.
 
 Your token picks the organization, and `Planetscale.providers()` deploys into it, next to the cloud where your app runs. Databases, branches and roles are declarations, and a branch can start from a backup. Migrations run on deploy. A role's connection details flow, as typed outputs, into whatever connects: Hyperdrive, a Worker, a Lambda Function.
 

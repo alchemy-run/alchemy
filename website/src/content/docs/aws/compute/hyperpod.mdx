@@ -5,8 +5,6 @@ description: Provision SageMaker HyperPod clusters — Slurm or EKS orchestrated
 
 SageMaker HyperPod is a standing fleet of accelerated instances for ML training and inference. It checks each node's health, including deep checks on its GPUs, replaces nodes that fail, and stays up between jobs. Where [ECS](/aws/compute/ecs) and [EKS](/aws/compute/eks) run application containers, HyperPod runs distributed training.
 
-This chapter starts with what a HyperPod cluster is made of and how to choose its orchestrator, then creates a Slurm cluster and an EKS one, runs work on each, and shares an EKS fleet between teams.
-
 ## Clusters, instance groups and lifecycle scripts
 
 A **cluster** is the fleet. It's divided into **instance groups**, each a set of identical instances with one type, count, role and **lifecycle script**: the script every node runs when it boots, which installs the scheduler, mounts shared storage and wires up monitoring. A cluster usually has a controller group and one or more worker groups.

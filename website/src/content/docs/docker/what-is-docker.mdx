@@ -5,9 +5,9 @@ description: The concepts behind Docker — the engine and contexts, images and 
 
 import DAG from "../../../components/DAG.astro";
 
-This page introduces the concepts you meet with Docker, once each, and how Alchemy models them. The examples follow one small setup: Postgres in a container, with its data on a volume, reachable by name on a network.
+Docker packages a program with everything it needs to run, its runtime, libraries and files, into an **image**, and runs images as isolated **containers**. The same image runs the same way on your laptop, in CI and on a server, which is why most cloud platforms take images as the unit of deployment.
 
-Here is the whole picture, which the rest of this page explains piece by piece. A context points at an engine, which holds everything else. The engine runs images as containers, which reach each other by name on a network and keep their data on a volume.
+Take one small setup: Postgres in a container, with its data on a volume, reachable by name on a network. A context points at an engine, which holds everything else. The engine runs images as containers, which reach each other by name on a network and keep their data on a volume.
 
 <DAG
   nodes={[
@@ -88,7 +88,7 @@ See [Docker Swarm](/docker/swarm).
 
 ## How @alchemy.run/docker models these concepts
 
-Each concept on this page is something your Stack declares.
+Each of these concepts is something your Stack declares.
 
 The active context picks the engine, and `Docker.providers()` drives it. Images, containers, networks and volumes are resources, labelled so Alchemy knows which ones are its own, and named in the same Stack as your cloud resources. Swarm services are resources too. Cloud runtimes that run images, like [ECS](/aws/compute/ecs) and [Cloudflare Containers](/cloudflare/compute/containers), build theirs with the same local Docker.
 

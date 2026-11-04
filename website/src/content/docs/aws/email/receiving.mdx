@@ -7,8 +7,6 @@ import DAG from "../../../../components/DAG.astro";
 
 SES can receive mail as well as send it. Point your domain's MX record at SES, and every message sent to an address on the domain arrives at AWS, where your **receipt rules** decide what happens to it: store it in S3, notify an SNS Topic, invoke a Function, or bounce it.
 
-This chapter starts with how rules are evaluated, then builds an inbound pipeline: a rule set, rules that store, notify and invoke, the order they run in, and filters that block senders before any rule runs.
-
 ## Rule sets, rules and actions
 
 Rules live in a **rule set**. An account can hold many rule sets, but SES evaluates only the **active** one. Within it, rules run in order. Each rule matches messages by recipient and runs its **actions** in order: store the raw message in a Bucket, publish to a Topic, invoke a Function, bounce, add a header, or stop.
