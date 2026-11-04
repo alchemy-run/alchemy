@@ -292,20 +292,12 @@ describe.skipIf(!!process.env.FAST)(
       "concurrent background journal writes retain every entry",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        yield* expectUrlContains(`${url}/bg-many`, "bg-many-scheduled");
-        const entries = yield* Effect.gen(function* () {
-          const text = yield* getText(`${url}/entries-many`);
-          return yield* Effect.try({
-            try: () => (JSON.parse(text) as { entries: string[] }).entries,
-            catch: (cause) => new Error(`Invalid journal response: ${text}`, { cause }),
-          });
-        }).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("500 millis"),
-            times: 8,
-            until: (entries) => entries.length === 40,
-          }),
-        );
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `parallel-${run}`;
+        expect(yield* getText(`${url}/bg-many/${label}`)).toBe("bg-many-scheduled");
+        const entries = yield* journalEntries(url, label, 40, 16);
         expect(entries.toSorted()).toEqual(
           Array.from({ length: 40 }, (_, i) => `parallel-${i}`).sort(),
         );

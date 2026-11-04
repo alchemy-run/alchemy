@@ -545,12 +545,11 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
           return HttpServerResponse.text("scheduled");
         }
 
-        if (url.pathname === "/bg-many") {
-          const journal = journals.getByName("parallel");
+        // `/bg-many/<label>`: 40 concurrent background writes, read back
+        // through `/lifetime/entries/<label>`.
+        if (url.pathname.startsWith("/bg-many/")) {
+          const journal = journals.getByName(url.pathname.split("/")[2] ?? "");
           return HttpServerResponse.text(`bg-many-${yield* journal.recordManyLater()}`);
-        }
-        if (url.pathname === "/entries-many") {
-          return yield* HttpServerResponse.json(yield* journals.getByName("parallel").snapshot());
         }
         if (url.pathname === "/bg") {
           yield* exec.waitUntil(

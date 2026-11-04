@@ -782,8 +782,8 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ```
  *
  * ### Background Work & Scopes
- * Every RPC call and fetch into a Durable Object gets its own Effect
- * `Scope`. When the method finishes, the bridge closes that scope and
+ * Every RPC call, fetch, alarm and WebSocket event in a Durable Object gets
+ * its own Effect `Scope`. When the method finishes, the bridge closes that scope and
  * registers the close promise with workerd's `state.waitUntil` — so
  * finalizers added with `Effect.addFinalizer` inside a method run *after*
  * the result is returned to the caller, without blocking it, and the
@@ -793,7 +793,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * with the caller's full context and keeps the object alive until it
  * settles. The call's scope stays open until then too, so the work can use
  * what the method acquired on it, and its spans and logs are exported with
- * the call's.
+ * the call's. What the work acquires itself is released when it finishes.
  *
  * Attach cleanup to method scopes, not the constructor (init) closure —
  * the constructor runs once per in-memory instance under

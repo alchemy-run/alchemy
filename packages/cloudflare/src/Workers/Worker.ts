@@ -2603,8 +2603,9 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * Effect with the caller's full context and keeps the invocation alive
  * until it settles. The event's scope stays open until then too, so the
  * work can use what the handler acquired on it, and its spans and logs are
- * exported with the event's. It is `RuntimeContext`-colored, so it can
- * only run inside a handler.
+ * exported with the event's. What the work acquires itself is released when
+ * it finishes. It is `RuntimeContext`-colored, so it can only run inside a
+ * handler.
  *
  * The constructor is evaluated once per isolate: the bridge builds the
  * Worker's layer stack on the first event and every later event reuses the
