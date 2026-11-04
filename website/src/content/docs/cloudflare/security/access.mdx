@@ -4,7 +4,7 @@ description: Put Cloudflare Access in front of a Worker with the access prop —
 sidebar:
   order: 20
 ---
-import Sequence from "../../../../components/diagrams/Sequence.astro";
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 Cloudflare Access puts a login wall in front of your Worker — covering
 its custom domains, routes, `workers.dev` URL, and version preview
@@ -16,23 +16,18 @@ Worker (`access: { policies }`) for per-Worker rules, and a **shared
 application** (`access: App`) when several Workers sit behind one
 policy set. Each has its own section below.
 
-<Sequence
-  actors={[
-    { id: "user", label: "browser" },
-    { id: "access", label: "Access", type: "Zero Trust", tone: "accent" },
-    { id: "idp", label: "identity provider", type: "Google, GitHub" },
-    { id: "worker", label: "Admin", type: "Worker" },
+<Boundaries
+  nodes={[
+    { id: "stranger", label: "anyone else", type: "not in the policy", col: 0, row: 0 },
+    { id: "ana", label: "ana@example.com", type: "signed in", col: 0, row: 1 },
+    { id: "admin", label: "Admin", type: "Worker · reads ctx.access", col: 1, row: 1, tone: "accent" },
   ]}
-  steps={[
-    { from: "user", to: "access", label: "GET admin.example.com" },
-    { from: "access", to: "user", label: "redirect to sign in", dashed: true },
-    { from: "user", to: "idp", label: "sign in as ana@example.com" },
-    { from: "idp", to: "access", label: "identity", dashed: true },
-    { note: "policy: allow emailDomain example.com", over: "access" },
-    { from: "access", to: "worker", label: "request + signed identity" },
-    { from: "worker", to: "user", label: "200 · ctx.access knows it's ana", dashed: true },
+  zones={[{ id: "access", label: "Access", type: "allow emailDomain example.com", nodes: ["admin"], tone: "warn" }]}
+  links={[
+    { from: "ana", to: "admin", label: "identity" },
+    { from: "stranger", to: "access", kind: "blocked", label: "login wall" },
   ]}
-  caption="Access checks every request before the Worker runs. Only callers its policies allow get through, and the Worker reads who they are from ctx.access."
+  caption="Access stands in front of the Worker on every hostname it serves. Only callers its policies allow get through, and the Worker reads who they are from ctx.access."
 />
 
 ## Dedicated application (per-Worker policies)

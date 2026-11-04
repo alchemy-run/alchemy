@@ -2,7 +2,7 @@
 title: Private services
 description: Keep a Cloud Run service private and call it from another service with GCP.Run.InvokeService and Google-signed identity tokens.
 ---
-import Sequence from "../../../../components/diagrams/Sequence.astro";
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 A Cloud Run service is private unless you set `invokerIamDisabled`.
 Callers need a Google identity token from an account that holds
@@ -12,23 +12,18 @@ Callers need a Google identity token from an account that holds
 
 Every request to a Cloud Run service passes IAM before it reaches your code. A private service only lets in callers that send a Google identity token for an account holding `roles/run.invoker` on it.
 
-<Sequence
-  actors={[
-    { id: "user", label: "browser", type: "anyone" },
-    { id: "gw", label: "Gateway", type: "public service" },
-    { id: "quotes", label: "Quotes", type: "private service", tone: "accent" },
+<Boundaries
+  nodes={[
+    { id: "anyone", label: "anyone", type: "no token", col: 0, row: 0 },
+    { id: "gw", label: "Gateway", type: "public service", col: 0, row: 1 },
+    { id: "quotes", label: "Quotes", type: "private service", col: 1, row: 1, tone: "accent" },
   ]}
-  steps={[
-    { from: "user", to: "gw", label: "GET /quote" },
-    { from: "gw", to: "quotes", label: "GET /quotes + identity token" },
-    { note: "Gateway holds run.invoker: let in", over: "quotes" },
-    { from: "quotes", to: "gw", label: "200", dashed: true },
-    { from: "gw", to: "user", label: "200", dashed: true },
-    { divider: "anyone calling Quotes directly" },
-    { from: "user", to: "quotes", label: "GET /quotes, no token" },
-    { from: "quotes", to: "user", label: "403, before your code runs", dashed: true, tone: "warn" },
+  zones={[{ id: "iam", label: "Cloud Run IAM", type: "run.invoker: Gateway only", nodes: ["quotes"], tone: "warn" }]}
+  links={[
+    { from: "gw", to: "quotes", label: "identity token" },
+    { from: "anyone", to: "iam", kind: "blocked", label: "403" },
   ]}
-  caption="The Gateway's calls carry an identity token for its own service account, which holds run.invoker on Quotes. A request without one is refused by Cloud Run itself."
+  caption="Cloud Run checks every request before it reaches Quotes. The Gateway's calls carry a token for an account that holds run.invoker, and everything else is refused before your code runs."
 />
 
 ## A private backend

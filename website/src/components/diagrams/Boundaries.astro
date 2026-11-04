@@ -61,7 +61,8 @@ const { nodes, zones = [], links = [], caption } = Astro.props as Props;
 
 const NW = Math.max(132, ...nodes.map((n) => Math.max(n.label.length * 8, (n.type ?? "").length * 6.6) + 24));
 const NH = 48;
-const GAP_X = 76;
+// Gaps fit the longest label on a horizontal link, with room to clear the zone borders it crosses.
+const GAP_X = Math.max(76, ...links.filter((l) => l.kind !== "blocked").map((l) => (l.label ?? "").length * 6.6 + 56));
 const ROW_H = NH + 96;
 const PAD = 16;
 const ZONE_PAD = 18;
@@ -88,13 +89,20 @@ const sideBlocked = (z: Zone) =>
 const zoneBox = (z: Zone) => {
   const ps = z.nodes.map((id) => pos.get(id)!);
   const x0 = Math.min(...ps.map((p) => p.x)) - ZONE_PAD;
-  const x1 = Math.max(...ps.map((p) => p.x)) + NW + ZONE_PAD;
+  // A zone is at least as wide as its own label.
+  const labelW = z.label.length * 7 + (z.type ? z.type.length * 6.6 + 8 : 0) + 24;
+  const x1 = Math.max(Math.max(...ps.map((p) => p.x)) + NW + ZONE_PAD, x0 + labelW);
   const y0 = Math.min(...ps.map((p) => p.y)) - ZONE_TOP;
   const y1 = Math.max(...ps.map((p) => p.y)) + NH + ZONE_PAD + (sideBlocked(z) ? 44 : 0);
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 };
 const boxes = new Map(zones.map((z) => [z.id, zoneBox(z)]));
-const W = PAD + Math.max(...[...pos.values()].map((p) => p.x)) + NW + ZONE_PAD;
+// Labels beside vertical links can run past the last column.
+const sideLabel = Math.max(0, ...links.filter((l) => l.kind !== "blocked" && colOf.get(l.from) === colOf.get(l.to)).map((l) => (l.label ?? "").length * 6.6 + 20 - 30));
+const W = Math.max(
+  PAD + Math.max(...[...pos.values()].map((p) => p.x)) + NW + ZONE_PAD + sideLabel,
+  ...[...boxes.values()].map((b) => b.x + b.w + PAD),
+);
 const H = Math.max(rowY[maxRow]! + NH + PAD, ...[...boxes.values()].map((b) => b.y + b.h + PAD));
 ---
 

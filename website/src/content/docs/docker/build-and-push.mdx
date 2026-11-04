@@ -2,25 +2,19 @@
 title: Build & push images
 description: Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
 ---
-import Sequence from "../../../components/diagrams/Sequence.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 This page is the canonical home for producing a **registry image
 reference** — the artifact that cloud container platforms consume.
-<Sequence
-  actors={[
-    { id: "you", label: "alchemy deploy" },
-    { id: "docker", label: "Docker", type: "your active context" },
-    { id: "reg", label: "registry", type: "ECR, GHCR, Cloudflare" },
-    { id: "platform", label: "platform", type: "ECS, Containers", tone: "accent" },
+<Tree
+  nodes={[
+    { id: "stack", label: "your Stack", type: "one deploy" },
+    { id: "repo", label: "ghcr.io/acme/app", type: "repository", parent: "stack" },
+    { id: "old", label: "sha256:4f1a…", type: "image · last deploy", parent: "repo", tone: "muted" },
+    { id: "new", label: "sha256:9c2e…", type: "image · tag latest", parent: "repo", tone: "accent" },
+    { id: "task", label: "ECS task", type: "or Cloudflare Container", side: true, parent: "stack", specs: [["runs", "app@sha256:9c2e…"]] },
   ]}
-  steps={[
-    { from: "you", to: "docker", label: "build the context" },
-    { from: "docker", to: "reg", label: "push" },
-    { from: "reg", to: "you", label: "repoDigest", dashed: true },
-    { from: "you", to: "platform", label: "imageRef @ digest" },
-    { from: "platform", to: "reg", label: "pull" },
-  ]}
-  caption="The image's digest becomes an input of whatever runs it, so a new build redeploys exactly the image you pushed."
+  caption="A tag can move, a digest can't. The platform gets the image by digest, so a new build redeploys exactly the image you pushed."
 />
 
 `Docker.Image` builds and pushes through your active Docker context;

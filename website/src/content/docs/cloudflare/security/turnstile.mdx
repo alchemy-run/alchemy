@@ -4,7 +4,7 @@ description: Manage Cloudflare Turnstile widgets as resources — deploy a widge
 sidebar:
   order: 23
 ---
-import Sequence from "../../../../components/diagrams/Sequence.astro";
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 Turnstile is Cloudflare's CAPTCHA alternative. A Turnstile widget is
 defined by the hostnames it runs on and its interaction mode;
@@ -12,21 +12,18 @@ Cloudflare assigns two keys in return — a public `sitekey` you embed
 in HTML and a `secret` your server uses to verify the tokens the
 widget produces.
 
-<Sequence
-  actors={[
-    { id: "browser", label: "browser", type: "has the sitekey" },
-    { id: "ts", label: "Turnstile", type: "Cloudflare", tone: "accent" },
-    { id: "worker", label: "Signup", type: "Worker · has the secret" },
+<Boundaries
+  nodes={[
+    { id: "bot", label: "bot", type: "no valid token", col: 0, row: 0 },
+    { id: "browser", label: "browser", type: "widget token", col: 0, row: 1 },
+    { id: "signup", label: "POST /signup", type: "handled", col: 1, row: 1, tone: "accent" },
   ]}
-  steps={[
-    { from: "browser", to: "ts", label: "widget runs its challenge" },
-    { from: "ts", to: "browser", label: "token", dashed: true },
-    { from: "browser", to: "worker", label: "POST /signup + token" },
-    { from: "worker", to: "ts", label: "siteverify(token, secret)" },
-    { from: "ts", to: "worker", label: "success: true", dashed: true },
-    { from: "worker", to: "browser", label: "201", dashed: true },
+  zones={[{ id: "worker", label: "Signup", type: "Worker · siteverify with the secret", nodes: ["signup"], tone: "warn" }]}
+  links={[
+    { from: "browser", to: "signup", label: "form + token" },
+    { from: "bot", to: "worker", kind: "blocked", label: "rejected" },
   ]}
-  caption="The sitekey is public and only renders the widget. The secret stays in the Worker, which checks each token with Cloudflare before trusting the form."
+  caption="The sitekey in the page only renders the widget. The Worker holds the secret and checks each token with Cloudflare before it trusts the form."
 />
 
 ## Create a widget

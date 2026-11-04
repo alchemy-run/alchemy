@@ -124,6 +124,17 @@ Each of these was a correction. Don't relearn them.
   `Responsibility` chart for choosing a runtime was the one the user called
   great: it shows the idea itself, a staircase of who manages what.
   More: [Diagrams](references/structure.md#diagrams).
+- **Don't reach for `Sequence` by default either.** After the DAG, Sequence
+  became the overused one: 25 pages drew a request bouncing between lifelines.
+  Use it only when the order of messages between parties *is* the idea (receive,
+  hide, delete; a token exchange; an ACME challenge). Otherwise draw what the
+  section is about: who can get past a boundary (`Boundaries`: Access,
+  Turnstile, signed webhooks, private services, tunnels), what a log or table
+  ends up holding (`Records`: a gateway's request log, the rows a pipeline
+  keeps), what happens over time (`Timeline`: cache hits after a miss, webhook
+  retries), or the states something moves through (`StateMachine`: a
+  subscription). Count the Sequences across the docs after a batch; a dozen is
+  plenty.
 - **Box-and-arrow is the last resort.** A second review rejected eight more
   diagrams as "too generic": a bus with two rule boxes, a topic fanning out to
   three boxes, writer and reader arrows into a volume box, `t3.small → size →

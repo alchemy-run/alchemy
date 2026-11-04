@@ -2,7 +2,7 @@
 title: Migrations
 description: Apply SQL migrations and seed data to PlanetScale databases and branches as part of every deploy — ordered, hashed, tracked, and run over short-lived credentials.
 ---
-import Sequence from "../../../../components/diagrams/Sequence.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Every PlanetScale database and branch resource — `PostgresDatabase`,
 `PostgresBranch`, `MySQLDatabase`, `MySQLBranch` — accepts a
@@ -11,20 +11,19 @@ every deploy. No separate migration step, no long-lived migration
 user — alchemy mints a short-lived credential for the run and deletes
 it afterwards.
 
-<Sequence
-  actors={[
-    { id: "deploy", label: "alchemy deploy" },
-    { id: "ps", label: "PlanetScale", type: "API" },
-    { id: "branch", label: "pr-42", type: "branch", tone: "accent" },
+<Timeline
+  end={10}
+  lanes={[
+    { id: "cred", label: "credential", type: "minted for this deploy" },
+    { id: "mig", label: "pr-42", type: "branch" },
   ]}
-  steps={[
-    { from: "deploy", to: "ps", label: "mint a short-lived credential" },
-    { from: "ps", to: "deploy", label: "credential", dashed: true },
-    { from: "deploy", to: "branch", label: "read __alchemy_migrations" },
-    { from: "deploy", to: "branch", label: "apply 0003_refunds.sql" },
-    { from: "deploy", to: "ps", label: "delete the credential" },
+  bars={[
+    { lane: "cred", start: 1, end: 8, label: "exists only now", tone: "warn" },
+    { lane: "mig", start: 1.6, end: 3.6, label: "history", tone: "default" },
+    { lane: "mig", start: 3.8, end: 7.6, label: "apply 0003_refunds" },
   ]}
-  caption="Each deploy applies only the files the branch hasn't run, with a credential that exists only for that deploy."
+  marks={[{ at: 1, label: "deploy starts" }, { at: 8, label: "deleted" }]}
+  caption="Each deploy mints a credential, applies only the files the branch hasn't run, and deletes the credential. No migration user outlives the deploy."
 />
 
 ## Database vs branch

@@ -2,7 +2,7 @@
 title: Database per tenant
 description: Give each customer their own Turso database.
 ---
-import Sequence from "../../../components/diagrams/Sequence.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Give each customer their own database. Their data stays separate, and removing a customer is just deleting their database.
 
@@ -21,21 +21,15 @@ Add `Turso.ManageDatabasesHttp` to the Worker. The Worker gets two tokens:
 
 Your own Turso API token stays on your machine.
 
-<Sequence
-  actors={[
-    { id: "user", label: "new customer" },
-    { id: "worker", label: "Api", type: "Worker" },
-    { id: "turso", label: "Turso", type: "Platform API" },
-    { id: "db", label: "acme", type: "database", tone: "accent" },
+<Tree
+  nodes={[
+    { id: "g", label: "Tenants", type: "group" },
+    { id: "a", label: "acme", type: "database", parent: "g", tone: "accent" },
+    { id: "b", label: "globex", type: "database", parent: "g", tone: "accent" },
+    { id: "c", label: "initech", type: "created at sign-up", parent: "g", tone: "muted" },
+    { id: "w", label: "Api", type: "Worker", parent: "g", side: true, specs: [["API token", "create, delete in Tenants"], ["DB token", "SQL on every database"]] },
   ]}
-  steps={[
-    { from: "user", to: "worker", label: "sign up as acme" },
-    { from: "worker", to: "turso", label: 'tenants.create("acme")' },
-    { note: "a new database in Tenants", over: "db" },
-    { from: "turso", to: "worker", label: "created", dashed: true },
-    { from: "worker", to: "db", label: "SQL, with the group's database token" },
-  ]}
-  caption="The Worker creates each customer's database at sign-up, only inside Tenants, and queries it with a token that covers every database in the group."
+  caption="Each customer gets a database of its own in the Tenants group. The Worker creates and deletes them with an API token limited to the group, and queries them with one database token."
 />
 
 ## Create a tenant

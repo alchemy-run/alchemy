@@ -4,7 +4,7 @@ description: Wire an AI Gateway into your Worker, turn it into a typed Effect La
 sidebar:
   order: 6
 ---
-import Sequence from "../../../../components/diagrams/Sequence.astro";
+import Records from "../../../../components/diagrams/Records.astro";
 
 You've now wired Durable Objects, hibernatable WebSockets, a
 container, and a Workflow into your Worker. The last piece in the
@@ -13,23 +13,19 @@ endpoint that fronts every model provider (Workers AI, OpenAI,
 Anthropic, Bedrock, …) and gives you caching, rate limiting, retries,
 DLP, and a single dashboard of every request, token, and cost.
 
-<Sequence
-  actors={[
-    { id: "worker", label: "Api", type: "Worker" },
-    { id: "gw", label: "Gateway", type: "AI Gateway", tone: "accent" },
-    { id: "model", label: "provider", type: "OpenAI, …" },
+<Records
+  title="Gateway · request log"
+  columns={["time", "provider · model", "tokens", "cost", "cache"]}
+  keys={0}
+  rows={[
+    ["10:02:11", "workers-ai · llama-3.3", "812", "$0.0002", "miss"],
+    ["10:02:40", "openai · gpt-4o-mini", "1,204", "$0.0007", "miss"],
+    ["10:02:52", "openai · gpt-4o-mini", "1,204", "$0", "hit"],
+    ["10:03:05", "anthropic · claude-haiku", "960", "$0.0012", "miss"],
+    ["10:03:09", "workers-ai · llama-3.3", "812", "$0", "hit"],
   ]}
-  steps={[
-    { from: "worker", to: "gw", label: "generateText(prompt)" },
-    { note: "logged · rate limit checked · cache miss", over: "gw" },
-    { from: "gw", to: "model", label: "forward" },
-    { from: "model", to: "gw", label: "completion · tokens · cost", dashed: true },
-    { from: "gw", to: "worker", label: "completion, cached 60s", dashed: true },
-    { divider: "the same prompt within cacheTtl" },
-    { from: "worker", to: "gw", label: "generateText(prompt)" },
-    { from: "gw", to: "worker", label: "completion from cache · no provider call", dashed: true },
-  ]}
-  caption="Every model call passes through the gateway, which logs it, applies its limits, and answers repeats from its cache."
+  query={{ label: "served from cache", rows: [2, 4] }}
+  caption="Every call, to any provider, goes through the gateway and lands in one log with its tokens and cost. A repeat of a prompt inside cacheTtl is answered from the cache, at no cost."
 />
 
 In Alchemy the gateway is a single resource. Once you've declared and
