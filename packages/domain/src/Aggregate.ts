@@ -8,6 +8,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import type { Annotations } from "./Annotations.ts";
 import type * as Command from "./Command.ts";
 import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
@@ -128,6 +129,11 @@ export interface Definition<
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
   E extends Event.Any = EventsOf<C>,
 > {
+  /**
+   * Data for what is built on the model, such as its `description`. Add your
+   * own keys by augmenting {@link Annotations}.
+   */
+  readonly annotations?: Annotations;
   /** Schema of the aggregate id (a string or branded string). */
   readonly id: Id;
   /** Schema of the aggregate's state. Used to persist snapshots. */
@@ -383,6 +389,7 @@ export interface ClientImpl {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Aggregate";
+  readonly annotations: Annotations;
   readonly aggregateName: string;
   readonly definition: AnyDefinition;
 }
@@ -721,6 +728,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
+    static readonly annotations: Annotations = definition.annotations ?? {};
     static readonly aggregateName: Name = name;
     static readonly definition: Resolved<Id, S, C, Ms, Rejects, ReadOf<R>> = {
       ...definition,
@@ -796,6 +804,7 @@ export interface AggregateClass<
   Def extends AnyDefinition,
 > extends Context.ServiceClass<Key<Name>, string, Client<Def>> {
   readonly kind: "Aggregate";
+  readonly annotations: Annotations;
   readonly aggregateName: Name;
   readonly definition: Def;
   /** Address one instance of this aggregate. */

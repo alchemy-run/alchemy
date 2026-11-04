@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { type DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
 import { targetId } from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Rejection from "./Rejection.ts";
 import * as Telemetry from "./Telemetry.ts";
 
@@ -88,6 +89,11 @@ export interface Definition<
   Rejects extends ReadonlyArray<Rejection.Any>,
 > {
   /**
+   * Data for what is built on the model, such as its `description`. Add your
+   * own keys by augmenting {@link Annotations}.
+   */
+  readonly annotations?: Annotations;
+  /**
    * What identifies one run, usually the id of the aggregate the saga is
    * about. Starting a saga again with the same key returns the same run.
    */
@@ -145,6 +151,7 @@ export interface Client<Key, Input, A, E> {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Saga";
+  readonly annotations: Annotations;
   readonly sagaName: string;
   readonly workflow: Workflow.Workflow<string, any, any, any>;
   readonly Implementation: Context.Key<unknown, true>;
@@ -277,6 +284,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Saga" as const;
+    static readonly annotations: Annotations = definition.annotations ?? {};
     static readonly sagaName: Name = name;
     static readonly definition = definition;
     static readonly workflow = workflow;
@@ -327,6 +335,7 @@ export interface SagaClass<
   Client<K["Type"], Schema.Struct.Type<I>, ResultSchema<R>["Type"], RejectsSchema<Rejects>["Type"]>
 > {
   readonly kind: "Saga";
+  readonly annotations: Annotations;
   readonly sagaName: Name;
   readonly definition: Definition<K, I, R, Rejects>;
   /** The Effect workflow the saga runs as. */

@@ -308,11 +308,11 @@ const invoke = (
 const published = (op: Operation): boolean => !op.stream;
 
 /**
- * A subcommand's help text: a command's Schema `description` annotation, or
- * what it is (`Send the Deposit command.`, `Read the Balance view.`).
+ * A subcommand's help text: the entry's `description`, or what it is
+ * (`Send the Deposit command.`, `Read the Balance view.`).
  */
 const descriptionOf = (op: Operation): string =>
-  (op.served.kind === "Command" ? SchemaAST.resolveDescription(op.served.ast) : undefined) ??
+  op.description ??
   (op.served.kind === "Command"
     ? `Send the ${op.name} command.`
     : `Read the ${op.name} ${op.served.kind.toLowerCase()}.`);

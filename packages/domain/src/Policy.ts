@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Schedule from "effect/Schedule";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type * as Key from "./Key.ts";
 import type * as View from "./View.ts";
@@ -52,6 +53,7 @@ export type Handler<T> = (trigger: T) => Effect.Effect<void>;
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Policy";
+  readonly annotations: Annotations;
   readonly policyName: string;
   readonly definition: {
     readonly from: From;
@@ -90,6 +92,11 @@ export interface Definition<
   On extends ReadonlyArray<Event.Any>,
   Key extends Key.Any | undefined,
 > {
+  /**
+   * Data for what is built on the model, such as its `description`. Add your
+   * own keys by augmenting {@link Annotations}.
+   */
+  readonly annotations?: Annotations;
   /** The aggregate or view, or several, whose events it reacts to. */
   readonly from: F;
   /**
@@ -191,6 +198,7 @@ export const make = <
   const Tag = Context.Service<PolicyKey<Name>, Handler<unknown>>()(`alchemy/Domain/Policy/${name}`);
   return class extends Tag {
     static readonly kind = "Policy" as const;
+    static readonly annotations: Annotations = definition.annotations ?? {};
     static readonly policyName: Name = name;
     static readonly definition = definition;
     static toLayer<Self extends Any, E, R>(
@@ -237,6 +245,7 @@ export interface PolicyClass<
   Handler<Trigger<F, Aggregate.InstanceOf<On[number]>, Key>>
 > {
   readonly kind: "Policy";
+  readonly annotations: Annotations;
   readonly policyName: Name;
   readonly definition: {
     readonly from: F;

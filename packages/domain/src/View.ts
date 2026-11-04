@@ -7,6 +7,7 @@ import type * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
 import { evolveView, type LocalViewInput } from "./internal.ts";
@@ -50,6 +51,7 @@ type Handlers = {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "View";
+  readonly annotations: Annotations;
   readonly viewName: string;
   readonly definition: {
     readonly from: ReadonlyArray<Aggregate.Any | Any>;
@@ -200,6 +202,11 @@ export interface Definition<
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 > extends Read.Contract<Key.RefOf<Key>, StateType<S> | null, Ms, Rejects> {
+  /**
+   * Data for what is built on the model, such as its `description`. Add your
+   * own keys by augmenting {@link Annotations}.
+   */
+  readonly annotations?: Annotations;
   /** The aggregates and views this view consumes. */
   readonly from: From;
   /**
@@ -489,6 +496,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "View" as const;
+    static readonly annotations: Annotations = definition.annotations ?? {};
     static readonly viewName: Name = name;
     static readonly definition: Definition<From, Key, S, Events, Computed, Ms, Rejects> =
       definition;
@@ -545,6 +553,7 @@ export interface ViewClass<
   Out,
 > extends Context.ServiceClass<ViewKey<Name>, string, Host<St, Key, Out>> {
   readonly kind: "View";
+  readonly annotations: Annotations;
   readonly viewName: Name;
   readonly definition: Def;
   /** The view's state schema. */

@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type * as Key from "./Key.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -70,6 +71,7 @@ type Sources<From extends ReadonlyArray<View.Source>> = From[number];
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Projection";
+  readonly annotations: Annotations;
   readonly projectionName: string;
   readonly definition: {
     readonly from: ReadonlyArray<View.Source>;
@@ -143,6 +145,11 @@ export interface Definition<
   On extends ReadonlyArray<Event.Any>,
   Writes extends ReadonlyArray<DomainStream.Any>,
 > {
+  /**
+   * Data for what is built on the model, such as its `description`. Add your
+   * own keys by augmenting {@link Annotations}.
+   */
+  readonly annotations?: Annotations;
   /** The aggregates and views whose events it consumes. */
   readonly from: From;
   /**
@@ -236,6 +243,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Projection" as const;
+    static readonly annotations: Annotations = definition.annotations ?? {};
     static readonly projectionName: Name = name;
     static readonly definition = definition;
     static readonly Progress = Progress;
@@ -272,6 +280,7 @@ export interface ProjectionClass<
   Implementation<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>
 > {
   readonly kind: "Projection";
+  readonly annotations: Annotations;
   readonly projectionName: Name;
   readonly definition: Definition<From, Key, On, Writes>;
   readonly Progress: Context.Service<ProgressKey<Name>, Progress>;

@@ -4,6 +4,7 @@ import * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type { Servable } from "./Api.ts";
@@ -259,6 +260,11 @@ export interface Operation {
   readonly rpc: Rpc.AnyWithProps;
   /** Whether the call answers with a stream of values (`watch`, `events`). */
   readonly stream: boolean;
+  /**
+   * The entry's `description` annotation, or for a command without one, its
+   * Schema `description` annotation.
+   */
+  readonly description: string | undefined;
 }
 
 /** Every call an Api serves, in the order it serves them. */
@@ -266,8 +272,11 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
   serves.flatMap((served): ReadonlyArray<Operation> => {
     if (served.kind === "Command") {
       const rpc = served.rpc as Rpc.AnyWithProps;
-      return [{ served, name: served.tag, operation: "send", rpc, stream: false }];
+      const description =
+        served.annotations.description ?? SchemaAST.resolveDescription(served.ast);
+      return [{ served, name: served.tag, operation: "send", rpc, stream: false, description }];
     }
+    const { description } = served.annotations;
     const name = nameOf(served);
     return Object.entries(readRpcs(served)).flatMap(([call, read]) => {
       if (read === undefined) return [];
@@ -276,7 +285,14 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
       const operation =
         (call as keyof ReadRpcs) === "get" && served.kind === "Stream" ? "peek" : call;
       return [
-        { served, name, operation, rpc, stream: RpcSchema.isStreamSchema(rpc.successSchema) },
+        {
+          served,
+          name,
+          operation,
+          rpc,
+          stream: RpcSchema.isStreamSchema(rpc.successSchema),
+          description,
+        },
       ];
     });
   });

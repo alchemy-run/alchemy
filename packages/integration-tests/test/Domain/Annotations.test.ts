@@ -1,0 +1,114 @@
+import * as Domain from "@alchemy.run/domain";
+import { describe, expect, it } from "@alchemy.run/test";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+// A key of this suite's own, as an app or a library adds one.
+declare module "@alchemy.run/domain" {
+  interface Annotations {
+    readonly annotationsTestOwner?: string;
+  }
+}
+
+const WalletId = Schema.String.pipe(Schema.brand("WalletId"));
+
+class Deposited extends Domain.Event(
+  "Deposited",
+  { amount: Schema.Int, balance: Schema.Int },
+  { annotations: { description: "Money arrived in a wallet." } },
+) {}
+
+class Deposit extends Domain.Command("Deposit", {
+  target: WalletId,
+  input: { amount: Schema.Int },
+  events: [Deposited],
+  annotations: {
+    description: "Put money into a wallet. The amount is in cents.",
+    annotationsTestOwner: "payments",
+  },
+}) {}
+
+class Close extends Domain.Command("Close", { target: WalletId }) {}
+
+class Wallet extends Domain.Aggregate("Wallet", {
+  id: WalletId,
+  state: Schema.Struct({ balance: Schema.Int }),
+  initial: { balance: 0 },
+  commands: [Deposit, Close],
+  decide: {
+    Deposit: (s, cmd) => [new Deposited({ amount: cmd.amount, balance: s.balance + cmd.amount })],
+    Close: () => [],
+  },
+  evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+  annotations: { description: "A wallet, which keeps its own balance." },
+}) {}
+
+class Balance extends Domain.View("Balance", {
+  from: [Wallet],
+  key: Wallet,
+  state: Schema.Struct({ balance: Schema.Int }),
+  initial: { balance: 0 },
+  evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+  annotations: { description: "The current balance of one wallet." },
+}) {}
+
+class BalanceChanged extends Domain.Event("BalanceChanged", { balance: Schema.Int }) {}
+
+class BalanceLog extends Domain.Stream("BalanceLog", {
+  key: Wallet,
+  entries: [BalanceChanged],
+  annotations: { description: "Every balance a wallet had, oldest first." },
+}) {}
+
+class LogBalances extends Domain.Projection("LogBalances", {
+  from: [Wallet],
+  key: Wallet,
+  on: [Deposited],
+  writes: [BalanceLog],
+  annotations: { description: "Logs each new balance." },
+}) {}
+
+class Notify extends Domain.Policy("Notify", {
+  from: Wallet,
+  on: [Deposited],
+  annotations: { description: "Tells the owner about a deposit." },
+}) {}
+
+class Refund extends Domain.Saga("Refund", {
+  key: Schema.String,
+  input: { wallet: Schema.String },
+  annotations: { description: "Gives a deposit back." },
+}) {}
+
+describe("Domain annotations", { tags: ["unit"] }, () => {
+  it("every declaration carries the annotations it declares", () => {
+    expect(Deposited.annotations.description).toBe("Money arrived in a wallet.");
+    expect(Deposit.annotations).toEqual({
+      description: "Put money into a wallet. The amount is in cents.",
+      annotationsTestOwner: "payments",
+    });
+    expect(Wallet.annotations.description).toBe("A wallet, which keeps its own balance.");
+    expect(Balance.annotations.description).toBe("The current balance of one wallet.");
+    expect(BalanceLog.annotations.description).toBe("Every balance a wallet had, oldest first.");
+    expect(LogBalances.annotations.description).toBe("Logs each new balance.");
+    expect(Notify.annotations.description).toBe("Tells the owner about a deposit.");
+    expect(Refund.annotations.description).toBe("Gives a deposit back.");
+  });
+
+  it("a declaration without annotations has none", () => {
+    expect(Close.annotations).toEqual({});
+    expect(BalanceChanged.annotations).toEqual({});
+  });
+
+  it.effect("a key nobody declared is a type error; an augmented one is typed", () =>
+    Effect.sync(() => {
+      class Typo extends Domain.Command("Typo", {
+        target: WalletId,
+        // @ts-expect-error `descripton` is not a key of Domain.Annotations
+        annotations: { descripton: "misspelled" },
+      }) {}
+      const owner: string | undefined = Deposit.annotations.annotationsTestOwner;
+      expect([Typo.tag, owner]).toEqual(["Typo", "payments"]);
+    }),
+  );
+});

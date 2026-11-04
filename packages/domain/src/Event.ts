@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import type { Annotations } from "./Annotations.ts";
 import type * as Telemetry from "./Telemetry.ts";
 
 /**
@@ -21,6 +22,7 @@ export type Instance<Tag extends string, F extends Fields> = { readonly _tag: Ta
  */
 export interface Any extends Schema.Top {
   readonly kind: "Event";
+  readonly annotations: Annotations;
   readonly tag: string;
   new (...args: any[]): { readonly _tag: string };
 }
@@ -60,6 +62,11 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
      * `Redacted` value is recorded as `<redacted>`.
      */
     readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
+    /**
+     * Data for what is built on the model, such as its `description`. Add your
+     * own keys by augmenting {@link Annotations}.
+     */
+    readonly annotations?: Annotations;
   },
 ): EventClass<Tag, F> => {
   // The base type is conditional on `Self`, so it is not a constructor until `make` returns.
@@ -69,6 +76,7 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
   ) as any;
   return class extends Base {
     static readonly kind = "Event" as const;
+    static readonly annotations: Annotations = options?.annotations ?? {};
     static readonly tag: Tag = tag;
     static readonly attributes = options?.attributes;
   } as unknown as EventClass<Tag, F>;
@@ -83,6 +91,7 @@ export interface EventClass<Tag extends string, F extends Fields> extends Schema
   {}
 > {
   readonly kind: "Event";
+  readonly annotations: Annotations;
   readonly tag: Tag;
   /** Span attributes the event adds, if it declares any. */
   readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;

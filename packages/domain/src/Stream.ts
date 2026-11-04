@@ -4,6 +4,7 @@ import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
 import type * as EffectStream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
 import type * as Key from "./Key.ts";
@@ -26,6 +27,7 @@ export interface Entry<E, Id = string> {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Stream";
+  readonly annotations: Annotations;
   readonly streamName: string;
   readonly definition: {
     readonly key: Key.Any;
@@ -54,6 +56,11 @@ export interface Definition<
   Ms,
   Rejects
 > {
+  /**
+   * Data for what is built on the model, such as its `description`. Add your
+   * own keys by augmenting {@link Annotations}.
+   */
+  readonly annotations?: Annotations;
   /**
    * What keys this stream, one ordered log per key: an aggregate, whose refs
    * are its keys, or a string Schema, whose values are.
@@ -199,6 +206,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Stream" as const;
+    static readonly annotations: Annotations = definition.annotations ?? {};
     static readonly streamName: Name = name;
     static readonly definition = definition;
   } as unknown as StreamClass<
@@ -219,6 +227,7 @@ export interface StreamClass<
   E,
 > extends Context.ServiceClass<StreamKey<Name>, string, Host<Key, E>> {
   readonly kind: "Stream";
+  readonly annotations: Annotations;
   readonly streamName: Name;
   readonly definition: Def;
   readonly "~event": E;

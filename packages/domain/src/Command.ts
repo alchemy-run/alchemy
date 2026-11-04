@@ -1,5 +1,6 @@
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type { Data, Fields } from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
@@ -19,6 +20,7 @@ export type TargetSchema = Schema.Top & { readonly Type: string; readonly Encode
  */
 export interface Any extends Schema.Top {
   readonly kind: "Command";
+  readonly annotations: Annotations;
   readonly tag: string;
   readonly target: TargetSchema;
   readonly events: ReadonlyArray<Event.Any>;
@@ -84,6 +86,7 @@ export interface CommandClass<
   R extends Rpc.Any,
 > extends Schema.Class<Instance<Tag, F>, Schema.TaggedStruct<Tag, F>, {}> {
   readonly kind: "Command";
+  readonly annotations: Annotations;
   readonly tag: Tag;
   readonly target: Target;
   readonly events: Events;
@@ -105,6 +108,7 @@ interface Options {
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly reply?: Fields;
   readonly attributes?: Telemetry.Attributes<any>;
+  readonly annotations?: Annotations;
 }
 
 const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
@@ -115,6 +119,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
   ) as unknown as new (input: object) => object;
   return class extends Base {
     static readonly kind = "Command" as const;
+    static readonly annotations: Annotations = options.annotations ?? {};
     static readonly tag = tag;
     static readonly target = options.target;
     static readonly events = options.events ?? [];
@@ -222,6 +227,11 @@ export const make = <
      * here, and a `Redacted` value is recorded as `<redacted>`.
      */
     readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
+    /**
+     * Data for what is built on the model, such as its `description`. Add your
+     * own keys by augmenting {@link Annotations}.
+     */
+    readonly annotations?: Annotations;
   },
 ): CommandClass<
   Tag,
