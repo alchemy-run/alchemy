@@ -3,22 +3,28 @@ title: How SQL works in Alchemy
 description: The concepts behind SQL in Alchemy — databases and engines, clients, connections and pools, request scope, migrations and their history — and how they fit together on every cloud.
 ---
 
-import Phases from "../../../components/diagrams/Phases.astro";
+import Timeline from "../../../components/diagrams/Timeline.astro";
 
 Alchemy works with SQL databases on every cloud: D1 and Durable Objects on Cloudflare, Aurora and DSQL on AWS, Cloud SQL and Spanner on GCP, Neon, PlanetScale, Turso, Prisma Postgres, and Postgres or MySQL you run yourself. Each is a different service, but the way your code uses them is the same. You declare the database, its schema changes are applied on deploy, and a client in your code queries it over a connection that lasts one request.
 
 Take one app: a Worker that queries Postgres with Drizzle, with migrations applied on every deploy. The deploy applies new migrations to the database. While the app runs, a client opens a connection per request and queries it.
 
-<Phases
-  phases={[
-    { label: "alchemy deploy", type: "on your machine" },
-    { label: "each request", type: "in your app" },
+<Timeline
+  end={10}
+  lanes={[
+    { id: "deploy", label: "alchemy deploy" },
+    { id: "a", label: "request" },
+    { id: "b", label: "request" },
+    { id: "c", label: "request" },
   ]}
-  rows={[
-    { code: 'migrations: "./migrations"', cells: ["applies the .sql files not yet applied", ""] },
-    { code: "db.select().from(users)", cells: ["", "opens a connection, queries, closes it"] },
+  bars={[
+    { lane: "deploy", start: 0, end: 3, label: "apply 0003.sql" },
+    { lane: "a", start: 3.6, end: 5.8, label: "connection", tone: "default" },
+    { lane: "b", start: 4.4, end: 7, label: "connection", tone: "default" },
+    { lane: "c", start: 7.4, end: 9.6, label: "connection", tone: "default" },
   ]}
-  caption="Deploys change the schema. Requests query it over a connection that lives as long as they do."
+  marks={[{ at: 3, label: "schema updated" }]}
+  caption="A deploy applies the migrations it hasn't run yet. After that, each request opens its own connection and closes it when the request ends."
 />
 
 ## Databases and engines

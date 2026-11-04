@@ -73,7 +73,7 @@ mixing them on a page is fine.
 | What states does it move through? | `StateMachine` | `cloudflare/messaging/queues`, `aws/observability/cloudwatch` |
 | How is data laid out, and what does a query read? | `Records` | `aws/data/dynamodb`, `aws/data/s3` |
 | When does each combination work? | `Matrix` | `aws/iam` (across accounts) |
-| What does the same code do in each phase? | `Phases` | `aws/security/secrets-env`, `infrastructure-as-effects/phases` |
+| How does a value or a line of code travel from deploy to run time? | `Sequence` (a value's journey) or `Timeline` (what runs when) | `aws/security/secrets-env`, `infrastructure-as-effects/phases` |
 | How do copies relate over time? | `BranchGraph` | `neon/data/branching` |
 
 Each component's JSDoc has its props and a usage example. Read it before using
@@ -92,6 +92,9 @@ Rules for every diagram:
   `getByName("lobby")`, `weur`, `maxRetries`, offsets, sizes, cities.
 - **Containment is a border, never an arrow.** Arrows are only for things that
   move or call. Group ids and node ids must differ.
+- **Never a table of text in boxes.** A grid of cells holding sentences, half
+  of them empty dashes, was rejected: it shows nothing a paragraph doesn't. If
+  the cells would be sentences, draw the movement or the timing instead.
 - **A diagram with no arrows and no meaningful borders is the wrong
   component.** Use a purpose-made one, or build a new one in
   `diagrams/` in the same style when no existing one answers the question.

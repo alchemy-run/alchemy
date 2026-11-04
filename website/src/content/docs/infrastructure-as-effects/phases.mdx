@@ -3,7 +3,7 @@ title: Phases
 description: Alchemy programs run in two phases — Construction drives the deploy, Runtime handles requests. Knowing which is which is the key to writing Workers and Lambda Functions.
 ---
 
-import Phases from "../../../components/diagrams/Phases.astro";
+import Timeline from "../../../components/diagrams/Timeline.astro";
 
 Every alchemy program runs in two phases — plantime builds the plan,
 runtime serves requests. [Runtime](/infrastructure-as-effects/runtime)
@@ -55,17 +55,22 @@ can run.
 
 ## What runs when
 
-<Phases
-  phases={[
-    { label: "plantime", type: "alchemy deploy" },
-    { label: "cold start", type: "in the Worker or Lambda" },
-    { label: "each request", type: "fetch()" },
+<Timeline
+  end={9.6}
+  lanes={[
+    { id: "deploy", label: "alchemy deploy", type: "plantime" },
+    { id: "worker", label: "Worker", type: "runtime" },
   ]}
-  rows={[
-    { code: "Construction", cells: ["records bindings", "builds SDK clients", ""] },
-    { code: "handler body", cells: ["", "", "runs, with the clients"] },
+  bars={[
+    { lane: "deploy", start: 0, end: 2.2, label: "Construction" },
+    { lane: "deploy", start: 2.2, end: 4.4, label: "create, update", tone: "muted" },
+    { lane: "worker", start: 5, end: 7.2, label: "Construction" },
+    { lane: "worker", start: 7.4, end: 8.3, label: "fetch", tone: "default" },
+    { lane: "worker", start: 8.5, end: 9.4, label: "fetch", tone: "default" },
   ]}
-  caption="Construction runs twice: at plantime to learn the bindings, and at cold start to build real clients. The handler body only ever runs per request."
+  marks={[{ at: 5, label: "cold start" }]}
+  legend={[{ tone: "accent", label: "Construction: records bindings, then builds clients" }, { tone: "default", label: "handler, per request" }]}
+  caption="Construction runs twice: at plantime, to record the bindings, and at cold start, to build real clients. The handler only ever runs per request."
 />
 
 - At **plantime**, the constructor runs to discover bindings — alchemy needs
