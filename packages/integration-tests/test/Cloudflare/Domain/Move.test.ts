@@ -133,15 +133,23 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
         expect(yield* json<{ balance: number }>(url, "/account/deep")).toEqual({
           balance: deepTotal,
         });
-        expect(
-          yield* json<{ count: number; total: number }>(url, "/view/deep").pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("1 second"),
-              until: (view) => view?.count === DEPTH + log.written.length,
-              times: 30,
-            }),
+        // The view is eventually consistent: deliveries the move held up arrive.
+        const viewStart = yield* now;
+        const view = yield* json<{ count: number; total: number }>(url, "/view/deep").pipe(
+          Effect.tap((view) =>
+            Effect.sync(() =>
+              console.log(
+                `MOVE-VIEW ${Math.round((Date.now() - viewStart.getTime()) / 1000)}s count=${view?.count} of ${DEPTH + log.written.length}`,
+              ),
+            ),
           ),
-        ).toEqual({ count: DEPTH + log.written.length, total: deepTotal });
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (view) => view?.count === DEPTH + log.written.length,
+            times: 36,
+          }),
+        );
+        expect(view).toEqual({ count: DEPTH + log.written.length, total: deepTotal });
         for (const i of [0, Math.floor(WIDTH / 2), WIDTH - 1]) {
           expect(yield* json(url, `/account/b${i}`)).toEqual({ balance: sum(1, SMALL) });
           expect(yield* json(url, `/view/b${i}`)).toEqual({ count: SMALL, total: sum(1, SMALL) });

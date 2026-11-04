@@ -5426,16 +5426,29 @@ export const LiveWorkerProvider = () =>
             )}`,
           );
 
+          // Old Domain classes whose objects have all moved leave the upload:
+          // their bindings and their exports (Cloudflare deletes a class only
+          // once the code no longer exports it).
+          const settled = yield* withoutSettledDomainMovers({
+            accountId,
+            scriptName: name,
+            bindings,
+            existingSettings,
+          });
           return yield* putWorker(
             id,
             fqn,
-            news,
-            yield* withoutSettledDomainMovers({
-              accountId,
-              scriptName: name,
-              bindings,
-              existingSettings,
-            }),
+            settled.dropped.size === 0 || news.exports === undefined
+              ? news
+              : {
+                  ...news,
+                  exports: Object.fromEntries(
+                    Object.entries(news.exports).filter(
+                      ([className]) => !settled.dropped.has(className),
+                    ),
+                  ),
+                },
+            settled.bindings,
             olds,
             output,
             session,
@@ -5803,7 +5816,7 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
 }) {
   const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
   const movers = domainClasses.filter((domainClass) => domainClass.mover);
-  if (movers.length === 0) return bindings;
+  if (movers.length === 0) return { bindings, dropped: new Set<string>() };
   const tags = Array.from(existingSettings?.tags ?? []);
   const deployed = DomainVersion.deployedVersion(tags);
   const deployedClasses = new Set(
@@ -5854,8 +5867,8 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
   const dropped = new Set(
     movers.map((mover) => mover.className).filter((className) => !kept.has(className)),
   );
-  if (dropped.size === 0) return bindings;
-  return bindings.map((binding) =>
+  if (dropped.size === 0) return { bindings, dropped };
+  const remaining = bindings.map((binding) =>
     binding.data.bindings === undefined
       ? binding
       : {
@@ -5875,6 +5888,7 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
           },
         },
   );
+  return { bindings: remaining, dropped };
 });
 
 /**
