@@ -7,6 +7,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { HttpServerError } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { AWAITING_HEADER, awaitingHeader } from "./Calls.ts";
 
 /** A native fetch entry point: a RivetKit actor handle's `fetch`. */
 export interface NativeFetcher {
@@ -39,11 +40,20 @@ export const fromNativeFetcher = (raw: NativeFetcher): Fetcher => {
   ) =>
     Effect.gen(function* () {
       const client = HttpClientRequest.isHttpClientRequest(request);
-      const web = client
+      const built = client
         ? yield* HttpClientRequest.toWeb(request).pipe(
             Effect.mapError((cause) => new RpcCallError({ method: "fetch", cause })),
           )
         : yield* HttpServerRequest.toWeb(request);
+      // The sections of the calling instance waiting on this call, so a
+      // call that comes back to it can fail instead of deadlocking.
+      const awaiting = yield* awaitingHeader;
+      let web = built;
+      if (awaiting !== undefined) {
+        const headers = new Headers(built.headers);
+        headers.set(AWAITING_HEADER, awaiting);
+        web = new Request(built, { headers });
+      }
       const response = yield* Effect.tryPromise({
         try: () => raw.fetch(web),
         catch: (cause) => new RpcCallError({ method: "fetch", cause }),

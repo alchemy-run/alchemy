@@ -23,15 +23,26 @@ import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
   DurableObjectState,
-  claimFiredAlarm,
   makeDurableObjectState,
   migrateStorage,
+  runFiredAlarm,
   type ActorContextLike,
 } from "../DurableObjectState.ts";
+import {
+  AWAITING_HEADER,
+  Awaiting,
+  DEADLOCK_STATUS,
+  isDeadlock,
+  makeActivation,
+  receive,
+  waitingSection,
+  type Activation,
+} from "./Calls.ts";
 
 /** What an actor activation keeps in memory until it sleeps. */
 interface ActivationVars {
   instance: DurableObjectInstance | undefined;
+  activation: Activation | undefined;
 }
 
 type ActivationContext = ActorContextLike & { readonly vars: ActivationVars };
@@ -39,9 +50,25 @@ type ActivationContext = ActorContextLike & { readonly vars: ActivationVars };
 /** Read a RivetKit setting the pool put in the node's environment. */
 const env = (name: string): string | undefined => process.env[name];
 
+const deadlock = (message: string) => new Response(message, { status: DEADLOCK_STATUS });
+
 /** Serve one actor request through the instance's `fetch` (and fetch-RPC). */
-const handleRequest = (instance: DurableObjectInstance, request: Request) =>
-  instance.execute(
+const handleRequest = (
+  instance: DurableObjectInstance,
+  activation: Activation,
+  request: Request,
+) => {
+  const awaiting = receive(request.headers.get(AWAITING_HEADER));
+  // The instance's construction waits on this call, and the call can't
+  // start until construction finishes.
+  if (waitingSection(activation, awaiting.received) === activation.construction) {
+    return Promise.resolve(
+      deadlock(
+        "This Durable Object's constructor waits on this call, which can't run until construction finishes.",
+      ),
+    );
+  }
+  return instance.execute(
     (shape) =>
       Effect.gen(function* () {
         const response = yield* instance
@@ -53,12 +80,17 @@ const handleRequest = (instance: DurableObjectInstance, request: Request) =>
             ),
           );
         return HttpServerResponse.toWeb(response);
-      }),
+      }).pipe(Effect.provideService(Awaiting, awaiting)),
     async (exit) =>
       Exit.isSuccess(exit)
         ? (exit.value as Response)
-        : new Response("Internal Server Error", { status: 500 }),
+        : isDeadlock(exit.cause)
+          ? deadlock(
+              "A transaction on this Durable Object waits on this call, which needs its storage.",
+            )
+          : new Response("Internal Server Error", { status: 500 }),
   );
+};
 
 /**
  * Host every Durable Object class as a RivetKit actor and connect this node
@@ -93,15 +125,28 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
       const instanceOf = (c: ActivationContext) => {
         let instance = c.vars.instance;
         if (instance === undefined) {
+          const activation = makeActivation();
+          c.vars.activation = activation;
           instance = makeDurableObjectInstance({
             build: () => Promise.resolve(build),
             // RivetKit runs an actor's calls concurrently over async
             // storage: the instance's own input gate keeps one call's
             // storage from interleaving with another's.
-            services: Context.add(
-              Effect.runSyncWith(context)(InputGateLive.pipe(Layer.build, Effect.scoped)),
-              DurableObjectState,
-              makeDurableObjectState(c),
+            services: Effect.runSyncWith(context)(
+              InputGateLive.pipe(Layer.build, Effect.scoped),
+            ).pipe(
+              Context.add(DurableObjectState, makeDurableObjectState(c, activation)),
+              // Construction runs under the activation's construction
+              // section; each call replaces it with what it was sent.
+              Context.add(Awaiting, {
+                received: [],
+                own: [
+                  {
+                    token: activation.construction,
+                    open: () => activation.open.has(activation.construction),
+                  },
+                ],
+              }),
             ),
             waitUntil: (promise) => c.waitUntil(promise),
             // RPC arrives as fetch-RPC over the actor's `fetch`.
@@ -109,25 +154,48 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           });
           c.vars.instance = instance;
         }
-        return instance;
+        const activation = c.vars.activation!;
+        // Construction has finished once a call starts, or fails.
+        const constructed = () => void activation.open.delete(activation.construction);
+        const execute: DurableObjectInstance["execute"] = (fn, onExit) =>
+          instance
+            .execute((shape) => {
+              constructed();
+              return fn(shape);
+            }, onExit)
+            .finally(constructed);
+        return { instance: { ...instance, execute }, activation };
       };
 
       use[name] = actor({
         db: db({ onMigrate: (database) => migrateStorage(database) }),
-        createVars: (): ActivationVars => ({ instance: undefined }),
-        onRequest: (c: ActivationContext, request: Request) =>
-          handleRequest(instanceOf(c), request),
+        createVars: (): ActivationVars => ({ instance: undefined, activation: undefined }),
+        onRequest: (c: ActivationContext, request: Request) => {
+          const { instance, activation } = instanceOf(c);
+          return handleRequest(instance, activation, request);
+        },
         actions: {
-          [ALARM_ACTION]: (c: ActivationContext, token: unknown) =>
-            instanceOf(c).execute((shape) =>
-              claimFiredAlarm(c, token).pipe(
-                Effect.flatMap((current) =>
-                  current && typeof shape.alarm === "function"
-                    ? (shape.alarm as () => Effect.Effect<void>)()
-                    : Effect.void,
+          // RivetKit times an action out after 60 seconds, and an alarm can
+          // wait out a transaction before its handler runs as long as it
+          // takes: the action only starts it, kept awake until it's done.
+          [ALARM_ACTION]: (c: ActivationContext, token: unknown) => {
+            void c.keepAwake(
+              instanceOf(c).instance.execute((shape) =>
+                runFiredAlarm(
+                  c,
+                  token,
+                  typeof shape.alarm === "function"
+                    ? Effect.suspend(() => (shape.alarm as () => Effect.Effect<void>)())
+                    : undefined,
+                ).pipe(
+                  Effect.provideService(Awaiting, receive(undefined)),
+                  Effect.catchCause((cause) =>
+                    Effect.logError("Durable Object alarm could not run", cause),
+                  ),
                 ),
               ),
-            ),
+            );
+          },
         },
       } as never);
     }

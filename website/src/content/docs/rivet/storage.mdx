@@ -120,6 +120,8 @@ alarm: () =>
 
 `getAlarm` returns when the alarm is due, or `null`. `deleteAlarm` cancels it. An alarm moved or cancelled after it came due, but before `alarm` started, doesn't run. A room that needs several timers keeps them in a table and sets the alarm to the earliest.
 
+If `alarm` fails, Rivet runs it again: up to six more times, two seconds after the first failure and twice as long after each one since, unless the handler set a new alarm before failing. That's how Cloudflare retries alarms too.
+
 ## Change state safely while calls overlap
 
 A room runs more than one call at once: while one call waits on something, another can start. Storage is the exception. Once a call starts using storage, no other call touches it until the first one waits on something else, so a read followed by a write stays together:
@@ -163,6 +165,18 @@ yield* state.storage.transaction(
 
 Its writes commit together if it succeeds and roll back if it fails, alarms included: an alarm set or cancelled inside takes effect when the transaction commits. No other call touches storage until it finishes, whatever it waits on.
 
-That also means a call back into this room from inside the transaction would wait for the transaction itself, so don't call other Durable Objects from one.
+A transaction runs for at most 30 seconds. Past that it's interrupted, rolled back, and dies with `Rivet.TransactionTimedOut`, so a transaction stuck waiting can't hold the room forever. Pass a timeout of your own as the second argument:
+
+```typescript title="src/room.ts"
+yield* state.storage.transaction(
+  Effect.gen(function* () {
+    const visitors = (yield* state.storage.get<number>("visitors")) ?? 0;
+    yield* state.storage.put("visitors", visitors + 1);
+  }),
+  { timeout: "5 seconds" },
+);
+```
+
+A call back into this room from inside a transaction can't use storage until the transaction finishes, and the transaction is waiting on it. Rivet spots that, even through other Durable Objects, and fails the call back with HTTP 508 instead of letting both wait. The transaction sees the failure and rolls back. The same goes for a room that calls itself while it starts.
 
 Next, [Calling a Durable Object](/rivet/calling): how callers reach a room.

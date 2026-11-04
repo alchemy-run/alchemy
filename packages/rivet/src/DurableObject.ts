@@ -415,6 +415,22 @@ const declare = (id: string, declaration: any) =>
 
 const namespaceOf = (name: string, declaration: Effect.Effect<DurableObject, never, any>) =>
   Effect.gen(function* () {
+    const ctx = Option.getOrUndefined(yield* Effect.serviceOption(RuntimeContext));
+    // Its own namespace, yielded from its own phase: it's already being
+    // built. It runs on its pool's nodes, which have the control plane in
+    // their environment; binding its own outputs into its environment would
+    // make it depend on itself.
+    if (ctx?.Type === DurableObjectTypeId && ctx.id === name) {
+      return makeNamespace(
+        name,
+        yield* Effect.sync(() => ({
+          endpoint: process.env.RIVET_ENDPOINT ?? "",
+          token: process.env.RIVET_TOKEN ?? "",
+          namespace: process.env.RIVET_NAMESPACE ?? "",
+          pool: process.env.RIVET_POOL ?? "",
+        })),
+      );
+    }
     // Built on a memo map of its own: a class built inside another's phase
     // would otherwise reuse the caller's already-built pool Layer, which
     // then never registers the class.
@@ -423,7 +439,6 @@ const namespaceOf = (name: string, declaration: Effect.Effect<DurableObject, nev
       : yield* declaration.pipe(
           Effect.provideServiceEffect(Layer.CurrentMemoMap, Layer.makeMemoMap),
         );
-    const ctx = Option.getOrUndefined(yield* Effect.serviceOption(RuntimeContext));
     // Outside a runtime (the stack itself) there is nothing to call from.
     if (ctx === undefined) return makeNamespace(name, undefined);
     // Bound as environment values while deploying; read back at runtime.
