@@ -65,7 +65,7 @@ export const runInBackground = <A, E, R>(
 export const makeEventLifetime = (scope: Scope.Scope) => {
   const work: Array<Promise<unknown>> = [];
   const settled = Effect.promise(async () => {
-    for (let seen = 0; seen < work.length; ) {
+    for (let seen = 0; seen < work.length;) {
       const batch = work.slice(seen);
       seen = work.length;
       await Promise.allSettled(batch);
