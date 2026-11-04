@@ -97,6 +97,12 @@ const zoneBox = (z: Zone) => {
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 };
 const boxes = new Map(zones.map((z) => [z.id, zoneBox(z)]));
+// The zone a tunnel pierces is the one around its target.
+const zoneOf = (id: string) => {
+  const z = zones.find((z) => z.nodes.includes(id));
+  return z ? { ...boxes.get(z.id)!, tone: z.tone } : undefined;
+};
+const BREACH = 22;
 // Labels beside vertical links can run past the last column.
 const sideLabel = Math.max(0, ...links.filter((l) => l.kind !== "blocked" && colOf.get(l.from) === colOf.get(l.to)).map((l) => (l.label ?? "").length * 6.6 + 20 - 30));
 const W = Math.max(
@@ -181,11 +187,17 @@ const H = Math.max(rowY[maxRow]! + NH + PAD, ...[...boxes.values()].map((b) => b
           const x = a.x + NW / 2;
           const y1 = a.y + NH;
           const y2 = b.y;
+          const wall = l.kind === "tunnel" ? zoneOf(l.to) : undefined;
           return l.kind === "tunnel" ? (
             <g>
-              <rect x={x - 11} y={y1} width={22} height={y2 - y1} rx="6" class="alc-bd__tunnel" />
-              <line x1={x} y1={y1 + 4} x2={x} y2={y2 - 4} class="alc-fig__line" marker-end="url(#alc-bd-arrow)" />
-              {l.label && <text x={x + 20} y={(y1 + y2) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+              {wall && (
+                <g>
+                  <rect x={x - BREACH} y={wall.y - 3} width={BREACH * 2} height={6} class="alc-bd__gap" />
+                  <line x1={x - BREACH} y1={wall.y} x2={x + BREACH} y2={wall.y} class:list={["alc-bd__breach", wall.tone === "warn" && "alc-bd__breach--warn"]} />
+                </g>
+              )}
+              <line x1={x} y1={y1} x2={x} y2={y2 - 4} class="alc-fig__line alc-bd__tunnel" marker-end="url(#alc-bd-arrow)" />
+              {l.label && <text x={x + 10} y={(y1 + y2) / 2 + 4} class="alc-fig__small">{l.label}</text>}
             </g>
           ) : (
             <g>
@@ -198,10 +210,16 @@ const H = Math.max(rowY[maxRow]! + NH + PAD, ...[...boxes.values()].map((b) => b
         const x1 = a.x + NW;
         const x2 = b.x;
         if (l.kind === "tunnel") {
+          const wall = zoneOf(l.to);
           return (
             <g>
-              <rect x={x1} y={y - 11} width={x2 - x1} height={22} rx="6" class="alc-bd__tunnel" />
-              <line x1={x1 + 6} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line" marker-end="url(#alc-bd-arrow)" />
+              {wall && (
+                <g>
+                  <rect x={wall.x - 3} y={y - BREACH} width={6} height={BREACH * 2} class="alc-bd__gap" />
+                  <line x1={wall.x} y1={y - BREACH} x2={wall.x} y2={y + BREACH} class:list={["alc-bd__breach", wall.tone === "warn" && "alc-bd__breach--warn"]} />
+                </g>
+              )}
+              <line x1={x1} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line alc-bd__tunnel" marker-end="url(#alc-bd-arrow)" />
               {l.label && <text x={(x1 + x2) / 2} y={y + 28} text-anchor="middle" class="alc-fig__small">{l.label}</text>}
             </g>
           );
@@ -242,10 +260,21 @@ const H = Math.max(rowY[maxRow]! + NH + PAD, ...[...boxes.values()].map((b) => b
     stroke: color-mix(in srgb, var(--alc-warn) 70%, transparent);
     stroke-width: 2;
   }
+  /* A tunnel is a plain arrow; the wall it passes through opens into a dotted gap. */
   .alc-bd__tunnel {
-    fill: color-mix(in srgb, var(--alc-accent) 18%, var(--alc-bg-elev-1));
-    stroke: var(--alc-accent);
-    stroke-width: 1.5;
+    stroke-width: 2;
+  }
+  .alc-bd__gap {
+    fill: var(--alc-bg-elev-1);
+  }
+  .alc-bd__breach {
+    stroke: var(--alc-accent-40);
+    stroke-width: 2;
+    stroke-dasharray: 2 4;
+    stroke-linecap: round;
+  }
+  .alc-bd__breach--warn {
+    stroke: color-mix(in srgb, var(--alc-warn) 70%, transparent);
   }
   .alc-bd__cross {
     stroke: var(--alc-danger);
