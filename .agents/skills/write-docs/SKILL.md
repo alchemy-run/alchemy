@@ -65,7 +65,10 @@ from JSDoc (see AGENTS.md "Documentation Generation").
    `scripts/screenshot.sh`, and check links with `scripts/check-links.sh`. Commit
    and push after each coherent change; don't batch a day's work. Docs-only PRs
    get a `docs(<scope>):` title. Add the `deploy-website` label for a preview at
-   `pr-<N>-alchemy-website-preview.testing-2b2.workers.dev`.
+   `pr-<N>-alchemy-website-preview.testing-2b2.workers.dev`. When the scope
+   grows, rewrite the PR body to match and read it back with
+   `gh api repos/<owner>/<repo>/pulls/<n>`. `gh pr edit --body-file` can exit
+   cleanly and change nothing, so fall back to `gh api -X PATCH … -F body=@file`.
 9. **Iterate on feedback in the same PR.** Apply feedback everywhere it applies,
    not just on the page the user pointed at. When they flag one hub, fix every hub.
    Then grep the whole docs tree for the rejected phrasing (see
@@ -189,6 +192,8 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
 ## When you finish
 
 Tell the user what changed per provider, what you verified (build, links,
-screenshots), which claims you couldn't verify and so left out, and what you
+screenshots), and show each new or changed diagram on its own (`diagram-sheet.py
+--split`, see [verification](references/verification.md#review-diagrams-one-at-a-time)).
+Say which claims you couldn't verify and so left out, and what you
 deliberately didn't change and why. Offer the obvious next sweep when you found
 one, like bun-first commands elsewhere in the docs.
