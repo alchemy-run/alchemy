@@ -2,6 +2,7 @@
 title: Prisma ORM with Postgres
 description: Deploy Prisma ORM v8 on Cloudflare Workers with Neon Postgres, Hyperdrive, controlled migrations, and Effect-native queries.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 [Contracts](/sql/prisma/contracts) · [Query API](/sql/prisma/postgres) · [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma)
 
@@ -11,10 +12,7 @@ Requires Prisma ORM **8.0.0-rc** and **PostgreSQL 17+**. Pin the ORM and CLI ver
 
 ## Install the dependencies
 
-```sh
-bun add alchemy @alchemy.run/cloudflare @alchemy.run/neon @alchemy.run/prisma effect @prisma/orm-postgres arktype
-bun add -d prisma
-```
+<PackageManagers add="alchemy @alchemy.run/cloudflare @alchemy.run/neon @alchemy.run/prisma effect @prisma/orm-postgres arktype" dev="prisma" />
 
 [Cloudflare setup](/cloudflare/setup) · [Neon setup](/neon/setup) · [Define a contract](/sql/prisma/contracts)
 
@@ -156,7 +154,7 @@ export default Alchemy.Stack(
 ## Deploy and query
 
 ```sh
-bun alchemy deploy
+npx alchemy deploy
 curl https://<your-worker>.workers.dev
 ```
 
@@ -164,9 +162,7 @@ This demo route is public. Add authentication before exposing private data.
 
 ## Clean up
 
-```sh
-bun alchemy destroy
-```
+<PackageManagers run="alchemy destroy" />
 
 Destroy removes the example's Worker, Hyperdrive configuration, and Neon resources, including the database data.
 

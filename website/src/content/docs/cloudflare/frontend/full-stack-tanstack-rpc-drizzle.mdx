@@ -5,7 +5,7 @@ sidebar:
   order: 6
 ---
 
-This guide ties four pieces into one deployable app:
+Take one deployable app, built from four pieces:
 
 - **[TanStack Start](/cloudflare/frontend/frontends)** — the React frontend, deployed as a
   Cloudflare Worker + assets via `Cloudflare.Website.Vite`.
@@ -519,8 +519,8 @@ and [Neon](/neon/setup) credentials first with `alchemy profile edit` (or an
 to run.
 
 ```sh
-bun install
-bun alchemy deploy
+npm install
+npx alchemy deploy
 ```
 
 Open the `websiteUrl` from the deploy output and add a few todos — each

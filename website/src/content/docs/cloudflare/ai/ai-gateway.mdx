@@ -194,8 +194,8 @@ need typed handling instead, `Effect.catchTag("AiError", …)` works.
 ## Try it
 
 ```sh
-bun alchemy deploy
-curl -X POST "$(bun alchemy stack output url)/generate" \
+npx alchemy deploy
+curl -X POST "$(npx alchemy stack output url)/generate" \
   -H "content-type: application/json" \
   -d '{"prompt":"Write a haiku about Effect"}'
 ```
@@ -244,7 +244,7 @@ flushes through the Worker → edge → client without buffering.
 entire lifetime of the stream, not just the initial setup.
 
 ```sh
-curl -N -X POST "$(bun alchemy stack output url)/stream" \
+curl -N -X POST "$(npx alchemy stack output url)/stream" \
   -H "content-type: application/json" \
   -d '{"prompt":"Write a haiku about Effect, slowly."}'
 ```
@@ -273,7 +273,7 @@ export const Gateway = Cloudflare.AI.Gateway("Gateway", {
 ```
 
 Bumping `cacheTtl`, `rateLimitingLimit`, or toggling `authentication`
-is a single `bun alchemy deploy` away — the diff updates the gateway
+is a single `alchemy deploy` away — the diff updates the gateway
 in place.
 
 ## What you have now

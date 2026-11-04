@@ -2,6 +2,7 @@
 title: Testing
 description: How Alchemy tests work — real clouds by default, local emulators on demand, one Stack deploy per suite, isolated stages, deploy → assert → destroy.
 ---
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 Alchemy tests run against real clouds by default — no mocks. A suite deploys a real Stack once, runs assertions against live resources, and tears it back down: deploy → assert → destroy. The same suite can also run entirely on your machine — see [Local mode](#local-mode-dev-true) below.
 
@@ -36,9 +37,7 @@ For every option, hook, and variant, see the [Test harness](/testing/test-harnes
 
 `Test.make` ships in `@alchemy.run/test` and runs on three test runners with the same API:
 
-```sh
-bun add -d @alchemy.run/test
-```
+<PackageManagers dev="@alchemy.run/test" />
 
 Import it from the adapter for your runner:
 
@@ -66,7 +65,7 @@ Test.make({ providers, stage: "ci-pr-42" });
 Or set it for the whole run from the command line:
 
 ```sh
-bunx alchemy-test --stage ci-pr-42
+npx alchemy-test --stage ci-pr-42
 ALCHEMY_TEST_STAGE=ci-pr-42 bun test
 ```
 

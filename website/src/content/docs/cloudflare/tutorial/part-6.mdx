@@ -161,7 +161,7 @@ datasets and token deploy before the Worker, automatically.
 Deploy, then hit the Worker to produce telemetry:
 
 ```sh
-bun alchemy deploy
+npx alchemy deploy
 
 curl -X PUT https://myapp-worker-dev-you-abc123.workers.dev/hello.txt \
   -d 'Hello, observability!'

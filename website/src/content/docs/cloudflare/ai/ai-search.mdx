@@ -277,14 +277,14 @@ metadata — no generated answer, because nothing was generated.
 Deploy, upload a document to the bucket, and ask a question.
 
 ```sh
-bun alchemy deploy
+npx alchemy deploy
 
 # upload a doc into the indexed bucket (via wrangler)
-echo "Alchemy deploys with 'bun alchemy deploy'." > faq.txt
-bunx wrangler r2 object put "$(bun alchemy stack output bucket)/faq.txt" --file faq.txt --remote
+echo "Alchemy deploys with 'npx alchemy deploy'." > faq.txt
+npx wrangler r2 object put "$(npx alchemy stack output bucket)/faq.txt" --file faq.txt --remote
 
 # ask over it
-curl "$(bun alchemy stack output url)/ask?q=How%20do%20I%20deploy%3F"
+curl "$(npx alchemy stack output url)/ask?q=How%20do%20I%20deploy%3F"
 ```
 
 You can also drag files straight into the bucket from the Cloudflare

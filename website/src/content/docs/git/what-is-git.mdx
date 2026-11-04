@@ -76,7 +76,7 @@ A host decides who may read and who may write, and what each write may do. Git i
 
 ## How @alchemy.run/git builds a host from these concepts
 
-Each decision on this page is a Layer you choose, all composed in one graph and provided once.
+Each of these decisions is a Layer you choose, all composed in one graph and provided once.
 
 `ApiLive` serves smart HTTP, a typed REST plane and a GitHub-compatible API, behind your own middleware, so who may call what is your application's code. `ReposDurableObject` gives each repository its own Durable Object, the one place its refs move. A registry resolves names, in a Durable Object or D1. A blob store keeps packs and bundles, in R2 or S3. A hasher verifies pushes, inline, in a Worker Loader isolate or on Lambda. Swap any line, and only that decision changes.
 

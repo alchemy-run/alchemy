@@ -26,8 +26,8 @@ platform needs:
 4. **Gate on it.** Your app checks your stored `charges_enabled` before
    it lets the merchant sell.
 
-This guide walks through `examples/stripe-connect`, which implements
-all four on one Worker with a D1 table. Every snippet is a piece of
+Take `examples/stripe-connect`, which implements all four on one
+Worker with a D1 table. Every snippet is a piece of
 [`src/Api.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/stripe-connect/src/Api.ts);
 the full file is at the end.
 
@@ -280,7 +280,7 @@ the onboarding path.
 
 ```sh
 cd examples/stripe-connect
-bun alchemy deploy
+npx alchemy deploy
 ```
 
 ```sh

@@ -18,8 +18,8 @@ it. The shape every SaaS lands on is:
    cancel gets sent to Stripe's hosted portal. You don't build those
    screens.
 
-This guide walks through `examples/stripe-billing`, which does exactly
-that on one Worker. Every snippet below is a piece of
+Take `examples/stripe-billing`, which does exactly that on one
+Worker. Every snippet below is a piece of
 [`src/Api.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/stripe-billing/src/Api.ts);
 the whole file is at the end.
 
@@ -299,7 +299,7 @@ one `Effect.provide([...])`:
 
 ```sh
 cd examples/stripe-billing
-bun alchemy deploy
+npx alchemy deploy
 ```
 
 ```sh

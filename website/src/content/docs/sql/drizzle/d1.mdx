@@ -60,7 +60,7 @@ export default defineConfig({
 ```
 
 ```sh
-bunx drizzle-kit generate
+npx drizzle-kit generate
 git add src/schema.ts drizzle.config.ts migrations
 git diff --cached
 git commit -m "Add database migration"
@@ -156,4 +156,4 @@ whatever `D1Database` binding the runtime provides.
 
 ## Where next
 
-The [Cloudflare D1 walkthrough](/cloudflare/data/d1-drizzle) owns deployment, while [Effect SQL: D1](/sql/effect-sql/d1) covers tagged-template queries over the same binding. The [D1 example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-d1-drizzle) demonstrates schema and query code but uses the optional schema resource rather than this guide's generation workflow.
+The [Cloudflare D1 walkthrough](/cloudflare/data/d1-drizzle) owns deployment, while [Effect SQL: D1](/sql/effect-sql/d1) covers tagged-template queries over the same binding. The [D1 example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-d1-drizzle) demonstrates schema and query code but uses the optional schema resource rather than generating migrations with `drizzle-kit`.

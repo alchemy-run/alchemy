@@ -1414,6 +1414,7 @@ export default defineConfig({
             {
               label: "Accounts & access",
               items: [
+                { label: "Organizations and keys", link: "/neon/organizations-and-keys" },
                 { label: "Organization governance", link: "/neon/governance" },
                 { label: "Roles", link: "/neon/data/roles" },
               ],

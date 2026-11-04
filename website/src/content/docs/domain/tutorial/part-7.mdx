@@ -4,6 +4,7 @@ description: Send the bank's traces and logs to Axiom, follow a deposit through 
 sidebar:
   order: 7
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 The bank already records a span for every command, event, view and policy. Nothing receives them yet. In this part you send them to [Axiom](/axiom), then add the browser's spans, so one trace runs from a click to every Durable Object it reaches.
 
@@ -16,9 +17,7 @@ You need a [configured Axiom profile](/axiom/setup).
 
 ## Install the Axiom provider
 
-```sh
-bun add @alchemy.run/axiom
-```
+<PackageManagers add="@alchemy.run/axiom" />
 
 ## Let the stack create Axiom resources
 
@@ -135,9 +134,7 @@ This is the only change the bank needs. `Axiom.Telemetry` gives the Worker the d
 
 ## Follow a deposit
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Open the app, deposit, and open `bank-traces` in Axiom. The deposit is one trace:
 
@@ -344,9 +341,7 @@ Runtime.run(
 
 ## Follow a click
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Deposit again. The trace now starts in the browser:
 

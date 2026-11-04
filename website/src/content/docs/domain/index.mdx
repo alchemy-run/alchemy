@@ -4,6 +4,7 @@ description: A domain-driven design framework for Effect. Model your business as
 ---
 
 import DAG from "../../../components/DAG.astro";
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 `@alchemy.run/domain` models your business in its own terms. Commands ask for changes, aggregates decide them, and events record what happened. Views, projections and policies then answer questions, feed your own stores, and apply the business's rules about what to do next.
 
@@ -72,10 +73,7 @@ The `alchemy-domain` skill teaches a coding agent how to turn requirements into 
 
 Ship it with your dependencies, so the skill always matches the alchemy version you have installed:
 
-```sh
-bun add -d skills-npm
-bunx skills-npm setup
-```
+<PackageManagers dev="skills-npm" run="skills-npm setup" />
 
 `setup` adds a `prepare` script. Every install then links the skills your packages ship into each coding agent's skills folder.
 
