@@ -19,6 +19,7 @@ import {
 } from "./Customer/UsernameReservation.policy.ts";
 import { DailyOutflow } from "./Fraud/DailyOutflow.view.ts";
 import { FraudReview, FraudReviewLive } from "./Fraud/FraudReview.policy.ts";
+import { AccountLedger, AccountLedgerLive } from "./Ledger/AccountLedger.query.ts";
 import { Ledger, LedgerLive } from "./Ledger/Ledger.projection.ts";
 import { SettlementRefund, SettlementRefundLive } from "./Settlement/SettlementRefund.policy.ts";
 import { AccountTransfers } from "./Transfer/AccountTransfers.view.ts";
@@ -31,7 +32,7 @@ import {
 import { TransferExecution, TransferExecutionLive } from "./Transfer/TransferExecution.policy.ts";
 import { TransferStatus } from "./Transfer/TransferStatus.view.ts";
 
-/** The bank: every aggregate, view, policy, projection, stream and saga, hosted together. */
+/** The bank: every aggregate, view, policy, projection, stream, saga and query, hosted together. */
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Customer, UsernameClaim, Account, Transfer],
   views: [
@@ -54,11 +55,12 @@ export class Bank extends Domain.Model("Bank", {
   projections: [Ledger, AccountCards],
   streams: [AccountCard],
   sagas: [ExecuteTransfer],
+  queries: [AccountLedger],
 }) {}
 
 /**
- * The policies' and projections' implementations. They require the FraudCheck
- * and Payments external systems, and the LedgerStore.
+ * The policies', projections' and queries' implementations. They require the
+ * FraudCheck and Payments external systems, and the LedgerStore.
  */
 export const BankHandlers = Layer.mergeAll(
   UsernameReservationLive,
@@ -69,5 +71,6 @@ export const BankHandlers = Layer.mergeAll(
   FraudReviewLive,
   SettlementRefundLive,
   LedgerLive,
+  AccountLedgerLive,
   AccountCardsLive,
 );

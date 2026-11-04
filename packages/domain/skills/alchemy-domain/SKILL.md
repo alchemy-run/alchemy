@@ -1,11 +1,11 @@
 ---
 name: alchemy-domain
-description: Build backends with @alchemy.run/domain (domain-driven design on Effect) - turn requirements into aggregates, commands, events, rejections, views, policies, sagas, projections, streams, external systems and Apis; lay them out in a monorepo (domain / server / web packages, kind-suffixed files); test them with stories; host them on Cloudflare Durable Objects with alchemy; and drive them from a foldkit frontend. Use when designing or changing an @alchemy.run/domain model, adding a building block, wiring hosting or a frontend, or reviewing such code.
+description: Build backends with @alchemy.run/domain (domain-driven design on Effect) - turn requirements into aggregates, commands, events, rejections, views, policies, sagas, projections, streams, queries, external systems and Apis; lay them out in a monorepo (domain / server / web packages, kind-suffixed files); test them with stories; host them on Cloudflare Durable Objects with alchemy; and drive them from a foldkit frontend. Use when designing or changing an @alchemy.run/domain model, adding a building block, wiring hosting or a frontend, or reviewing such code.
 ---
 
 # Building with @alchemy.run/domain
 
-`@alchemy.run/domain` models a backend as typed messages and pure state transitions. Commands are decided by aggregates, which record events. Views fold events into read models. Policies react to events. Sagas run long processes. Projections write outside the model. The same model runs in memory for tests and on Cloudflare Durable Objects in production.
+`@alchemy.run/domain` models a backend as typed messages and pure state transitions. Commands are decided by aggregates, which record events. Views fold events into read models. Policies react to events. Sagas run long processes. Projections write outside the model, and queries serve what they wrote. The same model runs in memory for tests and on Cloudflare Durable Objects in production.
 
 Docs: https://alchemy.run/domain, with every page listed in https://alchemy.run/llms.txt. Every section here and in the reference files ends with a More link to the docs page that covers it in depth. A complete reference project: `examples/cloudflare-domain` in the alchemy repo (a bank with a foldkit app).
 
@@ -35,6 +35,7 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - A process with steps, waits and undo (move money: debit, credit, refund on failure): a **Saga**, started by a policy.
 - Something outside the model you call (fraud scoring, payments): an **External System**.
 - Writes to a store outside the model (a ledger table): a **Projection**. An ordered, readable log per key (account cards): a **Stream** that a projection appends to.
+- A question across keys, answered from that store (an account's ledger, paged; large withdrawals across all accounts, largest first): a **Query**. Never a hand-written route.
 - Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block's `decide` or `validate` authorizing.
 
 A rule that spans aggregates never becomes a cross-aggregate transaction. Give the invariant its own aggregate, keyed by what it protects (`UsernameClaim` keyed by username). Or reserve first and commit after, in a policy or saga, with a deadline for anything that waits.
@@ -43,7 +44,7 @@ More: [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd), [
 
 ## Conventions
 
-- **One block per file, named `<Noun>.<kind>.ts`.** The kinds are `.aggregate`, `.command`, `.view`, `.policy`, `.saga`, `.projection`, `.stream`, `.external`, `.api` and `.model`. Plus `.middleware`, `.context` and `.rejection`. An aggregate's id lives in `<Aggregate>.id.ts` next to it. Plain values (`Money.ts`) and helpers keep plain names.
+- **One block per file, named `<Noun>.<kind>.ts`.** The kinds are `.aggregate`, `.command`, `.view`, `.policy`, `.saga`, `.projection`, `.stream`, `.query`, `.external`, `.api` and `.model`. Plus `.middleware`, `.context` and `.rejection`. An aggregate's id lives in `<Aggregate>.id.ts` next to it. Plain values (`Money.ts`) and helpers keep plain names.
 - **A command file holds the command, the events it records, and the rejections only it returns.** A rejection or event used by several commands gets its own file.
 - **A block's implementation sits in its file** (`TransferExecutionLive` in `TransferExecution.policy.ts`), unless it touches infrastructure. Then it lives in the server package.
 - **Folders are subdomains** (`Account/`, `Transfer/`). The model, Apis, middleware and request context sit at the package root.
@@ -58,6 +59,7 @@ More: [Project layout](https://alchemy.run/domain/project-layout).
 - `evolve` only applies an event to state. It never decides anything. It and `reply` are total: they cover every state and never fail, because `decide` already refused what can't happen. Keep a state the event can't follow (`s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`), never a guard that throws.
 - Events carry the outcome `decide` worked out (`balanceAfter`), so `evolve` copies it instead of repeating a rule.
 - Every rejection a command can return is listed in its `rejects`. Callers handle each one with `Effect.catchTag`.
+- Serve a store a projection writes through a `Domain.Query` on an Api, never a hand-written route: authorize it per request with `validate`, and per row with `visible`.
 - Policies and projections run at least once. Make their effects idempotent: commands sent from a handler get deterministic ids, and stores key rows by `stream:seq`.
 - Don't wait for a saga in a policy. `start` it, keyed by the aggregate it's about, and react to the events its steps record.
 - A handler resolves its dependencies once in `toLayer` and requires nothing per call.
@@ -74,5 +76,5 @@ More: [Domain Model: The aggregate decides, and everything commits at once](http
 2. Add the command to its aggregate's `commands`, with a `decide` branch for it and an `evolve` branch for each event.
 3. Update the views, policies and projections that care about the new events.
 4. Expose it through an Api, if a client sends or reads it, with the middleware it needs.
-5. Write stories for the happy path, every rejection, and every policy reaction.
+5. Write stories for the happy path, every rejection, every policy reaction, and every query's authorization.
 6. Run the domain package's tests, with one that expects `Domain.verify(Model)` to be empty. Then type-check the monorepo (`tsc -b`) and run the server and web tests.
