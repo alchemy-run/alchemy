@@ -7,6 +7,7 @@ import {
   usePaste,
   useStdout,
   type DOMElement,
+  type ProgramStatusKind,
 } from "@alchemy.run/sigil";
 import { stringWidth } from "@alchemy.run/sigil/ansi";
 import { useEffect, useLayoutEffect, useRef, useState } from "@alchemy.run/sigil/react";
@@ -17,6 +18,7 @@ import type { Choice, CycleChoice } from "../types.ts";
 import { useCliEnvironment, useGlyphs, useKeyGlyphs } from "./Environment.tsx";
 import { KeyBar, Spinner } from "./Feedback.tsx";
 import { Box, overflowListWindow } from "./Layout.tsx";
+import { useAlchemyStatus } from "./ProgramStatus.ts";
 import { Link, Text } from "./Typography.tsx";
 
 export interface TerminalKey {
@@ -812,6 +814,7 @@ export function BrowserLoginWait({
     return (
       <PromptFrame
         message={manualInputLabel}
+        blocked="auth"
         layout="inline"
         error={error}
         keys={[
@@ -842,6 +845,7 @@ export function BrowserLoginWait({
   return (
     <PromptFrame
       message={message}
+      blocked="auth"
       keys={[
         ...(allowManualInput ? ([[keyGlyphs.enter, "enter code manually"]] as const) : []),
         ...(onOpen === undefined ? [] : ([["o", "open browser"]] as const)),
@@ -872,6 +876,12 @@ export function BrowserLoginWait({
 
 export type PromptFrameProps = {
   readonly message: string;
+  /**
+   * What the prompt waits for, reported as OSC 7501 `blocked` while it is
+   * shown: approvals are `permission`, logins `auth`.
+   * @default "question"
+   */
+  readonly blocked?: ProgramStatusKind;
   readonly description?: ReactNode;
   readonly children: JSX.Element;
   readonly layout?: "inline" | "stacked";
@@ -881,6 +891,7 @@ export type PromptFrameProps = {
 
 export function PromptFrame({
   message,
+  blocked = "question",
   description,
   children,
   layout = "stacked",
@@ -888,6 +899,7 @@ export function PromptFrame({
   keys,
 }: PromptFrameProps) {
   const glyphs = useGlyphs();
+  useAlchemyStatus({ state: "blocked", kind: blocked, msg: message });
   // The active-step glyph shares the heading's brand colour: `◆ question` is
   // the step being answered, `✓ question` (AnsweredPrompt) one that is done.
   const heading = (suffix = "") => (

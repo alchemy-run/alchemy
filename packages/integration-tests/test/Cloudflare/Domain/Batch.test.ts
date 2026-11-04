@@ -27,9 +27,10 @@ const call = (request: HttpClientRequest.HttpClientRequest) =>
   );
 
 describe.concurrent.each([
-  { dev: true, stage: "domain-batches-local" },
-  { dev: false, stage: "domain-batches-live" },
+  { dev: true, stage: `${Test.defaultStage()}-domain-batches-local` },
+  { dev: false, stage: `${Test.defaultStage()}-domain-batches-live` },
 ] as const)("batched projections on Durable Objects (dev: $dev)", ({ dev, stage }) => {
+  const tags = ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"];
   const state = dev ? inMemoryState() : Cloudflare.state();
   const Stack = makeStack(state);
   const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -82,7 +83,7 @@ describe.concurrent.each([
       // the backstop, which inherits the callback's 30-second backoff: about 35.
       expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(20_000);
     }),
-    { timeout: 120_000 },
+    { tags, timeout: 120_000 },
   );
 
   test(
@@ -121,6 +122,6 @@ describe.concurrent.each([
       // retry backoff instead: about 47.
       expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(32_000);
     }),
-    { timeout: 150_000 },
+    { tags, timeout: 150_000 },
   );
 });

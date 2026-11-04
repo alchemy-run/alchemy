@@ -60,7 +60,8 @@ interface ReporterState {
    * only covered tests, such a run would print nothing at all and read as
    * deadlocked.
    */
-  readonly running: Map<string, { label: string; startedAt: number }>;
+  /** `queued`: started, but still waiting for its `exclusive` run lock. */
+  readonly running: Map<string, { label: string; startedAt: number; queued?: boolean }>;
   /** Total tests in the run, known once RunStart arrives. */
   total: number;
   /** Tests that have reported a result so far, and how they went. */
@@ -170,17 +171,25 @@ const STALL_LIST_MAX = 25;
 const printStalled = (state: ReporterState): void => {
   if (state.running.size === 0) return;
   if (Date.now() - state.lastEnd < STALL_AFTER_MS) return;
-  const key = [...state.running.keys()].sort().join("\n");
+  const key = [...state.running.entries()]
+    .map(([id, item]) => `${id}${item.queued ? " (queued)" : ""}`)
+    .sort()
+    .join("\n");
   if (key === state.lastStallKey) return;
   state.lastStallKey = key;
   const now = Date.now();
   const timestamp = new Date(now).toTimeString().slice(0, 8);
   const items = [...state.running.values()].sort((a, b) => a.startedAt - b.startedAt);
+  const queued = items.filter((item) => item.queued).length;
   const lines = [
-    dim(`⧗ [${timestamp}] no tests finished in the last 10s — ${items.length} still running:`),
+    dim(
+      `⧗ [${timestamp}] no tests finished in the last 10s — ${items.length - queued} still running` +
+        (queued > 0 ? `, ${queued} queued for an exclusive lock:` : ":"),
+    ),
   ];
   for (const item of items.slice(0, STALL_LIST_MAX)) {
-    lines.push(dim(`    ${item.label} (${formatDuration(now - item.startedAt)})`));
+    const elapsed = formatDuration(now - item.startedAt);
+    lines.push(dim(`    ${item.label} (${item.queued ? `queued ${elapsed}` : elapsed})`));
   }
   if (items.length > STALL_LIST_MAX) {
     lines.push(dim(`    … ${items.length - STALL_LIST_MAX} more`));
@@ -219,7 +228,15 @@ const onEvent = (event: TestEvent, state: ReporterState): Effect.Effect<void> =>
         state.running.set(event.test.id, {
           label: `${event.test.file} > ${event.test.titlePath.join(" > ")}`,
           startedAt: Date.now(),
+          queued: true,
         });
+      });
+    case "TestLocked":
+      return Effect.sync(() => {
+        const item = state.running.get(event.test.id);
+        if (item !== undefined) {
+          state.running.set(event.test.id, { label: item.label, startedAt: Date.now() });
+        }
       });
     case "HookStart":
       return Effect.sync(() => {

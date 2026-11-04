@@ -3,7 +3,9 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
@@ -173,7 +175,9 @@ const normalizeType = (value: string | undefined) => {
 };
 
 const defaultExpireTime = () =>
-  Effect.sync(() => new Date(Date.now() + DEFAULT_EXPIRE_MS).toISOString());
+  Effect.map(Clock.currentTimeMillis, (now) =>
+    DateTime.formatIso(DateTime.makeUnsafe(now + DEFAULT_EXPIRE_MS)),
+  );
 
 const toAttrs = (backup: bigtable.Backup, project: string) => {
   const name = backup.name ?? "";

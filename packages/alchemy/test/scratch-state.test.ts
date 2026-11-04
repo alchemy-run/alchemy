@@ -73,9 +73,12 @@ describe("test.provider scratch state durability", { tags: ["unit", "local"] }, 
   );
 
   test(
-    "scratch stacks default to test_${USER}",
+    "scratch stacks default to ALCHEMY_TEST_STAGE, then test_${USER}",
     Effect.sync(() => {
-      const expected = `test_${process.env.USER || process.env.USERNAME || "unknown"}`;
+      // `--stage` sets ALCHEMY_TEST_STAGE for the whole run.
+      const expected =
+        process.env.ALCHEMY_TEST_STAGE ||
+        `test_${process.env.USER || process.env.USERNAME || "unknown"}`;
       expect(Core.defaultStage()).toBe(expected);
       const scratch = Core.scratchStack(options, NAME, FILE);
       expect(scratch.stage).toBe(expected);

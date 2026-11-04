@@ -71,6 +71,8 @@ export interface Delivery {
     readonly name: string;
     /** The consumer's generation (see `Kernel.generationOf`), when it has been rebuilt. */
     readonly generation?: number;
+    /** Rebuilt in the storage it had (see `Kernel.inPlace`): its id says `@` for `#`. */
+    readonly inPlace?: boolean;
   };
   /** The target partition: a key's id, or the source stream for an unkeyed policy. */
   readonly key: string;
@@ -251,25 +253,29 @@ export interface AggregateStore {
   readonly send: (id: string, command: Json, meta: Aggregate.SendMeta) => Effect.Effect<SendResult>;
   /**
    * Send a command to one instance when it is due, durably (it survives
-   * restarts) and at least once. Replaces a pending one with the same
-   * `commandId`. Rejections are impossible: only non-rejecting commands are
-   * scheduled. Returns when it is due, in epoch milliseconds on the
-   * platform's clock. Fails with `AlreadyExecuted` when the instance already
-   * has a receipt for `commandId`, so the command would never run.
+   * restarts) and at least once. `name` is the scheduled command's id on the
+   * instance; `meta.commandId` is this arming's, the one the command commits
+   * with. Scheduling under a `name` replaces its command, pending or already
+   * run, unless that command has the same `meta.commandId`: then it is the
+   * same arming again (a policy or step that ran again) and nothing changes,
+   * not even when it is due. Rejections are impossible: only non-rejecting
+   * commands are scheduled. Returns when it is due, in epoch milliseconds on
+   * the platform's clock.
    */
   readonly schedule: (
     id: string,
+    name: string,
     command: Json,
     meta: Aggregate.SendMeta,
     due: Aggregate.Due,
-  ) => Effect.Effect<number, Aggregate.AlreadyExecuted>;
+  ) => Effect.Effect<number>;
   /**
-   * Cancel the pending scheduled command with this `commandId` on one
-   * instance, durably, and remember the cancel. Once this succeeds, the
-   * command never runs, even one already due. Fails with `AlreadyExecuted`
-   * when the instance has a receipt for `commandId`, `AlreadyCancelled` when
-   * it was cancelled before (and not scheduled again since), and
-   * `NotScheduled` when it was never scheduled.
+   * Cancel the pending scheduled command named `commandId` on one instance,
+   * durably, and remember the cancel. Once this succeeds, the command never
+   * runs, even one already due. Fails with `AlreadyExecuted` when the
+   * command under that name already ran, `AlreadyCancelled` when it was
+   * cancelled before (and not scheduled again since), and `NotScheduled`
+   * when nothing was scheduled under it.
    */
   readonly unschedule: (
     id: string,
@@ -367,6 +373,16 @@ export interface ViewKit {
    * (state, entries, input log and cursors) before it is read or applied to.
    */
   readonly generation: number;
+  /** The generation of the view's storage: its generation, unless it is rebuilt in place. */
+  readonly classGeneration: number;
+  /** The view's id, by `CatchUp.targetId`, in this code. */
+  readonly target: string;
+  /**
+   * Set for a view keyed by the one aggregate it reads (`source`): before a key
+   * answers a read, it reads its history from the instance with its own id, so
+   * every answer covers the whole history even when no backfill filled it.
+   */
+  readonly catchUp?: { readonly source: string };
   /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
   readonly singleSource: boolean;
   /**
@@ -613,6 +629,11 @@ export interface ModelHost {
     targets: ReadonlyArray<string>,
     /** What a backfill needs to know of each consumer: the sources it reads, and its keys' shape. */
     planOf: (target: string) => Plan | undefined,
+    /**
+     * The consumers among `targets` the deploy backfills. The others fill each
+     * key themselves, from its own instance (see `ViewKit.catchUp`).
+     */
+    backfill: ReadonlyArray<string>,
   ) => Effect.Effect<void>;
   /**
    * How much of the history recorded before a consumer (by

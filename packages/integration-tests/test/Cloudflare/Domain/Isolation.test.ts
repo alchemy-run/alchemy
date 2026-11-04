@@ -67,7 +67,7 @@ test(
     expect(yield* owners("Billing", "sam")).toEqual({ owner: "sam" });
     expect(yield* owners("Audit", "alex")).toEqual({ owner: "alex" });
   }),
-  { timeout: 180_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 180_000 },
 );
 
 test(
@@ -81,7 +81,7 @@ test(
     expect(yield* call(base, "POST", `/saga/Sales/${key}/sam`)).toEqual({ owner: "sam" });
     expect(yield* call(base, "POST", `/saga/Support/${key}/alex`)).toEqual({ owner: "alex" });
   }),
-  { timeout: 180_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 180_000 },
 );
 
 test(
@@ -95,7 +95,7 @@ test(
       ),
     ).toEqual(["alchemy:domain:v0"]);
   }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped),
-  { timeout: 60_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 60_000 },
 );
 
 /**
@@ -128,5 +128,5 @@ test.provider(
 
       yield* scratch.destroy();
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 300_000 },
 );

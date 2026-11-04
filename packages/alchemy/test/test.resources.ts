@@ -1390,6 +1390,78 @@ export const capturedConfigHost = (mode: string) =>
     );
   });
 
+// LookupTarget — a resource found by `name` through `LookupTarget.lookup`.
+// `lookupTargets` stands in for the cloud: tests put the resources no stack
+// manages into it, keyed by a name unique to the test (files run their tests
+// concurrently), and a declared LookupTarget lives there under its id. It is registered via `ProviderLayer.dual` so a dev run can
+// assert lookups always go through the live variant; `lookupCalls` records
+// which variant each lookup reached.
+
+export interface LookupTarget extends Resource<
+  "Test.LookupTarget",
+  { value?: string },
+  { name: string; value: string },
+  never,
+  undefined,
+  { name: string }
+> {}
+
+export const LookupTarget = Resource<LookupTarget>("Test.LookupTarget");
+
+/** Existing resources `lookup` can find, keyed by name. */
+export const lookupTargets = new Map<string, LookupTarget["Attributes"]>();
+/** Lookups dispatched to each variant, in order. */
+export const lookupCalls: { mode: ProviderMode; name: string }[] = [];
+/** Ids `delete` was called with — a lookup must never reach it. */
+export const lookupTargetDeletes: string[] = [];
+
+const lookupTargetVariant = (mode: ProviderMode) =>
+  Provider.succeed(LookupTarget, {
+    stables: ["name"],
+    list: () => Effect.succeed([]),
+    reconcile: Effect.fn(function* ({ id, news = {} }) {
+      const attrs = { name: id, value: news.value ?? id };
+      lookupTargets.set(id, attrs);
+      return attrs;
+    }),
+    delete: Effect.fn(function* ({ id }) {
+      lookupTargetDeletes.push(id);
+      lookupTargets.delete(id);
+    }),
+    lookup: Effect.fn(function* ({ name }) {
+      lookupCalls.push({ mode, name });
+      const found = lookupTargets.get(name);
+      return found === undefined ? undefined : { ...found };
+    }),
+  });
+
+export const lookupTargetProvider = () =>
+  ProviderLayer.dual(LookupTarget, {
+    live: () => lookupTargetVariant("live"),
+    local: () => lookupTargetVariant("local"),
+  });
+
+// UnsupportedLookup — declares lookup props, but its provider has no `lookup`.
+export interface UnsupportedLookup extends Resource<
+  "Test.UnsupportedLookup",
+  {},
+  { name: string },
+  never,
+  undefined,
+  { name: string }
+> {}
+
+export const UnsupportedLookup = Resource<UnsupportedLookup>("Test.UnsupportedLookup");
+
+export const unsupportedLookupProvider = () =>
+  Provider.succeed(UnsupportedLookup, {
+    list: () => Effect.succeed([]),
+    reconcile: Effect.fn(function* ({ id }) {
+      return { name: id };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
@@ -1411,6 +1483,8 @@ export const TestLayers = () =>
     driftResourceProvider(),
     modalResourceProvider(),
     capturedConfigHostProvider(),
+    lookupTargetProvider(),
+    unsupportedLookupProvider(),
     ProbeBindingLive,
   );
 

@@ -1,3 +1,4 @@
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
@@ -73,6 +74,13 @@ export interface Control {
   }>;
 }
 
+/** A scheduled command's latest arming: the id it commits with, when it is due, and whether it was cancelled. */
+interface Armed {
+  readonly commandId: string;
+  readonly at: number;
+  readonly cancelled: boolean;
+}
+
 /** A scheduled command: when it is due, and how to send it. */
 interface Timer {
   readonly at: number;
@@ -95,7 +103,7 @@ const memo = <A>(make: (key: string) => A) => {
 export const make = (
   options: Options = {},
 ): {
-  readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine>;
+  readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom>;
   readonly control: Control;
 } => {
   const now = options.now ?? (() => Date.now());
@@ -409,8 +417,8 @@ export const make = (
                 state: Json;
                 version: number;
                 readonly receipts: Map<string, SendResult>;
-                /** Ids cancelled and not scheduled again since. */
-                readonly cancelled: Set<string>;
+                /** The latest arming of each scheduled command, by its name. */
+                readonly scheduled: Map<string, Armed>;
                 readonly events: Array<StoredEvent>;
                 /** How far its events were routed to each view and projection. */
                 routed: Routed | undefined;
@@ -442,7 +450,7 @@ export const make = (
                   state: null,
                   version: 0,
                   receipts: new Map(),
-                  cancelled: new Set(),
+                  scheduled: new Map(),
                   events: [],
                   routed: undefined,
                 }),
@@ -528,35 +536,38 @@ export const make = (
             });
           const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
             lock.withPermits(1)(commit(id, command, meta));
-          const executed = (id: string, commandId: string) => instance(id).receipts.has(commandId);
           return {
             send,
-            schedule: (id, command, meta, due) =>
+            schedule: (id, name, command, meta, due) =>
               lock.withPermits(1)(
                 Effect.suspend(() => {
-                  const fields = { aggregate: kit.name, id, commandId: meta.commandId };
-                  if (executed(id, meta.commandId)) return Effect.fail(new AlreadyExecuted(fields));
-                  instance(id).cancelled.delete(meta.commandId);
+                  const { scheduled } = instance(id);
+                  // The same arming again (a policy or step ran again): leave it as it is.
+                  const armed = scheduled.get(name);
+                  if (armed?.commandId === meta.commandId) return Effect.succeed(armed.at);
                   const at = "at" in due ? due.at : now() + due.afterMillis;
+                  scheduled.set(name, { commandId: meta.commandId, at, cancelled: false });
                   return timer(
-                    `${modelName}/${kit.name}/${id}/${meta.commandId}`,
+                    `${modelName}/${kit.name}/${id}/${name}`,
                     at,
                     commit(id, command, meta).pipe(Effect.asVoid),
                     lock.withPermits(1),
                   ).pipe(Effect.as(at));
                 }),
               ),
-            unschedule: (id, commandId) =>
+            unschedule: (id, name) =>
               lock.withPermits(1)(
                 Effect.suspend(
                   (): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
-                    const fields = { aggregate: kit.name, id, commandId };
-                    if (executed(id, commandId)) return Effect.fail(new AlreadyExecuted(fields));
-                    const { cancelled } = instance(id);
-                    if (cancelled.has(commandId)) return Effect.fail(new AlreadyCancelled(fields));
-                    if (!timers.delete(`${modelName}/${kit.name}/${id}/${commandId}`))
-                      return Effect.fail(new NotScheduled(fields));
-                    cancelled.add(commandId);
+                    const fields = { aggregate: kit.name, id, commandId: name };
+                    const current = instance(id);
+                    const armed = current.scheduled.get(name);
+                    if (!armed) return Effect.fail(new NotScheduled(fields));
+                    if (current.receipts.has(armed.commandId))
+                      return Effect.fail(new AlreadyExecuted(fields));
+                    if (armed.cancelled) return Effect.fail(new AlreadyCancelled(fields));
+                    timers.delete(`${modelName}/${kit.name}/${id}/${name}`);
+                    current.scheduled.set(name, { ...armed, cancelled: true });
                     return Effect.void;
                   },
                 ),
@@ -664,11 +675,7 @@ export const make = (
                 Effect.tap((created) => Effect.sync(() => keys.set(key, created))),
               );
             });
-          const target = targetId({
-            kind: "view",
-            name: kit.name,
-            ...(kit.generation > 0 ? { generation: kit.generation } : {}),
-          });
+          const target = kit.target;
           /** Apply deliveries to a key and route what it emits. Callers hold `lock`. */
           const apply = (key: string, deliveries: ReadonlyArray<Delivery>) =>
             Effect.gen(function* () {
@@ -753,7 +760,42 @@ export const make = (
             );
             return role;
           });
-          sourceRoles.set(kit.name, sourceRole);
+          // A key of a view keyed by its one aggregate reads its history from that
+          // instance before it answers anything, the first time: when the view is
+          // lazy, or rebuilt in place. After that, it is read like any other.
+          const caughtUp = new Set<string>();
+          const ready = (key: string): Effect.Effect<void> =>
+            Effect.suspend(() => {
+              const catchUp = kit.catchUp;
+              if (catchUp === undefined || caughtUp.has(key)) return Effect.void;
+              const ref = { source: catchUp.source, id: key };
+              return consumer(key)
+                .start(target, ref, 5_000)
+                .pipe(
+                  Effect.repeat({ until: (started) => started === "settled", times: 20 }),
+                  Effect.tap((started) =>
+                    Effect.sync(() => {
+                      if (started === "settled") caughtUp.add(key);
+                    }),
+                  ),
+                  Effect.asVoid,
+                );
+            });
+          // Read as a source (by a view or projection catching up), a key has its
+          // own history first: what reads it never sees a key still filling.
+          sourceRoles.set(kit.name, (key) => {
+            const role = sourceRole(key);
+            const first = ready(key);
+            return {
+              ...role,
+              log: (after, limit) => Effect.andThen(first, role.log(after, limit)),
+              cursor: (target) => Effect.andThen(first, role.cursor(target)),
+              read: (target, at, after, limit) =>
+                Effect.andThen(first, role.read(target, at, after, limit)),
+              handoff: (target, at, through) =>
+                Effect.andThen(first, role.handoff(target, at, through)),
+            };
+          });
           return {
             receive: (key, deliveries) =>
               Effect.gen(function* () {
@@ -763,16 +805,26 @@ export const make = (
                   yield* lock.withPermits(1)(apply(key, deliveries));
               }),
             read: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.snapshot))),
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) => SubscriptionRef.get(current.snapshot)),
+              ),
             changes: (key) =>
               Stream.unwrap(
-                get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.snapshot))),
+                ready(key).pipe(
+                  Effect.andThen(get(key)),
+                  Effect.map((current) => SubscriptionRef.changes(current.snapshot)),
+                ),
               ),
             list: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) => SubscriptionRef.get(current.entries)),
+              ),
             tail: (key, after) =>
               Stream.unwrap(
-                get(key).pipe(
+                ready(key).pipe(
+                  Effect.andThen(get(key)),
                   Effect.map((current) => {
                     let last = after;
                     return SubscriptionRef.changes(current.entries).pipe(
@@ -1057,12 +1109,12 @@ export const make = (
         }),
 
       // A deploy that adds consumers starts their runs.
-      start: (targets, plans) =>
+      start: (targets, plans, backfill) =>
         Effect.suspend(() => {
           model = targets;
           planOf = plans;
           return Effect.forEach(
-            targets,
+            backfill,
             (target) => {
               const plan = plans(target);
               if (plan === undefined) return Effect.void;
@@ -1094,6 +1146,7 @@ export const make = (
     layer: Layer.mergeAll(
       Layer.succeed(Platform, platform),
       Layer.succeed(WorkflowEngine.WorkflowEngine, workflows),
+      SecureRandom.layerWebCrypto,
     ),
     control,
   };
@@ -1118,9 +1171,9 @@ export const make = (
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const InMemory: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine> = Layer.suspend(
-  () => make().layer,
-);
+export const InMemory: Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom
+> = Layer.suspend(() => make().layer);
 
 /** Is a stream write's origin after the last one applied? @internal */
 export const isAfter = (

@@ -629,6 +629,8 @@ const urlHostname = (url: string): string => {
 
 /** The `rules` payload shape of a zone phase-entrypoint PUT. */
 type PutZoneRedirectRules = rulesets.PutPhasForZoneRequest["rules"];
+/** A rule as a zone phase entrypoint read returns it. */
+type PhaseRule = NonNullable<rulesets.GetPhasResponse["rules"]>[number];
 
 /**
  * The *custom domain* hostnames recorded in a Worker's persisted legacy
@@ -1617,6 +1619,72 @@ export const LiveWorkerProvider = () =>
       });
 
       /**
+       * Converge the rules a Worker owns (descriptions starting with
+       * `prefix`) in a zone's shared phase entrypoint, one rule at a time:
+       * create each desired rule that's missing and delete each owned rule
+       * nothing desires, by rule id. Every other rule in the entrypoint is
+       * never written. Replacing the whole phase instead loses updates when
+       * two Workers converge the same zone at once: each writes back the
+       * other's rules as it last read them, so a rule one of them just
+       * removed comes back.
+       */
+      const syncOwnedPhaseRules = Effect.fn(function* <
+        Rule extends { readonly description: string; readonly expression: string },
+      >(params: {
+        zoneId: string;
+        phase: "http_request_dynamic_redirect" | "http_request_late_transform";
+        prefix: string;
+        desired: ReadonlyArray<Rule>;
+        /** Whether an owned rule with the same description and expression is `rule`. */
+        matches: (existing: PhaseRule, rule: Rule) => boolean;
+      }) {
+        const { zoneId, phase } = params;
+        const entrypoint = yield* rulesets
+          .getPhasForZone({ zoneId, rulesetPhase: phase })
+          // Only a missing entrypoint means no rules yet. Any other failure
+          // stops here rather than treating the phase as empty.
+          .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
+        if (entrypoint === undefined) {
+          if (params.desired.length === 0) return;
+          yield* rulesets.putPhasForZone({
+            zoneId,
+            rulesetPhase: phase,
+            rules: [...params.desired] as unknown as PutZoneRedirectRules,
+          });
+          return;
+        }
+        const owned = (entrypoint.rules ?? []).filter((rule) =>
+          (rule.description ?? "").startsWith(params.prefix),
+        );
+        const kept = new Set<string>();
+        const missing: Rule[] = [];
+        for (const rule of params.desired) {
+          const match = owned.find(
+            (existing) =>
+              !kept.has(existing.id ?? "") &&
+              existing.description === rule.description &&
+              existing.expression === rule.expression &&
+              params.matches(existing, rule),
+          );
+          if (match?.id) kept.add(match.id);
+          else missing.push(rule);
+        }
+        for (const rule of missing) {
+          yield* rulesets.createRuleForZone({
+            zoneId,
+            rulesetId: entrypoint.id,
+            body: rule as unknown as rulesets.CreateRuleForZoneRequest["body"],
+          });
+        }
+        for (const existing of owned) {
+          if (existing.id === undefined || existing.id === null || kept.has(existing.id)) continue;
+          yield* rulesets
+            .deleteRuleForZone({ zoneId, rulesetId: entrypoint.id, ruleId: existing.id })
+            .pipe(Effect.catchTag("RulesetRuleNotFound", () => Effect.void));
+        }
+      });
+
+      /**
        * Converge the redirect rules for a Worker's `domain.redirects` in
        * each affected zone's `http_request_dynamic_redirect` phase
        * entrypoint. Rules are identified by a
@@ -1638,24 +1706,24 @@ export const LiveWorkerProvider = () =>
         const desired = params.domain?.redirects ?? [];
         const targetName = params.domain?.name;
         // Zones to touch: every zone hosting a desired redirect, plus every
-        // zone that hosted one before (so removals converge). Hostnames
-        // whose zone we can't resolve (e.g. the domain was already
-        // detached) are skipped — their rules become unreachable dead
-        // config at worst, never a failed destroy.
+        // zone that hosted one before (so removals converge). A hostname
+        // missing from the attached-domain map — the domain list lags a
+        // fresh attach, or the domain is already detached — is looked up by
+        // name, so its rule is still removed. Hostnames whose zone can't be
+        // resolved at all are skipped: dead config at worst, never a failed
+        // destroy.
         const zoneIds = new Set<string>();
+        const zoneCache = new Map<string, string>();
         for (const hostname of [...desired, ...params.previousRedirects]) {
-          const zoneId = params.zoneIdByHostname.get(hostname);
+          const zoneId =
+            params.zoneIdByHostname.get(hostname) ??
+            (yield* inferZoneIdForHostname(hostname, zoneCache, params.domain?.zone).pipe(
+              Effect.orElseSucceed(() => undefined),
+            ));
           if (zoneId) zoneIds.add(zoneId);
         }
         if (zoneIds.size === 0) return;
         for (const zoneId of zoneIds) {
-          const entrypoint = yield* rulesets
-            .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
-            // Only a missing entrypoint means no rules yet. Any other failure must
-            // stop here: the PUT below replaces the whole phase, so reading it as
-            // empty would delete every other rule in the zone.
-            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
-          const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
             .map((hostname) => ({
@@ -1673,48 +1741,37 @@ export const LiveWorkerProvider = () =>
                 },
               },
             }));
-          const isOurs = (rule: { description?: string | null }) =>
-            (rule.description ?? "").startsWith(prefix);
-          const ourExisting = existingRules.filter(isOurs);
           // Compare the redirect target too: a changed canonical `name`
-          // keeps each rule's description and match expression, so those
-          // alone would skip the PUT and leave the old target in place.
-          // Fields are compared one by one because the read fills unset
-          // fields with `null`.
-          const existingFromValue = (rule: (typeof existingRules)[number]) =>
-            rule.action === "redirect" ? rule.actionParameters?.fromValue : undefined;
-          const converged =
-            ourExisting.length === ourDesired.length &&
-            ourDesired.every((rule) =>
-              ourExisting.some((existing) => {
-                const fromValue = existingFromValue(existing);
-                const desiredFromValue = rule.actionParameters.fromValue;
-                return (
-                  existing.description === rule.description &&
-                  existing.expression === rule.expression &&
-                  fromValue?.targetUrl?.expression === desiredFromValue.targetUrl.expression &&
-                  fromValue?.statusCode === desiredFromValue.statusCode &&
-                  fromValue?.preserveQueryString === desiredFromValue.preserveQueryString
-                );
-              }),
-            );
-          if (converged) continue;
-          // Pass foreign rules through untouched (minus the read-only
-          // fields the PUT schema doesn't accept) and replace our own set.
-          const foreign = existingRules
-            .filter((rule) => !isOurs(rule))
-            .map((rule) => {
-              const {
-                lastUpdated: _lastUpdated,
-                version: _version,
-                ...rest
-              } = rule as Record<string, unknown> & { lastUpdated?: string; version?: string };
-              return rest;
-            });
-          yield* rulesets.putPhasForZone({
+          // keeps each rule's description and match expression. Fields are
+          // compared one by one because the read fills unset fields with
+          // `null`.
+          yield* syncOwnedPhaseRules({
             zoneId,
-            rulesetPhase: "http_request_dynamic_redirect",
-            rules: [...foreign, ...ourDesired] as PutZoneRedirectRules,
+            phase: "http_request_dynamic_redirect",
+            prefix,
+            desired: ourDesired,
+            matches: (existing, rule) => {
+              const fromValue =
+                existing.action === "redirect"
+                  ? (
+                      existing as {
+                        actionParameters?: {
+                          fromValue?: {
+                            statusCode?: number | null;
+                            preserveQueryString?: boolean | null;
+                            targetUrl?: { expression?: string | null } | null;
+                          } | null;
+                        } | null;
+                      }
+                    ).actionParameters?.fromValue
+                  : undefined;
+              const want = rule.actionParameters.fromValue;
+              return (
+                fromValue?.targetUrl?.expression === want.targetUrl.expression &&
+                fromValue?.statusCode === want.statusCode &&
+                fromValue?.preserveQueryString === want.preserveQueryString
+              );
+            },
           });
         }
       });
@@ -1755,70 +1812,33 @@ export const LiveWorkerProvider = () =>
             params.desired !== undefined && hosts !== undefined
               ? buildAffinityZoneRules(params.scriptName, params.desired.affinity, hosts)
               : [];
-          const entrypoint = yield* rulesets
-            .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
-            // Only a missing entrypoint means no rules yet. Any other failure must
-            // stop here: the PUT below replaces the whole phase, so reading it as
-            // empty would delete every other rule in the zone.
-            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
-          const existingRules = entrypoint?.rules ?? [];
-          const isOurs = (rule: { description?: string | null }) =>
-            (rule.description ?? "").startsWith(prefix);
-          // The header-value expression of an existing rewrite rule, for
-          // convergence comparison. `headers` is an untyped wire record:
-          // `{ "<Header-Name>": { operation, expression | value } }`.
-          const existingValue = (rule: (typeof existingRules)[number]) => {
-            const headers =
-              "actionParameters" in rule
-                ? (
-                    rule.actionParameters as
-                      | { headers?: Record<string, unknown> | null }
-                      | null
-                      | undefined
-                  )?.headers
-                : undefined;
-            const header = headers?.[AFFINITY_HEADER] as { expression?: unknown } | undefined;
-            return typeof header?.expression === "string" ? header.expression : undefined;
-          };
-          const ourExisting = existingRules.filter(isOurs);
-          const converged =
-            ourExisting.length === ourDesired.length &&
-            ourDesired.every((rule) =>
-              ourExisting.some(
-                (existing) =>
-                  existing.description === rule.description &&
-                  existing.expression === rule.expression &&
-                  existingValue(existing) === rule.value,
-              ),
-            );
-          if (converged) continue;
-          // Pass foreign rules through untouched (minus the read-only
-          // fields the PUT schema doesn't accept) and replace our own set.
-          const foreign = existingRules
-            .filter((rule) => !isOurs(rule))
-            .map((rule) => {
-              const {
-                lastUpdated: _lastUpdated,
-                version: _version,
-                ...rest
-              } = rule as Record<string, unknown> & { lastUpdated?: string; version?: string };
-              return rest;
-            });
-          yield* rulesets.putPhasForZone({
+          yield* syncOwnedPhaseRules({
             zoneId,
-            rulesetPhase: "http_request_late_transform",
-            rules: [
-              ...foreign,
-              ...ourDesired.map((rule) => ({
-                action: "rewrite" as const,
-                description: rule.description,
-                enabled: true,
-                expression: rule.expression,
-                actionParameters: {
-                  headers: { [AFFINITY_HEADER]: { operation: "set", expression: rule.value } },
-                },
-              })),
-            ] as PutZoneRedirectRules,
+            phase: "http_request_late_transform",
+            prefix,
+            desired: ourDesired.map((rule) => ({
+              action: "rewrite" as const,
+              description: rule.description,
+              enabled: true,
+              expression: rule.expression,
+              actionParameters: {
+                headers: { [AFFINITY_HEADER]: { operation: "set", expression: rule.value } },
+              },
+            })),
+            // The header-value expression of an existing rewrite rule.
+            // `headers` is an untyped wire record:
+            // `{ "<Header-Name>": { operation, expression | value } }`.
+            matches: (existing, rule) => {
+              const headers = (
+                existing as {
+                  actionParameters?: { headers?: Record<string, unknown> | null } | null;
+                }
+              ).actionParameters?.headers;
+              const header = headers?.[AFFINITY_HEADER] as { expression?: unknown } | undefined;
+              return (
+                header?.expression === rule.actionParameters.headers[AFFINITY_HEADER].expression
+              );
+            },
           });
         }
         return [...(params.desired?.hostsByZone.keys() ?? [])].sort();
@@ -3798,7 +3818,7 @@ export const LiveWorkerProvider = () =>
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
         const streamingTailConsumers = resolveTailConsumers(news.streamingTailConsumers);
-        const observability = resolveObservability(news, bindings);
+        const observability = yield* resolveObservability(news, bindings);
         const metadata: workers.PutScriptRequest["metadata"] = {
           annotations: news.version
             ? { workersMessage: news.version.message, workersTag: news.version.tag }
@@ -4993,7 +5013,7 @@ export const LiveWorkerProvider = () =>
                         ]),
                       )
                     : undefined,
-                observability: resolveObservability(news, bindings),
+                observability: yield* resolveObservability(news, bindings),
                 tags,
               },
               files: [
@@ -5309,6 +5329,43 @@ export const LiveWorkerProvider = () =>
                 WorkerHasNoVersions: () => Effect.undefined,
                 DispatchNamespaceScriptNotFound: () => Effect.undefined,
                 DispatchNamespaceNotFound: () => Effect.undefined,
+              }),
+            ),
+        ),
+        lookup: Effect.fn(
+          function* ({ name }) {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            const [subdomain, settings] = yield* Effect.all(
+              [
+                workers.getScriptSubdomain({ accountId, scriptName: name }),
+                workers.getScriptScriptAndVersionSetting({ accountId, scriptName: name }),
+              ],
+              { concurrency: 1 },
+            );
+            const urls = subdomain.enabled
+              ? [`https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`]
+              : [];
+            return {
+              accountId,
+              workerId: yield* findWorkerId(accountId, name),
+              workerName: name,
+              namespace: undefined,
+              logpush: settings.logpush ?? undefined,
+              url: urls[0],
+              urls,
+              domain: undefined,
+              tags: settings.tags ?? undefined,
+              durableObjectNamespaces: getDurableObjects(settings.bindings),
+              routes: [],
+              crons: [],
+              tailConsumers: settings.tailConsumers?.map((c) => ({ service: c.service })),
+            } satisfies Worker["Attributes"] as Worker["Attributes"] | undefined;
+          },
+          (effect) =>
+            effect.pipe(
+              Effect.catchTags({
+                WorkerNotFound: () => Effect.undefined,
+                WorkerHasNoVersions: () => Effect.undefined,
               }),
             ),
         ),

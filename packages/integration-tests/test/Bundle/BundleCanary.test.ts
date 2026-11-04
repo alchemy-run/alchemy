@@ -178,12 +178,13 @@ const report = (label: string, stats: BundleStats, pkg: "aws" | "cloudflare") =>
 /**
  * Deploy-time code that must never ship in a runtime: the bundler, the CLI's
  * platform layer (Bun's platform came with it), and profile and credential
- * stores.
+ * stores. `Auth/Registry.ts` is the exception: `Stack.ts` provides it, and it
+ * imports nothing but Effect.
  */
 const DEPLOY_ONLY = [
   /[\\/](rolldown|@rolldown)[\\/]/,
   /[\\/]@effect[\\/]platform-bun[\\/]/,
-  /[\\/]alchemy[\\/]src[\\/](Auth|Cli|Bundle)[\\/]/,
+  /[\\/]alchemy[\\/]src[\\/](Auth[\\/](?!Registry\.ts$)|Cli[\\/]|Bundle[\\/])/,
   /[\\/]alchemy[\\/]src[\\/](EvalStack|Deploy|Destroy|Plan|Apply)\.ts$/,
 ];
 

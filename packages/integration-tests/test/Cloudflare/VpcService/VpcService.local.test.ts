@@ -89,7 +89,7 @@ test.provider(
             main: pathe.resolve(import.meta.dirname, "fixtures/vpc-local-worker.ts"),
             env: {
               VPC: managed,
-              VPC_LOOKUP: Cloudflare.VpcService.lookup({
+              VPC_LOOKUP: Cloudflare.VpcService.VpcService.lookup({
                 serviceId: svc.serviceId,
               }),
             },
