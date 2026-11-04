@@ -356,10 +356,6 @@ export const SchemaProvider = () =>
       // machines/checkouts. Internal filesystem ops always use the absolute
       // `resolveOut` form.
       const relativeOut = (abs: string) => path.relative(process.cwd(), abs);
-      // drizzle-kit 1.0.0-rc.5-ab785fc (the peer before 1.0.0-rc.5) reads
-      // snapshots as `./${file}`, so an absolute `out` resolves under the
-      // working directory and fails with ENOENT. Hand it the relative form.
-      const kitOut = (abs: string) => relativeOut(abs) || ".";
 
       const resolveSchema = (p: SchemaProps) => path.resolve(process.cwd(), p.schema);
       // drizzle-kit reads `schema` as a glob, where `\` is an escape.
@@ -426,7 +422,7 @@ export const SchemaProvider = () =>
             );
           }
         }
-        const { upgraded } = yield* drizzleKit.up({ dialect: cliDialect(props), out: kitOut(out) });
+        const { upgraded } = yield* drizzleKit.up({ dialect: cliDialect(props), out });
         return upgraded.length > 0;
       });
 
@@ -505,7 +501,7 @@ export const SchemaProvider = () =>
             ...props.generate,
             dialect: cliDialect(props),
             schema: schemaGlob(props),
-            out: kitOut(out),
+            out,
             explain: true,
             hints,
           });
@@ -560,7 +556,7 @@ export const SchemaProvider = () =>
             ...props.generate,
             dialect: cliDialect(props),
             schema: schemaGlob(props),
-            out: kitOut(out),
+            out,
             hints,
           });
           if (result.status === "missing_hints") {
