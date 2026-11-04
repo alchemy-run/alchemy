@@ -80,7 +80,7 @@ export interface Receipt<Ev = unknown, Reply = unknown> {
 }
 
 /**
- * What {@link Client.schedule} returns: the pending command's id, to
+ * What {@link Client.schedule} returns: the scheduled command's id, to
  * `unschedule` it by, and when it is due.
  */
 export interface ScheduleReceipt {
@@ -198,9 +198,8 @@ export interface SendOptions {
 }
 
 /**
- * The instance already handled a command with this id, so it can no longer
- * be scheduled or cancelled: a deadline that fired before it was cancelled,
- * or a command id that was already sent.
+ * The command scheduled with this id already ran, so it can no longer be
+ * cancelled: a deadline that fired before it was cancelled.
  */
 export class AlreadyExecuted extends Data.TaggedError("AlreadyExecuted")<{
   readonly aggregate: string;
@@ -224,27 +223,20 @@ export class NotScheduled extends Data.TaggedError("NotScheduled")<{
 
 /**
  * Options for {@link Client.schedule}: when to send, absolutely or after a
- * delay, and what an earlier command with the same id it replaces.
+ * delay, and the command id that names it.
  */
-export type ScheduleOptions = SendOptions & {
+export type ScheduleOptions = {
   /**
-   * What the schedule replaces when an earlier command used the same command
-   * id. `"pending"` (the default) replaces a pending command; once a command
-   * with the id ran, `schedule` fails with `AlreadyExecuted`. `"always"` also
-   * replaces a command that already ran: it drops that receipt, and the
-   * command runs again when due. Use it to arm a timer again under a
-   * deterministic id, e.g. a deadline that fired as a stale no-op. A
-   * redelivered policy then arms it again too, so the command must be safe to
-   * run more than once (as every scheduled command should be).
+   * Names the scheduled command on its instance, to replace or `unschedule`
+   * it by, e.g. `stall:<ticketId>`. Scheduling under the same id replaces
+   * the earlier command, pending or already run. Defaults to an id derived
+   * like a send's.
    */
-  readonly replace?: Replace;
+  readonly commandId?: string;
 } & (
-    | { readonly at: DateTime.Utc; readonly after?: never }
-    | { readonly after: Duration.Input; readonly at?: never }
-  );
-
-/** What a schedule replaces: see {@link ScheduleOptions.replace}. */
-export type Replace = "pending" | "always";
+  | { readonly at: DateTime.Utc; readonly after?: never }
+  | { readonly after: Duration.Input; readonly at?: never }
+);
 
 /**
  * When a scheduled command is due: an epoch-millisecond time, or a delay the
@@ -332,15 +324,16 @@ export interface Client<Def extends AnyDefinition> {
    * that never reject can be scheduled, since nobody is waiting to handle a
    * rejection when it fires; such a command reports a fact ("the approval
    * window closed") and records nothing when it no longer applies.
-   * Scheduling again with the same command id replaces the earlier one.
-   * Returns the command id to `unschedule` it by, and when it is due. Fails with `AlreadyExecuted` when the instance already handled a command
-   * with that id, unless `replace` is `"always"`.
+   * Scheduling again with the same command id replaces the earlier one,
+   * pending or already run, so a deadline can be armed again. A policy or
+   * saga step that runs again for the same trigger schedules nothing new.
+   * Returns the command id to `unschedule` it by, and when it is due.
    */
   readonly schedule: <Cmd extends InstanceOf<Schedulable<Def>>>(
     target: Target<Def>,
     command: Cmd,
     options: ScheduleOptions,
-  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  ) => Effect.Effect<ScheduleReceipt, never, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
   /**
    * Cancel a pending scheduled command by the command id it was scheduled
    * with. Once it succeeds, the command never runs. Fails with
@@ -377,7 +370,7 @@ export interface ClientImpl {
     target: unknown,
     command: { readonly _tag: string },
     options: ScheduleOptions,
-  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted>;
+  ) => Effect.Effect<ScheduleReceipt>;
   readonly unschedule: (
     target: unknown,
     commandId: string,

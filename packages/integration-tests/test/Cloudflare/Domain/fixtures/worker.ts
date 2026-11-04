@@ -23,8 +23,7 @@ const HoldsLive = Holds.layer(HoldDeadlineLive).pipe(
 /**
  * `POST /place/<id>`, `POST /release/<id>`, `GET /state/<id>` on the Holds
  * model; `POST /schedule/<id>` and `POST /cancel/<id>` schedule and cancel
- * the hold's expiry directly; `POST /rearm/<id>` schedules it in one second
- * with `replace: "always"`.
+ * the hold's expiry directly; `POST /rearm/<id>` schedules it in one second.
  */
 const ROUTE = /^\/(place|release|state|schedule|rearm|cancel)\/([^/]+)$/;
 
@@ -40,22 +39,14 @@ export default class DomainScheduleWorker extends Cloudflare.Worker<DomainSchedu
         if (!route) return HttpServerResponse.text("Not Found", { status: 404 });
         const id = decodeURIComponent(route[2]!);
         if (route[1] === "schedule" || route[1] === "rearm") {
-          const scheduled = yield* holds
-            .schedule(
-              id,
-              new ExpireHold(),
-              route[1] === "rearm"
-                ? { after: "1 second", commandId: EXPIRY, replace: "always" }
-                : { after: HOLD_WINDOW, commandId: EXPIRY },
-            )
-            .pipe(
-              Effect.map((receipt) => ({
-                commandId: receipt.commandId,
-                at: DateTime.toEpochMillis(receipt.at),
-              })),
-              Effect.catchTag("AlreadyExecuted", (e) => Effect.succeed({ failed: e._tag })),
-            );
-          return yield* HttpServerResponse.json(scheduled);
+          const receipt = yield* holds.schedule(id, new ExpireHold(), {
+            after: route[1] === "rearm" ? "1 second" : HOLD_WINDOW,
+            commandId: EXPIRY,
+          });
+          return yield* HttpServerResponse.json({
+            commandId: receipt.commandId,
+            at: DateTime.toEpochMillis(receipt.at),
+          });
         }
         if (route[1] === "cancel")
           return yield* HttpServerResponse.json({

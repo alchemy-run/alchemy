@@ -53,11 +53,10 @@ const expired = (url: string, id: string) =>
 
 /**
  * A timer scheduled again under a command id that already ran (alchemy#2804):
- * by default `schedule` fails with `AlreadyExecuted`; with `replace: "always"`
- * the Durable Object drops the old receipt and the command runs again.
+ * the Durable Object arms it again, and the command runs again.
  */
 test.provider(
-  "replace 'always' schedules a command id that already ran on Durable Objects",
+  "scheduling again after the command ran arms it again on Durable Objects",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -74,14 +73,11 @@ test.provider(
       expect(yield* expired(url, id)).toBe("expired");
       expect(yield* cancel(url, id)).toBe("AlreadyExecuted");
 
-      // scheduling it again by default fails: the instance has its receipt
-      expect(yield* call(url, "schedule", id)).toEqual({ failed: "AlreadyExecuted" });
-
-      // with replace "always" it is pending again, so it can be cancelled
+      // scheduled again, it is pending again, so it can be cancelled
       expect(yield* call(url, "rearm", id)).toMatchObject({ commandId: "expire" });
       expect(yield* cancel(url, id)).toBe("Cancelled");
 
-      // and, when not cancelled, it runs again: its receipt is back
+      // and, when not cancelled, it runs again
       expect(yield* call(url, "rearm", id)).toMatchObject({ commandId: "expire" });
       yield* Effect.sleep("5 seconds");
       expect(yield* cancel(url, id)).toBe("AlreadyExecuted");
