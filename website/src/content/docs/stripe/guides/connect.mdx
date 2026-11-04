@@ -2,6 +2,7 @@
 title: Onboard merchants with Connect
 description: Build a Connect platform on a Cloudflare Worker — create Express accounts, send merchants through hosted onboarding, and learn from account.updated when they can take payments.
 ---
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
 
 Stripe Connect is for platforms: a marketplace, a SaaS that invoices
 on behalf of its customers, anything where *other businesses* get paid
@@ -36,6 +37,21 @@ account. Do that once at
 [dashboard.stripe.com/connect](https://dashboard.stripe.com/test/connect)
 — there is no API for it.
 :::
+
+<StateMachine
+  states={[
+    { id: "created", label: "created", type: "connected account", col: 0, row: 0, start: true },
+    { id: "onboarding", label: "onboarding", type: "on Stripe's form", col: 1, row: 0, tone: "warn" },
+    { id: "submitted", label: "details submitted", type: "Stripe verifying", col: 2, row: 0 },
+    { id: "enabled", label: "charges_enabled", type: "can take payments", col: 2, row: 1, tone: "accent", end: true },
+  ]}
+  transitions={[
+    { from: "created", to: "onboarding", label: "onboarding link" },
+    { from: "onboarding", to: "submitted", label: "merchant finishes" },
+    { from: "submitted", to: "enabled", label: "account.updated" },
+  ]}
+  caption="Your platform never sets these states. Stripe moves the account along and tells you with account.updated, and your app gates payments on the charges_enabled it stored."
+/>
 
 ## The merchant table
 

@@ -2,11 +2,24 @@
 title: Docker Swarm
 description: Provision a swarm and deploy replicated services to it, from local dev to a remote VPS
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Docker Swarm is orchestration built into Docker: replicated services, rolling
 updates, and overlay networking, without running Kubernetes. Alchemy models
 the swarm itself (`Docker.Swarm`) and its workloads (`Docker.Service`,
 overlay `Docker.Network`), targeting any engine through a `Docker.Context`.
+
+<Tree
+  nodes={[
+    { id: "swarm", label: "swarm", type: "Docker.Swarm · single node" },
+    { id: "n1", label: "your engine", type: "node · manager + worker", parent: "swarm", dashed: true },
+    { id: "t1", label: "web.1", type: "task", parent: "n1", tone: "accent" },
+    { id: "t2", label: "web.2", type: "task", parent: "n1", tone: "accent" },
+    { id: "t3", label: "web.3", type: "task", parent: "n1", tone: "accent" },
+  ]}
+  scopes={[{ on: "swarm", label: "Service web · replicas: 3" }]}
+  caption="A Service asks for replicas, and the swarm keeps that many tasks running on its node, replacing any that stop."
+/>
 
 ## Create the swarm
 

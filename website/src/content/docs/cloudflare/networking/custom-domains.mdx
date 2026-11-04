@@ -4,6 +4,7 @@ description: Serve Workers from your own domain — create or adopt a Zone, atta
 sidebar:
   order: 0
 ---
+import Fanout from "../../../../components/diagrams/Fanout.astro";
 
 Every Worker gets a `workers.dev` URL by default, but production apps
 live on their own domain. This guide covers the pieces involved: the
@@ -28,6 +29,17 @@ export default Alchemy.Stack(
   }),
 );
 ```
+
+<Fanout
+  item={{ title: "request", lines: ["GET https://api.example.com/v1/users"] }}
+  group="example.com · zone"
+  routes={[
+    { label: "custom domain", condition: ["api.example.com"], target: { label: "Api", type: "Worker" } },
+    { label: "route", condition: ["shop.example.com/*"], target: { label: "Shop", type: "Worker" }, match: false },
+    { label: "DNS record", condition: ["app.example.com → origin"], target: { label: "your server", type: "proxied origin" }, match: false },
+  ]}
+  caption="Every request to the zone arrives at Cloudflare first. A custom domain or a route decides which Worker answers it, and a hostname with neither goes to its DNS record's origin."
+/>
 
 ## Create a Zone
 

@@ -84,6 +84,8 @@ it.effect(
       expect(session.setOutput).toBeDefined();
       yield* session.setOutput!({ api: "http://localhost:1337/" });
       expect(output.lines).toContainEqual("{ api: 'http://localhost:1337/' }");
+      yield* session.setOutput!({ a: { b: { c: { d: "deep" } } } });
+      expect(output.lines.join("\n")).toContain("d: 'deep'");
     }).pipe(Effect.provide(Layer.provide(LoggingCli, PlatformServices)), output.provide);
   },
   { tags: ["unit", "local"] },

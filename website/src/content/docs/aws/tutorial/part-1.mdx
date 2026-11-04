@@ -15,7 +15,7 @@ with an AWS S3 Bucket, and deploy it — all in under five minutes.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 24.11.1+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
 - An AWS account and an IAM identity with permission to create the
   resources you plan to deploy
 
@@ -70,11 +70,10 @@ keys with `alchemy profile edit --add AWS`. See
 
 ## Where state lives
 
-`state: AWS.state()` stores deploy state in an account-regional S3
-bucket (`alchemy-state-{accountId}-{region}-an`), created lazily on
+`state: AWS.state()` stores deploy state in a DynamoDB table
+(`alchemy-state`) in your account, created lazily on
 the first deploy. Because the state lives in your AWS account rather
-than on disk, the same configuration works locally and in CI with no
-extra setup.
+than on disk, the same configuration works locally and in CI.
 
 :::note[Other state stores]
 For purely local iteration you can use `Alchemy.localState()`
@@ -139,8 +138,8 @@ Run `alchemy deploy` to create the Bucket on AWS:
 <PackageManagers run="alchemy deploy" />
 
 Connect AWS first with `alchemy profile edit --add AWS` and pick a
-local authentication method: **SSO** (recommended), **console login**
-(`aws login`), or **stored access keys**. The choice is saved to your
+local authentication method: **console login** (recommended,
+`aws login`), **SSO** through IAM Identity Center, or **stored access keys**. The choice is saved to your
 **`default`** [profile](/environments/profiles); the region and account
 come from whichever method you pick, and a deploy with nothing
 configured fails with that exact command to run. CI instead reads AWS

@@ -3,16 +3,36 @@ title: Lambda Web Functions
 description: Run an HTTP server on AWS Lambda Web Functions — an Effect fetch handler or any Node server, with streaming responses, many concurrent requests per environment, and a built-in HTTPS endpoint.
 ---
 
-A **Lambda Web Function** runs your HTTP server on Lambda. Each execution
-environment serves many requests at once (up to 128), responses stream to
-the client as you produce them, and every function gets an HTTPS endpoint.
-It scales to zero when idle.
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
-Use it for anything that answers HTTP: APIs, server-rendered apps, AI
-responses streamed token by token. The [AWS websites](/aws/frontend/websites)
-(Nuxt, SvelteKit, Astro, and the rest) run their server on one by
-default. For queues, streams, schedules, and
-other event sources, use a [Lambda Function](/aws/compute/lambda).
+A Lambda Web Function runs an HTTP server on Lambda. Where a [Lambda Function](/aws/compute/lambda) runs one invocation at a time per environment, a Web Function's environment is a long-running server that takes many requests at once, up to 128. Responses stream to the client as your server writes them, and there's nothing to run while nobody calls it.
+
+## Environments, endpoints and revisions
+
+Your server runs in **environments**, each a copy of your code with 2 GB of memory and 2 vCPUs. Lambda starts more as traffic grows and stops them as it falls. Because each one serves many requests, a spike starts few environments, and requests share warm connection pools.
+
+<Timeline
+  end={10}
+  lanes={[{ id: "e1", label: "environment 1", type: "up to 128 at once" }]}
+  bars={[
+    { lane: "e1", start: 0, end: 0.7, tone: "warn" },
+    { lane: "e1", start: 0.7, end: 2.6, label: "request" },
+    { lane: "e1", start: 1.4, end: 3.3, label: "request" },
+    { lane: "e1", start: 1.5, end: 3.4, label: "request" },
+    { lane: "e1", start: 1.6, end: 3.5, label: "request" },
+    { lane: "e1", start: 2.8, end: 4.6, label: "request" },
+    { lane: "e1", start: 3.6, end: 5.4, label: "request" },
+    { lane: "e1", start: 5, end: 6.8, label: "request" },
+    { lane: "e1", start: 7.4, end: 9.2, label: "request" },
+  ]}
+  marks={[{ at: 1.4, label: "traffic spikes" }]}
+  legend={[{ tone: "accent", label: "request" }, { tone: "warn", label: "cold start" }]}
+  caption="The same spike that started two more environments on the Lambda page fits in the one environment that's already warm. Its requests run side by side and share its connections."
+/>
+
+Requests arrive through an **endpoint**: an HTTPS URL with its own auth, rate limit and cap on environments. Every Web Function has one, and you can add more. Each deploy publishes a new **revision**, and the endpoint moves its traffic to it, all at once or a share at a time.
+
+Use a Web Function for anything that answers HTTP: APIs, server-rendered sites, AI responses streamed token by token. The [AWS websites](/aws/frontend/websites) run their servers on one. For queues, streams, schedules and other events, use a [Lambda Function](/aws/compute/lambda).
 
 :::caution
 Web Functions run Node.js 24 on Arm64. They launched in `us-east-1`,
