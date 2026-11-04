@@ -627,6 +627,17 @@ test.provider(
           send: (id: string) => hit("/enqueue", id),
           concurrent: 1,
         },
+        {
+          // Effect code run inside a JavaScript AsyncLocalStorage store
+          // sees the store (the response) and its span still nests.
+          name: "als",
+          root: "operation",
+          names: ["operation", "als.child"],
+          platformUnder: [],
+          send: (id: string) =>
+            hit("/als", id, '"direct":"from-middleware","child":"from-middleware"'),
+          concurrent: 1,
+        },
       ] as const;
       type Shape = (typeof shapes)[number];
       const complete = (spans: SpanRow[], shape: Shape, id: string) => {
@@ -705,12 +716,13 @@ test.provider(
         );
       }
       expect(missing.map((shape) => shape.name)).toEqual([]);
-      const [fanout, exits, rpc, queue] = shapes;
+      const [fanout, exits, rpc, queue, als] = shapes;
       const ids = {
         fanout: completeIds(spans, fanout),
         exits: completeIds(spans, exits)[0]!,
         rpc: completeIds(spans, rpc)[0]!,
         queue: completeIds(spans, queue)[0]!,
+        als: completeIds(spans, als)[0]!,
       };
 
       // Fan-out: siblings and nesting follow the Effect span tree, and each
@@ -766,6 +778,13 @@ test.provider(
         expect(trace.root.parentSpanId).toBeTruthy();
         expect(trace.span("queue.inner").parentSpanId).toBe(trace.root.spanId);
         expect(trace.root.exit).toBe("success");
+      }
+
+      // AsyncLocalStorage: a span opened inside the JavaScript store nests
+      // under the Effect span that called into it.
+      {
+        const trace = traceOf(spans, "operation", ids.als)!;
+        expect(trace.span("als.child").parentSpanId).toBe(trace.root.spanId);
       }
 
       yield* stack.destroy();

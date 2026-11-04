@@ -19,6 +19,33 @@ export const SocketObjectLive = SocketObject.make(
       const closed: string[] = [];
       const cleanupStarted: string[] = [];
       const cleanups = new Map<string, Deferred.Deferred<void>>();
+      const record = (label: string, entry: string) =>
+        state.storage
+          .transaction(
+            Effect.gen(function* () {
+              const entries = (yield* state.storage.get<string[]>(`journal:${label}`)) ?? [];
+              yield* state.storage.put(`journal:${label}`, [...entries, entry]);
+            }),
+          )
+          .pipe(Effect.orDie);
+      // A resource bound to the RPC's scope, whose release is journaled.
+      const acquire = (label: string) =>
+        Effect.acquireRelease(
+          Effect.sync(() => ({ released: false })),
+          (resource) =>
+            Effect.sync(() => {
+              resource.released = true;
+            }).pipe(Effect.andThen(record(label, `${label}:released`))),
+        );
+      // Background work that uses the resource after the RPC has replied.
+      const useLater = (label: string, resource: { released: boolean }) =>
+        Effect.sleep("200 millis").pipe(
+          Effect.andThen(
+            Effect.suspend(() =>
+              record(label, `${label}:${resource.released ? "released" : "open"}`),
+            ),
+          ),
+        );
       return SocketRpcs.toLayer({
         greet: ({ name }) => Effect.succeed(new Greeting({ message: `Hello, ${name}!` })),
         increment: () =>
@@ -124,6 +151,28 @@ export const SocketObjectLive = SocketObject.make(
           // Native abort discards buffered storage writes.
           yield* state.storage.sync();
           yield* state.abort("RPC WebSocket test abort", { retryAlarm: false });
+        }),
+        holdLater: Effect.fn(function* ({ label }) {
+          const resource = yield* acquire(label);
+          yield* state.waitUntil(useLater(label, resource));
+          return "scheduled";
+        }),
+        // A stream has no RPC scope to bind to (`Stream.unwrap` releases what
+        // it acquires when the stream ends), so its element hands off work
+        // that acquires a resource of its own.
+        streamWaitUntil: ({ label }) =>
+          Stream.fromEffect(
+            state
+              .waitUntil(
+                Effect.gen(function* () {
+                  const resource = yield* acquire(label);
+                  yield* useLater(label, resource);
+                }),
+              )
+              .pipe(Effect.as("a")),
+          ),
+        journal: Effect.fn(function* ({ label }) {
+          return (yield* state.storage.get<string[]>(`journal:${label}`)) ?? [];
         }),
         stats: Effect.fn(function* () {
           return {

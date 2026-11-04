@@ -31,7 +31,6 @@ import type { Secret } from "../SecretsStore/Secret.ts";
 import type { StreamBinding } from "../Stream/StreamBinding.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { VpcService } from "../VpcService/VpcService.ts";
-import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
@@ -249,7 +248,6 @@ export type WorkerBindingResource =
   | DurableObjectLike<any>
   | WorkflowLike<any>
   | VpcService
-  | VpcServiceLookup
   // An account-level mTLS certificate becomes an `mtls_certificate` binding.
   | MtlsCertificate
   // A Container bound directly in `env` declares a container-backed Durable

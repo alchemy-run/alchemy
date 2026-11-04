@@ -666,16 +666,21 @@ const aggregateClient = (
     schedule: (target, command, options) =>
       Effect.gen(function* () {
         // The command runs later, so its span links back here rather than continuing this trace.
-        const { id, meta } = yield* metaFor(target, command, options, true);
+        // `commandId` names the scheduled command; the arming gets its own id, derived like a
+        // send's, so a policy or step that runs again arms nothing new, and a later trigger
+        // arms the name again even after its command ran.
+        const { id, meta } = yield* metaFor(target, command, undefined, true);
+        const name = options.commandId ?? meta.commandId;
         const at = yield* store.schedule(
           id,
+          name,
           yield* kernel.encodeCommand(aggregate, command),
           meta,
           options.at !== undefined
             ? { at: DateTime.toEpochMillis(options.at) }
             : { afterMillis: Duration.toMillis(Duration.fromInputUnsafe(options.after)) },
         );
-        return { commandId: meta.commandId, at: DateTime.makeUnsafe(at) };
+        return { commandId: name, at: DateTime.makeUnsafe(at) };
       }).pipe(
         Effect.withSpan(
           `Domain.schedule ${aggregate.aggregateName}.${command._tag}`,
