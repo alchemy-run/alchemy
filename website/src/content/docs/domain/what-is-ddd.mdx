@@ -240,9 +240,15 @@ export class Ledger extends Domain.Projection("Ledger", {
 }) {}
 ```
 
-A projection's store can answer questions a view can't, such as an account's whole history a page at a time, or every large withdrawal across all accounts. A **query** serves it. Like a command, a query is a message: it declares its input, its result and who may ask. Its implementation reads the store.
+See [View](/domain/view) and [Projection](/domain/projection).
 
-```typescript title="packages/domain/src/Ledger/AccountLedger.query.ts"
+## Queries: questions across many records
+
+A view answers questions about one thing: this account's balance, this customer's dashboard. Some questions span many: an account's whole history a page at a time, or every large withdrawal this week. A projection's store holds the answer, and a **query** asks for it.
+
+A query is a message, like a command. It's named after the question, and it declares what the caller sends, what comes back, and who may ask. Its implementation reads the store.
+
+```typescript title="src/AccountLedger.query.ts"
 export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },
   success: LedgerRow,
@@ -251,7 +257,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
 }) {}
 ```
 
-A client calls it like a command. Usually it gets what the store holds now. Right after its own command, it passes the command's receipt, and the query waits until the projection has written that change before it reads:
+A client calls a query like a command, and usually gets what the store holds now. Like a view, the store may be a moment behind. A screen that has just sent a command passes the command's receipt, and the query waits until the projections it `waitsFor` have written that change before it reads.
 
 ```typescript
 const page = yield* bank.AccountLedger({ account: accountId }); // what the store holds now
@@ -260,7 +266,7 @@ const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
 const fresh = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt }); // includes the deposit
 ```
 
-See [View](/domain/view), [Projection](/domain/projection) and [Query](/domain/query).
+See [Query](/domain/query).
 
 ## Policies: the business's standing rules
 
