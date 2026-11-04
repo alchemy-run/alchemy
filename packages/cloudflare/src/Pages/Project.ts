@@ -282,7 +282,7 @@ export const isProject = (value: unknown): value is Project =>
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
     stables: ["projectId", "accountId", "name", "subdomain", "createdOn"],
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -320,7 +320,7 @@ export const ProjectProvider = () =>
       const observed = yield* getProject(acct, name);
       return observed ? Unowned(toAttributes(observed, acct)) : undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = news.name ?? output?.name ?? (yield* createProjectName(id));
 

@@ -386,7 +386,7 @@ export const StreamProvider = () =>
   Provider.succeed(Stream, {
     stables: ["streamId", "accountId", "name", "createdAt"],
 
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -455,7 +455,7 @@ export const StreamProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* streamName(id, news.name);
       const http = desiredHttp(news.http);

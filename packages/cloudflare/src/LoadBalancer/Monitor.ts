@@ -282,7 +282,7 @@ export const MonitorProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const description = yield* createDescription(id, news.description);
       const body = buildBody(news, description);
