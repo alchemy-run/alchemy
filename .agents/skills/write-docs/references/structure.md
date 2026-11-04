@@ -68,6 +68,7 @@ mixing them on a page is fine.
 | Where does one event or message go, and why? Routing by content, broadcast copies, filters | `Fanout` (the item's JSON, each route's condition, match or not). No labels sitting on a line: a "copy" chip on each delivery was rejected | `aws/messaging/eventbridge`, `aws/messaging/sns` |
 | What's in a queue right now, and who holds what? | `Queue` (`messages` for a standard queue in no order, `groups` for FIFO message groups) | `aws/messaging/sqs` |
 | How do compute and shared storage spread over zones? | `Zones` | `aws/data/rds` |
+| What can reach what across a boundary? Tunnels, private networks, refused connections | `Boundaries` (zones as borders, a `tunnel` pipe through a wall, a `blocked` path ending in a cross; lay it out top to bottom so it fits the column) | `cloudflare/networking/tunnel` |
 | Who manages each layer, you or the platform? | `Responsibility` | `aws/compute/choosing-a-runtime` |
 | What happens, in what order, between whom? Which checks does a call pass? | `Sequence` | `aws/messaging/sqs`, `acme/what-is-acme`, `aws/iam` (across accounts) |
 | What runs when? Concurrency, waiting, propagation | `Timeline` | `aws/compute/lambda`, `cloudflare/data/kv` |

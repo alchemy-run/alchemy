@@ -4,7 +4,7 @@ description: Connect a private origin to Cloudflare's edge with a Tunnel, declar
 sidebar:
   order: 25
 ---
-import Sequence from "../../../../components/diagrams/Sequence.astro";
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 A Cloudflare Tunnel establishes an outbound connection from your
 origin — a home lab, a Kubernetes cluster, a VM with no public IP —
@@ -12,23 +12,24 @@ to Cloudflare's edge. No open inbound ports, no public address. In
 alchemy the tunnel, its routing rules, and the DNS record that
 publishes it are all ordinary resources in one stack.
 
-<Sequence
-  actors={[
-    { id: "user", label: "visitor" },
-    { id: "edge", label: "Cloudflare", type: "edge" },
-    { id: "cfd", label: "cloudflared", type: "on your origin", tone: "accent" },
-    { id: "svc", label: "api", type: "http://localhost:8080" },
+<Boundaries
+  nodes={[
+    { id: "visitor", label: "visitor", type: "anywhere", col: 0, row: 0 },
+    { id: "edge", label: "app.example.com", type: "proxied CNAME", col: 0, row: 1 },
+    { id: "cfd", label: "cloudflared", type: "dialed out", col: 0, row: 2, tone: "accent" },
+    { id: "api", label: "api", type: "localhost:8080", col: 1, row: 2 },
   ]}
-  steps={[
-    { from: "cfd", to: "edge", label: "dial out with the tunnel token" },
-    { note: "tunnel up · no inbound port open", over: "cfd" },
-    { from: "user", to: "edge", label: "GET app.example.com" },
-    { from: "edge", to: "cfd", label: "down the tunnel" },
-    { note: "first matching ingress rule", over: "cfd" },
-    { from: "cfd", to: "svc", label: "forward" },
-    { from: "svc", to: "user", label: "response, back the same way", dashed: true },
+  zones={[
+    { id: "cf", label: "Cloudflare", type: "edge", nodes: ["edge"] },
+    { id: "net", label: "your network", type: "no inbound ports", nodes: ["cfd", "api"], tone: "warn", labelAt: "right" },
   ]}
-  caption="The origin makes the only connection, outward. Visitors reach it through Cloudflare, so it needs no public address and no open port."
+  links={[
+    { from: "visitor", to: "edge", label: "GET" },
+    { from: "edge", to: "cfd", kind: "tunnel", label: "tunnel" },
+    { from: "cfd", to: "api", label: "ingress" },
+    { from: "visitor", to: "net", kind: "blocked", label: "direct: refused" },
+  ]}
+  caption="cloudflared opens the tunnel from inside your network, so the only way in is through Cloudflare. A visitor's request rides the tunnel down, and an ingress rule sends it to the service."
 />
 
 ## Create a tunnel
