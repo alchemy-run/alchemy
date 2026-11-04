@@ -100,9 +100,7 @@ const classes = (scriptName: string) =>
       .pipe(Stream.runCollect);
     return Object.fromEntries(
       namespaces.flatMap((namespace) =>
-        namespace.script === scriptName && namespace.class?.match(/^Bank\.(Summary|Latest)View/)
-          ? [[namespace.class, namespace.id]]
-          : [],
+        namespace.script === scriptName && namespace.class ? [[namespace.class, namespace.id]] : [],
       ),
     );
   }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped);
@@ -164,10 +162,9 @@ for (const dev of [true, false]) {
 
             if (!dev) {
               const after = yield* classes(worker.workerName);
-              // The summary was rebuilt in its own storage; the latest view in a new one.
-              expect(after["Bank.SummaryView"]).toBe(before["Bank.SummaryView"]);
-              expect(after["Bank.SummaryViewV1"]).toBeUndefined();
-              expect(after["Bank.LatestViewV1"]).toBeDefined();
+              // Rebuilt views, in place or in a new generation, stay in the one class.
+              expect(Object.keys(after)).toEqual(["AlchemyDomain"]);
+              expect(after).toEqual(before);
             }
 
             yield* stack.destroy();

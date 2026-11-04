@@ -2259,10 +2259,12 @@ const durableObjectPlatform = (
   );
 
 /**
- * Host a domain model on Cloudflare Durable Objects. Every aggregate, view
- * and policy becomes a Durable Object class on the host Worker, declared
- * while the model's Layer is built, so there are no bindings to write. One
- * instance per aggregate id, per view key, and per policy and source.
+ * Host a domain model on Cloudflare Durable Objects. Every aggregate, view,
+ * policy, projection, stream and saga run of every model on the Worker is a
+ * Durable Object of one class, `AlchemyDomain`, declared while the model's
+ * Layer is built, so there are no bindings to write. One instance per
+ * aggregate id, per view key, and per policy and source, named after its
+ * model, its definition and its key (`Billing.AccountAggregate/a-1`).
  *
  * Commands to one instance run one at a time, and their events, state and
  * outbox commit together. Deliveries to views and policies are at least once
@@ -2315,11 +2317,17 @@ const durableObjectPlatform = (
  * ```
  *
  * ### Hosting several models in one Worker
- * Each model gets its own Durable Object classes, named after the model
- * (`Billing.AccountAggregate`), so models that list the same aggregate never
- * share its data. A deploy moves data a Worker deployed with an earlier Domain
- * layout to the current one; see `legacyData` on a model's `layer` for models
- * that shared a class before Domain versions existed.
+ * Each object's name starts with its model (`Billing.AccountAggregate/a-1`),
+ * so models that list the same aggregate never share its data. However many
+ * models and definitions a Worker hosts, it declares one Durable Object
+ * class, well within Cloudflare's 100 per Worker.
+ *
+ * A deploy moves data a Worker deployed with an earlier Domain layout to the
+ * current one. A Worker from before the shared class keeps its old classes
+ * while the deploy moves each of their objects into it (see
+ * `Cloudflare.Domain.Migration`); a later deploy deletes them once they are
+ * empty. See `legacyData` on a model's `layer` for models that shared a class
+ * before Domain versions existed.
  *
  * **Example:** Two models that both list `Account`
  * ```typescript

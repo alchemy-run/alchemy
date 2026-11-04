@@ -112,7 +112,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ) {}
 ```
 
-Each aggregate, view and policy becomes a Durable Object class on this Worker while it starts, so there are no bindings or classes to write.
+Every aggregate, view and policy lives in one Durable Object class on this Worker, `AlchemyDomain`, declared while it starts, so there are no bindings or classes to write.
 
 ## Deploy it
 
@@ -164,7 +164,9 @@ bun alchemy deploy
 | A stream key, like the card of `a-1` | One Durable Object per stream and key |
 | A saga run, like transfer `t-1` | One Durable Object per saga and run, holding its steps' results |
 
-Sagas run on `Cloudflare.Workflows.layerDurableObjectEngine()`, the same engine you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
+All of them are objects of the one `AlchemyDomain` class, named after the model, the definition and the key, like `Billing.AccountAggregate/a-1`. A Worker declares that one class however many models and definitions it hosts, well within Cloudflare's 100 per Worker.
+
+Sagas run on the same engine as `Cloudflare.Workflows.layerDurableObjectEngine()`, which you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
 
 ## Keep the model in a jurisdiction
 
@@ -185,13 +187,21 @@ A Durable Object in a jurisdiction is a different object from the one with the s
 
 ## Host several models in one Worker
 
-Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
+Each object's name starts with its model: `Billing.AccountAggregate/a-1` and `Audit.AccountAggregate/a-1` when both list `Account`, and `Billing.OpenAccountWorkflow/t-1` for a saga run. Their data never mixes, so several models can share one Worker and one `layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
 
-Renaming a model renames its classes, and the model starts empty under the new names.
+Renaming a model renames its objects, and the model starts empty under the new names.
 
 ## Upgrade without losing data
 
-Each Worker records the Domain version it was deployed with. When a later Alchemy release lays models out differently, the next deploy moves the deployed data to the new layout: it renames classes in place, so every aggregate, view row and running saga carries over.
+Each Worker records the Domain version it was deployed with. When a later Alchemy release lays models out differently, the next deploy moves the deployed data to the new layout, so every aggregate, view row and running saga carries over.
+
+Domain version 0 gave each aggregate, view, policy, projection, stream and saga of each model a class of its own (`Billing.AccountAggregate`). Upgrading such a Worker keeps those classes while the deploy moves each of their objects into `AlchemyDomain`, storage, alarms and running sagas included, and waits until it has:
+
+```sh
+Moving Domain objects to the shared class: 1,200/4,096 (42s) ...
+```
+
+A key called during the move moves first, so nothing is read from an empty object. Cloudflare lists an object a few minutes after it is written, so a deploy at least 15 minutes later moves any the first one didn't see, and deletes each old class once its objects are empty.
 
 Models deployed before versions existed named classes after the definition alone, like `AccountAggregate`. If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails until you choose:
 

@@ -3,11 +3,13 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { getWorkerTags } from "../Utils/Worker.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import DuplicateWorker from "./fixtures/duplicate-worker.ts";
@@ -93,7 +95,24 @@ test(
       (yield* getWorkerTags(workerName, accountId)).filter((tag) =>
         tag.startsWith("alchemy:domain:"),
       ),
-    ).toEqual(["alchemy:domain:v0"]);
+    ).toEqual(["alchemy:domain:v1"]);
+  }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 60_000 },
+);
+
+test(
+  "every object of every model on a Worker lives in one Durable Object class",
+  Effect.gen(function* () {
+    const { workerName } = yield* stack;
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const namespaces = yield* durableObjects.listNamespaces
+      .items({ accountId })
+      .pipe(Stream.runCollect);
+    expect(
+      Array.from(namespaces)
+        .filter((namespace) => namespace.script === workerName)
+        .map((namespace) => namespace.class),
+    ).toEqual(["AlchemyDomain"]);
   }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped),
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 60_000 },
 );
