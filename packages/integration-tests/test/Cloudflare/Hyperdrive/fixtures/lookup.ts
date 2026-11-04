@@ -2,8 +2,9 @@
  * Name of a Hyperdrive configuration the lookup tests create out-of-band
  * (directly through distilled, standing in for a dashboard-created config).
  * Per-user so concurrent runs on the shared test account don't collide.
- * Only read at deploy time — the deployed Worker addresses the binding by
- * the lookup id — so the runtime fallback is never used.
+ * It also names the Worker binding, and `Connect` reads that binding in the
+ * deployed Worker, so the fallback for a missing `process` must produce the
+ * same name in both places: it is never used because tests always set USER.
  */
 export const lookupConfigName = (suite: "live" | "local") =>
   `alchemy-test-hd-lookup-${suite}-${(

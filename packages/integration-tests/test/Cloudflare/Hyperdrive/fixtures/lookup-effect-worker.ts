@@ -9,7 +9,7 @@ import { connectionRoutes } from "./routes.ts";
  * An existing Hyperdrive configuration looked up by name — never managed by
  * the stack.
  */
-export const LookupHyperdrive = Cloudflare.Hyperdrive.lookup("HyperdriveLookup", {
+export const LookupHyperdrive = Cloudflare.Hyperdrive.Connection.lookup({
   name: lookupConfigName("live"),
 });
 

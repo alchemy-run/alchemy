@@ -13,7 +13,7 @@ import { lookupConfigName } from "./lookup.ts";
  */
 export const LocalLookupHyperdrive = Effect.gen(function* () {
   const project = yield* Neon.Project("HyperdriveLookupLocalProject");
-  return Cloudflare.Hyperdrive.lookup("HyperdriveLookupLocal", {
+  return Cloudflare.Hyperdrive.Connection.lookup({
     name: lookupConfigName("local"),
     dev: project.origin,
   });
