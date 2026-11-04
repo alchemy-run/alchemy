@@ -81,6 +81,13 @@ export type DatabaseProps = {
    * commits with the bookkeeping row. DML between DDL statements fails the
    * deploy; split it into its own migration. Bookkeeping lives in the `alchemy_migrations` table
    * (Spanner names can't start with `_`).
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
