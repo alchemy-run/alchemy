@@ -1,6 +1,8 @@
 import { EventLifetime } from "alchemy/Workers/EventLifetime";
 import { gateExclusive, gateStorage } from "alchemy/Workers/InputGate";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -296,7 +298,10 @@ const setAlarm = (c: ActorContextLike, at: number, retries?: number) =>
   Effect.gen(function* () {
     const existing = yield* readAlarm(c);
     // The token tells the firing alarm whether it's still the one set.
-    const token = yield* Effect.sync(() => crypto.randomUUID());
+    const token = yield* SecureRandom.SecureRandom.pipe(
+      Effect.flatMap((random) => random.uuidV4()),
+      Effect.provide(SecureRandom.layerWebCrypto),
+    );
     const schedule = Effect.gen(function* () {
       yield* cancelSchedule(c, existing);
       return yield* Effect.promise(() => c.schedule.at(at, ALARM_ACTION, token));
@@ -490,9 +495,7 @@ export const makeDurableObjectState = (
         const context = yield* Effect.context<never>();
         const lifetime = yield* Effect.serviceOption(EventLifetime);
         yield* Effect.sync(() => {
-          const promise = Effect.runPromise(
-            effect.pipe(Effect.scoped, Effect.provideContext(context)) as never,
-          );
+          const promise = Effect.runPromiseWith(context)(effect.pipe(Effect.scoped) as never);
           if (Option.isSome(lifetime)) lifetime.value.extend(promise);
           c.waitUntil(promise);
         });
@@ -556,7 +559,7 @@ export const runFiredAlarm = (
     yield* gateStorage(
       Effect.gen(function* () {
         if ((yield* readAlarm(c)) !== undefined) return;
-        const now = yield* Effect.sync(() => Date.now());
+        const now = yield* Clock.currentTimeMillis;
         yield* setAlarm(c, now + ALARM_RETRY_DELAY * 2 ** retries, retries + 1);
       }),
     );

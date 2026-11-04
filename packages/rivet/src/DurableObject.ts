@@ -18,6 +18,7 @@ import type { Self } from "alchemy/Self";
 import type * as ConfigError from "effect/Config";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -423,12 +424,12 @@ const namespaceOf = (name: string, declaration: Effect.Effect<DurableObject, nev
     if (ctx?.Type === DurableObjectTypeId && ctx.id === name) {
       return makeNamespace(
         name,
-        yield* Effect.sync(() => ({
-          endpoint: process.env.RIVET_ENDPOINT ?? "",
-          token: process.env.RIVET_TOKEN ?? "",
-          namespace: process.env.RIVET_NAMESPACE ?? "",
-          pool: process.env.RIVET_POOL ?? "",
-        })),
+        yield* Config.all({
+          endpoint: Config.String("RIVET_ENDPOINT").pipe(Config.withDefault("")),
+          token: Config.String("RIVET_TOKEN").pipe(Config.withDefault("")),
+          namespace: Config.String("RIVET_NAMESPACE").pipe(Config.withDefault("")),
+          pool: Config.String("RIVET_POOL").pipe(Config.withDefault("")),
+        }).pipe(Effect.orDie),
       );
     }
     // Built on a memo map of its own: a class built inside another's phase
