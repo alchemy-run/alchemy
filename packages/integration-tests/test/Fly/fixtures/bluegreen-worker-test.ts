@@ -376,7 +376,10 @@ export const assertOrder = (
     (event) => event.machine === machine && (worker === undefined || event.worker === worker),
   );
   expect(selected.findIndex((event) => event.event === first)).toBeGreaterThanOrEqual(0);
-  expect(selected.findIndex((event) => event.event === second)).toBeGreaterThan(
+  // The last `second`: a Machine whose first process dies while booting
+  // logs its shutdown events once before the process Fly restarts in
+  // place, and that boot is not the stop under test.
+  expect(selected.findLastIndex((event) => event.event === second)).toBeGreaterThan(
     selected.findIndex((event) => event.event === first),
   );
 };

@@ -93,6 +93,13 @@ export interface PostgresProps {
    * is reachable on the org private network; deploy-time apply needs a
    * route to that network (a WireGuard peer, `fly mpg proxy`, or a
    * machine already on 6PN).
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**

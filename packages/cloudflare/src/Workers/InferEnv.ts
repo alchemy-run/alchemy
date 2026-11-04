@@ -32,7 +32,6 @@ import type * as Queues from "../Queues/index.ts";
 import type * as R2 from "../R2/index.ts";
 import type * as StreamNs from "../Stream/index.ts";
 import type { VpcService } from "../VpcService/VpcService.ts";
-import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
@@ -138,9 +137,7 @@ export type GetBindingType<T> =
                                                         // `StreamNs.StreamBinding`).
                                                         T extends StreamNs.StreamBinding
                                                         ? StreamBinding
-                                                        : T extends
-                                                              | HyperdriveNs.Connection
-                                                              | HyperdriveNs.ConnectionLookup
+                                                        : T extends HyperdriveNs.Connection
                                                           ? Hyperdrive
                                                           : T extends VersionMetadataBinding
                                                             ? WorkerVersionMetadata
@@ -156,7 +153,6 @@ export type GetBindingType<T> =
                                                                     >
                                                                   : T extends
                                                                         | VpcService
-                                                                        | VpcServiceLookup
                                                                         | MtlsCertificate
                                                                     ? Fetcher
                                                                     : T extends

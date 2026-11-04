@@ -90,8 +90,20 @@ export type VpcService = Resource<
   VpcServiceProps,
   Attributes,
   never,
-  Providers
+  Providers,
+  VpcServiceLookup
 >;
+
+/** Props for {@link VpcService.lookup}: find a VPC service this stack doesn't manage. */
+export type VpcServiceLookup =
+  | {
+      /** The Cloudflare-assigned ID of the VPC service. */
+      serviceId: string;
+    }
+  | {
+      /** The display name of the VPC service. */
+      name: string;
+    };
 
 /**
  * A Cloudflare VPC service that exposes a private host (IP or hostname)
@@ -117,6 +129,24 @@ export type VpcService = Resource<
  * const service = yield* Cloudflare.VpcService.VpcService("DevServer", {
  *   httpPort: 5173,
  *   host: { ipv4: "192.168.1.100", network: { tunnelId: tunnel.tunnelId } },
+ * });
+ * ```
+ *
+ * ### Looking up an existing VPC Service
+ * **Example:** Look up by ID
+ * ```typescript
+ * const service = Cloudflare.VpcService.VpcService.lookup({
+ *   serviceId: "123e4567-e89b-12d3-a456-426614174000",
+ * });
+ * ```
+ *
+ * **Example:** Bind a service looked up by name to a Worker
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     VPC: Cloudflare.VpcService.VpcService.lookup({ name: "my-vpc-service" }),
+ *   },
  * });
  * ```
  *
@@ -285,6 +315,19 @@ export const VpcServiceProvider = () =>
       const existing = yield* findServiceByName(name);
       if (!existing || !existing.serviceId) return undefined;
       return formatVpcService(existing, accountId);
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if ("name" in props) {
+        const existing = yield* findServiceByName(props.name);
+        return existing ? formatVpcService(existing, accountId) : undefined;
+      }
+      return yield* connectivity
+        .getDirectoryService({ accountId, serviceId: props.serviceId })
+        .pipe(
+          Effect.map((service) => formatVpcService(service, accountId)),
+          Effect.catchTag("VpcServiceNotFound", () => Effect.undefined),
+        );
     }),
   });
 

@@ -195,8 +195,14 @@ const exclusively = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     return yield* exit;
   });
 
-/** What `scheduled:<commandId>` holds once that command is cancelled; never a job token. */
+/** What `scheduled:<name>` holds once that command is cancelled; never a job token. */
 const CANCELLED = "cancelled";
+
+/** What `armed:<name>` holds: the latest arming's command id, and when it is due. */
+interface Armed {
+  readonly commandId: string;
+  readonly at: number;
+}
 
 /** How long a queue drain may hold its lease before another drain may take over. */
 const LEASE_MS = 60_000;
@@ -802,11 +808,13 @@ const aggregateObject = (
         state.storage
           .get<SendResult>(`receipt:${commandId}`)
           .pipe(Effect.map((receipt) => receipt !== undefined));
-      // Scheduled commands: one durable callback job per command id, run here
-      // when due. `scheduled:<commandId>` holds the token of the job that may
-      // run, or `CANCELLED` once it is cancelled, so a job cancelled or
-      // replaced after the alarm claimed it does nothing. It is cleared after
-      // the commit (the receipt takes over), so a retried job still runs.
+      // Scheduled commands: one durable callback job per name, run here when
+      // due. `scheduled:<name>` holds the token of the job that may run, or
+      // `CANCELLED` once it is cancelled, so a job cancelled or replaced after
+      // the alarm claimed it does nothing. It is cleared after the commit (the
+      // receipt takes over), so a retried job still runs. `armed:<name>` keeps
+      // the latest arming's command id and due time: the same arming again
+      // changes nothing, and its receipt tells whether the name's command ran.
       const timers = yield* makeCallback(
         "domain:schedule",
         (job: {
@@ -814,9 +822,11 @@ const aggregateObject = (
           readonly command: Json;
           readonly meta: Aggregate.SendMeta;
           readonly token?: string;
+          /** Absent on jobs scheduled before names: the command id stands in. */
+          readonly name?: string;
         }) =>
           Effect.gen(function* () {
-            const key = `scheduled:${job.meta.commandId}`;
+            const key = `scheduled:${job.name ?? job.meta.commandId}`;
             yield* ensureRegistered(net, { source: kit.name, id: job.id });
             const kick = yield* exclusively(
               Effect.gen(function* () {
@@ -837,29 +847,40 @@ const aggregateObject = (
       return {
         send: (id: string, command: Json, meta: Aggregate.SendMeta) =>
           reportDefects(send(id, command, meta)),
-        schedule: (id: string, command: Json, meta: Aggregate.SendMeta, due: Aggregate.Due) =>
+        schedule: (
+          id: string,
+          name: string,
+          command: Json,
+          meta: Aggregate.SendMeta,
+          due: Aggregate.Due,
+        ) =>
           Effect.gen(function* () {
-            if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
+            // The same arming again (a policy or step ran again): leave it as it is.
+            const armed = yield* state.storage.get<Armed>(`armed:${name}`);
+            if (armed?.commandId === meta.commandId) return { at: armed.at };
             const token = yield* random.uuidV4();
             const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
-            yield* state.storage.put(`scheduled:${meta.commandId}`, token);
-            yield* timers.schedule(meta.commandId, {
+            yield* state.storage.put(`armed:${name}`, { commandId: meta.commandId, at });
+            yield* state.storage.put(`scheduled:${name}`, token);
+            yield* timers.schedule(name, {
               at,
-              payload: { id, command, meta, token },
+              payload: { id, command, meta, token, name },
             });
             return { at };
           }).pipe(exclusively, reportDefects),
-        unschedule: (commandId: string) =>
+        unschedule: (name: string) =>
           Effect.gen(function* () {
-            if (yield* executed(commandId)) return "AlreadyExecuted" as const;
-            const key = `scheduled:${commandId}`;
+            // Before names, the command id was the name.
+            const armed = yield* state.storage.get<Armed>(`armed:${name}`);
+            if (yield* executed(armed?.commandId ?? name)) return "AlreadyExecuted" as const;
+            const key = `scheduled:${name}`;
             const token = yield* state.storage.get<string>(key);
             if (token === CANCELLED) return "AlreadyCancelled" as const;
             // A job scheduled before tokens existed has a job but no token.
-            if (token === undefined && (yield* timers.getStatus(commandId)) === undefined)
+            if (token === undefined && (yield* timers.getStatus(name)) === undefined)
               return "NotScheduled" as const;
             yield* state.storage.put(key, CANCELLED);
-            yield* timers.cancel(commandId);
+            yield* timers.cancel(name);
             return "Cancelled" as const;
           }).pipe(exclusively, reportDefects),
         state: () => reportDefects(currentMeta),
@@ -1845,23 +1866,11 @@ const durableObjectPlatform = (
                           ),
                         ),
                       ),
+                    schedule: (id, name, command, meta, due) =>
+                      unwrapDefects<{ readonly at: number }>(
+                        namespace.getByName(id).schedule(id, name, command, meta, due),
+                      ).pipe(Effect.map((outcome) => outcome.at)),
                     // The object answers with a tag (RPC loses typed failures); fail with it here.
-                    schedule: (id, command, meta, due) =>
-                      unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
-                        namespace.getByName(id).schedule(id, command, meta, due),
-                      ).pipe(
-                        Effect.flatMap((outcome) =>
-                          outcome === "AlreadyExecuted"
-                            ? Effect.fail(
-                                new AlreadyExecuted({
-                                  aggregate: aggregate.aggregateName,
-                                  id,
-                                  commandId: meta.commandId,
-                                }),
-                              )
-                            : Effect.succeed(outcome.at),
-                        ),
-                      ),
                     unschedule: (id, commandId) =>
                       unwrapDefects<
                         "Cancelled" | "AlreadyCancelled" | "AlreadyExecuted" | "NotScheduled"

@@ -9,6 +9,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/observability/OtlpTracer";
+import * as Stream from "effect/Stream";
 
 /**
  * Durable Object target whose events emit child spans — one HTTP fetch
@@ -18,12 +19,34 @@ import * as OtlpTracer from "effect/observability/OtlpTracer";
 export class OtelEventFlushTarget extends Cloudflare.DurableObject<OtelEventFlushTarget>()(
   "OtelEventFlushTarget",
   Effect.succeed(
-    Effect.succeed({
-      fetch: Effect.succeed(HttpServerResponse.text("durable-object-ok")).pipe(
-        Effect.withSpan("otel-event-flush.child"),
-      ),
-      ping: () =>
-        Effect.succeed("durable-object-rpc-ok").pipe(Effect.withSpan("otel-event-flush.rpc")),
+    Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+      return {
+        fetch: Effect.succeed(HttpServerResponse.text("durable-object-ok")).pipe(
+          Effect.withSpan("otel-event-flush.child"),
+        ),
+        ping: () =>
+          Effect.succeed("durable-object-rpc-ok").pipe(Effect.withSpan("otel-event-flush.rpc")),
+        // A Stream result whose element records a span as the caller reads it.
+        streamSpans: () =>
+          Effect.succeed(
+            Stream.fromEffect(
+              Effect.succeed("item").pipe(
+                Effect.delay("100 millis"),
+                Effect.withSpan("otel-event-flush.rpc.stream-item"),
+              ),
+            ),
+          ).pipe(Effect.withSpan("otel-event-flush.rpc.stream")),
+        pingLater: () =>
+          state
+            .waitUntil(
+              Effect.sleep("300 millis").pipe(Effect.withSpan("otel-event-flush.rpc.background")),
+            )
+            .pipe(
+              Effect.as("durable-object-rpc-ok"),
+              Effect.withSpan("otel-event-flush.rpc.later"),
+            ),
+      };
     }),
   ),
 ) {}
@@ -46,9 +69,97 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/rpc-stream-span")) {
+          const items = yield* Stream.runCollect(
+            yield* targetNamespace.getByName("target").streamSpans(),
+          );
+          return HttpServerResponse.text(items.join(","));
+        }
+        if (request.url.startsWith("/finalizer-wait-until")) {
+          // Work a finalizer hands off while the event's scope closes.
+          yield* Effect.addFinalizer(() =>
+            Cloudflare.waitUntil(
+              Effect.sleep("300 millis").pipe(
+                Effect.withSpan("otel-event-flush.finalizer.background"),
+              ),
+            ),
+          );
+          return HttpServerResponse.text("accepted", { status: 202 });
+        }
+        if (request.url.startsWith("/rpc-wait-until")) {
+          const pong = yield* targetNamespace.getByName("target").pingLater();
+          return HttpServerResponse.text(`worker-saw:${pong}`);
+        }
+        if (request.url.startsWith("/stream")) {
+          // The tail chunk's span ends after the handler has returned, so it
+          // only reaches the exporter if the streamed body owns the event's
+          // telemetry scope until it settles.
+          let bodyEnded = false;
+          // A handler finalizer belongs to the event's scope, so it runs
+          // once the body ends, not when the response is handed off.
+          yield* Effect.addFinalizer(() =>
+            Effect.suspend(() =>
+              Effect.void.pipe(
+                Effect.withSpan(
+                  bodyEnded
+                    ? "otel-event-flush.finalizer-after-body"
+                    : "otel-event-flush.finalizer-before-body",
+                ),
+              ),
+            ),
+          );
+          return HttpServerResponse.stream(
+            Stream.make("head\n").pipe(
+              Stream.concat(
+                Stream.fromEffect(
+                  Effect.sleep("300 millis").pipe(
+                    Effect.andThen(Effect.sync(() => (bodyEnded = true))),
+                    Effect.as("tail\n"),
+                    Effect.withSpan("otel-event-flush.stream-tail"),
+                  ),
+                ),
+              ),
+              Stream.encodeText,
+            ),
+          );
+        }
         if (request.url.startsWith("/rpc")) {
           const pong = yield* targetNamespace.getByName("target").ping();
           return HttpServerResponse.text(`worker-saw:${pong}`);
+        }
+        if (request.url.startsWith("/wait-until-stream")) {
+          // A streamed body takes over the request scope from the bridge.
+          yield* Cloudflare.waitUntil(
+            Effect.sleep("300 millis").pipe(Effect.withSpan("otel-event-flush.background.stream")),
+          );
+          return HttpServerResponse.stream(Stream.make("streamed").pipe(Stream.encodeText));
+        }
+        if (request.url.startsWith("/wait-until-failing")) {
+          yield* Cloudflare.waitUntil(
+            Effect.sleep("300 millis").pipe(
+              Effect.andThen(Effect.fail("background failure")),
+              Effect.withSpan("otel-event-flush.background.failing"),
+            ),
+          );
+          return HttpServerResponse.text("accepted", { status: 202 });
+        }
+        if (request.url.startsWith("/wait-until")) {
+          // Background work that starts more background work. The sleeps
+          // outlast the request scope's close, so the test can tell the
+          // request's own export apart from the background one.
+          yield* Cloudflare.waitUntil(
+            Effect.sleep("300 millis").pipe(
+              Effect.andThen(
+                Cloudflare.waitUntil(
+                  Effect.sleep("300 millis").pipe(
+                    Effect.withSpan("otel-event-flush.background.nested"),
+                  ),
+                ),
+              ),
+              Effect.withSpan("otel-event-flush.background"),
+            ),
+          );
+          return HttpServerResponse.text("accepted", { status: 202 });
         }
         const targetClient = Cloudflare.toHttpClient(targetNamespace.getByName("target"));
         const response = yield* targetClient.execute(

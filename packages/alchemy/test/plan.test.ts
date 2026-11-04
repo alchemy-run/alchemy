@@ -22,7 +22,12 @@ import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
 import { renamedFrom } from "@/Rename.ts";
-import { Resource, type ResourceBinding } from "@/Resource";
+import {
+  type LookupNotFoundError,
+  type LookupNotSupportedError,
+  Resource,
+  type ResourceBinding,
+} from "@/Resource";
 import { packEnvValue } from "@/RuntimeContext.ts";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -44,6 +49,9 @@ import {
   Function,
   inDev,
   KindStablesResource,
+  lookupCalls,
+  LookupTarget,
+  lookupTargets,
   ModalResource,
   NoPrecreateBindingTarget,
   OverrideStablesResource,
@@ -55,6 +63,7 @@ import {
   TestResource,
   TestResourceHooks,
   type TestResourceProps,
+  UnsupportedLookup,
 } from "./test.resources";
 
 const TEST_STACK = "test";
@@ -3745,6 +3754,114 @@ describe("RefExpr resolution", { tags: ["unit", "local"] }, () => {
         expect(err.resourceId).toBe("Ghost");
         expect(err.stage).toBe("other");
       }
+    }),
+  );
+});
+
+// `Resource.lookup(props)` finds a resource no stack manages through its
+// provider's `lookup`. It resolves at plan time like a ref, but from the
+// provider instead of state, and never becomes a node in the plan.
+describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
+  test(
+    "resolves through the provider's lookup and is not planned",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-found", { name: "plan-found", value: "external" });
+      const plan = yield* Effect.gen(function* () {
+        const found = LookupTarget.lookup({ name: "plan-found" });
+        yield* TestResource("Consumer", { string: found.value });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({ string: "external" });
+      expect(Object.keys(plan.resources)).toEqual(["Consumer"]);
+      expect(lookupCalls.filter((c) => c.name === "plan-found")).toEqual([
+        { mode: "live", name: "plan-found" },
+      ]);
+    }),
+  );
+
+  test(
+    "a lookup that finds nothing dies with LookupNotFoundError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const found = LookupTarget.lookup({ name: "plan-missing" });
+          yield* TestResource("Consumer", { string: found.value });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as LookupNotFoundError;
+        expect(err._tag).toBe("LookupNotFoundError");
+        expect(err.type).toBe("Test.LookupTarget");
+        expect(err.props).toEqual({ name: "plan-missing" });
+      }
+    }),
+  );
+
+  test(
+    "a provider without lookup dies with LookupNotSupportedError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const found = UnsupportedLookup.lookup({ name: "anything" });
+          yield* TestResource("Consumer", { string: found.name });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as LookupNotSupportedError;
+        expect(err._tag).toBe("LookupNotSupportedError");
+        expect(err.type).toBe("Test.UnsupportedLookup");
+      }
+    }),
+  );
+
+  test(
+    "under alchemy dev a lookup still goes through the live provider",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-dev", { name: "plan-dev", value: "external" });
+      const plan = yield* inDev(
+        Effect.gen(function* () {
+          const found = LookupTarget.lookup({ name: "plan-dev" });
+          yield* TestResource("Consumer", { string: found.value });
+        }).pipe(makePlan),
+      );
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({ string: "external" });
+      expect(lookupCalls.filter((c) => c.name === "plan-dev")).toEqual([
+        { mode: "live", name: "plan-dev" },
+      ]);
+    }),
+  );
+
+  test(
+    "a lookup keyed by a resource being created waits for it",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-keyed", { name: "plan-keyed", value: "external" });
+      const plan = yield* Effect.gen(function* () {
+        const key = yield* TestResource("Key", { string: "plan-keyed" });
+        const found = LookupTarget.lookup({ name: key.string });
+        yield* TestResource("Consumer", { string: found.value });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect(Output.isOutput((plan.resources.Consumer as any)?.props.string)).toBe(true);
+      expect(lookupCalls.filter((c) => c.name === "plan-keyed")).toEqual([]);
+    }),
+  );
+
+  test(
+    "a lookup carries its resource type statically",
+    Effect.gen(function* () {
+      const found = LookupTarget.lookup({ name: "plan-static" });
+      expect(found.Type).toBe("Test.LookupTarget");
+      expect(Output.isLookupExpr(found)).toBe(true);
+      // Nothing is looked up until the value is resolved.
+      expect(lookupCalls.filter((c) => c.name === "plan-static")).toEqual([]);
+      // `lookup` exists only on resources that declare lookup props.
+      // @ts-expect-error
+      TestResource.lookup;
     }),
   );
 });
