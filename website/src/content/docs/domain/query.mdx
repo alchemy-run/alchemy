@@ -48,7 +48,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
 
 - `input` holds the query's fields, like a command's. Filters, sort orders and scopes are fields too.
 - `success` is the result. With `paged: true` it is one entry of a page, and the result is `{ entries, cursor }`. Leave `paged` out for a query with one result.
-- `waitsFor` names the projections a read waits on when it passes a write to read at least. They may be keyed differently: the keys come from that write's events. Data the handler reads from anywhere else is not covered.
+- `waitsFor` names the projections to wait on when a caller asks to read its own write. See [Read your own write](#read-your-own-write).
 - `middleware`, `rejects` and `validate` work as they do for commands and views.
 
 `LedgerRow` is a schema, so the rows are checked and encoded on the way to the client:
@@ -95,18 +95,18 @@ The handler may also read what the query's middleware provides, such as the curr
 
 ## Ask it
 
-An Api lists a query next to commands and reads, and its client calls the query as a method.
+An Api lists the queries it serves next to its commands and reads. Left out, `queries` serves every query of the model.
 
 ```typescript title="packages/domain/src/CustomerApi.api.ts"
-export class CustomerApi extends Domain.Api(
-  "CustomerApi",
-  RegisterCustomer,
-  DepositMoney,
-  WithdrawMoney,
-  AccountSummary,
-  AccountLedger,
-) {}
+export class CustomerApi extends Domain.Api("CustomerApi", {
+  model: Bank,
+  commands: ["RegisterCustomer", "DepositMoney", "WithdrawMoney"],
+  views: ["AccountSummary"],
+  queries: ["AccountLedger"],
+}) {}
 ```
+
+Its client calls the query as a method. Most calls are plain reads, a screen loading or the next page, and get what the store holds now:
 
 ```typescript
 const page = yield* bank.AccountLedger({ account: accountId }, { take: 20 });
@@ -192,16 +192,44 @@ A page `visible` trimmed can be shorter than `take` without being the last one, 
 
 ## Read your own write
 
-The projection's store is eventually consistent with the model. A client that has just sent a command passes the command's result as `atLeast`, and the query waits until every projection in `waitsFor` has handled that command's events.
+A projection writes its store after the command commits, so a plain read can be a moment behind. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads:
 
 ```typescript
 const receipt = yield* bank.WithdrawMoney(accountId, { amount: 30 }, mfa);
+// receipt: { stream: "Account/a-1", version: 7 }
 const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
 ```
 
-The client's receipt carries only the command's `stream` and `version`, so the server reads that command's events back from its aggregate to know which keys to wait on. A wait that lasts longer than 10 seconds fails with `ConsistencyTimeout`, typed, so the client can retry or show that the data is behind.
+`atLeast` is optional, and only for this moment. A read with no write behind it, a screen loading or the next page, leaves it out.
 
-Without `waitsFor`, `atLeast` waits for nothing. A command handled by a saga or a policy (here, the debit of a transfer) is not the client's own write: poll for it, or watch a view.
+`waitsFor` tells the query which projections to wait on. The caller never names them, nor any key: it passes the one receipt. The server reads that command's events back from its aggregate and routes each through every projection in `waitsFor`, the same way the projection routes them when it handles them, to find the keys to wait on. Here, `WithdrawMoney` on `a-1` recorded `MoneyWithdrawn` at seq 7, and `Ledger` is keyed by account, so the query waits until `Ledger` has handled seq 7 for `a-1`.
+
+The projections can be keyed differently. Each finds its own keys in the same events:
+
+```typescript
+export class BranchTotals extends Domain.Projection("BranchTotals", {
+  from: [Account],
+  key: BranchId,
+  keyOf: { MoneyDeposited: (e) => e.branchId },
+  on: [MoneyDeposited],
+}) {}
+
+export class BranchActivity extends Domain.Query("BranchActivity", {
+  input: { branch: BranchId },
+  success: ActivityRow,
+  paged: true,
+  waitsFor: [Ledger, BranchTotals],
+}) {}
+
+const receipt = yield* bank.DepositMoney(accountId, { amount: 100, branchId: "b-9" });
+const page = yield* bank.BranchActivity({ branch: "b-9" }, { atLeast: receipt });
+```
+
+The deposit's one event, `MoneyDeposited { branchId: "b-9" }`, lands on `Ledger` key `a-1` and on `BranchTotals` key `b-9`, and the query waits for both. A projection that doesn't consume the receipt's aggregate has nothing to wait for.
+
+A wait longer than 10 seconds fails with `ConsistencyTimeout`, typed, so the client can retry or show that the data is behind.
+
+Only the stores of the projections in `waitsFor` are covered. Without `waitsFor`, `atLeast` waits for nothing, and data the handler reads from anywhere else may still be behind. `atLeast` takes one receipt: after two commands to the same aggregate instance, pass the later one. A command a saga or a policy sends (here, the debit of a transfer) is not the client's own write, so it has no receipt to pass: poll for it, or watch a view.
 
 ## Test it
 

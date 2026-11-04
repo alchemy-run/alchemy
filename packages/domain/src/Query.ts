@@ -190,10 +190,12 @@ export interface Definition<
    */
   readonly paged?: P;
   /**
-   * The projections a read `atLeast` a write waits on, before the handler
-   * reads their store. They may be keyed differently: the keys to wait on
-   * come from the command's own events. Reads outside these projections'
-   * stores are not covered by `atLeast`.
+   * The projections to wait on when a caller passes a command's receipt as
+   * `atLeast`, before the handler reads their store. The caller passes only
+   * the receipt: the keys to wait on come from that command's own events,
+   * routed through each projection's `key`/`keyOf`, so the projections may
+   * be keyed differently. Reads outside these projections' stores are not
+   * covered.
    */
   readonly waitsFor?: From;
   /**
@@ -279,11 +281,23 @@ export interface Definition<
  * ```
  *
  * ### Asking it
- * **Example:** Reading your own write, a page at a time
+ * Most calls are plain reads and get what the store holds now.
+ *
+ * **Example:** A page at a time
+ * ```typescript
+ * const page = yield* bank.AccountLedger({ account: accountId }, { take: 20 });
+ * if (page.cursor) yield* bank.AccountLedger({ account: accountId }, { after: page.cursor });
+ * ```
+ *
+ * Right after its own command, a client passes the command's receipt as
+ * `atLeast`. The query finds the keys to wait on in that command's events,
+ * waits until every projection in `waitsFor` has handled them, then reads.
+ * The caller passes one receipt, never projections or keys.
+ *
+ * **Example:** Reading your own write
  * ```typescript
  * const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
- * const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt, take: 20 });
- * if (page.cursor) yield* bank.AccountLedger({ account: accountId }, { after: page.cursor });
+ * const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
  * ```
  *
  * @primitive
