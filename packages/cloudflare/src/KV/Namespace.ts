@@ -25,6 +25,24 @@ export type NamespaceProps = {
   title?: string;
 };
 
+/**
+ * Props for {@link Namespace.lookup}: find a KV namespace this stack doesn't
+ * manage, by its id or its title.
+ */
+export type NamespaceLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing namespace.
+       */
+      namespaceId: string;
+    }
+  | {
+      /**
+       * The title of the existing namespace.
+       */
+      title: string;
+    };
+
 export type Namespace = Resource<
   "Cloudflare.KV.Namespace",
   NamespaceProps,
@@ -35,7 +53,8 @@ export type Namespace = Resource<
     accountId: string;
   },
   never,
-  Providers
+  Providers,
+  NamespaceLookup
 >;
 
 /**
@@ -67,6 +86,30 @@ export type Namespace = Resource<
  * token) in the worker's runtime layer. Use `Cloudflare.KV.ReadNamespace`
  * / `Cloudflare.KV.WriteNamespace` for least-privilege read- or
  * write-only access.
+ *
+ * ### Looking up an existing namespace
+ * `Namespace.lookup` binds a namespace Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `namespaceId` or `title`. It is
+ * read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** By title
+ * ```typescript
+ * const kv = yield* Cloudflare.KV.ReadWriteNamespace(
+ *   Cloudflare.KV.Namespace.lookup({ title: "sessions" }),
+ * );
+ * ```
+ *
+ * **Example:** By ID, in an async Worker's `env`
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     SESSIONS: Cloudflare.KV.Namespace.lookup({
+ *       namespaceId: "0f2ac74b498b48028cb68387c421e279",
+ *     }),
+ *   },
+ * });
+ * ```
  *
  * @resource
  * @product KV
@@ -198,6 +241,22 @@ export const ProviderLive = () =>
           ),
         ),
       );
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const namespace =
+        "namespaceId" in props
+          ? yield* kv
+              .getNamespace({ accountId, namespaceId: props.namespaceId })
+              .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.undefined))
+          : yield* findNamespaceByTitle(props.title);
+      if (!namespace) return undefined;
+      return {
+        title: namespace.title,
+        namespaceId: namespace.id,
+        supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
+        accountId,
+      };
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
