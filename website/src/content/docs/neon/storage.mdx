@@ -3,23 +3,24 @@ title: Storage
 description: How Neon Buckets store files on a branch through an S3-compatible API, how typed Objects hold configuration as values, and how Functions read and write them through bindings.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Neon stores files in **Buckets**, next to the database, through the same API as Amazon S3. A bucket belongs to a branch, so a preview branch has its own files, just as it has its own rows.
 
 ## A bucket belongs to a branch
 
-<DAG
+<Tree
   nodes={[
-    { id: "settings", label: "settings.json", type: "Object", tone: "accent", col: 0, row: 0 },
-    { id: "avatar", label: "avatars/sam.png", type: "Object", col: 1, row: 0 },
+    { id: "proj", label: "my-app", type: "project" },
+    { id: "main", label: "main", type: "branch · production", parent: "proj" },
+    { id: "b1", label: "Uploads", type: "private Bucket", parent: "main", dashed: true },
+    { id: "o1", label: "settings.json", type: "object", parent: "b1", tone: "accent" },
+    { id: "o2", label: "avatars/sam.png", type: "object", parent: "b1" },
+    { id: "pr", label: "pr-42", type: "branch · preview", parent: "proj" },
+    { id: "b2", label: "Uploads", type: "private Bucket", parent: "pr", dashed: true },
+    { id: "o3", label: "settings.json", type: "object", parent: "b2", tone: "accent" },
   ]}
-  groups={[
-    { id: "branch", label: "Branch pr-42", nodes: [] },
-    { id: "bucket", label: "Uploads · private Bucket", parent: "branch", nodes: ["settings", "avatar"], dashed: true },
-  ]}
-  edges={[]}
-  caption="A Bucket belongs to a branch and holds objects, so a preview branch gets its own Bucket."
+  caption="A Bucket belongs to a branch and holds objects. The preview branch has an Uploads Bucket of its own, so its files change without touching production's."
 />
 
 A bucket is private unless you make it public. Uploads from a browser go straight to the bucket through presigned URLs, which a Function creates for one key and a short time.

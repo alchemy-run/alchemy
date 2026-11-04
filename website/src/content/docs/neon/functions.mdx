@@ -3,7 +3,7 @@ title: Functions
 description: How Neon Functions run Node.js Fetch handlers next to a branch's database, in native or Effect form, how they subscribe to uploads and schedules, and why every handler authenticates its callers.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 A Neon Function is a Node.js program Neon runs for a branch. It answers HTTP at a public URL, and it already holds credentials for its own branch's database and storage, so it can query Postgres and read files without any secret of yours.
 
@@ -11,20 +11,14 @@ A Neon Function is a Node.js program Neon runs for a branch. It answers HTTP at 
 
 A Function is declared on a branch, and reaches that branch's database and buckets with credentials Neon gives it. A preview branch gets its own copy of the Function, talking to its own data.
 
-<DAG
+<Tree
   nodes={[
-    { id: "caller", label: "request", type: "public URL", col: 0, row: 0 },
-    { id: "fn", label: "Api", type: "Function", tone: "accent", col: 1, row: 0 },
-    { id: "db", label: "Postgres", type: "database", col: 2, row: 0 },
-    { id: "bucket", label: "Uploads", type: "Bucket", col: 2, row: 1 },
+    { id: "pr", label: "pr-42", type: "branch" },
+    { id: "fn", label: "Api", type: "Function · public URL", parent: "pr", tone: "accent", specs: [["credentials", "this branch's, from Neon"]] },
+    { id: "db", label: "neondb", type: "Postgres database", parent: "pr" },
+    { id: "bucket", label: "Uploads", type: "Bucket", parent: "pr" },
   ]}
-  groups={[{ id: "branch", label: "Branch pr-42", nodes: ["fn", "db", "bucket"] }]}
-  edges={[
-    { from: "caller", to: "fn" },
-    { from: "fn", to: "db" },
-    { from: "fn", to: "bucket" },
-  ]}
-  caption="A Function lives on a branch, and uses that branch's database and storage."
+  caption="A Function lives on a branch, next to that branch's database and storage, and Neon gives it credentials for them. A preview branch gets its own copy."
 />
 
 ## Declare a native Function
