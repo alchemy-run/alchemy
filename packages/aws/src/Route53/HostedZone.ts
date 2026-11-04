@@ -201,18 +201,30 @@ export const HostedZoneProvider = () =>
         if (deletable.length === 0) {
           return;
         }
-        yield* route53
-          .changeResourceRecordSets({
-            HostedZoneId: normalizeId(id),
-            ChangeBatch: {
-              Comment: "Alchemy HostedZone forceDestroy",
-              Changes: deletable.map((set) => ({
-                Action: "DELETE" as const,
-                ResourceRecordSet: set,
-              })),
-            },
-          })
-          .pipe(Effect.flatMap((response) => waitForChange(response.ChangeInfo.Id)));
+        const deleteSets = (sets: route53.ResourceRecordSet[]) =>
+          route53
+            .changeResourceRecordSets({
+              HostedZoneId: normalizeId(id),
+              ChangeBatch: {
+                Comment: "Alchemy HostedZone forceDestroy",
+                Changes: sets.map((set) => ({ Action: "DELETE" as const, ResourceRecordSet: set })),
+              },
+            })
+            .pipe(Effect.flatMap((response) => waitForChange(response.ChangeInfo.Id)));
+        // Records whose zone was inferred by NAME have no dependency edge on
+        // the zone, so they delete themselves concurrently with this purge.
+        // A record set gone since the listing rejects the whole batch: fall
+        // back to one DELETE per set, where a rejected DELETE is already done.
+        yield* deleteSets(deletable).pipe(
+          Effect.catchTag("InvalidChangeBatch", () =>
+            Effect.forEach(
+              deletable,
+              (set) =>
+                deleteSets([set]).pipe(Effect.catchTag("InvalidChangeBatch", () => Effect.void)),
+              { discard: true },
+            ),
+          ),
+        );
       });
 
       return {
@@ -353,14 +365,6 @@ export const HostedZoneProvider = () =>
         delete: Effect.fn(function* ({ olds, output }) {
           if (olds.forceDestroy) {
             yield* purgeRecords(output.id).pipe(
-              // Records looked up by zone NAME delete concurrently with the
-              // purge (see below), so a listed record set can be gone by the
-              // time the batch runs, which fails the whole batch. Re-list
-              // and purge what is left.
-              Effect.retry({
-                while: (e) => e._tag === "InvalidChangeBatch",
-                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
-              }),
               Effect.catchTag("NoSuchHostedZone", () => Effect.void),
             );
           }
