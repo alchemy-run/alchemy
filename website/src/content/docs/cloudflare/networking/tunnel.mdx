@@ -15,9 +15,9 @@ publishes it are all ordinary resources in one stack.
 <Boundaries
   nodes={[
     { id: "visitor", label: "visitor", type: "anywhere", col: 0, row: 0 },
-    { id: "edge", label: "app.example.com", type: "proxied CNAME", col: 0, row: 1 },
-    { id: "cfd", label: "cloudflared", type: "dialed out", col: 0, row: 2, tone: "accent" },
-    { id: "api", label: "api", type: "localhost:8080", col: 1, row: 2 },
+    { id: "edge", label: "app.example.com", type: "proxied CNAME", col: 1, row: 0 },
+    { id: "cfd", label: "cloudflared", type: "dialed out", col: 1, row: 1, tone: "accent" },
+    { id: "api", label: "api", type: "localhost:8080", col: 2, row: 1 },
   ]}
   zones={[
     { id: "cf", label: "Cloudflare", type: "edge", nodes: ["edge"] },
@@ -27,7 +27,7 @@ publishes it are all ordinary resources in one stack.
     { from: "visitor", to: "edge", label: "GET" },
     { from: "edge", to: "cfd", kind: "tunnel", label: "tunnel" },
     { from: "cfd", to: "api", label: "ingress" },
-    { from: "visitor", to: "net", kind: "blocked", label: "direct: refused" },
+    { from: "visitor", to: "net", kind: "blocked", label: "refused" },
   ]}
   caption="cloudflared opens the tunnel from inside your network, so the only way in is through Cloudflare. A visitor's request rides the tunnel down, and an ingress rule sends it to the service."
 />
