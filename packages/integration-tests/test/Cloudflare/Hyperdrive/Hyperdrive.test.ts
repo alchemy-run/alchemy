@@ -79,6 +79,9 @@ test.provider(
       expect(actual.id).toEqual(hd.hyperdriveId);
       assert("host" in actual.origin, "db.origin must have a host");
       expect(actual.origin.host).toEqual(db.origin.host);
+      // Omitted caching and connection limit take Cloudflare's defaults,
+      // which are no drift.
+      expect(yield* driftOf(stack, "DefaultHyperdrive")).toBe("unchanged");
 
       yield* stack.destroy();
 
@@ -186,6 +189,19 @@ test.provider(
         staleWhileRevalidate: 15,
       });
       expect(changed.resources.DriftHyperdrive?.attr.originConnectionLimit).toEqual(10);
+
+      // A change to enabled caching's settings is drift too.
+      yield* hyperdrive.patchConfig({
+        accountId,
+        hyperdriveId: hd.hyperdriveId,
+        caching: { disabled: false, maxAge: 120 },
+      });
+      const maxAge = yield* detectDrift();
+      expect(maxAge.resources.DriftHyperdrive?.attr.caching).toEqual({
+        disabled: false,
+        maxAge: 120,
+        staleWhileRevalidate: 15,
+      });
 
       yield* stack.destroy();
 
@@ -351,6 +367,16 @@ test.provider(
       });
       expect(before.mtls?.caCertificateId).toEqual(pinned.ca.mtlsCertificateId);
       expect(yield* driftOf(stack, "PinnedHyperdrive")).toBe("unchanged");
+
+      // An mTLS change made outside Alchemy is drift.
+      yield* hyperdrive.patchConfig({
+        accountId,
+        hyperdriveId: pinned.hd.hyperdriveId,
+        mtls: { caCertificateId: pinned.ca.mtlsCertificateId, sslmode: "verify-full" },
+      });
+      const sslmode = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+      expect(sslmode.resources.PinnedHyperdrive?.action).toBe("drifted");
+      expect(sslmode.resources.PinnedHyperdrive?.attr.mtls.sslmode).toEqual("verify-full");
 
       // Keep the CA deployed so the replacement doesn't also remove a
       // dependency in the same step.
