@@ -26,7 +26,7 @@ describe("stripChildEffectPrefix", { tags: ["unit", "local"] }, () => {
 describe("formatResourceTag", { tags: ["unit", "local"] }, () => {
   it("uses the Sigil info color when colors are enabled", () => {
     expect(formatResourceTag("Site/Worker", true)).toMatch(
-      /^\x1b\[38;2;\d+;\d+;\d+m\[Site\/Worker\]\x1b\[0m$/,
+      /^\x1b\[38;2;\d+;\d+;\d+m\[Site\/Worker\]\x1b\[39m$/,
     );
   });
 
