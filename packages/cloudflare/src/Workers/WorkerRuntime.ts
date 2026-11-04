@@ -193,11 +193,7 @@ export const WorkerExecutionContext = Context.Reference<WorkerExecutionContextSe
 );
 export type WorkerExecutionContext = typeof WorkerExecutionContext;
 
-export {
-  EventLifetime,
-  makeEventLifetime,
-  runInBackground,
-} from "alchemy/Workers/EventLifetime";
+export { EventLifetime, makeEventLifetime, runInBackground } from "alchemy/Workers/EventLifetime";
 
 export const fromExecutionContext = (
   ctx: cf.ExecutionContext,

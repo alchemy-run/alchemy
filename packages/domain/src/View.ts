@@ -24,8 +24,9 @@ export class WaitTimeout extends Data.TaggedError("WaitTimeout")<{
 }> {}
 
 /**
- * Raised by a read with `atLeast` when the view has not applied that write
- * before the timeout. A client receives it like a rejection.
+ * Raised by a read `atLeast` a write when the view, stream or projection
+ * (named in `view`) has not handled the write's events before the timeout. A
+ * client receives it like a rejection.
  */
 export class ConsistencyTimeout extends Schema.TaggedError<ConsistencyTimeout>()(
   "ConsistencyTimeout",

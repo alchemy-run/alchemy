@@ -41,7 +41,10 @@ export interface ProcessEventOptions<T, Build extends WorkerBuild<any, any>> {
    */
   readonly waitUntil: Pin;
   /** Turn the handler's exit into the value returned to the engine. */
-  readonly onExit: (exit: Exit.Exit<any, any>, lifetime: EventLifetime["Service"]) => T | Promise<T>;
+  readonly onExit: (
+    exit: Exit.Exit<any, any>,
+    lifetime: EventLifetime["Service"],
+  ) => T | Promise<T>;
 }
 
 /**

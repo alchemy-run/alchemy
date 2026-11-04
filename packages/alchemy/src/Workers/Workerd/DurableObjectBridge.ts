@@ -84,7 +84,10 @@ export const makeDurableObjectBridge =
           build,
           runtimeContext: (runtime, context) => ({
             ...runtime,
-            makeCallback: adapter.makeCallback(state, Context.get(context, SecureRandom.SecureRandom)),
+            makeCallback: adapter.makeCallback(
+              state,
+              Context.get(context, SecureRandom.SecureRandom),
+            ),
           }),
           initialize: () => initializeAlarmCallbacks(state),
           services: adapter.services(state, env),
