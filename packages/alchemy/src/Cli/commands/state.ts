@@ -6,6 +6,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Alchemist from "../../Alchemist/index.ts";
 import type * as Contributions from "../../Contributions.ts";
@@ -476,7 +478,7 @@ const stateSubcommands = [
  * Effect only checks direct subcommands, so `unsafe nuke` is listed too.
  */
 const clashes = (flag: Flag.Flag<unknown>) => {
-  try {
+  const built = Result.try(() =>
     Command.make("state", {}).pipe(
       Command.withSharedFlags({ flag }),
       Command.withSubcommands([
@@ -484,12 +486,11 @@ const clashes = (flag: Flag.Flag<unknown>) => {
         ...stateSubcommands,
         nukeCommand,
       ]),
-    );
-    return false;
-  } catch (error) {
-    if (error instanceof CliError.DuplicateOption) return true;
-    throw error;
-  }
+    ),
+  );
+  if (Result.isSuccess(built)) return false;
+  if (Schema.is(CliError.DuplicateOption)(built.failure)) return true;
+  throw built.failure;
 };
 
 /**
