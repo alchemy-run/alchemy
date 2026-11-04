@@ -3,7 +3,7 @@ title: Accounts and regions
 description: How AWS accounts isolate resources, how regions and Availability Zones place them, and how profiles and stages choose where each Alchemy deploy goes.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Every AWS resource lives in one account and, for most services, one region. Before you create anything, you decide which account and which region it goes to.
 
@@ -13,19 +13,66 @@ An AWS account holds resources, the identities that may use them, and the bill f
 
 So accounts are how you keep environments apart. Put production in an account of its own. Give staging, shared development and, if you like, each engineer their own accounts too. A mistake in development then can't reach production data, because no policy in the development account can name it.
 
-<DAG
+<Tree
   nodes={[
-    { id: "mgmt", label: "management", type: "pays the bill", tone: "accent", col: 0, row: 0 },
-    { id: "prod", label: "prod", type: "account", col: 1, row: 0 },
-    { id: "staging", label: "staging", type: "account", col: 0, row: 1 },
-    { id: "dev", label: "dev", type: "account", col: 1, row: 1 },
+    { id: "root", label: "Root", type: "organization" },
+    { id: "mgmt", label: "management", type: "pays the bill", parent: "root", tone: "accent" },
+    { id: "workloads", label: "Workloads", type: "OU", parent: "root" },
+    { id: "sandbox", label: "Sandbox", type: "OU", parent: "root" },
+    { id: "prodOu", label: "Prod", type: "OU", parent: "workloads" },
+    { id: "nonprod", label: "Non-prod", type: "OU", parent: "workloads" },
+    { id: "prod", label: "prod", type: "account", parent: "prodOu" },
+    { id: "staging", label: "staging", type: "account", parent: "nonprod" },
+    { id: "dev", label: "dev", type: "account", parent: "nonprod" },
+    { id: "sam", label: "sam", type: "account", parent: "sandbox" },
   ]}
-  groups={[{ id: "org", label: "Organization", nodes: ["mgmt", "prod", "staging", "dev"] }]}
-  edges={[]}
-  caption="An organization holds accounts. The management account pays one bill for all of them, and each account is isolated from the others."
+  scopes={[{ on: "workloads", label: "SCP DenyOtherRegions" }]}
+  caption="An organization is a tree: OUs hold accounts and other OUs. A policy attached to an OU applies to every account below it, so the Workloads accounts can only use the regions it allows."
 />
 
-An **organization** groups those accounts under one payer and lets you apply guardrails across them. People sign in once, through **IAM Identity Center**, and pick the account and role they want to work in.
+An **organization** groups those accounts under one payer, the **management account**. Under its **root** sit **organizational units** (OUs), which hold accounts and other OUs, so you can shape it like your teams and environments. Declare the tree from a Stack deployed to the management account:
+
+```typescript title="alchemy.run.ts"
+const root = yield* AWS.Organizations.Root("Root", {});
+const workloads = yield* AWS.Organizations.OrganizationalUnit("Workloads", {
+  parentId: root.rootId,
+  name: "workloads",
+});
+const prod = yield* AWS.Organizations.Account("Prod", {
+  name: "prod",
+  email: "aws-prod@example.com",
+  parentId: workloads.ouId,
+});
+```
+
+A **service control policy** (SCP) attached to an OU caps what every account below it may do, whatever those accounts' own IAM policies say. Turn SCPs on for the root once, then attach one:
+
+```typescript title="alchemy.run.ts"
+yield* AWS.Organizations.RootPolicyType("ScpEnabled", {
+  rootId: root.rootId,
+  policyType: "SERVICE_CONTROL_POLICY",
+});
+const denyRegions = yield* AWS.Organizations.Policy("DenyOtherRegions", {
+  type: "SERVICE_CONTROL_POLICY",
+  document: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Deny",
+        NotAction: ["iam:*", "organizations:*", "sts:*"],
+        Resource: "*",
+        Condition: { StringNotEquals: { "aws:RequestedRegion": ["us-east-1", "us-west-2"] } },
+      },
+    ],
+  },
+});
+yield* AWS.Organizations.PolicyAttachment("DenyRegionsOnWorkloads", {
+  policyId: denyRegions.policyId,
+  targetId: workloads.ouId,
+});
+```
+
+People sign in once, through **IAM Identity Center**, and pick the account and role they want to work in.
 
 ## Connect an account with a profile
 

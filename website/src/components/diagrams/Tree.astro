@@ -1,0 +1,118 @@
+---
+/**
+ * `<Tree />` — a hierarchy, top down, and what applies to each branch of it.
+ * Use it when things nest to any depth and rules flow down: an AWS
+ * organization's root, OUs and accounts with service control policies, a
+ * folder tree with inherited IAM roles.
+ *
+ *   <Tree
+ *     nodes={[
+ *       { id: "root", label: "Root", type: "organization" },
+ *       { id: "workloads", label: "Workloads", type: "OU", parent: "root" },
+ *       { id: "prod", label: "prod", type: "account", parent: "workloads" },
+ *     ]}
+ *     scopes={[{ on: "workloads", label: "SCP DenyOtherRegions" }]}
+ *   />
+ *
+ * A scope shades the subtree under `on` and labels it, so a policy attached
+ * to an OU visibly covers everything below it.
+ */
+import "./diagram.css";
+
+interface TreeNode {
+  id: string;
+  label: string;
+  type?: string;
+  parent?: string;
+  tone?: "default" | "accent";
+}
+interface Props {
+  nodes: TreeNode[];
+  scopes?: { on: string; label: string }[];
+  caption?: string;
+}
+
+const { nodes, scopes = [], caption } = Astro.props as Props;
+
+const NW = Math.max(108, ...nodes.map((n) => Math.max(n.label.length * 8, (n.type ?? "").length * 6.6) + 24));
+const NH = 46;
+const GAP = 22;
+const ROW = NH + 48;
+const PAD = 16;
+const SCOPE_TOP = 22;
+
+const children = new Map<string, TreeNode[]>();
+for (const n of nodes) if (n.parent) children.set(n.parent, [...(children.get(n.parent) ?? []), n]);
+const roots = nodes.filter((n) => !n.parent);
+
+const pos = new Map<string, { x: number; y: number }>();
+let next = 0;
+const place = (n: TreeNode, depth: number): number => {
+  const kids = children.get(n.id) ?? [];
+  const x = kids.length === 0 ? next++ * (NW + GAP) : kids.map((k) => place(k, depth + 1)).reduce((a, b) => a + b) / kids.length;
+  pos.set(n.id, { x: PAD + x, y: PAD + SCOPE_TOP + depth * ROW });
+  return x;
+};
+roots.forEach((r) => place(r, 0));
+
+const subtree = (id: string): string[] => [id, ...(children.get(id) ?? []).flatMap((k) => subtree(k.id))];
+const scopeBoxes = scopes.map((s) => {
+  const ps = subtree(s.on).map((id) => pos.get(id)!);
+  const x0 = Math.min(...ps.map((p) => p.x)) - 10;
+  const x1 = Math.max(...ps.map((p) => p.x)) + NW + 10;
+  const y0 = Math.min(...ps.map((p) => p.y)) - SCOPE_TOP;
+  const y1 = Math.max(...ps.map((p) => p.y)) + NH + 10;
+  return { ...s, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+});
+
+const W = PAD * 2 + Math.max(...[...pos.values()].map((p) => p.x)) + NW - PAD;
+const H = PAD * 2 + Math.max(...[...pos.values()].map((p) => p.y)) + NH + 10 - PAD;
+
+// Org-chart connectors: down from the parent, across, and down into each child.
+const links = nodes
+  .filter((n) => n.parent)
+  .map((n) => {
+    const a = pos.get(n.parent!)!;
+    const b = pos.get(n.id)!;
+    const ax = a.x + NW / 2;
+    const bx = b.x + NW / 2;
+    const midY = a.y + NH + (b.y - a.y - NH) / 2;
+    return `M ${ax} ${a.y + NH} V ${midY} H ${bx} V ${b.y}`;
+  });
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Tree"}>
+    {
+      scopeBoxes.map((s) => (
+        <g>
+          <rect x={s.x} y={s.y} width={s.w} height={s.h} rx="10" class="alc-tree__scope" />
+          <text x={s.x + 10} y={s.y + 15} class="alc-fig__strong">{s.label}</text>
+        </g>
+      ))
+    }
+    {links.map((d) => <path d={d} class="alc-fig__line alc-fig__line--muted" />)}
+    {
+      nodes.map((n) => {
+        const p = pos.get(n.id)!;
+        return (
+          <g>
+            <rect x={p.x} y={p.y} width={NW} height={NH} rx="8" class:list={["alc-fig__box", n.tone === "accent" && "alc-fig__box--accent"]} />
+            <text x={p.x + NW / 2} y={p.y + (n.type ? 20 : 28)} text-anchor="middle" class="alc-fig__label">{n.label}</text>
+            {n.type && <text x={p.x + NW / 2} y={p.y + 36} text-anchor="middle" class="alc-fig__type">{n.type}</text>}
+          </g>
+        );
+      })
+    }
+  </svg>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>
+
+<style>
+  .alc-tree__scope {
+    fill: color-mix(in srgb, var(--alc-warn) 9%, transparent);
+    stroke: color-mix(in srgb, var(--alc-warn) 60%, transparent);
+    stroke-width: 1.25;
+    stroke-dasharray: 5 4;
+  }
+</style>

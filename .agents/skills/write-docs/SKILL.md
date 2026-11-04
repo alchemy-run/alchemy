@@ -119,7 +119,7 @@ Each of these was a correction. Don't relearn them.
 - **Pick the visual by the question.** A `DAG` was the only tool, and it was
   "so overused": a box-and-arrow picture of SQS, Lambda or KV showed nothing a
   reader didn't already know. Now there's a component per question: `Sequence`,
-  `Timeline`, `WorldMap`, `Log`, `StateMachine`, `Records`, `BranchGraph`,
+  `Timeline`, `WorldMap`, `Log`, `StateMachine`, `Records`, `BranchGraph`, `Tree`,
   `Responsibility`, and `DAG` for containment and real flows. The
   `Responsibility` chart for choosing a runtime was the one the user called
   great: it shows the idea itself, a staircase of who manages what.
@@ -152,6 +152,11 @@ Each of these was a correction. Don't relearn them.
 - **Words the user rejected**: "A taste" (now "A quick example"), "a set of
   services", "the largest" when it isn't the point, "New to X? … walks through
   a, b, c, d, e…" (now "Start with [What is X?]").
+- **Draw the platform's real model, in full.** An AWS organization drawn as four
+  accounts in a box "left a lot to be desired": the real model is a tree of
+  OUs, with policies flowing down. Before drawing, check what the platform
+  actually supports (nesting, inheritance, scopes) and what the package can
+  declare (`AWS.Organizations.OrganizationalUnit`, `Policy`), and show both.
 - **Show the snippet the section talks about.** A section that names a resource,
   like a CloudWatch dashboard, shows a small snippet declaring it.
 
