@@ -2,12 +2,30 @@
 title: VPC & private networking
 description: Give Cloud Run services Direct VPC egress to reach private IPs like Memorystore, and create your own VPC networks and subnets.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 Most Google APIs, like Firestore, Pub/Sub, and Cloud Storage, are
 reached over their public endpoints, so a Cloud Run service needs no
 network setup. Some resources only have a private IP: Memorystore,
 AlloyDB, Filestore, and VMs without a public address. To reach those,
 give the service an interface on your VPC.
+
+## A network spans regions
+
+A VPC **network** on Google Cloud is global: one network reaches every region. Its **subnets** are regional, each with its own address range, and **firewall rules** on the network decide which traffic between them is allowed. A Cloud Run service joins the network through an interface in one subnet.
+
+<Tree
+  nodes={[
+    { id: "net", label: "Vpc", type: "VPC network · global" },
+    { id: "us", label: "Private", type: "subnet · us-central1 · 10.0.0.0/24", parent: "net", dashed: true },
+    { id: "eu", label: "Europe", type: "subnet · europe-west1 · 10.1.0.0/24", parent: "net", dashed: true },
+    { id: "nic", label: "Api's interface", type: "Direct VPC egress · 10.0.0.12", parent: "us", tone: "accent" },
+    { id: "redis", label: "Cache", type: "Memorystore · 10.0.0.3", parent: "us" },
+    { id: "vm", label: "worker-vm", type: "Compute Engine · 10.1.0.5", parent: "eu" },
+  ]}
+  scopes={[{ on: "net", label: "firewall: allow 10.0.0.0/8" }]}
+  caption="One network, a subnet in each region. The Api reaches the cache in its own subnet, and the VM in Europe over the same network, as the firewall allows."
+/>
 
 ## Direct VPC egress
 

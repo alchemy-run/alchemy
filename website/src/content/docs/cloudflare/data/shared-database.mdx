@@ -2,6 +2,7 @@
 title: Shared database across stages
 description: Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 [Stages](/environments/stages) make it cheap to spin up isolated copies
 of a stack — per-developer, `pr-42`, `prod`. Most resources should
@@ -9,6 +10,19 @@ be isolated. But some — a Neon Postgres project, a shared S3
 bucket, a global rate limiter — are too expensive or too stateful
 to re-provision per stage. PR-preview stages should *point at* the
 shared instance instead.
+
+<Tree
+  nodes={[
+    { id: "stack", label: "my-app", type: "stack" },
+    { id: "staging", label: "staging", type: "stage", parent: "stack" },
+    { id: "db", label: "app-db", type: "Neon project · created here", parent: "staging", tone: "accent" },
+    { id: "w1", label: "Api", type: "Worker", parent: "staging" },
+    { id: "pr", label: "pr-42", type: "stage", parent: "stack" },
+    { id: "ref", label: "app-db", type: 'ref("app-db", { stage: "staging" })', parent: "pr", tone: "muted" },
+    { id: "w2", label: "Api", type: "Worker", parent: "pr" },
+  ]}
+  caption="The staging stage owns the database. pr-42 deploys its own Worker but only references staging's database, so destroying the PR stage leaves it alone."
+/>
 
 `Resource.ref(id, { stage })` reads a deployed resource's
 attributes from another stage of the same stack — typed, lazy,

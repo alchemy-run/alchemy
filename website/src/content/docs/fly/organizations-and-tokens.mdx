@@ -1,0 +1,62 @@
+---
+title: Organizations and tokens
+description: How a Fly organization holds your Apps and billing, how an organization token decides where Alchemy deploys, and how to keep production in its own organization.
+---
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything you run on Fly belongs to an **organization**: its Apps and Machines, its volumes and databases, its private network, and its bill. Every account has a personal organization, and a team creates more and invites its members.
+
+An organization is also a boundary. Its Apps share one private network, and nothing in another organization can reach them.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme-prod", type: "organization · one private network, one bill" },
+    { id: "api", label: "api", type: "App", parent: "org" },
+    { id: "m1", label: "machine", type: "iad", parent: "api" },
+    { id: "m2", label: "machine", type: "lhr", parent: "api" },
+    { id: "worker", label: "worker", type: "App", parent: "org" },
+    { id: "m3", label: "machine", type: "iad", parent: "worker" },
+    { id: "db", label: "app-db", type: "Managed Postgres", parent: "org", side: true },
+    { id: "bucket", label: "uploads", type: "Tigris bucket", parent: "org", side: true },
+  ]}
+  scopes={[{ on: "org", label: "token: acme-prod" }]}
+  caption="An organization holds Apps and their Machines, plus databases and buckets of its own. An organization token reaches only that one, so it decides where a deploy goes."
+/>
+
+## A token decides the organization
+
+Alchemy deploys with an **API token**. An organization token is scoped to one organization, so the token is how you choose where things go: a Service creates its App in the token's organization, and `Fly.App` uses it when you leave out `orgSlug`.
+
+Create an organization token in the dashboard under **Account → Access Tokens**, or with the Fly CLI:
+
+```sh
+fly tokens create org
+```
+
+Then store it in a [profile](/environments/profiles):
+
+```sh
+alchemy profile edit --add Fly
+```
+
+See [Setup](/fly/setup) for the details.
+
+## One organization per environment
+
+A [stage](/environments/stages) decides what you deploy. The profile's token decides where. Give production its own organization, so its private network, its members and its bill are separate, and its own profile:
+
+```sh
+alchemy profile create prod
+alchemy profile edit --profile prod --add Fly
+alchemy deploy --stage prod --profile prod
+```
+
+Many stages can share a development organization, each with its own Apps.
+
+## In CI
+
+With `CI=true`, Alchemy skips the profile and reads `FLY_API_TOKEN` from the environment. Use a separate token for CI, so you can revoke it without touching yours. See [CI](/environments/ci).
+
+## Next
+
+Values your Services read at run time, like a third-party API key, are covered in [Secrets](/fly/data/secrets).
