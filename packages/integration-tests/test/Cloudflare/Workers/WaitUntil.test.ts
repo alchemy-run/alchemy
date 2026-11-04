@@ -131,6 +131,59 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 120_000 },
     );
 
+    // The producer's trace reaches the fixture's `tail` handler.
+    test(
+      "the event's scope stays open for waitUntil work (tail)",
+      Effect.gen(function* () {
+        const { url, producerUrl } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `tail-${run}`;
+        yield* expectUrlContains(`${producerUrl}/${label}`, "logged", {
+          label: "tail producer",
+        });
+        expect(yield* journalEntries(url, label, 2, 80)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    // The fixture's `* * * * *` trigger journals each tick under
+    // `cron-<minute>`. New schedules take up to 15 minutes to propagate, so
+    // keep the fixture with NO_DESTROY=1 before opting in; the local suite
+    // covers scheduled dispatch without waiting.
+    test.skipIf(process.env.CLOUDFLARE_TEST_CRON_DELIVERY !== "1")(
+      "the event's scope stays open for waitUntil work (scheduled)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const next = Math.ceil(Date.now() / 60_000) * 60_000;
+        // A trigger can miss its first tick after a deploy.
+        const ticks = [next, next + 60_000];
+        const entries = yield* Effect.forEach(ticks, (tick) =>
+          getText(`${url}/lifetime/entries/cron-${tick}`).pipe(
+            Effect.map((text) => (JSON.parse(text) as { entries: string[] }).entries),
+          ),
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (entries) => entries.some((tick) => tick.length >= 2),
+            times: 75,
+          }),
+        );
+        const index = entries.findIndex((tick) => tick.length >= 2);
+        expect(index).toBeGreaterThanOrEqual(0);
+        const label = `cron-${ticks[index]}`;
+        expect(entries[index]).toEqual([`${label}:open`, `${label}:released`]);
+      }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
     // A HEAD response drops its streamed body without reading it.
     test(
       "the event's scope stays open for waitUntil work (HEAD of a streamed body)",

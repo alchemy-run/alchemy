@@ -320,9 +320,9 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
       yield* Cloudflare.waitUntil(useLater(record, resource, label));
     });
 
-    // Each tick journals under `cron-<scheduledTime>`.
+    // Each tick journals under `cron-<minute>`, its minute in epoch millis.
     yield* Cloudflare.Workers.cron("* * * * *", (controller) =>
-      holdFor(`cron-${controller.scheduledTime}`),
+      holdFor(`cron-${Math.floor(controller.scheduledTime / 60_000) * 60_000}`),
     );
 
     // Each message's subject is a label. No zone, so no routing is created:

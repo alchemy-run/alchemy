@@ -57,8 +57,8 @@ test.provider(
       const { url, producerUrl } = yield* stack.deploy(WaitUntilResources);
       expect(url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      // A scheduled event at `time` journals under `cron-<time>`.
-      const time = Date.now();
+      // A scheduled event at `time`, a minute, journals under `cron-<time>`.
+      const time = Math.floor(Date.now() / 60_000) * 60_000;
       expect(
         yield* send(
           HttpClientRequest.post(
