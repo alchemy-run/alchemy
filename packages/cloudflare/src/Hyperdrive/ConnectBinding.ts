@@ -9,7 +9,6 @@ import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { Connect, type ConnectClient } from "./Connect.ts";
 import type { Connection } from "./Connection.ts";
 import { defaultPort, type DevOrigin, type Mtls, type Origin } from "./Connection.ts";
-import { type ConnectionLookup, isConnectionLookup } from "./ConnectionLookup.ts";
 
 export const ConnectBinding = Layer.effect(
   Connect,
@@ -17,7 +16,7 @@ export const ConnectBinding = Layer.effect(
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
 
-    return Effect.fn(function* (connection: Connection | ConnectionLookup) {
+    return Effect.fn(function* (connection: Connection) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`${connection}`({
           bindings: [
@@ -58,7 +57,7 @@ export const ConnectBinding = Layer.effect(
  * Access-protected origin without a `dev` override deploys.
  */
 export const getHyperdriveDevOriginForHost = Effect.fn(function* (
-  connection: Connection | ConnectionLookup,
+  connection: Connection,
   host: { readonly Mode?: ProviderMode | undefined },
 ) {
   const mode = host.Mode ?? (yield* defaultProviderMode);
@@ -87,8 +86,8 @@ const toDevOrigin = (dev: DevOrigin): Required<DevOrigin> => ({
   sslmode: dev.sslmode ?? "prefer",
 });
 
-export const getHyperdriveDevOrigin = (connection: Connection | ConnectionLookup) =>
-  isConnectionLookup(connection)
+export const getHyperdriveDevOrigin = (connection: Connection) =>
+  Output.isLookupExpr(connection)
     ? getLookupDevOrigin(connection)
     : getConnectionDevOrigin(connection);
 
@@ -96,7 +95,7 @@ export const getHyperdriveDevOrigin = (connection: Connection | ConnectionLookup
  * A looked-up configuration's origin password is never returned by the
  * Cloudflare API, so only its `dev` origin can be emulated locally.
  */
-const getLookupDevOrigin = (lookup: ConnectionLookup) =>
+const getLookupDevOrigin = (lookup: Connection) =>
   Output.map(
     Output.all(
       lookup.hyperdriveId,
@@ -109,7 +108,7 @@ const getLookupDevOrigin = (lookup: ConnectionLookup) =>
                   logicalId: lookup.LogicalId,
                   origin: "lookup",
                   message:
-                    "A Hyperdrive.lookup(...) configuration cannot be emulated in development mode without a `dev` origin: " +
+                    "A Hyperdrive.Connection.lookup(...) configuration cannot be emulated in development mode without a `dev` origin: " +
                     "the Cloudflare API never returns the origin password of an existing configuration. " +
                     "Set the `dev` property to an origin reachable from your machine.",
                 }),

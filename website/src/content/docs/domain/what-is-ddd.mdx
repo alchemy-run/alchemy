@@ -242,6 +242,32 @@ export class Ledger extends Domain.Projection("Ledger", {
 
 See [View](/domain/view) and [Projection](/domain/projection).
 
+## Queries: questions across many records
+
+A view answers questions about one thing: this account's balance, this customer's dashboard. Some questions span many: an account's whole history a page at a time, or every large withdrawal this week. A projection's store holds the answer, and a **query** asks for it.
+
+A query is a message, like a command. It's named after the question, and it declares what the caller sends, what comes back, and who may ask. Its implementation reads the store.
+
+```typescript title="src/AccountLedger.query.ts"
+export class AccountLedger extends Domain.Query("AccountLedger", {
+  input: { account: AccountId },
+  success: LedgerRow,
+  paged: true,
+  waitsFor: [Ledger],
+}) {}
+```
+
+A client calls a query like a command, and usually gets what the store holds now. Like a view, the store may be a moment behind. A screen that has just sent a command passes the command's receipt, and the query waits until the projections it `waitsFor` have written that change before it reads.
+
+```typescript
+const page = yield* bank.AccountLedger({ account: accountId }); // what the store holds now
+
+const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
+const fresh = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt }); // includes the deposit
+```
+
+See [Query](/domain/query).
+
 ## Policies: the business's standing rules
 
 Businesses have rules about what to do when something happens. Whenever a customer registers, open their main account. Whenever an account's withdrawals for a day pass a threshold, have it checked for fraud, and freeze it if the risk is high. These are business policies, and DDD models each one as a **policy**.
@@ -346,7 +372,7 @@ DDD splits the business into **bounded contexts**: areas in which one model and 
 
 ## How @alchemy.run/domain models these concepts
 
-Each concept on this page is a building block in `@alchemy.run/domain`. A bounded context is a [`Domain.Model`](/domain/model), and its published interface is an [`Api`](/domain/api). Inside it, you declare [commands](/domain/command), [events](/domain/event), [aggregates](/domain/aggregate) with `decide` and `evolve`, [views](/domain/view) and [policies](/domain/policy). The platform you run the model on provides the guarantees described here: one command at a time per aggregate, events and state committed together, and every event delivered to every view and policy that consumes it, in order.
+Each concept on this page is a building block in `@alchemy.run/domain`. A bounded context is a [`Domain.Model`](/domain/model), and its published interface is an [`Api`](/domain/api). Inside it, you declare [commands](/domain/command), [events](/domain/event), [aggregates](/domain/aggregate) with `decide` and `evolve`, [views](/domain/view), [projections](/domain/projection), [queries](/domain/query) and [policies](/domain/policy). The platform you run the model on provides the guarantees described here: one command at a time per aggregate, events and state committed together, and every event delivered to every view and policy that consumes it, in order.
 
 A model lists its building blocks:
 
@@ -355,6 +381,8 @@ export class Bank extends Domain.Model("Bank", {
   aggregates: [Account, Customer],
   views: [AccountSummary, Statement],
   policies: [MainAccountProvisioning],
+  projections: [Ledger],
+  queries: [AccountLedger],
 }) {}
 ```
 

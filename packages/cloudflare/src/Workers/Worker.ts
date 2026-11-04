@@ -2,7 +2,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
 import type { Dependencies } from "alchemy/Dependencies";
 import type { DnsConfig } from "alchemy/DNS/Adapter";
-import type { InputProps } from "alchemy/Input";
+import type { InputProps, PropsInput } from "alchemy/Input";
 import type { Named, Tag } from "alchemy/Named";
 import type * as Output from "alchemy/Output";
 import {
@@ -2919,7 +2919,7 @@ export const Worker: ResourceClassLike<Worker> & {
    * another pipeline) by its script name, without managing it. Resolves
    * during plan/deploy and fails the deploy when no such Worker exists.
    */
-  lookup(props: WorkerLookup): Worker;
+  lookup(props: PropsInput<WorkerLookup>): Worker;
 } & Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
     <Self, Shape extends WorkerShape, Deps = never>(): {
       <const Id extends string>(

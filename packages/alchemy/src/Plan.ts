@@ -1023,6 +1023,7 @@ const makePlan = <A>(
     // properties that identify a resource; providers without them go unchecked.
     const rejectManagedLookup = Effect.fn(function* (
       expr: Output.LookupExpr<any>,
+      props: unknown,
       attrs: Record<string, unknown>,
     ) {
       const provider = yield* tryFindProviderByType(expr.lookupType, "live");
@@ -1039,9 +1040,9 @@ const makePlan = <A>(
         ) {
           return yield* Effect.die(
             new LookupOfManagedResourceError({
-              message: `${expr.lookupType}.lookup(${JSON.stringify(expr.lookupProps)}) found '${fqn}', which this stack manages. Reference the declared resource instead: a lookup would not stop this stack deleting or replacing it.`,
+              message: `${expr.lookupType}.lookup(${JSON.stringify(props)}) found '${fqn}', which this stack manages. Reference the declared resource instead: a lookup would not stop this stack deleting or replacing it.`,
               type: expr.lookupType,
-              props: expr.lookupProps,
+              props,
               fqn,
             }),
           );
@@ -1062,8 +1063,12 @@ const makePlan = <A>(
           const upstream = yield* resolveOutput(expr.expr);
           return Output.hasOutputs(upstream) ? expr : expr.f(upstream);
         } else if (Output.isLookupExpr(expr)) {
-          const attrs = yield* expr.f();
-          yield* rejectManagedLookup(expr, attrs);
+          // Props that depend on a resource still being created resolve at
+          // apply, like any other Output.
+          const props = yield* resolveInput(expr.expr);
+          if (Output.hasOutputs(props)) return expr;
+          const attrs = yield* expr.f(props);
+          yield* rejectManagedLookup(expr, props, attrs);
           return attrs;
         } else if (Output.isEffectExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr);

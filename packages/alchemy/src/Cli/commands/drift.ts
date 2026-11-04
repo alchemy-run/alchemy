@@ -7,9 +7,17 @@ import * as Interaction from "../../Interaction.ts";
 import { Cli } from "../../Report.ts";
 import { renderApply } from "../../Report.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
-import { config, envFile, profile, resolveStage, stage } from "./flags.ts";
+import { setExitCode } from "./errors.ts";
+import { config, envFile, profile, resolveStage, stage, yes } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 import { renderPlanning } from "./render.ts";
+
+/**
+ * Exit code when drift was found and left unrepaired, so a scheduled job can
+ * tell it apart from a clean stage (0) and a failed check (1), as
+ * `terraform plan -detailed-exitcode` does.
+ */
+export const EXIT_DRIFT_DETECTED = 2;
 
 const repairFlag = Flag.Boolean("repair").pipe(
   Flag.withDescription("Repair detected drift without prompting"),
@@ -22,6 +30,7 @@ interface SyncArgs {
   envFile: Option.Option<string>;
   profile?: string;
   repair?: boolean;
+  yes?: boolean;
 }
 
 const routeDrift = Effect.fn(function* ({
@@ -30,6 +39,7 @@ const routeDrift = Effect.fn(function* ({
   envFile,
   profile,
   repair = false,
+  yes = false,
 }: SyncArgs) {
   const cli = yield* Cli;
   const snapshot = yield* Alchemist.importStack(main).pipe(
@@ -52,10 +62,12 @@ const routeDrift = Effect.fn(function* ({
     return yield* cli.displayPlan(snapshot.native);
   }
 
-  if (!repair) {
+  // `--yes` answers the repair prompt, so it repairs like `--repair`.
+  if (!repair && !yes) {
     const terminal = yield* Interaction.Interaction;
     if (!terminal.terminal.input) {
-      return yield* cli.displayPlan(snapshot.native);
+      yield* cli.displayPlan(snapshot.native);
+      return yield* setExitCode(EXIT_DRIFT_DETECTED);
     }
     const decision = yield* terminal.prompt
       .screen(
@@ -76,7 +88,7 @@ const routeDrift = Effect.fn(function* ({
         }),
       )
       .pipe(Effect.catchTag("TerminalCancelled", () => Effect.succeed("cancel" as const)));
-    if (decision === "cancel") return;
+    if (decision === "cancel") return yield* setExitCode(EXIT_DRIFT_DETECTED);
   }
 
   yield* Alchemist.Drift.execute(snapshot).pipe(renderApply(snapshot.native));
@@ -86,6 +98,7 @@ export const driftCommand = Command.make(
   "drift",
   {
     repair: repairFlag,
+    yes,
     main: config,
     envFile,
     stage,

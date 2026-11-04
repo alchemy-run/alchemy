@@ -1033,6 +1033,27 @@ describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  test.provider("a lookup keyed by another resource's Output waits for it", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-keyed";
+      lookupTargets.set(name, { name, value: "keyed" });
+      const keyed = Effect.gen(function* () {
+        const key = yield* TestResource("Key", { string: name });
+        const found = LookupTarget.lookup({ name: key.string });
+        return yield* TestResource("Consumer", { string: found.value });
+      });
+
+      const consumer = yield* stack.deploy(keyed);
+      expect(consumer.string).toEqual("keyed");
+      expect([...(yield* listState())].sort()).toEqual(["Consumer", "Key"]);
+      expect(actionOfPlan(yield* stack.plan(keyed), "Consumer")).toBe("noop");
+
+      yield* stack.destroy();
+      expect(yield* listState()).toEqual([]);
+      expect(lookupTargets.get(name)).toEqual({ name, value: "keyed" });
+    }),
+  );
+
   // Always a user mistake: the lookup would bind the resource with no
   // dependency, so this stack could delete or replace it under its consumer.
   test.provider("a lookup of a resource this stack manages fails the deploy", (stack) =>
