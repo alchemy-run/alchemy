@@ -110,7 +110,8 @@ export type Instance = Resource<
  *
  * Labels, logging, monitoring and RBAC update in place; the edition,
  * version, network and service accounts are fixed at create. An instance
- * takes 15–25 minutes to provision.
+ * takes 15–25 minutes to provision; a project's first instances can take
+ * a few attempts while Data Fusion sets up its tenant project.
  *
  * ### Creating an Instance
  * **Example:** A developer instance
@@ -259,7 +260,7 @@ export const InstanceProvider = () =>
 
       // Ensure
       if (current === undefined) {
-        const operation = yield* datafusion
+        const create = datafusion
           .createProjectsLocationsInstances({
             parent: `projects/${env.project}/locations/${location}`,
             instanceId,
@@ -277,8 +278,24 @@ export const InstanceProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
-        if (operation !== undefined) yield* waitFor(operation);
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.undefined),
+            Effect.flatMap((operation) =>
+              operation === undefined ? Effect.void : waitFor(operation),
+            ),
+          );
+        // A project's first instances can fail while Data Fusion sets up its
+        // tenant project (code 10 "Failed to perform tenant project creation");
+        // a later attempt succeeds.
+        yield* create.pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "GCP.OperationFailed" &&
+              error.message.includes("Failed to perform tenant project creation"),
+            times: 8,
+            schedule: Schedule.spaced("30 seconds"),
+          }),
+        );
         current = yield* getByName(name);
       }
       if (current === undefined) {

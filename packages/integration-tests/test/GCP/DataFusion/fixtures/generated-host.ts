@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeInstance } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated DataFusion binding as its own
@@ -15,18 +16,42 @@ export default class DataFusionGeneratedHost extends GCP.Function<DataFusionGene
   "DataFusionGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.DataFusion.ListInstances();
-    const p1 = yield* GCP.DataFusion.ListVersions();
+    const p0 = yield* GCP.DataFusion.CreateInstanceDnsPeering(ProbeInstance);
+    const p1 = yield* GCP.DataFusion.DeleteInstanceDnsPeering(ProbeInstance);
+    const p2 = yield* GCP.DataFusion.GetInstance(ProbeInstance);
+    const p3 = yield* GCP.DataFusion.ListInstanceDnsPeerings(ProbeInstance);
+    const p4 = yield* GCP.DataFusion.ListInstances();
+    const p5 = yield* GCP.DataFusion.ListVersions();
+    const p6 = yield* GCP.DataFusion.RestartInstance(ProbeInstance);
     return {
       fetch: serveProbes({
-        ListInstances: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListVersions: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        CreateInstanceDnsPeering: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeleteInstanceDnsPeering: probeOutcome(
+          Retry.none(p1({ dnsPeering: "alchemy-missing" } as never)),
+        ),
+        GetInstance: probeOutcome(Retry.none(p2({} as never))),
+        ListInstanceDnsPeerings: probeOutcome(Retry.none(p3({} as never))),
+        ListInstances: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListVersions: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        RestartInstance: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Layer.mergeAll(GCP.DataFusion.ListInstancesHttp, GCP.DataFusion.ListVersionsHttp),
+        Layer.mergeAll(
+          GCP.DataFusion.CreateInstanceDnsPeeringHttp,
+          GCP.DataFusion.DeleteInstanceDnsPeeringHttp,
+          GCP.DataFusion.GetInstanceHttp,
+          GCP.DataFusion.ListInstanceDnsPeeringsHttp,
+          GCP.DataFusion.ListInstancesHttp,
+          GCP.DataFusion.ListVersionsHttp,
+          GCP.DataFusion.RestartInstanceHttp,
+        ),
       ),
     ),
   ),

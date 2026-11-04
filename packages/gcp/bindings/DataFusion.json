@@ -10,10 +10,10 @@
     "datafusion.projects.locations.versions.list": "datafusion.instances.list"
   },
   "probes": {
-    "resources": {},
+    "resources": {
+      "Instance": "ProbeInstance"
+    },
     "enable": ["datafusion.googleapis.com"],
-    "untestable": {
-      "Instance": "the testing project can't host Data Fusion: every create fails its operation with code 10 \"Failed to perform tenant project creation\""
-    }
+    "deployMinutes": 60
   }
 }
