@@ -14,8 +14,9 @@ import {
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/Foldkit.ts";
+import { hetznerPrimaryIps } from "../limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 

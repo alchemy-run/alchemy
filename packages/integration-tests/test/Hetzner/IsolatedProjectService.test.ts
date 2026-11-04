@@ -7,8 +7,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { materializeIsolatedProject, removeIsolatedProject } from "../IsolatedProject.ts";
 import IsolatedProjectApi, { project } from "./fixtures/isolated-project-service.ts";
+import { hetznerPrimaryIps } from "./limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -52,6 +53,5 @@ test.provider(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: "hetzner",
   },
 );

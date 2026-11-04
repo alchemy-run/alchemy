@@ -28,8 +28,10 @@ import {
   Wall,
 } from "./fixtures/app/shared.ts";
 import Worker from "./fixtures/app/worker.ts";
+import { hetznerPrimaryIps } from "./limit.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  limit: hetznerPrimaryIps,
   providers: Hetzner.providers(),
 });
 
@@ -71,11 +73,10 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = beforeAll(deploy(Stack), { timeout: 180_000, exclusive: "hetzner" });
+const stack = beforeAll(deploy(Stack), { timeout: 180_000 });
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 120_000,
-  exclusive: "hetzner",
 });
 
 test(
@@ -175,6 +176,5 @@ test(
       "live",
     ],
     timeout: 180_000,
-    exclusive: "hetzner",
   },
 );

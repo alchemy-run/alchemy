@@ -10,8 +10,9 @@ import * as Schedule from "effect/Schedule";
 import Api from "./fixtures/api.ts";
 import { Data, MARKER } from "./fixtures/shared.ts";
 import Worker from "./fixtures/worker.ts";
+import { hetznerPrimaryIps } from "./limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -89,6 +90,5 @@ test.provider(
       "live",
     ],
     timeout: 180_000,
-    exclusive: "hetzner",
   },
 );

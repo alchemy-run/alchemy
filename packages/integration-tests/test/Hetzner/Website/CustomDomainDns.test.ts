@@ -24,8 +24,10 @@ import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { hetznerPrimaryIps } from "../limit.ts";
 
 const { test } = Test.make({
+  limit: hetznerPrimaryIps,
   providers: Layer.mergeAll(Hetzner.providers(), Cloudflare.providers()),
 });
 
