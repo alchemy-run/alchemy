@@ -5,6 +5,8 @@ description: How Lambda Functions, Lambda Web Functions, ECS, EKS and EC2 differ
 
 import DAG from "../../../../components/DAG.astro";
 import Responsibility from "../../../../components/Responsibility.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 AWS gives you several places to run code. They differ in one main way: how much of the machine AWS manages for you, and so how much you decide yourself. Every one of them runs the same kind of Alchemy program, takes the same bindings, and gets its IAM role from them.
 
@@ -57,11 +59,38 @@ That makes it an easy and cheap place to start. Its limits come from the same mo
 
 Choose it for event handlers, background jobs, scheduled work, and APIs that see uneven traffic.
 
+<Timeline
+  end={10}
+  lanes={[{ id: "e1", label: "environment 1" }, { id: "e2", label: "environment 2" }]}
+  bars={[
+    { lane: "e1", start: 0, end: 0.8, tone: "warn" },
+    { lane: "e1", start: 0.8, end: 3.4, label: "invocation" },
+    { lane: "e1", start: 4.2, end: 6.8, label: "invocation" },
+    { lane: "e2", start: 1.6, end: 2.4, tone: "warn" },
+    { lane: "e2", start: 2.4, end: 5, label: "invocation" },
+  ]}
+  legend={[{ tone: "accent", label: "invocation" }, { tone: "warn", label: "cold start" }]}
+  caption="One invocation per environment. An invocation that arrives while the others are busy starts a new environment, with a cold start."
+/>
+
 ## Lambda Web Functions: HTTP servers on Lambda
 
 A [Lambda Web Function](/aws/compute/web-functions) runs an HTTP server on Lambda. One environment serves many requests at once, up to 128, so a spike starts fewer environments and requests share warm connections. Responses stream as your handler produces them.
 
 It only receives HTTP, runs Node.js, and has a fixed 2 GB of memory per environment. Choose it for APIs and websites, and pair it with a Lambda Function when the API hands work to a queue.
+
+<Timeline
+  end={10}
+  lanes={[{ id: "e1", label: "environment 1", type: "up to 128 at once" }]}
+  bars={[
+    { lane: "e1", start: 0, end: 0.8, tone: "warn" },
+    { lane: "e1", start: 0.8, end: 3.6, label: "request" },
+    { lane: "e1", start: 1.6, end: 4.4, label: "request" },
+    { lane: "e1", start: 2.2, end: 5.4, label: "request" },
+    { lane: "e1", start: 4, end: 7, label: "request" },
+  ]}
+  caption="The same traffic in one environment. Requests run side by side and share its warm connections."
+/>
 
 ## ECS: containers that keep running
 
@@ -71,17 +100,65 @@ You pay for running tasks whether or not they're busy. They run inside a VPC: yo
 
 Choose it for long-lived servers, workers that hold connections open, and anything that already ships as a container.
 
+<Timeline
+  end={10}
+  lanes={[
+    { id: "req", label: "requests" },
+    { id: "t1", label: "task 1" },
+    { id: "t2", label: "task 2" },
+  ]}
+  bars={[
+    { lane: "req", start: 1, end: 1.6 },
+    { lane: "req", start: 2.2, end: 2.8 },
+    { lane: "req", start: 7.4, end: 8 },
+    { lane: "t1", start: 0, end: 10, label: "running · holds connections and memory" },
+    { lane: "t2", start: 0, end: 10, label: "running" },
+  ]}
+  caption="Tasks run whether or not requests arrive, so there's no cold start, and you pay for every hour they run."
+/>
+
 ## EKS: Kubernetes
 
 [EKS](/aws/compute/eks) runs a Kubernetes cluster, with AWS managing the control plane and, in Auto Mode, the nodes. You deploy Deployments, Jobs, Helm charts and raw manifests from the same Stack, with the same bindings.
 
 A cluster takes about ten minutes to create and costs money while it exists. Choose it when you want Kubernetes itself: its tools, its operators, or a team that already runs on it.
 
+<Tree
+  nodes={[
+    { id: "c", label: "EKS cluster", type: "Auto Mode" },
+    { id: "n1", label: "node 1", type: "managed by AWS", parent: "c", dashed: true },
+    { id: "p1", label: "web", type: "Pod", parent: "n1", tone: "accent" },
+    { id: "p2", label: "worker", type: "Pod", parent: "n1" },
+    { id: "n2", label: "node 2", type: "managed by AWS", parent: "c", dashed: true },
+    { id: "p3", label: "web", type: "Pod", parent: "n2", tone: "accent" },
+  ]}
+  caption="You declare Pods through Deployments and Jobs. Kubernetes places them on nodes, and Auto Mode adds and patches the nodes."
+/>
+
 ## EC2: the whole machine
 
 [EC2](/aws/compute/ec2) gives you a virtual machine. You pick the instance type, the operating system and the disk, and you own patching and recovery. Alchemy can run your program on it directly, or leave it as a plain machine.
 
 Choose it for GPUs, custom daemons, software that expects a host, or steady load where a reserved machine is cheapest.
+
+<Tree
+  nodes={[
+    { id: "subnet", label: "subnet", type: "in your VPC", dashed: true },
+    {
+      id: "i",
+      label: "Server",
+      type: "EC2 instance",
+      parent: "subnet",
+      tone: "accent",
+      specs: [
+        ["type", "g5.xlarge · 1 GPU"],
+        ["image", "your OS and disk"],
+        ["you own", "patching, restarts, recovery"],
+      ],
+    },
+  ]}
+  caption="The whole machine is yours: its size, its operating system, everything on it, and keeping it healthy."
+/>
 
 ## Mix runtimes in one app
 

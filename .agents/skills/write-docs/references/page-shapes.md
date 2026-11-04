@@ -103,6 +103,30 @@ secrets: ({ stage }) =>
 Then it says the `Config.Redacted(...)` code doesn't change, and links
 [Secret providers](/environments/secret-providers).
 
+## Choosing a runtime
+
+Every provider with more than one place to run code gets this page, in the same
+shape, so readers comparing AWS and GCP see the same thing. GCP once had a
+single timeline covering three of its runtimes, and was called out as
+inconsistent with AWS.
+
+1. The intro: what the runtimes have in common.
+2. A `Responsibility` matrix straight after it: one column per runtime, ordered
+   from most managed to least. The rows are the same everywhere (your program,
+   image or runtime, scaling, orchestration, OS & patching, hardware), and the
+   caption says "From left to right, <platform> manages less and you decide
+   more."
+3. "The same program on every runtime", with the shared declaration.
+4. One section per runtime, each with **one small diagram of how that runtime
+   runs**. Draw environments for per-invocation functions, one environment with
+   requests side by side for HTTP servers, always-on tasks against sparse
+   traffic for containers, an execution's tasks for jobs, nodes holding Pods for
+   Kubernetes, and specs inside the box for a machine. Keep them small: two or
+   three lanes or boxes.
+5. "Mix runtimes in one app": one diagram of a common combination.
+
+Examples: `aws/compute/choosing-a-runtime`, `gcp/compute/choosing-a-runtime`.
+
 ## Concept chapters
 
 One page per platform concept (Lambda, S3, KV, Machines, Branches). Open with

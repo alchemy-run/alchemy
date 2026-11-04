@@ -175,6 +175,10 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
   the page and the source. A multi-node swarm, an Axiom "resolved" alert and a
   Stripe "more info needed" state were drafted and cut, because nothing backed
   them.
+- **The same kind of page looks the same on every provider.** When one
+  provider gets a better diagram for a page every provider has (choosing a
+  runtime, accounts and access, secrets), give it to the others in the same
+  change. More: [Choosing a runtime](references/page-shapes.md#choosing-a-runtime).
 - **It must read at the column's width.** Lay wide things out top to bottom, keep
   labels short, put no label on top of a line, and leave no empty rows or
   right-hand space. Look at every diagram on a contact sheet and on the real
