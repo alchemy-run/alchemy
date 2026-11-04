@@ -133,8 +133,18 @@ const engines = new Map<
   Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker>
 >();
 
-const makeEngine = (
+/**
+ * An engine that declares each workflow's class with `declareClass`: a Domain
+ * model's engine hosts its runs in the Domain's shared class.
+ *
+ * @internal
+ */
+export const makeEngine = (
   jurisdiction: DurableObjectJurisdiction | undefined,
+  declareClass: (
+    name: string,
+    impl: ObjectImpl,
+  ) => Effect.Effect<Namespace, never, Worker> = declare,
 ): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
   Layer.effect(
     WorkflowEngine.WorkflowEngine,
@@ -158,7 +168,7 @@ const makeEngine = (
         register: (workflow, execute) =>
           Effect.gen(function* () {
             if (namespaces.has(workflow._tag)) return;
-            const namespace = yield* declare(
+            const namespace = yield* declareClass(
               `${workflowClassName(workflow)}Workflow`,
               executionObject({ workflow: workflow as AnyWorkflow, execute, engine: () => engine }),
             ).pipe(Effect.provide(init));
@@ -629,12 +639,12 @@ interface Stub {
   readonly [method: string]: (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>;
 }
 
-interface Namespace {
+export interface Namespace {
   readonly getByName: (name: string) => Stub;
   readonly jurisdiction: (jurisdiction: DurableObjectJurisdiction) => Namespace;
 }
 
-type ObjectImpl = Effect.Effect<
+export type ObjectImpl = Effect.Effect<
   Effect.Effect<Record<string, unknown>, never, DurableObjectState | RuntimeContext | Scope.Scope>,
   never,
   DurableObjectState

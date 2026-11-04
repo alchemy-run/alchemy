@@ -21,6 +21,8 @@ import SharedWorker from "./fixtures/shared-worker.ts";
 import UpgradeNextWorker from "./fixtures/upgrade-next-worker.ts";
 import UpgradeNoneWorker from "./fixtures/upgrade-none-worker.ts";
 import UpgradePlainWorker from "./fixtures/upgrade-plain-worker.ts";
+import UpgradeSharedNextWorker from "./fixtures/upgrade-shared-next-worker.ts";
+import UpgradeSharedWorker from "./fixtures/upgrade-shared-worker.ts";
 import UpgradeWorker from "./fixtures/upgrade-worker.ts";
 
 const { test } = Test.make({
@@ -91,6 +93,24 @@ const watch = (url: string, path: string, answers: Array<{ status: number; body:
     Effect.catch((error) => Effect.succeed({ status: 0, body: String(error) })),
     Effect.tap((answer) => Effect.sync(() => answers.push(answer))),
     Effect.repeat(Schedule.spaced("250 millis")),
+  );
+
+/** How many objects of a namespace Cloudflare lists as holding data. */
+const holdingData = Effect.fn(function* (namespaceId: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const objects = yield* durableObjects.listNamespaceObjects
+    .items({ accountId, id: namespaceId })
+    .pipe(Stream.runCollect);
+  return Array.from(objects).filter((object) => object.hasStoredData === true).length;
+});
+
+/** Poll every namespace until `until` holds for its count of objects holding data. */
+const untilListed = (namespaceIds: ReadonlyArray<string>, until: (count: number) => boolean) =>
+  Effect.forEach(namespaceIds, (id) =>
+    holdingData(id).pipe(
+      // Cloudflare lists an object a few minutes after it is written.
+      Effect.repeat({ schedule: Schedule.spaced("10 seconds"), until, times: 48 }),
+    ),
   );
 
 const tagsOf = Effect.fn(function* (scriptName: string) {
@@ -183,7 +203,7 @@ test.provider(
       expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v0");
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
 
-      // A Worker a newer Alchemy deployed (version 1) is never moved back.
+      // A Worker a newer Alchemy deployed (version 2) is never moved back.
       const { accountId } = yield* yield* CloudflareEnvironment;
       yield* workers.patchScriptScriptAndVersionSetting({
         accountId,
@@ -197,7 +217,7 @@ test.provider(
             ]),
           ),
           tags: (yield* tagsOf(scriptName)).map((tag) =>
-            tag === "alchemy:domain:v0" ? "alchemy:domain:v1" : tag,
+            tag === "alchemy:domain:v0" ? "alchemy:domain:v2" : tag,
           ),
         },
       });
@@ -211,7 +231,7 @@ test.provider(
       expect(Exit.isFailure(downgrade)).toBe(true);
       expect(String(downgrade)).toContain("DomainVersionTooNew");
       expect(yield* namespacesOf(scriptName)).toEqual(upgraded);
-      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
+      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v2");
 
       // Nor are its classes deleted by older code that hosts no model at all.
       const removed = yield* stack
@@ -315,4 +335,113 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 300_000 },
+);
+
+/**
+ * Domain version 1 hosts every object of every model in one Durable Object
+ * class. Upgrading a version 0 Worker keeps its classes live while the
+ * deploy's migration Workflow moves each object's storage over; once the
+ * move has settled, the next deploy deletes them, and every account, view
+ * row and saga run is still there.
+ */
+test.provider(
+  "upgrading to one shared class moves every object, then deletes the old classes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const before = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeWorker };
+        }),
+      );
+      const url = before.worker.url!;
+      const scriptName = before.worker.workerName;
+      yield* waitForVersion(url, 0);
+
+      yield* call(url, "/Billing/open/a-1/sam", "POST");
+      yield* poll(url, "/Billing/owners/a-1", (body) => (body as any)?.owner === "sam");
+      // a run that waits for its approval across the upgrade
+      yield* call(url, "/saga/s-1/kim", "POST");
+      yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Running");
+
+      const legacy = yield* namespacesOf(scriptName);
+      expect(Object.keys(legacy).sort()).toEqual([
+        "Billing.AccountAggregate",
+        "Billing.ApproveWorkflow",
+        "Billing.DomainDirectory",
+        "Billing.OwnersView",
+        "Billing.OwnersViewRun",
+      ]);
+      // The deploy's migration moves what Cloudflare lists: wait until it lists these.
+      const written = [
+        legacy["Billing.AccountAggregate"]!,
+        legacy["Billing.ApproveWorkflow"]!,
+        legacy["Billing.OwnersView"]!,
+      ];
+      yield* untilListed(written, (count) => count > 0);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeSharedWorker };
+        }),
+      );
+      yield* waitForVersion(url, 1);
+      const moving = yield* namespacesOf(scriptName);
+      // the old classes stay, next to the shared one
+      expect(Object.keys(moving).sort()).toEqual([...Object.keys(legacy), "AlchemyDomain"].sort());
+      for (const [cls, id] of Object.entries(legacy)) expect(moving[cls]).toBe(id);
+      const tags = yield* tagsOf(scriptName);
+      expect(tags).toContain("alchemy:domain:v1");
+      const movingTag = tags.find((tag) => tag.startsWith("alchemy:domain:moving:"));
+      expect(movingTag).toBeDefined();
+
+      // The deploy waited for the move: nothing has read them since, and the
+      // old objects are empty.
+      yield* untilListed(written, (count) => count === 0);
+
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
+      expect((yield* call(url, "/saga/s-1")) as any).toMatchObject({ _tag: "Running" });
+      // the run started before the upgrade finishes after it
+      yield* call(url, "/approve/s-1/lee", "POST");
+      yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Completed");
+      expect(yield* call(url, "/Billing/state/s-1")).toEqual({ owner: "kim:lee" });
+      // new writes land in the shared class
+      yield* call(url, "/Billing/open/a-2/ann", "POST");
+      yield* poll(url, "/Billing/owners/a-2", (body) => (body as any)?.owner === "ann");
+
+      // Pretend the move started long enough ago for Cloudflare to list
+      // every old object: the next upload deletes each old class that holds
+      // no data.
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* workers.patchScriptScriptAndVersionSetting({
+        accountId,
+        scriptName,
+        settings: {
+          exports: Object.fromEntries(
+            Object.keys(moving).map((className) => [
+              className,
+              { type: "durable-object", storage: "sqlite" },
+            ]),
+          ),
+          tags: tags.map((tag) => (tag === movingTag ? "alchemy:domain:moving:1" : tag)),
+        },
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeSharedNextWorker };
+        }),
+      );
+      expect(yield* namespacesOf(scriptName)).toEqual({ AlchemyDomain: moving.AlchemyDomain });
+      expect(
+        (yield* tagsOf(scriptName)).filter((tag) => tag.startsWith("alchemy:domain:")),
+      ).toEqual(["alchemy:domain:v1"]);
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/state/a-2")).toEqual({ owner: "ann" });
+      expect(yield* call(url, "/Billing/state/s-1")).toEqual({ owner: "kim:lee" });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 1_500_000 },
 );

@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
  * `alchemy:domain:v<N>` tag. A Worker without the tag was deployed before
  * versions existed: version `undefined`.
  */
-export const DOMAIN_VERSION = 0;
+export const DOMAIN_VERSION = 1;
 
 /**
  * The Domain version a Worker's models are laid out with: always
@@ -34,6 +34,11 @@ export interface DomainClass {
   readonly legacyName: string;
   /** The model keeps the class's data when models shared it before version 0. */
   readonly legacyData: boolean;
+  /**
+   * The class is version 0's, kept by version 1 code only to move its objects
+   * to the shared class: live while any of them still holds data.
+   */
+  readonly mover?: boolean;
 }
 
 /**
@@ -100,6 +105,61 @@ export const deployedVersion = (tags: ReadonlyArray<string>): number | undefined
   return undefined;
 };
 
+/** The tag that records when a Worker started moving its objects to the shared class (version 1). */
+export const movingTag = (sinceSeconds: number) => `alchemy:domain:moving:${sinceSeconds}`;
+
+/** When a Worker started moving its objects to the shared class, in seconds; `undefined` if it isn't. */
+export const movingSince = (tags: ReadonlyArray<string>): number | undefined => {
+  for (const tag of tags) {
+    const match = /^alchemy:domain:moving:(\d+)$/.exec(tag);
+    if (match) return Number(match[1]);
+  }
+  return undefined;
+};
+
+/**
+ * How long after the move starts an old class may be deleted. Cloudflare
+ * lists a Durable Object a few minutes after it is first written: until then,
+ * an old class that lists no objects may still have some.
+ */
+export const LISTING_LAG_SECONDS = 15 * 60;
+
+/**
+ * The version 0 classes an upload keeps live, to move their objects to the
+ * shared class. A class is kept while the Worker has it and, once the move
+ * has been running past {@link LISTING_LAG_SECONDS}, while any of its objects
+ * still holds data. The others are left out, and the upload deletes them.
+ */
+export const keptMovers = Effect.fn(function* <E, R>({
+  deployed,
+  movers,
+  deployedClasses,
+  since,
+  now,
+  holdsData,
+}: {
+  readonly deployed: number | undefined;
+  readonly movers: ReadonlyArray<DomainClass>;
+  /** The classes the Worker has now, and the classes this upload renames to. */
+  readonly deployedClasses: ReadonlySet<string>;
+  /** When the move started, in seconds: see {@link movingSince}. */
+  readonly since: number | undefined;
+  readonly now: number;
+  readonly holdsData: (className: string) => Effect.Effect<boolean, E, R>;
+}) {
+  const kept = new Set<string>();
+  for (const mover of movers) {
+    if (!deployedClasses.has(mover.className)) continue;
+    const settled =
+      deployed !== undefined &&
+      deployed >= 1 &&
+      since !== undefined &&
+      now - since >= LISTING_LAG_SECONDS;
+    if (!settled || (yield* holdsData(mover.className))) kept.add(mover.className);
+  }
+  return kept;
+});
+
 /**
  * The Durable Object class renames that bring a Worker deployed at `deployed`
  * up to {@link DOMAIN_VERSION} without losing data. `deployedClasses` are the
@@ -140,6 +200,7 @@ export const migrate = Effect.fn(function* ({
       renamed.push({ from: legacyName, to: keeps[0]!.className });
     }
   }
-  // if (deployed === undefined || deployed < 1) { ... 0 -> 1 }
+  // 0 -> 1: nothing is renamed. The version 0 classes stay live next to the
+  // shared class while their objects move (see `keptMovers`).
   return renamed;
 });

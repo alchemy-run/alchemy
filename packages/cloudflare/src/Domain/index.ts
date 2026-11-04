@@ -60,9 +60,11 @@ import { makeRpcStub } from "../Workers/Rpc.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
 import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
-import { layerDurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
+import { layerDurableObjectEngine, makeEngine } from "../Workflows/DurableObjectEngine.ts";
 import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
+import { Migration } from "./Migration.ts";
+import { ID_KEY, sharedClasses } from "./Shared.ts";
 import { DeployVersion } from "./Version.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
@@ -658,9 +660,6 @@ const runRpc = (relay: Backfill.Relay, run: () => Backfill.Run) => ({
 
 /** How long before a key that couldn't list itself in the directory tries again. */
 const REGISTER_RETRY_MS = 2_000;
-
-/** The id an instance was listed under, saved so jobs that fire later find it. */
-const ID_KEY = "bf:id";
 
 /**
  * List an instance in the directory before its first commit, so every
@@ -1515,12 +1514,26 @@ const className = (modelName: string, name: string) =>
  * before Domain version 0, so the deploy carries its data over. See
  * `Version.ts`.
  */
-const record = (modelName: string, legacyName: string, legacyData: boolean, name = legacyName) =>
+const record = (
+  modelName: string,
+  legacyName: string,
+  legacyData: boolean,
+  name = legacyName,
+  mover = false,
+) =>
   Effect.gen(function* () {
     const worker = yield* CloudflareWorker;
     const current = className(modelName, name);
     yield* worker.bind`${current}.DomainVersion`({
-      domainClasses: [{ model: modelName, className: current, legacyName, legacyData }],
+      domainClasses: [
+        {
+          model: modelName,
+          className: current,
+          legacyName,
+          legacyData,
+          ...(mover ? { mover } : {}),
+        },
+      ],
     });
   });
 
@@ -1565,6 +1578,18 @@ const durableObjectPlatform = (
       const env = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment));
       const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
         Effect.provide(effect, init);
+      const inJurisdiction = (namespace: Namespace): Namespace =>
+        jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction);
+      // Version 1: every object of every model in one class (see `Shared.ts`).
+      const shared =
+        version !== undefined && version >= 1 ? yield* inInit(sharedClasses()) : undefined;
+      /** Each model's version 0 classes, which a deploy moves to the shared class. */
+      const moversOf = new Map<string, Array<string>>();
+      const mover = (modelName: string, cls: string) => {
+        const movers = moversOf.get(modelName) ?? [];
+        if (!movers.includes(cls)) movers.push(cls);
+        moversOf.set(modelName, movers);
+      };
 
       // Model names are unique per Worker, not per platform build: two
       // different models named alike would declare the same classes. The
@@ -1581,7 +1606,16 @@ const durableObjectPlatform = (
           const object = (name: string, impl: ObjectImpl) =>
             version === undefined
               ? declareIn(name, impl)
-              : Effect.andThen(record(modelName, name, legacyData), declareIn(named(name), impl));
+              : shared === undefined
+                ? Effect.andThen(record(modelName, name, legacyData), declareIn(named(name), impl))
+                : // The version 0 class stays declared, to move its objects over.
+                  Effect.andThen(
+                    Effect.andThen(
+                      record(modelName, name, legacyData, name, true),
+                      Effect.sync(() => mover(modelName, named(name))),
+                    ),
+                    Effect.map(shared.object(named(name), impl, named(name)), inJurisdiction),
+                  );
           // Every consumer in the model this isolate runs, set once the model is built.
           let model: ReadonlyArray<string> = [];
           let planOf: PlanOf = () => undefined;
@@ -1599,6 +1633,10 @@ const durableObjectPlatform = (
            * it still reaches every aggregate, view and projection this way.
            */
           const bound = (binding: string): Namespace | undefined => {
+            if (shared !== undefined) {
+              const view = shared.bound(binding);
+              return view === undefined ? undefined : inJurisdiction(view as Namespace);
+            }
             const namespace = env?.[binding];
             return namespace !== undefined && typeof namespace.getByName === "function"
               ? fromBinding(namespace)
@@ -1754,15 +1792,20 @@ const durableObjectPlatform = (
                     const root = (target: string) =>
                       Effect.suspend(() => {
                         const { kind, name } = Backfill.consumerOf(target);
+                        const cls = runClass(
+                          named(consumerClass(kind, name, generationOfTarget(target))),
+                        );
                         const namespace =
-                          workerEnv[
-                            runClass(named(consumerClass(kind, name, generationOfTarget(target))))
-                          ];
+                          shared === undefined
+                            ? workerEnv[cls] === undefined
+                              ? undefined
+                              : fromBinding(workerEnv[cls])
+                            : bound(cls);
                         return namespace === undefined
                           ? Effect.die(
                               new Error(`backfill: ${target} isn't in the code this runs yet`),
                             )
-                          : Effect.succeed(fromBinding(namespace).getByName(RUN_ROOT));
+                          : Effect.succeed(namespace.getByName(RUN_ROOT));
                       });
                     for (const target of targets) {
                       const begun = yield* task(
@@ -2107,6 +2150,32 @@ const durableObjectPlatform = (
             start: (targets, plansOfTarget, backfilled) =>
               Effect.gen(function* () {
                 // At deploy time: reconciliation runs the backfill of new consumers and waits.
+                // At deploy time: move the objects of the model's version 0 classes.
+                const movers = moversOf.get(modelName);
+                if (
+                  !globalThis.__ALCHEMY_RUNTIME__ &&
+                  shared !== undefined &&
+                  movers !== undefined
+                ) {
+                  yield* inInit(
+                    Effect.gen(function* () {
+                      const worker = yield* CloudflareWorker;
+                      yield* Migration(named("DomainMigration"), {
+                        scriptName: worker.workerName as unknown as string,
+                        workflowName: shared.workflowName as string,
+                        classes: movers.map((cls) => ({ className: cls, route: cls })),
+                        namespaces: worker.durableObjectNamespaces as unknown as Record<
+                          string,
+                          string
+                        >,
+                        deployment: worker.hash,
+                        ...(backfillTimeoutSeconds === undefined
+                          ? {}
+                          : { timeoutSeconds: backfillTimeoutSeconds }),
+                      }) as unknown as Effect.Effect<unknown>;
+                    }),
+                  );
+                }
                 if (!globalThis.__ALCHEMY_RUNTIME__ && backfilled.length > 0) {
                   yield* inInit(
                     Effect.gen(function* () {
@@ -2166,15 +2235,19 @@ const durableObjectPlatform = (
             // engine, named after the model too.
             for (const saga of model.sagas)
               if (version === undefined) legacySagas.set(`${model.modelName}.${saga}`, saga);
-              else
+              else {
+                if (shared !== undefined)
+                  mover(model.modelName, className(model.modelName, `${saga}Workflow`));
                 yield* inInit(
                   record(
                     model.modelName,
                     `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
                     model.legacyData,
                     `${saga}Workflow`,
+                    shared !== undefined,
                   ),
                 );
+              }
             const hosted = hosts.get(model.modelName);
             if (hosted !== undefined) return hosted;
             const host = yield* hostFor(model);
@@ -2296,7 +2369,13 @@ export function layerDurableObjects({
       (platform = Layer.unwrap(
         Effect.gen(function* () {
           const version = yield* DeployVersion;
-          const engine = layerDurableObjectEngine({ jurisdiction });
+          const engine =
+            version !== undefined && version >= 1
+              ? // Saga runs in the shared class too, each workflow's on its own route.
+                makeEngine(jurisdiction, (name, impl) =>
+                  Effect.flatMap(sharedClasses(), (shared) => shared.object(name, impl, name)),
+                )
+              : layerDurableObjectEngine({ jurisdiction });
           const legacySagas = new Map<string, string>();
           return Layer.merge(
             durableObjectPlatform(jurisdiction, timeoutSeconds, version, legacySagas),

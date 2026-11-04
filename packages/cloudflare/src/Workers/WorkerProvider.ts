@@ -14,6 +14,7 @@ import { isRedactedMarker } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { cachedFunction } from "alchemy/Util/cached-function";
 import { sha256Object } from "alchemy/Util/sha256";
+import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -3782,8 +3783,28 @@ export const LiveWorkerProvider = () =>
 
         // The Domain version goes up with every upload that can change the
         // classes, in the same request, so the tag and the classes never disagree.
+        // While old Domain classes stay live to move their objects, record
+        // when the move started: they may be deleted only once Cloudflare
+        // lists every object written before it.
+        const hostedClassNames = new Set(currentDoBindings.map((binding) => binding.className));
+        const moving = domainClasses.some(
+          (domainClass) => domainClass.mover && hostedClassNames.has(domainClass.className),
+        );
+        const movingSince =
+          (deployedDomainVersion !== undefined && deployedDomainVersion >= 1
+            ? DomainVersion.movingSince(oldTags)
+            : undefined) ?? Math.floor((yield* Clock.currentTimeMillis) / 1000);
         const domainTags =
-          domainClasses.length > 0 ? [DomainVersion.versionTag(DomainVersion.DOMAIN_VERSION)] : [];
+          domainClasses.length > 0
+            ? [
+                // The layout the code deployed: version 1 code records its
+                // classes as movers; tests still deploy version 0 layouts.
+                DomainVersion.versionTag(
+                  domainClasses.some((domainClass) => domainClass.mover) ? 1 : 0,
+                ),
+                ...(moving ? [DomainVersion.movingTag(movingSince)] : []),
+              ]
+            : [];
         const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags, ...domainTags];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
@@ -5416,7 +5437,21 @@ export const LiveWorkerProvider = () =>
             )}`,
           );
 
-          return yield* putWorker(id, fqn, news, bindings, olds, output, session, existingSettings);
+          return yield* putWorker(
+            id,
+            fqn,
+            news,
+            yield* withoutSettledDomainMovers({
+              accountId,
+              scriptName: name,
+              bindings,
+              existingSettings,
+            }),
+            olds,
+            output,
+            session,
+            existingSettings,
+          );
         }),
         delete: Effect.fn(function* ({ output }) {
           // Version workers own a version, not the script — `workerName` is
@@ -5755,6 +5790,103 @@ const buildDurableObjectExports = (params: {
  * all count.
  */
 const MAX_SCRIPT_EXPORTS = 100;
+
+/**
+ * Leave out of the upload each version 0 Domain class whose objects have all
+ * moved to the shared class, so the upload deletes it (see
+ * `DomainVersion.keptMovers`). The others stay live, to finish moving.
+ */
+const withoutSettledDomainMovers = Effect.fn(function* ({
+  accountId,
+  scriptName,
+  bindings,
+  existingSettings,
+}: {
+  accountId: string;
+  scriptName: string;
+  bindings: ResourceBinding<Worker["Binding"]>[];
+  existingSettings:
+    | {
+        readonly tags?: ReadonlyArray<string> | null;
+        readonly bindings?: ReadonlyArray<unknown> | null;
+      }
+    | undefined;
+}) {
+  const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
+  const movers = domainClasses.filter((domainClass) => domainClass.mover);
+  if (movers.length === 0) return bindings;
+  const tags = Array.from(existingSettings?.tags ?? []);
+  const deployed = DomainVersion.deployedVersion(tags);
+  const deployedClasses = new Set(
+    (existingSettings?.bindings ?? []).flatMap((binding) =>
+      typeof binding === "object" &&
+      binding !== null &&
+      "type" in binding &&
+      binding.type === "durable_object_namespace" &&
+      "className" in binding &&
+      typeof binding.className === "string" &&
+      !("scriptName" in binding && binding.scriptName && binding.scriptName !== scriptName)
+        ? [binding.className]
+        : [],
+    ),
+  );
+  // Classes from before Domain versions are renamed to their version 0 names in this upload.
+  for (const { to } of yield* DomainVersion.migrate({
+    scriptName,
+    deployed,
+    classes: domainClasses,
+    deployedClasses,
+  }))
+    deployedClasses.add(to);
+  const namespaces = new Map<string, string>();
+  const kept = yield* DomainVersion.keptMovers({
+    deployed,
+    movers,
+    deployedClasses,
+    since: DomainVersion.movingSince(tags),
+    now: Math.floor((yield* Clock.currentTimeMillis) / 1000),
+    holdsData: (className) =>
+      Effect.gen(function* () {
+        if (namespaces.size === 0)
+          for (const namespace of yield* durableObjectsApi.listNamespaces
+            .items({ accountId })
+            .pipe(Stream.runCollect))
+            if (namespace.script === scriptName && namespace.class && namespace.id)
+              namespaces.set(namespace.class, namespace.id);
+        const id = namespaces.get(className);
+        if (id === undefined) return false;
+        const holding = yield* durableObjectsApi.listNamespaceObjects.items({ accountId, id }).pipe(
+          Stream.filter((object) => object.hasStoredData === true),
+          Stream.runHead,
+        );
+        return holding._tag === "Some";
+      }),
+  });
+  const dropped = new Set(
+    movers.map((mover) => mover.className).filter((className) => !kept.has(className)),
+  );
+  if (dropped.size === 0) return bindings;
+  return bindings.map((binding) =>
+    binding.data.bindings === undefined
+      ? binding
+      : {
+          ...binding,
+          data: {
+            ...binding.data,
+            bindings: binding.data.bindings.filter(
+              (item: WorkerBinding) =>
+                !(
+                  item.type === "durable_object_namespace" &&
+                  "className" in item &&
+                  item.className !== undefined &&
+                  dropped.has(item.className) &&
+                  (item.scriptName === undefined || item.scriptName === scriptName)
+                ),
+            ),
+          },
+        },
+  );
+});
 
 /**
  * The `{ type: "worker", cache }` export entries for a Worker's configured
