@@ -5,8 +5,8 @@
   "probes": {
     "resources": {},
     "enable": ["advisorynotifications.googleapis.com"],
-    "locations": {
-      "ListNotifications": "global"
+    "skip": {
+      "ListNotifications": "answers BadRequest \"Request contains an invalid argument.\" for every location of the testing project (notifications are sent to organizations)"
     }
   }
 }

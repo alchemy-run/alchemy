@@ -16,23 +16,14 @@ export default class AdvisoryNotificationsGeneratedHost extends GCP.Function<Adv
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.AdvisoryNotifications.GetNotification();
-    const p1 = yield* GCP.AdvisoryNotifications.ListNotifications();
     return {
       fetch: serveProbes({
         GetNotification: probeOutcome(
           Retry.none(p0({ notification: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListNotifications: probeOutcome(Retry.none(p1({ location: "global" } as never))),
       }),
     };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.AdvisoryNotifications.GetNotificationHttp,
-          GCP.AdvisoryNotifications.ListNotificationsHttp,
-        ),
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.AdvisoryNotifications.GetNotificationHttp))),
   ),
 ) {}

@@ -17,6 +17,7 @@
     "enable": ["cloudbilling.googleapis.com"]
   },
   "roles": {
-    "cloudbilling.projects.updateBillingInfo": "roles/billing.projectManager"
+    "cloudbilling.projects.updateBillingInfo": "roles/billing.projectManager",
+    "cloudbilling.projects.getBillingInfo": "roles/billing.projectManager"
   }
 }

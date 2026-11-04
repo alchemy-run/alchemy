@@ -2,7 +2,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -15,57 +14,8 @@ export default class ParallelstoreGeneratedHost extends GCP.Function<Parallelsto
   "ParallelstoreGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.Parallelstore.CreateInstance();
-    const p1 = yield* GCP.Parallelstore.DeleteInstance();
-    const p2 = yield* GCP.Parallelstore.ExportInstanceData();
-    const p3 = yield* GCP.Parallelstore.GetInstance();
-    const p4 = yield* GCP.Parallelstore.ImportInstanceData();
-    const p5 = yield* GCP.Parallelstore.ListInstances();
-    const p6 = yield* GCP.Parallelstore.PatchInstance();
     return {
-      fetch: serveProbes({
-        CreateInstance: probeOutcome(
-          Retry.none(
-            p0({ location: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        DeleteInstance: probeOutcome(
-          Retry.none(p1({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
-        ),
-        ExportInstanceData: probeOutcome(
-          Retry.none(p2({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
-        ),
-        GetInstance: probeOutcome(
-          Retry.none(p3({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
-        ),
-        ImportInstanceData: probeOutcome(
-          Retry.none(
-            p4({
-              instance: "alchemy-missing",
-              location: "us-central1-a",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
-        ),
-        ListInstances: probeOutcome(Retry.none(p5({ location: "us-central1-a" } as never))),
-        PatchInstance: probeOutcome(
-          Retry.none(p6({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
-        ),
-      }),
+      fetch: serveProbes({}),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.Parallelstore.CreateInstanceHttp,
-          GCP.Parallelstore.DeleteInstanceHttp,
-          GCP.Parallelstore.ExportInstanceDataHttp,
-          GCP.Parallelstore.GetInstanceHttp,
-          GCP.Parallelstore.ImportInstanceDataHttp,
-          GCP.Parallelstore.ListInstancesHttp,
-          GCP.Parallelstore.PatchInstanceHttp,
-        ),
-      ),
-    ),
-  ),
+  }),
 ) {}

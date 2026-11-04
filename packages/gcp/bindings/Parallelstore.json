@@ -5,6 +5,9 @@
   "probes": {
     "resources": {},
     "enable": ["parallelstore.googleapis.com"],
-    "location": "us-central1-a"
+    "location": "us-central1-a",
+    "untestable": {
+      "project": "the testing project is offered no Parallelstore locations: listLocations returns none and every call answers Forbidden \"Location us-central1-a is not found or access is unauthorized.\""
+    }
   }
 }
