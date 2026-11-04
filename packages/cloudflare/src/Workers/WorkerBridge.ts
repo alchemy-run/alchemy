@@ -141,23 +141,6 @@ export const makeWorkerBridge = (
     ) {
       super(ctx, env);
 
-      for (const methodName of ExportedHandlerMethods) {
-        (this as any)[methodName] = async (input: any) =>
-          processEvent(
-            (built) =>
-              built.export[methodName](input, this.env, this.ctx) as [
-                Effect.Effect<any>,
-                Context.Context<never>,
-              ],
-            this.ctx,
-            this.env,
-            (exit) =>
-              exit._tag === "Success"
-                ? Promise.resolve(exit.value)
-                : Promise.reject(Cause.squash(exit.cause)),
-          );
-      }
-
       return new Proxy(this, {
         get: (target, prop) => {
           if (typeof prop !== "string") return (target as any)[prop];
@@ -205,13 +188,25 @@ export const makeWorkerBridge = (
     }
   }
 
-  // Stub prototype methods so Cloudflare's script-validate detects the
-  // standard handler set; per-instance overrides above are what actually
-  // run.
-  for (const method of ExportedHandlerMethods) {
-    Object.defineProperty(WorkerBridge.prototype, method, {
-      value: function () {
-        throw new Error(`Bridge method '${method}' was called before instance setup`);
+  // The handlers live on the prototype: Cloudflare's script validation
+  // detects the handler set there, and a handler called over JS RPC (the
+  // local runtime delivers `email` that way) must be a prototype method.
+  for (const methodName of ExportedHandlerMethods) {
+    Object.defineProperty(WorkerBridge.prototype, methodName, {
+      value: function (this: WorkerBridge, input: any) {
+        return processEvent(
+          (built) =>
+            built.export[methodName](input, this.env, this.ctx) as [
+              Effect.Effect<any>,
+              Context.Context<never>,
+            ],
+          this.ctx,
+          this.env,
+          (exit) =>
+            exit._tag === "Success"
+              ? Promise.resolve(exit.value)
+              : Promise.reject(Cause.squash(exit.cause)),
+        );
       },
       writable: true,
       configurable: true,
@@ -428,48 +423,6 @@ export const getWorkerExport = <Export = any>({
 
   return { build };
 };
-
-export const makeRpcProxy = (
-  self: any,
-  userShape: Effect.Effect<any>,
-  processEvent: (eff: Effect.Effect<[Effect.Effect<any>, Context.Context<never>]>) => Promise<any>,
-) =>
-  new Proxy(self, {
-    get: (target, prop) => {
-      if (typeof prop !== "string") return (target as any)[prop];
-      if (prop in target) return (target as any)[prop];
-      return (...args: unknown[]) =>
-        userShape
-          .pipe(
-            Effect.map((shape) => shape[prop]),
-            Effect.flatMap((dispatcher) => {
-              if (typeof dispatcher !== "function") {
-                return Effect.die(
-                  new Error(
-                    `Method "${prop}" not found on worker. ` +
-                      `Make sure it's returned from the worker's default export.`,
-                  ),
-                );
-              }
-              const result = dispatcher(...args);
-              // Effects (including nested-RPC values built by
-              // `asEffectOrStream`, which are Effects *branded* as Streams)
-              // must be run as effects — their resolved value may itself be a
-              // `Stream`, which `handleRpcExit` then encodes. Only a *genuine*
-              // `Stream` (not an Effect) is lifted into the success channel so
-              // `handleRpcExit` encodes it directly.
-              return Effect.isEffect(result)
-                ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped RPC dispatcher result; failures are encoded by handleRpcExit
-                  (result as Effect.Effect<any>)
-                : Stream.isStream(result)
-                  ? Effect.succeed(result)
-                  : (result as Effect.Effect<any>);
-            }),
-            processEvent,
-          )
-          .then((exit) => handleRpcExit(exit));
-    },
-  });
 
 /**
  * The RPC transport reads a Stream result after the call has returned, outside
