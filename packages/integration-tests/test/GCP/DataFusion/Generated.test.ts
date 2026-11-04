@@ -70,51 +70,31 @@ describe.skipIf(!!process.env.FAST)(
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 3_600_000 },
+      { timeout: 1_800_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 3_600_000 });
+    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Instance", { concurrent: true }, () => {
-      test.provider(
-        "CreateInstanceDnsPeering (datafusion.projects.locations.instances.dnsPeerings.create)",
-        () => probe("CreateInstanceDnsPeering", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'CreateInstanceDnsPeering (datafusion.projects.locations.instances.dnsPeerings.create): Instance: the testing project can\'t host Data Fusion: every create fails its operation with code 10 "Failed to perform tenant project creation"',
+        () => Effect.void,
       );
-      test.provider(
-        "DeleteInstanceDnsPeering (datafusion.projects.locations.instances.dnsPeerings.delete)",
-        () => probe("DeleteInstanceDnsPeering", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'DeleteInstanceDnsPeering (datafusion.projects.locations.instances.dnsPeerings.delete): Instance: the testing project can\'t host Data Fusion: every create fails its operation with code 10 "Failed to perform tenant project creation"',
+        () => Effect.void,
       );
-      test.provider(
-        "GetInstance (datafusion.projects.locations.instances.get)",
-        () => probe("GetInstance", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetInstance (datafusion.projects.locations.instances.get): Instance: the testing project can\'t host Data Fusion: every create fails its operation with code 10 "Failed to perform tenant project creation"',
+        () => Effect.void,
       );
-      test.provider(
-        "ListInstanceDnsPeerings (datafusion.projects.locations.instances.dnsPeerings.list)",
-        () => probe("ListInstanceDnsPeerings", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ListInstanceDnsPeerings (datafusion.projects.locations.instances.dnsPeerings.list): Instance: the testing project can\'t host Data Fusion: every create fails its operation with code 10 "Failed to perform tenant project creation"',
+        () => Effect.void,
       );
-      test.provider(
-        "RestartInstance (datafusion.projects.locations.instances.restart)",
-        () => probe("RestartInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'RestartInstance (datafusion.projects.locations.instances.restart): Instance: the testing project can\'t host Data Fusion: every create fails its operation with code 10 "Failed to perform tenant project creation"',
+        () => Effect.void,
       );
     });
 

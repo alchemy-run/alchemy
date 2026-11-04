@@ -58,8 +58,30 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:datafusion", "live"], timeout: 90_000 },
 );
 
-// A Data Fusion instance takes 15–25 minutes to provision, so `--fast` skips the lifecycle.
-test.provider.skipIf(!!process.env.FAST)(
+// Data Fusion provisions each instance in a Google-managed tenant project, and
+// the testing project can't get one: every create fails its operation with
+// code 10 "Failed to perform tenant project creation". Set
+// GCP_TEST_DATAFUSION=1 on a project that can host Data Fusion. An instance
+// takes 15–25 minutes to provision, so `--fast` skips the lifecycle too.
+const tenantProjects = !!process.env.GCP_TEST_DATAFUSION;
+
+test.provider.skipIf(tenantProjects)(
+  "create fails without a Data Fusion tenant project",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* Effect.flip(
+        stack.deploy(fusion({ enableStackdriverLogging: false, labels: { env: "test" } })),
+      );
+      expect(JSON.stringify(error)).toContain("Failed to perform tenant project creation");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:datafusion", "live"], timeout: 600_000 },
+);
+
+test.provider.skipIf(!tenantProjects || !!process.env.FAST)(
   "create, update, and delete a Data Fusion instance",
   (stack) =>
     Effect.gen(function* () {
