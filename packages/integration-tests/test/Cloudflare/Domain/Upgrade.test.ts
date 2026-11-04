@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { passMarker } from "@alchemy.run/cloudflare/Domain/Version";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
@@ -114,21 +115,24 @@ const untilListed = (namespaceIds: ReadonlyArray<string>, until: (count: number)
     ),
   );
 
+/** The Worker's migration Workflow, by its binding. */
+const migrationWorkflow = Effect.fn(function* (scriptName: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const settings = yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName });
+  const binding = (settings.bindings ?? []).find(
+    (binding) => binding.type === "workflow" && binding.name === "AlchemyDomainMigration",
+  );
+  expect(binding).toBeDefined();
+  return (binding as { readonly workflowName: string }).workflowName;
+});
+
 /**
  * How many objects the Worker's migration Workflow moved, from its complete
  * instances (the passes' markers move none).
  */
 const movedBy = Effect.fn(function* (scriptName: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
-  const settings = yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName });
-  const binding = (settings.bindings ?? []).find(
-    (binding) =>
-      binding.type === "workflow" &&
-      "className" in binding &&
-      binding.className === "AlchemyDomainMigration",
-  );
-  if (binding === undefined || !("workflowName" in binding)) return 0;
-  const workflowName = binding.workflowName as string;
+  const workflowName = yield* migrationWorkflow(scriptName);
   const instances = yield* workflows.listInstances
     .items({ accountId, workflowName, status: "complete" })
     .pipe(Stream.runCollect);
@@ -413,23 +417,31 @@ test.provider(
       ];
       yield* untilListed(written, (count) => count > 0);
 
+      // Read the account throughout the upgrade: Worker isolates still on the
+      // old code reach the old class, which forwards to the shared one.
+      const answers: Array<{ status: number; body: string }> = [];
+      const watcher = yield* Effect.forkChild(watch(url, "/Billing/state/a-1", answers));
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeSharedWorker };
         }),
       );
       yield* waitForVersion(url, 1);
+      yield* Effect.sleep("5 seconds");
+      yield* Fiber.interrupt(watcher);
+      expect(answers.length).toBeGreaterThan(10);
+      expect(answers.filter((answer) => answer.status !== 200)).toEqual([]);
+      expect(new Set(answers.map((answer) => answer.body))).toEqual(
+        new Set([JSON.stringify({ owner: "sam" })]),
+      );
       const moving = yield* namespacesOf(scriptName);
       // the old classes stay, next to the shared one
       expect(Object.keys(moving).sort()).toEqual([...Object.keys(legacy), "AlchemyDomain"].sort());
       for (const [cls, id] of Object.entries(legacy)) expect(moving[cls]).toBe(id);
-      const tags = yield* tagsOf(scriptName);
-      expect(tags).toContain("alchemy:domain:v1");
-      const movingTag = tags.find((tag) => tag.startsWith("alchemy:domain:moving:"));
-      expect(movingTag).toBeDefined();
+      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
 
-      // The deploy waited for the move, before anything read them: the
-      // account, the view row, the saga run and the directory and run nodes.
+      // The deploy waited for the move: the account, the view row, the saga
+      // run and the directory and run nodes.
       expect(yield* movedBy(scriptName)).toBeGreaterThanOrEqual(written.length);
 
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
@@ -443,26 +455,40 @@ test.provider(
       yield* call(url, "/Billing/open/a-2/ann", "POST");
       yield* poll(url, "/Billing/owners/a-2", (body) => (body as any)?.owner === "ann");
 
-      // Pretend the move started long enough ago for Cloudflare to list
-      // every old object: the next upload deletes each old class that holds
-      // no data.
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      yield* workers.patchScriptScriptAndVersionSetting({
-        accountId,
-        scriptName,
-        settings: {
-          exports: Object.fromEntries(
-            Object.keys(moving).map((className) => [
-              className,
-              { type: "durable-object", storage: "sqlite" },
-            ]),
-          ),
-          tags: tags.map((tag) => (tag === movingTag ? "alchemy:domain:moving:1" : tag)),
-        },
-      });
+      // A redeploy right away keeps the old classes: Cloudflare may not list
+      // every old object yet.
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeSharedNextWorker };
+        }),
+      );
+      expect(Object.keys(yield* namespacesOf(scriptName)).sort()).toEqual(
+        Object.keys(moving).sort(),
+      );
+
+      // Record a pass from long ago, as if the move started earlier: with the
+      // passes the deploys ran, the next upload deletes every old class.
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workflowName = yield* migrationWorkflow(scriptName);
+      for (const className of Object.keys(legacy)) {
+        const instanceId = passMarker(className, 1);
+        yield* workflows.createInstance({
+          accountId,
+          workflowName,
+          instanceId,
+          params: { className, route: className, ids: [] },
+        });
+        yield* workflows.getInstance({ accountId, workflowName, instanceId, simple: true }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (instance) => instance.status === "complete",
+            times: 30,
+          }),
+        );
+      }
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeSharedWorker };
         }),
       );
       expect(yield* namespacesOf(scriptName)).toEqual({ AlchemyDomain: moving.AlchemyDomain });
@@ -477,4 +503,52 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 1_500_000 },
+);
+
+/**
+ * A Worker deployed before Domain versions existed goes straight to the
+ * shared class: its classes get their version 0 names in the upload, and
+ * keys move on their first call, before the migration has listed them.
+ */
+test.provider(
+  "upgrading a model deployed before Domain versions straight to the shared class keeps its data",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const before = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeNoneWorker };
+        }),
+      );
+      const url = before.worker.url!;
+      const scriptName = before.worker.workerName;
+      yield* waitForVersion(url, null);
+      yield* call(url, "/Billing/open/a-1/sam", "POST");
+      yield* poll(url, "/Billing/owners/a-1", (body) => (body as any)?.owner === "sam");
+      yield* call(url, "/saga/s-1/kim", "POST");
+      yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Running");
+      const legacy = yield* namespacesOf(scriptName);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeSharedWorker };
+        }),
+      );
+      yield* waitForVersion(url, 1);
+      const upgraded = yield* namespacesOf(scriptName);
+      // renamed in place, kept while their objects move
+      expect(upgraded["Billing.AccountAggregate"]).toBe(legacy.AccountAggregate);
+      expect(upgraded["Billing.ApproveWorkflow"]).toBe(legacy.ApproveWorkflow);
+      expect(upgraded.AlchemyDomain).toBeDefined();
+      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
+
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
+      yield* call(url, "/approve/s-1/lee", "POST");
+      yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Completed");
+      expect(yield* call(url, "/Billing/state/s-1")).toEqual({ owner: "kim:lee" });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 600_000 },
 );

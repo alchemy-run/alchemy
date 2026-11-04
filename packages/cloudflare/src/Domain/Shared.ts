@@ -3,6 +3,8 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import {
@@ -43,6 +45,8 @@ export const ID_KEY = "bf:id";
 
 /** Set on a new object once it holds its old object's storage. */
 const ADOPTED = `${TRANSFER_KEY_PREFIX}adopted`;
+/** The next page of the old object's storage, while the move is under way. */
+const CURSOR = `${TRANSFER_KEY_PREFIX}cursor`;
 
 interface Stub {
   readonly [method: string]: (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>;
@@ -179,7 +183,9 @@ const legacyStub = (
 const adopt = (storage: cf.DurableObjectStorage, from: Stub) =>
   Effect.gen(function* () {
     if (yield* Effect.promise(() => storage.get<boolean>(ADOPTED))) return;
-    let cursor: TransferCursor | null = null;
+    // Where an earlier attempt got to: a large object that doesn't move within
+    // one construction (30 seconds) moves over several.
+    let cursor = (yield* Effect.promise(() => storage.get<TransferCursor>(CURSOR))) ?? null;
     let alarm: number | null = null;
     do {
       const page = (yield* from.domainExport!(cursor).pipe(
@@ -188,6 +194,7 @@ const adopt = (storage: cf.DurableObjectStorage, from: Stub) =>
       yield* importPage(storage, page);
       cursor = page.next;
       if (cursor === null) alarm = page.alarm ?? null;
+      else yield* Effect.promise(() => storage.put(CURSOR, cursor));
     } while (cursor !== null);
     yield* rearm(storage, alarm);
     yield* Effect.promise(() => storage.put(ADOPTED, true));
@@ -277,7 +284,20 @@ const mover = (classes: Classes, route: string): ObjectImpl =>
             : classes.namespace.jurisdiction(jurisdiction);
         return namespace.getByName(`${route}/${name}`) as Stub;
       };
-      return {
+      /**
+       * A call from a Worker isolate still on the code from before the upload
+       * (for a few seconds while Cloudflare rolls it out): answered by the
+       * key's new object, which moves this one's storage first.
+       */
+      const forward =
+        (method: string) =>
+        (...args: ReadonlyArray<unknown>) =>
+          Effect.flatMap(key, (name) =>
+            name === null
+              ? Effect.die(new Error(`${route}: an object without a name can't be forwarded`))
+              : target(name)[method]!(...args),
+          );
+      const known: Record<string | symbol, unknown> = {
         [OwnsAlarmCallbacks]: true,
         domainName: () => key,
         domainExport: (cursor: TransferCursor | null) => exportPage(storage, cursor),
@@ -301,9 +321,40 @@ const mover = (classes: Classes, route: string): ObjectImpl =>
             yield* target(name).domainAdopt!().pipe(Effect.orDie);
           }),
         webSocketMessage: (socket: WebSocket) => socket.close(1012, "moved"),
+        webSocketClose: () => Effect.void,
+        webSocketError: () => Effect.void,
+        fetch: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const name = yield* key;
+          if (name === null)
+            return HttpServerResponse.text("This object moved and has no name", { status: 410 });
+          return yield* (
+            target(name) as unknown as {
+              fetch: (
+                request: HttpServerRequest,
+              ) => Effect.Effect<HttpServerResponse.HttpServerResponse, unknown>;
+            }
+          )
+            .fetch(request)
+            .pipe(Effect.orDie);
+        }),
       };
+      // Every other method is forwarded: see `forward`.
+      return new Proxy(known, {
+        get: (target, prop) =>
+          prop in target || typeof prop !== "string" || UNFORWARDED.has(prop)
+            ? target[prop]
+            : forward(prop),
+        getOwnPropertyDescriptor: (target, prop) =>
+          prop in target || typeof prop !== "string" || UNFORWARDED.has(prop)
+            ? Reflect.getOwnPropertyDescriptor(target, prop)
+            : { value: forward(prop), configurable: true, enumerable: false, writable: false },
+      });
     });
   });
+
+/** Members the runtime looks up on an instance that are not calls to forward. */
+const UNFORWARDED = new Set(["then", "toJSON", "constructor", "pipe"]);
 
 /** How many objects one step of the migration moves. */
 const STEP = 25;

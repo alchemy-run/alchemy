@@ -108,22 +108,10 @@ export const deployedVersion = (tags: ReadonlyArray<string>): number | undefined
 /** The Workflow, on a Domain's Worker, that moves version 0 objects to the shared class. */
 export const MIGRATION_WORKFLOW = "AlchemyDomainMigration";
 
-/** The tag that records when a Worker started moving its objects to the shared class (version 1). */
-export const movingTag = (sinceSeconds: number) => `alchemy:domain:moving:${sinceSeconds}`;
-
-/** When a Worker started moving its objects to the shared class, in seconds; `undefined` if it isn't. */
-export const movingSince = (tags: ReadonlyArray<string>): number | undefined => {
-  for (const tag of tags) {
-    const match = /^alchemy:domain:moving:(\d+)$/.exec(tag);
-    if (match) return Number(match[1]);
-  }
-  return undefined;
-};
-
 /**
- * How long after the move starts an old class may be deleted. Cloudflare
- * lists a Durable Object a few minutes after it is first written: until then,
- * a pass over an old class's listed objects may miss some.
+ * How far apart two passes over an old class must be before it may be
+ * deleted. Cloudflare lists a Durable Object a few minutes after it is first
+ * written: until then, a pass over an old class's listed objects may miss some.
  */
 export const LISTING_LAG_SECONDS = 15 * 60;
 
@@ -144,46 +132,44 @@ const fnv = (text: string) => {
 export const passMarker = (className: string, listedAt: number) =>
   `moved-${fnv(className)}-${listedAt}`;
 
-/** When the latest complete pass over `className` listed its objects, from the Workflow's instance ids. */
-export const lastPass = (className: string, instanceIds: Iterable<string>): number | undefined => {
+/** When each complete pass over `className` listed its objects, from the Workflow's instance ids. */
+export const passesOf = (className: string, instanceIds: Iterable<string>): Array<number> => {
   const prefix = `moved-${fnv(className)}-`;
-  let last: number | undefined;
+  const passes: Array<number> = [];
   for (const id of instanceIds) {
     if (!id.startsWith(prefix)) continue;
     const at = Number(id.slice(prefix.length));
-    if (Number.isInteger(at) && (last === undefined || at > last)) last = at;
+    if (Number.isInteger(at)) passes.push(at);
   }
-  return last;
+  return passes;
 };
 
 /**
  * The version 0 classes an upload keeps live, to move their objects to the
- * shared class. A class is kept while the Worker has it, until a pass over
- * its objects that listed them at least {@link LISTING_LAG_SECONDS} after the
- * move started has completed: every object written before the move is
- * listed by then, and none is written to the old class after it. The others
- * are left out, and the upload deletes them.
+ * shared class. A class is kept while the Worker has it, until it has two
+ * complete passes at least {@link LISTING_LAG_SECONDS} apart. The first pass
+ * runs after the upload that started the move, and nothing writes to the old
+ * class after that upload; by the later pass, Cloudflare lists every object
+ * written before it, so that pass moved them all. The others are left out,
+ * and the upload deletes them.
  */
 export const keptMovers = ({
   movers,
   deployedClasses,
-  since,
   passes,
 }: {
   readonly movers: ReadonlyArray<DomainClass>;
   /** The classes the Worker has now, and the classes this upload renames to. */
   readonly deployedClasses: ReadonlySet<string>;
-  /** When the move started, in seconds: see {@link movingSince}. */
-  readonly since: number | undefined;
   /** The migration Workflow's complete instances: see {@link passMarker}. */
   readonly passes: ReadonlyArray<string>;
 }) => {
   const kept = new Set<string>();
   for (const mover of movers) {
     if (!deployedClasses.has(mover.className)) continue;
-    const pass = lastPass(mover.className, passes);
+    const times = passesOf(mover.className, passes);
     const settled =
-      since !== undefined && pass !== undefined && pass >= since + LISTING_LAG_SECONDS;
+      times.length > 0 && Math.max(...times) - Math.min(...times) >= LISTING_LAG_SECONDS;
     if (!settled) kept.add(mover.className);
   }
   return kept;

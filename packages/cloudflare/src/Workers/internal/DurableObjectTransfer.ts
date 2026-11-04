@@ -40,7 +40,24 @@ export const OwnsAlarmCallbacks = "~alchemy/ownsAlarmCallbacks";
 /** Keys the transfer itself uses: never copied. */
 export const TRANSFER_KEY_PREFIX = "~transfer:";
 
-const PAGE = 500;
+/** Key-value entries per page: at most 128 KiB each, so a page stays well under RPC's 32 MiB. */
+const KV_PAGE = 128;
+/** Rows per page, cut short once they pass {@link PAGE_BYTES}. */
+const SQL_PAGE = 200;
+const PAGE_BYTES = 8 * 1024 * 1024;
+
+/** A row's size, roughly, as RPC sends it. */
+const sizeOf = (row: ReadonlyArray<unknown>) => {
+  let size = 0;
+  for (const value of row)
+    size +=
+      typeof value === "string"
+        ? value.length * 2
+        : value instanceof ArrayBuffer
+          ? value.byteLength
+          : 8;
+  return size;
+};
 /** `storage.put` takes at most 128 entries at once. */
 const PUT_BATCH = 128;
 
@@ -48,7 +65,7 @@ const PUT_BATCH = 128;
 const userObjects = (sql: cf.SqlStorage) =>
   sql
     .exec<{ name: string; sql: string; type: string }>(
-      "SELECT name, sql, type FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END, rowid",
+      "SELECT name, sql, type FROM sqlite_master WHERE sql IS NOT NULL AND substr(name, 1, 4) != '_cf_' AND substr(name, 1, 7) != 'sqlite_' ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END, rowid",
     )
     .toArray();
 
@@ -63,7 +80,7 @@ export const exportPage = (
     if (at.phase === "kv") {
       const listed = yield* Effect.promise(() =>
         storage.list(
-          at.after === undefined ? { limit: PAGE } : { limit: PAGE, startAfter: at.after },
+          at.after === undefined ? { limit: KV_PAGE } : { limit: KV_PAGE, startAfter: at.after },
         ),
       );
       const entries = [...listed.entries()].filter(([key]) => !key.startsWith(TRANSFER_KEY_PREFIX));
@@ -71,7 +88,7 @@ export const exportPage = (
       return {
         entries,
         next:
-          listed.size === PAGE && last !== undefined
+          listed.size === KV_PAGE && last !== undefined
             ? ({ phase: "kv", after: last } as const)
             : ({ phase: "sql", table: 0, offset: 0 } as const),
       } satisfies TransferPage;
@@ -89,15 +106,23 @@ export const exportPage = (
     }
     const name = table.name;
     const result: cf.SqlStorageCursor<Record<string, cf.SqlStorageValue>> = yield* Effect.sync(() =>
-      storage.sql.exec(`SELECT * FROM ${quote(name)} LIMIT ? OFFSET ?`, PAGE, at.offset),
+      storage.sql.exec(`SELECT * FROM ${quote(name)} LIMIT ? OFFSET ?`, SQL_PAGE, at.offset),
     );
-    const values: Array<Array<unknown>> = yield* Effect.sync(() => Array.from(result.raw()));
+    const rows: Array<Array<unknown>> = yield* Effect.sync(() => Array.from(result.raw()));
+    // Cut the page short once it is large: large rows move a few at a time.
+    const values: Array<Array<unknown>> = [];
+    let bytes = 0;
+    for (const row of rows) {
+      if (values.length > 0 && bytes + sizeOf(row) > PAGE_BYTES) break;
+      values.push(row);
+      bytes += sizeOf(row);
+    }
     return {
       schema,
       rows: { table: name, columns: result.columnNames, values },
       next:
-        values.length === PAGE
-          ? ({ phase: "sql", table: at.table, offset: at.offset + PAGE } as const)
+        values.length < rows.length || rows.length === SQL_PAGE
+          ? ({ phase: "sql", table: at.table, offset: at.offset + values.length } as const)
           : ({ phase: "sql", table: at.table + 1, offset: 0 } as const),
     } satisfies TransferPage;
   });

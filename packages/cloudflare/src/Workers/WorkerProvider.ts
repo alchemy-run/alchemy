@@ -3784,17 +3784,6 @@ export const LiveWorkerProvider = () =>
 
         // The Domain version goes up with every upload that can change the
         // classes, in the same request, so the tag and the classes never disagree.
-        // While old Domain classes stay live to move their objects, record
-        // when the move started: they may be deleted only once Cloudflare
-        // lists every object written before it.
-        const hostedClassNames = new Set(currentDoBindings.map((binding) => binding.className));
-        const moving = domainClasses.some(
-          (domainClass) => domainClass.mover && hostedClassNames.has(domainClass.className),
-        );
-        const movingSince =
-          (deployedDomainVersion !== undefined && deployedDomainVersion >= 1
-            ? DomainVersion.movingSince(oldTags)
-            : undefined) ?? Math.floor((yield* Clock.currentTimeMillis) / 1000);
         const domainTags =
           domainClasses.length > 0
             ? [
@@ -3803,7 +3792,6 @@ export const LiveWorkerProvider = () =>
                 DomainVersion.versionTag(
                   domainClasses.some((domainClass) => domainClass.mover) ? 1 : 0,
                 ),
-                ...(moving ? [DomainVersion.movingTag(movingSince)] : []),
               ]
             : [];
         const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags, ...domainTags];
@@ -5840,7 +5828,6 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
   }))
     deployedClasses.add(to);
   // The migration Workflow's complete passes: see `DomainVersion.passMarker`.
-  const since = DomainVersion.movingSince(tags);
   const workflowName = bindings
     .flatMap((b) => b.data.bindings ?? [])
     .find(
@@ -5848,7 +5835,7 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
         item.type === "workflow" && item.className === DomainVersion.MIGRATION_WORKFLOW,
     );
   const passes =
-    since === undefined || workflowName === undefined || !("workflowName" in workflowName)
+    workflowName === undefined || !("workflowName" in workflowName)
       ? []
       : Array.from(
           yield* workflowsApi.listInstances
@@ -5863,7 +5850,7 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
               Effect.catchTag("WorkflowNotFound", () => Effect.succeed([] as Array<string>)),
             ),
         );
-  const kept = DomainVersion.keptMovers({ movers, deployedClasses, since, passes });
+  const kept = DomainVersion.keptMovers({ movers, deployedClasses, passes });
   const dropped = new Set(
     movers.map((mover) => mover.className).filter((className) => !kept.has(className)),
   );

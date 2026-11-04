@@ -36,8 +36,8 @@ export interface MigrationProps {
 export interface MigrationAttrs {
   accountId: string;
   workflowName: string;
-  /** The Workflow instances the last deploy waited for. */
-  instanceIds: string[];
+  /** How many Workflow instances the last deploy waited for. */
+  instances: number;
   /** How many objects the last deploy moved. */
   moved: number;
 }
@@ -85,7 +85,28 @@ export class MigrationStillRunning extends Data.TaggedError("MigrationStillRunni
 
 /** Old objects one Workflow instance moves: its params stay well under the limit. */
 const CHUNK = 1_000;
-const POLL = "2 seconds";
+/** Instances one bulk call starts. */
+const BULK = 100;
+const POLL = "5 seconds";
+
+/** How many objects an instance couldn't move, from its output (`{ moved, skipped }`). */
+const skippedOf = (output: unknown): number => {
+  const value = typeof output === "string" ? parse(output) : output;
+  return value !== null &&
+    typeof value === "object" &&
+    "skipped" in value &&
+    typeof value.skipped === "number"
+    ? value.skipped
+    : 0;
+};
+
+const parse = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
 
 /** Workflows answers for a Workflow uploaded moments before with an internal error for a while. */
 const retryInternal = {
@@ -117,20 +138,23 @@ const MigrationLive = () =>
     }),
     reconcile: Effect.fn(function* ({ instanceId: resource, news, session }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
+      const workflowName = news.workflowName;
       const started = yield* Clock.currentTimeMillis;
       // Every object listed from here on is moved by this pass.
       const listedAt = Math.floor(started / 1000);
       const timeout = (news.timeoutSeconds ?? 1800) * 1000;
+      const attrs = { accountId, workflowName };
 
-      // The old classes the upload kept, and their objects that still hold data.
+      // The old classes the upload kept, and their objects that may hold data.
+      const live = news.classes.filter(({ className }) => news.namespaces[className] !== undefined);
       const batches: Array<{ className: string; route: string; ids: string[] }> = [];
-      for (const { className, route } of news.classes) {
-        const id = news.namespaces[className];
-        if (id === undefined) continue;
-        const objects = yield* durableObjects.listNamespaceObjects.items({ accountId, id }).pipe(
-          Stream.filter((object) => object.hasStoredData === true),
-          Stream.runCollect,
-        );
+      for (const { className, route } of live) {
+        const objects = yield* durableObjects.listNamespaceObjects
+          .items({ accountId, id: news.namespaces[className]! })
+          .pipe(
+            Stream.filter((object) => object.hasStoredData === true),
+            Stream.runCollect,
+          );
         const ids = Array.from(objects, (object) => object.id).filter(
           (id): id is string => typeof id === "string",
         );
@@ -138,67 +162,90 @@ const MigrationLive = () =>
           batches.push({ className, route, ids: ids.slice(i, i + CHUNK) });
       }
       const total = batches.reduce((sum, batch) => sum + batch.ids.length, 0);
-      const attrs = { accountId, workflowName: news.workflowName };
-
-      /** Start an instance, or find it started. */
-      const create = (instanceId: string, params: object) =>
-        workflows
-          .createInstance({ accountId, workflowName: news.workflowName, instanceId, params })
-          .pipe(
-            Effect.asVoid,
-            Effect.catchTag("InstanceAlreadyExists", () => Effect.void),
-            // The Workflow is uploaded with the Worker: it can take a moment to appear.
-            Effect.retry({
-              while: (error) =>
-                error._tag === "WorkflowNotFound" || error._tag === "WorkflowInternalError",
-              schedule: Schedule.spaced("2 seconds"),
-              times: 30,
-            }),
-          );
-      /**
-       * Record each class's complete pass as an instance of the Workflow that
-       * moves nothing: the Worker's next upload reads them, and deletes a
-       * class once a pass has seen every object written before the move.
-       */
-      const markPasses = Effect.forEach(
-        news.classes.filter(({ className }) => news.namespaces[className] !== undefined),
-        ({ className, route }) =>
-          create(passMarker(className, listedAt), { className, route, ids: [] }),
-        { discard: true },
+      yield* session.note(
+        `Moving ${total} Domain objects of ${live.length} classes to the shared class ...`,
+        { kind: "status" },
       );
-      if (total === 0) {
-        yield* markPasses;
-        return { ...attrs, instanceIds: [], moved: 0 };
-      }
 
-      const instanceIds: Array<string> = [];
-      for (const batch of batches) {
-        const instanceId = `migrate-${resource.slice(0, 12)}-${started.toString(36)}-${hash(`${batch.className}|${batch.ids.join(",")}`)}`;
-        yield* create(instanceId, batch);
-        instanceIds.push(instanceId);
-      }
+      /** Start instances, a hundred per call; one started before is found started. */
+      const create = (instances: ReadonlyArray<{ readonly id: string; readonly params: object }>) =>
+        Effect.forEach(
+          Array.from({ length: Math.ceil(instances.length / BULK) }, (_, i) =>
+            instances.slice(i * BULK, (i + 1) * BULK),
+          ),
+          (group) =>
+            workflows
+              .bulkInstance({
+                accountId,
+                workflowName,
+                body: group.map(({ id, params }) => ({ instanceId: id, params })),
+              })
+              .pipe(
+                Effect.asVoid,
+                // A deploy started again: one by one, skipping those that exist.
+                Effect.catchTag("InstanceAlreadyExists", () =>
+                  Effect.forEach(
+                    group,
+                    ({ id, params }) =>
+                      workflows
+                        .createInstance({ accountId, workflowName, instanceId: id, params })
+                        .pipe(
+                          Effect.asVoid,
+                          Effect.catchTag("InstanceAlreadyExists", () => Effect.void),
+                        ),
+                    { discard: true },
+                  ),
+                ),
+                // The Workflow is uploaded with the Worker: it can take a moment to appear.
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "WorkflowNotFound" ||
+                    error._tag === "WorkflowInternalError" ||
+                    error._tag === "CloudflareRateLimited",
+                  schedule: Schedule.spaced("2 seconds"),
+                  times: 30,
+                }),
+              ),
+          { discard: true },
+        );
 
-      const pending = new Map(instanceIds.map((id, i) => [id, batches[i]!.ids.length]));
-      let moved = 0;
-      while (pending.size > 0) {
-        for (const [instanceId, size] of pending) {
-          const status = yield* workflows
-            .getInstance({ accountId, workflowName: news.workflowName, instanceId, simple: true })
+      const instances = batches.map((batch) => ({
+        id: `migrate-${resource.slice(0, 12)}-${started.toString(36)}-${hash(`${batch.className}|${batch.ids.join(",")}`)}`,
+        params: batch,
+      }));
+      yield* create(instances);
+
+      // Wait by listing the Workflow's instances, not by asking each one: a
+      // large Domain has thousands, and the API allows 1,200 calls per five minutes.
+      const since = new Date(started - 60_000).toISOString().replace(/\.\d+Z$/, "Z");
+      const listed = (status: "complete" | "errored" | "terminated") =>
+        workflows.listInstances
+          .items({ accountId, workflowName, status, dateStart: since, perPage: 100 })
+          .pipe(
+            Stream.map((instance) => instance.id),
+            Stream.runCollect,
+            Effect.map((ids) => new Set(ids)),
+            Effect.retry(retryInternal),
+          );
+      const ours = new Map(instances.map(({ id, params }) => [id, params]));
+      let complete = new Set<string>();
+      while (true) {
+        const ended = new Set([...(yield* listed("errored")), ...(yield* listed("terminated"))]);
+        const failed = instances.find(({ id }) => ended.has(id));
+        if (failed !== undefined) {
+          const instance = yield* workflows
+            .getInstance({ accountId, workflowName, instanceId: failed.id })
             .pipe(Effect.retry(retryInternal));
-          if (status.status === "complete") {
-            pending.delete(instanceId);
-            moved += size;
-          } else if (status.status === "errored" || status.status === "terminated") {
-            const failed = yield* workflows
-              .getInstance({ accountId, workflowName: news.workflowName, instanceId })
-              .pipe(Effect.retry(retryInternal));
-            return yield* new MigrationFailed({
-              message: `Moving Domain objects to the shared class ended ${status.status}: ${failed.error?.message ?? "no error reported"}. Deploy again to move the rest; nothing moved is lost.`,
-              instanceId,
-            });
-          }
+          return yield* new MigrationFailed({
+            message: `Moving Domain objects of ${failed.params.className} to the shared class failed: ${instance.error?.message ?? "no error reported"}. Deploy again to move the rest; nothing that moved is lost.`,
+            instanceId: failed.id,
+          });
         }
-        if (pending.size === 0) break;
+        complete = new Set([...(yield* listed("complete"))].filter((id) => ours.has(id)));
+        if (complete.size === instances.length) break;
+        const moved = instances
+          .filter(({ id }) => complete.has(id))
+          .reduce((sum, { params }) => sum + params.ids.length, 0);
         const elapsed = (yield* Clock.currentTimeMillis) - started;
         if (elapsed > timeout)
           return yield* new MigrationStillRunning({
@@ -210,9 +257,49 @@ const MigrationLive = () =>
         );
         yield* Effect.sleep(POLL);
       }
-      yield* markPasses;
+
+      // An object that knows neither its name nor its key can't be moved: its
+      // class is never recorded as moved, so no upload deletes it.
+      const skipped = new Map<string, number>();
+      yield* Effect.forEach(
+        instances,
+        ({ id, params }) =>
+          workflows.getInstance({ accountId, workflowName, instanceId: id }).pipe(
+            Effect.retry({
+              while: (error) =>
+                error._tag === "WorkflowInternalError" || error._tag === "CloudflareRateLimited",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 30,
+            }),
+            Effect.map((instance) => {
+              const count = skippedOf(instance.output);
+              if (count > 0)
+                skipped.set(params.className, (skipped.get(params.className) ?? 0) + count);
+            }),
+          ),
+        { concurrency: 4, discard: true },
+      );
+      for (const [className, count] of skipped)
+        yield* session.note(
+          `${count} objects of ${className} know neither their name nor their key, so they can't move to the shared class: the class is kept.`,
+          { kind: "status" },
+        );
+
+      /**
+       * Record each class's complete pass as an instance of the Workflow that
+       * moves nothing: the Worker's next upload reads them, and deletes a
+       * class once a pass has seen every object written before the move.
+       */
+      yield* create(
+        live
+          .filter(({ className }) => !skipped.has(className))
+          .map(({ className, route }) => ({
+            id: passMarker(className, listedAt),
+            params: { className, route, ids: [] },
+          })),
+      );
       yield* session.note(`Moved ${total} Domain objects to the shared class`, { kind: "status" });
-      return { ...attrs, instanceIds, moved: total };
+      return { ...attrs, instances: instances.length, moved: total };
     }),
     // The instances end by themselves; the old classes go with the Worker's next upload.
     delete: Effect.fn(function* () {}),
@@ -228,7 +315,7 @@ const MigrationLocal = () =>
       return output;
     }),
     reconcile: Effect.fn(function* ({ news }) {
-      return { accountId: "dev", workflowName: news.workflowName, instanceIds: [], moved: 0 };
+      return { accountId: "dev", workflowName: news.workflowName, instances: 0, moved: 0 };
     }),
     delete: Effect.fn(function* () {}),
   });
