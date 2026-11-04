@@ -1,6 +1,6 @@
 ---
 name: write-docs
-description: Write or rewrite the website docs for an Alchemy provider (AWS, Cloudflare, Fly, PlanetScale, any `@alchemy.run/*` package) at the house quality bar — a hub that says what the platform is, a "What is X?" page that teaches the platform's concepts once each, an "Accounts & access" section first, concept chapters structured like the platform, DAG diagrams, small verified snippets, and a sidebar ordered by reader concern. Use for "write the docs for X", "rewrite the Fly docs", "bring the X docs up to par", "/write-docs neon", "add a What is X page", or any provider docs overhaul.
+description: Write or rewrite the website docs for an Alchemy provider (AWS, Cloudflare, Fly, PlanetScale, any `@alchemy.run/*` package) at the house quality bar — a hub that says what the platform is, a "What is X?" page that teaches the platform's concepts once each, an "Accounts & access" section first, concept chapters structured like the platform, diagrams chosen for the question each section answers (sequences, timelines, maps, logs, state machines, record layouts, branch graphs, responsibility charts, borders for containment), small verified snippets, and a sidebar ordered by reader concern. Use for "write the docs for X", "rewrite the Fly docs", "bring the X docs up to par", "/write-docs neon", "add a What is X page", or any provider docs overhaul.
 metadata:
   internal: true
 ---
@@ -53,14 +53,20 @@ from JSDoc (see AGENTS.md "Documentation Generation").
    overstated capability is worse than a missing paragraph.
 6. **Wire up structure.** Register sidebar entries, icons and llms coverage. See
    [structure](references/structure.md).
-7. **Build, look, push.** Run `pnpm run build` in `website/` (it regenerates
+7. **Design each diagram on purpose.** For every diagram, ask what a reader of
+   that section would get wrong, pick the component that shows it (see
+   [Diagrams](references/structure.md#diagrams)), and fill it with the page's
+   own names and values. If no component fits, build one in
+   `website/src/components/diagrams/` in the shared style, try it on its best
+   page, and show the user before using it elsewhere.
+8. **Build, look, push.** Run `pnpm run build` in `website/` (it regenerates
    llms and the reference). Put every new or changed diagram on one sheet with
    `scripts/diagram-sheet.py` and read it, screenshot whole pages with
    `scripts/screenshot.sh`, and check links with `scripts/check-links.sh`. Commit
    and push after each coherent change; don't batch a day's work. Docs-only PRs
    get a `docs(<scope>):` title. Add the `deploy-website` label for a preview at
    `pr-<N>-alchemy-website-preview.testing-2b2.workers.dev`.
-8. **Iterate on feedback in the same PR.** Apply feedback everywhere it applies,
+9. **Iterate on feedback in the same PR.** Apply feedback everywhere it applies,
    not just on the page the user pointed at. When they flag one hub, fix every hub.
    Then grep the whole docs tree for the rejected phrasing (see
    [verification](references/verification.md#sweep-for-rejected-phrasing)), and
@@ -112,11 +118,19 @@ Each of these was a correction. Don't relearn them.
   that one. Use `groups` on `DAG`.
 - **Pick the visual by the question.** A `DAG` was the only tool, and it was
   "so overused": a box-and-arrow picture of SQS, Lambda or KV showed nothing a
-  reader didn't already know. Sequence diagrams, timelines, maps, logs, state
-  machines, record layouts, matrices, phase tables and branch graphs each answer
-  a different question. The `Responsibility` chart for choosing a runtime was
-  the one the user called great: it shows the idea itself.
+  reader didn't already know. Now there's a component per question: `Sequence`,
+  `Timeline`, `WorldMap`, `Log`, `StateMachine`, `Records`, `BranchGraph`,
+  `Responsibility`, and `DAG` for containment and real flows. The
+  `Responsibility` chart for choosing a runtime was the one the user called
+  great: it shows the idea itself, a staircase of who manages what.
   More: [Diagrams](references/structure.md#diagrams).
+- **Draw movement and time, not tables.** Two components were built, rejected
+  and deleted: `Phases` (a grid of sentences, half of them empty dashes) and
+  `Matrix` (an allowed/denied truth table). Both said in boxes what a paragraph
+  already said. Their pages now show a value travelling (`Sequence`), code
+  running at two moments (`Timeline`), and a call passing two checks
+  (`Sequence`). When the user rejects a kind of visual, remove the component
+  and its rows in the skill, not just the one instance.
 - **Containment is a border, never an arrow.** Whenever one thing holds another
   (an organization its accounts, a Bucket its objects, a cluster its instances,
   a namespace its objects, a role its policies), draw the holder as a border

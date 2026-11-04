@@ -113,6 +113,29 @@ Rules for every diagram:
   the dev server and read the sheet. Overlapping labels, overflowing text,
   missing edges and clipped bottoms don't show up any other way.
 
+### Component gotchas
+
+Each of these came up on a sheet and was fixed:
+
+- **Timeline:** at `end={10}` one unit is about 56px, and a bar's label needs
+  about 6.4px a character plus 12. A label that doesn't fit spills after the bar
+  and runs into the next one, so widen the bar, shorten the label, or drop it
+  and add a `legend` (cold starts, waits, failures).
+- **Sequence:** keep arrow labels shorter than the gap between lifelines
+  (about 24 characters for neighbours). Notes and self-loops size themselves.
+  Use `dashed` for replies and later deliveries, `tone: "warn"` for the bad
+  path, and a `divider` to start an alternative ("or, if the Worker crashes").
+- **WorldMap:** two places closer than about 10° overlap, so move one to a
+  nearby real city (Madrid rather than Paris next to Amsterdam). Label only the
+  arc with the most room, and let the caption cover the rest. `crop` to the
+  region, and `center={180}` for a route across the Pacific.
+- **Log:** a cursor `below` a lane needs room under it; it's there, but check
+  the label isn't clipped. Keep records short (`#1 paid`, `INSERT #1`).
+- **StateMachine:** a pair of opposite transitions needs `bend` around 0.7 on
+  both, or their labels overlap.
+- **Records:** order rows the way the store keeps them (lexicographic keys) and
+  highlight exactly what the query returns.
+
 ### DAG details
 
 - **Auto layout** (`layer` on nodes) suits a left-to-right flow. **Grid layout**
