@@ -28,17 +28,21 @@ const backend = Flag.String("backend").pipe(
   Flag.withDefault("configured"),
 );
 /**
- * The flags of every provider's state store, such as `--name` or `--domain`.
- * Stores that take the same flag share it, and the first one provides its
- * help. Which ones a backend takes is checked when the store is opened.
+ * The flags of every provider's state store, such as `--name` or `--domain`,
+ * each optional so a flag not given is `undefined`. Stores that take the same
+ * flag share it, and the first one provides its help. Which ones a backend
+ * takes is checked when the store is opened.
  */
 const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Contributions>) =>
-  contributions
-    .flatMap((provider) => Object.values(provider.stateStores ?? {}))
-    .reduce<Record<string, Flag.Flag<unknown>>>(
-      (flags, store) => Record.union(flags, store.flags ?? {}, (first) => first),
-      {},
-    );
+  Record.map(
+    contributions
+      .flatMap((provider) => Object.values(provider.stateStores ?? {}))
+      .reduce<Record<string, Flag.Flag<unknown>>>(
+        (flags, store) => Record.union(flags, store.flags ?? {}, (first) => first),
+        {},
+      ),
+    (flag) => flag.pipe(Flag.optional, Flag.map(Option.getOrUndefined)),
+  );
 
 /** The store options `alchemy state` was given, shared with its subcommands. */
 class StoreOptions extends Context.Service<StoreOptions, Contributions.StateStoreOptions>()(

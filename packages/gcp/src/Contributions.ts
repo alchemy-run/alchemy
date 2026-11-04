@@ -13,7 +13,6 @@ export default Contributions.make({
       flags: {
         name: Flag.String("name").pipe(
           Flag.withDescription("A store other than the project's default, by name"),
-          Flag.withDefault(undefined),
         ),
       },
       load: Contributions.lazy(

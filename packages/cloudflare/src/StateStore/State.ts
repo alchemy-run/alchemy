@@ -88,9 +88,9 @@ export const state = (options: CloudflareStateOptions = {}) =>
       const context = yield* Effect.context<Effect.Services<typeof init>>();
       const store: Provisioning.StoreRef = {
         backend: "cloudflare",
-        name: workerName,
+        flags: { name: workerName, domain },
         label: `Cloudflare State Store '${scriptName}'`,
-        configured: options.accountId !== undefined || domain !== undefined,
+        configured: options.accountId !== undefined,
       };
 
       const init = Effect.gen(function* () {

@@ -98,17 +98,17 @@ const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?
 /** The AWS environment of the profile core runs the operation under. */
 const environment = stateEnvironment();
 
-/**
- * The DynamoDB state store's lifecycle, for `Alchemist.State` and
- * `alchemy state`. The store also creates its table on first use, so
- * bootstrapping is only needed to provision it ahead of time.
- */
 /** The DynamoDB state store's options. */
 export interface DynamoDBStateStoreOptions {
   /** A store other than the default, by name. */
   readonly name?: string;
 }
 
+/**
+ * The DynamoDB state store's lifecycle, for `Alchemist.State` and
+ * `alchemy state`. The store also creates its table on first use, so
+ * bootstrapping is only needed to provision it ahead of time.
+ */
 export const lifecycle: StateStoreLifecycle<DynamoDBStateStoreOptions> = {
   bootstrap: ({ options }) =>
     bootstrapStateTable(options?.name).pipe(

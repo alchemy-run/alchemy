@@ -3,7 +3,6 @@ import * as Flag from "effect/cli/Flag";
 
 const name = Flag.String("name").pipe(
   Flag.withDescription("A store other than the account's default, by name"),
-  Flag.withDefault(undefined),
 );
 
 export default Contributions.make({

@@ -13,11 +13,9 @@ export default Contributions.make({
       flags: {
         name: Flag.String("name").pipe(
           Flag.withDescription("The store's full Worker name, for a store other than the default"),
-          Flag.withDefault(undefined),
         ),
         domain: Flag.String("domain").pipe(
           Flag.withDescription("Hostname the store is served on, when it has a custom domain"),
-          Flag.withDefault(undefined),
         ),
       },
       load: Contributions.lazy(

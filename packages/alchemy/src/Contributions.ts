@@ -120,15 +120,12 @@ export interface StateStore {
    * The flags `alchemy state` takes for this store with `--backend`, for what
    * a profile alone can't tell it: a store other than the default, or where
    * it is served. Each parses into the store's options under its key. Flags
-   * are built without loading the store, and leaving one out should parse to
-   * `undefined` so the store uses its default:
+   * are built without loading the store, and the CLI makes each optional: one
+   * that isn't given is `undefined`, so the store applies its own default.
    *
    * ```ts
    * flags: {
-   *   domain: Flag.String("domain").pipe(
-   *     Flag.withDescription("Hostname the store is served on"),
-   *     Flag.withDefault(undefined),
-   *   ),
+   *   domain: Flag.String("domain").pipe(Flag.withDescription("Hostname the store is served on")),
    * },
    * ```
    *
