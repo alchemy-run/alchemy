@@ -337,7 +337,7 @@ const source = (classes: Classes, route: string, impl: ObjectImpl): ObjectImpl =
     const state = yield* DurableObjectState;
     const raw = state.raw?.storage;
     // At deploy time the class is declared with a placeholder state.
-    if (raw === undefined) return yield* impl;
+    if (raw?.kv === undefined) return yield* impl;
     // A move already under way keeps logging after a restart.
     Move.resumeSource(raw);
     const inner = yield* impl;

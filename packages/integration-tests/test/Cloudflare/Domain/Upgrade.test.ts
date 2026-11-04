@@ -15,7 +15,6 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { getWorkerTags } from "../Utils/Worker.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import SharedBillingWorker from "./fixtures/shared-billing-worker.ts";
 import SharedNoneWorker from "./fixtures/shared-none-worker.ts";
@@ -26,6 +25,7 @@ import UpgradePlainWorker from "./fixtures/upgrade-plain-worker.ts";
 import UpgradeSharedNextWorker from "./fixtures/upgrade-shared-next-worker.ts";
 import UpgradeSharedWorker from "./fixtures/upgrade-shared-worker.ts";
 import UpgradeWorker from "./fixtures/upgrade-worker.ts";
+import { backdatePasses, movedBy, namespacesOf, tagsOf, untilListed, watch } from "./move.ts";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
@@ -69,89 +69,6 @@ const waitForVersion = (url: string, version: number | null) =>
 /** Poll a route until `until` holds. */
 const poll = (url: string, path: string, until: (body: unknown) => boolean) =>
   call(url, path).pipe(Effect.repeat({ schedule: Schedule.spaced("1 second"), until, times: 30 }));
-
-/** The Durable Object classes Cloudflare hosts for a script, by class name. */
-const namespacesOf = Effect.fn(function* (scriptName: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  const namespaces = yield* durableObjects.listNamespaces
-    .items({ accountId })
-    .pipe(Stream.runCollect);
-  return Object.fromEntries(
-    namespaces.flatMap((namespace) =>
-      namespace.script === scriptName && namespace.class ? [[namespace.class, namespace.id]] : [],
-    ),
-  );
-});
-
-/**
- * Read `path` every 250 ms, without retrying, until interrupted: every answer
- * the Worker gave while a deploy rolled out.
- */
-const watch = (url: string, path: string, answers: Array<{ status: number; body: string }>) =>
-  HttpClient.execute(
-    HttpClientRequest.get(`${url}${path}`).pipe(HttpClientRequest.setHeader("connection", "close")),
-  ).pipe(
-    Effect.flatMap((res) => Effect.map(res.text, (body) => ({ status: res.status, body }))),
-    Effect.catch((error) => Effect.succeed({ status: 0, body: String(error) })),
-    Effect.tap((answer) => Effect.sync(() => answers.push(answer))),
-    Effect.repeat(Schedule.spaced("250 millis")),
-  );
-
-/** How many objects of a namespace Cloudflare lists as holding data. */
-const holdingData = Effect.fn(function* (namespaceId: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  const objects = yield* durableObjects.listNamespaceObjects
-    .items({ accountId, id: namespaceId })
-    .pipe(Stream.runCollect);
-  return Array.from(objects).filter((object) => object.hasStoredData === true).length;
-});
-
-/** Poll every namespace until `until` holds for its count of objects holding data. */
-const untilListed = (namespaceIds: ReadonlyArray<string>, until: (count: number) => boolean) =>
-  Effect.forEach(namespaceIds, (id) =>
-    holdingData(id).pipe(
-      // Cloudflare lists an object a few minutes after it is written.
-      Effect.repeat({ schedule: Schedule.spaced("10 seconds"), until, times: 48 }),
-    ),
-  );
-
-/** The Worker's migration Workflow, by its binding. */
-const migrationWorkflow = Effect.fn(function* (scriptName: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  const settings = yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName });
-  const binding = (settings.bindings ?? []).find(
-    (binding) => binding.type === "workflow" && binding.name === "AlchemyDomainMigration",
-  );
-  expect(binding).toBeDefined();
-  return (binding as { readonly workflowName: string }).workflowName;
-});
-
-/** How many objects the Worker's migration runs moved, from their complete instances. */
-const movedBy = Effect.fn(function* (scriptName: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  const workflowName = yield* migrationWorkflow(scriptName);
-  const instances = yield* workflows.listInstances
-    .items({ accountId, workflowName, status: "complete" })
-    .pipe(Stream.runCollect);
-  let moved = 0;
-  for (const instance of instances) {
-    // Each deploy's run reports how many objects it moved.
-    if (!instance.id.startsWith("mg-run-")) continue;
-    const { output } = yield* workflows.getInstance({
-      accountId,
-      workflowName,
-      instanceId: instance.id,
-    });
-    const parsed = typeof output === "string" ? JSON.parse(output) : output;
-    moved += (parsed as { progress?: { instances?: number } } | null)?.progress?.instances ?? 0;
-  }
-  return moved;
-});
-
-const tagsOf = Effect.fn(function* (scriptName: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  return yield* getWorkerTags(scriptName, accountId);
-});
 
 /**
  * A Worker deployed before Domain versions existed named its classes after
@@ -466,24 +383,7 @@ test.provider(
 
       // Record a pass from long ago, as if the move started earlier: with the
       // passes the deploys ran, the next upload deletes every old class.
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const workflowName = yield* migrationWorkflow(scriptName);
-      for (const className of Object.keys(legacy)) {
-        const instanceId = passMarker(className, 1);
-        yield* workflows.createInstance({
-          accountId,
-          workflowName,
-          instanceId,
-          params: { op: "mark" },
-        });
-        yield* workflows.getInstance({ accountId, workflowName, instanceId, simple: true }).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("1 second"),
-            until: (instance) => instance.status === "complete",
-            times: 30,
-          }),
-        );
-      }
+      yield* backdatePasses(scriptName, Object.keys(legacy));
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeSharedWorker };
