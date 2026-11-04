@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeReportConfig } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated StorageInsights binding as its own
@@ -16,19 +17,16 @@ export default class StorageInsightsGeneratedHost extends GCP.Function<StorageIn
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.StorageInsights.CreateDatasetConfig();
-    const p1 = yield* GCP.StorageInsights.CreateReportConfig();
-    const p2 = yield* GCP.StorageInsights.DeleteDatasetConfig();
-    const p3 = yield* GCP.StorageInsights.DeleteReportConfig();
-    const p4 = yield* GCP.StorageInsights.GetDatasetConfig();
-    const p5 = yield* GCP.StorageInsights.GetReportConfig();
-    const p6 = yield* GCP.StorageInsights.GetReportConfigReportDetail();
-    const p7 = yield* GCP.StorageInsights.LinkDatasetConfigDataset();
-    const p8 = yield* GCP.StorageInsights.ListDatasetConfigs();
-    const p9 = yield* GCP.StorageInsights.ListReportConfigReportDetails();
-    const p10 = yield* GCP.StorageInsights.ListReportConfigs();
-    const p11 = yield* GCP.StorageInsights.PatchDatasetConfig();
-    const p12 = yield* GCP.StorageInsights.PatchReportConfig();
-    const p13 = yield* GCP.StorageInsights.UnlinkDatasetConfigDataset();
+    const p1 = yield* GCP.StorageInsights.DeleteDatasetConfig();
+    const p2 = yield* GCP.StorageInsights.GetDatasetConfig();
+    const p3 = yield* GCP.StorageInsights.GetReportConfig(ProbeReportConfig);
+    const p4 = yield* GCP.StorageInsights.GetReportConfigReportDetail(ProbeReportConfig);
+    const p5 = yield* GCP.StorageInsights.LinkDatasetConfigDataset();
+    const p6 = yield* GCP.StorageInsights.ListDatasetConfigs();
+    const p7 = yield* GCP.StorageInsights.ListReportConfigReportDetails(ProbeReportConfig);
+    const p8 = yield* GCP.StorageInsights.ListReportConfigs();
+    const p9 = yield* GCP.StorageInsights.PatchDatasetConfig();
+    const p10 = yield* GCP.StorageInsights.UnlinkDatasetConfigDataset();
     return {
       fetch: serveProbes({
         CreateDatasetConfig: probeOutcome(
@@ -36,48 +34,27 @@ export default class StorageInsightsGeneratedHost extends GCP.Function<StorageIn
             p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreateReportConfig: probeOutcome(
-          Retry.none(
-            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
         DeleteDatasetConfig: probeOutcome(
-          Retry.none(p2({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        DeleteReportConfig: probeOutcome(
-          Retry.none(p3({ reportConfig: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p1({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
         ),
         GetDatasetConfig: probeOutcome(
-          Retry.none(p4({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p2({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetReportConfig: probeOutcome(
-          Retry.none(p5({ reportConfig: "alchemy-missing", location: "us-central1" } as never)),
-        ),
+        GetReportConfig: probeOutcome(Retry.none(p3({} as never))),
         GetReportConfigReportDetail: probeOutcome(
-          Retry.none(
-            p6({
-              reportConfig: "alchemy-missing",
-              reportDetail: "alchemy-missing",
-              location: "us-central1",
-            } as never),
-          ),
+          Retry.none(p4({ reportDetail: "alchemy-missing" } as never)),
         ),
         LinkDatasetConfigDataset: probeOutcome(
-          Retry.none(p7({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p5({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListDatasetConfigs: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListReportConfigReportDetails: probeOutcome(
-          Retry.none(p9({ reportConfig: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListReportConfigs: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListDatasetConfigs: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListReportConfigReportDetails: probeOutcome(Retry.none(p7({} as never))),
+        ListReportConfigs: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
         PatchDatasetConfig: probeOutcome(
-          Retry.none(p11({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        PatchReportConfig: probeOutcome(
-          Retry.none(p12({ reportConfig: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p9({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
         ),
         UnlinkDatasetConfigDataset: probeOutcome(
-          Retry.none(p13({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p10({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),
     };
@@ -86,9 +63,7 @@ export default class StorageInsightsGeneratedHost extends GCP.Function<StorageIn
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.StorageInsights.CreateDatasetConfigHttp,
-          GCP.StorageInsights.CreateReportConfigHttp,
           GCP.StorageInsights.DeleteDatasetConfigHttp,
-          GCP.StorageInsights.DeleteReportConfigHttp,
           GCP.StorageInsights.GetDatasetConfigHttp,
           GCP.StorageInsights.GetReportConfigHttp,
           GCP.StorageInsights.GetReportConfigReportDetailHttp,
@@ -97,7 +72,6 @@ export default class StorageInsightsGeneratedHost extends GCP.Function<StorageIn
           GCP.StorageInsights.ListReportConfigReportDetailsHttp,
           GCP.StorageInsights.ListReportConfigsHttp,
           GCP.StorageInsights.PatchDatasetConfigHttp,
-          GCP.StorageInsights.PatchReportConfigHttp,
           GCP.StorageInsights.UnlinkDatasetConfigDatasetHttp,
         ),
       ),

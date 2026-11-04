@@ -85,14 +85,6 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "CreateReportConfig (storageinsights.projects.locations.reportConfigs.create)",
-        () => probe("CreateReportConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "DeleteDatasetConfig (storageinsights.projects.locations.datasetConfigs.delete)",
         () => probe("DeleteDatasetConfig", false),
         {
@@ -101,32 +93,8 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "DeleteReportConfig (storageinsights.projects.locations.reportConfigs.delete)",
-        () => probe("DeleteReportConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "GetDatasetConfig (storageinsights.projects.locations.datasetConfigs.get)",
         () => probe("GetDatasetConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetReportConfig (storageinsights.projects.locations.reportConfigs.get)",
-        () => probe("GetReportConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetReportConfigReportDetail (storageinsights.projects.locations.reportConfigs.reportDetails.get)",
-        () => probe("GetReportConfigReportDetail", false),
         {
           tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
           timeout: 600_000,
@@ -149,14 +117,6 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "ListReportConfigReportDetails (storageinsights.projects.locations.reportConfigs.reportDetails.list)",
-        () => probe("ListReportConfigReportDetails", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "ListReportConfigs (storageinsights.projects.locations.reportConfigs.list)",
         () => probe("ListReportConfigs", true),
         {
@@ -173,16 +133,35 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "PatchReportConfig (storageinsights.projects.locations.reportConfigs.patch)",
-        () => probe("PatchReportConfig", false),
+        "UnlinkDatasetConfigDataset (storageinsights.projects.locations.datasetConfigs.unlinkDataset)",
+        () => probe("UnlinkDatasetConfigDataset", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("ReportConfig", { concurrent: true }, () => {
+      test.provider(
+        "GetReportConfig (storageinsights.projects.locations.reportConfigs.get)",
+        () => probe("GetReportConfig", true),
         {
           tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
           timeout: 600_000,
         },
       );
       test.provider(
-        "UnlinkDatasetConfigDataset (storageinsights.projects.locations.datasetConfigs.unlinkDataset)",
-        () => probe("UnlinkDatasetConfigDataset", false),
+        "GetReportConfigReportDetail (storageinsights.projects.locations.reportConfigs.reportDetails.get)",
+        () => probe("GetReportConfigReportDetail", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListReportConfigReportDetails (storageinsights.projects.locations.reportConfigs.reportDetails.list)",
+        () => probe("ListReportConfigReportDetails", true),
         {
           tags: ["provider:gcp", "provider:gcp:storageinsights", "live"],
           timeout: 600_000,

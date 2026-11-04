@@ -3,20 +3,18 @@ import type * as storageinsights from "@distilled.cloud/gcp/storageinsights_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { ReportConfig } from "./ReportConfig.ts";
 
 export interface ListReportConfigReportDetailsRequest extends Omit<
   storageinsights.ListProjectsLocationsReportConfigsReportDetailsRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the reportConfig (`reportConfigs/{reportConfig}`). */
-  reportConfig: string;
-}
+> {}
 
-export type ListReportConfigReportDetailsShape = () => Effect.Effect<
+export type ListReportConfigReportDetailsShape = (
+  resource: ReportConfig,
+) => Effect.Effect<
   (
-    request: ListReportConfigReportDetailsRequest,
+    request?: ListReportConfigReportDetailsRequest,
   ) => Effect.Effect<
     storageinsights.ListReportDetailsResponse,
     storageinsights.ListProjectsLocationsReportConfigsReportDetailsError,
@@ -27,14 +25,14 @@ export type ListReportConfigReportDetailsShape = () => Effect.Effect<
 /**
  * Lists the inventory reports in a given project for a given location.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ListReportConfigReportDetailsHttp}. The host gets `roles/storageinsights.viewer` on the project.
+ * Bind it to a {@link ReportConfig} and provide {@link ListReportConfigReportDetailsHttp}. The
+ * host gets `roles/storageinsights.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `reportDetails.list`
  * ```typescript
- * const listReportConfigReportDetails = yield* GCP.StorageInsights.ListReportConfigReportDetails();
- * const response = yield* listReportConfigReportDetails({ location: "us-central1", reportConfig: "..." });
+ * const listReportConfigReportDetails = yield* GCP.StorageInsights.ListReportConfigReportDetails(reportConfig);
+ * const response = yield* listReportConfigReportDetails();
  * ```
  *
  * @binding
