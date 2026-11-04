@@ -4,6 +4,7 @@ description: Put Cloudflare Access in front of a Worker with the access prop —
 sidebar:
   order: 20
 ---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 Cloudflare Access puts a login wall in front of your Worker — covering
 its custom domains, routes, `workers.dev` URL, and version preview
@@ -14,6 +15,25 @@ The prop has two forms — a **dedicated application** owned by the
 Worker (`access: { policies }`) for per-Worker rules, and a **shared
 application** (`access: App`) when several Workers sit behind one
 policy set. Each has its own section below.
+
+<Sequence
+  actors={[
+    { id: "user", label: "browser" },
+    { id: "access", label: "Access", type: "Zero Trust", tone: "accent" },
+    { id: "idp", label: "identity provider", type: "Google, GitHub" },
+    { id: "worker", label: "Admin", type: "Worker" },
+  ]}
+  steps={[
+    { from: "user", to: "access", label: "GET admin.example.com" },
+    { from: "access", to: "user", label: "redirect to sign in", dashed: true },
+    { from: "user", to: "idp", label: "sign in as ana@example.com" },
+    { from: "idp", to: "access", label: "identity", dashed: true },
+    { note: "policy: allow emailDomain example.com", over: "access" },
+    { from: "access", to: "worker", label: "request + signed identity" },
+    { from: "worker", to: "user", label: "200 · ctx.access knows it's ana", dashed: true },
+  ]}
+  caption="Access checks every request before the Worker runs. Only callers its policies allow get through, and the Worker reads who they are from ctx.access."
+/>
 
 ## Dedicated application (per-Worker policies)
 

@@ -3,7 +3,7 @@ title: Containers
 description: Cloudflare Containers run long-lived processes beside a Durable Object — declare a typed container class, implement its runtime in a separate file, and alchemy builds the image, pushes it, and wires the DO pairing.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 A Cloudflare Container is a long-lived process running next to a
 [Durable Object](/cloudflare/compute/durable-objects): the DO owns the
@@ -24,14 +24,17 @@ need request/response compute, a Worker is.
 
 A Container is a Docker image Cloudflare runs on its network, one instance per Durable Object. The Durable Object starts its container on demand, sends it requests, and stops it after a period of inactivity. Callers never reach the container directly. They call the Durable Object by name, which makes each container addressable the same way: one sandbox per user, one build runner per project.
 
-<DAG
+<Tree
   nodes={[
-    { id: "worker", label: "Worker", type: "caller", col: 0, row: 0 },
-    { id: "c", label: "container", type: "your image", tone: "accent", col: 1, row: 0 },
+    { id: "ns", label: "Sandbox", type: "Durable Object class" },
+    { id: "a", label: "user-42", type: "Durable Object", parent: "ns" },
+    { id: "ca", label: "container", type: "your image · running", parent: "a", tone: "accent" },
+    { id: "b", label: "user-7", type: "Durable Object", parent: "ns" },
+    { id: "cb", label: "container", type: "stopped while idle", parent: "b", tone: "muted" },
+    { id: "c", label: "user-9", type: "Durable Object", parent: "ns" },
+    { id: "cc", label: "container", type: "your image · running", parent: "c", tone: "accent" },
   ]}
-  groups={[{ id: "do", label: "Sandbox user-42 · Durable Object", nodes: ["c"] }]}
-  edges={[{ from: "worker", to: "do", label: "getByName" }]}
-  caption="Each Durable Object owns one container, and starts it when it's needed."
+  caption="Each Durable Object owns one container. A Worker reaches one by name, like user-42, and that object starts its container when it's needed and lets it stop when idle."
 />
 
 A container's filesystem lasts only as long as it runs. Keep what must survive in the Durable Object's storage, or in R2.

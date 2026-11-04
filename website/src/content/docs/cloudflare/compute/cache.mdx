@@ -4,6 +4,7 @@ description: Serve responses from Cloudflare's edge cache before your Worker eve
 sidebar:
   order: 13
 ---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 Workers Cache sits in front of a Worker: when it's enabled, Cloudflare
 checks the cache before invoking the Worker at all, and a hit is
@@ -11,6 +12,25 @@ served straight from the edge. What gets cached is controlled by
 standard response headers: `Cache-Control` (including
 `stale-while-revalidate`), `Cache-Tag` for tag-based purging, and
 `Vary` for content negotiation.
+
+<Sequence
+  actors={[
+    { id: "client", label: "browser" },
+    { id: "cache", label: "Workers Cache", type: "in the nearest city", tone: "accent" },
+    { id: "worker", label: "Api", type: "Worker" },
+  ]}
+  steps={[
+    { from: "client", to: "cache", label: "GET /posts" },
+    { note: "miss", over: "cache" },
+    { from: "cache", to: "worker", label: "invoke" },
+    { from: "worker", to: "cache", label: "200 · Cache-Control: max-age=300", dashed: true },
+    { from: "cache", to: "client", label: "200 · stored for 5 minutes", dashed: true },
+    { divider: "the next 5 minutes" },
+    { from: "client", to: "cache", label: "GET /posts" },
+    { from: "cache", to: "client", label: "200 from cache · the Worker never runs", dashed: true },
+  ]}
+  caption="The cache answers before the Worker runs. Your response headers decide what it keeps and for how long."
+/>
 
 ## Enable the cache on a Worker
 

@@ -2,6 +2,7 @@
 title: Pipelines
 description: Ingest events into R2 with Cloudflare Pipelines — a typed stream, a SQL pipeline, and a sink that writes JSON or Parquet files, or Apache Iceberg tables.
 ---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 **Cloudflare Pipelines** ingests events into R2. Producers send JSON events to a
 **stream**. A **pipeline** filters or reshapes them with SQL and writes them to
@@ -16,6 +17,24 @@ your own code consumes the events.
 
 By the end of this page, a Worker sends page views to a stream, and a pipeline
 writes them to an Iceberg table.
+
+<Sequence
+  actors={[
+    { id: "worker", label: "Api", type: "Worker" },
+    { id: "stream", label: "PageViews", type: "stream" },
+    { id: "pipeline", label: "PageViewEtl", type: "pipeline", tone: "accent" },
+    { id: "sink", label: "PageViewTable", type: "Iceberg sink" },
+  ]}
+  steps={[
+    { from: "worker", to: "stream", label: "send(view)" },
+    { from: "worker", to: "stream", label: "send(view)" },
+    { note: "events buffer", over: "stream" },
+    { from: "stream", to: "pipeline", label: "a batch", dashed: true },
+    { note: "drop /health, keep userId, path, at", over: "pipeline" },
+    { from: "pipeline", to: "sink", label: "data files + a new snapshot", dashed: true },
+  ]}
+  caption="Producers send and move on. The pipeline takes events in batches, transforms them with SQL, and commits them to the sink as files you query later."
+/>
 
 ## Create a typed stream
 

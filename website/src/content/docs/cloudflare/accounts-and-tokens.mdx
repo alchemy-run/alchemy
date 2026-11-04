@@ -2,8 +2,23 @@
 title: Accounts and API tokens
 description: How a Cloudflare account holds your Workers, storage and zones, how Alchemy signs in to it with OAuth or an API token, and how your Stack mints scoped tokens for CI and runtimes.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Everything you deploy to Cloudflare lives in an **account**: Workers, KV namespaces, R2 buckets, D1 databases, queues and your zones. An account has **members**, the people who can sign in to it, each with roles that decide what they can change.
+
+<Tree
+  nodes={[
+    { id: "acct", label: "my-company", type: "account · members: ana, sam" },
+    { id: "zone", label: "example.com", type: "zone", parent: "acct" },
+    { id: "r1", label: "api", type: "DNS record", parent: "zone" },
+    { id: "r2", label: "www", type: "DNS record", parent: "zone" },
+    { id: "api", label: "Api", type: "Worker", parent: "acct", tone: "accent", side: true },
+    { id: "kv", label: "Sessions", type: "KV namespace", parent: "acct", side: true },
+    { id: "r2b", label: "Uploads", type: "R2 bucket", parent: "acct", side: true },
+  ]}
+  scopes={[{ on: "zone", label: "token: DNS Write" }]}
+  caption="An account holds your zones and everything you deploy. A token's policy can reach the whole account, or one zone, like this one that may edit only example.com's DNS."
+/>
 
 ## Sign in with a profile
 

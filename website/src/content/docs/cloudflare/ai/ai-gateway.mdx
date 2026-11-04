@@ -4,6 +4,7 @@ description: Wire an AI Gateway into your Worker, turn it into a typed Effect La
 sidebar:
   order: 6
 ---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 You've now wired Durable Objects, hibernatable WebSockets, a
 container, and a Workflow into your Worker. The last piece in the
@@ -11,6 +12,25 @@ Cloudflare track is an **AI Gateway** — a stable account-scoped
 endpoint that fronts every model provider (Workers AI, OpenAI,
 Anthropic, Bedrock, …) and gives you caching, rate limiting, retries,
 DLP, and a single dashboard of every request, token, and cost.
+
+<Sequence
+  actors={[
+    { id: "worker", label: "Api", type: "Worker" },
+    { id: "gw", label: "Gateway", type: "AI Gateway", tone: "accent" },
+    { id: "model", label: "provider", type: "OpenAI, …" },
+  ]}
+  steps={[
+    { from: "worker", to: "gw", label: "generateText(prompt)" },
+    { note: "logged · rate limit checked · cache miss", over: "gw" },
+    { from: "gw", to: "model", label: "forward" },
+    { from: "model", to: "gw", label: "completion · tokens · cost", dashed: true },
+    { from: "gw", to: "worker", label: "completion, cached 60s", dashed: true },
+    { divider: "the same prompt within cacheTtl" },
+    { from: "worker", to: "gw", label: "generateText(prompt)" },
+    { from: "gw", to: "worker", label: "completion from cache · no provider call", dashed: true },
+  ]}
+  caption="Every model call passes through the gateway, which logs it, applies its limits, and answers repeats from its cache."
+/>
 
 In Alchemy the gateway is a single resource. Once you've declared and
 bound it, `.model({...})` returns an Effect `LanguageModel.LanguageModel`

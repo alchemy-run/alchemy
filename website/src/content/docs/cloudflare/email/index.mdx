@@ -3,7 +3,7 @@ title: Email
 description: Cloudflare Email Routing turns a zone into a mail endpoint — enable routing, verify destinations, forward with rules and a catch-all, hand mail to a Worker, and send from Workers with the send_email binding.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Fanout from "../../../../components/diagrams/Fanout.astro";
 
 Email Routing turns a zone you own into a mail endpoint: rules match
 inbound mail and forward it, drop it, or hand it to a Worker — and
@@ -16,19 +16,15 @@ needs routing enabled on the sender's domain. The category also
 covers sending subdomains and the enterprise Email Security suite,
 both below.
 
-<DAG
-  nodes={[
-    { id: "in", label: "inbox@example.com", type: "inbound mail", layer: 0 },
-    { id: "routing", label: "Email Routing", type: "rules · catch-all", tone: "accent", layer: 1 },
-    { id: "fwd", label: "you@personal.example", type: "verified address", layer: 2 },
-    { id: "worker", label: "Worker", type: "email handler", layer: 2 },
+<Fanout
+  item={{ title: "inbound mail", lines: ["to: inbox@example.com", "from: ana@customer.example"] }}
+  group="example.com · Email Routing"
+  routes={[
+    { label: "rule", condition: ["to = inbox@example.com"], target: { label: "you@personal.example", type: "forward" } },
+    { label: "rule", condition: ["to = orders@example.com"], target: { label: "Orders", type: "Worker · email handler" }, match: false },
+    { label: "catch-all", condition: ["anything unmatched"], target: { label: "drop", type: "discard" }, match: false },
   ]}
-  edges={[
-    { from: "in", to: "routing" },
-    { from: "routing", to: "fwd", label: "forward" },
-    { from: "routing", to: "worker", label: "worker" },
-  ]}
-  caption="Rules match each inbound message and forward it, drop it, or hand it to a Worker."
+  caption="Rules match each inbound message in priority order and forward it, hand it to a Worker, or drop it. Mail no rule matches falls to the catch-all."
 />
 
 ## Enable routing on the zone

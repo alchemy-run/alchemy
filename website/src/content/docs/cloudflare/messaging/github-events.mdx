@@ -4,6 +4,7 @@ description: Subscribe a Cloudflare Worker to GitHub repository webhooks with ty
 sidebar:
   order: 20
 ---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 A push lands on `main`, a pull request opens, a release tag appears —
 and you want code to run. `GitHub.consumeRepositoryEvents` subscribes
@@ -13,6 +14,25 @@ delivery's signature, and hands your handler a fully typed payload.
 
 This event source is **Cloudflare-only today** — see
 [the note below](#cloudflare-only-today).
+
+<Sequence
+  actors={[
+    { id: "dev", label: "git push", type: "to main" },
+    { id: "gh", label: "GitHub", type: "repository webhook" },
+    { id: "worker", label: "Deploys", type: "Worker", tone: "accent" },
+    { id: "other", label: "anyone else" },
+  ]}
+  steps={[
+    { from: "dev", to: "gh", label: "push" },
+    { from: "gh", to: "worker", label: "POST · push payload · X-Hub-Signature-256" },
+    { note: "signature checked against the webhook secret", over: "worker" },
+    { from: "worker", to: "gh", label: "200", dashed: true },
+    { divider: "a request without a valid signature" },
+    { from: "other", to: "worker", label: "POST · forged payload" },
+    { from: "worker", to: "other", label: "401 · the handler never runs", dashed: true, tone: "warn" },
+  ]}
+  caption="Alchemy creates the webhook with a secret only it and GitHub know, so the handler only ever sees deliveries GitHub signed."
+/>
 
 ## 1. Subscribe to push events
 
