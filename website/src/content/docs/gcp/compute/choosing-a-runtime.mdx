@@ -4,6 +4,7 @@ description: How Cloud Run services, jobs and worker pools, Cloud Functions and 
 ---
 
 import DAG from "../../../../components/DAG.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Google Cloud gives you several places to run code. Most of them are Cloud Run underneath: containers that Google starts, scales and stops for you. They differ in what starts them and how long they live. Every one runs the same kind of Alchemy program, takes the same bindings, and runs as a service account of its own.
 
@@ -27,7 +28,24 @@ export default class Reindex extends GCP.Run.Job<Reindex>()(
 ) {}
 ```
 
-So moving part of an app from one runtime to another changes its declaration, not its bindings. Choose by how the work behaves.
+So moving part of an app from one runtime to another changes its declaration, not its bindings. Choose by how the work behaves:
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "svc", label: "service", type: "on requests" },
+    { id: "job", label: "job", type: "runs, then exits" },
+    { id: "pool", label: "worker pool", type: "always on" },
+  ]}
+  bars={[
+    { lane: "svc", start: 0.5, end: 1.6, label: "request" },
+    { lane: "svc", start: 1.8, end: 3.2, label: "request" },
+    { lane: "svc", start: 6.6, end: 7.8, label: "request" },
+    { lane: "job", start: 3.6, end: 6.2, label: "execution" },
+    { lane: "pool", start: 0, end: 10, label: "pulling from Pub/Sub" },
+  ]}
+  caption="A service runs while requests arrive and scales to zero between them. A job runs when it's started and exits. A worker pool runs, and bills, the whole time."
+/>
 
 ## Cloud Run services: answer HTTP
 
@@ -65,10 +83,10 @@ An app rarely needs just one. A common shape is a service for the API, a topic i
 
 <DAG
   nodes={[
-    { id: "api", label: "Api", type: "Cloud Run service", layer: 0 },
-    { id: "topic", label: "Events", type: "Pub/Sub topic", layer: 1 },
-    { id: "worker", label: "Worker", type: "worker pool", layer: 2 },
-    { id: "job", label: "Reindex", type: "Cloud Run job", layer: 1 },
+    { id: "api", label: "Api", type: "Cloud Run service", col: 0, row: 0 },
+    { id: "topic", label: "Events", type: "Pub/Sub topic", col: 1, row: 0 },
+    { id: "worker", label: "Worker", type: "worker pool", col: 2, row: 0 },
+    { id: "job", label: "Reindex", type: "Cloud Run job", col: 0, row: 1 },
   ]}
   edges={[
     { from: "api", to: "topic" },

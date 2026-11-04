@@ -94,3 +94,7 @@ grep -rnE "This page (introduces|covers|starts)|This chapter|rest of this page|s
 
 Fix each hit in pages you own. List the rest for the user rather than editing
 unrelated pages unasked.
+
+## Long pages on a contact sheet
+
+`diagram-sheet.py` captures the first 4000 CSS pixels of each page at 2x. A diagram further down comes out cut off or missing. Run it with `SHEET_SCALE=1` to capture 15000 pixels at 1x.

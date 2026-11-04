@@ -3,7 +3,7 @@ title: IAM & bindings
 description: What a GCP binding does — the per-runtime service account, the role it grants, where the grant lands, and how removing a binding revokes it.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 IAM decides, on every request to Google Cloud, whether the caller may do what it's asking.
 
@@ -11,14 +11,23 @@ IAM decides, on every request to Google Cloud, whether the caller may do what it
 
 A **principal** is who's asking: a Google account, a group, or a **service account**, the identity code runs as. A **role** is a named set of permissions: `roles/pubsub.publisher` holds `pubsub.topics.publish`. An **IAM policy** on a resource binds principals to roles on that resource.
 
-<DAG
+<Tree
   nodes={[
-    { id: "sa", label: "alch-api-…", type: "service account", col: 0, row: 0 },
-    { id: "binding", label: "binding", type: "pubsub.publisher", tone: "accent", col: 1, row: 0 },
+    { id: "org", label: "example.com", type: "organization" },
+    { id: "project", label: "my-app-prod", type: "project", parent: "org" },
+    {
+      id: "events",
+      label: "Events",
+      type: "Pub/Sub topic",
+      parent: "project",
+      tone: "accent",
+      specs: [["policy", "pubsub.publisher → alch-api-…"]],
+    },
+    { id: "audit", label: "Audit", type: "Pub/Sub topic", parent: "project" },
+    { id: "links", label: "Links", type: "Firestore database", parent: "project" },
   ]}
-  groups={[{ id: "topic", label: "Events topic · IAM policy", nodes: ["binding"] }]}
-  edges={[{ from: "sa", to: "binding", label: "member" }]}
-  caption="The topic's own IAM policy grants the service account one role there, and nowhere else."
+  scopes={[{ on: "project", label: "viewer → dev-team@" }]}
+  caption="The dev team's viewer role on the project covers every resource in it. The Api's service account holds pubsub.publisher in the Events topic's own policy, so it can publish there and nowhere else."
 />
 
 Policies live on the organization, folders, projects and individual resources, and a grant applies to everything beneath where it's made. So the narrowest grant is on the resource itself. Some services also accept an **IAM Condition** on a project-level grant, limiting it to resources whose names match.

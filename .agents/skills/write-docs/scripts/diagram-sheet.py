@@ -18,7 +18,10 @@ from PIL import Image
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 FIGURE = (34, 30, 24)  # .alc-dag panel background in the dark theme
-SCAN_X = 700  # a column inside the content area at 2x, left of any node
+# SHEET_SCALE=1 captures 15000 CSS px instead of 4000, for long pages whose
+# last diagrams fall off the 2x capture.
+SCALE = int(os.environ.get("SHEET_SCALE", "2"))
+SCAN_X = 350 * SCALE  # a column inside the content area, left of any node
 
 
 def shoot(paths, tmp):
@@ -29,8 +32,8 @@ def shoot(paths, tmp):
         procs.append(
             subprocess.Popen(
                 [CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-                 "--virtual-time-budget=6000", "--force-device-scale-factor=2",
-                 "--window-size=1300,8000", f"--screenshot={out}",
+                 "--virtual-time-budget=6000", f"--force-device-scale-factor={SCALE}",
+                 f"--window-size=1300,{8000 if SCALE == 2 else 15000}", f"--screenshot={out}",
                  f"http://localhost:4321/{p.strip('/')}/"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
@@ -50,13 +53,13 @@ def figures(path):
         if im.getpixel((SCAN_X, y)) == FIGURE:
             start = y
             while y < height and im.getpixel((SCAN_X, y)) == FIGURE:
-                y += 2
-            if runs and start - runs[-1][1] < 80:
+                y += SCALE
+            if runs and start - runs[-1][1] < 40 * SCALE:
                 runs[-1][1] = y
             else:
                 runs.append([start, y])
-        y += 2
-    return [im.crop((660, s - 10, 1940, e + 10)) for s, e in runs if e - s >= 200]
+        y += SCALE
+    return [im.crop((330 * SCALE, s - 5 * SCALE, 970 * SCALE, e + 5 * SCALE)) for s, e in runs if e - s >= 100 * SCALE]
 
 
 def main():
