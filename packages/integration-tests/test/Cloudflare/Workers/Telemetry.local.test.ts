@@ -315,6 +315,30 @@ test.provider(
         );
       }
 
+      // Work a finalizer hands off while the event's scope closes.
+      const finalized = yield* client
+        .get(`${deployment.url}/finalizer-wait-until`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(finalized.status).toBe(202);
+      const finalizerSpans = (yield* exported("otel-event-flush.finalizer.background")).flatMap(
+        ({ records }) => records,
+      );
+      expect(finalizerSpans.map((span) => span.name)).toContain(
+        "otel-event-flush.finalizer.background",
+      );
+
+      // Durable Object: a span recorded by a Stream result as it is read.
+      const streamed = yield* client
+        .get(`${deployment.url}/rpc-stream-span`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(streamed.status).toBe(200);
+      expect(yield* streamed.text).toBe("item");
+      const streamSpans = (yield* exported("otel-event-flush.rpc.stream-item")).flatMap(
+        ({ records }) => records,
+      );
+      const item = streamSpans.find((span) => span.name === "otel-event-flush.rpc.stream-item");
+      expect(item).toBeDefined();
+
       // Durable Object: `DurableObjectState.waitUntil` in an RPC call.
       const rpcResponse = yield* client
         .get(`${deployment.url}/rpc-wait-until`)

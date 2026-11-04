@@ -22,7 +22,7 @@ import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState
 import { makeRequestEffect } from "./HttpServer.ts";
 import { takeRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { fromWebSocket } from "./WebSocket.ts";
-import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
+import { getWorkerExport, handleRpcExit, withEventContext } from "./WorkerBridge.ts";
 import { EventLifetime, makeEventLifetime } from "./WorkerRuntime.ts";
 
 /**
@@ -142,7 +142,7 @@ export const makeDurableObjectBridge =
                         `Durable Object RPC member "${prop}" must return an Effect or a Stream`,
                       ),
                     );
-                  }).pipe((effect) =>
+                  }).pipe(withEventContext, (effect) =>
                     Option.isSome(parent) ? Effect.withParentSpan(effect, parent.value) : effect,
                   ),
                 handleRpcExit,
@@ -163,7 +163,7 @@ export const makeDurableObjectBridge =
 
         const { instance, services, context, telemetry } = await this.#instance;
 
-        return fn(instance)
+        return Effect.andThen(event.holdExporters, fn(instance))
           .pipe(
             Effect.provide(
               Layer.mergeAll(

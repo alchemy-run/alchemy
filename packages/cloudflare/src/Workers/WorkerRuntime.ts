@@ -220,7 +220,9 @@ export class EventLifetime extends Context.Service<
  *
  * The event is found through {@link EventLifetime} rather than the ambient
  * `Scope`: work handed off inside an `Effect.scoped` region (an RPC request's
- * scope, say) must not hold that region open.
+ * scope, say) must not hold that region open. The work gets a scope of its
+ * own, so what it acquires lives as long as it does, not as long as the
+ * region it was handed off from.
  *
  * @internal
  */
@@ -232,7 +234,7 @@ export const runInBackground = <A, E, R>(
     const context = yield* Effect.context<R>();
     const lifetime = yield* Effect.serviceOption(EventLifetime);
     yield* Effect.sync(() => {
-      const promise = Effect.runPromiseWith(context)(effect);
+      const promise = Effect.runPromiseWith(context)(effect.pipe(Effect.scoped));
       if (Option.isSome(lifetime)) lifetime.value.extend(promise);
       register(promise);
     });
@@ -245,6 +247,10 @@ export const runInBackground = <A, E, R>(
  * started while waiting, before running the rest of its finalizers. So that
  * work can still use the event's resources, and its spans and logs reach the
  * event's exporters.
+ *
+ * Run `holdExporters` once the event's exporters are on the scope and before
+ * the handler: work a handler's finalizer hands off is waited for again
+ * before the exporters flush.
  *
  * @internal
  */
@@ -262,6 +268,8 @@ export const makeEventLifetime = (scope: Scope.Scope) => {
   };
   return {
     lifetime,
+    // Added before the handler's own finalizers, so it runs after them.
+    holdExporters: Scope.addFinalizer(scope, settled),
     // Added after the handler's own finalizers, so it runs before them.
     holdScope: (): void => Effect.runSync(Scope.addFinalizer(scope, settled)),
   };

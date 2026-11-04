@@ -84,7 +84,7 @@ export const makeWorkerBridge = (
       .then(
         (built) => {
           const [eff, services] = makeEffect(built);
-          return eff.pipe(
+          return Effect.andThen(event.holdExporters, eff).pipe(
             // Per-event services take precedence over the captured services
             // and the built isolate context: the real per-event
             // WorkerExecutionContext (init only ever sees the reference's
@@ -185,12 +185,14 @@ export const makeWorkerBridge = (
                 // *genuine* `Stream` (not an Effect) is lifted into the
                 // success channel so `handleRpcExit` encodes it directly.
                 return [
-                  Effect.isEffect(result)
-                    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped RPC dispatcher result; failures are encoded by handleRpcExit
-                      (result as Effect.Effect<any>)
-                    : Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : (result as Effect.Effect<any>),
+                  withEventContext(
+                    Effect.isEffect(result)
+                      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped RPC dispatcher result; failures are encoded by handleRpcExit
+                        (result as Effect.Effect<any>)
+                      : Stream.isStream(result)
+                        ? Effect.succeed(result)
+                        : (result as Effect.Effect<any>),
+                  ),
                   Context.empty(),
                 ] as const;
               },
@@ -468,6 +470,25 @@ export const makeRpcProxy = (
           .then((exit) => handleRpcExit(exit));
     },
   });
+
+/**
+ * The RPC transport reads a Stream result after the call has returned, outside
+ * the event's fiber. Run it with the call's context, so its spans reach the
+ * event's exporters and the `waitUntil` work it hands off joins the event.
+ */
+export const withEventContext = <E, R>(
+  effect: Effect.Effect<unknown, E, R>,
+): Effect.Effect<unknown, E, R> =>
+  effect.pipe(
+    Effect.flatMap((value) =>
+      Stream.isStream(value)
+        ? Effect.map(Effect.context<never>(), (context) =>
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- an RPC Stream result needs no more than the call's context
+            Stream.provideContext(value as Stream.Stream<unknown, unknown, never>, context),
+          )
+        : Effect.succeed(value),
+    ),
+  );
 
 export const handleRpcExit = async (
   exit: Exit.Exit<any, any>,

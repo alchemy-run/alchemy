@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Http from "alchemy/Http";
+import * as Rpc from "alchemy/Rpc";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpApi from "effect/http-api/HttpApi";
@@ -65,6 +66,16 @@ const resourceLines = (resource: { released: boolean }, mode: StreamMode) =>
     ),
   );
 
+/**
+ * Background work that acquires a resource of its own, then uses it the way
+ * {@link useLater} does.
+ */
+const acquireAndUseLater = <R>(record: RecordEntry<R>, label: string) =>
+  Effect.gen(function* () {
+    const resource = yield* acquireResource(record, label);
+    yield* useLater(record, resource, label);
+  });
+
 /** Slow background work: journals `<label>:done` after 3 seconds. */
 const doneLater = <R>(record: RecordEntry<R>, label: string) =>
   Effect.sleep("3 seconds").pipe(Effect.andThen(record(`${label}:done`)));
@@ -96,6 +107,11 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest;
           const path = new URL(request.url, "http://x").pathname.split("/");
+          // `/socket/<label>`: a hibernatable WebSocket for `webSocketMessage`.
+          if (path[1] === "socket") {
+            const [response] = yield* Cloudflare.upgrade();
+            return response;
+          }
           // `/stream/<mode>/<label>`: a streamed body over a call-scoped resource.
           if (path[1] === "stream" && isStreamMode(path[2])) {
             const label = path[3] ?? "";
@@ -108,6 +124,29 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
           const resource = yield* acquireResource(append, label);
           yield* state.waitUntil(useLater(append, resource, label));
           return HttpServerResponse.text("scheduled");
+        }),
+        // Each message is a label: `waitUntil` work in a WebSocket event.
+        webSocketMessage: Effect.fn(function* (
+          socket: Cloudflare.WebSocket,
+          message: string | ArrayBuffer,
+        ) {
+          const label = typeof message === "string" ? message : "";
+          const resource = yield* acquireResource(append, label);
+          yield* state.waitUntil(useLater(append, resource, label));
+          yield* socket.send("scheduled");
+        }),
+        // `waitUntil` work in an alarm event, for the label `holdAlarm` stored.
+        alarm: () =>
+          Effect.gen(function* () {
+            const label =
+              (yield* state.storage.get<string>("alarm-label").pipe(Effect.orDie)) ?? "";
+            const resource = yield* acquireResource(append, label);
+            yield* state.waitUntil(useLater(append, resource, label));
+          }),
+        holdAlarm: Effect.fn(function* (label: string) {
+          yield* state.storage.put("alarm-label", label).pipe(Effect.orDie);
+          yield* state.storage.setAlarm(Date.now()).pipe(Effect.orDie);
+          return "scheduled" as const;
         }),
         record: append,
         recordManyLater: Effect.fn(function* () {
@@ -160,6 +199,26 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
           yield* state.waitUntil(useLater(append, resource, label));
           return "scheduled" as const;
         }),
+        // Work handed off inside a scoped region that acquires its own
+        // resource: the resource lives as long as the work, not the region.
+        holdScopedAcquire: Effect.fn(function* (label: string) {
+          yield* Effect.scoped(state.waitUntil(acquireAndUseLater(append, label)));
+          return "scheduled" as const;
+        }),
+        // A method that fails after handing off work.
+        holdFailingCall: Effect.fn(function* (label: string) {
+          const resource = yield* acquireResource(append, label);
+          yield* state.waitUntil(useLater(append, resource, label));
+          return yield* new StreamFailure();
+        }),
+        // A Stream result that hands off work while the caller reads it.
+        streamWaitUntil: (label: string) =>
+          Effect.gen(function* () {
+            const resource = yield* acquireResource(append, label);
+            return Stream.fromEffect(
+              state.waitUntil(useLater(append, resource, label)).pipe(Effect.as("a")),
+            );
+          }),
         // The same, from a method whose Stream result takes over the call's
         // scope until the caller has drained it.
         streamLater: (label: string) =>
@@ -189,6 +248,25 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
     });
   }),
 ) {}
+
+/** Each message is a label for `waitUntil` work in a queue batch. */
+export const LifetimeQueue = Cloudflare.Queues.Queue("WaitUntilLifetimeQueue");
+
+/** The precreate placeholder can fail early batches; space their retries. */
+const consumerSettings = {
+  batchSize: 10,
+  maxWaitTime: "1 second",
+  maxRetries: 10,
+  retryDelay: "3 seconds",
+} as const;
+
+/** Decode a Worker RPC result from a raw loopback stub, as a typed stub does. */
+const decodeRpc = <A>(call: () => Promise<unknown>) =>
+  Effect.promise(call).pipe(
+    Effect.flatMap((value) => Rpc.decodeRpcResult(value)),
+    Effect.map((value) => value as A),
+    Effect.orDie,
+  );
 
 const BackgroundApi = HttpApi.make("BackgroundApi").add(
   HttpApiGroup.make("Background").add(
@@ -229,6 +307,30 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
         (globalThis as any).__initFinalizerRuns =
           ((globalThis as any).__initFinalizerRuns ?? 0) + 1;
       }),
+    );
+
+    const lifetimeQueue = yield* LifetimeQueue;
+    const queue = yield* Cloudflare.Queues.QueueSink(lifetimeQueue);
+    yield* Cloudflare.Queues.consumeQueueMessages<{ label: string }>(
+      lifetimeQueue,
+      consumerSettings,
+      (messages) =>
+        messages.pipe(
+          Stream.map((message) => message.body.label),
+          Stream.runCollect,
+          Effect.flatMap((labels) =>
+            Effect.forEach(
+              labels,
+              Effect.fnUntraced(function* (label) {
+                const record = (entry: string) =>
+                  journals.getByName(label).record(entry).pipe(Effect.orDie);
+                const resource = yield* acquireResource(record, label);
+                yield* Cloudflare.waitUntil(useLater(record, resource, label));
+              }),
+              { discard: true },
+            ),
+          ),
+        ),
     );
 
     // HttpApi routes built once, in init (#2173): `HttpApiBuilder.group`
@@ -276,10 +378,34 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
           yield* Cloudflare.waitUntil(useLater(record, resource, label));
           return "scheduled";
         }),
+      // A Stream result, for `/lifetime/rpc-stream`.
+      streamLater: (label: string) =>
+        Effect.gen(function* () {
+          const record = (entry: string) =>
+            journals.getByName(label).record(entry).pipe(Effect.orDie);
+          const resource = yield* acquireResource(record, label);
+          yield* Cloudflare.waitUntil(useLater(record, resource, label));
+          return Stream.make("a", "b");
+        }),
+      // A Stream result that hands off work while the caller reads it.
+      streamWaitUntil: (label: string) =>
+        Effect.gen(function* () {
+          const record = (entry: string) =>
+            journals.getByName(label).record(entry).pipe(Effect.orDie);
+          const resource = yield* acquireResource(record, label);
+          return Stream.fromEffect(
+            Cloudflare.waitUntil(useLater(record, resource, label)).pipe(Effect.as("a")),
+          );
+        }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         const journal = journals.getByName("default");
+
+        // `/socket/<label>`: a WebSocket to the label's Journal.
+        if (url.pathname.startsWith("/socket/")) {
+          return yield* journals.getByName(url.pathname.split("/")[2] ?? "").fetch(request);
+        }
 
         if (url.pathname.startsWith("/api/")) {
           return yield* api;
@@ -333,6 +459,44 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
             yield* Cloudflare.waitUntil(Effect.fail("background failure"));
             const resource = yield* acquireResource(record, label);
             yield* Cloudflare.waitUntil(useLater(record, resource, label));
+          } else if (kind === "scoped-acquire") {
+            // Work handed off inside a scoped region that acquires its own
+            // resource: the resource lives as long as the work.
+            yield* Effect.scoped(Cloudflare.waitUntil(acquireAndUseLater(record, label)));
+          } else if (kind === "nested-acquire") {
+            // Work that background work hands off after the handler returned.
+            yield* Cloudflare.waitUntil(
+              Effect.sleep("100 millis").pipe(
+                Effect.andThen(Cloudflare.waitUntil(acquireAndUseLater(record, label))),
+              ),
+            );
+          } else if (kind === "fails") {
+            // A handler that fails after handing off work.
+            const resource = yield* acquireResource(record, label);
+            yield* Cloudflare.waitUntil(useLater(record, resource, label));
+            return yield* Effect.die(new Error("handler failure"));
+          } else if (kind === "queue") {
+            yield* Stream.make({ label }).pipe(Stream.run(queue), Effect.orDie);
+          } else if (kind === "rpc-stream" || kind === "rpc-stream-wait-until") {
+            const self = yield* exec.exports.default().pipe(Effect.orDie);
+            const rpc = self.raw as unknown as Record<string, (label: string) => Promise<unknown>>;
+            const method = kind === "rpc-stream" ? "streamLater" : "streamWaitUntil";
+            const lines = yield* decodeRpc<Stream.Stream<string>>(() => rpc[method]!(label));
+            return HttpServerResponse.text((yield* Stream.runCollect(lines)).join(","));
+          } else if (kind === "do-alarm") {
+            return HttpServerResponse.text(yield* journal.holdAlarm(label));
+          } else if (kind === "do-scoped-acquire") {
+            return HttpServerResponse.text(yield* journal.holdScopedAcquire(label));
+          } else if (kind === "do-fails") {
+            return HttpServerResponse.text(
+              yield* journal.holdFailingCall(label).pipe(
+                Effect.as("succeeded"),
+                Effect.catchTag("StreamFailure", () => Effect.succeed("failed")),
+              ),
+            );
+          } else if (kind === "do-stream-wait-until") {
+            const values = yield* Stream.runCollect(yield* journal.streamWaitUntil(label));
+            return HttpServerResponse.text(values.join(","));
           } else if (kind === "stream") {
             // A streamed body takes over the request scope from the bridge.
             const resource = yield* acquireResource(record, label);
@@ -444,5 +608,9 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(Cloudflare.Queues.EventSourceLive, Cloudflare.Queues.QueueSinkBinding),
+    ),
+  ),
 ) {}

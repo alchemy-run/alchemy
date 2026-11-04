@@ -27,6 +27,16 @@ export class OtelEventFlushTarget extends Cloudflare.DurableObject<OtelEventFlus
         ),
         ping: () =>
           Effect.succeed("durable-object-rpc-ok").pipe(Effect.withSpan("otel-event-flush.rpc")),
+        // A Stream result whose element records a span as the caller reads it.
+        streamSpans: () =>
+          Effect.succeed(
+            Stream.fromEffect(
+              Effect.succeed("item").pipe(
+                Effect.delay("100 millis"),
+                Effect.withSpan("otel-event-flush.rpc.stream-item"),
+              ),
+            ),
+          ).pipe(Effect.withSpan("otel-event-flush.rpc.stream")),
         pingLater: () =>
           state
             .waitUntil(
@@ -59,6 +69,23 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/rpc-stream-span")) {
+          const items = yield* Stream.runCollect(
+            yield* targetNamespace.getByName("target").streamSpans(),
+          );
+          return HttpServerResponse.text(items.join(","));
+        }
+        if (request.url.startsWith("/finalizer-wait-until")) {
+          // Work a finalizer hands off while the event's scope closes.
+          yield* Effect.addFinalizer(() =>
+            Cloudflare.waitUntil(
+              Effect.sleep("300 millis").pipe(
+                Effect.withSpan("otel-event-flush.finalizer.background"),
+              ),
+            ),
+          );
+          return HttpServerResponse.text("accepted", { status: 202 });
+        }
         if (request.url.startsWith("/rpc-wait-until")) {
           const pong = yield* targetNamespace.getByName("target").pingLater();
           return HttpServerResponse.text(`worker-saw:${pong}`);

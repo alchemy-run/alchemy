@@ -46,7 +46,7 @@ const getText = Effect.fn(function* (url: string) {
 // NO_DESTROY keeps the deployment.
 const run = crypto.randomUUID().slice(0, 8);
 
-const journalEntries = Effect.fn(function* (url: string, label: string, count: number) {
+const journalEntries = Effect.fn(function* (url: string, label: string, count: number, polls = 20) {
   return yield* Effect.gen(function* () {
     const text = yield* getText(`${url}/lifetime/entries/${label}`);
     return yield* Effect.try({
@@ -57,7 +57,7 @@ const journalEntries = Effect.fn(function* (url: string, label: string, count: n
     Effect.repeat({
       schedule: Schedule.spaced("500 millis"),
       until: (entries) => entries.length >= count,
-      times: 20,
+      times: polls,
     }),
   );
 });
@@ -75,12 +75,21 @@ describe.skipIf(!!process.env.FAST)(
       ["nested", "scheduled"],
       ["failing", "scheduled"],
       ["stream", "streamed"],
+      ["scoped-acquire", "scheduled"],
+      ["nested-acquire", "scheduled"],
       ["rpc", "scheduled"],
+      ["rpc-stream", "a,b"],
+      ["rpc-stream-wait-until", "a"],
+      ["queue", "scheduled"],
       ["do", "scheduled"],
       ["do-nested", "scheduled"],
       ["do-failing", "scheduled"],
+      ["do-fails", "failed"],
+      ["do-scoped-acquire", "scheduled"],
       ["do-stream", "a,b"],
+      ["do-stream-wait-until", "a"],
       ["do-fetch", "scheduled"],
+      ["do-alarm", "scheduled"],
     ] as const) {
       test(
         `the event's scope stays open for waitUntil work (${kind})`,
@@ -91,7 +100,9 @@ describe.skipIf(!!process.env.FAST)(
           });
           const label = `${kind}-${run}`;
           expect(yield* getText(`${url}/lifetime/${kind}/${label}`)).toBe(response);
-          expect(yield* journalEntries(url, label, 2)).toEqual([
+          // A queue batch arrives after a second, and an early one can land
+          // on the precreate placeholder and be retried.
+          expect(yield* journalEntries(url, label, 2, kind === "queue" ? 80 : 20)).toEqual([
             `${label}:open`,
             `${label}:released`,
           ]);
@@ -99,6 +110,77 @@ describe.skipIf(!!process.env.FAST)(
         { timeout: 120_000 },
       );
     }
+
+    test(
+      "the event's scope stays open for waitUntil work (failed handler)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `fails-${run}`;
+        const response = yield* requestWorker(
+          HttpClientRequest.get(`${url}/lifetime/fails/${label}?cb=${Date.now()}-${bust++}`),
+        );
+        expect(response.status).toBe(500);
+        expect(yield* journalEntries(url, label, 2)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    // A HEAD response drops its streamed body without reading it.
+    test(
+      "the event's scope stays open for waitUntil work (HEAD of a streamed body)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `head-${run}`;
+        const response = yield* requestWorker(
+          HttpClientRequest.head(`${url}/lifetime/stream/${label}?cb=${Date.now()}-${bust++}`),
+        );
+        expect(response.status).toBe(200);
+        expect(yield* journalEntries(url, label, 2)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    test(
+      "the event's scope stays open for waitUntil work (Durable Object WebSocket message)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `socket-${run}`;
+        const reply = yield* Effect.callback<string, Error>((resume) => {
+          const socket = new WebSocket(`${url.replace(/^http/, "ws")}/socket/${label}`);
+          socket.addEventListener("open", () => socket.send(label));
+          socket.addEventListener("message", (event) => {
+            resume(Effect.succeed(String(event.data)));
+            socket.close();
+          });
+          socket.addEventListener("error", () => resume(Effect.fail(new Error("socket error"))));
+          return Effect.sync(() => socket.close());
+        }).pipe(
+          Effect.timeout("10 seconds"),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 5 }),
+        );
+        expect(reply).toBe("scheduled");
+        expect(yield* journalEntries(url, label, 2)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
 
     // The event outlives these responses, but the responses must not wait
     // for it: each hands off work that sleeps 3 seconds before journaling.
