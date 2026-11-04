@@ -29,10 +29,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./Bootstrap/*": "./src/Bootstrap/*.ts",
+    "./AccessApproval": "./src/AccessApproval/index.ts",
     "./AccessContextManager": "./src/AccessContextManager/index.ts",
+    "./AddressValidation": "./src/AddressValidation/index.ts",
+    "./AdvisoryNotifications": "./src/AdvisoryNotifications/index.ts",
     "./AgentIdentity": "./src/AgentIdentity/index.ts",
     "./AgentRegistry": "./src/AgentRegistry/index.ts",
     "./AIPlatform": "./src/AIPlatform/index.ts",
+    "./AirQuality": "./src/AirQuality/index.ts",
     "./AlloyDB": "./src/AlloyDB/index.ts",
     "./AnalyticsHub": "./src/AnalyticsHub/index.ts",
     "./AndroidDeviceProvisioning": "./src/AndroidDeviceProvisioning/index.ts",
@@ -48,9 +52,11 @@
     "./AppHub": "./src/AppHub/index.ts",
     "./ArtifactRegistry": "./src/ArtifactRegistry/index.ts",
     "./AssuredWorkloads": "./src/AssuredWorkloads/index.ts",
+    "./AuditManager": "./src/AuditManager/index.ts",
     "./AuthorizedBuyersMarketplace": "./src/AuthorizedBuyersMarketplace/index.ts",
     "./BackupDR": "./src/BackupDR/index.ts",
     "./BareMetalSolution": "./src/BareMetalSolution/index.ts",
+    "./Batch": "./src/Batch/index.ts",
     "./BeyondCorp": "./src/BeyondCorp/index.ts",
     "./BigLake": "./src/BigLake/index.ts",
     "./BigQuery": "./src/BigQuery/index.ts",
@@ -66,6 +72,7 @@
     "./CES": "./src/CES/index.ts",
     "./ChromeManagement": "./src/ChromeManagement/index.ts",
     "./CloudAsset": "./src/CloudAsset/index.ts",
+    "./CloudBilling": "./src/CloudBilling/index.ts",
     "./CloudBuild": "./src/CloudBuild/index.ts",
     "./CloudChannel": "./src/CloudChannel/index.ts",
     "./CloudControlsPartner": "./src/CloudControlsPartner/index.ts",
@@ -73,10 +80,12 @@
     "./CloudFunctions": "./src/CloudFunctions/index.ts",
     "./CloudIdentity": "./src/CloudIdentity/index.ts",
     "./CloudNumberRegistry": "./src/CloudNumberRegistry/index.ts",
+    "./CloudProfiler": "./src/CloudProfiler/index.ts",
     "./CloudScheduler": "./src/CloudScheduler/index.ts",
     "./CloudSearch": "./src/CloudSearch/index.ts",
     "./CloudSupport": "./src/CloudSupport/index.ts",
     "./CloudTasks": "./src/CloudTasks/index.ts",
+    "./CloudTrace": "./src/CloudTrace/index.ts",
     "./Composer": "./src/Composer/index.ts",
     "./Compute": "./src/Compute/index.ts",
     "./Config": "./src/Config/index.ts",
@@ -86,8 +95,11 @@
     "./Container": "./src/Container/index.ts",
     "./ContainerAnalysis": "./src/ContainerAnalysis/index.ts",
     "./ContentWarehouse": "./src/ContentWarehouse/index.ts",
+    "./DatabaseCenter": "./src/DatabaseCenter/index.ts",
     "./DataCatalog": "./src/DataCatalog/index.ts",
+    "./Dataflow": "./src/Dataflow/index.ts",
     "./Dataform": "./src/Dataform/index.ts",
+    "./DataFusion": "./src/DataFusion/index.ts",
     "./DataLabeling": "./src/DataLabeling/index.ts",
     "./DataLineage": "./src/DataLineage/index.ts",
     "./DataManager": "./src/DataManager/index.ts",
@@ -104,15 +116,20 @@
     "./DLP": "./src/DLP/index.ts",
     "./DNS": "./src/DNS/index.ts",
     "./DocumentAI": "./src/DocumentAI/index.ts",
+    "./Domains": "./src/Domains/index.ts",
+    "./ErrorReporting": "./src/ErrorReporting/index.ts",
     "./EssentialContacts": "./src/EssentialContacts/index.ts",
     "./Eventarc": "./src/Eventarc/index.ts",
+    "./FCM": "./src/FCM/index.ts",
     "./Filestore": "./src/Filestore/index.ts",
     "./Firebase": "./src/Firebase/index.ts",
     "./FirebaseAppCheck": "./src/FirebaseAppCheck/index.ts",
     "./FirebaseAppDistribution": "./src/FirebaseAppDistribution/index.ts",
     "./FirebaseAppHosting": "./src/FirebaseAppHosting/index.ts",
+    "./FirebaseDatabase": "./src/FirebaseDatabase/index.ts",
     "./FirebaseDataConnect": "./src/FirebaseDataConnect/index.ts",
     "./FirebaseRules": "./src/FirebaseRules/index.ts",
+    "./FirebaseStorage": "./src/FirebaseStorage/index.ts",
     "./Firestore": "./src/Firestore/index.ts",
     "./GamesConfiguration": "./src/GamesConfiguration/index.ts",
     "./GKEBackup": "./src/GKEBackup/index.ts",
@@ -120,14 +137,20 @@
     "./GKEOnPrem": "./src/GKEOnPrem/index.ts",
     "./GmailPostmasterTools": "./src/GmailPostmasterTools/index.ts",
     "./Healthcare": "./src/Healthcare/index.ts",
+    "./HypercomputeCluster": "./src/HypercomputeCluster/index.ts",
     "./IAM": "./src/IAM/index.ts",
+    "./IAMCredentials": "./src/IAMCredentials/index.ts",
     "./IAP": "./src/IAP/index.ts",
+    "./IDS": "./src/IDS/index.ts",
     "./Integrations": "./src/Integrations/index.ts",
     "./Jobs": "./src/Jobs/index.ts",
     "./KMS": "./src/KMS/index.ts",
+    "./KMSInventory": "./src/KMSInventory/index.ts",
+    "./Language": "./src/Language/index.ts",
     "./Licensing": "./src/Licensing/index.ts",
     "./Logging": "./src/Logging/index.ts",
     "./Looker": "./src/Looker/index.ts",
+    "./Lustre": "./src/Lustre/index.ts",
     "./ManagedIdentities": "./src/ManagedIdentities/index.ts",
     "./ManagedKafka": "./src/ManagedKafka/index.ts",
     "./Memcache": "./src/Memcache/index.ts",
@@ -141,24 +164,35 @@
     "./NetworkManagement": "./src/NetworkManagement/index.ts",
     "./NetworkSecurity": "./src/NetworkSecurity/index.ts",
     "./NetworkServices": "./src/NetworkServices/index.ts",
+    "./Notebooks": "./src/Notebooks/index.ts",
     "./Observability": "./src/Observability/index.ts",
+    "./OnDemandScanning": "./src/OnDemandScanning/index.ts",
     "./OracleDatabase": "./src/OracleDatabase/index.ts",
     "./OrgPolicy": "./src/OrgPolicy/index.ts",
     "./OSConfig": "./src/OSConfig/index.ts",
     "./OSLogin": "./src/OSLogin/index.ts",
+    "./Parallelstore": "./src/Parallelstore/index.ts",
     "./ParameterManager": "./src/ParameterManager/index.ts",
+    "./Places": "./src/Places/index.ts",
+    "./PolicyAnalyzer": "./src/PolicyAnalyzer/index.ts",
+    "./PolicySimulator": "./src/PolicySimulator/index.ts",
+    "./PolicyTroubleshooter": "./src/PolicyTroubleshooter/index.ts",
+    "./Pollen": "./src/Pollen/index.ts",
     "./PrivateCA": "./src/PrivateCA/index.ts",
+    "./PublicCA": "./src/PublicCA/index.ts",
     "./PubSub": "./src/PubSub/index.ts",
     "./PubSubLite": "./src/PubSubLite/index.ts",
     "./RapidMigrationAssessment": "./src/RapidMigrationAssessment/index.ts",
     "./RealTimeBidding": "./src/RealTimeBidding/index.ts",
     "./RecaptchaEnterprise": "./src/RecaptchaEnterprise/index.ts",
     "./RecommendationEngine": "./src/RecommendationEngine/index.ts",
+    "./Recommender": "./src/Recommender/index.ts",
     "./Redis": "./src/Redis/index.ts",
     "./ResourceManager": "./src/ResourceManager/index.ts",
     "./Retail": "./src/Retail/index.ts",
     "./Run": "./src/Run/index.ts",
     "./SaasServiceManagement": "./src/SaasServiceManagement/index.ts",
+    "./SafeBrowsing": "./src/SafeBrowsing/index.ts",
     "./SasPortal": "./src/SasPortal/index.ts",
     "./SecretManager": "./src/SecretManager/index.ts",
     "./SecureSourceManager": "./src/SecureSourceManager/index.ts",
@@ -169,20 +203,29 @@
     "./ServiceNetworking": "./src/ServiceNetworking/index.ts",
     "./ServiceUsage": "./src/ServiceUsage/index.ts",
     "./SiteVerification": "./src/SiteVerification/index.ts",
+    "./Solar": "./src/Solar/index.ts",
     "./Spanner": "./src/Spanner/index.ts",
     "./Speech": "./src/Speech/index.ts",
     "./SQL": "./src/SQL/index.ts",
     "./StateStore": "./src/StateStore/index.ts",
     "./Storage": "./src/Storage/index.ts",
+    "./StorageBatchOperations": "./src/StorageBatchOperations/index.ts",
+    "./StorageInsights": "./src/StorageInsights/index.ts",
     "./StorageTransfer": "./src/StorageTransfer/index.ts",
+    "./TestLab": "./src/TestLab/index.ts",
+    "./TextToSpeech": "./src/TextToSpeech/index.ts",
+    "./ToolResults": "./src/ToolResults/index.ts",
     "./TPU": "./src/TPU/index.ts",
+    "./TrafficDirector": "./src/TrafficDirector/index.ts",
     "./Transcoder": "./src/Transcoder/index.ts",
     "./Translate": "./src/Translate/index.ts",
     "./Vault": "./src/Vault/index.ts",
+    "./VideoIntelligence": "./src/VideoIntelligence/index.ts",
     "./Vision": "./src/Vision/index.ts",
     "./VMMigration": "./src/VMMigration/index.ts",
     "./VMwareEngine": "./src/VMwareEngine/index.ts",
     "./VpcAccess": "./src/VpcAccess/index.ts",
+    "./WebRisk": "./src/WebRisk/index.ts",
     "./WebSecurityScanner": "./src/WebSecurityScanner/index.ts",
     "./Website": "./src/Website/index.ts",
     "./Workflows": "./src/Workflows/index.ts",
@@ -204,10 +247,25 @@
         "bun": "./src/Bootstrap/*.ts",
         "default": "./src/Bootstrap/*.ts"
       },
+      "./AccessApproval": {
+        "types": "./lib/AccessApproval/index.d.ts",
+        "bun": "./src/AccessApproval/index.ts",
+        "default": "./lib/AccessApproval/index.js"
+      },
       "./AccessContextManager": {
         "types": "./lib/AccessContextManager/index.d.ts",
         "bun": "./src/AccessContextManager/index.ts",
         "default": "./lib/AccessContextManager/index.js"
+      },
+      "./AddressValidation": {
+        "types": "./lib/AddressValidation/index.d.ts",
+        "bun": "./src/AddressValidation/index.ts",
+        "default": "./lib/AddressValidation/index.js"
+      },
+      "./AdvisoryNotifications": {
+        "types": "./lib/AdvisoryNotifications/index.d.ts",
+        "bun": "./src/AdvisoryNotifications/index.ts",
+        "default": "./lib/AdvisoryNotifications/index.js"
       },
       "./AgentIdentity": {
         "types": "./lib/AgentIdentity/index.d.ts",
@@ -223,6 +281,11 @@
         "types": "./lib/AIPlatform/index.d.ts",
         "bun": "./src/AIPlatform/index.ts",
         "default": "./lib/AIPlatform/index.js"
+      },
+      "./AirQuality": {
+        "types": "./lib/AirQuality/index.d.ts",
+        "bun": "./src/AirQuality/index.ts",
+        "default": "./lib/AirQuality/index.js"
       },
       "./AlloyDB": {
         "types": "./lib/AlloyDB/index.d.ts",
@@ -299,6 +362,11 @@
         "bun": "./src/AssuredWorkloads/index.ts",
         "default": "./lib/AssuredWorkloads/index.js"
       },
+      "./AuditManager": {
+        "types": "./lib/AuditManager/index.d.ts",
+        "bun": "./src/AuditManager/index.ts",
+        "default": "./lib/AuditManager/index.js"
+      },
       "./AuthorizedBuyersMarketplace": {
         "types": "./lib/AuthorizedBuyersMarketplace/index.d.ts",
         "bun": "./src/AuthorizedBuyersMarketplace/index.ts",
@@ -313,6 +381,11 @@
         "types": "./lib/BareMetalSolution/index.d.ts",
         "bun": "./src/BareMetalSolution/index.ts",
         "default": "./lib/BareMetalSolution/index.js"
+      },
+      "./Batch": {
+        "types": "./lib/Batch/index.d.ts",
+        "bun": "./src/Batch/index.ts",
+        "default": "./lib/Batch/index.js"
       },
       "./BeyondCorp": {
         "types": "./lib/BeyondCorp/index.d.ts",
@@ -389,6 +462,11 @@
         "bun": "./src/CloudAsset/index.ts",
         "default": "./lib/CloudAsset/index.js"
       },
+      "./CloudBilling": {
+        "types": "./lib/CloudBilling/index.d.ts",
+        "bun": "./src/CloudBilling/index.ts",
+        "default": "./lib/CloudBilling/index.js"
+      },
       "./CloudBuild": {
         "types": "./lib/CloudBuild/index.d.ts",
         "bun": "./src/CloudBuild/index.ts",
@@ -424,6 +502,11 @@
         "bun": "./src/CloudNumberRegistry/index.ts",
         "default": "./lib/CloudNumberRegistry/index.js"
       },
+      "./CloudProfiler": {
+        "types": "./lib/CloudProfiler/index.d.ts",
+        "bun": "./src/CloudProfiler/index.ts",
+        "default": "./lib/CloudProfiler/index.js"
+      },
       "./CloudScheduler": {
         "types": "./lib/CloudScheduler/index.d.ts",
         "bun": "./src/CloudScheduler/index.ts",
@@ -443,6 +526,11 @@
         "types": "./lib/CloudTasks/index.d.ts",
         "bun": "./src/CloudTasks/index.ts",
         "default": "./lib/CloudTasks/index.js"
+      },
+      "./CloudTrace": {
+        "types": "./lib/CloudTrace/index.d.ts",
+        "bun": "./src/CloudTrace/index.ts",
+        "default": "./lib/CloudTrace/index.js"
       },
       "./Composer": {
         "types": "./lib/Composer/index.d.ts",
@@ -489,15 +577,30 @@
         "bun": "./src/ContentWarehouse/index.ts",
         "default": "./lib/ContentWarehouse/index.js"
       },
+      "./DatabaseCenter": {
+        "types": "./lib/DatabaseCenter/index.d.ts",
+        "bun": "./src/DatabaseCenter/index.ts",
+        "default": "./lib/DatabaseCenter/index.js"
+      },
       "./DataCatalog": {
         "types": "./lib/DataCatalog/index.d.ts",
         "bun": "./src/DataCatalog/index.ts",
         "default": "./lib/DataCatalog/index.js"
       },
+      "./Dataflow": {
+        "types": "./lib/Dataflow/index.d.ts",
+        "bun": "./src/Dataflow/index.ts",
+        "default": "./lib/Dataflow/index.js"
+      },
       "./Dataform": {
         "types": "./lib/Dataform/index.d.ts",
         "bun": "./src/Dataform/index.ts",
         "default": "./lib/Dataform/index.js"
+      },
+      "./DataFusion": {
+        "types": "./lib/DataFusion/index.d.ts",
+        "bun": "./src/DataFusion/index.ts",
+        "default": "./lib/DataFusion/index.js"
       },
       "./DataLabeling": {
         "types": "./lib/DataLabeling/index.d.ts",
@@ -579,6 +682,16 @@
         "bun": "./src/DocumentAI/index.ts",
         "default": "./lib/DocumentAI/index.js"
       },
+      "./Domains": {
+        "types": "./lib/Domains/index.d.ts",
+        "bun": "./src/Domains/index.ts",
+        "default": "./lib/Domains/index.js"
+      },
+      "./ErrorReporting": {
+        "types": "./lib/ErrorReporting/index.d.ts",
+        "bun": "./src/ErrorReporting/index.ts",
+        "default": "./lib/ErrorReporting/index.js"
+      },
       "./EssentialContacts": {
         "types": "./lib/EssentialContacts/index.d.ts",
         "bun": "./src/EssentialContacts/index.ts",
@@ -588,6 +701,11 @@
         "types": "./lib/Eventarc/index.d.ts",
         "bun": "./src/Eventarc/index.ts",
         "default": "./lib/Eventarc/index.js"
+      },
+      "./FCM": {
+        "types": "./lib/FCM/index.d.ts",
+        "bun": "./src/FCM/index.ts",
+        "default": "./lib/FCM/index.js"
       },
       "./Filestore": {
         "types": "./lib/Filestore/index.d.ts",
@@ -614,6 +732,11 @@
         "bun": "./src/FirebaseAppHosting/index.ts",
         "default": "./lib/FirebaseAppHosting/index.js"
       },
+      "./FirebaseDatabase": {
+        "types": "./lib/FirebaseDatabase/index.d.ts",
+        "bun": "./src/FirebaseDatabase/index.ts",
+        "default": "./lib/FirebaseDatabase/index.js"
+      },
       "./FirebaseDataConnect": {
         "types": "./lib/FirebaseDataConnect/index.d.ts",
         "bun": "./src/FirebaseDataConnect/index.ts",
@@ -623,6 +746,11 @@
         "types": "./lib/FirebaseRules/index.d.ts",
         "bun": "./src/FirebaseRules/index.ts",
         "default": "./lib/FirebaseRules/index.js"
+      },
+      "./FirebaseStorage": {
+        "types": "./lib/FirebaseStorage/index.d.ts",
+        "bun": "./src/FirebaseStorage/index.ts",
+        "default": "./lib/FirebaseStorage/index.js"
       },
       "./Firestore": {
         "types": "./lib/Firestore/index.d.ts",
@@ -659,15 +787,30 @@
         "bun": "./src/Healthcare/index.ts",
         "default": "./lib/Healthcare/index.js"
       },
+      "./HypercomputeCluster": {
+        "types": "./lib/HypercomputeCluster/index.d.ts",
+        "bun": "./src/HypercomputeCluster/index.ts",
+        "default": "./lib/HypercomputeCluster/index.js"
+      },
       "./IAM": {
         "types": "./lib/IAM/index.d.ts",
         "bun": "./src/IAM/index.ts",
         "default": "./lib/IAM/index.js"
       },
+      "./IAMCredentials": {
+        "types": "./lib/IAMCredentials/index.d.ts",
+        "bun": "./src/IAMCredentials/index.ts",
+        "default": "./lib/IAMCredentials/index.js"
+      },
       "./IAP": {
         "types": "./lib/IAP/index.d.ts",
         "bun": "./src/IAP/index.ts",
         "default": "./lib/IAP/index.js"
+      },
+      "./IDS": {
+        "types": "./lib/IDS/index.d.ts",
+        "bun": "./src/IDS/index.ts",
+        "default": "./lib/IDS/index.js"
       },
       "./Integrations": {
         "types": "./lib/Integrations/index.d.ts",
@@ -684,6 +827,16 @@
         "bun": "./src/KMS/index.ts",
         "default": "./lib/KMS/index.js"
       },
+      "./KMSInventory": {
+        "types": "./lib/KMSInventory/index.d.ts",
+        "bun": "./src/KMSInventory/index.ts",
+        "default": "./lib/KMSInventory/index.js"
+      },
+      "./Language": {
+        "types": "./lib/Language/index.d.ts",
+        "bun": "./src/Language/index.ts",
+        "default": "./lib/Language/index.js"
+      },
       "./Licensing": {
         "types": "./lib/Licensing/index.d.ts",
         "bun": "./src/Licensing/index.ts",
@@ -698,6 +851,11 @@
         "types": "./lib/Looker/index.d.ts",
         "bun": "./src/Looker/index.ts",
         "default": "./lib/Looker/index.js"
+      },
+      "./Lustre": {
+        "types": "./lib/Lustre/index.d.ts",
+        "bun": "./src/Lustre/index.ts",
+        "default": "./lib/Lustre/index.js"
       },
       "./ManagedIdentities": {
         "types": "./lib/ManagedIdentities/index.d.ts",
@@ -764,10 +922,20 @@
         "bun": "./src/NetworkServices/index.ts",
         "default": "./lib/NetworkServices/index.js"
       },
+      "./Notebooks": {
+        "types": "./lib/Notebooks/index.d.ts",
+        "bun": "./src/Notebooks/index.ts",
+        "default": "./lib/Notebooks/index.js"
+      },
       "./Observability": {
         "types": "./lib/Observability/index.d.ts",
         "bun": "./src/Observability/index.ts",
         "default": "./lib/Observability/index.js"
+      },
+      "./OnDemandScanning": {
+        "types": "./lib/OnDemandScanning/index.d.ts",
+        "bun": "./src/OnDemandScanning/index.ts",
+        "default": "./lib/OnDemandScanning/index.js"
       },
       "./OracleDatabase": {
         "types": "./lib/OracleDatabase/index.d.ts",
@@ -789,15 +957,50 @@
         "bun": "./src/OSLogin/index.ts",
         "default": "./lib/OSLogin/index.js"
       },
+      "./Parallelstore": {
+        "types": "./lib/Parallelstore/index.d.ts",
+        "bun": "./src/Parallelstore/index.ts",
+        "default": "./lib/Parallelstore/index.js"
+      },
       "./ParameterManager": {
         "types": "./lib/ParameterManager/index.d.ts",
         "bun": "./src/ParameterManager/index.ts",
         "default": "./lib/ParameterManager/index.js"
       },
+      "./Places": {
+        "types": "./lib/Places/index.d.ts",
+        "bun": "./src/Places/index.ts",
+        "default": "./lib/Places/index.js"
+      },
+      "./PolicyAnalyzer": {
+        "types": "./lib/PolicyAnalyzer/index.d.ts",
+        "bun": "./src/PolicyAnalyzer/index.ts",
+        "default": "./lib/PolicyAnalyzer/index.js"
+      },
+      "./PolicySimulator": {
+        "types": "./lib/PolicySimulator/index.d.ts",
+        "bun": "./src/PolicySimulator/index.ts",
+        "default": "./lib/PolicySimulator/index.js"
+      },
+      "./PolicyTroubleshooter": {
+        "types": "./lib/PolicyTroubleshooter/index.d.ts",
+        "bun": "./src/PolicyTroubleshooter/index.ts",
+        "default": "./lib/PolicyTroubleshooter/index.js"
+      },
+      "./Pollen": {
+        "types": "./lib/Pollen/index.d.ts",
+        "bun": "./src/Pollen/index.ts",
+        "default": "./lib/Pollen/index.js"
+      },
       "./PrivateCA": {
         "types": "./lib/PrivateCA/index.d.ts",
         "bun": "./src/PrivateCA/index.ts",
         "default": "./lib/PrivateCA/index.js"
+      },
+      "./PublicCA": {
+        "types": "./lib/PublicCA/index.d.ts",
+        "bun": "./src/PublicCA/index.ts",
+        "default": "./lib/PublicCA/index.js"
       },
       "./PubSub": {
         "types": "./lib/PubSub/index.d.ts",
@@ -829,6 +1032,11 @@
         "bun": "./src/RecommendationEngine/index.ts",
         "default": "./lib/RecommendationEngine/index.js"
       },
+      "./Recommender": {
+        "types": "./lib/Recommender/index.d.ts",
+        "bun": "./src/Recommender/index.ts",
+        "default": "./lib/Recommender/index.js"
+      },
       "./Redis": {
         "types": "./lib/Redis/index.d.ts",
         "bun": "./src/Redis/index.ts",
@@ -853,6 +1061,11 @@
         "types": "./lib/SaasServiceManagement/index.d.ts",
         "bun": "./src/SaasServiceManagement/index.ts",
         "default": "./lib/SaasServiceManagement/index.js"
+      },
+      "./SafeBrowsing": {
+        "types": "./lib/SafeBrowsing/index.d.ts",
+        "bun": "./src/SafeBrowsing/index.ts",
+        "default": "./lib/SafeBrowsing/index.js"
       },
       "./SasPortal": {
         "types": "./lib/SasPortal/index.d.ts",
@@ -904,6 +1117,11 @@
         "bun": "./src/SiteVerification/index.ts",
         "default": "./lib/SiteVerification/index.js"
       },
+      "./Solar": {
+        "types": "./lib/Solar/index.d.ts",
+        "bun": "./src/Solar/index.ts",
+        "default": "./lib/Solar/index.js"
+      },
       "./Spanner": {
         "types": "./lib/Spanner/index.d.ts",
         "bun": "./src/Spanner/index.ts",
@@ -929,15 +1147,45 @@
         "bun": "./src/Storage/index.ts",
         "default": "./lib/Storage/index.js"
       },
+      "./StorageBatchOperations": {
+        "types": "./lib/StorageBatchOperations/index.d.ts",
+        "bun": "./src/StorageBatchOperations/index.ts",
+        "default": "./lib/StorageBatchOperations/index.js"
+      },
+      "./StorageInsights": {
+        "types": "./lib/StorageInsights/index.d.ts",
+        "bun": "./src/StorageInsights/index.ts",
+        "default": "./lib/StorageInsights/index.js"
+      },
       "./StorageTransfer": {
         "types": "./lib/StorageTransfer/index.d.ts",
         "bun": "./src/StorageTransfer/index.ts",
         "default": "./lib/StorageTransfer/index.js"
       },
+      "./TestLab": {
+        "types": "./lib/TestLab/index.d.ts",
+        "bun": "./src/TestLab/index.ts",
+        "default": "./lib/TestLab/index.js"
+      },
+      "./TextToSpeech": {
+        "types": "./lib/TextToSpeech/index.d.ts",
+        "bun": "./src/TextToSpeech/index.ts",
+        "default": "./lib/TextToSpeech/index.js"
+      },
+      "./ToolResults": {
+        "types": "./lib/ToolResults/index.d.ts",
+        "bun": "./src/ToolResults/index.ts",
+        "default": "./lib/ToolResults/index.js"
+      },
       "./TPU": {
         "types": "./lib/TPU/index.d.ts",
         "bun": "./src/TPU/index.ts",
         "default": "./lib/TPU/index.js"
+      },
+      "./TrafficDirector": {
+        "types": "./lib/TrafficDirector/index.d.ts",
+        "bun": "./src/TrafficDirector/index.ts",
+        "default": "./lib/TrafficDirector/index.js"
       },
       "./Transcoder": {
         "types": "./lib/Transcoder/index.d.ts",
@@ -953,6 +1201,11 @@
         "types": "./lib/Vault/index.d.ts",
         "bun": "./src/Vault/index.ts",
         "default": "./lib/Vault/index.js"
+      },
+      "./VideoIntelligence": {
+        "types": "./lib/VideoIntelligence/index.d.ts",
+        "bun": "./src/VideoIntelligence/index.ts",
+        "default": "./lib/VideoIntelligence/index.js"
       },
       "./Vision": {
         "types": "./lib/Vision/index.d.ts",
@@ -973,6 +1226,11 @@
         "types": "./lib/VpcAccess/index.d.ts",
         "bun": "./src/VpcAccess/index.ts",
         "default": "./lib/VpcAccess/index.js"
+      },
+      "./WebRisk": {
+        "types": "./lib/WebRisk/index.d.ts",
+        "bun": "./src/WebRisk/index.ts",
+        "default": "./lib/WebRisk/index.js"
       },
       "./WebSecurityScanner": {
         "types": "./lib/WebSecurityScanner/index.d.ts",

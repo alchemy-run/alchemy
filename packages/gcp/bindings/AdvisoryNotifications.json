@@ -1,0 +1,9 @@
+{
+  "discovery": "advisorynotifications-v1",
+  "module": "advisorynotifications_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["advisorynotifications.googleapis.com"]
+  }
+}

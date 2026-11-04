@@ -1,0 +1,9 @@
+{
+  "discovery": "domains-v1",
+  "module": "domains_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["domains.googleapis.com"]
+  }
+}

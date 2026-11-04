@@ -1,0 +1,12 @@
+{
+  "discovery": "batch-v1",
+  "module": "batch_v1",
+  "resources": {},
+  "permissions": {
+    "batch.projects.locations.jobs.cancel": "batch.jobs.delete"
+  },
+  "probes": {
+    "resources": {},
+    "enable": ["batch.googleapis.com"]
+  }
+}

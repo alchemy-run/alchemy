@@ -1,0 +1,10 @@
+{
+  "discovery": "solar-v1",
+  "module": "solar_v1",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["solar.googleapis.com"]
+  }
+}

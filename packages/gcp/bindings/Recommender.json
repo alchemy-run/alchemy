@@ -1,0 +1,39 @@
+{
+  "discovery": "recommender-v1",
+  "module": "recommender_v1",
+  "resources": {},
+  "permissions": {
+    "recommender.projects.locations.recommenders.getConfig": "recommender.computeInstanceMachineTypeRecommenderConfig.get",
+    "recommender.projects.locations.recommenders.updateConfig": "recommender.computeInstanceMachineTypeRecommenderConfig.update",
+    "recommender.projects.locations.insightTypes.getConfig": "recommender.computeInstanceGroupManagerMachineTypeInsightTypeConfig.get",
+    "recommender.projects.locations.insightTypes.updateConfig": "recommender.computeInstanceGroupManagerMachineTypeInsightTypeConfig.update",
+    "recommender.projects.locations.recommenders.recommendations.list": "recommender.computeInstanceMachineTypeRecommendations.list",
+    "recommender.projects.locations.recommenders.recommendations.get": "recommender.computeInstanceMachineTypeRecommendations.get",
+    "recommender.projects.locations.recommenders.recommendations.markSucceeded": "recommender.computeInstanceMachineTypeRecommendations.update",
+    "recommender.projects.locations.recommenders.recommendations.markDismissed": "recommender.computeInstanceMachineTypeRecommendations.update",
+    "recommender.projects.locations.recommenders.recommendations.markFailed": "recommender.computeInstanceMachineTypeRecommendations.update",
+    "recommender.projects.locations.recommenders.recommendations.markClaimed": "recommender.computeInstanceMachineTypeRecommendations.update",
+    "recommender.projects.locations.insightTypes.insights.markAccepted": "recommender.computeInstanceMachineTypeInsights.update",
+    "recommender.projects.locations.insightTypes.insights.get": "recommender.computeInstanceMachineTypeInsights.get",
+    "recommender.projects.locations.insightTypes.insights.list": "recommender.computeInstanceMachineTypeInsights.list"
+  },
+  "roles": {
+    "recommender.projects.locations.recommenders.recommendations.list": "roles/recommender.viewer",
+    "recommender.projects.locations.recommenders.recommendations.get": "roles/recommender.viewer",
+    "recommender.projects.locations.recommenders.recommendations.markSucceeded": "roles/recommender.admin",
+    "recommender.projects.locations.recommenders.recommendations.markDismissed": "roles/recommender.admin",
+    "recommender.projects.locations.recommenders.recommendations.markFailed": "roles/recommender.admin",
+    "recommender.projects.locations.recommenders.recommendations.markClaimed": "roles/recommender.admin",
+    "recommender.projects.locations.insightTypes.insights.list": "roles/recommender.viewer",
+    "recommender.projects.locations.insightTypes.insights.get": "roles/recommender.viewer",
+    "recommender.projects.locations.insightTypes.insights.markAccepted": "roles/recommender.admin",
+    "recommender.projects.locations.recommenders.getConfig": "roles/recommender.viewer",
+    "recommender.projects.locations.insightTypes.getConfig": "roles/recommender.viewer",
+    "recommender.projects.locations.recommenders.updateConfig": "roles/recommender.admin",
+    "recommender.projects.locations.insightTypes.updateConfig": "roles/recommender.admin"
+  },
+  "probes": {
+    "resources": {},
+    "enable": ["recommender.googleapis.com"]
+  }
+}

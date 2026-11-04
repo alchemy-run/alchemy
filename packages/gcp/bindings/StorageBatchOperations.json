@@ -1,0 +1,9 @@
+{
+  "discovery": "storagebatchoperations-v1",
+  "module": "storagebatchoperations_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["storagebatchoperations.googleapis.com"]
+  }
+}

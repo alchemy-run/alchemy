@@ -1,0 +1,9 @@
+{
+  "discovery": "firebasedatabase-v1beta",
+  "module": "firebasedatabase_v1beta",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["firebasedatabase.googleapis.com"]
+  }
+}

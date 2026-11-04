@@ -1,0 +1,12 @@
+{
+  "discovery": "ondemandscanning-v1",
+  "module": "ondemandscanning_v1",
+  "resources": {},
+  "permissions": {
+    "ondemandscanning.projects.locations.scans.vulnerabilities.list": "ondemandscanning.scans.listVulnerabilities"
+  },
+  "probes": {
+    "resources": {},
+    "enable": ["ondemandscanning.googleapis.com"]
+  }
+}

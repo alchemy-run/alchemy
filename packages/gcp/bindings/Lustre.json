@@ -1,0 +1,9 @@
+{
+  "discovery": "lustre-v1",
+  "module": "lustre_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["lustre.googleapis.com"]
+  }
+}

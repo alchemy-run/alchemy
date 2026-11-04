@@ -1,0 +1,9 @@
+{
+  "discovery": "parallelstore-v1",
+  "module": "parallelstore_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["parallelstore.googleapis.com"]
+  }
+}

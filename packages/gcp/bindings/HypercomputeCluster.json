@@ -1,0 +1,9 @@
+{
+  "discovery": "hypercomputecluster-v1",
+  "module": "hypercomputecluster_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["hypercomputecluster.googleapis.com"]
+  }
+}

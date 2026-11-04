@@ -1,0 +1,12 @@
+{
+  "discovery": "datafusion-v1",
+  "module": "datafusion_v1",
+  "resources": {},
+  "permissions": {
+    "datafusion.projects.locations.versions.list": "datafusion.instances.list"
+  },
+  "probes": {
+    "resources": {},
+    "enable": ["datafusion.googleapis.com"]
+  }
+}

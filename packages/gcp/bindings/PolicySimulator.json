@@ -1,0 +1,9 @@
+{
+  "discovery": "policysimulator-v1",
+  "module": "policysimulator_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["policysimulator.googleapis.com"]
+  }
+}

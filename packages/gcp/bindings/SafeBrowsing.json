@@ -1,0 +1,10 @@
+{
+  "discovery": "safebrowsing-v5",
+  "module": "safebrowsing_v5",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["safebrowsing.googleapis.com"]
+  }
+}

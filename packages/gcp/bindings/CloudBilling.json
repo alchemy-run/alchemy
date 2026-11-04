@@ -1,0 +1,19 @@
+{
+  "discovery": "cloudbilling-v1",
+  "module": "cloudbilling_v1",
+  "resources": {},
+  "permissions": {
+    "cloudbilling.projects.getBillingInfo": "billing.resourceAssociations.list",
+    "cloudbilling.projects.updateBillingInfo": "resourcemanager.projects.createBillingAssignment",
+    "cloudbilling.services.list": "serviceusage.services.use"
+  },
+  "skip": {
+    "cloudbilling.getCard": "the Gemini billing assistant's UI card, not an API for user code",
+    "cloudbilling.message.send": "the Gemini billing assistant's chat, not an API for user code",
+    "cloudbilling.message.stream": "the Gemini billing assistant's chat, not an API for user code"
+  },
+  "probes": {
+    "resources": {},
+    "enable": ["cloudbilling.googleapis.com"]
+  }
+}

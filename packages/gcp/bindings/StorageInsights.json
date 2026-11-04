@@ -1,0 +1,9 @@
+{
+  "discovery": "storageinsights-v1",
+  "module": "storageinsights_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["storageinsights.googleapis.com"]
+  }
+}

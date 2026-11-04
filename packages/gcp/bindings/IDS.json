@@ -1,0 +1,9 @@
+{
+  "discovery": "ids-v1",
+  "module": "ids_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["ids.googleapis.com"]
+  }
+}
