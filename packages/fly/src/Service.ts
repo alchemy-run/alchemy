@@ -14,7 +14,6 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import { Platform, type Main, type MainRpc, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { makeRandom } from "alchemy/Random";
 import type { Resource } from "alchemy/Resource";
 import type { ServerHost } from "alchemy/Runtime/Process";
 import { packEnvValue } from "alchemy/RuntimeContext";
@@ -22,7 +21,6 @@ import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import { App, deleteApp, ensureApp } from "./App.ts";
 import { boundTargetEnvKeys } from "./BindService.ts";
 import { attachBucketSecrets } from "./Bucket.ts";
@@ -74,7 +72,7 @@ import {
   type Replica,
   type ReplicaSet,
 } from "./replicas.ts";
-import { BINDING_PORT_ENV, DEFAULT_BINDING_PORT, RPC_ORG_ENV, RPC_TOKEN_ENV } from "./rpc.ts";
+import { BINDING_PORT_ENV, DEFAULT_BINDING_PORT, RPC_CALLERS_ENV, RPC_ORG_ENV } from "./rpc.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -140,12 +138,6 @@ export interface ServiceProps extends PlatformProps {
    * @default 7780
    */
   bindingPort?: number;
-  /**
-   * Caller token for bound callers. Set automatically from an
-   * `Alchemy.Random` child resource; do not pass it.
-   * @internal
-   */
-  rpcToken?: Redacted.Redacted<string>;
   /**
    * Module entrypoint bundled with rolldown and baked into a Docker
    * image pushed to `registry.fly.io`. Typically `import.meta.url`.
@@ -287,8 +279,6 @@ export type Service = Resource<
      * shared App's network. `undefined` for the organization's default.
      */
     network?: string;
-    /** Token bound callers send with RPC calls. */
-    rpcToken?: Redacted.Redacted<string>;
     /**
      * Slug of the organization the App is in. Its Machines' OIDC tokens are
      * issued by `https://oidc.fly.io/{orgSlug}`.
@@ -544,9 +534,9 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ### Call another Service
  * A Service can return methods next to `fetch`. Another Service calls
  * them by binding it with {@link bindService}, which returns a typed
- * client. Binding makes the caller deploy after the Service, and only
- * callers that bind a Service receive its caller token, so only they
- * can call its methods.
+ * client. Binding makes the caller deploy after the Service and records
+ * the caller's App on it, so only callers that bind a Service can call
+ * its methods.
  *
  * **Example:** A private Service with methods
  * ```typescript
@@ -580,9 +570,10 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```
  *
  * Calls use plain HTTP to `privateUrl` inside Fly's WireGuard-encrypted
- * private network. The Service accepts a method call only with its
- * caller token and a `Fly-Src` signature from Fly's proxy for the same
- * organization, so the public internet can never call it. A public
+ * private network. The Service accepts a method call only with a
+ * `Fly-Src` signature from Fly's proxy naming the App of a Service that
+ * binds it, so neither the public internet nor any other App can call
+ * it, and no caller holds a key. A public
  * Service publishes an extra plain-HTTP port for bound callers,
  * `bindingPort` (default 7780), since its own ports are an HTTPS
  * redirect and HTTPS. `client.fetch` sends a request to the Service's
@@ -1049,8 +1040,6 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
         const app = Effect.isEffect(props.app)
           ? yield* props.app as Effect.Effect<App, never, Providers>
           : props.app;
-        // Only callers that bind this Service receive the token.
-        const rpcToken = yield* makeRandom(`${id}RpcToken`);
         if (app !== undefined) {
           // Report the ports this Service publishes so the App can reject
           // two Services on the same port before either one is deployed.
@@ -1060,7 +1049,7 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
             bindingPort: props.bindingPort,
           });
         }
-        return { ...props, app, rpcToken } as typeof props;
+        return { ...props, app } as typeof props;
       }),
   });
 
@@ -1315,7 +1304,6 @@ interface Access {
   isPublic: boolean;
   network: string | undefined;
   bindingPort: number;
-  rpcToken: Redacted.Redacted<string> | undefined;
   orgSlug: string | undefined;
 }
 
@@ -1499,7 +1487,6 @@ const toAttrs = (set: ReplicaSet, codeHash: string, access: Access): Service["At
   appName: set.appName,
   ownsApp: access.ownsApp,
   network: normalizeNetwork(access.network),
-  rpcToken: access.rpcToken,
   orgSlug: access.orgSlug,
   ...endpointsOf(set, access),
   rolloutPending: set.rolloutPending,
@@ -1754,7 +1741,6 @@ export const ServiceProvider = () =>
               isPublic: false,
               network: output?.network ?? olds?.network,
               bindingPort: olds?.bindingPort ?? DEFAULT_BINDING_PORT,
-              rpcToken: output?.rpcToken,
               orgSlug: output?.orgSlug ?? (yield* resolveOrgSlug()),
             });
           }
@@ -1763,7 +1749,6 @@ export const ServiceProvider = () =>
             isPublic: ownsApp && (yield* hasPublicAddress(found.appName)),
             network: output?.network ?? (ownsApp ? olds?.network : undefined),
             bindingPort: olds?.bindingPort ?? DEFAULT_BINDING_PORT,
-            rpcToken: output?.rpcToken,
             orgSlug: output?.orgSlug ?? (yield* resolveOrgSlug()),
           });
         }),
@@ -1777,7 +1762,6 @@ export const ServiceProvider = () =>
               isPublic: true,
               network: undefined,
               bindingPort: DEFAULT_BINDING_PORT,
-              rpcToken: undefined,
               orgSlug: undefined,
             }),
           );
@@ -1832,12 +1816,13 @@ export const ServiceProvider = () =>
           );
           const services = published.services;
           if (!ownsApp) yield* validateObservedPorts(appName, fqn, id, services);
-          if (props.rpcToken !== undefined) env[RPC_TOKEN_ENV] = Redacted.value(props.rpcToken);
+          // The Apps of the Services that bind this one; only they may call
+          // its methods (see `serveFlyRpc`).
+          if (bound.callers.length > 0) env[RPC_CALLERS_ENV] = bound.callers.join(",");
           for (const target of bound.targets) {
             const keys = boundTargetEnvKeys(target.service);
             env[keys.appName] = packEnvValue(target.appName);
             if (target.privateUrl !== undefined) env[keys.url] = packEnvValue(target.privateUrl);
-            if (target.rpcToken !== undefined) env[keys.token] = packEnvValue(target.rpcToken);
           }
           env[RPC_ORG_ENV] = yield* resolveOrgSlug();
           if (published.added) env[BINDING_PORT_ENV] = String(bindingPort);
@@ -1893,14 +1878,13 @@ export const ServiceProvider = () =>
             isPublic,
             network,
             bindingPort,
-            rpcToken: props.rpcToken,
             orgSlug: yield* resolveOrgSlug(),
           });
         }),
 
-        // Create the App, its addresses, and the caller token before any
-        // Machine, so two Services that bind each other can both resolve
-        // the other's private address and token.
+        // Create the App and its addresses before any Machine, so two
+        // Services that bind each other can both resolve the other's App
+        // and private address.
         precreate: Effect.fn(function* ({ id, news }) {
           const props = news;
           // Precreate runs before dependencies resolve. A Service placed in
@@ -1954,7 +1938,6 @@ export const ServiceProvider = () =>
             isPublic,
             network,
             bindingPort,
-            rpcToken: isResolved(props.rpcToken) ? props.rpcToken : undefined,
             orgSlug: yield* resolveOrgSlug(),
           });
         }),
