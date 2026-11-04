@@ -462,12 +462,7 @@ export const host = (
   return {
     run: (input, { after, take, atLeast }) =>
       Effect.gen(function* () {
-        yield* Effect.annotateCurrentSpan(
-          Telemetry.attributesOf(
-            implementation.options.attributes as Telemetry.Attributes<unknown> | undefined,
-            input,
-          ),
-        );
+        yield* Effect.annotateCurrentSpan(Telemetry.attributesOf(implementation.options, input));
         const receipts = receiptsOf(atLeast);
         // Judge the request first: a refused caller never waits on a projection.
         if (validate) yield* validate(input, { atLeast: receipts });

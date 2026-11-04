@@ -166,21 +166,36 @@ Every span carries `domain.correlation_id`, the id of the first command in the f
 ## Record the amount on every withdrawal
 
 ```diff lang="typescript"
-// src/BankWorker.ts
-const BankLive = Layer.mergeAll(SessionLive, TelemetryLive).pipe(
--  Layer.provideMerge(Bank.layer(BankHandlers)),
-+  Layer.provideMerge(
-+    Bank.layer(BankHandlers, {
-+      telemetry: {
-+        attributes: { commands: { WithdrawMoney: (cmd) => ({ "bank.amount": cmd.amount }) } },
-+      },
-+    }),
-+  ),
-  Layer.provide(DomainCloudflare.layerDurableObjects()),
-);
+// src/WithdrawMoney.command.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "./Account.id.ts";
+import { NotOpen } from "./NotOpen.rejection.ts";
+import { NotOwner } from "./NotOwner.rejection.ts";
+import { Session } from "./Session.middleware.ts";
+
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
+}) {}
+
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  balance: Schema.Int,
+  requested: Schema.Int,
+}) {}
+
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  middleware: [Session],
+  input: { amount: Schema.Int },
+  events: [MoneyWithdrawn],
+  rejects: [NotOpen, NotOwner, InsufficientFunds],
+  reply: { balance: Schema.Int },
++  attributes: (cmd) => ({ "bank.amount": cmd.amount }),
+}) {}
 ```
 
-Spans record nothing from a command's input unless you ask. `attributes` adds `bank.amount` to every span the withdrawal makes, so you can find large withdrawals in Axiom. It sits on the model's Layer, not the command: what a trace records is tuning, and changing it changes nothing the command means. `events` and `rejections` take attributes by tag the same way, and a `Redacted` value is always recorded as `<redacted>`.
+Spans record nothing from a command's input unless you ask. `attributes` adds `bank.amount` to every span the withdrawal makes, so you can find large withdrawals in Axiom. Events and rejections accept `attributes` too, and a `Redacted` value is always recorded as `<redacted>`.
 
 ## Trace the browser
 
@@ -225,13 +240,7 @@ const TelemetryLive = Axiom.Telemetry({
 });
 
 const BankLive = Layer.mergeAll(SessionLive, TelemetryLive).pipe(
-  Layer.provideMerge(
-    Bank.layer(BankHandlers, {
-      telemetry: {
-        attributes: { commands: { WithdrawMoney: (cmd) => ({ "bank.amount": cmd.amount }) } },
-      },
-    }),
-  ),
+  Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 

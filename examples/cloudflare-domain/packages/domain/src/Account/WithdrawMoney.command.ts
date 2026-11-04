@@ -28,4 +28,6 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   events: [MoneyWithdrawn],
   rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
   reply: { balance: Cents },
+  // Recorded on every span the withdrawal passes through; nothing else from it is.
+  attributes: (cmd) => ({ "bank.amount": cmd.amount }),
 }) {}

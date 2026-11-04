@@ -307,7 +307,8 @@ const build = (
   const decodeEvent = (json: Json): Effect.Effect<unknown> =>
     Effect.map(eventCodec((json as { _tag: string })._tag), (codec) => codec.decode(json));
   /** The span attributes an event's declaration adds. */
-  const eventAttributes = (event: { readonly _tag: string }) => telemetry.event(event);
+  const eventAttributes = (event: { readonly _tag: string }) =>
+    Telemetry.attributesOf(eventCodecs.get(event._tag)?.cls, event);
 
   // ----------------------------------------------------- aggregate codecs
   interface AggregateCodecs {
@@ -1090,7 +1091,7 @@ const build = (
             );
           }
           const decoded = command.codec.decode(input.command) as { readonly _tag: string };
-          yield* Effect.annotateCurrentSpan(telemetry.command(decoded));
+          yield* Effect.annotateCurrentSpan(Telemetry.attributesOf(command.cls, decoded));
           const state = codecs.state.decode(input.state ?? codecs.initial);
           const id = decodeId(input.id) as string;
           const now = DateTime.makeUnsafe(input.now);
@@ -1124,9 +1125,10 @@ const build = (
           if (judged._tag === "Rejected") {
             const rejection = judged.rejection;
             const codec = codecs.rejections.get(rejection._tag)!;
+            const declared = command.cls.rejects.find((r) => rejectionTag(r) === rejection._tag)!;
             yield* Effect.annotateCurrentSpan({
               "domain.outcome": rejection._tag,
-              ...telemetry.rejection(rejection),
+              ...Telemetry.attributesOf(declared, rejection),
             });
             return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
           }

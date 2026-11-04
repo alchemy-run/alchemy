@@ -16,11 +16,16 @@ import { Activity } from "effect/workflow";
 
 // A wallet whose debits a policy audits on a second aggregate, and reminds later.
 class Opened extends Domain.Event("Opened", { balance: Schema.Number }) {}
-class Debited extends Domain.Event("Debited", {
-  amount: Schema.Number,
-  note: Schema.Redacted(Schema.String),
-}) {}
-class Insufficient extends Domain.Rejection("Insufficient", { balance: Schema.Number }) {}
+class Debited extends Domain.Event(
+  "Debited",
+  { amount: Schema.Number, note: Schema.Redacted(Schema.String) },
+  { attributes: (e) => ({ "wallet.amount": e.amount, "wallet.note": e.note }) },
+) {}
+class Insufficient extends Domain.Rejection(
+  "Insufficient",
+  { balance: Schema.Number },
+  { attributes: (r) => ({ "wallet.balance": r.balance }) },
+) {}
 
 class Open extends Domain.Command("Open", {
   target: Schema.String,
@@ -32,6 +37,7 @@ class Debit extends Domain.Command("Debit", {
   input: { amount: Schema.Number, note: Schema.Redacted(Schema.String) },
   events: [Debited],
   rejects: [Insufficient],
+  attributes: (cmd) => ({ "wallet.amount": cmd.amount }),
 }) {}
 
 class Wallet extends Domain.Aggregate("Wallet", {
@@ -161,17 +167,7 @@ const reviewStory = Story.make(Reviewed, {
   stub: [Scorer],
 });
 
-// What to record from a command's input, an event and a rejection: tuning, on the Layer.
-const story = Story.make(Bank, {
-  layer: Layer.mergeAll(AuditDebitsLive),
-  telemetry: {
-    attributes: {
-      commands: { Debit: (cmd) => ({ "wallet.amount": cmd.amount }) },
-      events: { Debited: (e) => ({ "wallet.amount": e.amount, "wallet.note": e.note }) },
-      rejections: { Insufficient: (r) => ({ "wallet.balance": r.balance }) },
-    },
-  },
-});
+const story = Story.make(Bank, { layer: Layer.mergeAll(AuditDebitsLive) });
 const alice = Wallet.ref("alice");
 const ledger = Ledger.ref("main");
 
@@ -197,22 +193,6 @@ const recording = () => {
 const parentId = (span: Tracer.Span) => Option.getOrUndefined(span.parent)?.spanId;
 
 describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
-  it("keys span attributes by the model's own tags, typed by each declaration", () => {
-    Bank.layer(AuditDebitsLive, {
-      telemetry: {
-        attributes: { commands: { Audit: (cmd) => ({ "ledger.wallet": cmd.wallet }) } },
-      },
-    });
-    Bank.layer(AuditDebitsLive, {
-      // @ts-expect-error not a command of the model
-      telemetry: { attributes: { commands: { Withdraw: () => ({}) } } },
-    });
-    Bank.layer(AuditDebitsLive, {
-      // @ts-expect-error a Debited event has no `wallet`
-      telemetry: { attributes: { events: { Debited: (e) => ({ x: e.wallet }) } } },
-    });
-  });
-
   it.effect("a command's whole flow is one trace, with one correlation id", () =>
     Effect.gen(function* () {
       const { tracer, one, spans } = recording();

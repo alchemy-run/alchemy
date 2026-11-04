@@ -19,7 +19,6 @@ import {
   LazyViewNeedsOneSource,
   MissingWorkflowEngine,
 } from "./DefinitionError.ts";
-import type * as Event from "./Event.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import type * as Key from "./Key.ts";
@@ -41,7 +40,6 @@ import {
 import type * as Policy from "./Policy.ts";
 import * as Projection from "./Projection.ts";
 import * as Query from "./Query.ts";
-import type * as Rejection from "./Rejection.ts";
 import * as RequestContext from "./RequestContext.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -134,7 +132,7 @@ export interface ModelClass<
    */
   layer<E = never, R = never>(
     handlers: Layer.Layer<Policies, E, R>,
-    options?: LayerOptionsOf<Parts>,
+    options?: LayerOptions<Parts["views"][number]["viewName"]>,
   ): Layer.Layer<
     Provided | Internals,
     E,
@@ -193,18 +191,9 @@ type ProvidedBy<
   | Projection.ProgressIdentifier<J[number]>;
 
 /** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
-export interface LayerOptions<
-  Views extends string = string,
-  C extends Command.Any = Command.Any,
-  Ev extends Event.Any = Event.Any,
-  Rj extends Rejection.Any = Rejection.Any,
-> {
-  /**
-   * What the hosted model records in traces: whether views trace each event
-   * they apply, and what to record from each command's input, event and
-   * rejection. See {@link Telemetry.Options}.
-   */
-  readonly telemetry?: Telemetry.Options<C, Ev, Rj>;
+export interface LayerOptions<Views extends string = string> {
+  /** What the hosted model records in traces. See {@link Telemetry.Options}. */
+  readonly telemetry?: Telemetry.Options;
   /**
    * Before Domain version 0, models in one Worker that listed the same
    * aggregate, view or saga shared its Durable Object class, and so its data.
@@ -224,14 +213,6 @@ export interface LayerOptions<
    */
   readonly lazy?: ReadonlyArray<Views>;
 }
-
-/** The {@link LayerOptions} of a model, typed by its views, commands, events and rejections. */
-export type LayerOptionsOf<Parts extends Servable> = LayerOptions<
-  Parts["views"][number]["viewName"],
-  Parts["commands"][number],
-  Parts["aggregates"][number]["definition"]["events"][number],
-  Parts["commands"][number]["rejects"][number]
->;
 
 /** Every implementation a model's `layer` requires: its policies, projections, sagas and queries. */
 type HandledBy<
@@ -509,7 +490,6 @@ const build = <A, E, R>(
         aggregate,
         aggregateStores.get(aggregate.aggregateName)!,
         random,
-        telemetry,
       );
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
@@ -674,7 +654,6 @@ const aggregateClient = (
   aggregate: Aggregate.Any,
   store: AggregateStore,
   random: SecureRandom.SecureRandom["Service"],
-  telemetry: Telemetry.Resolved,
 ): Aggregate.ClientImpl => {
   /** What a send carries besides the command: its id, context, flow and trace. */
   const metaFor = (
@@ -690,7 +669,7 @@ const aggregateClient = (
       yield* Effect.annotateCurrentSpan({
         "domain.command_id": commandId,
         "domain.correlation_id": correlationId,
-        ...telemetry.command(command),
+        ...Telemetry.attributesOf(command.constructor, command),
       });
       const trace = yield* Telemetry.currentTrace;
       return {

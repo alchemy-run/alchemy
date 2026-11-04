@@ -30,14 +30,7 @@ const BankLive = Layer.mergeAll(
   Observability,
 ).pipe(
   Layer.provideMerge(SessionKeyLive),
-  Layer.provideMerge(
-    Bank.layer(BankHandlers, {
-      // Recorded on every span a withdrawal passes through; nothing else from it is.
-      telemetry: {
-        attributes: { commands: { WithdrawMoney: ({ amount }) => ({ "bank.amount": amount }) } },
-      },
-    }),
-  ),
+  Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
     Layer.mergeAll(

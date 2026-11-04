@@ -42,12 +42,13 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   events: [MoneyWithdrawn],                // every event it may record
   rejects: [NotOpen, DailyLimitExceeded],  // every way it can be refused
   reply: { balance: Cents },               // optional typed reply
+  attributes: (cmd) => ({ "bank.amount": cmd.amount }),  // optional: what its spans record
 }) {}
 ```
 
-A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Nothing from a payload is traced unless the model's Layer asks for it (`telemetry.attributes`, see [hosting](./hosting.md#observability)).
+A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Events and rejections take `attributes` as a third argument: `Domain.Event("MoneyWithdrawn", { ... }, { attributes: (e) => ({ ... }) })`. Nothing from a payload is traced unless `attributes` returns it, and `Redacted` values record as `<redacted>`.
 
-`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...). `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
+`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...) plus `attributes`. `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
 
 More: [Command: Annotate a rejection](https://alchemy.run/domain/command#annotate-a-rejection).
 
