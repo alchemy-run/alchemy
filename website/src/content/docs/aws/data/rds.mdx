@@ -3,7 +3,7 @@ title: RDS & Aurora
 description: How RDS and Aurora run Postgres and MySQL inside your VPC, how the Aurora helper creates a cluster with its secret, subnets and instances, and how runtimes connect, migrate and scale it.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Zones from "../../../../components/diagrams/Zones.astro";
 
 RDS runs relational databases for you: Postgres, MySQL, MariaDB and others, with backups, patching and failover handled by AWS. **Aurora** is AWS's own engine behind the Postgres and MySQL interfaces. It separates compute from storage, so a cluster's instances share one copy of the data, replicated across three Availability Zones.
 
@@ -11,18 +11,16 @@ RDS runs relational databases for you: Postgres, MySQL, MariaDB and others, with
 
 An Aurora **cluster** owns the storage: one volume, grown automatically, kept in six copies across three zones. **Instances** are the compute that run queries against it. One instance is the **writer**. Others are **readers**, which serve reads from the same storage and take over if the writer fails.
 
-<DAG
-  nodes={[
-    { id: "writer", label: "writer", type: "instance", tone: "accent", col: 0, row: 0 },
-    { id: "reader", label: "reader", type: "instance", col: 1, row: 0 },
-    { id: "storage", label: "cluster volume", type: "3 zones, 6 copies", col: 0, row: 1 },
+<Zones
+  title="Aurora cluster"
+  zones={["us-east-1a", "us-east-1b", "us-east-1c"]}
+  instances={[
+    { zone: 0, label: "writer", type: "instance", flow: "writes", tone: "accent" },
+    { zone: 1, label: "reader", type: "instance", flow: "reads" },
+    { zone: 2, label: "reader", type: "instance", flow: "reads" },
   ]}
-  groups={[{ id: "cluster", label: "Aurora cluster", nodes: ["writer", "reader", "storage"] }]}
-  edges={[
-    { from: "writer", to: "storage", label: "writes" },
-    { from: "reader", to: "storage", label: "reads" },
-  ]}
-  caption="A cluster's instances run queries. Its volume holds the data they share, copied across three zones."
+  volume={{ label: "cluster volume", type: "one copy of the data, grown automatically", copies: 2 }}
+  caption="The instances in each zone share one volume. It keeps two copies in every zone, so losing a zone loses no data. If the writer fails, a reader in another zone takes over."
 />
 
 Instances come in two kinds. **Serverless v2** instances scale their capacity, measured in ACUs, up and down with load. **Provisioned** instances have a fixed size, like `db.r6g.large`.

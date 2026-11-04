@@ -3,7 +3,7 @@ title: SNS
 description: How SNS Topics broadcast one message to every subscriber, how to publish from a runtime, subscribe Functions and Queues, and filter what each subscriber receives.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Fanout from "../../../../components/diagrams/Fanout.astro";
 
 SNS broadcasts messages. A publisher sends a message to a **Topic** once, and SNS pushes a copy to every **subscription**: a Lambda Function, an SQS Queue, an HTTPS endpoint, an email address. The publisher doesn't know who's listening, so adding a subscriber never changes the code that publishes.
 
@@ -11,21 +11,14 @@ SNS broadcasts messages. A publisher sends a message to a **Topic** once, and SN
 
 A [Queue](/aws/messaging/sqs) hands each message to one consumer. A Topic hands each message to every subscriber, each with its own copy.
 
-<DAG
-  nodes={[
-    { id: "api", label: "Api", type: "publisher", layer: 0 },
-    { id: "topic", label: "Orders", type: "SNS Topic", tone: "accent", layer: 1 },
-    { id: "email", label: "EmailJobs", type: "SQS Queue", layer: 2 },
-    { id: "analytics", label: "AnalyticsJobs", type: "SQS Queue", layer: 2 },
-    { id: "audit", label: "Audit", type: "Lambda Function", layer: 2 },
+<Fanout
+  item={{ title: "message", lines: ['"orderId": "o_104"', '"total": 120'] }}
+  routes={[
+    { target: { label: "EmailJobs", type: "SQS Queue" }, copy: "copy" },
+    { target: { label: "AnalyticsJobs", type: "SQS Queue" }, copy: "copy" },
+    { target: { label: "Audit", type: "Lambda Function" }, copy: "copy" },
   ]}
-  edges={[
-    { from: "api", to: "topic", label: "publish" },
-    { from: "topic", to: "email", dashed: true },
-    { from: "topic", to: "analytics", dashed: true },
-    { from: "topic", to: "audit", dashed: true },
-  ]}
-  caption="One publish, one copy per subscription."
+  caption="Api publishes once, and each subscription gets a copy of its own. Deleting the copy in EmailJobs leaves the others untouched."
 />
 
 SNS pushes each copy as soon as it arrives and retries deliveries that fail. It doesn't store messages for later, so a subscriber that needs to work at its own pace, or survive being down for a while, subscribes through a Queue.
@@ -128,6 +121,16 @@ yield* AWS.SNS.consumeTopicNotifications(
   (stream) => stream.pipe(Stream.runForEach((n) => Console.log(n.Message))),
 );
 ```
+
+<Fanout
+  item={{ title: "message", lines: ['"Message": "…"', '"MessageAttributes":', '  { "type": "order.created" }'] }}
+  routes={[
+    { label: "no filter policy", condition: ["every message"], target: { label: "EmailJobs", type: "SQS Queue" } },
+    { label: "filter policy", condition: ['{ "type": ["order.created"] }'], target: { label: "Audit", type: "Lambda Function" } },
+    { label: "filter policy", condition: ['{ "type": ["order.refunded"] }'], target: { label: "Refunds", type: "Lambda Function" }, match: false },
+  ]}
+  caption="SNS checks each subscription's filter policy before it delivers. Refunds never sees this message, and is never invoked for it."
+/>
 
 Publishers set the attributes to match on with `MessageAttributes`. A `Subscription` takes the same `FilterPolicy` in its `attributes`.
 

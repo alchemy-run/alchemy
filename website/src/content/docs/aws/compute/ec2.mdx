@@ -3,7 +3,7 @@ title: EC2
 description: How EC2 instances give you a whole virtual machine, how to launch one from an image into a subnet, how to run your Effect program on it as a service, and how to reach it.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 EC2 gives you a virtual machine, called an **instance**. You choose its size, its operating system and its disk, and it runs until you stop it. Everything on it is yours to control: the kernel, the daemons, the GPUs, the software that expects a host. So is everything that keeps it healthy: patching, restarts, and replacing it when it fails.
 
@@ -11,22 +11,24 @@ EC2 gives you a virtual machine, called an **instance**. You choose its size, it
 
 An **image** (AMI) is the disk an instance boots from: an operating system and whatever is installed on it. An **instance type** is its size: `t3.micro` has 2 vCPUs and 1 GB of memory, `g5.xlarge` has a GPU. A **subnet** is where it sits on your [network](/aws/networking), and **security groups** decide what can reach it.
 
-<DAG
+<Tree
   nodes={[
-    { id: "type", label: "t3.small", type: "instance type", col: 0, row: 0 },
-    { id: "ami", label: "Amazon Linux", type: "image", col: 0, row: 1 },
-    { id: "inst", label: "Server", type: "instance", tone: "accent", col: 1, row: 0 },
+    { id: "vpc", label: "VPC", type: "your network" },
+    { id: "subnet", label: "public subnet", type: "us-east-1a", parent: "vpc", dashed: true },
+    { id: "sg", label: "security group", type: "allows :3000 in", parent: "subnet", dashed: true },
+    {
+      id: "server",
+      label: "Server",
+      type: "instance",
+      parent: "sg",
+      tone: "accent",
+      specs: [
+        ["type", "t3.small · 2 vCPU · 2 GB"],
+        ["image", "Amazon Linux (AMI)"],
+      ],
+    },
   ]}
-  groups={[
-    { id: "vpc", label: "VPC", nodes: [] },
-    { id: "subnet", label: "public subnet", parent: "vpc", nodes: [], dashed: true },
-    { id: "sg", label: "security group · :3000", parent: "subnet", nodes: ["inst"], dashed: true },
-  ]}
-  edges={[
-    { from: "type", to: "inst", label: "size" },
-    { from: "ami", to: "inst", label: "boots", exit: "side" },
-  ]}
-  caption="An instance boots from an image at the size its type sets. It sits in a subnet of your VPC, and its security groups decide what can reach it."
+  caption="An instance boots from its image at the size its type sets. It sits in a subnet of your VPC, behind security groups that decide what can reach it."
 />
 
 You pay for an instance by the second while it runs, busy or idle.

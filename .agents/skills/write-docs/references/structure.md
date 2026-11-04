@@ -64,7 +64,10 @@ mixing them on a page is fine.
 | The section answers | Component | Good example |
 | --- | --- | --- |
 | What holds what? What is the platform made of? | `DAG` with `groups` (borders) | `aws/what-is-aws`, `aws/networking` |
-| What connects to what, and what flows where? | `DAG` (arrows) | `aws/messaging/sns`, `aws/frontend/websites` |
+| What connects to what, and what flows where? (rarely: reach for a component below first) | `DAG` (arrows) | `aws/frontend/websites` |
+| Where does one event or message go, and why? Routing by content, broadcast copies, filters | `Fanout` (the item's JSON, each route's condition, match or not, a copy chip per delivery) | `aws/messaging/eventbridge`, `aws/messaging/sns` |
+| What's in a queue right now, and who holds what? | `Queue` (`messages` for a standard queue in no order, `groups` for FIFO message groups) | `aws/messaging/sqs` |
+| How do compute and shared storage spread over zones? | `Zones` | `aws/data/rds` |
 | Who manages each layer, you or the platform? | `Responsibility` | `aws/compute/choosing-a-runtime` |
 | What happens, in what order, between whom? Which checks does a call pass? | `Sequence` | `aws/messaging/sqs`, `acme/what-is-acme`, `aws/iam` (across accounts) |
 | What runs when? Concurrency, waiting, propagation | `Timeline` | `aws/compute/lambda`, `cloudflare/data/kv` |
@@ -74,7 +77,7 @@ mixing them on a page is fine.
 | How is data laid out, and what does a query read? | `Records` | `aws/data/dynamodb`, `aws/data/s3` |
 | How does a value or a line of code travel from deploy to run time? | `Sequence` (a value's journey) or `Timeline` (what runs when) | `aws/security/secrets-env`, `infrastructure-as-effects/phases` |
 | How do copies relate over time? | `BranchGraph` | `neon/data/branching` |
-| What nests inside what, to any depth, and what applies to each branch? | `Tree`: nested borders, each parent drawn around its children (with `scopes` tagging the container a policy is attached to) | `aws/accounts-and-regions` |
+| What nests inside what, to any depth, and what applies to each branch? | `Tree`: nested borders, each parent drawn around its children (`scopes` tag the container a policy is attached to; `dashed`, `wide`, `specs` for a box's own properties) | `aws/accounts-and-regions`, `aws/compute/ec2`, `aws/compute/eks` |
 
 Each component's JSDoc has its props and a usage example. Read it before using
 one.
@@ -86,8 +89,11 @@ Rules for every diagram:
 - **Show the behaviour, not the boxes.** A Lambda section is about one
   invocation per environment, so draw environments over time (`Timeline`), not
   a box called "environment". An SQS section is about receive, hide and delete,
-  so draw the messages (`Sequence`). Ask what a reader would get wrong, and draw
-  that.
+  so draw the queue's contents (`Queue`), then the receive, hide and delete
+  (`Sequence`). Ask what a reader would get wrong, and draw that.
+- **A property is not a node.** An instance's type and image, a table's key
+  schema, a function's memory: write them inside the thing's box (`specs` on
+  `Tree`), never as separate boxes with arrows labelled "size" or "boots".
 - **Use real names and values** from the page's own example: `"user#sam"`,
   `getByName("lobby")`, `weur`, `maxRetries`, offsets, sizes, cities.
 - **Containment is a border, never an arrow.** Arrows are only for things that

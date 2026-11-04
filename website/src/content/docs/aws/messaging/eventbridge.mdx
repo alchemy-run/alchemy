@@ -3,7 +3,7 @@ title: EventBridge & Scheduler
 description: How EventBridge buses route events to targets by matching their content, how runtimes publish and consume events, and how EventBridge Scheduler runs Functions, Queues and tasks on a schedule.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Fanout from "../../../../components/diagrams/Fanout.astro";
 
 EventBridge routes **events**. A producer puts an event on a **bus**, and **rules** on the bus look at its content and send it to whichever **targets** match. Producers don't know the targets, and targets don't know each other, so new reactions to an event are added as new rules.
 
@@ -13,21 +13,18 @@ AWS services publish their own events to every account's default bus: an object 
 
 Every event has a `source`, a `detail-type` and a JSON `detail`. A rule's **event pattern** lists the values it matches, and a matching event goes to the rule's targets:
 
-<DAG
-  nodes={[
-    { id: "api", label: "Api", type: "OrderPlaced", col: 0, row: 0 },
-    { id: "r1", label: "rule", type: "detail-type match", col: 1, row: 0 },
-    { id: "r2", label: "rule", type: "source match", col: 1, row: 1 },
-    { id: "worker", label: "Worker", type: "Lambda Function", col: 2, row: 0 },
-    { id: "audit", label: "Audit", type: "SQS Queue", col: 2, row: 1 },
+<Fanout
+  item={{
+    title: "event",
+    lines: ['"source": "shop.orders"', '"detail-type": "OrderPlaced"', '"detail": { "total": 120 }'],
+  }}
+  group="Orders · event bus"
+  routes={[
+    { label: "rule", condition: ['{ "detail-type": ["OrderPlaced"] }'], target: { label: "Worker", type: "Lambda Function" } },
+    { label: "rule", condition: ['{ "source": ["shop.orders"] }'], target: { label: "Audit", type: "SQS Queue" } },
+    { label: "rule", condition: ['{ "detail-type": ["OrderRefunded"] }'], target: { label: "Refunds", type: "Lambda Function" }, match: false },
   ]}
-  groups={[{ id: "bus", label: "Orders · event bus", nodes: ["r1", "r2"] }]}
-  edges={[
-    { from: "api", to: "bus", label: "put" },
-    { from: "r1", to: "worker" },
-    { from: "r2", to: "audit" },
-  ]}
-  caption="Rules live on the bus. Each matches events by their content, and one event can match several rules."
+  caption="Each rule on the bus tests the event against its pattern. This OrderPlaced event matches two rules, so both of their targets get it, and the third rule ignores it."
 />
 
 A pattern can match on any field of the event, including fields inside `detail`, so a rule can take only the orders over a certain amount, or only the ones from one region. Events that match no rule are dropped.

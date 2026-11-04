@@ -124,6 +124,17 @@ Each of these was a correction. Don't relearn them.
   `Responsibility` chart for choosing a runtime was the one the user called
   great: it shows the idea itself, a staircase of who manages what.
   More: [Diagrams](references/structure.md#diagrams).
+- **Box-and-arrow is the last resort.** A second review rejected eight more
+  diagrams as "too generic": a bus with two rule boxes, a topic fanning out to
+  three boxes, writer and reader arrows into a volume box, `t3.small → size →
+  instance`, Deployment `creates` Pods, and a Web Function lane of scattered
+  bars. Each became a picture of the thing itself: the event's JSON against each
+  rule's pattern (`Fanout`), a copy per subscriber, the queue's contents in no
+  order and FIFO groups in line (`Queue`), zones under one shared volume
+  (`Zones`), properties written inside the instance, objects on the API server
+  above Pods on nodes (`Tree`), and the Lambda page's spike absorbed by one
+  environment. Before drawing nodes and edges, ask what the thing looks like
+  inside.
 - **Draw movement and time, not tables.** Two components were built, rejected
   and deleted: `Phases` (a grid of sentences, half of them empty dashes) and
   `Matrix` (an allowed/denied truth table). Both said in boxes what a paragraph

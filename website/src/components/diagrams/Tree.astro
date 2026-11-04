@@ -16,7 +16,10 @@
  *   />
  *
  * A scope tags a container and tints its border, so a policy attached to an
- * OU visibly covers everything inside it.
+ * OU visibly covers everything inside it. `dashed` draws a softer border (a
+ * subnet, a security group, a node), `wide` gives a node its own full row,
+ * `specs` lists [key, value] lines inside a box (an instance's type and image),
+ * and `tone: "muted"` greys out something finished or idle.
  */
 import "./diagram.css";
 
@@ -25,7 +28,10 @@ interface TreeNode {
   label: string;
   type?: string;
   parent?: string;
-  tone?: "default" | "accent";
+  tone?: "default" | "accent" | "muted";
+  dashed?: boolean;
+  wide?: boolean;
+  specs?: [string, string][];
 }
 interface Props {
   nodes: TreeNode[];
@@ -45,12 +51,37 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
 {
   node ? (
     kids(node.id).length === 0 ? (
-      <div class:list={["alc-tree__leaf", node.tone === "accent" && "alc-tree__leaf--accent"]}>
+      <div
+        class:list={[
+          "alc-tree__leaf",
+          node.tone === "accent" && "alc-tree__leaf--accent",
+          node.tone === "muted" && "alc-tree__leaf--muted",
+          node.wide && "alc-tree__wide",
+          node.specs && "alc-tree__leaf--specs",
+        ]}
+      >
         <span class="alc-tree__label">{node.label}</span>
         {node.type && <span class="alc-tree__type">{node.type}</span>}
+        {node.specs && (
+          <dl class="alc-tree__specs">
+            {node.specs.map(([k, v]) => (
+              <>
+                <dt>{k}</dt>
+                <dd>{v}</dd>
+              </>
+            ))}
+          </dl>
+        )}
       </div>
     ) : (
-      <div class:list={["alc-tree__box", scopeOf(node.id).length > 0 && "alc-tree__box--scoped"]}>
+      <div
+        class:list={[
+          "alc-tree__box",
+          node.dashed && "alc-tree__box--dashed",
+          node.wide && "alc-tree__wide",
+          scopeOf(node.id).length > 0 && "alc-tree__box--scoped",
+        ]}
+      >
         <div class="alc-tree__head">
           <span class="alc-tree__label">{node.label}</span>
           {node.type && <span class="alc-tree__type">{node.type}</span>}
@@ -82,6 +113,13 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
     border: 1.5px solid var(--alc-accent-40);
     border-radius: 10px;
     padding: 0.5rem 0.625rem 0.625rem;
+  }
+  .alc-tree__box--dashed {
+    border-style: dashed;
+    border-color: var(--alc-hairline-3);
+  }
+  .alc-tree__wide {
+    flex-basis: 100%;
   }
   .alc-tree__box--scoped {
     border: 1.5px dashed color-mix(in srgb, var(--alc-warn) 70%, transparent);
@@ -116,6 +154,33 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
   .alc-tree__leaf--accent {
     border-color: var(--alc-accent);
     background: color-mix(in srgb, var(--alc-accent-soft) 60%, var(--alc-bg-elev-2));
+  }
+  .alc-tree__leaf--muted {
+    border-style: dashed;
+    border-color: var(--alc-hairline-3);
+    background: transparent;
+    opacity: 0.75;
+  }
+  .alc-tree__leaf--specs {
+    align-items: stretch;
+    text-align: center;
+  }
+  .alc-tree__specs {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 0.75rem;
+    margin: 0.5rem 0 0;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--alc-hairline-2);
+    font-size: 11px;
+    text-align: left;
+  }
+  .alc-tree__specs dt {
+    color: var(--alc-fg-3);
+  }
+  .alc-tree__specs dd {
+    margin: 0;
+    color: var(--alc-fg-1);
   }
   .alc-tree__label {
     font-size: 12.5px;

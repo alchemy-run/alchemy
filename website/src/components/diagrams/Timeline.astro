@@ -18,7 +18,8 @@
  *   />
  *
  * Several bars in one lane at overlapping times stack into rows, so a lane
- * shows concurrency without extra props. `tone` is "accent" (the work),
+ * shows concurrency without extra props. A lane that stacks is drawn as one
+ * bordered box with its rows inside, so they read as one environment. `tone` is "accent" (the work),
  * "muted" (waiting, no compute) or "warn" (a cold start, a retry).
  */
 import "./diagram.css";
@@ -92,6 +93,9 @@ const W = LABEL_W + PLOT_W + 12;
       laneBoxes.map((l, i) => (
         <g>
           {i > 0 && <line x1="0" y1={l.y} x2={W} y2={l.y} class="alc-fig__line alc-fig__line--muted" />}
+          {l.placed.some((p) => p.row > 0) && (
+            <rect x={LABEL_W - 8} y={l.y + 3} width={PLOT_W + 16} height={l.h - 6} rx="8" class="alc-fig__box alc-tl__env" />
+          )}
           <text x="4" y={l.y + l.h / 2 + (l.lane.type ? -2 : 4)} class="alc-fig__label">{l.lane.label}</text>
           {l.lane.type && <text x="4" y={l.y + l.h / 2 + 12} class="alc-fig__type">{l.lane.type}</text>}
           {l.placed.map(({ bar, row }) => {
@@ -165,6 +169,10 @@ const W = LABEL_W + PLOT_W + 12;
 </figure>
 
 <style>
+  .alc-tl__env {
+    fill: color-mix(in srgb, var(--alc-hairline) 45%, transparent);
+    stroke: var(--alc-hairline-3);
+  }
   .alc-tl__legend {
     display: flex;
     justify-content: center;

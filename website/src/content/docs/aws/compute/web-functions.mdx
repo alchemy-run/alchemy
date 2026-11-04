@@ -13,18 +13,21 @@ Your server runs in **environments**, each a copy of your code with 2 GB of memo
 
 <Timeline
   end={10}
-  lanes={[{ id: "e1", label: "environment", type: "one copy of your server" }]}
+  lanes={[{ id: "e1", label: "environment 1", type: "up to 128 at once" }]}
   bars={[
-    { lane: "e1", start: 0, end: 0.8, tone: "warn" },
-    { lane: "e1", start: 0.8, end: 4.2, label: "GET /orders" },
-    { lane: "e1", start: 1.4, end: 3, label: "GET /" },
-    { lane: "e1", start: 2, end: 6.5, label: "POST /chat · streaming" },
-    { lane: "e1", start: 3.4, end: 5.6, label: "GET /orders/7" },
-    { lane: "e1", start: 5.8, end: 7.8, label: "GET /orders" },
-    { lane: "e1", start: 7, end: 9.4, label: "GET /" },
+    { lane: "e1", start: 0, end: 0.7, tone: "warn" },
+    { lane: "e1", start: 0.7, end: 2.6, label: "request" },
+    { lane: "e1", start: 1.4, end: 3.3, label: "request" },
+    { lane: "e1", start: 1.5, end: 3.4, label: "request" },
+    { lane: "e1", start: 1.6, end: 3.5, label: "request" },
+    { lane: "e1", start: 2.8, end: 4.6, label: "request" },
+    { lane: "e1", start: 3.6, end: 5.4, label: "request" },
+    { lane: "e1", start: 5, end: 6.8, label: "request" },
+    { lane: "e1", start: 7.4, end: 9.2, label: "request" },
   ]}
+  marks={[{ at: 1.4, label: "traffic spikes" }]}
   legend={[{ tone: "accent", label: "request" }, { tone: "warn", label: "cold start" }]}
-  caption="One environment serves many requests at once, up to 128, so a spike starts few environments and requests share its warm connections."
+  caption="The same spike that started two more environments on the Lambda page fits in the one environment that's already warm. Its requests run side by side and share its connections."
 />
 
 Requests arrive through an **endpoint**: an HTTPS URL with its own auth, rate limit and cap on environments. Every Web Function has one, and you can add more. Each deploy publishes a new **revision**, and the endpoint moves its traffic to it, all at once or a share at a time.
