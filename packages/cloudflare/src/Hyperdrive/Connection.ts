@@ -148,6 +148,16 @@ export type Connection = Resource<
     accountId: string;
     origin: Origin;
     mtls: Mtls;
+    /**
+     * Caching configuration as Cloudflare holds it: `{ disabled: true }`, or
+     * the enabled settings with defaults filled in.
+     */
+    caching: Caching;
+    /**
+     * The (soft) maximum number of origin connections, or `undefined` when
+     * Cloudflare's default applies.
+     */
+    originConnectionLimit: number | undefined;
     dev: DevOrigin | undefined;
   },
   never,
@@ -245,6 +255,7 @@ export const ProviderLive = () =>
                 mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
                 sslmode: c.mtls?.sslmode ?? undefined,
               } as Mtls,
+              ...observedSettings(c),
               dev: undefined,
             })),
           ),
@@ -305,6 +316,7 @@ export const ProviderLive = () =>
                 mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
                 sslmode: c.mtls?.sslmode ?? undefined,
               } as Mtls,
+              ...observedSettings(c),
               dev: output?.dev,
             })),
             Effect.catchTag("HyperdriveConfigNotFound", () => Effect.undefined),
@@ -326,6 +338,7 @@ export const ProviderLive = () =>
             mtlsCertificateId: match.mtls?.mtlsCertificateId ?? undefined,
             sslmode: match.mtls?.sslmode ?? undefined,
           } as Mtls,
+          ...observedSettings(match),
           dev: output?.dev,
         };
       }
@@ -364,6 +377,7 @@ export const ProviderLive = () =>
           accountId: output?.accountId ?? accountId,
           origin: news.origin,
           mtls: news.mtls ?? {},
+          ...observedSettings(observed),
           dev: news.dev,
         };
       }
@@ -414,6 +428,7 @@ export const ProviderLive = () =>
         accountId: output?.accountId ?? accountId,
         origin: news.origin,
         mtls: news.mtls ?? {},
+        ...observedSettings(synced),
         dev: news.dev,
       };
     }),
@@ -460,6 +475,14 @@ export const ProviderLocal = () =>
         accountId: output?.accountId ?? accountId,
         origin: news.origin,
         mtls: news.mtls ?? {},
+        ...observedSettings({
+          caching: {
+            disabled: news.caching?.disabled ?? false,
+            maxAge: news.caching?.maxAge,
+            staleWhileRevalidate: news.caching?.staleWhileRevalidate,
+          },
+          originConnectionLimit: news.originConnectionLimit,
+        }),
         dev: news.dev,
       };
     }),
@@ -505,6 +528,29 @@ const toRequestBody = (props: Props) => ({
 const SECRET_ORIGIN_KEYS = new Set(["password", "accessClientSecret"]);
 const DEFAULT_MAX_AGE = 60;
 const DEFAULT_STALE_WHILE_REVALIDATE = 15;
+
+/**
+ * The caching and connection-limit attributes, as Cloudflare holds them, so
+ * `drift` sees a change made outside Alchemy. Enabled caching carries its
+ * defaults; disabled caching carries none, since Cloudflare ignores them.
+ */
+const observedSettings = (config: {
+  caching: {
+    disabled: boolean;
+    maxAge?: number | null;
+    staleWhileRevalidate?: number | null;
+  };
+  originConnectionLimit?: number | null;
+}): { caching: Caching; originConnectionLimit: number | undefined } => ({
+  caching: config.caching.disabled
+    ? { disabled: true }
+    : {
+        disabled: false,
+        maxAge: config.caching.maxAge ?? DEFAULT_MAX_AGE,
+        staleWhileRevalidate: config.caching.staleWhileRevalidate ?? DEFAULT_STALE_WHILE_REVALIDATE,
+      },
+  originConnectionLimit: config.originConnectionLimit ?? undefined,
+});
 
 /**
  * Whether the live config already matches every readable field of the

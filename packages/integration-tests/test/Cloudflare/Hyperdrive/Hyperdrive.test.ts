@@ -6,6 +6,7 @@ import { assert, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -116,6 +117,63 @@ test.provider(
       const actual = yield* hyperdrive.getConfig({ accountId, hyperdriveId: updated.hyperdriveId });
       // After PUT with `disabled: true`, caching should reflect the change.
       expect(actual.caching).toBeDefined();
+
+      yield* stack.destroy();
+
+      yield* waitForConfigToBeDeleted(hd.hyperdriveId, accountId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+  },
+);
+
+// #2986: caching and the connection limit are attributes, so `drift` sees
+// them change outside Alchemy.
+test.provider(
+  "drift detects caching and connection-limit changes made outside alchemy",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const hd = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Neon.Project("DriftProject");
+          return yield* Cloudflare.Hyperdrive.Connection("DriftHyperdrive", {
+            origin: project.origin,
+            caching: { disabled: true },
+            originConnectionLimit: 15,
+          });
+        }),
+      );
+      expect(hd.caching).toEqual({ disabled: true });
+      expect(hd.originConnectionLimit).toEqual(15);
+
+      const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+      const unchanged = yield* detectDrift();
+      expect(unchanged.resources.DriftHyperdrive?.action).toBe("unchanged");
+
+      yield* hyperdrive.patchConfig({
+        accountId,
+        hyperdriveId: hd.hyperdriveId,
+        caching: { disabled: false },
+        originConnectionLimit: 10,
+      });
+      const changed = yield* detectDrift();
+      expect(changed.resources.DriftHyperdrive?.action).toBe("drifted");
+      expect(changed.resources.DriftHyperdrive?.attr.caching).toEqual({
+        disabled: false,
+        maxAge: 60,
+        staleWhileRevalidate: 15,
+      });
+      expect(changed.resources.DriftHyperdrive?.attr.originConnectionLimit).toEqual(10);
 
       yield* stack.destroy();
 
