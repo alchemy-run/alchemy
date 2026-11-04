@@ -7,10 +7,12 @@
     }
   },
   "probes": {
-    "resources": {
-      "Job": "ProbeJob"
-    },
+    "resources": {},
     "enable": ["storagebatchoperations.googleapis.com"],
-    "location": "global"
+    "location": "global",
+    "untestable": {
+      "Job": "needs Storage Intelligence, a paid subscription the testing project lacks: create answers Forbidden \"Storage Intelligence must be enabled for the bucket's project ... is not enrolled in Storage Intelligence.\"",
+      "project": "needs Storage Intelligence, a paid subscription the testing project lacks"
+    }
   }
 }

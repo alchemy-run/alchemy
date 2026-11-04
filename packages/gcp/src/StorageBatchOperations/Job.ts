@@ -75,6 +75,9 @@ export type Job = Resource<
  * holds, rewrite) applied to many objects in a bucket, selected by prefix
  * or listed in a manifest.
  *
+ * Batch operations need [Storage Intelligence](https://cloud.google.com/storage/docs/storage-intelligence/overview)
+ * enabled on the bucket's project.
+ *
  * Jobs run as the project's Storage Batch Operations service agent, so the
  * provider grants it `roles/storage.objectUser` on the bucket. The grant
  * stays when the job is deleted, since other jobs may share it.

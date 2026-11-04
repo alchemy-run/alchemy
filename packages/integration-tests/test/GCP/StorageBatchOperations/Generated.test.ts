@@ -76,48 +76,28 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Job", { concurrent: true }, () => {
-      test.provider(
-        "CancelJob (storagebatchoperations.projects.locations.jobs.cancel)",
-        () => probe("CancelJob", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'CancelJob (storagebatchoperations.projects.locations.jobs.cancel): Job: needs Storage Intelligence, a paid subscription the testing project lacks: create answers Forbidden "Storage Intelligence must be enabled for the bucket\'s project ... is not enrolled in Storage Intelligence."',
+        () => Effect.void,
       );
-      test.provider(
-        "GetJob (storagebatchoperations.projects.locations.jobs.get)",
-        () => probe("GetJob", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetJob (storagebatchoperations.projects.locations.jobs.get): Job: needs Storage Intelligence, a paid subscription the testing project lacks: create answers Forbidden "Storage Intelligence must be enabled for the bucket\'s project ... is not enrolled in Storage Intelligence."',
+        () => Effect.void,
       );
-      test.provider(
-        "GetJobBucketOperation (storagebatchoperations.projects.locations.jobs.bucketOperations.get)",
-        () => probe("GetJobBucketOperation", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetJobBucketOperation (storagebatchoperations.projects.locations.jobs.bucketOperations.get): Job: needs Storage Intelligence, a paid subscription the testing project lacks: create answers Forbidden "Storage Intelligence must be enabled for the bucket\'s project ... is not enrolled in Storage Intelligence."',
+        () => Effect.void,
       );
-      test.provider(
-        "ListJobBucketOperations (storagebatchoperations.projects.locations.jobs.bucketOperations.list)",
-        () => probe("ListJobBucketOperations", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ListJobBucketOperations (storagebatchoperations.projects.locations.jobs.bucketOperations.list): Job: needs Storage Intelligence, a paid subscription the testing project lacks: create answers Forbidden "Storage Intelligence must be enabled for the bucket\'s project ... is not enrolled in Storage Intelligence."',
+        () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "ListJobs (storagebatchoperations.projects.locations.jobs.list)",
-        () => probe("ListJobs", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListJobs (storagebatchoperations.projects.locations.jobs.list): needs Storage Intelligence, a paid subscription the testing project lacks",
+        () => Effect.void,
       );
     });
   },

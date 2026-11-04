@@ -11,6 +11,13 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
+// Batch operations need Storage Intelligence, a paid project subscription
+// the testing project doesn't have: create answers Forbidden "Storage
+// Intelligence must be enabled for the bucket's project ... is not enrolled
+// in Storage Intelligence." Set GCP_TEST_STORAGE_INTELLIGENCE=1 on a
+// project that has it.
+const intelligence = !!process.env.GCP_TEST_STORAGE_INTELLIGENCE;
+
 const BatchOpsApi = GCP.ServiceUsage.ProjectService("StorageBatchOperationsApi", {
   service: "storagebatchoperations.googleapis.com",
 });
@@ -61,7 +68,21 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"], timeout: 90_000 },
 );
 
-test.provider(
+test.provider.skipIf(intelligence)(
+  "create is rejected with Forbidden without Storage Intelligence",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* Effect.flip(stack.deploy(job("no-store")));
+      expect(JSON.stringify(error)).toContain("Storage Intelligence");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"], timeout: 300_000 },
+);
+
+test.provider.skipIf(!intelligence)(
   "run a batch job, replace it on a change, and delete it",
   (stack) =>
     Effect.gen(function* () {

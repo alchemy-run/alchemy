@@ -2,9 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
-import { ProbeJob } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated StorageBatchOperations binding as its own
@@ -16,35 +14,8 @@ export default class StorageBatchOperationsGeneratedHost extends GCP.Function<St
   "StorageBatchOperationsGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.StorageBatchOperations.CancelJob(ProbeJob);
-    const p1 = yield* GCP.StorageBatchOperations.GetJob(ProbeJob);
-    const p2 = yield* GCP.StorageBatchOperations.GetJobBucketOperation(ProbeJob);
-    const p3 = yield* GCP.StorageBatchOperations.ListJobBucketOperations(ProbeJob);
-    const p4 = yield* GCP.StorageBatchOperations.ListJobs();
     return {
-      fetch: serveProbes({
-        CancelJob: probeOutcome(
-          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
-        ),
-        GetJob: probeOutcome(Retry.none(p1({} as never))),
-        GetJobBucketOperation: probeOutcome(
-          Retry.none(p2({ bucketOperation: "alchemy-missing" } as never)),
-        ),
-        ListJobBucketOperations: probeOutcome(Retry.none(p3({} as never))),
-        ListJobs: probeOutcome(Retry.none(p4({ location: "global" } as never))),
-      }),
+      fetch: serveProbes({}),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.StorageBatchOperations.CancelJobHttp,
-          GCP.StorageBatchOperations.GetJobHttp,
-          GCP.StorageBatchOperations.GetJobBucketOperationHttp,
-          GCP.StorageBatchOperations.ListJobBucketOperationsHttp,
-          GCP.StorageBatchOperations.ListJobsHttp,
-        ),
-      ),
-    ),
-  ),
+  }),
 ) {}
