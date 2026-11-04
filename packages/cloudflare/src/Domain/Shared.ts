@@ -148,7 +148,14 @@ export const sharedClasses = Effect.fn(function* () {
     object: (route: string, impl: ObjectImpl, legacy?: string) =>
       Effect.gen(function* () {
         shared.routes.set(route, impl);
-        if (legacy !== undefined && !shared.movers.has(route)) {
+        // At deploy time every version 0 class is declared, and the upload keeps
+        // those still holding objects (see `Version.keptMovers`). At runtime only
+        // those the upload kept have a binding: declaring another would fail.
+        if (
+          legacy !== undefined &&
+          !shared.movers.has(route) &&
+          (!globalThis.__ALCHEMY_RUNTIME__ || shared.env?.[legacy] !== undefined)
+        ) {
           shared.movers.set(route, legacy);
           yield* declare(legacy, source(shared, route, impl));
         }
