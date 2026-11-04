@@ -20,7 +20,8 @@ import {
 import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
-const MAX_INSTANCE_ID_LENGTH = 63;
+/** "a lowercase letter followed by up to 47 lowercase letters, numbers, or hyphens" */
+const MAX_INSTANCE_ID_LENGTH = 48;
 const DEFAULT_MACHINE_TYPE = "e2-standard-2";
 
 export type InstanceProps = {
