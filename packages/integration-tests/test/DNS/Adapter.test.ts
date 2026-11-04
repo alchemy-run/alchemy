@@ -329,6 +329,9 @@ const R53 = {
   setB: `set-b.${R53_ZONE}`,
   txt: `txt.${R53_ZONE}`,
   recordCname: `rec-cname.${R53_ZONE}`,
+  dualSetA: `dual-set-a.${R53_ZONE}`,
+  dualSetB: `dual-set-b.${R53_ZONE}`,
+  upgrade: `upgrade.${R53_ZONE}`,
 };
 
 const route53Program = (cfZoneId: string, version: 1 | 2) =>
@@ -351,14 +354,26 @@ const route53Program = (cfZoneId: string, version: 1 | 2) =>
 
     // A dual-stack Route 53 alias at a record in the same zone — a real
     // AWS alias target that needs no billable resource.
-    yield* dns.alias("Www", {
-      name: R53.www,
-      ipv6: true,
-      target: {
-        hostname: Output.map(origin.records, () => R53.origin),
-        route53Alias: { hostedZoneId: zone.id, evaluateTargetHealth: false },
-      },
+    const originAlias = {
+      hostname: Output.map(origin.records, () => R53.origin),
+      route53Alias: { hostedZoneId: zone.id, evaluateTargetHealth: false },
+    };
+    yield* dns.alias("Www", { name: R53.www, ipv6: true, target: originAlias });
+    // An alias that turns dual-stack on redeploy: `Upgrade` becomes
+    // `Upgrade-A` + `Upgrade-AAAA`, and deleting the old `Upgrade` must
+    // leave the `A` record the new one now holds.
+    yield* dns.alias("Upgrade", {
+      name: R53.upgrade,
+      ipv6: version === 2,
+      target: originAlias,
     });
+    // A dual-stack alias set: declared and bound names get `A` and `AAAA`.
+    const dualSet = yield* dns.aliasSet("DualSet", {
+      names: version === 1 ? [R53.dualSetA] : [],
+      ipv6: true,
+      target: originAlias,
+    });
+    yield* dualSet.bind`BoundDualSite`({ names: [R53.dualSetB] });
     yield* dns.alias("Cname", {
       name: R53.cname,
       target: { hostname: target },
@@ -442,6 +457,15 @@ describe("AWS.Route53 adapter", () => {
           expect(yield* route53Values(zoneId, name, "CNAME")).toEqual([TARGET_1]);
         }
         expect(yield* route53Values(zoneId, R53.txt, "TXT")).toEqual([TXT_1]);
+        for (const name of [R53.dualSetA, R53.dualSetB]) {
+          for (const type of ["A", "AAAA"] as const) {
+            expect(
+              normalize((yield* route53Set(zoneId, name, type))?.AliasTarget?.DNSName ?? ""),
+            ).toBe(R53.origin);
+          }
+        }
+        expect((yield* route53Set(zoneId, R53.upgrade, "A"))?.AliasTarget).toBeDefined();
+        expect(yield* route53Set(zoneId, R53.upgrade, "AAAA")).toBeUndefined();
 
         // Authoritative answers from the zone's own nameservers.
         const servers = yield* nameServerAddresses(zone.nameServers);
@@ -460,6 +484,20 @@ describe("AWS.Route53 adapter", () => {
         expect(yield* route53Values(zoneId, R53.setB, "CNAME")).toEqual([TARGET_2]);
         expect(yield* route53Values(zoneId, R53.txt, "TXT")).toEqual([TXT_2]);
         expect(yield* route53Values(zoneId, R53.recordCname, "CNAME")).toEqual([]);
+        // The dropped declared name leaves both families; the bound one keeps both.
+        expect(yield* route53Set(zoneId, R53.dualSetA, "A")).toBeUndefined();
+        expect(yield* route53Set(zoneId, R53.dualSetA, "AAAA")).toBeUndefined();
+        for (const type of ["A", "AAAA"] as const) {
+          expect(
+            normalize((yield* route53Set(zoneId, R53.dualSetB, type))?.AliasTarget?.DNSName ?? ""),
+          ).toBe(R53.origin);
+          // The upgraded alias holds both, with the old `A` generation gone.
+          expect(
+            normalize((yield* route53Set(zoneId, R53.upgrade, type))?.AliasTarget?.DNSName ?? ""),
+          ).toBe(R53.origin);
+        }
+        yield* waitForAuthoritative(servers, R53.dualSetB, "AAAA", ["2001:db8::20"]);
+        yield* waitForAuthoritative(servers, R53.upgrade, "AAAA", ["2001:db8::20"]);
         // The alias follows its target's new address.
         yield* waitForAuthoritative(servers, R53.www, "A", ["192.0.2.21"]);
         yield* waitForAuthoritative(servers, R53.cname, "CNAME", [TARGET_2]);
