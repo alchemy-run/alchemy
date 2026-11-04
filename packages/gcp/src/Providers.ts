@@ -2001,6 +2001,10 @@ import {
   WasmPluginsVersionProvider,
 } from "./NetworkServices/WasmPluginsVersion.ts";
 import {
+  Instance as NotebooksInstance,
+  InstanceProvider as NotebooksInstanceProvider,
+} from "./Notebooks/Instance.ts";
+import {
   BucketsDatasetsLink,
   BucketsDatasetsLinkProvider,
 } from "./Observability/BucketsDatasetsLink.ts";
@@ -3533,6 +3537,7 @@ const makeProviders = () =>
           BatchJob,
           StorageInsightsReportConfig,
           StorageBatchOperationsJob,
+          NotebooksInstance,
           TranslateModel,
           WorkstationCluster,
           WorkstationClustersWorkstationConfig,
@@ -4653,6 +4658,7 @@ const makeProviders = () =>
                 BatchJobProvider(),
                 StorageInsightsReportConfigProvider(),
                 StorageBatchOperationsJobProvider(),
+                NotebooksInstanceProvider(),
                 TranslateModelProvider(),
               ),
               Layer.mergeAll(

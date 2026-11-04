@@ -3,20 +3,18 @@ import type * as notebooks from "@distilled.cloud/gcp/notebooks_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface DiagnoseInstanceRequest extends Omit<
   notebooks.DiagnoseProjectsLocationsInstancesRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-}
+> {}
 
-export type DiagnoseInstanceShape = () => Effect.Effect<
+export type DiagnoseInstanceShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
-    request: DiagnoseInstanceRequest,
+    request?: DiagnoseInstanceRequest,
   ) => Effect.Effect<
     notebooks.Operation,
     notebooks.DiagnoseProjectsLocationsInstancesError,
@@ -27,14 +25,14 @@ export type DiagnoseInstanceShape = () => Effect.Effect<
 /**
  * Creates a Diagnostic File and runs Diagnostic Tool given an Instance.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link DiagnoseInstanceHttp}. The host gets `roles/notebooks.editor` on the project.
+ * Bind it to a {@link Instance} and provide {@link DiagnoseInstanceHttp}. The
+ * host gets `roles/notebooks.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `instances.diagnose`
  * ```typescript
- * const diagnoseInstance = yield* GCP.Notebooks.DiagnoseInstance();
- * const response = yield* diagnoseInstance({ location: "us-central1", instance: "..." });
+ * const diagnoseInstance = yield* GCP.Notebooks.DiagnoseInstance(instance);
+ * const response = yield* diagnoseInstance();
  * ```
  *
  * @binding

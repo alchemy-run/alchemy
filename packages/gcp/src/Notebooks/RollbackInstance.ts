@@ -3,20 +3,18 @@ import type * as notebooks from "@distilled.cloud/gcp/notebooks_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface RollbackInstanceRequest extends Omit<
   notebooks.RollbackProjectsLocationsInstancesRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-}
+> {}
 
-export type RollbackInstanceShape = () => Effect.Effect<
+export type RollbackInstanceShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
-    request: RollbackInstanceRequest,
+    request?: RollbackInstanceRequest,
   ) => Effect.Effect<
     notebooks.Operation,
     notebooks.RollbackProjectsLocationsInstancesError,
@@ -27,14 +25,14 @@ export type RollbackInstanceShape = () => Effect.Effect<
 /**
  * Rollbacks a notebook instance to the previous version.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link RollbackInstanceHttp}. The host gets `roles/notebooks.editor` on the project.
+ * Bind it to a {@link Instance} and provide {@link RollbackInstanceHttp}. The
+ * host gets `roles/notebooks.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `instances.rollback`
  * ```typescript
- * const rollbackInstance = yield* GCP.Notebooks.RollbackInstance();
- * const response = yield* rollbackInstance({ location: "us-central1", instance: "..." });
+ * const rollbackInstance = yield* GCP.Notebooks.RollbackInstance(instance);
+ * const response = yield* rollbackInstance();
  * ```
  *
  * @binding

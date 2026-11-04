@@ -3,20 +3,18 @@ import type * as notebooks from "@distilled.cloud/gcp/notebooks_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface ReportInstanceInfoSystemRequest extends Omit<
   notebooks.ReportInfoSystemProjectsLocationsInstancesRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-}
+> {}
 
-export type ReportInstanceInfoSystemShape = () => Effect.Effect<
+export type ReportInstanceInfoSystemShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
-    request: ReportInstanceInfoSystemRequest,
+    request?: ReportInstanceInfoSystemRequest,
   ) => Effect.Effect<
     notebooks.Operation,
     notebooks.ReportInfoSystemProjectsLocationsInstancesError,
@@ -27,14 +25,14 @@ export type ReportInstanceInfoSystemShape = () => Effect.Effect<
 /**
  * Allows notebook instances to report their latest instance information to the Notebooks API server.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ReportInstanceInfoSystemHttp}. The host gets `roles/notebooks.editor` on the project.
+ * Bind it to a {@link Instance} and provide {@link ReportInstanceInfoSystemHttp}. The
+ * host gets `roles/notebooks.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `instances.reportInfoSystem`
  * ```typescript
- * const reportInstanceInfoSystem = yield* GCP.Notebooks.ReportInstanceInfoSystem();
- * const response = yield* reportInstanceInfoSystem({ location: "us-central1", instance: "..." });
+ * const reportInstanceInfoSystem = yield* GCP.Notebooks.ReportInstanceInfoSystem(instance);
+ * const response = yield* reportInstanceInfoSystem();
  * ```
  *
  * @binding

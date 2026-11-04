@@ -3,20 +3,18 @@ import type * as notebooks from "@distilled.cloud/gcp/notebooks_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface UpgradeInstanceSystemRequest extends Omit<
   notebooks.UpgradeSystemProjectsLocationsInstancesRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-}
+> {}
 
-export type UpgradeInstanceSystemShape = () => Effect.Effect<
+export type UpgradeInstanceSystemShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
-    request: UpgradeInstanceSystemRequest,
+    request?: UpgradeInstanceSystemRequest,
   ) => Effect.Effect<
     notebooks.Operation,
     notebooks.UpgradeSystemProjectsLocationsInstancesError,
@@ -27,14 +25,14 @@ export type UpgradeInstanceSystemShape = () => Effect.Effect<
 /**
  * Allows notebook instances to upgrade themselves.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link UpgradeInstanceSystemHttp}. The host gets `roles/notebooks.editor` on the project.
+ * Bind it to a {@link Instance} and provide {@link UpgradeInstanceSystemHttp}. The
+ * host gets `roles/notebooks.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `instances.upgradeSystem`
  * ```typescript
- * const upgradeInstanceSystem = yield* GCP.Notebooks.UpgradeInstanceSystem();
- * const response = yield* upgradeInstanceSystem({ location: "us-central1", instance: "..." });
+ * const upgradeInstanceSystem = yield* GCP.Notebooks.UpgradeInstanceSystem(instance);
+ * const response = yield* upgradeInstanceSystem();
  * ```
  *
  * @binding

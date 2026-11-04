@@ -3,20 +3,18 @@ import type * as notebooks from "@distilled.cloud/gcp/notebooks_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface StopInstanceRequest extends Omit<
   notebooks.StopProjectsLocationsInstancesRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-}
+> {}
 
-export type StopInstanceShape = () => Effect.Effect<
+export type StopInstanceShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
-    request: StopInstanceRequest,
+    request?: StopInstanceRequest,
   ) => Effect.Effect<
     notebooks.Operation,
     notebooks.StopProjectsLocationsInstancesError,
@@ -27,14 +25,14 @@ export type StopInstanceShape = () => Effect.Effect<
 /**
  * Stops a notebook instance.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link StopInstanceHttp}. The host gets `roles/notebooks.editor` on the project.
+ * Bind it to a {@link Instance} and provide {@link StopInstanceHttp}. The
+ * host gets `roles/notebooks.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `instances.stop`
  * ```typescript
- * const stopInstance = yield* GCP.Notebooks.StopInstance();
- * const response = yield* stopInstance({ location: "us-central1", instance: "..." });
+ * const stopInstance = yield* GCP.Notebooks.StopInstance(instance);
+ * const response = yield* stopInstance();
  * ```
  *
  * @binding

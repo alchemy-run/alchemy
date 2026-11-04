@@ -3,20 +3,18 @@ import type * as notebooks from "@distilled.cloud/gcp/notebooks_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface CheckInstanceAuthorizationRequest extends Omit<
   notebooks.CheckAuthorizationProjectsLocationsInstancesRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-}
+> {}
 
-export type CheckInstanceAuthorizationShape = () => Effect.Effect<
+export type CheckInstanceAuthorizationShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
-    request: CheckInstanceAuthorizationRequest,
+    request?: CheckInstanceAuthorizationRequest,
   ) => Effect.Effect<
     notebooks.CheckAuthorizationResponse,
     notebooks.CheckAuthorizationProjectsLocationsInstancesError,
@@ -27,14 +25,14 @@ export type CheckInstanceAuthorizationShape = () => Effect.Effect<
 /**
  * Initiated by Cloud Console for Oauth consent flow for Workbench Instances.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link CheckInstanceAuthorizationHttp}. The host gets `roles/notebooks.legacyViewer` on the project.
+ * Bind it to a {@link Instance} and provide {@link CheckInstanceAuthorizationHttp}. The
+ * host gets `roles/notebooks.legacyViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `instances.checkAuthorization`
  * ```typescript
- * const checkInstanceAuthorization = yield* GCP.Notebooks.CheckInstanceAuthorization();
- * const response = yield* checkInstanceAuthorization({ location: "us-central1", instance: "..." });
+ * const checkInstanceAuthorization = yield* GCP.Notebooks.CheckInstanceAuthorization(instance);
+ * const response = yield* checkInstanceAuthorization();
  * ```
  *
  * @binding

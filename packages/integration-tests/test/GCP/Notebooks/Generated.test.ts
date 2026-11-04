@@ -57,12 +57,18 @@ describe.skipIf(!!process.env.FAST)(
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
               service: "notebooks.googleapis.com",
             });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi1", {
+              service: "compute.googleapis.com",
+            });
           }),
         );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
               service: "notebooks.googleapis.com",
+            });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi1", {
+              service: "compute.googleapis.com",
             });
             const host = yield* NotebooksGeneratedHost;
             return { uri: host.uri };
@@ -75,7 +81,7 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("project", { concurrent: true }, () => {
+    describe("Instance", { concurrent: true }, () => {
       test.provider(
         "CheckInstanceAuthorization (notebooks.projects.locations.instances.checkAuthorization)",
         () => probe("CheckInstanceAuthorization", false),
@@ -87,22 +93,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "CheckInstanceUpgradability (notebooks.projects.locations.instances.checkUpgradability)",
         () => probe("CheckInstanceUpgradability", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "CreateInstance (notebooks.projects.locations.instances.create)",
-        () => probe("CreateInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteInstance (notebooks.projects.locations.instances.delete)",
-        () => probe("DeleteInstance", false),
         {
           tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
           timeout: 600_000,
@@ -126,31 +116,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "GetInstance (notebooks.projects.locations.instances.get)",
-        () => probe("GetInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetInstanceConfig (notebooks.projects.locations.instances.getConfig)",
-        () => probe("GetInstanceConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ListInstances (notebooks.projects.locations.instances.list)",
-        () => probe("ListInstances", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchInstance (notebooks.projects.locations.instances.patch)",
-        () => probe("PatchInstance", false),
+        () => probe("GetInstance", true),
         {
           tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
           timeout: 600_000,
@@ -223,6 +189,25 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "UpgradeInstanceSystem (notebooks.projects.locations.instances.upgradeSystem)",
         () => probe("UpgradeInstanceSystem", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("project", { concurrent: true }, () => {
+      test.provider(
+        "GetInstanceConfig (notebooks.projects.locations.instances.getConfig)",
+        () => probe("GetInstanceConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListInstances (notebooks.projects.locations.instances.list)",
+        () => probe("ListInstances", true),
         {
           tags: ["provider:gcp", "provider:gcp:notebooks", "live"],
           timeout: 600_000,
