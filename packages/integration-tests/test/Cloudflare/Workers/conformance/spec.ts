@@ -37,6 +37,8 @@ import * as Schedule from "effect/Schedule";
 export interface ConformanceContext {
   /** Base URL of the deployed worker (or a caller that fronts it). */
   readonly baseUrl: () => string;
+  /** Whether the engine under test runs in a real cloud or on this machine. */
+  readonly kind: "live" | "local";
 }
 
 /** The upstream is still rolling out (transport error or 5xx). */
@@ -111,7 +113,8 @@ export const waitForReady = (
  */
 export const conformanceTests = (test: TestApi["test"], ctx: ConformanceContext) => {
   const url = (path: string) => `${ctx.baseUrl()}${path}`;
-  const timeout = { timeout: 120_000 };
+  const tags = [ctx.kind];
+  const timeout = { timeout: 120_000, tags };
 
   test(
     "kv: writes persist across calls to the same cell",
@@ -224,7 +227,7 @@ export const conformanceTests = (test: TestApi["test"], ctx: ConformanceContext)
     }),
     // The alarm fires ~1.5s after arming; the budget covers the bounded
     // 20 × 1s poll plus per-request retries on a cold engine.
-    { timeout: 180_000 },
+    { timeout: 180_000, tags },
   );
 
   test(
@@ -242,6 +245,6 @@ export const conformanceTests = (test: TestApi["test"], ctx: ConformanceContext)
       const fired = (yield* get(url("/alarm/t2/fired"))) as { count: number };
       expect(fired.count).toBe(0);
     }),
-    { timeout: 180_000 },
+    { timeout: 180_000, tags },
   );
 };

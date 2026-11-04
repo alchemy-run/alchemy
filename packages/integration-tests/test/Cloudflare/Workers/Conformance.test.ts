@@ -43,6 +43,6 @@ describe.skipIf(!!process.env.FAST)(
       timeout: 300_000,
     });
 
-    conformanceTests(test, { baseUrl: () => baseUrl });
+    conformanceTests(test, { baseUrl: () => baseUrl, kind: "live" });
   },
 );
