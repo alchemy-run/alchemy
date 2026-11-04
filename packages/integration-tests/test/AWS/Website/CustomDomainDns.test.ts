@@ -398,7 +398,7 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 2_400_000 },
     );
 
-    test.provider.skipIf(!process.env.HCLOUD_TOKEN)(
+    test.provider(
       "StaticSite on Hetzner DNS serves a delegated subdomain over HTTPS",
       (stack) =>
         Effect.gen(function* () {

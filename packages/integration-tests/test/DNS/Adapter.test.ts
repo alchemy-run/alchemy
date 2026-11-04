@@ -45,8 +45,6 @@ const TARGET_2 = "example.org";
 const TXT_1 = "dns-adapter=v1";
 const TXT_2 = "dns-adapter=v2";
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -591,7 +589,7 @@ const waitUntilHetznerZoneGone = (zoneId: number) =>
   );
 
 describe("Hetzner.DNS adapter", () => {
-  test.provider.skipIf(!hasHetznerCreds)(
+  test.provider(
     "alias, aliasSet (+ bound names) and records converge in a Hetzner zone",
     (stack) =>
       Effect.gen(function* () {
@@ -638,7 +636,7 @@ describe("Hetzner.DNS adapter", () => {
     },
   );
 
-  test.provider.skipIf(!hasHetznerCreds)(
+  test.provider(
     "a CNAME alias at the pinned zone apex dies with DnsAdapterError",
     (stack) =>
       Effect.gen(function* () {
@@ -678,7 +676,7 @@ describe("Hetzner.DNS adapter", () => {
     { tags: ["provider:dns", "provider:hetzner:dns", "live"] },
   );
 
-  test.provider.skipIf(!hasHetznerCreds)(
+  test.provider(
     "Hetzner DNS rejects a sub-zone of the Cloudflare test zone (why the zone is not delegated)",
     (stack) =>
       Effect.gen(function* () {
