@@ -157,6 +157,14 @@ Each of these was a correction. Don't relearn them.
   OUs, with policies flowing down. Before drawing, check what the platform
   actually supports (nesting, inheritance, scopes) and what the package can
   declare (`AWS.Organizations.OrganizationalUnit`, `Policy`), and show both.
+- **Provider pages are about the provider.** Core Alchemy behaviour, like how
+  `Config` travels from deploy to run time, `Redacted`, defaults, or reading
+  Config in Construction rather than a handler, lives on the core pages
+  (`/environments/secrets`, `/infrastructure-as-effects/phases`). A provider
+  page says what's specific to its platform (Lambda encrypts environment
+  variables and caps them at 4 KB; Worker `Config` binds as `secret_text`) and
+  links the core page. Move anything worth keeping to the core page rather than
+  deleting it.
 - **Show the snippet the section talks about.** A section that names a resource,
   like a CloudWatch dashboard, shows a small snippet declaring it.
 
