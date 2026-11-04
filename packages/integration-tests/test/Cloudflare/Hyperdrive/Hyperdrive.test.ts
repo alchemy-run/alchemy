@@ -7,7 +7,9 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Drift from "alchemy/Drift";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
+import type { State } from "alchemy/State";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -41,6 +43,15 @@ import {
 } from "./fixtures/vpc-origin.ts";
 
 const { test } = Test.make({ providers: Layer.merge(Cloudflare.providers(), Neon.providers()) });
+
+/** The drift action `Drift.detect` reports for one resource of the stack. */
+const driftOf = Effect.fn(function* (
+  stack: { name: string; stage: string; state: Layer.Layer<State> },
+  logicalId: string,
+) {
+  const result = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+  return result.resources[logicalId]?.action;
+});
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 test.provider(
@@ -147,7 +158,8 @@ test.provider(
         Effect.gen(function* () {
           const project = yield* Neon.Project("DriftProject");
           return yield* Cloudflare.Hyperdrive.Connection("DriftHyperdrive", {
-            origin: project.origin,
+            // Without `port`: Cloudflare fills in 5432, which is no drift.
+            origin: project.origin.pipe(Output.map(({ port: _, ...origin }) => origin)),
             caching: { disabled: true },
             originConnectionLimit: 15,
           });
@@ -338,6 +350,7 @@ test.provider(
         hyperdriveId: pinned.hd.hyperdriveId,
       });
       expect(before.mtls?.caCertificateId).toEqual(pinned.ca.mtlsCertificateId);
+      expect(yield* driftOf(stack, "PinnedHyperdrive")).toBe("unchanged");
 
       // Keep the CA deployed so the replacement doesn't also remove a
       // dependency in the same step.
@@ -361,6 +374,7 @@ test.provider(
       const after = yield* hyperdrive.getConfig({ accountId, hyperdriveId: unpinned.hyperdriveId });
       expect(after.mtls?.caCertificateId ?? undefined).toBeUndefined();
       expect(after.mtls?.sslmode).toEqual("require");
+      expect(yield* driftOf(stack, "PinnedHyperdrive")).toBe("unchanged");
       yield* waitForConfigToBeDeleted(pinned.hd.hyperdriveId, accountId);
 
       yield* stack.destroy();
@@ -677,6 +691,7 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
           });
           assert("accessClientId" in actual.origin, "origin must be Access-protected");
           expect(actual.origin.host).toEqual(ACCESS_ORIGIN_HOST);
+          expect(yield* driftOf(stack, "HyperdriveAccessConnection")).toBe("unchanged");
 
           // Both binding flavors reach Postgres through Access + the tunnel.
           expect(yield* queryThroughOrigin(deployed.effectWorker.url!)).toEqual({
@@ -755,6 +770,7 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
           assert("serviceId" in actual.origin, "origin must be a VPC Service origin");
           expect(actual.origin.serviceId).toEqual(deployed.service.serviceId);
           expect(actual.origin.database).toEqual("postgres");
+          expect(yield* driftOf(stack, "HyperdriveVpcConnection")).toBe("unchanged");
 
           // Both binding flavors reach Postgres through the VPC Service.
           expect(yield* queryThroughOrigin(deployed.effectWorker.url!)).toEqual({
