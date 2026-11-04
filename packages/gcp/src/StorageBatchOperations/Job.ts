@@ -1,5 +1,4 @@
 import * as sbo from "@distilled.cloud/gcp/storagebatchoperations_v1";
-import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -182,18 +181,7 @@ export const JobProvider = () =>
 
       // Ensure: a job has nothing to sync after create.
       if (current === undefined) {
-        // The job reads and changes objects as the service agent, created on first use.
-        const identity = yield* serviceusage
-          .generateServiceIdentityServices({
-            parent: `projects/${env.project}/services/storagebatchoperations.googleapis.com`,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
-        if (identity !== undefined) {
-          yield* waitForOperation(identity, (op) => serviceusage.getOperations({ name: op }), {
-            budget: "2 minutes",
-            interval: "2 seconds",
-          });
-        }
+        // The job reads and changes objects as the service agent.
         const number = yield* projectNumberOf(env.project);
         yield* updateIamMembership({
           kind: "storage.bucket",

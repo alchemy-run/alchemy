@@ -15,33 +15,11 @@ export default class KMSInventoryGeneratedHost extends GCP.Function<KMSInventory
   "KMSInventoryGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.KMSInventory.GetCryptoKeyProtectedResourcesSummary();
-    const p1 = yield* GCP.KMSInventory.ListCryptoKeys();
-    const p2 = yield* GCP.KMSInventory.SearchProtectedResource();
+    const p0 = yield* GCP.KMSInventory.ListCryptoKeys();
     return {
       fetch: serveProbes({
-        GetCryptoKeyProtectedResourcesSummary: probeOutcome(
-          Retry.none(
-            p0({
-              keyRing: "alchemy-missing",
-              cryptoKey: "alchemy-missing",
-              location: "us-central1",
-            } as never),
-          ),
-        ),
-        ListCryptoKeys: probeOutcome(Retry.none(p1({} as never))),
-        SearchProtectedResource: probeOutcome(Retry.none(p2({} as never))),
+        ListCryptoKeys: probeOutcome(Retry.none(p0({} as never))),
       }),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.KMSInventory.GetCryptoKeyProtectedResourcesSummaryHttp,
-          GCP.KMSInventory.ListCryptoKeysHttp,
-          GCP.KMSInventory.SearchProtectedResourceHttp,
-        ),
-      ),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.KMSInventory.ListCryptoKeysHttp)))),
 ) {}
