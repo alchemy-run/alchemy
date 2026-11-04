@@ -77,13 +77,11 @@ When the record is beyond repair, delete it and redeploy.
 `state delete` only deletes Alchemy's local record. It does not delete cloud
 resources:
 
-```sh
-# one stage
-npx alchemy state delete myapp/pr-42
+<PackageManagers script={`# one stage
+{run} alchemy state delete myapp/pr-42
 
 # a whole stack
-npx alchemy state delete myapp
-```
+{run} alchemy state delete myapp`} />
 
 Then deploy — resources alchemy owns are re-imported automatically:
 
@@ -103,10 +101,8 @@ Pass `--backend local` to any `state` subcommand to read the on-disk
 The canonical use: a Cloudflare state-store bootstrap was interrupted
 and left resources recorded only locally.
 
-```sh
-# wipe local state after a botched bootstrap
-npx alchemy state delete myapp --backend local
-```
+<PackageManagers script={`# wipe local state after a botched bootstrap
+{run} alchemy state delete myapp --backend local`} />
 
 See [cloudflare](/cli/cloudflare) for bootstrap repair.
 

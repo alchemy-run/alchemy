@@ -42,9 +42,7 @@ Keep plugins, additional fields, and model names aligned between this call and t
 
 Run the CLI with Node.js 22.12 or newer:
 
-```sh
-npx auth@1.7.5 generate --config ./auth.cli.ts --output ./src/auth-schema.ts
-```
+<PackageManagers script={`{dlx} auth@1.7.5 generate --config ./auth.cli.ts --output ./src/auth-schema.ts`} />
 
 This command creates the `src/auth-schema.ts` imported below, including auth tables and `authRelations`. Do not pass `--adapter drizzle`: it selects the legacy Relations v1 generator rather than the configured Relations v2 adapter.
 

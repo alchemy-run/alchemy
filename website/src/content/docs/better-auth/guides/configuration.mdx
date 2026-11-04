@@ -100,11 +100,9 @@ Alchemy selects an available port and prints the origin. With `AUTH_BASE_URL` un
 
 ## Override the origin deliberately
 
-```sh
-read -r AUTH_BASE_URL
+<PackageManagers script={`read -r AUTH_BASE_URL
 export AUTH_BASE_URL
-npx alchemy deploy --stage prod
-```
+{run} alchemy deploy --stage prod`} />
 
 Enter the actual origin serving this Worker, without a path or trailing slash. `baseURL` does not provision DNS or attach a custom domain; configure that routing separately before sending traffic there.
 

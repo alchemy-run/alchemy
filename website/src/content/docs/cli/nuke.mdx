@@ -39,10 +39,8 @@ State entries remain stale, so follow up with `alchemy state delete`. See
 
 `--local` flips the command over to the **local** implementations of your providers — the floci-emulated AWS account and the Cloudflare local runtime that [`alchemy dev`](/cli/dev) provisions into — instead of the real cloud.
 
-```sh
-# clear everything floci is holding
-npx alchemy unsafe nuke --local --include 'AWS.*'
-```
+<PackageManagers script={`# clear everything floci is holding
+{run} alchemy unsafe nuke --local --include 'AWS.*'`} />
 
 Only providers registered with both a live and a local implementation participate; mode-agnostic providers (a single implementation, which always talks to the real cloud) are dropped at discovery. That's what makes `--local` safe: there is no code path by which it reaches live infrastructure, and it needs no cloud credentials.
 
@@ -56,10 +54,8 @@ Each selected provider's local variant is built lazily, as it is scanned, so `--
 
 `--filter` is a JavaScript expression evaluated with `resource` in scope (plus synthesized `Type` and `LogicalId` fields); a **truthy** expression **spares** the resource, and a throwing or non-boolean expression is treated as false. Repeatable.
 
-```sh
-# spare production workers
-npx alchemy unsafe nuke --filter 'resource.workerName.startsWith("prod-")'
-```
+<PackageManagers script={`# spare production workers
+{run} alchemy unsafe nuke --filter 'resource.workerName.startsWith("prod-")'`} />
 
 ## Dry run and confirmation
 

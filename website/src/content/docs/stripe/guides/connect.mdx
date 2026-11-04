@@ -3,6 +3,7 @@ title: Onboard merchants with Connect
 description: Build a Connect platform on a Cloudflare Worker — create Express accounts, send merchants through hosted onboarding, and learn from account.updated when they can take payments.
 ---
 import StateMachine from "../../../../components/diagrams/StateMachine.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Stripe Connect is for platforms: a marketplace, a SaaS that invoices
 on behalf of its customers, anything where *other businesses* get paid
@@ -278,10 +279,8 @@ the onboarding path.
 
 ## Try it
 
-```sh
-cd examples/stripe-connect
-npx alchemy deploy
-```
+<PackageManagers script={`cd examples/stripe-connect
+{run} alchemy deploy`} />
 
 ```sh
 curl -X POST "$URL/merchants" -H 'content-type: application/json' \

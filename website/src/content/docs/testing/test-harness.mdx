@@ -364,9 +364,7 @@ import { expect } from "@effect/vitest";
 Every `test(...)` runs as an `@effect/vitest` `it.live` test, with
 the same 120s default hook timeout.
 
-```sh
-npx vitest run test/integ.test.ts
-```
+<PackageManagers run="vitest run test/integ.test.ts" />
 
 ### Setting the stage from the command line
 
@@ -374,11 +372,9 @@ The default stage is `test_$USER` on every runner. `ALCHEMY_TEST_STAGE`
 replaces it for the whole run. `alchemy-test` sets it with
 `--stage`; with `bun test` or Vitest, set the variable yourself.
 
-```sh
-npx alchemy-test --stage ci-pr-42
+<PackageManagers script={`{run} alchemy-test --stage ci-pr-42
 ALCHEMY_TEST_STAGE=ci-pr-42 bun test
-ALCHEMY_TEST_STAGE=ci-pr-42 npx vitest run
-```
+ALCHEMY_TEST_STAGE=ci-pr-42 {run} vitest run`} />
 
 A `stage` passed to `Test.make` or to a single `deploy` still wins
 over the variable.

@@ -108,13 +108,17 @@ Each of these was a correction. Don't relearn them.
   Center). Call out who each option is for.
 - **Node.js first, linked, then Bun.** Write "[Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)",
   using the minimum from `packages/alchemy/bin/cli.js`.
-- **Commands are package-manager neutral.** An install or an `alchemy` command
-  is a `<PackageManagers add="…" />` or `<PackageManagers run="alchemy deploy" />`
-  (tabs, pnpm first), never a raw ```sh block of `bun alchemy …`. Prose writes
-  the CLI bare: `alchemy deploy`. A shell block that mixes in `curl` or `git`
-  uses `npx alchemy …`. Keep Bun-only commands (`bun test`, `bun build`) where
-  the page deliberately uses Bun, and GitHub Actions workflows that set up Bun
-  themselves. About 190 bun-first blocks had to be swept once already.
+- **Commands are package-manager neutral, pnpm first.** Every install or
+  `alchemy` command is `<PackageManagers>` tabs (pnpm, bun, npm, yarn), never a
+  raw ```sh block with one manager hard-coded, `bun alchemy` or `npx alchemy`
+  alike. `add`/`dev`/`run` cover single commands. A block that mixes in `curl`,
+  `git`, prompts or comments is `script={`…`}`, with `{run}` for an installed
+  binary (`pnpm`, `bun`, `npx`, `yarn`) and `{dlx}` for a remote package like
+  `auth@1.7.5` or `create-*` (`pnpx`, `bunx`, `npx`, `yarn dlx`). Prose writes
+  the CLI bare: `alchemy deploy`. Bun-only commands (`bun test`, `bun build`)
+  stay as written inside the tabs, and GitHub Actions workflows that set up Bun
+  themselves stay as they are. Two sweeps were needed: first for bun-first
+  blocks, then for the `npx` the first sweep hard-coded in their place.
 - **Accounts & access comes first**, right after the tutorial, on every provider.
   More: [Accounts & access](references/page-shapes.md#accounts--access).
 - **Every secrets page mentions secret providers** (Doppler, Infisical, per-stage

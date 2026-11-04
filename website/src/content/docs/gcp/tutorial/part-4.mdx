@@ -17,13 +17,11 @@ the same Stack: one per developer, per environment, and (in
 
 Without `--stage`, Alchemy deploys to `live_$USER`:
 
-```sh
-$ whoami
+<PackageManagers script={`$ whoami
 sam
 
-$ npx alchemy deploy
-# deploys to stage `live_sam`
-```
+$ {run} alchemy deploy
+# deploys to stage \`live_sam\``} />
 
 Every developer gets a personal copy with no setup. The stage comes
 from, in order:

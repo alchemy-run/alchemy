@@ -64,10 +64,8 @@ Test.make({ providers, stage: "ci-pr-42" });
 
 Or set it for the whole run from the command line:
 
-```sh
-npx alchemy-test --stage ci-pr-42
-ALCHEMY_TEST_STAGE=ci-pr-42 bun test
-```
+<PackageManagers script={`{run} alchemy-test --stage ci-pr-42
+ALCHEMY_TEST_STAGE=ci-pr-42 bun test`} />
 
 Running several git worktrees at once? See [Worktrees](/environments/worktrees). The per-call form is covered in [Test harness → stage](/testing/test-harness#stage).
 

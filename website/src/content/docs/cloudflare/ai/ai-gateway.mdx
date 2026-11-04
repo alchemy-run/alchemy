@@ -5,6 +5,7 @@ sidebar:
   order: 6
 ---
 import Records from "../../../../components/diagrams/Records.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 You've now wired Durable Objects, hibernatable WebSockets, a
 container, and a Workflow into your Worker. The last piece in the
@@ -193,12 +194,10 @@ need typed handling instead, `Effect.catchTag("AiError", …)` works.
 
 ## Try it
 
-```sh
-npx alchemy deploy
-curl -X POST "$(npx alchemy stack output url)/generate" \
-  -H "content-type: application/json" \
-  -d '{"prompt":"Write a haiku about Effect"}'
-```
+<PackageManagers script={`{run} alchemy deploy
+curl -X POST "$({run} alchemy stack output url)/generate" \\
+  -H "content-type: application/json" \\
+  -d '{"prompt":"Write a haiku about Effect"}'`} />
 
 The first call takes ~1–2 seconds. Send the **exact same** prompt
 again and it returns in milliseconds — that's the `cacheTtl: 60`
@@ -243,11 +242,9 @@ flushes through the Worker → edge → client without buffering.
 `Effect.provide` — the `LanguageModel` needs to be available for the
 entire lifetime of the stream, not just the initial setup.
 
-```sh
-curl -N -X POST "$(npx alchemy stack output url)/stream" \
-  -H "content-type: application/json" \
-  -d '{"prompt":"Write a haiku about Effect, slowly."}'
-```
+<PackageManagers script={`curl -N -X POST "$({run} alchemy stack output url)/stream" \\
+  -H "content-type: application/json" \\
+  -d '{"prompt":"Write a haiku about Effect, slowly."}'`} />
 
 `-N` disables curl's response buffering so you see each SSE event as
 soon as the Worker flushes it.

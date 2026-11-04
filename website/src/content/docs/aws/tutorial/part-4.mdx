@@ -20,13 +20,11 @@ the infrastructure.
 You've been using stages all along. If you don't pass `--stage`,
 Alchemy deploys to **`live_$USER`** (e.g. `live_sam`):
 
-```sh
-$ whoami
+<PackageManagers script={`$ whoami
 sam
 
-$ npx alchemy deploy
-# deploys to stage `live_sam`
-```
+$ {run} alchemy deploy
+# deploys to stage \`live_sam\``} />
 
 Each developer on your team automatically gets a personal sandbox
 without any config. The resolution order is:

@@ -3,6 +3,7 @@ title: Sell a subscription
 description: The full SaaS billing loop on one Cloudflare Worker — hosted Checkout, the Billing Portal, and webhooks that keep an entitlement record your app gates on.
 ---
 import StateMachine from "../../../../components/diagrams/StateMachine.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 You have a product with a monthly price and you want people to pay for
 it. The shape every SaaS lands on is:
@@ -297,10 +298,8 @@ one `Effect.provide([...])`:
 
 ## Try it
 
-```sh
-cd examples/stripe-billing
-npx alchemy deploy
-```
+<PackageManagers script={`cd examples/stripe-billing
+{run} alchemy deploy`} />
 
 ```sh
 curl -X POST "$URL/checkout" -H 'content-type: application/json' \

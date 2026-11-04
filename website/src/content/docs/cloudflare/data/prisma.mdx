@@ -153,10 +153,8 @@ export default Alchemy.Stack(
 
 ## Deploy and query
 
-```sh
-npx alchemy deploy
-curl https://<your-worker>.workers.dev
-```
+<PackageManagers script={`{run} alchemy deploy
+curl https://<your-worker>.workers.dev`} />
 
 This demo route is public. Add authentication before exposing private data.
 

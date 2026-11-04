@@ -5,6 +5,7 @@ description: Set up CI/CD pipelines for alchemy projects with GitHub Actions, au
 
 import { Code, Steps, TabItem, Tabs } from "@astrojs/starlight/components";
 import yaml from "yaml";
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 export function DeployWorkflow({ manager = "bun" }) {
   const managers = {
@@ -176,11 +177,9 @@ consumes, and `alchemy provider check-env` validates them against that
 contract. It prints one line per registered provider and exits with code 1
 when a required variable is missing:
 
-```sh
-$ npx alchemy provider check-env
+<PackageManagers script={`$ {run} alchemy provider check-env
 ok Cloudflare
-MISSING AWS: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION | AWS_DEFAULT_REGION
-```
+MISSING AWS: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION | AWS_DEFAULT_REGION`} />
 
 Run it as the first step of a deploy job to fail fast with a list of
 missing secrets instead of failing minutes later inside a provider API

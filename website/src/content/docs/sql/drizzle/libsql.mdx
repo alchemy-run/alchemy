@@ -53,11 +53,9 @@ export default defineConfig({
 });
 ```
 
-```sh
-npx drizzle-kit generate
+<PackageManagers script={`{run} drizzle-kit generate
 git add src/schema.ts drizzle.config.ts migrations
-git commit -m "Add database migration"
-```
+git commit -m "Add database migration"`} />
 
 ## Create the database
 
