@@ -356,7 +356,7 @@ test.provider(
 );
 
 // ── Existing configuration (#1343) ─────────────────────────────────────────
-// `Hyperdrive.lookup` binds a configuration the stack does not own: deploys
+// `Hyperdrive.Connection.lookup` binds a configuration the stack does not own: deploys
 // only read it and destroy leaves it untouched.
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
@@ -400,7 +400,11 @@ test.provider(
 
       const deployed = yield* Effect.scoped(
         Effect.gen(function* () {
-          const created = yield* outOfBandConfig(accountId, lookupConfigName("live"), origin);
+          const created = yield* outOfBandConfig(
+            accountId,
+            lookupConfigName("live", stack.stage),
+            origin,
+          );
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
@@ -411,7 +415,7 @@ test.provider(
               const asyncWorker = yield* Cloudflare.Worker("HyperdriveLookupAsyncWorker", {
                 main: pathe.resolve(import.meta.dirname, "fixtures/async-worker.ts"),
                 env: {
-                  HD: Cloudflare.Hyperdrive.lookup("HyperdriveLookupById", {
+                  HD: Cloudflare.Hyperdrive.Connection.lookup({
                     hyperdriveId: created.id,
                   }),
                 },

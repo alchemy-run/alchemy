@@ -3836,6 +3836,22 @@ describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
   );
 
   test(
+    "a lookup keyed by a resource being created waits for it",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-keyed", { name: "plan-keyed", value: "external" });
+      const plan = yield* Effect.gen(function* () {
+        const key = yield* TestResource("Key", { string: "plan-keyed" });
+        const found = LookupTarget.lookup({ name: key.string });
+        yield* TestResource("Consumer", { string: found.value });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect(Output.isOutput((plan.resources.Consumer as any)?.props.string)).toBe(true);
+      expect(lookupCalls.filter((c) => c.name === "plan-keyed")).toEqual([]);
+    }),
+  );
+
+  test(
     "a lookup carries its resource type statically",
     Effect.gen(function* () {
       const found = LookupTarget.lookup({ name: "plan-static" });
