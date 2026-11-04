@@ -1,6 +1,10 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { isWorkerEvent } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import type * as cf from "@cloudflare/workers-types";
 import * as Http from "alchemy/Http";
 import * as Rpc from "alchemy/Rpc";
+import type { FunctionContext } from "alchemy/Runtime/Function";
+import { CurrentRuntimeContext, RuntimeContext } from "alchemy/RuntimeContext";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpApi from "effect/http-api/HttpApi";
@@ -309,6 +313,38 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
       }),
     );
 
+    // `waitUntil` work in a non-fetch event, journaled under `label`.
+    const holdFor = Effect.fnUntraced(function* (label: string) {
+      const record = (entry: string) => journals.getByName(label).record(entry).pipe(Effect.orDie);
+      const resource = yield* acquireResource(record, label);
+      yield* Cloudflare.waitUntil(useLater(record, resource, label));
+    });
+
+    // Each tick journals under `cron-<scheduledTime>`.
+    yield* Cloudflare.Workers.cron("* * * * *", (controller) =>
+      holdFor(`cron-${controller.scheduledTime}`),
+    );
+
+    // Each message's subject is a label. No zone, so no routing is created:
+    // the test delivers mail through the local runtime.
+    yield* Cloudflare.email().subscribe((message) => holdFor(message.headers.get("subject") ?? ""));
+
+    // `WaitUntilTailProducer` logs `lifetime:<label>` for each label.
+    const runtime = (yield* CurrentRuntimeContext) as FunctionContext | undefined;
+    if (runtime !== undefined) {
+      yield* runtime.listen((event) => {
+        if (!isWorkerEvent(event) || event.type !== "tail") return;
+        const labels = (event.input as cf.TraceItem[])
+          .flatMap((item) => item.logs.flatMap((log) => log.message as unknown[]))
+          .filter((message): message is string => typeof message === "string")
+          .filter((message) => message.startsWith("lifetime:"))
+          .map((message) => message.slice("lifetime:".length));
+        return Effect.forEach(labels, holdFor, { discard: true }).pipe(
+          Effect.provideService(RuntimeContext, runtime),
+        );
+      });
+    }
+
     const lifetimeQueue = yield* LifetimeQueue;
     const queue = yield* Cloudflare.Queues.QueueSink(lifetimeQueue);
     yield* Cloudflare.Queues.consumeQueueMessages<{ label: string }>(
@@ -609,7 +645,12 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(Cloudflare.Queues.EventSourceLive, Cloudflare.Queues.QueueSinkBinding),
+      Layer.mergeAll(
+        Cloudflare.Queues.EventSourceLive,
+        Cloudflare.Queues.QueueSinkBinding,
+        Cloudflare.Workers.CronEventSourceLive,
+        Cloudflare.Workers.EmailEventSourceLive,
+      ),
     ),
   ),
 ) {}

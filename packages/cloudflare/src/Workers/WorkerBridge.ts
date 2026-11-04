@@ -141,23 +141,6 @@ export const makeWorkerBridge = (
     ) {
       super(ctx, env);
 
-      for (const methodName of ExportedHandlerMethods) {
-        (this as any)[methodName] = async (input: any) =>
-          processEvent(
-            (built) =>
-              built.export[methodName](input, this.env, this.ctx) as [
-                Effect.Effect<any>,
-                Context.Context<never>,
-              ],
-            this.ctx,
-            this.env,
-            (exit) =>
-              exit._tag === "Success"
-                ? Promise.resolve(exit.value)
-                : Promise.reject(Cause.squash(exit.cause)),
-          );
-      }
-
       return new Proxy(this, {
         get: (target, prop) => {
           if (typeof prop !== "string") return (target as any)[prop];
@@ -205,13 +188,25 @@ export const makeWorkerBridge = (
     }
   }
 
-  // Stub prototype methods so Cloudflare's script-validate detects the
-  // standard handler set; per-instance overrides above are what actually
-  // run.
-  for (const method of ExportedHandlerMethods) {
-    Object.defineProperty(WorkerBridge.prototype, method, {
-      value: function () {
-        throw new Error(`Bridge method '${method}' was called before instance setup`);
+  // The handlers live on the prototype: Cloudflare's script validation
+  // detects the handler set there, and a handler called over JS RPC (the
+  // local runtime delivers `email` that way) must be a prototype method.
+  for (const methodName of ExportedHandlerMethods) {
+    Object.defineProperty(WorkerBridge.prototype, methodName, {
+      value: function (this: WorkerBridge, input: any) {
+        return processEvent(
+          (built) =>
+            built.export[methodName](input, this.env, this.ctx) as [
+              Effect.Effect<any>,
+              Context.Context<never>,
+            ],
+          this.ctx,
+          this.env,
+          (exit) =>
+            exit._tag === "Success"
+              ? Promise.resolve(exit.value)
+              : Promise.reject(Cause.squash(exit.cause)),
+        );
       },
       writable: true,
       configurable: true,
