@@ -338,19 +338,8 @@ export const ProviderLive = () =>
               .pipe(Effect.catchTag("HyperdriveConfigNotFound", () => Effect.undefined))
           : yield* findByName(props.name);
       if (!config) return undefined;
-      return {
-        hyperdriveId: config.id,
-        name: config.name,
-        accountId,
-        // The origin password is write-only: the API never returns it.
-        origin: { ...config.origin } as Origin,
-        mtls: {
-          caCertificateId: config.mtls?.caCertificateId ?? undefined,
-          mtlsCertificateId: config.mtls?.mtlsCertificateId ?? undefined,
-          sslmode: config.mtls?.sslmode ?? undefined,
-        } as Mtls,
-        dev: props.dev,
-      };
+      // The origin password is write-only: the API never returns it.
+      return toAttributes(config, { accountId, secrets: undefined, dev: props.dev });
     }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
