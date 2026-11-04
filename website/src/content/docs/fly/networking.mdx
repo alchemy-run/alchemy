@@ -2,6 +2,7 @@
 title: IPs & certificates
 description: Public and private Fly Services, App addresses, and certificates for your own hostname.
 ---
+import Sequence from "../../../components/diagrams/Sequence.astro";
 
 A [Service](/fly/compute/services) owns its App and manages that
 App's addresses. It is public by default and reachable only inside
@@ -11,6 +12,25 @@ your organization with `public: false`. Fly's proxy load-balances
 IPs and certificates you declare yourself attach to a
 [`Fly.App`](/fly/compute/apps): use them for Machines, for Services
 grouped in one App, and for your own domain.
+
+<Sequence
+  actors={[
+    { id: "user", label: "visitor" },
+    { id: "proxy", label: "Fly proxy", type: "nearest region", tone: "accent" },
+    { id: "m", label: "api Machine", type: "listens on port" },
+    { id: "orders", label: "orders", type: "private · Flycast" },
+  ]}
+  steps={[
+    { from: "user", to: "proxy", label: "GET https://api.fly.dev" },
+    { note: "TLS ends here", over: "proxy" },
+    { from: "proxy", to: "m", label: "to a healthy Machine" },
+    { from: "m", to: "proxy", label: "200", dashed: true },
+    { from: "proxy", to: "user", label: "200", dashed: true },
+    { divider: "inside the organization" },
+    { from: "m", to: "orders", label: "orders.flycast · private network" },
+  ]}
+  caption="Public traffic enters through Fly's proxy, which load-balances across the App's Machines. A private Service has only a Flycast address, reachable from inside the organization's network."
+/>
 
 ## Public Services
 
