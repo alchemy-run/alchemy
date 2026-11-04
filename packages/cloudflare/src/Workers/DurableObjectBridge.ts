@@ -24,7 +24,7 @@ import {
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
-import { OwnsAlarmCallbacks } from "./internal/DurableObjectTransfer.ts";
+import { counted, OwnsAlarmCallbacks } from "./internal/DurableObjectMove.ts";
 import { takeRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
@@ -244,12 +244,16 @@ export const makeDurableObjectBridge =
 
       async alarm(alarmInfo?: cf.AlarmInvocationInfo) {
         return this.#execute((instance) =>
-          // An object whose stored callbacks belong to code it no longer runs
-          // (its data is moving to another object) handles the alarm itself.
-          (Object.hasOwn(instance, OwnsAlarmCallbacks)
-            ? Effect.void
-            : Effect.asVoid(dispatchAlarmCallbacks(this.#state, instance.alarm !== undefined))
-          ).pipe(Effect.andThen(() => instance.alarm?.(alarmInfo) ?? Effect.void)),
+          // On an object being moved, the alarm is work under way: its seal waits for it.
+          counted(
+            this.#state.storage,
+            // An object whose stored callbacks belong to code it no longer runs
+            // (its data is moving to another object) handles the alarm itself.
+            (Object.hasOwn(instance, OwnsAlarmCallbacks)
+              ? Effect.void
+              : Effect.asVoid(dispatchAlarmCallbacks(this.#state, instance.alarm !== undefined))
+            ).pipe(Effect.andThen(() => instance.alarm?.(alarmInfo) ?? Effect.void)),
+          ),
         );
       }
 

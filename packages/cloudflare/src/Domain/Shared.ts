@@ -12,16 +12,8 @@ import {
   type DurableObjectJurisdiction,
 } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import {
-  exportPage,
-  importPage,
-  OwnsAlarmCallbacks,
-  TRANSFER_KEY_PREFIX,
-  type TransferCursor,
-  type TransferPage,
-} from "../Workers/internal/DurableObjectTransfer.ts";
+import * as Move from "../Workers/internal/DurableObjectMove.ts";
 import { makeRpcStub } from "../Workers/Rpc.ts";
-import type { WebSocket } from "../Workers/WebSocket.ts";
 import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
 import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
 import { task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
@@ -33,20 +25,22 @@ import { MIGRATION_WORKFLOW } from "./Version.ts";
  * `Billing.AccountAggregate/a-1`: the route names the model and the
  * definition, as each class did in version 0, so models stay isolated.
  *
- * A Worker upgraded from version 0 keeps each old class live as a mover until
- * its objects have moved: the first call to a key's new object, a deploy's
- * {@link MIGRATION_WORKFLOW}, or the old object's own alarm moves its storage
- * over. See `Version.ts` for when the old classes are deleted.
+ * A Worker upgraded from version 0 keeps each old class live, running the same
+ * code, until its objects have moved (see `DurableObjectMove.ts`). Callers
+ * always address the new object. Until it owns its key's data, it forwards
+ * every call to the old object, which keeps serving, while it copies the old
+ * object's storage in the background; then it seals the old object and takes
+ * over in one short step. The first call to a key starts its move; a deploy's
+ * {@link MIGRATION_WORKFLOW} moves the rest. See `Version.ts` for when the old
+ * classes are deleted.
  */
 export const SHARED_CLASS = "AlchemyDomain";
 
 /** The key an object listed itself under in the backfill directory. */
 export const ID_KEY = "bf:id";
 
-/** Set on a new object once it holds its old object's storage. */
-const ADOPTED = `${TRANSFER_KEY_PREFIX}adopted`;
-/** The next page of the old object's storage, while the move is under way. */
-const CURSOR = `${TRANSFER_KEY_PREFIX}cursor`;
+/** How long one alarm of a new object copies before it schedules the next. */
+const COPY_BUDGET_MS = 20_000;
 
 interface Stub {
   readonly [method: string]: (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>;
@@ -144,15 +138,15 @@ export const sharedClasses = Effect.fn(function* () {
     movers: shared.movers,
     /**
      * Host `route`'s objects in the shared class. `legacy` is the class they
-     * had in version 0: declared as a mover, so a Worker upgraded from it
-     * moves their storage over.
+     * had in version 0: declared too, running the same code, so a Worker
+     * upgraded from it moves their storage over.
      */
     object: (route: string, impl: ObjectImpl, legacy?: string) =>
       Effect.gen(function* () {
         shared.routes.set(route, impl);
         if (legacy !== undefined && !shared.movers.has(route)) {
           shared.movers.set(route, legacy);
-          yield* declare(legacy, mover(shared, route));
+          yield* declare(legacy, source(shared, route, impl));
         }
         return routeView(shared.namespace, route);
       }),
@@ -176,61 +170,86 @@ const legacyStub = (
   return makeRpcStub<Stub>(scoped.getByName(key));
 };
 
-/**
- * Copy the old object's storage into this one, then empty the old object.
- * Runs while the object is constructed, before any other event reaches it.
- */
-const adopt = (storage: cf.DurableObjectStorage, from: Stub) =>
-  Effect.gen(function* () {
-    if (yield* Effect.promise(() => storage.get<boolean>(ADOPTED))) return;
-    // Where an earlier attempt got to: a large object that doesn't move within
-    // one construction (30 seconds) moves over several.
-    let cursor = (yield* Effect.promise(() => storage.get<TransferCursor>(CURSOR))) ?? null;
-    let alarm: number | null = null;
-    do {
-      const page = (yield* from.domainExport!(cursor).pipe(
-        Effect.mapError(failed("reading the old object")),
-      )) as TransferPage;
-      yield* importPage(storage, page);
-      cursor = page.next;
-      if (cursor === null) alarm = page.alarm ?? null;
-      else yield* Effect.promise(() => storage.put(CURSOR, cursor));
-    } while (cursor !== null);
-    yield* rearm(storage, alarm);
-    yield* Effect.promise(() => storage.put(ADOPTED, true));
-    yield* from.domainFinish!().pipe(Effect.mapError(failed("emptying the old object")));
-  });
+/** The new object of `key` in the shared class. */
+const sharedStub = (
+  classes: Classes,
+  route: string,
+  key: string,
+  jurisdiction: DurableObjectJurisdiction | undefined,
+): Stub => {
+  const namespace =
+    jurisdiction === undefined ? classes.namespace : classes.namespace.jurisdiction(jurisdiction);
+  return namespace.getByName(`${route}/${key}`) as Stub;
+};
+
+/** The old object, as the new one calls it during a move. */
+const sourceCalls = (from: Stub): Move.SourceCalls => {
+  const call = <A>(what: string, effect: Effect.Effect<unknown, unknown>) =>
+    effect.pipe(Effect.mapError(failed(what))) as Effect.Effect<A, DomainMoveFailed>;
+  return {
+    begin: () => call("starting the move", from.domainMoveBegin!()),
+    snapshot: (after) => call("copying", from.domainMoveSnapshot!(after)),
+    changes: (after) => call("catching up", from.domainMoveChanges!(after)),
+    seal: () => call("sealing the old object", from.domainMoveSeal!()),
+    sql: (at) => call("copying its tables", from.domainMoveSql!(at)),
+    finish: () => call("emptying the old object", from.domainMoveFinish!()),
+  };
+};
+
+/** Members the runtime looks up on an instance that are not calls to forward. */
+const UNFORWARDED = new Set(["then", "toJSON", "constructor", "pipe"]);
 
 /**
- * Arm the alarm for the stored callbacks that came over, or for the old
- * object's own alarm if it had no callbacks.
+ * An instance whose members are looked up when they are used: `members()`
+ * decides, so one object can change what it does (forward, or serve) while it
+ * lives. The bridge checks members with `Object.hasOwn`, which this answers.
  */
-const rearm = (storage: cf.DurableObjectStorage, alarm: number | null) =>
-  Effect.gen(function* () {
-    const next = yield* Effect.sync(() => {
-      const tables = new Set(
-        storage.sql
-          .exec<{ name: string }>(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('alchemy_alarm_callbacks', 'alchemy_scheduled_events')",
-          )
-          .toArray()
-          .map((row) => row.name),
-      );
-      let next: number | null = null;
-      for (const table of tables) {
-        const at = storage.sql
-          .exec<{ run_at: number | null }>(`SELECT MIN(run_at) AS run_at FROM ${table}`)
-          .one().run_at;
-        if (at !== null && (next === null || at < next)) next = at;
-      }
-      return next;
-    });
-    const at = next ?? alarm;
-    const now = yield* Clock.currentTimeMillis;
-    if (at !== null) yield* Effect.promise(() => storage.setAlarm(Math.max(at, now + 1)));
+const dynamic = (members: (prop: string) => unknown): Record<string, unknown> =>
+  new Proxy({} as Record<string, unknown>, {
+    get: (_, prop) =>
+      typeof prop !== "string" || UNFORWARDED.has(prop) ? undefined : members(prop),
+    getOwnPropertyDescriptor: (_, prop) => {
+      if (typeof prop !== "string" || UNFORWARDED.has(prop)) return undefined;
+      const value = members(prop);
+      return value === undefined
+        ? undefined
+        : { value, configurable: true, enumerable: false, writable: false };
+    },
   });
 
-/** The shared class: each object runs its route's implementation. */
+/** Forward a member to another object's stub: a method call, or `fetch`. */
+const forwardTo = (stub: Effect.Effect<Stub | undefined>, prop: string): unknown =>
+  prop === "fetch"
+    ? Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const target = yield* stub;
+        if (target === undefined)
+          return HttpServerResponse.text("This object moved and has no name", { status: 410 });
+        return yield* (
+          target as unknown as {
+            fetch: (
+              request: HttpServerRequest,
+            ) => Effect.Effect<HttpServerResponse.HttpServerResponse, unknown>;
+          }
+        )
+          .fetch(request)
+          .pipe(Effect.orDie);
+      })
+    : (...args: ReadonlyArray<unknown>) =>
+        Effect.flatMap(stub, (target) =>
+          target === undefined
+            ? Effect.die(new Error(`an object without a name can't forward ${prop}`))
+            : target[prop]!(...args),
+        );
+
+/** WebSocket and alarm members that a forwarding object handles itself. */
+const LOCAL = new Set(["webSocketMessage", "webSocketClose", "webSocketError"]);
+
+/**
+ * The shared class: each object runs its route's implementation. A route
+ * whose version 0 class is still on the Worker moves its key's data first:
+ * see the module's description.
+ */
 const router = (
   routes: Map<string, ObjectImpl>,
   movers: Map<string, string>,
@@ -243,121 +262,131 @@ const router = (
     const impl = parsed === undefined ? undefined : routes.get(parsed.route);
     // A route the code no longer hosts keeps its data, and does nothing.
     if (parsed === undefined || impl === undefined)
-      return Effect.succeed({ alarm: () => Effect.void, domainAdopt: () => Effect.void });
+      return Effect.succeed({ alarm: () => Effect.void, domainMove: () => Effect.succeed(true) });
     const inner = yield* impl;
     const from = movers.has(parsed.route)
       ? legacyStub(classes(), parsed.route, parsed.key, state.id.jurisdiction)
       : undefined;
     return Effect.gen(function* () {
-      if (from !== undefined) yield* adopt(state.raw.storage, from).pipe(Effect.orDie);
+      // Built now, while the object is constructed, as always: it reads its
+      // storage lazily, so it serves the copied data once the move is done.
       const instance = yield* inner;
-      return {
-        ...instance,
-        // The migration's call: the move ran when the object was constructed;
-        // empty the old object again in case that didn't complete.
-        domainAdopt: () =>
-          from === undefined
-            ? Effect.void
-            : from.domainFinish!().pipe(Effect.mapError(failed("emptying the old object"))),
-      };
+      const raw = state.raw.storage;
+      const owned = () => from === undefined || Move.moveState(raw)?.phase === "owned";
+      if (owned()) return { ...instance, domainMove: () => Effect.succeed(true) };
+      const calls = sourceCalls(from!);
+
+      /** Copy for a while; once caught up, take over with this object's own calls held. */
+      const step = Effect.gen(function* () {
+        yield* Move.begin(raw, calls);
+        const ready = yield* Move.copyFor(raw, calls, COPY_BUDGET_MS);
+        if (ready)
+          yield* state.blockConcurrencyWhile(() => Move.takeOver(raw, calls).pipe(Effect.orDie));
+        // Not done: carry on in the next alarm.
+        else yield* Effect.promise(() => raw.setAlarm(Date.now()));
+      });
+
+      // Start the move as soon as the object is first used: its alarm drives it.
+      if (
+        Move.moveState(raw) === undefined &&
+        (yield* Effect.promise(() => raw.getAlarm())) === null
+      )
+        yield* Effect.promise(() => raw.setAlarm(Date.now()));
+
+      const forwarded = Effect.succeed(from);
+      return dynamic((prop) => {
+        if (owned()) {
+          if (prop === "domainMove") return () => Effect.succeed(true);
+          return (instance as Record<string, unknown>)[prop];
+        }
+        switch (prop) {
+          case Move.OwnsAlarmCallbacks:
+            return true;
+          case "alarm":
+            return () => step.pipe(Effect.orDie);
+          // The migration's call: start the move, and answer once it's done or `waitMillis` passes.
+          case "domainMove":
+            return (waitMillis: number) =>
+              Effect.gen(function* () {
+                if ((yield* Effect.promise(() => raw.getAlarm())) === null)
+                  yield* Effect.promise(() => raw.setAlarm(Date.now()));
+                const until = (yield* Clock.currentTimeMillis) + waitMillis;
+                while (!owned() && (yield* Clock.currentTimeMillis) < until)
+                  yield* Effect.sleep("250 millis");
+                return owned();
+              });
+          default:
+            // Until the move is done, the old object serves: it holds the data.
+            return LOCAL.has(prop) ? undefined : forwardTo(forwarded, prop);
+        }
+      });
     });
   });
 
 /**
- * A version 0 class while its objects move: it serves nothing, and hands its
- * storage to the new object of the same key.
+ * A version 0 class while its objects move: it serves with the same code as
+ * the new one, and logs its writes for the move once one begins. Once sealed,
+ * every call goes to the new object of the same key.
  */
-const mover = (classes: Classes, route: string): ObjectImpl =>
+const source = (classes: Classes, route: string, impl: ObjectImpl): ObjectImpl =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
+    const raw = state.raw?.storage;
+    // At deploy time the class is declared with a placeholder state.
+    if (raw === undefined) return yield* impl;
+    // A move already under way keeps logging after a restart.
+    Move.resumeSource(raw);
+    const inner = yield* impl;
     return Effect.gen(function* () {
-      const storage = state.raw.storage;
+      const instance = (yield* inner) as Record<string, unknown>;
       const key = Effect.gen(function* () {
         // An object created before Durable Objects kept their names: the key it stored.
-        return state.id.name ?? (yield* Effect.promise(() => storage.get<string>(ID_KEY))) ?? null;
+        return state.id.name ?? (yield* Effect.promise(() => raw.get<string>(ID_KEY))) ?? undefined;
       });
-      const target = (name: string) => {
-        const jurisdiction = state.id.jurisdiction as DurableObjectJurisdiction | undefined;
-        const namespace =
-          jurisdiction === undefined
-            ? classes.namespace
-            : classes.namespace.jurisdiction(jurisdiction);
-        return namespace.getByName(`${route}/${name}`) as Stub;
+      const target = Effect.map(key, (name) =>
+        name === undefined
+          ? undefined
+          : sharedStub(
+              classes,
+              route,
+              name,
+              state.id.jurisdiction as DurableObjectJurisdiction | undefined,
+            ),
+      );
+      const moves: Record<string, unknown> = {
+        domainName: () => Effect.map(key, (name) => name ?? null),
+        domainMoveBegin: () => Move.beginSource(raw),
+        domainMoveSnapshot: (after: Move.SnapshotCursor) => Move.snapshotPage(raw, after),
+        domainMoveChanges: (after: number) => Move.changesPage(raw, after),
+        domainMoveSeal: () => Move.seal(raw, () => state.raw.getWebSockets()),
+        domainMoveSql: (at: Move.SqlCursor | null) => Move.sqlPage(raw, at),
+        domainMoveFinish: () => Move.finish(raw),
       };
-      /**
-       * A call from a Worker isolate still on the code from before the upload
-       * (for a few seconds while Cloudflare rolls it out): answered by the
-       * key's new object, which moves this one's storage first.
-       */
-      const forward =
-        (method: string) =>
-        (...args: ReadonlyArray<unknown>) =>
-          Effect.flatMap(key, (name) =>
-            name === null
-              ? Effect.die(new Error(`${route}: an object without a name can't be forwarded`))
-              : target(name)[method]!(...args),
-          );
-      const known: Record<string | symbol, unknown> = {
-        [OwnsAlarmCallbacks]: true,
-        domainName: () => key,
-        domainExport: (cursor: TransferCursor | null) => exportPage(storage, cursor),
-        domainFinish: () =>
-          Effect.promise(async () => {
-            for (const socket of state.raw.getWebSockets()) {
-              try {
-                socket.close(1012, "moved");
-              } catch {
-                // already closed
-              }
-            }
-            await storage.deleteAlarm();
-            await storage.deleteAll();
-          }),
-        // A job was due here: move, and the new object runs it.
-        alarm: () =>
-          Effect.gen(function* () {
-            const name = yield* key;
-            if (name === null) return;
-            yield* target(name).domainAdopt!().pipe(Effect.orDie);
-          }),
-        webSocketMessage: (socket: WebSocket) => socket.close(1012, "moved"),
-        webSocketClose: () => Effect.void,
-        webSocketError: () => Effect.void,
-        fetch: Effect.gen(function* () {
-          const request = yield* HttpServerRequest;
-          const name = yield* key;
-          if (name === null)
-            return HttpServerResponse.text("This object moved and has no name", { status: 410 });
-          return yield* (
-            target(name) as unknown as {
-              fetch: (
-                request: HttpServerRequest,
-              ) => Effect.Effect<HttpServerResponse.HttpServerResponse, unknown>;
-            }
-          )
-            .fetch(request)
-            .pipe(Effect.orDie);
-        }),
-      };
-      // Every other method is forwarded: see `forward`.
-      return new Proxy(known, {
-        get: (target, prop) =>
-          prop in target || typeof prop !== "string" || UNFORWARDED.has(prop)
-            ? target[prop]
-            : forward(prop),
-        getOwnPropertyDescriptor: (target, prop) =>
-          prop in target || typeof prop !== "string" || UNFORWARDED.has(prop)
-            ? Reflect.getOwnPropertyDescriptor(target, prop)
-            : { value: forward(prop), configurable: true, enumerable: false, writable: false },
+      return dynamic((prop) => {
+        if (prop in moves) return moves[prop];
+        if (Move.isSealing(raw)) {
+          // Moved: the new object answers. Its stored callbacks moved with it.
+          if (prop === Move.OwnsAlarmCallbacks) return true;
+          if (prop === "alarm") return () => Effect.void;
+          return LOCAL.has(prop) ? undefined : forwardTo(target, prop);
+        }
+        const member = instance[prop];
+        // A call under way: a seal waits for it.
+        if (typeof member === "function")
+          return (...args: ReadonlyArray<unknown>) =>
+            Move.counted(
+              raw,
+              (member as (...a: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(...args),
+            );
+        if (Effect.isEffect(member)) return Move.counted(raw, member);
+        return member;
       });
     });
   });
 
-/** Members the runtime looks up on an instance that are not calls to forward. */
-const UNFORWARDED = new Set(["then", "toJSON", "constructor", "pipe"]);
-
-/** How many objects one step of the migration moves. */
+/** How many objects one step of the migration moves, and how long each may take. */
 const STEP = 25;
+const MOVE_WAIT_MS = 10_000;
 
 /**
  * Move each listed object of one old class (by hex id) to its key's object in
@@ -391,11 +420,20 @@ const migration = (params: {
               if (name === null) return false;
               const scoped =
                 id.jurisdiction === undefined ? shared : shared.jurisdiction(id.jurisdiction);
-              yield* makeRpcStub<Stub>(scoped.getByName(`${params.route}/${name}`))
-                .domainAdopt!().pipe(Effect.mapError(failed(`moving ${params.className} ${name}`)));
-              return true;
+              const target = makeRpcStub<Stub>(scoped.getByName(`${params.route}/${name}`));
+              // Keep asking until it has moved: each call waits a while for the move.
+              for (let tries = 0; ; tries++) {
+                const done = (yield* target.domainMove!(MOVE_WAIT_MS).pipe(
+                  Effect.mapError(failed(`moving ${params.className} ${name}`)),
+                )) as boolean;
+                if (done) return true;
+                if (tries >= 20)
+                  return yield* new DomainMoveFailed({
+                    message: `moving ${params.className} ${name}: still copying after ${tries} waits`,
+                  });
+              }
             }),
-          { concurrency: 8 },
+          { concurrency: 6 },
         ),
         { retries: { limit: 5, delay: "2 seconds", backoff: "exponential" } },
       );

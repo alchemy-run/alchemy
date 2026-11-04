@@ -13,6 +13,7 @@ import {
   ActiveStorageTransactions,
   type ActiveStorageTransaction,
 } from "./DurableObjectTransactionContext.ts";
+import { liveStorage } from "./internal/DurableObjectMove.ts";
 
 /** A native transaction failure or invalid use of a transaction's owner. */
 export class DurableObjectStorageError extends Data.TaggedError("DurableObjectStorageError")<{
@@ -145,7 +146,8 @@ function withStorageTransaction<A, E, R>(
           };
 
           try {
-            native = storage.transaction((txn) => {
+            // A source being moved logs the transaction's writes: see `liveStorage`.
+            native = liveStorage(storage).transaction((txn) => {
               if (cancelled) {
                 throw new DurableObjectStorageError({
                   operation: "transaction",
@@ -499,15 +501,18 @@ export const fromDurableObjectStorage = (
       ? Effect.void
       : checkTransactionOwner(transaction).pipe(Effect.orDie);
   });
+  // A source being moved logs its writes and refuses them once sealed: looked up
+  // on every call, so a wrapper made before the move began does too.
+  const live = () => liveStorage(storage);
   const use = <A>(effect: Effect.Effect<A>) => Effect.andThen(checkOwner, effect);
   const useAlarm = <A>(effect: Effect.Effect<A>) =>
     use(Effect.andThen(flushDurableObjectAlarm(storage), effect));
 
   return {
     get: ((keyOrKeys: string | string[], options?: cf.DurableObjectGetOptions) =>
-      use(Effect.promise(() => storage.get(keyOrKeys as any, options)))) as any,
+      use(Effect.promise(() => live().get(keyOrKeys as any, options)))) as any,
     list: (options?: cf.DurableObjectListOptions) =>
-      use(Effect.promise(() => storage.list(options))),
+      use(Effect.promise(() => live().list(options))),
     put: ((
       keyOrEntries: string | Record<string, unknown>,
       valueOrOptions?: unknown,
@@ -515,31 +520,35 @@ export const fromDurableObjectStorage = (
     ) =>
       use(
         typeof keyOrEntries === "string"
-          ? Effect.promise(() => storage.put(keyOrEntries, valueOrOptions, maybeOptions))
+          ? Effect.promise(() => live().put(keyOrEntries, valueOrOptions, maybeOptions))
           : Effect.promise(() =>
-              storage.put(keyOrEntries, valueOrOptions as cf.DurableObjectPutOptions | undefined),
+              live().put(keyOrEntries, valueOrOptions as cf.DurableObjectPutOptions | undefined),
             ),
       )) as any,
     delete: ((keyOrKeys: string | string[], options?: cf.DurableObjectPutOptions) =>
-      use(Effect.promise(() => storage.delete(keyOrKeys as any, options)))) as any,
+      use(Effect.promise(() => live().delete(keyOrKeys as any, options)))) as any,
     deleteAll: (options?: cf.DurableObjectPutOptions) =>
-      use(Effect.promise(() => storage.deleteAll(options))),
+      use(Effect.promise(() => live().deleteAll(options))),
     transaction: <A, E, R>(
       body: Effect.Effect<A, E, R> | ((txn: DurableObjectTransaction) => Effect.Effect<A, E, R>),
     ) => withStorageTransaction(storage, (txn) => (typeof body === "function" ? body(txn) : body)),
     getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
-      useAlarm(Effect.promise(() => storage.getAlarm(options))),
+      useAlarm(Effect.promise(() => live().getAlarm(options))),
     setAlarm: (scheduledTime: number | Date, options?: cf.DurableObjectSetAlarmOptions) =>
-      useAlarm(Effect.promise(() => storage.setAlarm(scheduledTime, options))),
+      useAlarm(Effect.promise(() => live().setAlarm(scheduledTime, options))),
     deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
-      useAlarm(Effect.promise(() => storage.deleteAlarm(options))),
-    sync: () => use(Effect.promise(() => storage.sync())),
-    sql: fromSqlStorage(storage.sql, checkOwner),
-    kv: storage.kv,
-    getCurrentBookmark: () => use(Effect.promise(() => storage.getCurrentBookmark())),
+      useAlarm(Effect.promise(() => live().deleteAlarm(options))),
+    sync: () => use(Effect.promise(() => live().sync())),
+    get sql() {
+      return fromSqlStorage(live().sql, checkOwner);
+    },
+    get kv() {
+      return live().kv;
+    },
+    getCurrentBookmark: () => use(Effect.promise(() => live().getCurrentBookmark())),
     getBookmarkForTime: (timestamp: number | Date) =>
-      use(Effect.promise(() => storage.getBookmarkForTime(timestamp))),
+      use(Effect.promise(() => live().getBookmarkForTime(timestamp))),
     onNextSessionRestoreBookmark: (bookmark: string) =>
-      use(Effect.promise(() => storage.onNextSessionRestoreBookmark(bookmark))),
+      use(Effect.promise(() => live().onNextSessionRestoreBookmark(bookmark))),
   };
 };

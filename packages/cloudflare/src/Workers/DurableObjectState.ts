@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
+import { trackWork } from "./internal/DurableObjectMove.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 import {
   getLoopbackEntrypoint,
@@ -121,7 +122,8 @@ export const fromDurableObjectState = (
       // event's lifetime without blocking the caller.
       const track = yield* Effect.serviceOption(BackgroundWork);
       yield* Effect.sync(() => {
-        const promise = Effect.runPromiseWith(context)(effect);
+        // Background work on a source being moved: its seal waits for it.
+        const promise = trackWork(state.storage, Effect.runPromiseWith(context)(effect));
         if (Option.isSome(track)) track.value(promise);
         state.waitUntil(promise);
       });
