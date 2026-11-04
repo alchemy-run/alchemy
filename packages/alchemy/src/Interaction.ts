@@ -380,7 +380,7 @@ const loadCapabilities = importOnce(() => import("./Cli/components/capabilities.
 export interface TerminalOptions {
   readonly stdin?: NodeJS.ReadStream | undefined;
   readonly stdout?: NodeJS.WriteStream | undefined;
-  readonly stderr?: NodeJS.WriteStream;
+  readonly stderr?: NodeJS.WriteStream | undefined;
   /** Override automatic TTY input detection. Primarily useful for tests. */
   readonly input?: boolean;
   readonly colors?: boolean;
