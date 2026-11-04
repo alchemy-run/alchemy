@@ -253,7 +253,39 @@ for (const file of tracked) {
   rewritten++;
 }
 
+// ============ Cycles ============
+
+// A merged contract now imports its scaffolding (`TableHttp.ts`) as a value;
+// scaffolding that imports a value back from that contract (an error class)
+// is a cycle that throws at module evaluation. Report it: move the shared
+// value into its own module (`TableTypes.ts`) and re-export it.
+const cycles: string[] = [];
+if (!dryRun) {
+  for (const { to } of merged) {
+    const dir = path.dirname(to);
+    const source = fs.readFileSync(to, "utf8");
+    for (const m of source.matchAll(/^import\s+(?!type\b)[^;]*?from\s+"\.\/(\w+Http)\.ts";/gms)) {
+      const scaffold = path.join(dir, `${m[1]}.ts`);
+      if (!fs.existsSync(scaffold)) continue;
+      const back = new RegExp(
+        `^import\\s+(?!type\\b)\\{([^}]*)\\}\\s+from\\s+"\\./${path.basename(to, ".ts")}\\.ts";`,
+        "m",
+      ).exec(fs.readFileSync(scaffold, "utf8"));
+      const values = back?.[1]
+        ?.split(",")
+        .map((x) => x.trim())
+        .filter((x) => x && !x.startsWith("type "));
+      if (values?.length) {
+        cycles.push(
+          `${path.relative(root, scaffold)} imports ${values.join(", ")} from ${path.basename(to)}, which imports it back`,
+        );
+      }
+    }
+  }
+}
+
 console.log(
   `${dryRun ? "[dry run] " : ""}merged ${merged.length} pairs, rewrote ${rewritten} referencing files`,
 );
+for (const c of cycles) console.log(`cycle ${c}`);
 for (const s of skipped) console.log(`skipped ${s}`);
