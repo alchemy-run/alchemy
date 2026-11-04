@@ -128,7 +128,7 @@ Leaving something out is how you keep it internal. `OpenAccount` isn't listed, b
 
 ## Describe what it serves
 
-Every declaration takes `annotations`. Its `description` says what the entry does, and the tools built from an Api show it: an MCP tool for an agent, or CLI help.
+Every declaration takes `annotations`. Its `description` says what the entry does, and everything built from an Api shows it: an MCP tool for an agent, CLI help, and the OpenAPI document of `toHttpApi`. An Api's own description heads the CLI help and the OpenAPI document.
 
 ```typescript title="src/WithdrawMoney.command.ts"
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {

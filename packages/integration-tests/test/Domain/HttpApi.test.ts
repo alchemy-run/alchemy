@@ -482,6 +482,38 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     ),
   );
 
+  it("the OpenAPI document carries each entry's description annotation", () => {
+    class Credited extends Domain.Event("Credited", { balance: Schema.Int }) {}
+    class Credit extends Domain.Command("Credit", {
+      target: Schema.String,
+      events: [Credited],
+      annotations: { description: "Add a cent to a purse." },
+    }) {}
+    class Purse extends Domain.Aggregate("Purse", {
+      id: Schema.String,
+      state: Schema.Struct({ balance: Schema.Int }),
+      initial: { balance: 0 },
+      commands: [Credit],
+      decide: { Credit: () => [] },
+      evolve: { Credited: (_, e) => ({ balance: e.balance }) },
+      read: {},
+      annotations: { description: "A purse, which keeps its own balance." },
+    }) {}
+    class Purses extends Domain.Model("Purses", { aggregates: [Purse] }) {}
+    class PurseApi extends Domain.Api("PurseApi", {
+      model: Purses,
+      annotations: { description: "What a purse app reaches." },
+    }) {}
+    const spec = OpenApi.fromApi(
+      DomainHttp.toHttpApi(PurseApi, { expose: ["Credit", "Purse.get"] }).api,
+    );
+    expect(spec.info.description).toBe("What a purse app reaches.");
+    expect(spec.paths["/Credit"]!.post!.description).toBe("Add a cent to a purse.");
+    expect(spec.paths["/Purse/{key}"]!.get!.description).toBe(
+      "A purse, which keeps its own balance.",
+    );
+  });
+
   it("the OpenAPI document lists each endpoint with its schemas", () => {
     const spec = OpenApi.fromApi(WalletHttp.api);
     expect(Object.keys(spec.paths).sort()).toEqual([

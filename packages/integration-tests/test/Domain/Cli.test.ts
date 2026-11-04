@@ -480,7 +480,11 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           annotations: { description: "The current balance of one purse." },
         }) {}
         class Purses extends Domain.Model("Purses", { aggregates: [Purse], views: [Total] }) {}
-        class PurseApi extends Domain.Api("PurseApi", { model: Purses, aggregates: ["Purse"] }) {}
+        class PurseApi extends Domain.Api("PurseApi", {
+          model: Purses,
+          aggregates: ["Purse"],
+          annotations: { description: "What a purse app reaches." },
+        }) {}
         const run = yield* cliOver;
         const help = yield* run(
           toCli(PurseApi, {
@@ -493,6 +497,8 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
         expect(help.stdout).toMatch(
           /^\s+withdraw\s+Take money out of a wallet\. The amount is in cents\.$/m,
         );
+        // The root's help is the Api's own description.
+        expect(help.stdout).toContain("What a purse app reaches.");
         expect(help.stdout).toMatch(/^\s+purse\s+A purse, which keeps its own balance\.$/m);
         expect(help.stdout).toMatch(/^\s+total\s+The current balance of one purse\.$/m);
       }),

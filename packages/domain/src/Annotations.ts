@@ -27,7 +27,7 @@
 export interface Annotations {
   /**
    * What the declaration is or does, for the people and agents who use it.
-   * An Api's MCP tools and CLI help show it.
+   * An Api's MCP tools, CLI help and OpenAPI document show it.
    */
   readonly description?: string;
 }
