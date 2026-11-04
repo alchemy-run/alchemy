@@ -1,5 +1,4 @@
 import { D1 } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1Options";
 /**
  * Node-side query path into the local workerd D1 simulator, built on the
  * runtime's platform proxy (`PlatformProxy.open` — our `getPlatformProxy`).
@@ -22,7 +21,6 @@ import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1O
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
 import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
-import type { BindingHook } from "@alchemy.run/cloudflare-runtime/core/PluginContext";
 import { splitSqliteStatements } from "@alchemy.run/sql/SqlFile";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -53,20 +51,6 @@ interface D1StatementResponse {
 }
 
 /**
- * A plain service binding onto the raw `d1` service for `databaseId` —
- * bypassing the `cloudflare-internal:d1-api` wrapper so the proxy's fetch
- * passthrough can POST the full D1 HTTP protocol.
- */
-const rawD1Binding = (databaseId: string): BindingHook =>
-  Effect.succeed({
-    name: "D1_RAW",
-    service: {
-      name: SERVICE_D1,
-      props: { json: JSON.stringify({ databaseId }) },
-    },
-  });
-
-/**
  * Boot a scoped platform proxy for `databaseId`, hand `use` a query
  * function that tunnels {@link D1QueryBody} requests into the local
  * simulator, and tear the instance down when `use` completes.
@@ -82,11 +66,10 @@ export const withLocalD1Query = <A, E, R>(
       const proxy = yield* open({
         name: gatewayName("alchemy-d1-gateway", databaseId),
         bindings: [
-          // The wrapped binding is unused by the gateway itself, but its
-          // hook registers the database with the D1 plugin so the `d1`
-          // service is emitted into this workerd config.
-          D1.local({ binding: "DB", id: databaseId }),
-          rawD1Binding(databaseId),
+          // A plain service binding onto the raw `d1` simulator, bypassing
+          // the `cloudflare-internal:d1-api` wrapper so the proxy's fetch
+          // passthrough can POST the full D1 HTTP protocol.
+          D1.raw({ binding: "D1_RAW", id: databaseId }),
         ],
       });
       const raw = (proxy.env as Record<string, unknown>).D1_RAW as {

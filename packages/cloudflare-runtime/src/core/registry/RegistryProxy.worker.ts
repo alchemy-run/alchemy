@@ -4,12 +4,13 @@
  * so that we can bake in the initial registry state and export one
  * makeExternalDurableObject() per Durable Object class.
  */
-import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
+import { DurableObject, RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
 import {
   HEADER_REGISTRY_UPDATE_SECRET,
   resolvedTargetKey,
   type ResolvedTarget,
   type ResolvedTargetMap,
+  type StorageTarget,
   type Subscriber,
 } from "./RegistryTypes.shared.ts";
 
@@ -17,6 +18,8 @@ interface Env {
   REGISTRY_DEBUG_PORT: Env.WorkerdDebugPortConnector;
   /** Per-instance credential required on registry pushes. */
   REGISTRY_UPDATE_SECRET: ArrayBuffer;
+  /** This runtime's id as a storage owner candidate. */
+  REGISTRY_OWNER_ID: string;
 }
 
 /**
@@ -65,6 +68,11 @@ declare namespace Env {
    */
   interface WorkerdDebugPortConnector {
     connect(address: string): WorkerdDebugPortClient;
+    /**
+     * This workerd process's own debug port, without a TCP connection back
+     * to ourselves (workerd#7005). Absent on older workerd builds.
+     */
+    current?(): WorkerdDebugPortClient;
   }
 
   /**
@@ -450,5 +458,96 @@ export class ExternalWorkflow extends WorkerEntrypoint<Env, Subscriber.Workflow>
 
   private notFoundMessage() {
     return `Workflow "${this.ctx.props.workflowName}" defined in worker "${this.ctx.props.scriptName}" not found. Make sure the worker is running locally and exports the workflow.`;
+  }
+}
+
+/**
+ * A local RPC target whose members resolve lazily on another target. Used
+ * for RPC properties that return RPC targets (e.g. Stream's `videos`): a
+ * debug-port RPC property cannot itself cross this outer property path, so
+ * the outer hop ends here and its methods are forwarded (Miniflare's
+ * `ExternalRpcTarget`).
+ */
+class ExternalRpcTarget extends RpcTarget {
+  constructor(resolve: () => object) {
+    super();
+    return new Proxy(this, {
+      get(target, prop) {
+        if (Reflect.has(target, prop)) {
+          return Reflect.get(target, prop);
+        }
+        return Reflect.get(resolve(), prop);
+      },
+    });
+  }
+}
+
+/**
+ * Forwards a storage simulator binding (D1, R2, KV, ...) to the runtime that
+ * owns the storage directory, so only one workerd process opens its SQLite
+ * files (Miniflare's shared storage `ExternalServiceProxy` with
+ * `storage: true`). Every runtime, including the owner, routes through here;
+ * the owner reaches itself through the in-process debug port.
+ */
+export class ExternalStorage extends WorkerEntrypoint<Env, StorageTarget> {
+  private storageOwner: Target.Resolver;
+
+  constructor(ctx: ExecutionContext<StorageTarget>, env: Env) {
+    super(ctx, env);
+    const { scope, service, entrypoint, props, rpcProperties } = ctx.props;
+    this.storageOwner = Target.makeResolver(
+      { kind: "storage-owner", scope },
+      (owner: ResolvedTarget<Subscriber.StorageOwner>) => {
+        const debugPort = env.REGISTRY_DEBUG_PORT;
+        const client =
+          owner.ownerId === env.REGISTRY_OWNER_ID && typeof debugPort.current === "function"
+            ? debugPort.current()
+            : debugPort.connect(owner.debugPortAddress);
+        return client.getEntrypoint(service, entrypoint, props);
+      },
+    );
+
+    return new Proxy(this, {
+      get: (_, prop) => {
+        if (Reflect.has(this, prop)) {
+          return Reflect.get(this, prop);
+        }
+        if (typeof prop === "string" && HANDLER_RESERVED_KEYS.has(prop)) {
+          return undefined;
+        }
+        if (typeof prop === "string" && rpcProperties?.includes(prop)) {
+          return new ExternalRpcTarget(() => Reflect.get(this.resolveOwner(), prop) as object);
+        }
+        const fetcher = this.storageOwner.resolve();
+        // Like the Durable Object proxy above: return a function that throws,
+        // since throwing in the trap would crash workerd's property probes.
+        if (!fetcher) {
+          return () => {
+            throw new Error(this.notFoundMessage());
+          };
+        }
+        return Reflect.get(fetcher, prop);
+      },
+    });
+  }
+
+  fetch(request: Request): Promise<Response> | Response {
+    const fetcher = this.storageOwner.resolve();
+    if (!fetcher) {
+      return new Response(this.notFoundMessage(), { status: 503 });
+    }
+    return fetcher.fetch(request);
+  }
+
+  private resolveOwner(): Fetcher {
+    const fetcher = this.storageOwner.resolve();
+    if (!fetcher) {
+      throw new Error(this.notFoundMessage());
+    }
+    return fetcher;
+  }
+
+  private notFoundMessage() {
+    return `No runtime owns the local storage at "${this.ctx.props.scope}". The runtime that owned it stopped; another will take over within a few seconds.`;
   }
 }

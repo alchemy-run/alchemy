@@ -21,6 +21,7 @@ import { DEFAULT_COMPATIBILITY_DATE, SOCKET_USER_ENTRY } from "../../internal/co
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import { PluginContext, type BindingHook } from "../../PluginContext.ts";
+import * as SharedStorage from "../../registry/SharedStorage.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
@@ -101,6 +102,10 @@ export const ImagesLive = Layer.effect(
 
         let used = false;
         let loopbackService: WorkerdConfig.ServiceDesignator | undefined;
+        // The hosted-image store, reached through the storage owner (see
+        // `SharedStorage`). The images service itself stays local: it calls
+        // back into this process for Sharp transforms.
+        let storeService: WorkerdConfig.ServiceDesignator = { name: SERVICE_IMAGES_STORE };
         // The workerd entry port, captured in `start` — the images worker
         // resolves it through the loopback to build absolute variant URLs
         // (Miniflare's `/core/public-url`).
@@ -137,11 +142,17 @@ export const ImagesLive = Layer.effect(
           api: {
             register: () =>
               Plugin.use(Loopback.Loopback, (loopback) =>
-                Effect.map(loopback.api.route(`images:${worker.name}`, handler), (service) => {
-                  used = true;
-                  loopbackService = service;
-                  return { name: SERVICE_IMAGES };
-                }),
+                Effect.all([
+                  loopback.api.route(`images:${worker.name}`, handler),
+                  SharedStorage.route({ name: SERVICE_IMAGES_STORE }),
+                ]).pipe(
+                  Effect.map(([service, store]) => {
+                    used = true;
+                    loopbackService = service;
+                    storeService = store;
+                    return { name: SERVICE_IMAGES };
+                  }),
+                ),
               ),
           },
           start: (ports) =>
@@ -149,9 +160,12 @@ export const ImagesLive = Layer.effect(
               publicPort = ports[SOCKET_USER_ENTRY];
             }),
           defer: Effect.gen(function* () {
-            if (!used || loopbackService === undefined) return {};
+            const hostsImages = used && loopbackService !== undefined;
+            // A candidate storage owner hosts the store even unbound, so it
+            // can serve other runtimes' images (see `SharedStorage`).
+            if (!hostsImages && !(yield* SharedStorage.hosting)) return {};
             const storageService = yield* makeStorageService;
-            const storeService: WorkerdConfig.Service = {
+            const storeSimulator: WorkerdConfig.Service = {
               name: SERVICE_IMAGES_STORE,
               worker: {
                 compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
@@ -187,6 +201,9 @@ export const ImagesLive = Layer.effect(
                 ],
               },
             };
+            if (!hostsImages) {
+              return { services: [storageService, storeSimulator] };
+            }
             const imagesService: WorkerdConfig.Service = {
               name: SERVICE_IMAGES,
               worker: {
@@ -195,11 +212,11 @@ export const ImagesLive = Layer.effect(
                 bindings: [
                   {
                     name: BINDING_IMAGES_STORE,
-                    kvNamespace: { name: SERVICE_IMAGES_STORE },
+                    kvNamespace: storeService,
                   },
                   {
                     name: BINDING_IMAGES_LOOPBACK,
-                    service: loopbackService,
+                    service: loopbackService!,
                   },
                 ],
               },
@@ -237,7 +254,7 @@ export const ImagesLive = Layer.effect(
               order: 1,
             };
             return {
-              services: [storageService, storeService, imagesService],
+              services: [storageService, storeSimulator, imagesService],
               middlewares: [deliveryMiddleware],
             };
           }),

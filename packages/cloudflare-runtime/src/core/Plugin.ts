@@ -8,7 +8,13 @@ import type * as WorkerdConfig from "./workerd/Config.ts";
 import type * as Workerd from "./workerd/Workerd.ts";
 
 export type Plugin<Api = never> = WithApi<
-  PluginConfig & { readonly defer?: Effect.Effect<PluginConfig, RuntimeError> },
+  PluginConfig & {
+    /**
+     * Computes config once every binding hook has run. Runs with the
+     * worker's `PluginContext`.
+     */
+    readonly defer?: Effect.Effect<PluginConfig, RuntimeError, PluginContext>;
+  },
   Api
 >;
 
@@ -25,6 +31,12 @@ export interface PluginConfig {
    * takes precedence.
    */
   readonly userWorker?: Partial<WorkerdConfig.Worker>;
+  /**
+   * Directories whose startup lock workerd must hold while it boots (see
+   * `internal/StartupLock.ts`), e.g. a shared storage directory whose
+   * simulators other runtimes also host.
+   */
+  readonly startupLocks?: ReadonlyArray<string>;
   /**
    * Initializes each workerd process, including replacements after a crash.
    * Resources and tasks acquired here are released before the next process
