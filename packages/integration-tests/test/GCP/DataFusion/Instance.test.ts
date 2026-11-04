@@ -77,14 +77,19 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       expect(unchanged.resources.Pipelines?.action).toEqual("noop");
 
-      // Logging and labels update in place.
+      // Logging updates in place.
       const updated = yield* stack.deploy(
-        fusion({ enableStackdriverLogging: true, labels: { env: "prod" } }),
+        fusion({ enableStackdriverLogging: true, labels: { env: "test" } }),
       );
       expect(updated.name).toEqual(created.name);
       const fetched = yield* datafusion.getProjectsLocationsInstances({ name: created.name });
       expect(fetched.enableStackdriverLogging).toEqual(true);
-      expect(fetched.labels?.env).toEqual("prod");
+
+      // Labels are fixed at create: new labels are a new instance.
+      const relabeled = yield* stack.plan(
+        fusion({ enableStackdriverLogging: true, labels: { env: "prod" } }),
+      );
+      expect(relabeled.resources.Pipelines?.action).toEqual("replace");
 
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.name)).toEqual("gone");

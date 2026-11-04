@@ -12,7 +12,6 @@ import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   createInternalLabels,
-  diffLabels,
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
@@ -71,7 +70,10 @@ export type InstanceProps = {
   enableRbac?: boolean;
   /** Service account the instance's Dataproc clusters run as. Immutable — changing it replaces the instance. */
   dataprocServiceAccount?: string;
-  /** User labels. Alchemy ownership labels are merged in automatically. */
+  /**
+   * User labels. Alchemy ownership labels are merged in automatically.
+   * Immutable — changing them replaces the instance.
+   */
   labels?: Record<string, string>;
 };
 
@@ -108,8 +110,8 @@ export type Instance = Resource<
  * A Cloud Data Fusion instance: a managed CDAP environment for building and
  * running data pipelines, which runs them on Dataproc clusters it creates.
  *
- * Labels, logging, monitoring and RBAC update in place; the edition,
- * version, network and service accounts are fixed at create. An instance
+ * Logging, monitoring and RBAC update in place; the edition, version,
+ * network, service accounts and labels are fixed at create. An instance
  * takes 15–25 minutes to provision; a project's first instances can take
  * a few attempts while Data Fusion sets up its tenant project.
  *
@@ -216,7 +218,9 @@ export const InstanceProvider = () =>
         news.version !== olds.version ||
         (news.privateInstance ?? false) !== (olds.privateInstance ?? false) ||
         !sameJson(news.networkConfig, olds.networkConfig) ||
-        news.dataprocServiceAccount !== olds.dataprocServiceAccount;
+        news.dataprocServiceAccount !== olds.dataprocServiceAccount ||
+        // "unsupported path in fieldMask: labels": labels are fixed at create.
+        !sameJson(news.labels ?? {}, olds.labels ?? {});
       return fixedChanged ? { action: "replace" as const } : undefined;
     }),
 
@@ -303,9 +307,7 @@ export const InstanceProvider = () =>
       }
 
       // Sync the fields Data Fusion updates in place against the live instance.
-      const { upsert, removed } = diffLabels(tagRecord(current.labels), desiredLabels);
       const mask = [
-        (upsert.length > 0 || removed.length > 0) && "labels",
         (current.enableStackdriverLogging ?? false) !== (news.enableStackdriverLogging ?? false) &&
           "enable_stackdriver_logging",
         (current.enableStackdriverMonitoring ?? false) !==
@@ -317,7 +319,6 @@ export const InstanceProvider = () =>
           name: current.name ?? name,
           updateMask: mask.join(","),
           body: {
-            labels: desiredLabels,
             enableStackdriverLogging: news.enableStackdriverLogging ?? false,
             enableStackdriverMonitoring: news.enableStackdriverMonitoring ?? false,
             enableRbac: news.enableRbac ?? false,
