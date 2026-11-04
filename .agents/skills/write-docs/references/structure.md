@@ -66,13 +66,12 @@ mixing them on a page is fine.
 | What holds what? What is the platform made of? | `DAG` with `groups` (borders) | `aws/what-is-aws`, `aws/networking` |
 | What connects to what, and what flows where? | `DAG` (arrows) | `aws/messaging/sns`, `aws/frontend/websites` |
 | Who manages each layer, you or the platform? | `Responsibility` | `aws/compute/choosing-a-runtime` |
-| What happens, in what order, between whom? | `Sequence` | `aws/messaging/sqs`, `acme/what-is-acme` |
+| What happens, in what order, between whom? Which checks does a call pass? | `Sequence` | `aws/messaging/sqs`, `acme/what-is-acme`, `aws/iam` (across accounts) |
 | What runs when? Concurrency, waiting, propagation | `Timeline` | `aws/compute/lambda`, `cloudflare/data/kv` |
 | Where in the world does it run? | `WorldMap` | `cloudflare/compute/durable-objects`, `cloudflare/data/hyperdrive` |
 | What is ordered, and who has read how far? | `Log` | `cloudflare/messaging/k2`, `aws/messaging/kinesis` |
 | What states does it move through? | `StateMachine` | `cloudflare/messaging/queues`, `aws/observability/cloudwatch` |
 | How is data laid out, and what does a query read? | `Records` | `aws/data/dynamodb`, `aws/data/s3` |
-| When does each combination work? | `Matrix` | `aws/iam` (across accounts) |
 | How does a value or a line of code travel from deploy to run time? | `Sequence` (a value's journey) or `Timeline` (what runs when) | `aws/security/secrets-env`, `infrastructure-as-effects/phases` |
 | How do copies relate over time? | `BranchGraph` | `neon/data/branching` |
 
@@ -93,11 +92,16 @@ Rules for every diagram:
 - **Containment is a border, never an arrow.** Arrows are only for things that
   move or call. Group ids and node ids must differ.
 - **Never a table of text in boxes.** A grid of cells holding sentences, half
-  of them empty dashes, was rejected: it shows nothing a paragraph doesn't. If
+  of them empty dashes, was rejected: it shows nothing a paragraph doesn't. So
+  was a truth-table grid of allowed/denied (IAM across accounts): draw the call
+  passing its checks instead. If
   the cells would be sentences, draw the movement or the timing instead.
 - **A diagram with no arrows and no meaningful borders is the wrong
   component.** Use a purpose-made one, or build a new one in
   `diagrams/` in the same style when no existing one answers the question.
+- **No long empty edges.** Don't push a node columns away to make room for an
+  edge label; put the detail in the node's type (`SendMessage on Jobs`) and keep
+  neighbours adjacent.
 - **Keep it compact.** Two or three columns read better than a row of five.
   Crop a `WorldMap` to the region that matters (`crop`), and set `center={180}`
   for a route across the Pacific.

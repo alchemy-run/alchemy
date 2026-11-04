@@ -4,7 +4,7 @@ description: How IAM identities, roles, trust, resource-based policies and tag-b
 ---
 
 import DAG from "../../../components/DAG.astro";
-import Matrix from "../../../components/diagrams/Matrix.astro";
+import Sequence from "../../../components/diagrams/Sequence.astro";
 
 IAM is the part of AWS that answers one question on every request: may this identity do this action on this resource? Nothing is allowed until a policy says so.
 
@@ -40,13 +40,13 @@ A role has two policies. Its **permissions** say what it may do. Its **trust pol
   nodes={[
     { id: "lambda", label: "Lambda", type: "AWS service", col: 0, row: 0 },
     { id: "trust", label: "trust policy", type: "who may assume it", col: 1, row: 0 },
-    { id: "perms", label: "permissions", type: "what it may call", col: 1, row: 1 },
-    { id: "queue", label: "Jobs", type: "SQS Queue", col: 3, row: 1 },
+    { id: "perms", label: "permissions", type: "SendMessage on Jobs", col: 1, row: 1 },
+    { id: "queue", label: "Jobs", type: "SQS Queue", col: 2, row: 1 },
   ]}
   groups={[{ id: "role", label: "Execution role", nodes: ["trust", "perms"] }]}
   edges={[
     { from: "lambda", to: "trust", label: "assumes" },
-    { from: "perms", to: "queue", label: "sqs:SendMessage" },
+    { from: "perms", to: "queue" },
   ]}
   caption="A role holds two policies. The trust policy lets Lambda assume the role. The permissions let the role send to one Queue."
 />
@@ -71,30 +71,24 @@ This one lets CloudFront read the site's files, but only on behalf of one distri
 
 Within one account, either kind of policy can allow a request. Across accounts, both must: the caller's identity policy has to allow the call, and the resource's policy has to allow the caller's account.
 
-<Matrix
-  panels={[
-    {
-      title: "Within one account",
-      rowsLabel: "identity policy",
-      colsLabel: "bucket policy",
-      cols: ["allows", "says nothing"],
-      rows: [
-        { label: "allows", cells: [{ text: "allowed", yes: true }, { text: "allowed", yes: true }] },
-        { label: "says nothing", cells: [{ text: "allowed", yes: true }, { text: "denied" }] },
-      ],
-    },
-    {
-      title: "Across accounts",
-      rowsLabel: "identity policy",
-      colsLabel: "bucket policy",
-      cols: ["allows", "says nothing"],
-      rows: [
-        { label: "allows", cells: [{ text: "allowed", yes: true }, { text: "denied" }] },
-        { label: "says nothing", cells: [{ text: "denied" }, { text: "denied" }] },
-      ],
-    },
+<Sequence
+  actors={[
+    { id: "role", label: "Role", type: "account 1111" },
+    { id: "identity", label: "identity policy", type: "account 1111" },
+    { id: "resource", label: "bucket policy", type: "account 2222" },
+    { id: "bucket", label: "Bucket", type: "account 2222", tone: "accent" },
   ]}
-  caption="Within one account, either policy can allow a call. Across accounts, both must. An explicit deny in either one always wins."
+  steps={[
+    { from: "role", to: "identity", label: "may I s3:GetObject?" },
+    { from: "identity", to: "role", label: "allow", dashed: true },
+    { from: "role", to: "resource", label: "GetObject" },
+    { note: "does it trust account 1111?", over: "resource" },
+    { from: "resource", to: "bucket", label: "allow" },
+    { from: "bucket", to: "role", label: "the object", dashed: true },
+    { divider: "within one account" },
+    { note: "either policy allowing is enough", over: ["identity", "resource"] },
+  ]}
+  caption="A call across accounts passes two checks, one in each account, and both must allow it. Within one account, either is enough. An explicit deny in either always wins."
 />
 
 Services that call your resources, like CloudFront, EventBridge, SNS or S3 notifications, have no identity policy in your account. A resource policy is the only way to let them in.
