@@ -19,7 +19,9 @@
  * OU visibly covers everything inside it. `dashed` draws a softer border (a
  * subnet, a security group, a node), `wide` gives a node its own full row,
  * `specs` lists [key, value] lines inside a box (an instance's type and image),
- * and `tone: "muted"` greys out something finished or idle.
+ * `tone: "muted"` greys out something finished or idle, and `side` stacks a
+ * node in a column beside its siblings (small branches next to a big one, so
+ * a short branch doesn't get a whole empty row).
  */
 import "./diagram.css";
 
@@ -32,6 +34,7 @@ interface TreeNode {
   dashed?: boolean;
   wide?: boolean;
   specs?: [string, string][];
+  side?: boolean;
 }
 interface Props {
   nodes: TreeNode[];
@@ -87,9 +90,24 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
           {node.type && <span class="alc-tree__type">{node.type}</span>}
           {scopeOf(node.id).map((s) => <span class="alc-tree__scope">{s.label}</span>)}
         </div>
-        <div class="alc-tree__kids">
-          {kids(node.id).map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
-        </div>
+        {kids(node.id).some((k) => k.side) ? (
+          <div class="alc-tree__split">
+            <div class="alc-tree__side">
+              {kids(node.id)
+                .filter((k) => k.side)
+                .map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+            </div>
+            <div class="alc-tree__kids">
+              {kids(node.id)
+                .filter((k) => !k.side)
+                .map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+            </div>
+          </div>
+        ) : (
+          <div class="alc-tree__kids">
+            {kids(node.id).map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+          </div>
+        )}
       </div>
     )
   ) : (
@@ -105,7 +123,7 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
 <style>
   .alc-tree {
     width: fit-content;
-    max-width: min(44rem, 100%);
+    max-width: 100%;
     margin-inline: auto;
     font-family: var(--alc-font-mono);
   }
@@ -125,6 +143,30 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
   .alc-tree__box--scoped {
     border: 1.5px dashed color-mix(in srgb, var(--alc-warn) 70%, transparent);
     background: color-mix(in srgb, var(--alc-warn) 8%, transparent);
+  }
+  .alc-tree__split {
+    display: flex;
+    gap: 0.625rem;
+    align-items: stretch;
+  }
+  .alc-tree__split > .alc-tree__kids {
+    flex: 1 1 auto;
+  }
+  .alc-tree__side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+  }
+  .alc-tree__side > .alc-tree__leaf {
+    align-self: stretch;
+  }
+  .alc-tree__side > .alc-tree__box {
+    flex: 1 1 auto;
+  }
+  @media (max-width: 40rem) {
+    .alc-tree__split {
+      flex-direction: column;
+    }
   }
   .alc-tree__head {
     display: flex;

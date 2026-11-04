@@ -16,9 +16,9 @@ So accounts are how you keep environments apart. Put production in an account of
 <Tree
   nodes={[
     { id: "root", label: "Root", type: "organization" },
-    { id: "mgmt", label: "management", type: "pays the bill", parent: "root", tone: "accent" },
+    { id: "mgmt", label: "management", type: "pays the bill", parent: "root", tone: "accent", side: true },
     { id: "workloads", label: "Workloads", type: "OU", parent: "root" },
-    { id: "sandbox", label: "Sandbox", type: "OU", parent: "root" },
+    { id: "sandbox", label: "Sandbox", type: "OU", parent: "root", side: true },
     { id: "prodOu", label: "Prod", type: "OU", parent: "workloads" },
     { id: "nonprod", label: "Non-prod", type: "OU", parent: "workloads" },
     { id: "prod", label: "prod", type: "account", parent: "prodOu" },
