@@ -173,7 +173,25 @@ export interface ProjectAttributes {
   createdOn: string;
 }
 
-export type Project = Resource<TypeId, ProjectProps, ProjectAttributes, never, Providers>;
+export type Project = Resource<
+  TypeId,
+  ProjectProps,
+  ProjectAttributes,
+  never,
+  Providers,
+  ProjectLookup
+>;
+
+/**
+ * Props for {@link Project.lookup}: find a Pages project this stack doesn't
+ * manage, by its name.
+ */
+export interface ProjectLookup {
+  /**
+   * The name of the existing project (its `<name>.pages.dev` subdomain).
+   */
+  name: string;
+}
 
 /**
  * A Cloudflare Pages project (direct-upload).
@@ -233,6 +251,20 @@ export type Project = Resource<TypeId, ProjectProps, ProjectAttributes, never, P
  * });
  * ```
  *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Attach a custom domain to an existing project
+ * ```typescript
+ * const project = Cloudflare.Pages.Project.lookup({ name: "my-site" });
+ * const domain = yield* Cloudflare.Pages.Domain("site-domain", {
+ *   projectName: project.name,
+ *   name: "www.example.com",
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/pages/
  *
  * @resource
@@ -267,6 +299,11 @@ export const ProjectProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* ({ name }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* getProject(accountId, name);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
