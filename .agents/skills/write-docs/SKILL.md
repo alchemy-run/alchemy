@@ -77,9 +77,10 @@ Each of these was a correction. Don't relearn them.
   The same goes for superlatives: "the largest public cloud" says nothing about
   AWS a reader can use. Keep one only when it's the platform's defining trait
   and the user asked for it (Cloudflare's network, PlanetScale's speed).
-- **Say what the platform is known for**, not a short list of the services we
-  happen to support ("Google Cloud is a set of services for running code" was
-  rejected as too small).
+- **Say plainly what the platform is**: "a cloud platform with services for
+  compute, storage, …". Never "a set of services", "a cloud of a few hundred
+  services" or "a collection of services"; those were rejected, twice. Then say
+  what it's known for, not a short list of the services we happen to support.
 - **No bias the product doesn't have.** Don't call one runtime "our default".
   Recommend an option for a stated reason ("an easy, cheap place to start") and
   present the alternatives fairly.
