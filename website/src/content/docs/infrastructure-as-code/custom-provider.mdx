@@ -464,6 +464,42 @@ return StripeProduct.Provider.of({
 Resources with no enumeration API (singletons, existence-only
 resources) keep the `Effect.succeed([])` stub instead.
 
+## Implement `lookup` (optional)
+
+`lookup` lets users bind a product they created outside Alchemy:
+`StripeProduct.lookup({ productId })`. Declare what it takes as the
+Resource type's sixth parameter:
+
+```diff lang="typescript"
+export type StripeProduct = Resource<
+  "Stripe.Product",
+  StripeProductProps,
+-  StripeProductAttributes
++  StripeProductAttributes,
++  never,
++  undefined,
++  { productId: string }
+>;
+```
+
+Then return the product's attributes, or `undefined` when there is no
+such product (see [Providers › lookup](/infrastructure-as-code/provider#lookup)):
+
+```diff lang="typescript"
+return StripeProduct.Provider.of({
+  stables: ["productId"],
++  lookup: Effect.fn(function* ({ productId }) {
++    const { apiKey } = yield* yield* StripeCredentials;
++    const stripe = new Stripe(Redacted.value(apiKey));
++    const product = yield* Effect.tryPromise(() =>
++      stripe.products.retrieve(productId),
++    ).pipe(Effect.catch(() => Effect.undefined));
++    return product ? { productId: product.id, created: product.created } : undefined;
++  }),
+  // ...
+});
+```
+
 ## Bundle into a `providers()` layer
 
 Users expect the same one-line ergonomics as the built-ins

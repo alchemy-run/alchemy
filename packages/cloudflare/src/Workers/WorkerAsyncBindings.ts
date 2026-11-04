@@ -48,7 +48,6 @@ import { isSecret } from "../SecretsStore/Secret.ts";
 import { isStream } from "../Stream/Stream.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isVpcService } from "../VpcService/VpcService.ts";
-import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import { isWorkflowLike, WorkflowResource, type WorkflowBinding } from "../Workflows/Workflow.ts";
 import { asScriptNameOutput, makeWorkflowName } from "../Workflows/WorkflowName.ts";
@@ -296,7 +295,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           // binding value; contribute it as binding data so the wire binding
           // stays pure.
           devRemote:
-            (isWorkerOnlyBinding(binding) || isSendEmail(binding)) && binding.devRemote
+            ((isWorkerOnlyBinding(binding) || isSendEmail(binding)) && binding.devRemote) ||
+            isLookedUpWorker(binding)
               ? { [bindingName]: true }
               : undefined,
         });
@@ -312,6 +312,16 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
     Object.assign(resource, { env });
   }
 });
+
+/**
+ * A service binding to a `Worker.lookup(...)`: the target is deployed, never
+ * run by `alchemy dev`, so the dev worker reaches it remotely.
+ */
+const isLookedUpWorker = (binding: unknown): boolean =>
+  Output.isLookupExpr(binding) ||
+  (isWorkerEntrypoint(binding) &&
+    binding.worker !== undefined &&
+    Output.isLookupExpr(binding.worker));
 
 /**
  * Structural check for a `Cloudflare.Container` class declaration. Keyed on
@@ -775,17 +785,8 @@ const toBinding = (
       stream: binding.streamId,
     };
   } else if (Output.isOutput(binding)) {
-    return Output.map(binding, (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>
-      // A `VpcService.lookup(...)` data source resolves to the service's
-      // attributes branded with the resource `Type`; classify it like the
-      // managed resource instead of a plain json env value.
-      isVpcService(value)
-        ? {
-            type: "vpc_service" as const,
-            name: bindingName,
-            serviceId: (value as VpcServiceLookup).serviceId,
-          }
-        : toValueBinding(bindingName, value as Json | Redacted.Redacted<Json>),
+    return Output.map(binding, (value: Json | Redacted.Redacted<Json>) =>
+      toValueBinding(bindingName, value),
     );
   } else {
     return {
