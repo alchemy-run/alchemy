@@ -15,15 +15,16 @@ An Aurora **cluster** owns the storage: one volume, grown automatically, kept in
 
 <DAG
   nodes={[
-    { id: "writer", label: "writer", type: "instance", tone: "accent", layer: 0 },
-    { id: "reader", label: "reader", type: "instance", layer: 0 },
-    { id: "storage", label: "cluster volume", type: "3 zones, 6 copies", layer: 1 },
+    { id: "writer", label: "writer", type: "instance", tone: "accent", col: 0, row: 0 },
+    { id: "reader", label: "reader", type: "instance", col: 1, row: 0 },
+    { id: "storage", label: "cluster volume", type: "3 zones, 6 copies", col: 0, row: 1 },
   ]}
+  groups={[{ id: "cluster", label: "Aurora cluster", nodes: ["writer", "reader", "storage"] }]}
   edges={[
-    { from: "writer", to: "storage" },
-    { from: "reader", to: "storage" },
+    { from: "writer", to: "storage", label: "writes" },
+    { from: "reader", to: "storage", label: "reads" },
   ]}
-  caption="Instances run queries. The cluster's volume holds the data they share."
+  caption="A cluster's instances run queries. Its volume holds the data they share, copied across three zones."
 />
 
 Instances come in two kinds. **Serverless v2** instances scale their capacity, measured in ACUs, up and down with load. **Provisioned** instances have a fixed size, like `db.r6g.large`.

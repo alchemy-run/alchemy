@@ -15,17 +15,18 @@ A Function is declared on a branch, and reaches that branch's database and bucke
 
 <DAG
   nodes={[
-    { id: "caller", label: "request", type: "public URL", layer: 0 },
-    { id: "fn", label: "Api", type: "Function on pr-42", tone: "accent", layer: 1 },
-    { id: "db", label: "Postgres", type: "pr-42", layer: 2 },
-    { id: "bucket", label: "Uploads", type: "pr-42", layer: 2 },
+    { id: "caller", label: "request", type: "public URL", col: 0, row: 0 },
+    { id: "fn", label: "Api", type: "Function", tone: "accent", col: 1, row: 0 },
+    { id: "db", label: "Postgres", type: "database", col: 2, row: 0 },
+    { id: "bucket", label: "Uploads", type: "Bucket", col: 2, row: 1 },
   ]}
+  groups={[{ id: "branch", label: "Branch pr-42", nodes: ["fn", "db", "bucket"] }]}
   edges={[
     { from: "caller", to: "fn" },
     { from: "fn", to: "db" },
     { from: "fn", to: "bucket" },
   ]}
-  caption="A Function uses its own branch's database and storage."
+  caption="A Function lives on a branch, and uses that branch's database and storage."
 />
 
 ## Declare a native Function

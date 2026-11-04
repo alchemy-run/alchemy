@@ -17,17 +17,14 @@ So accounts are how you keep environments apart. Put production in an account of
 
 <DAG
   nodes={[
-    { id: "org", label: "Organization", type: "one bill", tone: "accent", layer: 0 },
-    { id: "prod", label: "prod", type: "account", layer: 1 },
-    { id: "staging", label: "staging", type: "account", layer: 1 },
-    { id: "dev", label: "dev", type: "account", layer: 1 },
+    { id: "mgmt", label: "management", type: "pays the bill", tone: "accent", col: 0, row: 0 },
+    { id: "prod", label: "prod", type: "account", col: 1, row: 0 },
+    { id: "staging", label: "staging", type: "account", col: 0, row: 1 },
+    { id: "dev", label: "dev", type: "account", col: 1, row: 1 },
   ]}
-  edges={[
-    { from: "org", to: "prod" },
-    { from: "org", to: "staging" },
-    { from: "org", to: "dev" },
-  ]}
-  caption="An organization groups accounts under one bill. Each account is isolated from the others."
+  groups={[{ id: "org", label: "Organization", nodes: ["mgmt", "prod", "staging", "dev"] }]}
+  edges={[]}
+  caption="An organization holds accounts. The management account pays one bill for all of them, and each account is isolated from the others."
 />
 
 An **organization** groups those accounts under one payer and lets you apply guardrails across them. People sign in once, through **IAM Identity Center**, and pick the account and role they want to work in.

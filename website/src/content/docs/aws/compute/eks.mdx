@@ -17,20 +17,19 @@ A **cluster** is one Kubernetes installation: an API server and the **nodes** th
 
 <DAG
   nodes={[
-    { id: "cluster", label: "Cluster", type: "control plane · Auto Mode", tone: "accent", layer: 0 },
-    { id: "deploy", label: "Deployment", type: "replicas: 2", layer: 1 },
-    { id: "job", label: "Job", type: "run to completion", layer: 1 },
-    { id: "pods", label: "Pods", type: "your containers", layer: 2 },
-    { id: "svc", label: "Service", type: "LoadBalancer", layer: 2 },
+    { id: "deploy", label: "web", type: "Deployment", col: 0, row: 0 },
+    { id: "pods", label: "web-…", type: "Pods × 2", tone: "accent", col: 1, row: 0 },
+    { id: "svc", label: "web", type: "Service · LB", col: 2, row: 0 },
+    { id: "job", label: "migrate", type: "Job", col: 0, row: 1 },
+    { id: "jobPod", label: "migrate-…", type: "Pod · runs once", col: 1, row: 1 },
   ]}
+  groups={[{ id: "cluster", label: "EKS cluster · Auto Mode", nodes: ["deploy", "pods", "svc", "job", "jobPod"] }]}
   edges={[
-    { from: "cluster", to: "deploy" },
-    { from: "cluster", to: "job" },
-    { from: "deploy", to: "pods" },
-    { from: "job", to: "pods" },
-    { from: "svc", to: "pods" },
+    { from: "deploy", to: "pods", label: "creates" },
+    { from: "svc", to: "pods", label: "selects" },
+    { from: "job", to: "jobPod", label: "creates" },
   ]}
-  caption="The cluster runs Deployments and Jobs as Pods. A Service puts an address in front of a Deployment's Pods."
+  caption="Everything runs inside the cluster. Deployments and Jobs create Pods, and a Service puts an address in front of a Deployment's Pods."
 />
 
 Every one of these is an object, described by a **manifest** and applied to the cluster.

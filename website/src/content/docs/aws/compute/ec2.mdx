@@ -15,16 +15,20 @@ An **image** (AMI) is the disk an instance boots from: an operating system and w
 
 <DAG
   nodes={[
-    { id: "ami", label: "Amazon Linux", type: "image", layer: 0 },
-    { id: "type", label: "t3.small", type: "instance type", layer: 0 },
-    { id: "inst", label: "Server", type: "instance", tone: "accent", layer: 1 },
-    { id: "subnet", label: "public subnet", type: "security group :3000", layer: 2 },
+    { id: "type", label: "t3.small", type: "instance type", col: 0, row: 0 },
+    { id: "ami", label: "Amazon Linux", type: "image", col: 0, row: 1 },
+    { id: "inst", label: "Server", type: "instance", tone: "accent", col: 1, row: 0 },
+  ]}
+  groups={[
+    { id: "vpc", label: "VPC", nodes: [] },
+    { id: "subnet", label: "public subnet", parent: "vpc", nodes: [], dashed: true },
+    { id: "sg", label: "security group · :3000", parent: "subnet", nodes: ["inst"], dashed: true },
   ]}
   edges={[
-    { from: "ami", to: "inst" },
-    { from: "type", to: "inst" },
-    { from: "inst", to: "subnet" },
+    { from: "type", to: "inst", label: "size" },
+    { from: "ami", to: "inst", label: "boots", exit: "side" },
   ]}
+  caption="An instance boots from an image at the size its type sets. It sits in a subnet of your VPC, and its security groups decide what can reach it."
 />
 
 You pay for an instance by the second while it runs, busy or idle.

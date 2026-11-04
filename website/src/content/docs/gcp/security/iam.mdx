@@ -13,15 +13,12 @@ A **principal** is who's asking: a Google account, a group, or a **service accou
 
 <DAG
   nodes={[
-    { id: "sa", label: "alch-api-…", type: "service account", layer: 0 },
-    { id: "role", label: "pubsub.publisher", type: "role", tone: "accent", layer: 1 },
-    { id: "topic", label: "Events", type: "topic's IAM policy", layer: 2 },
+    { id: "sa", label: "alch-api-…", type: "service account", col: 0, row: 0 },
+    { id: "binding", label: "binding", type: "pubsub.publisher", tone: "accent", col: 1, row: 0 },
   ]}
-  edges={[
-    { from: "sa", to: "role" },
-    { from: "role", to: "topic" },
-  ]}
-  caption="A policy on the topic grants the service account one role there, and nowhere else."
+  groups={[{ id: "topic", label: "Events topic · IAM policy", nodes: ["binding"] }]}
+  edges={[{ from: "sa", to: "binding", label: "member" }]}
+  caption="The topic's own IAM policy grants the service account one role there, and nowhere else."
 />
 
 Policies live on the organization, folders, projects and individual resources, and a grant applies to everything beneath where it's made. So the narrowest grant is on the resource itself. Some services also accept an **IAM Condition** on a project-level grant, limiting it to resources whose names match.

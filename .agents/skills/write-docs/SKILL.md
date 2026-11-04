@@ -97,6 +97,13 @@ Each of these was a correction. Don't relearn them.
   and a Durable Object namespace; a Neon project around its branches. A request
   flowing through boxes was rejected. Each platform has its own model, so draw
   that one. Use `groups` on `DAG`.
+- **Containment is a border, never an arrow.** Whenever one thing holds another
+  (an organization its accounts, a Bucket its objects, a cluster its instances,
+  a namespace its objects, a role its policies), draw the holder as a border
+  around what it holds. Arrows are only for things that move or call: requests,
+  messages, writes, events. A tree of arrows fanning out from a parent was
+  rejected as ugly and uninformative. Design each chapter's diagram for the one
+  idea its section explains.
   More: [Diagrams](references/structure.md#diagrams).
 - **Show the snippet the section talks about.** A section that names a resource,
   like a CloudWatch dashboard, shows a small snippet declaring it.

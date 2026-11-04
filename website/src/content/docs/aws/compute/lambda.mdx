@@ -15,19 +15,17 @@ Lambda runs your code in **execution environments**: small, isolated sandboxes, 
 
 <DAG
   nodes={[
-    { id: "a", label: "invocation", type: "request", layer: 0 },
-    { id: "b", label: "invocation", type: "message", layer: 0 },
-    { id: "lambda", label: "Api", type: "Lambda Function", tone: "accent", layer: 1 },
-    { id: "e1", label: "environment 1", type: "warm", layer: 2 },
-    { id: "e2", label: "environment 2", type: "cold start", layer: 2 },
+    { id: "a", label: "invocation", type: "request", col: 0, row: 0 },
+    { id: "b", label: "invocation", type: "message", col: 0, row: 1 },
+    { id: "e1", label: "environment 1", type: "warm", tone: "accent", col: 1, row: 0 },
+    { id: "e2", label: "environment 2", type: "cold start", tone: "accent", col: 1, row: 1 },
   ]}
+  groups={[{ id: "fn", label: "Api · Lambda Function", nodes: ["e1", "e2"] }]}
   edges={[
-    { from: "a", to: "lambda" },
-    { from: "b", to: "lambda" },
-    { from: "lambda", to: "e1" },
-    { from: "lambda", to: "e2" },
+    { from: "a", to: "e1" },
+    { from: "b", to: "e2" },
   ]}
-  caption="Each environment runs one invocation at a time. More traffic, more environments."
+  caption="A Function runs in environments. Each environment handles one invocation at a time, so more traffic means more environments."
 />
 
 Starting a new environment is a **cold start**: Lambda loads your code and runs its setup before the first invocation, which adds tens to hundreds of milliseconds. After that the environment is **warm**, and later invocations skip the setup.

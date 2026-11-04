@@ -66,6 +66,11 @@ with `groups` on the grid.
   edge can point at a group's `id`, and it ends at the border (`profile` →
   `account`, labelled "deploy"). Leave a free row or column where a border needs
   room.
+- **Borders for containment, arrows for flow.** Never draw "A contains B" as an
+  arrow from A to B. Group ids and node ids must differ.
+- **Keep it compact.** Two or three columns read better than a row of five,
+  which shrinks to fit the column. Wrap a long sequence into two rows. A small
+  diagram stays at its natural size rather than stretching to the column.
 - **Routing on the grid.** A straight edge runs along a row or a column. An
   elbow leaves the source's top or bottom and turns into the target's side; with
   `exit: "side"` it leaves the side and turns into the target's top or bottom.

@@ -21,16 +21,21 @@ The Worker connects to Hyperdrive in its own city, which is quick. Hyperdrive se
 
 <DAG
   nodes={[
-    { id: "worker", label: "Worker", type: "Sydney", layer: 0 },
-    { id: "edge", label: "Hyperdrive", type: "near the Worker", tone: "accent", layer: 1 },
-    { id: "pool", label: "pool", type: "near the database", tone: "accent", layer: 2 },
-    { id: "db", label: "Postgres", type: "Virginia", layer: 3 },
+    { id: "worker", label: "Worker", type: "your code", col: 0, row: 0 },
+    { id: "edge", label: "Hyperdrive", type: "entry point", tone: "accent", col: 1, row: 0 },
+    { id: "pool", label: "pool", type: "warm connections", tone: "accent", col: 1, row: 1 },
+    { id: "db", label: "Postgres", type: "your database", col: 0, row: 1 },
+  ]}
+  groups={[
+    { id: "syd", label: "Sydney", nodes: ["worker", "edge"], dashed: true },
+    { id: "iad", label: "Virginia", nodes: ["pool", "db"], dashed: true },
   ]}
   edges={[
     { from: "worker", to: "edge" },
-    { from: "edge", to: "pool", label: "Cloudflare network" },
-    { from: "pool", to: "db", label: "warm connections" },
+    { from: "edge", to: "pool" },
+    { from: "pool", to: "db" },
   ]}
+  caption="The Worker connects to Hyperdrive in its own city. Hyperdrive crosses Cloudflare's network once, to a pool of warm connections next to the database."
 />
 
 Hyperdrive can also cache the results of read queries, so repeated reads don't reach the database at all. To your code it's an ordinary connection string, so any Postgres or MySQL driver works.

@@ -39,15 +39,17 @@ A role has two policies. Its **permissions** say what it may do. Its **trust pol
 
 <DAG
   nodes={[
-    { id: "lambda", label: "lambda.amazonaws.com", type: "trusted principal", layer: 0 },
-    { id: "role", label: "Execution role", type: "IAM role", tone: "accent", layer: 1 },
-    { id: "queue", label: "Jobs", type: "SQS Queue", layer: 2 },
+    { id: "lambda", label: "Lambda", type: "AWS service", col: 0, row: 0 },
+    { id: "trust", label: "trust policy", type: "who may assume it", col: 1, row: 0 },
+    { id: "perms", label: "permissions", type: "what it may call", col: 1, row: 1 },
+    { id: "queue", label: "Jobs", type: "SQS Queue", col: 3, row: 1 },
   ]}
+  groups={[{ id: "role", label: "Execution role", nodes: ["trust", "perms"] }]}
   edges={[
-    { from: "lambda", to: "role", label: "assumes" },
-    { from: "role", to: "queue", label: "sqs:SendMessage" },
+    { from: "lambda", to: "trust", label: "assumes" },
+    { from: "perms", to: "queue", label: "sqs:SendMessage" },
   ]}
-  caption="The trust policy lets Lambda assume the role. The permissions let the role send to one Queue."
+  caption="A role holds two policies. The trust policy lets Lambda assume the role. The permissions let the role send to one Queue."
 />
 
 A Lambda Function's execution role trusts `lambda.amazonaws.com`, so the Lambda service can assume it on the Function's behalf. Every time your code runs, it carries the role's temporary credentials, and every call it makes is checked against the role's permissions.
@@ -72,18 +74,21 @@ Within one account, either kind of policy can allow a request. Across accounts, 
 
 <DAG
   nodes={[
-    { id: "caller", label: "Role", type: "account 1111", layer: 0 },
-    { id: "identity", label: "Identity policy", type: "may call s3:GetObject?", tone: "accent", layer: 1 },
-    { id: "resource", label: "Bucket policy", type: "trusts account 1111?", tone: "accent", layer: 1 },
-    { id: "bucket", label: "Bucket", type: "account 2222", layer: 2 },
+    { id: "caller", label: "Role", type: "the caller", col: 0, row: 0 },
+    { id: "identity", label: "identity policy", type: "s3:GetObject?", col: 0, row: 1 },
+    { id: "bucket", label: "Bucket", type: "the target", col: 2, row: 0 },
+    { id: "resource", label: "bucket policy", type: "trusts 1111?", col: 2, row: 1 },
+  ]}
+  groups={[
+    { id: "a1", label: "Account 1111", nodes: ["caller", "identity"] },
+    { id: "a2", label: "Account 2222", nodes: ["bucket", "resource"] },
   ]}
   edges={[
-    { from: "caller", to: "identity" },
-    { from: "caller", to: "resource" },
-    { from: "identity", to: "bucket" },
-    { from: "resource", to: "bucket" },
+    { from: "caller", to: "bucket", label: "s3:GetObject" },
+    { from: "identity", to: "caller", label: "allows?", dashed: true },
+    { from: "resource", to: "bucket", label: "allows?", dashed: true },
   ]}
-  caption="A call across accounts needs both policies to allow it. Within one account, either is enough."
+  caption="A call across accounts needs both policies to allow it: the caller's identity policy and the bucket's policy. Within one account, either is enough."
 />
 
 Services that call your resources, like CloudFront, EventBridge, SNS or S3 notifications, have no identity policy in your account. A resource policy is the only way to let them in.

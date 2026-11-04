@@ -15,15 +15,20 @@ A value written in one city reaches the others within about a minute. Until it d
 
 <DAG
   nodes={[
-    { id: "w", label: "put", type: "Worker in Paris", layer: 0 },
-    { id: "central", label: "Cache", type: "KV Namespace", tone: "accent", layer: 1 },
-    { id: "tokyo", label: "Tokyo copy", type: "cached", layer: 2 },
-    { id: "nyc", label: "New York copy", type: "cached", layer: 2 },
+    { id: "w", label: "Worker", type: "put", col: 0, row: 0 },
+    { id: "central", label: "Cache", type: "KV Namespace", tone: "accent", col: 1, row: 0 },
+    { id: "tokyo", label: "copy", type: "cached", col: 2, row: 0 },
+    { id: "nyc", label: "copy", type: "cached", col: 2, row: 1 },
+  ]}
+  groups={[
+    { id: "cityPar", label: "Paris", nodes: ["w"], dashed: true },
+    { id: "cityTyo", label: "Tokyo", nodes: ["tokyo"], dashed: true },
+    { id: "cityNyc", label: "New York", nodes: ["nyc"], dashed: true },
   ]}
   edges={[
     { from: "w", to: "central" },
-    { from: "central", to: "tokyo", dashed: true },
-    { from: "central", to: "nyc", dashed: true },
+    { from: "central", to: "tokyo" },
+    { from: "central", to: "nyc" },
   ]}
   caption="Writes reach every city within about a minute. Reads come from the nearest copy."
 />

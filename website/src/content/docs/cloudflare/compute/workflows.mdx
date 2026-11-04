@@ -25,17 +25,18 @@ Each run of a Workflow is an **instance**, started with an input. Its body is a 
 
 <DAG
   nodes={[
-    { id: "charge", label: "charge card", type: "step · saved", layer: 0 },
-    { id: "sleep", label: "sleep 24h", type: "no compute", layer: 1 },
-    { id: "email", label: "send reminder", type: "step · retried", tone: "accent", layer: 2 },
-    { id: "done", label: "complete", type: "output", layer: 3 },
+    { id: "charge", label: "charge card", type: "step · saved", col: 0, row: 0 },
+    { id: "sleep", label: "sleep 24h", type: "no compute", col: 1, row: 0 },
+    { id: "email", label: "send reminder", type: "step · retried", tone: "accent", col: 1, row: 1 },
+    { id: "done", label: "complete", type: "output", col: 0, row: 1 },
   ]}
+  groups={[{ id: "run", label: "Workflow run order-42", nodes: ["charge", "sleep", "email", "done"] }]}
   edges={[
     { from: "charge", to: "sleep" },
     { from: "sleep", to: "email" },
     { from: "email", to: "done" },
   ]}
-  caption="A rerun skips the steps that already finished and picks up at the first that didn't."
+  caption="A run is a sequence of saved steps. A rerun skips the steps that already finished and picks up at the first that didn't."
 />
 
 So the work inside a step happens once, even if the body runs many times. Keep anything with side effects, a charge, an email, a write, inside a step. A sleep or a wait for an event costs nothing while it lasts, whether it's seconds or weeks.

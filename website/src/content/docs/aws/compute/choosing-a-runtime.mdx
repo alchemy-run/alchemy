@@ -12,17 +12,17 @@ This chapter walks from the most managed runtime to the least, says what each on
 <DAG
   nodes={[
     { id: "lambda", label: "Lambda Function", type: "per invocation", col: 0, row: 0 },
-    { id: "web", label: "Lambda Web Function", type: "HTTP server", col: 1, row: 0 },
-    { id: "ecs", label: "ECS", type: "containers", col: 2, row: 0 },
-    { id: "eks", label: "EKS", type: "Kubernetes", col: 3, row: 0 },
-    { id: "ec2", label: "EC2", type: "machines", col: 4, row: 0 },
+    { id: "web", label: "Web Function", type: "HTTP server", col: 0, row: 1 },
+    { id: "ecs", label: "ECS", type: "containers", col: 1, row: 0 },
+    { id: "eks", label: "EKS", type: "Kubernetes", col: 1, row: 1 },
+    { id: "ec2", label: "EC2", type: "machines", col: 2, row: 0 },
   ]}
-  edges={[
-    { from: "lambda", to: "web" },
-    { from: "web", to: "ecs" },
-    { from: "ecs", to: "eks" },
-    { from: "eks", to: "ec2" },
+  groups={[
+    { id: "fn", label: "Functions", nodes: ["lambda", "web"] },
+    { id: "ctr", label: "Containers", nodes: ["ecs", "eks"] },
+    { id: "vm", label: "Machines", nodes: ["ec2"] },
   ]}
+  edges={[]}
   caption="From left to right, AWS manages less and you decide more."
 />
 

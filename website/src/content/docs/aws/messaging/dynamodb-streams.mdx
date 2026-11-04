@@ -15,17 +15,18 @@ The table writes the record as part of the change, so there's no second write to
 
 <DAG
   nodes={[
-    { id: "api", label: "Api", type: "PutItem", layer: 0 },
-    { id: "table", label: "Orders", type: "DynamoDB Table", tone: "accent", layer: 1 },
-    { id: "stream", label: "stream", type: "INSERT · MODIFY · REMOVE", layer: 2 },
-    { id: "consumer", label: "Indexer", type: "Lambda Function", layer: 3 },
+    { id: "api", label: "Api", type: "PutItem", col: 0, row: 0 },
+    { id: "items", label: "items", type: "the data", col: 1, row: 0 },
+    { id: "stream", label: "stream", type: "change records", col: 1, row: 1 },
+    { id: "consumer", label: "Indexer", type: "Lambda Function", tone: "accent", col: 2, row: 1 },
   ]}
+  groups={[{ id: "table", label: "Orders · DynamoDB Table", nodes: ["items", "stream"] }]}
   edges={[
-    { from: "api", to: "table" },
-    { from: "table", to: "stream" },
+    { from: "api", to: "items" },
+    { from: "items", to: "stream" },
     { from: "stream", to: "consumer", dashed: true },
   ]}
-  caption="The table records its own changes. The consumer reads them shortly after."
+  caption="The table records its own changes in its stream. The consumer reads them shortly after."
 />
 
 Each record says what happened, `INSERT`, `MODIFY` or `REMOVE`, the item's keys, and, depending on the stream's **view type**, the item as it was before, after, or both.

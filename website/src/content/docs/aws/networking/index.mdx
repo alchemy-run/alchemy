@@ -21,21 +21,24 @@ A VPC owns a range of private addresses, like `10.42.0.0/16`. **Subnets** divide
 
 <DAG
   nodes={[
-    { id: "igw", label: "Internet gateway", type: "in and out", layer: 0 },
-    { id: "pubA", label: "public a", type: "10.42.0.0/24", tone: "accent", layer: 1 },
-    { id: "pubB", label: "public b", type: "10.42.1.0/24", tone: "accent", layer: 1 },
-    { id: "nat", label: "NAT gateway", type: "out only", layer: 2 },
-    { id: "privA", label: "private a", type: "10.42.2.0/24", layer: 3 },
-    { id: "privB", label: "private b", type: "10.42.3.0/24", layer: 3 },
+    { id: "igw", label: "Internet gateway", type: "in and out", col: 0, row: 0 },
+    { id: "lb", label: "load balancer", type: "reachable", col: 1, row: 0 },
+    { id: "nat", label: "NAT gateway", type: "out only", col: 2, row: 0 },
+    { id: "db", label: "database", type: "no way in", col: 1, row: 1 },
+    { id: "task", label: "containers", type: "call out", tone: "accent", col: 2, row: 1 },
+  ]}
+  groups={[
+    { id: "vpc", label: "VPC 10.42.0.0/16", nodes: [] },
+    { id: "pubA", label: "public a", parent: "vpc", nodes: ["lb"], dashed: true },
+    { id: "pubB", label: "public b", parent: "vpc", nodes: ["nat"], dashed: true },
+    { id: "privA", label: "private a", parent: "vpc", nodes: ["db"], dashed: true },
+    { id: "privB", label: "private b", parent: "vpc", nodes: ["task"], dashed: true },
   ]}
   edges={[
     { from: "igw", to: "pubA" },
-    { from: "igw", to: "pubB" },
-    { from: "pubA", to: "nat" },
-    { from: "privA", to: "nat", dashed: true },
-    { from: "privB", to: "nat", dashed: true },
+    { from: "task", to: "nat", label: "out", dashed: true },
   ]}
-  caption="Public subnets route through the internet gateway. Private ones reach out through a NAT gateway, and nothing reaches in."
+  caption="Public subnets route through the internet gateway, so a load balancer there can be reached. Private subnets can't be reached, and call out through a NAT gateway in a public subnet."
 />
 
 What makes a subnet public or private is its **route table**. A public subnet routes internet traffic to an **internet gateway**, so things in it can have public addresses and be reached from outside. A private subnet has no route in from the internet. If it routes outbound traffic to a **NAT gateway** in a public subnet, things in it can call out, to download packages or call an API, and still can't be reached. Load balancers go in public subnets. Databases, and usually containers, go in private ones.

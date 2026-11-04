@@ -15,16 +15,13 @@ A Bucket is a flat map from keys to objects. Keys can contain slashes, like `ava
 
 <DAG
   nodes={[
-    { id: "worker", label: "Worker", type: "binding", layer: 0 },
-    { id: "bucket", label: "Uploads", type: "R2 Bucket", tone: "accent", layer: 1 },
-    { id: "a", label: "avatars/sam.png", type: "object", layer: 2 },
-    { id: "b", label: "reports/q1.pdf", type: "object", layer: 2 },
+    { id: "worker", label: "Worker", type: "binding", col: 0, row: 0 },
+    { id: "a", label: "avatars/sam.png", type: "object", col: 1, row: 0 },
+    { id: "b", label: "reports/q1.pdf", type: "object", col: 2, row: 0 },
   ]}
-  edges={[
-    { from: "worker", to: "bucket" },
-    { from: "bucket", to: "a" },
-    { from: "bucket", to: "b" },
-  ]}
+  groups={[{ id: "bucket", label: "Uploads · R2 Bucket", nodes: ["a", "b"] }]}
+  edges={[{ from: "worker", to: "bucket" }]}
+  caption="Objects sit directly in the Bucket. Slashes are part of the key, not folders."
 />
 
 A Bucket's data lives in one region, chosen when it's created, near the first requests or where you hint. R2 caches reads at the edge, and moving data out is free, so serving large files from it costs only the requests.

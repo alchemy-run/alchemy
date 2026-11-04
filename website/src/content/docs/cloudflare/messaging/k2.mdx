@@ -18,17 +18,13 @@ that one consumer handles once, with retries and a dead-letter queue.
 
 <DAG
   nodes={[
-    { id: "api", label: "Api", type: "producer", layer: 0 },
-    { id: "stream", label: "Orders", type: "K2 stream on R2", tone: "accent", layer: 1 },
-    { id: "s1", label: "billing", type: "subscription · position 812", layer: 2 },
-    { id: "s2", label: "analytics", type: "subscription · position 40", layer: 2 },
+    { id: "api", label: "Api", type: "producer", col: 0, row: 0 },
+    { id: "s1", label: "billing", type: "at position 812", tone: "accent", col: 1, row: 0 },
+    { id: "s2", label: "analytics", type: "at position 40", tone: "accent", col: 2, row: 0 },
   ]}
-  edges={[
-    { from: "api", to: "stream", label: "send" },
-    { from: "stream", to: "s1" },
-    { from: "stream", to: "s2" },
-  ]}
-  caption="Each subscription reads every record at its own pace. Records stay for the retention period."
+  groups={[{ id: "stream", label: "Orders · K2 stream on R2", nodes: ["s1", "s2"] }]}
+  edges={[{ from: "api", to: "stream", label: "send" }]}
+  caption="A stream keeps records for its retention period. Each subscription reads every record at its own pace."
 />
 
 | | Queues | K2 |

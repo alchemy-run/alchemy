@@ -15,18 +15,22 @@ A D1 database has one **primary** copy, in one location. Every write goes to it,
 
 <DAG
   nodes={[
-    { id: "a", label: "Worker", type: "Tokyo", layer: 0 },
-    { id: "b", label: "Worker", type: "Paris", layer: 0 },
-    { id: "primary", label: "Database", type: "D1 primary · weur", tone: "accent", layer: 1 },
-    { id: "replica", label: "read replica", type: "apac", layer: 1 },
+    { id: "a", label: "Worker", type: "in Paris", col: 0, row: 0 },
+    { id: "primary", label: "primary", type: "reads and writes", tone: "accent", col: 1, row: 0 },
+    { id: "replica", label: "read replica", type: "reads", col: 1, row: 1 },
+    { id: "b", label: "Worker", type: "in Tokyo", col: 2, row: 1 },
+  ]}
+  groups={[
+    { id: "weur", label: "weur", nodes: ["primary"], dashed: true },
+    { id: "apac", label: "apac", nodes: ["replica"], dashed: true },
   ]}
   edges={[
-    { from: "a", to: "replica", label: "reads" },
     { from: "a", to: "primary", label: "writes" },
-    { from: "b", to: "primary" },
-    { from: "primary", to: "replica", dashed: true },
+    { from: "b", to: "replica", label: "reads" },
+    { from: "b", to: "primary", label: "writes" },
+    { from: "primary", to: "replica", label: "replicates", dashed: true },
   ]}
-  caption="Writes go to the primary. With read replication on, reads can be served from a replica nearby."
+  caption="Writes go to the primary, in one region. With read replication on, reads can be served by a replica nearby."
 />
 
 A database holds up to 10 GB. That's a lot for one app's data, and a hint about how D1 is meant to be used: many small databases, one per app, per tenant or per user, rather than one huge one.

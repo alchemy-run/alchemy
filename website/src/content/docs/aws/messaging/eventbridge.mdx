@@ -17,21 +17,19 @@ Every event has a `source`, a `detail-type` and a JSON `detail`. A rule's **even
 
 <DAG
   nodes={[
-    { id: "api", label: "Api", type: "app.orders · OrderPlaced", layer: 0 },
-    { id: "bus", label: "Orders", type: "event bus", tone: "accent", layer: 1 },
-    { id: "r1", label: "rule", type: "OrderPlaced", layer: 2 },
-    { id: "r2", label: "rule", type: "source: app.orders", layer: 2 },
-    { id: "worker", label: "Worker", type: "Lambda Function", layer: 3 },
-    { id: "audit", label: "Audit", type: "SQS Queue", layer: 3 },
+    { id: "api", label: "Api", type: "OrderPlaced", col: 0, row: 0 },
+    { id: "r1", label: "rule", type: "detail-type match", col: 1, row: 0 },
+    { id: "r2", label: "rule", type: "source match", col: 1, row: 1 },
+    { id: "worker", label: "Worker", type: "Lambda Function", col: 2, row: 0 },
+    { id: "audit", label: "Audit", type: "SQS Queue", col: 2, row: 1 },
   ]}
+  groups={[{ id: "bus", label: "Orders · event bus", nodes: ["r1", "r2"] }]}
   edges={[
-    { from: "api", to: "bus" },
-    { from: "bus", to: "r1" },
-    { from: "bus", to: "r2" },
+    { from: "api", to: "bus", label: "put" },
     { from: "r1", to: "worker" },
     { from: "r2", to: "audit" },
   ]}
-  caption="Each rule matches on content. One event can match several rules."
+  caption="Rules live on the bus. Each matches events by their content, and one event can match several rules."
 />
 
 A pattern can match on any field of the event, including fields inside `detail`, so a rule can take only the orders over a certain amount, or only the ones from one region. Events that match no rule are dropped.

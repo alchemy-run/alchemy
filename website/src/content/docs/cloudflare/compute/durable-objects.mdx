@@ -15,18 +15,21 @@ A Durable Object is a class, and it has one **instance** per name. Every request
 
 <DAG
   nodes={[
-    { id: "a", label: "Worker", type: "Tokyo", layer: 0 },
-    { id: "b", label: "Worker", type: "Paris", layer: 0 },
-    { id: "lobby", label: "lobby", type: "Counter instance", tone: "accent", layer: 1 },
-    { id: "kitchen", label: "kitchen", type: "Counter instance", layer: 1 },
-    { id: "db", label: "SQLite", type: "lobby's storage", layer: 2 },
+    { id: "a", label: "Worker", type: "in Tokyo", col: 0, row: 0 },
+    { id: "lobby", label: "SQLite", type: "lobby's storage", tone: "accent", col: 1, row: 0 },
+    { id: "kitchen", label: "SQLite", type: "kitchen's storage", col: 1, row: 1 },
+    { id: "b", label: "Worker", type: "in Paris", col: 2, row: 0 },
+  ]}
+  groups={[
+    { id: "ns", label: "Counter namespace", nodes: [] },
+    { id: "lobbyObj", label: "lobby", parent: "ns", nodes: ["lobby"], dashed: true },
+    { id: "kitchenObj", label: "kitchen", parent: "ns", nodes: ["kitchen"], dashed: true },
   ]}
   edges={[
-    { from: "a", to: "lobby", label: "getByName(\"lobby\")" },
-    { from: "b", to: "lobby", label: "getByName(\"lobby\")" },
-    { from: "lobby", to: "db" },
+    { from: "a", to: "lobbyObj" },
+    { from: "b", to: "lobbyObj" },
   ]}
-  caption="Every caller that names the lobby reaches the same instance, which owns its own storage."
+  caption="A namespace holds one instance per name. Every Worker that names the lobby reaches the same instance, wherever it runs, and each instance owns its own storage."
 />
 
 You never create an instance. Every name exists, and the first call to one starts it. Because there's only ever one lobby, it can count its visitors or order its messages without coordinating with anything else.

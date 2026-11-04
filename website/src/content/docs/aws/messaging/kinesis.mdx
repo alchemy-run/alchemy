@@ -15,19 +15,20 @@ A stream is split into **shards**. Each record carries a **partition key**, and 
 
 <DAG
   nodes={[
-    { id: "a", label: "order#1", type: "partition key", layer: 0 },
-    { id: "b", label: "order#2", type: "partition key", layer: 0 },
-    { id: "s1", label: "shard 1", type: "ordered", tone: "accent", layer: 1 },
-    { id: "s2", label: "shard 2", type: "ordered", tone: "accent", layer: 1 },
-    { id: "c", label: "Audit", type: "consumer", layer: 2 },
+    { id: "a", label: "order#1", type: "partition key", col: 0, row: 0 },
+    { id: "b", label: "order#2", type: "partition key", col: 0, row: 1 },
+    { id: "s1", label: "shard 1", type: "ordered", tone: "accent", col: 1, row: 0 },
+    { id: "s2", label: "shard 2", type: "ordered", tone: "accent", col: 1, row: 1 },
+    { id: "c", label: "Audit", type: "consumer", col: 2, row: 0 },
   ]}
+  groups={[{ id: "stream", label: "Orders · Kinesis stream", nodes: ["s1", "s2"] }]}
   edges={[
     { from: "a", to: "s1" },
     { from: "b", to: "s2" },
     { from: "s1", to: "c" },
-    { from: "s2", to: "c" },
+    { from: "s2", to: "c", exit: "side" },
   ]}
-  caption="Records with the same key share a shard and stay in order. Different shards are read in parallel."
+  caption="A stream is made of shards. Records with the same key share a shard and stay in order, and different shards are read in parallel."
 />
 
 So the guarantee is per key: every event for `order#1` arrives in the order it happened. Events for different orders may interleave. Choose the partition key as the thing whose history must stay in order, usually an entity's id.

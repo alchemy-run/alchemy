@@ -17,17 +17,18 @@ A table can also have a **sort key**. Then the partition key and the sort key to
 
 <DAG
   nodes={[
-    { id: "p1", label: "pk: user#sam", type: "partition", tone: "accent", layer: 0 },
-    { id: "a", label: "sk: order#2026-01-04", type: "item", layer: 1 },
-    { id: "b", label: "sk: order#2026-02-11", type: "item", layer: 1 },
-    { id: "c", label: "sk: profile", type: "item", layer: 1 },
+    { id: "a", label: "profile", type: "sort key", col: 0, row: 0 },
+    { id: "b", label: "order#0104", type: "sort key", col: 1, row: 0 },
+    { id: "c", label: "order#0211", type: "sort key", col: 2, row: 0 },
+    { id: "d", label: "profile", type: "sort key", col: 0, row: 1 },
   ]}
-  edges={[
-    { from: "p1", to: "a" },
-    { from: "p1", to: "b" },
-    { from: "p1", to: "c" },
+  groups={[
+    { id: "table", label: "Orders · DynamoDB Table", nodes: [] },
+    { id: "sam", label: "partition user#sam", parent: "table", nodes: ["a", "b", "c"], dashed: true },
+    { id: "ana", label: "partition user#ana", parent: "table", nodes: ["d"], dashed: true },
   ]}
-  caption="One partition holds a user's profile and orders, sorted by their sort keys."
+  edges={[]}
+  caption="Items with the same partition key live together, sorted by their sort keys. One partition holds a user's profile and orders."
 />
 
 Two kinds of read are fast. **Get** one item by its full key. **Query** one partition, optionally narrowing by a range of sort keys: "Sam's orders in 2026". Anything else means a **scan**, which reads the whole table. So list the reads your app needs before you choose the keys, and pick keys that turn each one into a get or a query.

@@ -13,14 +13,15 @@ This chapter starts with how a bucket relates to its branch, then declares one, 
 
 <DAG
   nodes={[
-    { id: "branch", label: "pr-42", type: "Branch", tone: "accent", layer: 0 },
-    { id: "uploads", label: "Uploads", type: "private Bucket", layer: 1 },
-    { id: "settings", label: "settings.json", type: "Object", layer: 2 },
+    { id: "settings", label: "settings.json", type: "Object", tone: "accent", col: 0, row: 0 },
+    { id: "avatar", label: "avatars/sam.png", type: "Object", col: 1, row: 0 },
   ]}
-  edges={[
-    { from: "branch", to: "uploads" },
-    { from: "uploads", to: "settings" },
+  groups={[
+    { id: "branch", label: "Branch pr-42", nodes: [] },
+    { id: "bucket", label: "Uploads · private Bucket", parent: "branch", nodes: ["settings", "avatar"], dashed: true },
   ]}
+  edges={[]}
+  caption="A Bucket belongs to a branch and holds objects, so a preview branch gets its own Bucket."
 />
 
 A bucket is private unless you make it public. Uploads from a browser go straight to the bucket through presigned URLs, which a Function creates for one key and a short time.

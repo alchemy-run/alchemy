@@ -15,17 +15,13 @@ Your server runs in **environments**, each a copy of your code with 2 GB of memo
 
 <DAG
   nodes={[
-    { id: "endpoint", label: "endpoint", type: "HTTPS URL · auth · limits", tone: "accent", layer: 0 },
-    { id: "rev", label: "revision 7", type: "code + config", layer: 1 },
-    { id: "e1", label: "environment", type: "≤ 128 requests", layer: 2 },
-    { id: "e2", label: "environment", type: "≤ 128 requests", layer: 2 },
+    { id: "endpoint", label: "endpoint", type: "HTTPS URL · auth", col: 0, row: 0 },
+    { id: "e1", label: "environment", type: "≤ 128 requests", tone: "accent", col: 1, row: 0 },
+    { id: "e2", label: "environment", type: "≤ 128 requests", tone: "accent", col: 2, row: 0 },
   ]}
-  edges={[
-    { from: "endpoint", to: "rev" },
-    { from: "rev", to: "e1" },
-    { from: "rev", to: "e2" },
-  ]}
-  caption="Requests arrive at an endpoint, which sends them to the current revision's environments."
+  groups={[{ id: "rev", label: "revision 7 · code + config", nodes: ["e1", "e2"] }]}
+  edges={[{ from: "endpoint", to: "rev" }]}
+  caption="Requests arrive at an endpoint, which sends them to the current revision. Each of its environments serves many requests at once."
 />
 
 Requests arrive through an **endpoint**: an HTTPS URL with its own auth, rate limit and cap on environments. Every Web Function has one, and you can add more. Each deploy publishes a new **revision**, and the endpoint moves its traffic to it, all at once or a share at a time.

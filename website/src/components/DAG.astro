@@ -368,7 +368,8 @@ const groupEdge = (e: EdgeIn, box: Box): Edge => {
 
 const buildEdges = (): Edge[] =>
   edges.map((e) => {
-    const box = boxes.get(e.to);
+    // A node wins over a group with the same id.
+    const box = positions.has(e.to) ? undefined : boxes.get(e.to);
     if (box) return groupEdge(e, box);
     if (grid) return gridEdge(e);
     const a = positions.get(e.from)!;
@@ -474,6 +475,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
   <svg
     class="alc-dag__svg"
     viewBox={`0 0 ${width} ${height}`}
+    style={`max-width: ${Math.round(width * 1.15)}px`}
     role="img"
     aria-label={caption ?? "Dependency graph"}
   >
@@ -625,7 +627,8 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
     display: block;
     width: 100%;
     height: auto;
-    max-width: 100%;
+    /* A small diagram keeps its natural size instead of filling the column. */
+    margin-inline: auto;
   }
 
   .alc-dag__node-bg {

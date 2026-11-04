@@ -17,17 +17,13 @@ There are no real folders. A key with slashes in it looks like a path, and S3 ca
 
 <DAG
   nodes={[
-    { id: "bucket", label: "Files", type: "S3 Bucket", tone: "accent", layer: 0 },
-    { id: "a", label: "avatars/sam.png", type: "object", layer: 1 },
-    { id: "b", label: "reports/2026/q1.pdf", type: "object", layer: 1 },
-    { id: "c", label: "hello.txt", type: "object", layer: 1 },
+    { id: "a", label: "avatars/sam.png", type: "object", col: 0, row: 0 },
+    { id: "b", label: "reports/q1.pdf", type: "object", col: 1, row: 0 },
+    { id: "c", label: "hello.txt", type: "object", col: 2, row: 0 },
   ]}
-  edges={[
-    { from: "bucket", to: "a" },
-    { from: "bucket", to: "b" },
-    { from: "bucket", to: "c" },
-  ]}
-  caption="Every object sits directly in the Bucket. Slashes are part of the key."
+  groups={[{ id: "bucket", label: "Files · S3 Bucket", nodes: ["a", "b", "c"] }]}
+  edges={[]}
+  caption="Every object sits directly in the Bucket. Slashes are part of the key, not folders."
 />
 
 Writing a key that already exists replaces its object as a whole. S3 never changes part of an object. To keep the old copy as well, turn on versioning, and each write becomes a new **version** of the key.

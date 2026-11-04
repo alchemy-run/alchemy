@@ -17,20 +17,21 @@ A **task definition** is a blueprint: which image, how much CPU and memory, whic
 
 <DAG
   nodes={[
-    { id: "def", label: "task definition", type: "image · cpu · memory · role", layer: 0 },
-    { id: "svc", label: "Service", type: "desiredCount: 2", tone: "accent", layer: 1 },
-    { id: "t1", label: "task", type: "running", layer: 2 },
-    { id: "t2", label: "task", type: "running", layer: 2 },
-    { id: "alb", label: "load balancer", type: "HTTP", layer: 1 },
+    { id: "def", label: "task definition", type: "image · cpu · role", col: 0, row: 0 },
+    { id: "t1", label: "task", type: "running", tone: "accent", col: 1, row: 0 },
+    { id: "t2", label: "task", type: "running", tone: "accent", col: 1, row: 1 },
+    { id: "alb", label: "load balancer", type: "HTTP", col: 2, row: 0 },
+  ]}
+  groups={[
+    { id: "cluster", label: "Cluster", nodes: [] },
+    { id: "svc", label: "Service · desiredCount: 2", parent: "cluster", nodes: ["t1", "t2"], dashed: true },
   ]}
   edges={[
-    { from: "def", to: "svc" },
-    { from: "svc", to: "t1" },
-    { from: "svc", to: "t2" },
+    { from: "def", to: "svc", label: "runs" },
     { from: "alb", to: "t1" },
     { from: "alb", to: "t2" },
   ]}
-  caption="A Service keeps tasks running from a task definition. The load balancer spreads requests across them."
+  caption="A Service in a cluster keeps tasks running from a task definition. The load balancer spreads requests across them."
 />
 
 In Alchemy, `AWS.ECS.Task` is a task definition together with everything that builds its image, and `AWS.ECS.Service` keeps tasks running, with or without a Task of its own.

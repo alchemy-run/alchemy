@@ -26,15 +26,12 @@ A Container is a Docker image Cloudflare runs on its network, one instance per D
 
 <DAG
   nodes={[
-    { id: "worker", label: "Worker", type: "caller", layer: 0 },
-    { id: "do", label: "Sandbox · user-42", type: "Durable Object", tone: "accent", layer: 1 },
-    { id: "c", label: "container", type: "your image", layer: 2 },
+    { id: "worker", label: "Worker", type: "caller", col: 0, row: 0 },
+    { id: "c", label: "container", type: "your image", tone: "accent", col: 1, row: 0 },
   ]}
-  edges={[
-    { from: "worker", to: "do", label: "getByName" },
-    { from: "do", to: "c", label: "start · RPC · HTTP" },
-  ]}
-  caption="Each Durable Object owns one container, started when needed."
+  groups={[{ id: "do", label: "Sandbox user-42 · Durable Object", nodes: ["c"] }]}
+  edges={[{ from: "worker", to: "do", label: "getByName" }]}
+  caption="Each Durable Object owns one container, and starts it when it's needed."
 />
 
 A container's filesystem lasts only as long as it runs. Keep what must survive in the Durable Object's storage, or in R2.

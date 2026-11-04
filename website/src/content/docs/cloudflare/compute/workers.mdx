@@ -15,19 +15,23 @@ Workers run in **isolates**: lightweight sandboxes inside one V8 process, the Ja
 
 <DAG
   nodes={[
-    { id: "tokyo", label: "request", type: "Tokyo", layer: 0 },
-    { id: "paris", label: "request", type: "Paris", layer: 0 },
-    { id: "w1", label: "Worker", type: "isolate in Tokyo", tone: "accent", layer: 1 },
-    { id: "w2", label: "Worker", type: "isolate in Paris", tone: "accent", layer: 1 },
-    { id: "r2", label: "Uploads", type: "R2 Bucket", layer: 2 },
+    { id: "tokyo", label: "request", type: "from Tokyo", col: 0, row: 0 },
+    { id: "paris", label: "request", type: "from Paris", col: 0, row: 1 },
+    { id: "w1", label: "Worker", type: "isolate", tone: "accent", col: 1, row: 0 },
+    { id: "w2", label: "Worker", type: "isolate", tone: "accent", col: 1, row: 1 },
+    { id: "r2", label: "Uploads", type: "R2 Bucket", col: 2, row: 0 },
+  ]}
+  groups={[
+    { id: "cityTyo", label: "Tokyo", nodes: ["w1"], dashed: true },
+    { id: "cityPar", label: "Paris", nodes: ["w2"], dashed: true },
   ]}
   edges={[
     { from: "tokyo", to: "w1" },
     { from: "paris", to: "w2" },
     { from: "w1", to: "r2", label: "binding" },
-    { from: "w2", to: "r2", label: "binding" },
+    { from: "w2", to: "r2", label: "binding", exit: "side" },
   ]}
-  caption="The same Worker runs near each request and reaches shared resources through bindings."
+  caption="The same Worker runs in the city nearest each request, and reaches shared resources through bindings."
 />
 
 So a Worker keeps nothing between requests that it can count on. Two requests may run in two cities, in two isolates. Anything that must be remembered lives in a resource the Worker reaches through a binding: a [KV Namespace](/cloudflare/data/kv), an [R2 Bucket](/cloudflare/data/r2), a [D1 database](/cloudflare/data/d1), or a [Durable Object](/cloudflare/compute/durable-objects) when one place has to see every request.

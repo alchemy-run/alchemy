@@ -15,18 +15,18 @@ A **hosted zone** holds the DNS records for a domain. A **certificate** for a na
 
 <DAG
   nodes={[
-    { id: "zone", label: "example.com", type: "hosted zone", tone: "accent", layer: 0 },
-    { id: "cert", label: "certificate", type: "ACM", layer: 1 },
-    { id: "record", label: "app.example.com", type: "alias record", layer: 1 },
-    { id: "cdn", label: "Distribution", type: "CloudFront", layer: 2 },
+    { id: "record", label: "app.example.com", type: "alias record", col: 0, row: 0 },
+    { id: "val", label: "_x.example.com", type: "validation CNAME", col: 0, row: 1 },
+    { id: "cdn", label: "Distribution", type: "CloudFront", tone: "accent", col: 1, row: 0 },
+    { id: "cert", label: "certificate", type: "ACM", col: 1, row: 1 },
   ]}
+  groups={[{ id: "zone", label: "Hosted zone example.com", nodes: ["record", "val"] }]}
   edges={[
-    { from: "zone", to: "cert", label: "validates" },
-    { from: "zone", to: "record" },
-    { from: "cert", to: "cdn" },
-    { from: "record", to: "cdn" },
+    { from: "record", to: "cdn", label: "points at" },
+    { from: "val", to: "cert", label: "validates" },
+    { from: "cert", to: "cdn", label: "presents" },
   ]}
-  caption="The zone validates the certificate and points the name at the distribution, which presents the certificate."
+  caption="The hosted zone holds two records: one proves you own the name, so ACM issues the certificate, and one points the name at the distribution, which presents the certificate."
 />
 
 An **alias record** is Route 53's way to point a name at an AWS resource. It works at the zone's apex, `example.com` itself, where an ordinary CNAME can't.
