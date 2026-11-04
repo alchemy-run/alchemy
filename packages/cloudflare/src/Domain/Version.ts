@@ -127,14 +127,20 @@ const fnv = (text: string) => {
 /**
  * The migration Workflow instance that records a complete pass over an old
  * class: every object Cloudflare listed at `listedAt` (seconds) has moved.
- * Cloudflare keeps the instance, so the next upload can read it.
+ * Cloudflare keeps the instance, so the next upload can read it. It names the
+ * class's namespace too: a Worker deleted and deployed again has new
+ * namespaces, so passes recorded for the old ones never count.
  */
-export const passMarker = (className: string, listedAt: number) =>
-  `moved-${fnv(className)}-${listedAt}`;
+export const passMarker = (className: string, namespaceId: string, listedAt: number) =>
+  `moved-${fnv(`${className}|${namespaceId}`)}-${listedAt}`;
 
 /** When each complete pass over `className` listed its objects, from the Workflow's instance ids. */
-export const passesOf = (className: string, instanceIds: Iterable<string>): Array<number> => {
-  const prefix = `moved-${fnv(className)}-`;
+export const passesOf = (
+  className: string,
+  namespaceId: string,
+  instanceIds: Iterable<string>,
+): Array<number> => {
+  const prefix = `moved-${fnv(`${className}|${namespaceId}`)}-`;
   const passes: Array<number> = [];
   for (const id of instanceIds) {
     if (!id.startsWith(prefix)) continue;
@@ -156,18 +162,22 @@ export const passesOf = (className: string, instanceIds: Iterable<string>): Arra
 export const keptMovers = ({
   movers,
   deployedClasses,
+  namespaces,
   passes,
 }: {
   readonly movers: ReadonlyArray<DomainClass>;
   /** The classes the Worker has now, and the classes this upload renames to. */
   readonly deployedClasses: ReadonlySet<string>;
+  /** The Worker's Durable Object namespace ids, by class. */
+  readonly namespaces: ReadonlyMap<string, string>;
   /** The migration Workflow's complete instances: see {@link passMarker}. */
   readonly passes: ReadonlyArray<string>;
 }) => {
   const kept = new Set<string>();
   for (const mover of movers) {
     if (!deployedClasses.has(mover.className)) continue;
-    const times = passesOf(mover.className, passes);
+    const namespace = namespaces.get(mover.className);
+    const times = namespace === undefined ? [] : passesOf(mover.className, namespace, passes);
     const settled =
       times.length > 0 && Math.max(...times) - Math.min(...times) >= LISTING_LAG_SECONDS;
     if (!settled) kept.add(mover.className);

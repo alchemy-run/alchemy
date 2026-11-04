@@ -47,18 +47,19 @@ const json = <A>(url: string, path: string) =>
 
 /**
  * Write deposits to `account` one request at a time, from `from` up, and read
- * it between them, until interrupted: every answer, and the deposits that went
- * through. A deposit is idempotent by its amount, so the count is exact.
+ * it between them, until `log.stop` is set: every answer, and the deposits that
+ * went through. A deposit is idempotent by its amount, so the count is exact.
  */
 const writer = (
   url: string,
   account: string,
   from: number,
-  log: { written: Array<number>; failures: Array<string> },
+  log: { written: Array<number>; failures: Array<string>; stop: boolean },
 ) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    for (let amount = from; ; amount++) {
+    // Stopped between requests, never during one: a deposit is either counted or not sent.
+    for (let amount = from; !log.stop; amount++) {
       const answer = yield* client
         .execute(
           HttpClientRequest.post(`${url}/deposit/${account}/${amount}/1`).pipe(
@@ -115,7 +116,7 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
 
         // Write to the deep account all through the move: each deposit lands
         // on the old object until its key flips, then on the new one.
-        const log = { written: [] as Array<number>, failures: [] as Array<string> };
+        const log = { written: [] as Array<number>, failures: [] as Array<string>, stop: false };
         const writing = yield* Effect.forkChild(writer(url, "deep", DEPTH + 1, log));
         yield* stack.deploy(
           Effect.gen(function* () {
@@ -124,7 +125,8 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
         );
         yield* serving(url, "v1");
         yield* Effect.sleep("5 seconds");
-        yield* Fiber.interrupt(writing);
+        log.stop = true;
+        yield* Fiber.join(writing);
 
         expect(log.failures).toEqual([]);
         expect(log.written.length).toBeGreaterThan(10);

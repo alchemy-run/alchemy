@@ -114,8 +114,9 @@ export const backdatePasses = Effect.fn(function* (
 ) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const workflowName = yield* migrationWorkflow(scriptName);
+  const namespaces = yield* namespacesOf(scriptName);
   for (const className of classes) {
-    const instanceId = passMarker(className, 1);
+    const instanceId = passMarker(className, namespaces[className]!, 1);
     yield* workflows.createInstance({
       accountId,
       workflowName,

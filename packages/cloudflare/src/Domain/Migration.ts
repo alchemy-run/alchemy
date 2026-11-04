@@ -201,7 +201,7 @@ const MigrationLive = () =>
           live
             .filter(({ className }) => (skipped[className] ?? 0) === 0)
             .map(({ className }) => ({
-              id: passMarker(className, listedAt),
+              id: passMarker(className, news.namespaces[className]!, listedAt),
               params: { op: "mark" },
             })),
         );

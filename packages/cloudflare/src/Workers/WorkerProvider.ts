@@ -5863,7 +5863,14 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
               Effect.catchTag("WorkflowNotFound", () => Effect.succeed([] as Array<string>)),
             ),
         );
-  const kept = DomainVersion.keptMovers({ movers, deployedClasses, passes });
+  // Each class's namespace: a pass counts only for the namespace it moved.
+  const namespaces = new Map<string, string>();
+  for (const namespace of yield* durableObjectsApi.listNamespaces
+    .items({ accountId })
+    .pipe(Stream.runCollect))
+    if (namespace.script === scriptName && namespace.class && namespace.id)
+      namespaces.set(namespace.class, namespace.id);
+  const kept = DomainVersion.keptMovers({ movers, deployedClasses, namespaces, passes });
   const dropped = new Set(
     movers.map((mover) => mover.className).filter((className) => !kept.has(className)),
   );
