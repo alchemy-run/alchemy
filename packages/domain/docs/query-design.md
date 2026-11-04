@@ -61,7 +61,8 @@ export const LedgerEntry = Schema.Struct({
 
 export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },
-  row: LedgerEntry,                // a paged result: { entries, cursor }
+  success: LedgerEntry,            // the result, or with `paged`, one entry of a page
+  paged: true,                     // the result is { entries, cursor }
   from: [Ledger],                  // the projections it reads; `atLeast` waits on them
   middleware: [Session],
   rejects: [NotOwner],
@@ -79,8 +80,8 @@ The options:
 | Option | Meaning |
 | --- | --- |
 | `input` | The query's fields, like a command's `input`. Filters, sort keys and scopes are fields here. |
-| `row` | A paged query: the schema of one row. The result is `{ entries: Row[], cursor: string \| null }`. |
-| `success` | A single-result query: the schema of the result. Exclusive with `row`. |
+| `success` | The schema of the result, or with `paged`, of one entry of a page. Named like a command's or an RPC's `success`. |
+| `paged` | Answer a page at a time: the result is `{ entries: Success[], cursor: string \| null }`, and the client pages with `after` and `take`. Default `false`. |
 | `from` | The projections whose stores the query reads. `atLeast` waits on each. |
 | `middleware` | Guards the query in an Api, in order. What it provides is what `validate`, `visible` and the handler may read. |
 | `rejects` | The rejections it may fail with; they reach the client typed. |
@@ -151,7 +152,7 @@ const page = yield* bank.AccountLedger(
 const next = yield* bank.AccountLedger({ account: accountId }, { after: page.cursor!, take: 20 });
 ```
 
-The wire value is `{ input, after?, take?, atLeast? }`, so a query's own fields never collide with the paging and consistency options. The success schema is the `row` page or `success`. The error schema is the union of `rejects`, plus `ConsistencyTimeout` when `from` is not empty. As with every entry, anything else (an infrastructure error, an undeclared rejection) becomes a defect, so it never reaches the client as an error it cannot decode.
+The wire value is `{ input, after?, take?, atLeast? }`, so a query's own fields never collide with the paging and consistency options. The success schema is `success`, or a page of it when the query is `paged`. The error schema is the union of `rejects`, plus `ConsistencyTimeout` when `from` is not empty. As with every entry, anything else (an infrastructure error, an undeclared rejection) becomes a defect, so it never reaches the client as an error it cannot decode.
 
 The client's error type is `QueryError<Q>`: the declared rejections, the middleware's errors, `ConsistencyTimeout` when the query has `from`, and `RpcClientError`.
 

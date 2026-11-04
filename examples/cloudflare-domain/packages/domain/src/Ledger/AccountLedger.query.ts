@@ -16,7 +16,8 @@ import { LedgerRow, LedgerStore } from "./LedgerStore.ts";
  */
 export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },
-  row: LedgerRow,
+  success: LedgerRow,
+  paged: true,
   from: [Ledger],
   middleware: [Session],
   rejects: [NotOwner],

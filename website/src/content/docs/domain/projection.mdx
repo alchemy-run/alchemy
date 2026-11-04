@@ -217,7 +217,8 @@ A projection's store is yours, and a [query](/domain/query) serves it to clients
 ```typescript title="packages/domain/src/Ledger/AccountLedger.query.ts"
 export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },
-  row: LedgerRow,
+  success: LedgerRow,
+  paged: true,
   from: [Ledger],
   middleware: [Session],
   rejects: [NotOwner],

@@ -60,17 +60,21 @@ export type Member =
   | Saga.SagaKey<string>
   | Projection.ProgressKey<string>;
 
-/** The result of a query with a `row` (a page) or a `success` schema. */
-export type ResultType<Row, S> = Row extends Schema.Top
-  ? Page<Row["Type"]>
-  : S extends Schema.Top
-    ? S["Type"]
-    : void;
+/** A query's result: its `success`, or a page of them when it is `paged`. */
+export type ResultType<P extends boolean, S> = S extends Schema.Top
+  ? P extends true
+    ? Page<S["Type"]>
+    : S["Type"]
+  : void;
 
 /** What a query's handler receives besides the input: the page, for a paged query. */
-export type PageOf<Row> = Row extends Schema.Top ? PageRequest : undefined;
+export type PageOf<P extends boolean> = P extends true ? PageRequest : undefined;
 
-type RowType<Row> = Row extends Schema.Top ? Row["Type"] : never;
+type EntryType<P extends boolean, S> = P extends true
+  ? S extends Schema.Top
+    ? S["Type"]
+    : never
+  : never;
 
 /**
  * A query's handler: one run, for one request. Resolve your store while
@@ -94,15 +98,15 @@ export interface Implementation {
 /** A query's declaration, widened. @internal */
 export interface AnyDefinition {
   readonly input?: Fields;
-  readonly row?: Schema.Top;
   readonly success?: Schema.Top;
+  readonly paged?: boolean;
   readonly from?: ReadonlyArray<Projection.Any>;
   readonly middleware?: Middleware.List;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly take?: Take;
   readonly attributes?: Telemetry.Attributes<any>;
   readonly validate?: (input: never, request: Request) => Effect.Effect<void, unknown, unknown>;
-  readonly visible?: (row: never, input: never) => Effect.Effect<boolean, unknown, unknown>;
+  readonly visible?: (entry: never, input: never) => Effect.Effect<boolean, unknown, unknown>;
 }
 
 /**
@@ -151,7 +155,7 @@ export interface QueryKey<Name extends string> {
  */
 export interface Definition<
   F extends Fields,
-  Row extends Schema.Top | undefined,
+  P extends boolean,
   S extends Schema.Top | undefined,
   From extends ReadonlyArray<Projection.Any>,
   Ms extends Middleware.List,
@@ -161,10 +165,17 @@ export interface Definition<
 > {
   /** The query's fields. Filters, sort orders and scopes are fields too. */
   readonly input?: F;
-  /** A paged query: the schema of one row. Its result is `{ entries, cursor }`. */
-  readonly row?: Row;
-  /** A single-result query: the schema of its result. Exclusive with `row`. */
+  /**
+   * The schema of the result, or with `paged`, of one entry of a page.
+   * Without it, the query answers nothing (`void`).
+   */
   readonly success?: S;
+  /**
+   * Answer a page at a time: the result is `{ entries, cursor }`, where each
+   * entry is a `success`, and the client pages with `after` and `take`.
+   * @default false
+   */
+  readonly paged?: P;
   /** The projections whose stores it reads. A read `atLeast` a write waits on each. */
   readonly from?: From;
   /**
@@ -192,11 +203,12 @@ export interface Definition<
     request: Request,
   ) => Effect.Effect<void, Aggregate.InstanceOf<Rejects[number]>, RV>;
   /**
-   * Judge each row of a paged result: rows it refuses are dropped, never
-   * rejected. The handler should scope its store by the caller; this is the
-   * guarantee that no other row gets out. Keep it cheap: it runs per row.
+   * Judge each entry of a paged result: entries it refuses are dropped, never
+   * rejected, so a page may hold fewer than `take` and still have a `cursor`.
+   * The handler should scope its store by the caller; this is the guarantee
+   * that no other entry gets out. Keep it cheap: it runs per entry.
    */
-  readonly visible?: (row: RowType<Row>, input: Data<F>) => Effect.Effect<boolean, never, RS>;
+  readonly visible?: (entry: EntryType<P, S>, input: Data<F>) => Effect.Effect<boolean, never, RS>;
 }
 
 /**
@@ -226,7 +238,8 @@ export interface Definition<
  *
  * export class AccountLedger extends Domain.Query("AccountLedger", {
  *   input: { account: AccountId },
- *   row: LedgerEntry,
+ *   success: LedgerEntry,
+ *   paged: true,
  *   from: [Ledger],
  *   middleware: [Session],
  *   rejects: [NotOwner],
@@ -241,8 +254,9 @@ export interface Definition<
  *
  * ### Implementing it
  * The construction Effect runs once and resolves the store. The handler gets
- * the input and, for a paged query, the page asked for; it returns the rows
- * and the cursor of the next page (`null` on the last).
+ * the input and, for a paged query, the page asked for; it returns the
+ * entries and the cursor of the next page (`null` on the last, never a
+ * short page).
  *
  * **Example:** Reading the projection's store
  * ```typescript
@@ -267,7 +281,7 @@ export interface Definition<
 export const make = <
   const Name extends string,
   const F extends Fields = {},
-  Row extends Schema.Top | undefined = undefined,
+  const P extends boolean = false,
   S extends Schema.Top | undefined = undefined,
   const From extends ReadonlyArray<Projection.Any> = readonly [],
   const Ms extends Middleware.List = readonly [],
@@ -276,13 +290,13 @@ export const make = <
   RS extends Middleware.Provides<Ms> | Member = never,
 >(
   name: Name,
-  definition: Definition<F, Row, S, From, Ms, Rejects, RV, RS>,
+  definition: Definition<F, P, S, From, Ms, Rejects, RV, RS>,
 ): QueryClass<
   Name,
-  Definition<F, Row, S, From, Ms, Rejects, RV, RS>,
+  Definition<F, P, S, From, Ms, Rejects, RV, RS>,
   Data<F>,
-  ResultType<Row, S>,
-  PageOf<Row>,
+  ResultType<P, S>,
+  PageOf<P>,
   Aggregate.InstanceOf<Rejects[number]>,
   Ms,
   Exclude<RV | RS, Middleware.Provides<Ms>>
@@ -297,13 +311,13 @@ export const make = <
     payload: {
       input: Schema.Struct(definition.input ?? {}),
       atLeast: Schema.optional(Schema.Struct({ stream: Schema.String, version: Schema.Number })),
-      ...(definition.row
+      ...(definition.paged
         ? { after: Schema.optional(Schema.String), take: Schema.optional(Schema.Number) }
         : {}),
     },
-    success: definition.row
+    success: definition.paged
       ? Schema.Struct({
-          entries: Schema.Array(definition.row),
+          entries: Schema.Array(definition.success ?? Schema.Void),
           cursor: Schema.NullOr(Schema.String),
         })
       : (definition.success ?? Schema.Void),
@@ -325,10 +339,10 @@ export const make = <
     }
   } as unknown as QueryClass<
     Name,
-    Definition<F, Row, S, From, Ms, Rejects, RV, RS>,
+    Definition<F, P, S, From, Ms, Rejects, RV, RS>,
     Data<F>,
-    ResultType<Row, S>,
-    PageOf<Row>,
+    ResultType<P, S>,
+    PageOf<P>,
     Aggregate.InstanceOf<Rejects[number]>,
     Ms,
     Exclude<RV | RS, Middleware.Provides<Ms>>
@@ -401,7 +415,7 @@ export const host = (
     | ((input: unknown, request: Request) => Effect.Effect<void, unknown>)
     | undefined;
   const visible = def.visible as
-    | ((row: unknown, input: unknown) => Effect.Effect<boolean>)
+    | ((entry: unknown, input: unknown) => Effect.Effect<boolean>)
     | undefined;
   return {
     run: (input, { after, take, atLeast }) =>
@@ -423,14 +437,14 @@ export const host = (
               );
           }
         }
-        if (!def.row) return yield* implementation.handle(input, undefined);
+        if (!def.paged) return yield* implementation.handle(input, undefined);
         const size = take === undefined ? fallback : Math.min(max, Math.max(1, Math.floor(take)));
         const page = (yield* implementation.handle(input, {
           after,
           take: size,
         })) as Page<unknown>;
         const shown = visible
-          ? yield* Effect.filter(page.entries, (row) => visible(row, input))
+          ? yield* Effect.filter(page.entries, (entry) => visible(entry, input))
           : page.entries;
         yield* Effect.annotateCurrentSpan({
           "domain.query.rows": shown.length,

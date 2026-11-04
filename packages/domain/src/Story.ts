@@ -1246,7 +1246,7 @@ const make =
                 break;
               }
               const label = `${name}(${brief(s.input)})`;
-              if (s.query.definition.row) {
+              if (s.query.definition.paged) {
                 const rows = (wire as Query.Page<unknown>).entries;
                 const expected = s.expected as ReadonlyArray<unknown>;
                 const ok =

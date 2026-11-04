@@ -33,7 +33,8 @@ The bank's ledger is a table the `Ledger` projection writes. `AccountLedger` rea
 ```typescript title="packages/domain/src/Ledger/AccountLedger.query.ts"
 export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },
-  row: LedgerRow,
+  success: LedgerRow,
+  paged: true,
   from: [Ledger],
   middleware: [Session],
   rejects: [NotOwner],
@@ -48,7 +49,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
 ```
 
 - `input` holds the query's fields, like a command's. Filters, sort orders and scopes are fields too.
-- `row` makes it a paged query: its result is `{ entries, cursor }`. A query with one result declares `success` instead.
+- `success` is the result. With `paged: true` it is one entry of a page, and the result is `{ entries, cursor }`. Leave `paged` out for a query with one result.
 - `from` names the projections whose store it reads, so a read can wait for a write.
 - `middleware`, `rejects` and `validate` work as they do for commands and views.
 - `take` limits page sizes, and `attributes` chooses what of the input reaches a trace.
@@ -111,7 +112,7 @@ export class CustomerApi extends Domain.Api(
 const page = yield* bank.AccountLedger({ account: accountId }, { take: 20 });
 ```
 
-The result is decoded from the row schema. The error type lists the query's rejections, its middleware's errors, `ConsistencyTimeout` when it reads from projections, and `RpcClientError`, so `Effect.catchTag` handles each.
+The result is decoded from the `success` schema. The error type lists the query's rejections, its middleware's errors, `ConsistencyTimeout` when it reads from projections, and `RpcClientError`, so `Effect.catchTag` handles each.
 
 A Foldkit app asks a query through a Command from `@alchemy.run/domain/Foldkit`. See [Integrate with Foldkit: Ask a query](/domain/foldkit#ask-a-query).
 

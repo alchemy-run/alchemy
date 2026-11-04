@@ -146,7 +146,8 @@ class Ledger extends Domain.Projection("FoldkitLedger", {
 }) {}
 class Entries extends Domain.Query("Entries", {
   input: { counter: CounterId },
-  row: Row,
+  success: Row,
+  paged: true,
   from: [Ledger],
   rejects: [Limit],
 }) {}

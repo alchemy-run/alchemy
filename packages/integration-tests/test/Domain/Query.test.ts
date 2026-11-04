@@ -146,7 +146,8 @@ const ViewerSessionLive = Layer.succeed(ViewerSession, (effect, { headers }) =>
 /** One wallet's movements, for its owner: authorized per request. */
 class WalletMovements extends Domain.Query("WalletMovements", {
   input: { wallet: Schema.String },
-  row: Movement,
+  success: Movement,
+  paged: true,
   from: [Ledger],
   middleware: [ViewerSession],
   rejects: [NotYours],
@@ -168,7 +169,8 @@ const WalletMovementsLive = WalletMovements.toLayer(
 /** Large movements across every wallet: each row judged on its own. */
 class LargeMovements extends Domain.Query("LargeMovements", {
   input: { min: Schema.Number, note: Schema.Redacted(Schema.String) },
-  row: Movement,
+  success: Movement,
+  paged: true,
   middleware: [ViewerSession],
   attributes: (input) => ({ "query.min": input.min, "query.note": input.note }),
   visible: Effect.fn(function* (row) {
@@ -475,7 +477,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
   });
 
   it("verify reports every query problem without hosting the model", () => {
-    class Both extends Domain.Query("Both", { row: Movement, success: Schema.Number }) {}
+    class Pages extends Domain.Query("Pages", { paged: true }) {}
     class Judged extends Domain.Query("Judged", {
       success: Schema.Number,
       visible: () => Effect.succeed(true),
@@ -484,11 +486,11 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
     class Broken extends Domain.Model("QueryBroken", {
       aggregates: [Wallet],
       views: [WalletOwner],
-      queries: [Both, Judged, Named, Total, Total],
+      queries: [Pages, Judged, Named, Total, Total],
     }) {}
     expect(Domain.verify(Broken).map((problem) => problem.message)).toEqual([
-      "Query 'Both' declares both `row` and `success`; it is paged or it isn't",
-      "Query 'Judged' declares `visible` without `row`: only rows are judged",
+      "Query 'Pages' is `paged` but declares no `success`: name the schema of one entry",
+      "Query 'Judged' declares `visible` but is not `paged`: only the entries of a page are judged",
       "Two entities are named 'WalletOwner'",
       "Total consumes Ledger, which is not in the Domain",
       "Duplicate query 'Total'",

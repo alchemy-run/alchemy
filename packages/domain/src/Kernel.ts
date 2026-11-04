@@ -19,7 +19,7 @@ import {
   MissingInitial,
   MissingKeyOf,
   NoEmitter,
-  PagedAndSingle,
+  PagedWithoutSuccess,
   type Reason,
   TwoWriters,
   NewerGeneration,
@@ -30,7 +30,7 @@ import {
   UnknownSource,
   UnknownStream,
   UnmatchedRoute,
-  VisibleWithoutRow,
+  VisibleWithoutPaging,
   WriterKeyMismatch,
 } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
@@ -687,8 +687,8 @@ const build = (
     queryNames.add(name);
     if (callNames.has(name)) problem(new DuplicateName({ entity: name }));
     const def = query.definition;
-    if (def.row && def.success) problem(new PagedAndSingle({ query: name }));
-    if (def.visible && !def.row) problem(new VisibleWithoutRow({ query: name }));
+    if (def.paged && !def.success) problem(new PagedWithoutSuccess({ query: name }));
+    if (def.visible && !def.paged) problem(new VisibleWithoutPaging({ query: name }));
     for (const projection of def.from ?? []) {
       if (projectionByName.get(projection.projectionName) !== projection) {
         problem(new UnknownSource({ consumer: name, source: projection.projectionName }));

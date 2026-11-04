@@ -334,7 +334,8 @@ A question across keys, answered from a store a projection writes. Never serve s
 // Ledger/AccountLedger.query.ts
 export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },   // filters, sort orders and scopes are input fields
-  row: LedgerRow,                  // a Schema; paged result { entries, cursor }. Or `success:` for one result
+  success: LedgerRow,              // the result, or with `paged`, one entry of a page
+  paged: true,                     // result { entries, cursor }; leave out for one result
   from: [Ledger],                  // projections it reads: `atLeast` waits on them
   middleware: [Session],
   rejects: [NotOwner],

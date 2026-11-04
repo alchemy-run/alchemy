@@ -353,21 +353,21 @@ export class LazyViewNeedsOneSource extends Data.TaggedError("LazyViewNeedsOneSo
   }
 }
 
-/** A query declares both `row` and `success`: it is paged or it isn't. */
-export class PagedAndSingle extends Data.TaggedError("PagedAndSingle")<{
+/** A query is `paged` but declares no `success`: a page needs the schema of its entries. */
+export class PagedWithoutSuccess extends Data.TaggedError("PagedWithoutSuccess")<{
   readonly query: string;
 }> {
   override get message() {
-    return `Query '${this.query}' declares both \`row\` and \`success\`; it is paged or it isn't`;
+    return `Query '${this.query}' is \`paged\` but declares no \`success\`: name the schema of one entry`;
   }
 }
 
-/** A query declares `visible` but no `row`: only the rows of a page are judged. */
-export class VisibleWithoutRow extends Data.TaggedError("VisibleWithoutRow")<{
+/** A query declares `visible` but is not `paged`: only the entries of a page are judged. */
+export class VisibleWithoutPaging extends Data.TaggedError("VisibleWithoutPaging")<{
   readonly query: string;
 }> {
   override get message() {
-    return `Query '${this.query}' declares \`visible\` without \`row\`: only rows are judged`;
+    return `Query '${this.query}' declares \`visible\` but is not \`paged\`: only the entries of a page are judged`;
   }
 }
 
@@ -407,8 +407,8 @@ export type Reason =
   | NewerGeneration
   | ModelHostedTwice
   | LazyViewNeedsOneSource
-  | PagedAndSingle
-  | VisibleWithoutRow;
+  | PagedWithoutSuccess
+  | VisibleWithoutPaging;
 
 /**
  * A domain definition error, found while the kernel is built or when a

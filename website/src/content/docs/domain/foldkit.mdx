@@ -122,7 +122,7 @@ Use `watch` for state. A View can change its state without an output event, so `
 
 ## Ask a query
 
-A [query](/domain/query) is one request and one answer. It has no live read, so the adapter gives it a Command, not a Subscription. Each query Command takes `{ input, requestId, atLeast?, after?, take? }`. `after` and `take` page a query with a `row`.
+A [query](/domain/query) is one request and one answer. It has no live read, so the adapter gives it a Command, not a Subscription. Each query Command takes `{ input, requestId, atLeast?, after?, take? }`. `after` and `take` page a `paged` query.
 
 ```typescript
 const { commandId: requestId, commandIds } = DomainFoldkit.next(model.commandIds);
