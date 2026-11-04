@@ -36,7 +36,7 @@ export interface SecretProps {
   /**
    * Secret name. If omitted, Alchemy generates a deterministic physical name.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Optional description for the secret.
    */
@@ -44,19 +44,19 @@ export interface SecretProps {
   /**
    * Optional KMS key used to encrypt the secret.
    */
-  kmsKeyId?: string;
+  kmsKeyId?: string | undefined;
   /**
    * Plain string secret value.
    */
-  secretString?: Redacted.Redacted<string>;
+  secretString?: Redacted.Redacted<string> | undefined;
   /**
    * Binary secret value.
    */
-  secretBinary?: Redacted.Redacted<Uint8Array<ArrayBufferLike>>;
+  secretBinary?: Redacted.Redacted<Uint8Array<ArrayBufferLike>> | undefined;
   /**
    * Generate a password and store it inside a JSON secret string.
    */
-  generateSecretString?: GenerateSecretStringProps;
+  generateSecretString?: GenerateSecretStringProps | undefined;
   /**
    * Resource-based permission policy attached to the secret
    * (`PutResourcePolicy`). Accepts a typed {@link PolicyDocument} or a raw
@@ -64,7 +64,7 @@ export interface SecretProps {
    * policy). Omitting the prop removes any policy previously attached by
    * Alchemy.
    */
-  resourcePolicy?: PolicyDocument | string;
+  resourcePolicy?: PolicyDocument | string | undefined;
   /**
    * Number of days (a whole number from 7 to 30) AWS keeps the secret recoverable after Alchemy
    * deletes it (`DeleteSecret`'s `RecoveryWindowInDays`).
@@ -122,7 +122,7 @@ export interface Secret extends Resource<
      * The resource-based policy (canonical JSON), as observed. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    resourcePolicy?: string;
+    resourcePolicy?: string | undefined;
   },
   never,
   Providers
@@ -180,7 +180,7 @@ export interface Secret extends Resource<
 export const Secret = Resource<Secret>("AWS.SecretsManager.Secret");
 
 const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: Array<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

@@ -53,7 +53,12 @@ const clusterIamResources = (cluster: Cluster, resources: readonly EcsClusterIam
  * when `resources` is `"cluster-condition"` — for list actions that have no
  * usable resource type on Fargate).
  */
-export const makeEcsClusterHttpBinding = <I extends { cluster?: string }, A, E, R>(options: {
+export const makeEcsClusterHttpBinding = <
+  I extends { cluster?: string | undefined },
+  A,
+  E,
+  R,
+>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.ECS.DescribeServices`. */
   tag: string;
   /** The distilled operation; `cluster` is injected from the bound cluster. */
@@ -123,7 +128,7 @@ const taskDefinitionFamilyOf = (arn: string) =>
  * roles.
  */
 export const makeEcsTaskLaunchHttpBinding = <
-  I extends { cluster?: string; taskDefinition: string },
+  I extends { cluster?: string | undefined; taskDefinition: string },
   A,
   E,
   R,

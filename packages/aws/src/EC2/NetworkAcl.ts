@@ -64,41 +64,49 @@ export interface NetworkAcl extends Resource<
     /**
      * The rule entries (inbound and outbound) currently defined on the ACL.
      */
-    entries?: Array<{
-      /** The rule number; rules are evaluated lowest to highest. */
-      ruleNumber: number;
-      /** The protocol number ("-1" means all protocols). */
-      protocol: string;
-      /** Whether the rule allows or denies matching traffic. */
-      ruleAction: ec2.RuleAction;
-      /** Whether this is an egress (outbound) rule. */
-      egress: boolean;
-      /** The IPv4 CIDR block the rule applies to. */
-      cidrBlock?: string;
-      /** The IPv6 CIDR block the rule applies to. */
-      ipv6CidrBlock?: string;
-      /** The ICMP type and code, for ICMP rules. */
-      icmpTypeCode?: {
-        code?: number;
-        type?: number;
-      };
-      /** The port range, for TCP/UDP rules. */
-      portRange?: {
-        from?: number;
-        to?: number;
-      };
-    }>;
+    entries?:
+      | Array<{
+          /** The rule number; rules are evaluated lowest to highest. */
+          ruleNumber: number;
+          /** The protocol number ("-1" means all protocols). */
+          protocol: string;
+          /** Whether the rule allows or denies matching traffic. */
+          ruleAction: ec2.RuleAction;
+          /** Whether this is an egress (outbound) rule. */
+          egress: boolean;
+          /** The IPv4 CIDR block the rule applies to. */
+          cidrBlock?: string | undefined;
+          /** The IPv6 CIDR block the rule applies to. */
+          ipv6CidrBlock?: string | undefined;
+          /** The ICMP type and code, for ICMP rules. */
+          icmpTypeCode?:
+            | {
+                code?: number | undefined;
+                type?: number | undefined;
+              }
+            | undefined;
+          /** The port range, for TCP/UDP rules. */
+          portRange?:
+            | {
+                from?: number | undefined;
+                to?: number | undefined;
+              }
+            | undefined;
+        }>
+      | undefined;
     /**
      * The subnet associations currently attached to the network ACL.
      */
-    associations?: Array<{
-      /** The ID of the association between the ACL and the subnet. */
-      networkAclAssociationId: string;
-      /** The ID of the associated network ACL. */
-      networkAclId: string;
-      /** The ID of the associated subnet. */
-      subnetId: string;
-    }>;
+    associations?:
+      | Array<{
+          /** The ID of the association between the ACL and the subnet. */
+          networkAclAssociationId: string;
+          /** The ID of the associated network ACL. */
+          networkAclId: string;
+          /** The ID of the associated subnet. */
+          subnetId: string;
+        }>
+      | undefined;
   },
   never,
   Providers

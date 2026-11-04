@@ -473,7 +473,7 @@ export const LINK_TAG_RE = /\{@link\s+([^}]+)\}/g;
 /** Split a `{@link ...}` tag's inner text into target + optional label. */
 export function parseLinkTag(inner: string): {
   target: string;
-  label?: string;
+  label?: string | undefined;
 } {
   const trimmed = inner.trim();
   const pipe = trimmed.indexOf("|");

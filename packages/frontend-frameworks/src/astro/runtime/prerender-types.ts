@@ -10,7 +10,7 @@ import type { SerializedRouteData } from "astro/app/manifest";
 interface SerializedPathWithRoute {
   pathname: string;
   route: SerializedRouteData;
-  cacheKey?: string;
+  cacheKey?: string | undefined;
 }
 
 /**
@@ -18,7 +18,7 @@ interface SerializedPathWithRoute {
  */
 export interface StaticPathsResponse {
   paths: Array<SerializedPathWithRoute>;
-  metadata?: StaticPathsMetadata;
+  metadata?: StaticPathsMetadata | undefined;
 }
 
 /**
@@ -39,5 +39,5 @@ export interface PrerenderResponseMetadata {
    * scope could be installed in the worker (degraded collection — the path is
    * recorded as "not tracked", which is distinct from tracked-but-empty).
    */
-  metadata?: PrerenderRenderMetadata;
+  metadata?: PrerenderRenderMetadata | undefined;
 }

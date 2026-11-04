@@ -14,6 +14,8 @@
  * protocol: key metadata lives in Durable Object SQLite, values are stored as
  * blob files via the `kv:storage` disk service.
  */
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { KeyValueEntry } from "../../internal/shared.worker.ts";
 import {
   assert,
@@ -120,7 +122,7 @@ function validateKeyLength(key: string): void {
   }
 }
 
-function validateGetOptions(key: string, options?: { cacheTtl?: number }): void {
+function validateGetOptions(key: string, options?: { cacheTtl?: number | undefined }): void {
   validateKey(key);
   // Validate cacheTtl, but ignore it as there's only one "edge location":
   // the user's computer
@@ -141,7 +143,7 @@ function validatePutOptions(
     rawExpirationTtl: string /* seconds */ | null;
     rawMetadata: string /* JSON */ | null;
   },
-): { expiration?: number /* seconds */; metadata?: unknown } {
+): { expiration: number /* seconds */ | undefined; metadata: unknown } {
   const { now, rawExpiration, rawExpirationTtl, rawMetadata } = options;
 
   validateKey(key);
@@ -203,7 +205,7 @@ function decodeListOptions(url: URL) {
   return { limit, prefix, cursor };
 }
 
-function validateListOptions(options: { limit: number; prefix?: string }): void {
+function validateListOptions(options: { limit: number; prefix?: string | undefined }): void {
   // Validate key limit
   const limit = options.limit;
   if (limit !== undefined) {
@@ -614,7 +616,10 @@ export class KVNamespaceObject implements DurableObject {
     const res = this.storage.list(options);
     const keys = res.keys.map<KVNamespaceListKey<unknown>>((key) => ({
       name: key.key,
-      expiration: maybeApply(millisToSeconds, key.expiration),
+      ...Record.filterMap(
+        { expiration: maybeApply(millisToSeconds, key.expiration) },
+        Result.fromNullishOr(() => undefined),
+      ),
       // workerd expects metadata to be a JSON-serialised string
       metadata: maybeApply(JSON.stringify, key.metadata),
     }));

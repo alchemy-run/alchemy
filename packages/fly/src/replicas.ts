@@ -197,7 +197,13 @@ export const toImageRef = (ref: FlyImageRef | undefined): MachineImageRef | unde
 
 export const toGuestAttrs = (
   guest:
-    | { cpu_kind?: string; cpus?: number; memory_mb?: number; gpu_kind?: string; gpus?: number }
+    | {
+        cpu_kind?: string | undefined;
+        cpus?: number | undefined;
+        memory_mb?: number | undefined;
+        gpu_kind?: string | undefined;
+        gpus?: number | undefined;
+      }
     | undefined,
 ): MachineGuest | undefined => {
   if (guest === undefined) return undefined;
@@ -920,8 +926,8 @@ export const ownedReplicas = (
     metadata: Record<string, string>;
     resourceInstanceId: string;
     fqn: string;
-    baseName?: string;
-    machineIds?: readonly string[];
+    baseName?: string | undefined;
+    machineIds?: readonly string[] | undefined;
   },
 ) =>
   listed.filter((machine) => {
@@ -1012,7 +1018,7 @@ export interface ReconcileReplicasInput {
   fqn: string;
   resourceInstanceId: string;
   policy: DeploymentPolicy;
-  checks?: Record<string, MachineCheck>;
+  checks?: Record<string, MachineCheck> | undefined;
   id: string;
   type: FlyAlchemyType;
   appName: string;
@@ -1025,7 +1031,7 @@ export interface ReconcileReplicasInput {
   count: number;
   disks: DiskSpec[];
   skipLaunch?: boolean;
-  minSecretsVersion?: number;
+  minSecretsVersion?: number | undefined;
   outputMachineIds?: readonly string[];
   preferVolumeIds?: ReadonlyArray<ReadonlyArray<string>>;
   configDrifted: (
@@ -1316,7 +1322,7 @@ export const deleteReplicaSet = Effect.fn(function* (input: {
   type: FlyAlchemyType;
   fqn: string;
   resourceInstanceId: string;
-  force?: boolean;
+  force?: boolean | undefined;
   machineIds: readonly string[];
   volumeIds: readonly string[];
 }) {
@@ -1381,13 +1387,13 @@ export const groupGenerations = (machines: FlyMachine[]) => {
 };
 
 export const observeReplicaSet = Effect.fn(function* (input: {
-  appName?: string;
+  appName?: string | undefined;
   fqn: string;
   resourceInstanceId: string;
   id: string;
   type: FlyAlchemyType;
-  machineIds?: readonly string[];
-  baseName?: string;
+  machineIds?: readonly string[] | undefined;
+  baseName?: string | undefined;
 }) {
   if (input.appName === undefined) return undefined;
   const owned = ownedReplicas(yield* listMachinesByApp(input.appName), {

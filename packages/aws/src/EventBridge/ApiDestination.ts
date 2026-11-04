@@ -51,7 +51,7 @@ export interface ApiDestinationProps {
    * limit, not a duration.
    * @default 300
    */
-  invocationRateLimitPerSecond?: number;
+  invocationRateLimitPerSecond?: number | undefined;
 }
 
 /**

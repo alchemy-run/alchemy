@@ -114,7 +114,7 @@ export const publishWebsiteDomainDns = Effect.fn("Fly.Website.publishDomainDns")
  */
 export interface FrameworkSiteProps {
   /** Deployment strategy forwarded to the hosted Fly Service. */
-  deploy?: ServiceProps["deploy"];
+  deploy?: ServiceProps["deploy"] | undefined;
   /** Process shutdown policy. The framework server must handle the signal. */
   shutdown?: ServiceProps["shutdown"];
   /** Named Machine readiness checks. */

@@ -89,11 +89,11 @@ const DEFAULT_MEMORY_MB = 256;
 
 export interface ServiceProps extends PlatformProps {
   /** Deployment strategy and readiness deadline. Defaults to in-place rolling updates. */
-  deploy?: MachineDeploy;
+  deploy?: MachineDeploy | undefined;
   /** Graceful process shutdown. Defaults to SIGTERM / 30 seconds when blue/green is enabled. */
-  shutdown?: MachineShutdown;
+  shutdown?: MachineShutdown | undefined;
   /** Named readiness checks for workers without public services. */
-  checks?: Record<string, MachineCheck>;
+  checks?: Record<string, MachineCheck> | undefined;
   /**
    * Run inside an existing {@link App} instead of the Service's own App.
    * The Service then shares that App's hostname, addresses, and secrets,
@@ -104,7 +104,7 @@ export interface ServiceProps extends PlatformProps {
    * By default each Service owns its App, so it gets its own
    * `{name}.fly.dev` hostname, addresses, logs, and metrics.
    */
-  app?: Ref<App>;
+  app?: Ref<App> | undefined;
   /**
    * Whether the Service is reachable from the internet. A public Service
    * gets a shared IPv4 and an IPv6 and serves `https://{name}.fly.dev`. A
@@ -114,7 +114,7 @@ export interface ServiceProps extends PlatformProps {
    *
    * @default true
    */
-  public?: boolean;
+  public?: boolean | undefined;
   /**
    * Private network the Service's App joins. Only Apps on the same
    * network can reach it, over `privateUrl` or `.internal`; every other
@@ -127,7 +127,7 @@ export interface ServiceProps extends PlatformProps {
    *
    * @default the organization's default network, shared by every App
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Plain-HTTP port Alchemy publishes for callers that bind this Service
    * with {@link bindService}, when the Service publishes no plain-HTTP port
@@ -139,13 +139,13 @@ export interface ServiceProps extends PlatformProps {
    *
    * @default 7780
    */
-  bindingPort?: number;
+  bindingPort?: number | undefined;
   /**
    * Caller token for bound callers. Set automatically from an
    * `Alchemy.Random` child resource; do not pass it.
    * @internal
    */
-  rpcToken?: Redacted.Redacted<string>;
+  rpcToken?: Redacted.Redacted<string> | undefined;
   /**
    * Module entrypoint bundled with rolldown and baked into a Docker
    * image pushed to `registry.fly.io`. Typically `import.meta.url`.
@@ -161,7 +161,7 @@ export interface ServiceProps extends PlatformProps {
    *
    * @default "iad"
    */
-  region?: Region | Region[];
+  region?: Region | Region[] | undefined;
   /**
    * Number of Machines to provision in each region, including
    * stopped/suspended idle capacity. Fly's proxy load-balances
@@ -172,35 +172,35 @@ export interface ServiceProps extends PlatformProps {
    *
    * @default 1
    */
-  count?: number;
+  count?: number | undefined;
   /**
    * Guest size. Defaults to shared-cpu-1x 256 MB.
    */
-  guest?: MachineGuest;
+  guest?: MachineGuest | undefined;
   /**
    * Port the hosted HTTP server listens on. Written to `PORT` and used
    * as the Fly proxy `internal_port`.
    *
    * @default 3000
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Named export to load from `main`.
    *
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Additional environment variables for the hosted process. Merged
    * after binding-injected `env`.
    */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Bundler configuration for `main`: rolldown `input`/`output`
    * overrides, pure-annotation options (`pure`), and `install` for
    * packages that must ship as real `node_modules` (see {@link FlyBuildOptions}).
    */
-  build?: FlyBuildOptions;
+  build?: FlyBuildOptions | undefined;
   /**
    * Environment image used as the generated Dockerfile's `FROM`. Must
    * be able to run Node (websites and Effect-native Services use Node
@@ -208,11 +208,11 @@ export interface ServiceProps extends PlatformProps {
    *
    * @default "node:26-slim"
    */
-  image?: string;
+  image?: string | undefined;
   /**
    * Fly proxy services. Defaults to HTTP 80 + HTTPS 443 → {@link port}.
    */
-  services?: MachineService[];
+  services?: MachineService[] | undefined;
   /**
    * Name of the Service's App, which is its `{name}.fly.dev` and
    * `{name}.flycast` hostname. Globally unique across Fly. If omitted, a
@@ -222,30 +222,32 @@ export interface ServiceProps extends PlatformProps {
    * When `app` is set, this is instead the Machine name (unique per App;
    * in blue/green mode a base for generation-qualified physical names).
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Extra host directories copied into the Machine image next to the
    * bundled entry (e.g. a website `clientDirectory` at `/app/dist`).
    * Hashed into `code.hash` so asset changes update the image.
    * Destination is relative to `/app`.
    */
-  extraFiles?: ReadonlyArray<{ source: string; dest: string }>;
+  extraFiles?: ReadonlyArray<{ source: string; dest: string }> | undefined;
   /**
    * Fly proxy static-file maps. Matching GET paths skip the process and
    * are served from the image (`guestPath`) or a Tigris bucket
    * (`tigrisBucket`). Website composites publish hashed client assets
    * this way.
    */
-  statics?: ReadonlyArray<{
-    /** Path inside the image, or key prefix in {@link tigrisBucket}. */
-    guestPath: string;
-    /** URL prefix, e.g. `"/"`. */
-    urlPrefix: string;
-    /** Tigris bucket name. When set, files come from the bucket. */
-    tigrisBucket?: string;
-    /** Directory index file (`index.html`) for Tigris statics. */
-    indexDocument?: string;
-  }>;
+  statics?:
+    | ReadonlyArray<{
+        /** Path inside the image, or key prefix in {@link tigrisBucket}. */
+        guestPath: string;
+        /** URL prefix, e.g. `"/"`. */
+        urlPrefix: string;
+        /** Tigris bucket name. When set, files come from the bucket. */
+        tigrisBucket?: string | undefined;
+        /** Directory index file (`index.html`) for Tigris statics. */
+        indexDocument?: string | undefined;
+      }>
+    | undefined;
 }
 
 /** A port the Service publishes on Fly's proxy. */
@@ -277,24 +279,24 @@ export type Service = Resource<
   ServiceProps,
   {
     /** Whether recovery must finish an interrupted deployment. */
-    rolloutPending?: boolean;
+    rolloutPending?: boolean | undefined;
     /** Fly App name the Machines run in. */
     appName: string;
     /** Whether the Service created and manages {@link appName}. */
-    ownsApp?: boolean;
+    ownsApp?: boolean | undefined;
     /**
      * Private network the Service's Machines are on: `network`, or the
      * shared App's network. `undefined` for the organization's default.
      */
-    network?: string;
+    network?: string | undefined;
     /** Token bound callers send with RPC calls. */
-    rpcToken?: Redacted.Redacted<string>;
+    rpcToken?: Redacted.Redacted<string> | undefined;
     /** Fly Machine id of replica 0. */
     machineId: string;
     /** Fly Machine ids of every replica. */
     machineIds: string[];
     /** Logical base for generation-qualified Machine names. */
-    baseName?: string;
+    baseName?: string | undefined;
     /** Machine name of replica 0 (unique per App). Changes during blue/green deployment. */
     name: string;
     /** Region of the first Machine. */
@@ -1124,8 +1126,8 @@ const toFlyStatics = (
     | ReadonlyArray<{
         guestPath: string;
         urlPrefix: string;
-        tigrisBucket?: string;
-        indexDocument?: string;
+        tigrisBucket?: string | undefined;
+        indexDocument?: string | undefined;
       }>
     | undefined,
 ): FlyStatic[] | undefined => {
@@ -1145,7 +1147,7 @@ const buildConfig = (input: {
   services: FlyMachineService[];
   mounts: FlyMachineMount[];
   metadata: Record<string, string>;
-  statics?: FlyStatic[];
+  statics?: FlyStatic[] | undefined;
 }): FlyMachineConfig => ({
   image: input.image,
   guest: input.guest,
@@ -1216,7 +1218,7 @@ const configDrifted = (
     services: FlyMachineService[];
     mounts: FlyMachineMount[];
     metadata: Record<string, string>;
-    statics?: FlyStatic[];
+    statics?: FlyStatic[] | undefined;
   },
 ) => {
   const config = machine.config;
@@ -1537,7 +1539,9 @@ const machineIdsOf = (output: Service["Attributes"] | undefined) =>
 /** The private network the Service's Machines join. */
 const networkOf = (props: ServiceProps) =>
   normalizeNetwork(
-    props.app === undefined ? props.network : (props.app as { network?: string }).network,
+    props.app === undefined
+      ? props.network
+      : (props.app as { network?: string | undefined }).network,
   );
 
 /**

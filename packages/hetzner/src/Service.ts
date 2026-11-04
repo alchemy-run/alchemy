@@ -62,7 +62,7 @@ export interface ServiceProps extends PlatformProps {
    * plus pure-annotation options (`pure`) and `install` for packages that
    * must ship as real `node_modules` (see {@link HetznerBuildOptions}).
    */
-  build?: HetznerBuildOptions;
+  build?: HetznerBuildOptions | undefined;
   /**
    * Extra host directories packed into the unit archive next to the
    * bundled entry (e.g. a website `clientDirectory` at `dist/`). Hashed
@@ -193,7 +193,9 @@ const unwrapKey = (value: Redacted.Redacted<string> | string | undefined): strin
 
 const privateKeyOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
-  return unwrapKey((value as { privateKey?: Redacted.Redacted<string> | string }).privateKey);
+  return unwrapKey(
+    (value as { privateKey?: Redacted.Redacted<string> | string | undefined }).privateKey,
+  );
 };
 
 const createUnitName = (id: string, existing?: string) =>

@@ -2,6 +2,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const EmailMessageWorker = {
   worker: () =>
@@ -163,9 +165,14 @@ export const remote = (props: SendEmailProps): BindingHook<RemoteBindings | Send
       {
         name: props.binding,
         type: "send_email",
-        destinationAddress: props.destinationAddress,
-        allowedDestinationAddresses: props.allowedDestinationAddresses,
-        allowedSenderAddresses: props.allowedSenderAddresses,
+        ...Record.filterMap(
+          {
+            destinationAddress: props.destinationAddress,
+            allowedDestinationAddresses: props.allowedDestinationAddresses,
+            allowedSenderAddresses: props.allowedSenderAddresses,
+          },
+          Result.fromNullishOr(() => undefined),
+        ),
       },
       (service) => ({
         name: props.binding,

@@ -43,7 +43,7 @@ export interface NotificationWebhookProps {
    * Mutable — renames are applied in place.
    * @default ${app}-${id}-${stage}-${suffix}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The POST endpoint Cloudflare calls when dispatching a notification.
    * Cloudflare sends a test request on create/update; the endpoint must
@@ -286,20 +286,20 @@ export const NotificationWebhookProvider = () =>
 
 interface ObservedWebhook {
   readonly id: string;
-  readonly name?: string;
-  readonly url?: string;
-  readonly type?: NotificationWebhookType;
-  readonly createdAt?: string;
+  readonly name?: string | undefined;
+  readonly url?: string | undefined;
+  readonly type?: NotificationWebhookType | undefined;
+  readonly createdAt?: string | undefined;
 }
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowWebhook = (raw: {
-  id?: string | null;
-  name?: string | null;
-  url?: string | null;
-  type?: string | null;
-  createdAt?: string | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  url?: string | null | undefined;
+  type?: string | null | undefined;
+  createdAt?: string | null | undefined;
 }): ObservedWebhook | undefined =>
   raw.id == null
     ? undefined

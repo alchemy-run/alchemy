@@ -36,7 +36,7 @@ export type DocumentProps = {
    * If omitted, a unique id is generated and used for lookup.
    * Immutable — changing it replaces the document.
    */
-  referenceId?: string;
+  referenceId?: string | undefined;
   /**
    * Multi-region location (`us` or `eu`). Immutable — changing it
    * replaces the document. `US` is accepted and normalized to `us`.

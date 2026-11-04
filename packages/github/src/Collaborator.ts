@@ -33,7 +33,7 @@ export interface CollaboratorProps {
    *
    * @default "push"
    */
-  permission?: "pull" | "push" | "maintain" | "triage" | "admin";
+  permission?: "pull" | "push" | "maintain" | "triage" | "admin" | undefined;
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.

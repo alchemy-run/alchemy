@@ -351,7 +351,7 @@ const desiredBody = (news: Props) => ({
 /** Extract the URL pattern from a rule's targets. */
 const targetOf = (rule: {
   targets: ReadonlyArray<{
-    constraint?: { value: string } | null;
+    constraint?: { value: string } | null | undefined;
   }>;
 }): string | undefined => rule.targets[0]?.constraint?.value;
 

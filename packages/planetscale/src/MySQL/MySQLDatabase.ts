@@ -48,37 +48,37 @@ export interface MySQLDatabaseProps extends BaseDatabaseProps {
    * never by replacing the database.
    * @see https://planetscale.com/docs/vitess/sharding/keyspaces
    */
-  replicas?: number;
+  replicas?: number | undefined;
 
   /**
    * Whether to copy migration data to new branches and in deploy requests.
    */
-  automaticMigrations?: boolean;
+  automaticMigrations?: boolean | undefined;
 
   /**
    * Migration framework to use on the database.
    */
-  migrationFramework?: string;
+  migrationFramework?: string | undefined;
 
   /**
    * Name of the migration table.
    */
-  migrationTableName?: string;
+  migrationTableName?: string | undefined;
 
   /**
    * Whether data branching is allowed on the database.
    */
-  allowDataBranching?: boolean;
+  allowDataBranching?: boolean | undefined;
 
   /**
    * Whether foreign key constraints are allowed on the database.
    */
-  allowForeignKeyConstraints?: boolean;
+  allowForeignKeyConstraints?: boolean | undefined;
 
   /**
    * Whether full queries should be collected from the database.
    */
-  insightsRawQueries?: boolean;
+  insightsRawQueries?: boolean | undefined;
 }
 
 /**
@@ -99,12 +99,12 @@ export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
   /**
    * Migration framework to use on the database.
    */
-  migrationFramework?: string;
+  migrationFramework?: string | undefined;
 
   /**
    * Name of the migration table.
    */
-  migrationTableName?: string;
+  migrationTableName?: string | undefined;
 
   /**
    * Whether data branching is allowed on the database.

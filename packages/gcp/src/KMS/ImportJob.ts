@@ -241,7 +241,7 @@ const getByName = (name: string) =>
 const paginate = <A, E, R>(
   fetch: (
     pageToken: string | undefined,
-  ) => Effect.Effect<{ items: A[]; nextPageToken?: string }, E, R>,
+  ) => Effect.Effect<{ items: A[]; nextPageToken?: string | undefined }, E, R>,
 ) =>
   Effect.gen(function* () {
     const found: A[] = [];

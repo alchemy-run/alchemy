@@ -82,13 +82,13 @@ export type NfsShareProps = {
    * Requested size of the underlying volume, in GiB. Minimum is 100.
    * @default 100
    */
-  requestedSizeGib?: number | string;
+  requestedSizeGib?: number | string | undefined;
   /**
    * Storage type of the underlying volume. Immutable — changing it
    * replaces the share.
    * @default "SSD"
    */
-  storageType?: baremetalsolution.NfsShareStorageTypeEnum | (string & {});
+  storageType?: baremetalsolution.NfsShareStorageTypeEnum | (string & {}) | undefined;
   /**
    * Independent infrastructure pod. The share can only attach to networks
    * and instances in the same pod. Immutable — changing it replaces the

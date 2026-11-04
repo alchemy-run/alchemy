@@ -395,7 +395,7 @@ interface ExecContext {
     readonly tagsFilter: TagsFilter;
     readonly selectedTests?: ReadonlySet<TestCase>;
   };
-  readonly suiteStates?: Map<Suite, Exit.Exit<void, unknown>>;
+  readonly suiteStates?: Map<Suite, Exit.Exit<void, unknown>> | undefined;
   readonly onlyMode: boolean;
   readonly emit: (event: TestEvent) => Effect.Effect<void>;
   readonly fileLogs: Array<LogEntry>;

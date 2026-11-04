@@ -36,7 +36,7 @@ export interface LifecyclePolicyProps {
   /**
    * A human-readable description of the policy.
    */
-  description?: string;
+  description?: string | undefined;
 }
 
 export interface LifecyclePolicy extends Resource<
@@ -58,7 +58,7 @@ export interface LifecyclePolicy extends Resource<
     /**
      * Description of the lifecycle policy.
      */
-    description?: string;
+    description?: string | undefined;
   },
   {},
   Providers

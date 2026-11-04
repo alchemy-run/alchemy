@@ -28,7 +28,7 @@ export type BillingSavedQuerySummaryField = {
    * LogEntry field to include in the Logs Explorer summary line
    * (e.g. `resource.type` or `jsonPayload.name`).
    */
-  field?: string;
+  field?: string | undefined;
 };
 
 export type BillingSavedQueryLoggingQuery = {
@@ -39,15 +39,15 @@ export type BillingSavedQueryLoggingQuery = {
   /**
    * Characters counted from the start of the string in the summary line.
    */
-  summaryFieldStart?: number;
+  summaryFieldStart?: number | undefined;
   /**
    * Characters counted from the end of the string in the summary line.
    */
-  summaryFieldEnd?: number;
+  summaryFieldEnd?: number | undefined;
   /**
    * Summary fields shown for this query in Logs Explorer.
    */
-  summaryFields?: BillingSavedQuerySummaryField[];
+  summaryFields?: BillingSavedQuerySummaryField[] | undefined;
 };
 
 export type BillingSavedQueryOpsAnalyticsQuery = {

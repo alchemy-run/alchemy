@@ -45,12 +45,12 @@ export type WireGroupProps = {
   /**
    * Properties applied to every wire (bandwidth, fault response).
    */
-  wireProperties?: WireGroupWireProperties;
+  wireProperties?: WireGroupWireProperties | undefined;
   /**
    * Logical endpoints keyed by RFC1035 labels. Each endpoint lists
    * interconnects and VLAN tags.
    */
-  endpoints?: WireGroupEndpointMap;
+  endpoints?: WireGroupEndpointMap | undefined;
 };
 
 export type WireGroup = Resource<

@@ -17,9 +17,9 @@ type TypeId = typeof TypeId;
  */
 export interface MagicStaticRouteScope {
   /** List of colo names the route applies to. */
-  coloNames?: string[];
+  coloNames?: string[] | undefined;
   /** List of colo regions the route applies to. */
-  coloRegions?: string[];
+  coloRegions?: string[] | undefined;
 }
 
 export interface MagicStaticRouteProps {
@@ -36,19 +36,19 @@ export interface MagicStaticRouteProps {
    * Priority of the static route. Lower values are preferred.
    * @default 100
    */
-  priority?: number;
+  priority?: number | undefined;
   /**
    * An optional human-provided description of the static route.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Optional weight for ECMP routes.
    */
-  weight?: number;
+  weight?: number | undefined;
   /**
    * Used only for ECMP routes — restrict the route to colos/regions.
    */
-  scope?: MagicStaticRouteScope;
+  scope?: MagicStaticRouteScope | undefined;
 }
 
 export interface MagicStaticRouteAttributes {
@@ -248,14 +248,17 @@ interface ObservedRoute {
   nexthop: string;
   prefix: string;
   priority: number;
-  description?: string | null;
-  weight?: number | null;
-  scope?: {
-    coloNames?: string[] | null;
-    coloRegions?: string[] | null;
-  } | null;
-  createdOn?: string | null;
-  modifiedOn?: string | null;
+  description?: string | null | undefined;
+  weight?: number | null | undefined;
+  scope?:
+    | {
+        coloNames?: string[] | null | undefined;
+        coloRegions?: string[] | null | undefined;
+      }
+    | null
+    | undefined;
+  createdOn?: string | null | undefined;
+  modifiedOn?: string | null | undefined;
 }
 
 /**

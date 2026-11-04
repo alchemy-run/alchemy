@@ -73,7 +73,7 @@ export default TextractTestFunction.make(
 
     const BucketName = yield* bucket.bucketName;
 
-    const lineTexts = (blocks: { BlockType?: string; Text?: string }[]) =>
+    const lineTexts = (blocks: { BlockType?: string | undefined; Text?: string | undefined }[]) =>
       blocks.filter((b) => b.BlockType === "LINE").map((b) => b.Text);
 
     // Textract's adapter management APIs throttle at ~1 TPS; bounded backoff

@@ -52,9 +52,9 @@ export type TemplateComponentType = "TYPE_UNSPECIFIED" | "TRIGGER" | "TASK" | "C
 
 export type TemplateComponent = {
   /** Component type. */
-  type?: TemplateComponentType | (string & {});
+  type?: TemplateComponentType | (string & {}) | undefined;
   /** Component name. */
-  name?: string;
+  name?: string | undefined;
 };
 
 export type TemplateBundle = integrations.GoogleCloudIntegrationsV1alphaTemplateBundle;
@@ -87,7 +87,7 @@ export type TemplateProps = {
   /**
    * How to use the template.
    */
-  usageInfo?: string;
+  usageInfo?: string | undefined;
   /**
    * Link to template documentation.
    */

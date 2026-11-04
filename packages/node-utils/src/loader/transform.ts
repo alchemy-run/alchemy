@@ -61,7 +61,7 @@ const inferFormat = (filePath: string): ModuleFormat => {
   return packageType(path.dirname(filePath));
 };
 
-const language = (filePath: string): TransformOptions["lang"] => {
+const language = (filePath: string): NonNullable<TransformOptions["lang"]> => {
   switch (path.extname(filePath)) {
     case ".tsx":
       return "tsx";

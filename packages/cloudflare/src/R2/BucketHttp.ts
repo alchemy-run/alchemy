@@ -117,12 +117,12 @@ const stripQuotes = (etag: string | undefined): string | undefined =>
   etag === undefined ? undefined : etag.replace(/^"|"$/g, "");
 
 export interface HttpMetadata {
-  contentType?: string;
-  contentEncoding?: string;
-  contentDisposition?: string;
-  contentLanguage?: string;
-  cacheControl?: string;
-  cacheExpiry?: Date;
+  contentType?: string | undefined;
+  contentEncoding?: string | undefined;
+  contentDisposition?: string | undefined;
+  contentLanguage?: string | undefined;
+  cacheControl?: string | undefined;
+  cacheExpiry?: Date | undefined;
 }
 
 /** Normalize the caller's `httpMetadata` option (object or `Headers`). */
@@ -156,11 +156,11 @@ export const baseObject = (
   key: string,
   meta: HttpMetadata,
   attrs: {
-    size?: number;
-    etag?: string;
-    uploaded?: Date;
-    storageClass?: string;
-    customMetadata?: Record<string, string>;
+    size?: number | undefined;
+    etag?: string | undefined;
+    uploaded?: Date | undefined;
+    storageClass?: string | undefined;
+    customMetadata?: Record<string, string> | undefined;
   },
 ): R2Object =>
   ({

@@ -38,17 +38,19 @@ export interface SecurityGroupRuleProps {
    * Only groupId is consumed; other attributes do not change this rule.
    * Specify exactly one of group or groupId.
    */
-  group?: {
-    /** The security group's physical ID. */
-    groupId: SecurityGroupId;
-  };
+  group?:
+    | {
+        /** The security group's physical ID. */
+        groupId: SecurityGroupId;
+      }
+    | undefined;
 
   /**
    * The ID of an existing security group. Retained for ID-only callers; use
    * group with the whole resource when composing inline and standalone rules.
    * Specify exactly one of group or groupId.
    */
-  groupId?: SecurityGroupId;
+  groupId?: SecurityGroupId | undefined;
 
   /**
    * Whether this is an ingress (inbound) or egress (outbound) rule.
@@ -65,43 +67,43 @@ export interface SecurityGroupRuleProps {
    * The start of the port range.
    * For ICMP, use the ICMP type number.
    */
-  fromPort?: number;
+  fromPort?: number | undefined;
 
   /**
    * The end of the port range.
    * For ICMP, use the ICMP code.
    */
-  toPort?: number;
+  toPort?: number | undefined;
 
   /**
    * IPv4 CIDR range to allow.
    */
-  cidrIpv4?: string;
+  cidrIpv4?: string | undefined;
 
   /**
    * IPv6 CIDR range to allow.
    */
-  cidrIpv6?: string;
+  cidrIpv6?: string | undefined;
 
   /**
    * ID of a security group to allow traffic from/to.
    */
-  referencedGroupId?: SecurityGroupId;
+  referencedGroupId?: SecurityGroupId | undefined;
 
   /**
    * ID of a prefix list.
    */
-  prefixListId?: string;
+  prefixListId?: string | undefined;
 
   /**
    * Description for the rule.
    */
-  description?: string;
+  description?: string | undefined;
 
   /**
    * Tags to assign to the security group rule.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface SecurityGroupRule extends Resource<
@@ -136,12 +138,12 @@ export interface SecurityGroupRule extends Resource<
     /**
      * The start of the port range.
      */
-    fromPort?: number;
+    fromPort?: number | undefined;
 
     /**
      * The end of the port range.
      */
-    toPort?: number;
+    toPort?: number | undefined;
 
     /**
      * The IPv4 CIDR range.
@@ -156,12 +158,12 @@ export interface SecurityGroupRule extends Resource<
     /**
      * The ID of the referenced security group.
      */
-    referencedGroupId?: string;
+    referencedGroupId?: string | undefined;
 
     /**
      * The ID of the prefix list.
      */
-    prefixListId?: string;
+    prefixListId?: string | undefined;
 
     /**
      * The description.

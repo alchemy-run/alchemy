@@ -36,7 +36,7 @@ export interface SecretProps {
    * Actions environment instead of the whole repository. Accepts an
    * environment name or a `GitHub.Environment` resource.
    */
-  environment?: string | Environment;
+  environment?: string | Environment | undefined;
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.

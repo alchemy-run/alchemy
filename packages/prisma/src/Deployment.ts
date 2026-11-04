@@ -85,7 +85,7 @@ export interface DeploymentProps {
   /**
    * Path to a pre-created artifact file to upload to the pre-signed upload URL.
    */
-  artifactPath?: string;
+  artifactPath?: string | undefined;
   /**
    * Content type for artifact uploads.
    *
@@ -174,13 +174,13 @@ export interface Deployment extends Resource<
      * Hash of the artifact bytes uploaded for this deployment, when Alchemy
      * uploaded an artifact.
      */
-    artifactHash?: string;
+    artifactHash?: string | undefined;
     /**
      * Salted fingerprint of the resolved `triggers` inputs this deployment
      * was created for. Held `Redacted` so the inputs stay out of plaintext
      * state; absent when `triggers` is unset.
      */
-    triggersHash?: Redacted.Redacted<string>;
+    triggersHash?: Redacted.Redacted<string> | undefined;
     /**
      * Stable App endpoint domain after promotion.
      */
@@ -284,9 +284,9 @@ const attrsFrom = (
   deployment: ObservedDeployment,
   appId: string,
   extra?: {
-    artifactHash?: string;
-    triggersHash?: Redacted.Redacted<string>;
-    appEndpointDomain?: string;
+    artifactHash?: string | undefined;
+    triggersHash?: Redacted.Redacted<string> | undefined;
+    appEndpointDomain?: string | undefined;
   },
 ): Deployment["Attributes"] => ({
   deploymentId: deployment.id,
@@ -309,7 +309,7 @@ export class InvalidArtifactUploadUrlError extends Data.TaggedError(
 
 export interface ReadUploadArtifactInput {
   artifact?: string | Uint8Array;
-  artifactPath?: string;
+  artifactPath?: string | undefined;
   output?: "bytes" | "file";
 }
 

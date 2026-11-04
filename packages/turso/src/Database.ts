@@ -80,7 +80,7 @@ export interface DatabaseProps {
    * Seed the new database from an existing database or a pending upload.
    * Only used when the database is created.
    */
-  seed?: DatabaseSeed;
+  seed?: DatabaseSeed | undefined;
   /**
    * Encrypt the database at rest with your own key. Only used when the
    * database is created; changing it replaces the database. Requires a Pro

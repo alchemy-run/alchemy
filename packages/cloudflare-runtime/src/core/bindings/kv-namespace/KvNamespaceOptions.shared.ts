@@ -9,7 +9,7 @@ export interface KvNamespaceProps {
    */
   readonly id?: string;
   /** Emulate Instant metadata and listing semantics; defaults to classic KV. */
-  readonly mode?: "instant";
+  readonly mode?: "instant" | undefined;
 }
 
 /**
@@ -19,7 +19,7 @@ export interface KvNamespaceProps {
  */
 export interface KvServiceProps {
   readonly namespaceId: string;
-  readonly mode?: "instant";
+  readonly mode?: "instant" | undefined;
 }
 
 export const SERVICE_KV = "kv";

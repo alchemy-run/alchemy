@@ -31,32 +31,32 @@ const MAX_NAME_LENGTH = 255;
 
 export type TargetServerTlsCommonName = {
   /** TLS common name to match. */
-  value?: string;
+  value?: string | undefined;
   /** Match the cert as a wildcard. */
-  wildcardMatch?: boolean;
+  wildcardMatch?: boolean | undefined;
 };
 
 export type TargetServerTlsInfo = {
   /** Enable TLS. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /** Ignore TLS certificate errors. */
-  ignoreValidationErrors?: boolean;
+  ignoreValidationErrors?: boolean | undefined;
   /** Enable two-way TLS. */
-  clientAuthEnabled?: boolean;
+  clientAuthEnabled?: boolean | undefined;
   /** Truststore resource id. */
-  trustStore?: string;
+  trustStore?: string | undefined;
   /** Key alias when client auth is enabled. */
-  keyAlias?: string;
+  keyAlias?: string | undefined;
   /** Keystore resource id when client auth is enabled. */
-  keyStore?: string;
+  keyStore?: string | undefined;
   /** TLS common name. */
-  commonName?: TargetServerTlsCommonName;
+  commonName?: TargetServerTlsCommonName | undefined;
   /** TLS protocol versions. */
-  protocols?: string[];
+  protocols?: string[] | undefined;
   /** Cipher suites. */
-  ciphers?: string[];
+  ciphers?: string[] | undefined;
   /** Strictly enforce TLS. */
-  enforce?: boolean;
+  enforce?: boolean | undefined;
 };
 
 export type EnvironmentsTargetserverProps = {

@@ -25,17 +25,17 @@ import {
 
 type QaAnswerLabel = {
   /** Skip this question. */
-  skipValue?: boolean;
+  skipValue?: boolean | undefined;
   /** Not-applicable value. */
-  naValue?: boolean;
+  naValue?: boolean | undefined;
   /** Answer-choice key. */
-  key?: string;
+  key?: string | undefined;
   /** Numeric value. */
-  numValue?: number;
+  numValue?: number | undefined;
   /** Boolean value. */
-  boolValue?: boolean;
+  boolValue?: boolean | undefined;
   /** String value. */
-  strValue?: string;
+  strValue?: string | undefined;
 };
 
 export type ConversationsFeedbackLabelProps = {

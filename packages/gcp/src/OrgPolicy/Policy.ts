@@ -14,11 +14,11 @@ export type PolicyRuleValues = {
   /**
    * Values allowed at this resource. List constraints only.
    */
-  allowedValues?: string[];
+  allowedValues?: string[] | undefined;
   /**
    * Values denied at this resource. List constraints only.
    */
-  deniedValues?: string[];
+  deniedValues?: string[] | undefined;
 };
 
 export type PolicyRuleCondition = {
@@ -26,47 +26,47 @@ export type PolicyRuleCondition = {
    * CEL expression. Must use `resource.matchTag`, `resource.matchTagId`,
    * `resource.hasTagKey`, or `resource.hasTagKeyId`.
    */
-  expression?: string;
+  expression?: string | undefined;
   /**
    * Short title shown in UIs.
    */
-  title?: string;
+  title?: string | undefined;
   /**
    * Longer description of the condition.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Location string for error reporting.
    */
-  location?: string;
+  location?: string | undefined;
 };
 
 export type PolicyRule = {
   /**
    * Allow every value. List constraints only.
    */
-  allowAll?: boolean;
+  allowAll?: boolean | undefined;
   /**
    * Deny every value. List constraints only.
    */
-  denyAll?: boolean;
+  denyAll?: boolean | undefined;
   /**
    * When true, the boolean/managed constraint is enforced. When false,
    * any configuration is acceptable. Boolean constraints only.
    */
-  enforce?: boolean;
+  enforce?: boolean | undefined;
   /**
    * Allowed and denied values. List constraints only.
    */
-  values?: PolicyRuleValues;
+  values?: PolicyRuleValues | undefined;
   /**
    * Tag-based CEL condition that selects when this rule applies.
    */
-  condition?: PolicyRuleCondition;
+  condition?: PolicyRuleCondition | undefined;
   /**
    * Parameter values for managed constraints.
    */
-  parameters?: Record<string, unknown>;
+  parameters?: Record<string, unknown> | undefined;
 };
 
 export type PolicySpec = {
@@ -74,17 +74,17 @@ export type PolicySpec = {
    * When true, list-constraint rules from ancestors are inherited.
    * List constraints only.
    */
-  inheritFromParent?: boolean;
+  inheritFromParent?: boolean | undefined;
   /**
    * Restore the constraint default at this resource. When true, `rules`
    * must be empty and `inheritFromParent` must be false.
    */
-  reset?: boolean;
+  reset?: boolean | undefined;
   /**
    * Policy rules. Boolean constraints must have exactly one rule with no
    * condition.
    */
-  rules?: PolicyRule[];
+  rules?: PolicyRule[] | undefined;
 };
 
 export type PolicyProps = {

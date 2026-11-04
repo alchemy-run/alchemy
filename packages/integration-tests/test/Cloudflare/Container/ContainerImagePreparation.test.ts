@@ -7,7 +7,7 @@ import * as TestClock from "effect/testing/TestClock";
 
 const image = "registry.cloudflare.com/account/shell@sha256:digest";
 const fixture = () => {
-  const notes: { message: string; kind?: NoteKind }[] = [];
+  const notes: { message: string; kind?: NoteKind | undefined }[] = [];
   return {
     notes,
     session: {

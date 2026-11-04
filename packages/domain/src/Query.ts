@@ -111,7 +111,7 @@ export interface Implementation {
 /** A query's declaration, widened. @internal */
 export interface AnyDefinition {
   readonly input?: Fields;
-  readonly success?: Schema.Top;
+  readonly success?: Schema.Top | undefined;
   readonly paged?: boolean;
   readonly waitsFor?: ReadonlyArray<Projection.Any>;
   readonly middleware?: Middleware.List;
@@ -411,9 +411,9 @@ export interface QueryClass<
 
 /** How a client asks a query: the page, and the write to read at least. @internal */
 export interface RunOptions {
-  readonly after?: string;
-  readonly take?: number;
-  readonly atLeast?: AtLeast;
+  readonly after?: string | undefined;
+  readonly take?: number | undefined;
+  readonly atLeast?: AtLeast | undefined;
 }
 
 /** A hosted query: `validate`, the `atLeast` wait, the handler, then `visible`. @internal */

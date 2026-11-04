@@ -25,7 +25,7 @@ export type AndroidAppProps = {
    * changing it replaces the app. If omitted, a unique
    * `com.alchemy.test.{id}` name is generated.
    */
-  packageName?: string;
+  packageName?: string | undefined;
   /**
    * User-assigned display name. Android apps have no labels field, so
    * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it

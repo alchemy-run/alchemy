@@ -37,7 +37,7 @@ export interface ResourceShareProps {
    * an organization ARN, an organizational unit (OU) ARN, an IAM role ARN, or an
    * IAM user ARN. Principals can be added or removed on update.
    */
-  principals?: string[];
+  principals?: string[] | undefined;
 
   /**
    * Source accounts or ARNs whose resources are shared through this share.
@@ -62,7 +62,7 @@ export interface ResourceShareProps {
   /**
    * Tags applied to the resource share.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface ResourceShare extends Resource<

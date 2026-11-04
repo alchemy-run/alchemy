@@ -30,31 +30,31 @@ export interface RepositoryProps {
   /**
    * Name of the repository. If omitted, a unique name is generated.
    */
-  repositoryName?: string;
+  repositoryName?: string | undefined;
   /**
    * Image tag mutability setting.
    * @default "MUTABLE"
    */
-  imageTagMutability?: ecr.ImageTagMutability;
+  imageTagMutability?: ecr.ImageTagMutability | undefined;
   /**
    * Whether enhanced image scanning should run on push.
    */
-  scanOnPush?: boolean;
+  scanOnPush?: boolean | undefined;
   /**
    * Optional lifecycle policy document JSON.
    */
-  lifecyclePolicyText?: string;
+  lifecyclePolicyText?: string | undefined;
   /**
    * Repository permission policy controlling access from other AWS
    * principals — either a structured IAM {@link PolicyDocument} or a raw
    * JSON string (escape hatch / adoption of an existing policy). Omitting
    * the prop removes any repository policy.
    */
-  policy?: PolicyDocument | string;
+  policy?: PolicyDocument | string | undefined;
   /**
    * User-defined tags to apply to the repository.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Repository extends Resource<
@@ -74,9 +74,9 @@ export interface Repository extends Resource<
     /** Whether repository images are scanned when they are pushed. */
     scanOnPush: boolean;
     /** The JSON lifecycle policy applied to the repository, if any. */
-    lifecyclePolicyText?: string;
+    lifecyclePolicyText?: string | undefined;
     /** The JSON repository permissions policy, if any. */
-    policy?: string;
+    policy?: string | undefined;
     /** The tags attached to the repository. */
     tags: Record<string, string>;
   },
@@ -120,7 +120,7 @@ export const RepositoryProvider = () =>
   Provider.effect(
     Repository,
     Effect.gen(function* () {
-      const toRepositoryName = (id: string, props: { repositoryName?: string } = {}) =>
+      const toRepositoryName = (id: string, props: { repositoryName?: string | undefined } = {}) =>
         props.repositoryName
           ? Effect.succeed(props.repositoryName)
           : createPhysicalName({

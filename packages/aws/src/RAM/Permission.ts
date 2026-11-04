@@ -69,7 +69,7 @@ export interface PermissionProps {
   /**
    * Tags applied to the permission.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Permission extends Resource<

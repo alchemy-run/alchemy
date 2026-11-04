@@ -1,3 +1,5 @@
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { Plugin } from "rolldown";
 
 export interface BundleAnalyzerPluginOptions {
@@ -32,7 +34,10 @@ export const bundleAnalyzerPlugin = async (
   const { bundleAnalyzerPlugin: rolldownBundleAnalyzerPlugin } =
     await import("rolldown/experimental");
   return rolldownBundleAnalyzerPlugin({
-    fileName: options.fileName,
+    ...Record.filterMap(
+      { fileName: options.fileName },
+      Result.fromNullishOr(() => undefined),
+    ),
     format: options.format ?? "md",
   });
 };

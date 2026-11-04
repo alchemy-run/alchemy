@@ -47,20 +47,20 @@ export interface MagicSiteWanProps {
    * app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Priority of the WAN for traffic load balancing. Lower is preferred.
    */
-  priority?: number;
+  priority?: number | undefined;
   /**
    * VLAN ID. Use zero for untagged.
    * @default 0
    */
-  vlanTag?: number;
+  vlanTag?: number | undefined;
   /**
    * Static addressing configuration; omit to use DHCP.
    */
-  staticAddressing?: MagicSiteWanStaticAddressing;
+  staticAddressing?: MagicSiteWanStaticAddressing | undefined;
 }
 
 export interface MagicSiteWanAttributes {
@@ -287,17 +287,20 @@ export const MagicSiteWanProvider = () =>
   });
 
 interface ObservedWan {
-  id?: string | null;
-  name?: string | null;
-  physport?: number | null;
-  priority?: number | null;
-  vlanTag?: number | null;
-  healthCheckRate?: string | null;
-  staticAddressing?: {
-    address: string;
-    gatewayAddress: string;
-    secondaryAddress?: string | null;
-  } | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  physport?: number | null | undefined;
+  priority?: number | null | undefined;
+  vlanTag?: number | null | undefined;
+  healthCheckRate?: string | null | undefined;
+  staticAddressing?:
+    | {
+        address: string;
+        gatewayAddress: string;
+        secondaryAddress?: string | null | undefined;
+      }
+    | null
+    | undefined;
 }
 
 /**

@@ -26,17 +26,17 @@ export type Money = {
   /**
    * Whole units of the amount. For USD, `1` is one dollar.
    */
-  units?: string;
+  units?: string | undefined;
   /**
    * ISO 4217 currency code. If set on create, it must match the billing
    * account currency.
    */
-  currencyCode?: string;
+  currencyCode?: string | undefined;
   /**
    * Nano (10^-9) units of the amount. Must be between -999,999,999 and
    * 999,999,999.
    */
-  nanos?: number;
+  nanos?: number | undefined;
 };
 
 export type BudgetAmount = {
@@ -45,24 +45,28 @@ export type BudgetAmount = {
    * Cannot be combined with `customPeriod`. Empty object selects this
    * mode.
    */
-  lastPeriodAmount?: Record<string, never> | {};
+  lastPeriodAmount?: Record<string, never> | {} | undefined;
   /**
    * Explicit budgeted amount. `currencyCode` is optional on create and
    * must match the billing account (and the existing budget on update).
    */
-  specifiedAmount?: Money;
+  specifiedAmount?: Money | undefined;
 };
 
 export type CustomPeriod = {
   /**
    * Inclusive start date. Must be after 2017-01-01.
    */
-  startDate?: { year?: number; month?: number; day?: number };
+  startDate?:
+    | { year?: number | undefined; month?: number | undefined; day?: number | undefined }
+    | undefined;
   /**
    * Inclusive end date. Budgets past this date are not processed. Omit
    * to track all usage since `startDate`.
    */
-  endDate?: { year?: number; month?: number; day?: number };
+  endDate?:
+    | { year?: number | undefined; month?: number | undefined; day?: number | undefined }
+    | undefined;
 };
 
 export type BudgetFilter = {
@@ -70,52 +74,52 @@ export type BudgetFilter = {
    * Folders and organizations whose usage is included, as
    * `folders/{folderId}` or `organizations/{organizationId}`.
    */
-  resourceAncestors?: string[];
+  resourceAncestors?: string[] | undefined;
   /**
    * Subaccounts of the form `billingAccounts/{account_id}`.
    */
-  subaccounts?: string[];
+  subaccounts?: string[] | undefined;
   /**
    * Recurring calendar period (`MONTH`, `QUARTER`, `YEAR`). Default
    * `MONTH` when `customPeriod` is unset.
    */
-  calendarPeriod?: string;
+  calendarPeriod?: string | undefined;
   /**
    * Services of the form `services/{service_id}`.
    */
-  services?: string[];
+  services?: string[] | undefined;
   /**
    * Credit types subtracted from gross cost when
    * `creditTypesTreatment` is `INCLUDE_SPECIFIED_CREDITS`.
    */
-  creditTypes?: string[];
+  creditTypes?: string[] | undefined;
   /**
    * How credits are treated (`INCLUDE_ALL_CREDITS`,
    * `EXCLUDE_ALL_CREDITS`, `INCLUDE_SPECIFIED_CREDITS`).
    */
-  creditTypesTreatment?: string;
+  creditTypesTreatment?: string | undefined;
   /**
    * Projects of the form `projects/{project}`. Omit to include every
    * project the billing account pays for.
    */
-  projects?: string[];
+  projects?: string[] | undefined;
   /**
    * Static (non-recurring) time period. Mutually exclusive with
    * `calendarPeriod`.
    */
-  customPeriod?: CustomPeriod;
+  customPeriod?: CustomPeriod | undefined;
   /**
    * Single resource-label key mapped to a list of values. Usage from
    * only those labeled resources is included.
    */
-  labels?: Record<string, unknown[] | undefined>;
+  labels?: Record<string, unknown[] | undefined> | undefined;
 };
 
 export type ThresholdRule = {
   /**
    * Alert when spend exceeds this fraction of the budget (`0.5` is 50%).
    */
-  thresholdPercent?: number;
+  thresholdPercent?: number | undefined;
   /**
    * Spend basis (`CURRENT_SPEND` or `FORECASTED_SPEND`). Defaults to
    * `CURRENT_SPEND`.
@@ -127,26 +131,26 @@ export type NotificationsRule = {
   /**
    * Schema version of Pub/Sub notifications. Only `"1.0"` is accepted.
    */
-  schemaVersion?: string;
+  schemaVersion?: string | undefined;
   /**
    * Pub/Sub topic for programmatic notifications, as
    * `projects/{project}/topics/{topic}`.
    */
-  pubsubTopic?: string;
+  pubsubTopic?: string | undefined;
   /**
    * When true, default IAM billing-account recipients are not emailed.
    */
-  disableDefaultIamRecipients?: boolean;
+  disableDefaultIamRecipients?: boolean | undefined;
   /**
    * When true and the budget tracks a single project, also notify that
    * project's Owners.
    */
-  enableProjectLevelRecipients?: boolean;
+  enableProjectLevelRecipients?: boolean | undefined;
   /**
    * Cloud Monitoring email notification channels, as
    * `projects/{project}/notificationChannels/{channel}`. Max 5.
    */
-  monitoringNotificationChannels?: string[];
+  monitoringNotificationChannels?: string[] | undefined;
 };
 
 export type BillingBudgetProps = {

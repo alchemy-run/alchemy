@@ -106,16 +106,16 @@ export interface HealthCheck extends Resource<
      * tags, as observed. Lets `alchemy drift` detect out-of-band changes.
      */
     configuration?: {
-      ipAddress?: string;
-      port?: number;
-      resourcePath?: string;
-      fullyQualifiedDomainName?: string;
-      searchString?: string;
-      failureThreshold?: number;
+      ipAddress?: string | undefined;
+      port?: number | undefined;
+      resourcePath?: string | undefined;
+      fullyQualifiedDomainName?: string | undefined;
+      searchString?: string | undefined;
+      failureThreshold?: number | undefined;
       inverted?: boolean;
       disabled?: boolean;
-      healthThreshold?: number;
-      enableSNI?: boolean;
+      healthThreshold?: number | undefined;
+      enableSNI?: boolean | undefined;
       tags: Record<string, string>;
     };
   },
@@ -176,8 +176,9 @@ export const HealthCheck = Resource<HealthCheck>("AWS.Route53.HealthCheck");
  * the owning service may retain them as tombstones after its resource is
  * deleted. They therefore must not be returned to account-wide nuke inventory.
  */
-export const isNukeableHealthCheck = (check: { LinkedService?: route53.LinkedService }): boolean =>
-  check.LinkedService === undefined;
+export const isNukeableHealthCheck = (check: {
+  LinkedService?: route53.LinkedService | undefined;
+}): boolean => check.LinkedService === undefined;
 
 const toConfig = (props: HealthCheckProps): route53.HealthCheckConfig => ({
   Type: props.type,

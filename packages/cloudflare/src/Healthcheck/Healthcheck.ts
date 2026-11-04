@@ -132,7 +132,7 @@ export interface Props {
    * Mutable — Cloudflare supports renaming in place.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The hostname or IP address of the origin server to run health checks
    * on.
@@ -143,62 +143,62 @@ export interface Props {
    * protocols are `HTTP`, `HTTPS` and `TCP`.
    * @default "HTTP"
    */
-  type?: Type;
+  type?: Type | undefined;
   /**
    * A human-readable description of the health check.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * A list of regions from which to run health checks. Omitting it lets
    * Cloudflare pick a default region. Multiple regions require a Business
    * or Enterprise plan.
    */
-  checkRegions?: Region[];
+  checkRegions?: Region[] | undefined;
   /**
    * The number of consecutive fails required from a health check before
    * changing the health to unhealthy.
    * @default 1
    */
-  consecutiveFails?: number;
+  consecutiveFails?: number | undefined;
   /**
    * The number of consecutive successes required from a health check
    * before changing the health to healthy.
    * @default 1
    */
-  consecutiveSuccesses?: number;
+  consecutiveSuccesses?: number | undefined;
   /**
    * The interval between each health check, in seconds. Shorter intervals
    * may give quicker notifications but increase load on the origin.
    * Plan-gated minimums apply (Pro: 60, Business: 15, Enterprise: 10).
    * @default 60
    */
-  interval?: number;
+  interval?: number | undefined;
   /**
    * The number of retries to attempt in case of a timeout before marking
    * the origin as unhealthy. Retries are attempted immediately.
    * @default 2
    */
-  retries?: number;
+  retries?: number | undefined;
   /**
    * The timeout (in seconds) before marking the health check as failed.
    * @default 5
    */
-  timeout?: number;
+  timeout?: number | undefined;
   /**
    * If suspended, no health checks are sent to the origin.
    * @default false
    */
-  suspended?: boolean;
+  suspended?: boolean | undefined;
   /**
    * Parameters specific to an HTTP or HTTPS health check. Only valid when
    * `type` is `HTTP` or `HTTPS`.
    */
-  httpConfig?: HttpConfig;
+  httpConfig?: HttpConfig | undefined;
   /**
    * Parameters specific to a TCP health check. Only valid when `type` is
    * `TCP`.
    */
-  tcpConfig?: TcpConfig;
+  tcpConfig?: TcpConfig | undefined;
 }
 
 export interface Attributes {
@@ -471,16 +471,16 @@ interface DesiredBody {
   name: string;
   address: string;
   type: Type;
-  description?: string;
-  checkRegions?: Region[];
+  description?: string | undefined;
+  checkRegions?: Region[] | undefined;
   consecutiveFails: number;
   consecutiveSuccesses: number;
   interval: number;
   retries: number;
   timeout: number;
   suspended: boolean;
-  httpConfig?: HttpConfig;
-  tcpConfig?: TcpConfig;
+  httpConfig?: HttpConfig | undefined;
+  tcpConfig?: TcpConfig | undefined;
 }
 
 /**

@@ -45,7 +45,7 @@ export interface LifecycleHookProps {
   /**
    * Lifecycle hook name. If omitted, a deterministic name is generated.
    */
-  lifecycleHookName?: string;
+  lifecycleHookName?: string | undefined;
   /**
    * Auto Scaling Group to attach the hook to.
    */
@@ -62,27 +62,27 @@ export interface LifecycleHookProps {
    * `Duration.seconds(300)` (30 seconds–2 hours on the wire).
    * @default "1 hour"
    */
-  heartbeatTimeout?: Duration.Input;
+  heartbeatTimeout?: Duration.Input | undefined;
   /**
    * Action taken when the hook times out or the ASG is otherwise unable to
    * respond.
    * @default "ABANDON"
    */
-  defaultResult?: LifecycleActionResult;
+  defaultResult?: LifecycleActionResult | undefined;
   /**
    * ARN of an SNS topic or SQS queue to notify when the transition occurs.
    * Omit to receive lifecycle events via EventBridge (the default target).
    */
-  notificationTargetARN?: string;
+  notificationTargetARN?: string | undefined;
   /**
    * ARN of the IAM role that permits the ASG to publish to
    * `notificationTargetARN`. Required when `notificationTargetARN` is set.
    */
-  roleARN?: string;
+  roleARN?: string | undefined;
   /**
    * Arbitrary metadata delivered with the lifecycle notification.
    */
-  notificationMetadata?: string;
+  notificationMetadata?: string | undefined;
 }
 
 export interface LifecycleHook extends Resource<
@@ -117,15 +117,15 @@ export interface LifecycleHook extends Resource<
     /**
      * SNS/SQS target lifecycle notifications are published to, if any.
      */
-    notificationTargetARN?: string;
+    notificationTargetARN?: string | undefined;
     /**
      * IAM role used to publish to the notification target, if any.
      */
-    roleARN?: string;
+    roleARN?: string | undefined;
     /**
      * Metadata delivered with each lifecycle event.
      */
-    notificationMetadata?: string;
+    notificationMetadata?: string | undefined;
   },
   never,
   Providers
@@ -180,7 +180,7 @@ export const LifecycleHookProvider = () =>
   Provider.effect(
     LifecycleHook,
     Effect.gen(function* () {
-      const toName = (id: string, props: { lifecycleHookName?: string } = {}) =>
+      const toName = (id: string, props: { lifecycleHookName?: string | undefined } = {}) =>
         props.lifecycleHookName
           ? Effect.succeed(props.lifecycleHookName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });

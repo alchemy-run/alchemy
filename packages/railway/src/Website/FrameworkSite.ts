@@ -119,7 +119,9 @@ export interface FrameworkSiteProps {
    * `alchemy dev`, the framework dev server). Accepts `Output`s
    * (e.g. `VITE_API_URL: api.url`).
    */
-  env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
+  env?:
+    | Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>
+    | undefined;
   /**
    * Static-asset routing (`notFoundHandling`, `htmlHandling`). Railway
    * CDN caches hashed files by Content-Type regardless of this bag.
@@ -140,7 +142,7 @@ export interface FrameworkSiteProps {
    * publish the records Railway requires through that DNS host. See
    * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
-  domain?: WebsiteDomain;
+  domain?: WebsiteDomain | undefined;
   /**
    * User-defined tags. Railway Services do not persist tags; accepted
    * for API parity with AWS/Cloudflare Website composites.

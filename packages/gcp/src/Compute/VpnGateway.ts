@@ -29,12 +29,12 @@ export type VpnGatewayInterfaceProps = {
    * Interface id (`0` or `1`). Required when attaching a VLAN
    * attachment for HA VPN over Cloud Interconnect.
    */
-  id?: number;
+  id?: number | undefined;
   /**
    * VLAN attachment URL for HA VPN over Cloud Interconnect. Immutable —
    * changing it replaces the gateway.
    */
-  interconnectAttachment?: string;
+  interconnectAttachment?: string | undefined;
 };
 
 export type VpnGatewayInterface = {
@@ -243,8 +243,8 @@ const toInterfaces = (
 
 const attachmentKey = (
   interfaces: ReadonlyArray<{
-    id?: number;
-    interconnectAttachment?: string;
+    id?: number | undefined;
+    interconnectAttachment?: string | undefined;
   }>,
 ) =>
   interfaces

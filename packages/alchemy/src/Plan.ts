@@ -7,7 +7,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Record from "effect/Record";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
 import {
@@ -240,7 +242,7 @@ export interface ActionDelete<T extends ActionLike = ActionLike> extends ActionN
 
 export type Plan<Output = any> = {
   /** Closed selection for partial apply and GC; absent for a full plan. */
-  selectedFqns?: ReadonlySet<string>;
+  selectedFqns?: ReadonlySet<string> | undefined;
   resources: {
     [id in string]: Apply<any>;
   };
@@ -296,14 +298,19 @@ export const describeResource = (node: CRUD): PlannedResource => ({
   resourceType: node.resource.Type,
   action: node.action,
   bindings: node.bindings.map(describeBinding),
-  providerMode: node.mode,
-  fromProviderMode:
-    node.action === "replace" &&
-    node.mode !== undefined &&
-    node.state.providerMode !== undefined &&
-    node.state.providerMode !== node.mode
-      ? node.state.providerMode
-      : undefined,
+  ...Record.filterMap(
+    {
+      providerMode: node.mode,
+      fromProviderMode:
+        node.action === "replace" &&
+        node.mode !== undefined &&
+        node.state.providerMode !== undefined &&
+        node.state.providerMode !== node.mode
+          ? node.state.providerMode
+          : undefined,
+    },
+    Result.fromNullishOr(() => undefined),
+  ),
 });
 
 /** The serializable row view of one stack-action node. */
@@ -335,7 +342,7 @@ export const describePlan = (
 });
 
 export interface MakePlanOptions {
-  force?: boolean;
+  force?: boolean | undefined;
   include?: never;
   exclude?: never;
 }
@@ -361,12 +368,12 @@ export interface FilteredPlanOptions
    * supplies one pattern; commas are literal. Dependencies hidden inside
    * callbacks must be declared explicitly.
    */
-  include?: ReadonlyArray<string>;
+  include?: ReadonlyArray<string> | undefined;
 }
 
 type FullPlanCall = [options?: MakePlanOptions];
 
-export function make<A, Call extends [options?: FilteredPlanOptions] = FullPlanCall>(
+export function make<A, Call extends [options?: FilteredPlanOptions | undefined] = FullPlanCall>(
   stack: StackSpec<A>,
   ...call: Call
 ): Effect.Effect<Plan<SelectionOutput<A, Call[0]>>, never, State>;

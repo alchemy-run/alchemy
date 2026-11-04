@@ -11,20 +11,20 @@ export type SendEmailProps = {
    * Mutually exclusive with `allowedDestinationAddresses`. The destination
    * must be a verified address on the account (see {@link Address}).
    */
-  destinationAddress?: string;
+  destinationAddress?: string | undefined;
   /**
    * Restrict the Worker to send to one of these verified destination addresses.
    *
    * Mutually exclusive with `destinationAddress`.
    */
-  allowedDestinationAddresses?: string[];
+  allowedDestinationAddresses?: string[] | undefined;
   /**
    * Restrict the Worker to send from one of these sender addresses.
    *
    * The sender domain must have Email Routing configured (see
    * {@link Routing}) and the addresses must be verified.
    */
-  allowedSenderAddresses?: string[];
+  allowedSenderAddresses?: string[] | undefined;
 };
 
 /**
@@ -86,7 +86,7 @@ export type SendEmail = SendEmailProps & {
    * on the host Worker via the binding-data `devRemote` channel, never on
    * the wire binding itself.
    */
-  devRemote?: boolean;
+  devRemote?: boolean | undefined;
 };
 
 export const isSendEmail = (value: unknown): value is SendEmail =>

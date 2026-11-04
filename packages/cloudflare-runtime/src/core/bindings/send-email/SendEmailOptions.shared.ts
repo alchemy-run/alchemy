@@ -3,11 +3,11 @@ export interface SendEmailProps {
   /** Binding name exposed on `env`. */
   readonly binding: string;
   /** Restrict sends to exactly this recipient address. */
-  readonly destinationAddress?: string;
+  readonly destinationAddress?: string | undefined;
   /** Restrict sends to this set of recipient addresses. */
-  readonly allowedDestinationAddresses?: Array<string>;
+  readonly allowedDestinationAddresses?: Array<string> | undefined;
   /** Restrict sends to this set of sender addresses. */
-  readonly allowedSenderAddresses?: Array<string>;
+  readonly allowedSenderAddresses?: Array<string> | undefined;
 }
 
 /**
@@ -16,9 +16,9 @@ export interface SendEmailProps {
  * binding; each binding's designator carries its own address restrictions.
  */
 export interface SendEmailServiceProps {
-  readonly destinationAddress?: string;
-  readonly allowedDestinationAddresses?: Array<string>;
-  readonly allowedSenderAddresses?: Array<string>;
+  readonly destinationAddress?: string | undefined;
+  readonly allowedDestinationAddresses?: Array<string> | undefined;
+  readonly allowedSenderAddresses?: Array<string> | undefined;
 }
 
 export const SERVICE_SEND_EMAIL = "send-email";

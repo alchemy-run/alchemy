@@ -811,7 +811,7 @@ const viewHost = (
   const readAtLeast = (
     id: string,
     options?: {
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly atLeast?: { readonly stream: string; readonly version: number } | undefined;
       readonly timeout?: Duration.Input;
     },
   ) => {

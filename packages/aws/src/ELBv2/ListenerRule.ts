@@ -57,7 +57,7 @@ export interface ListenerRuleProps {
   /** The actions to take when the rule matches. */
   actions: ListenerAction[];
   /** Tags to apply to the rule. */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface ListenerRule extends Resource<

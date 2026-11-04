@@ -255,10 +255,10 @@ export const WebhookProvider = () =>
 
 const toAttrs = (data: {
   id: number;
-  config?: { url?: string } | null;
-  ping_url?: string | null;
-  test_url?: string | null;
-  updated_at?: string | null;
+  config?: { url?: string | undefined } | null | undefined;
+  ping_url?: string | null | undefined;
+  test_url?: string | null | undefined;
+  updated_at?: string | null | undefined;
 }): Webhook["Attributes"] => ({
   webhookId: data.id,
   url: data.config?.url ?? "",

@@ -55,7 +55,7 @@ export type NotificationProps = {
    * If set, only objects whose names start with this prefix generate
    * notifications. Immutable — changing it replaces the notification.
    */
-  objectNamePrefix?: string;
+  objectNamePrefix?: string | undefined;
   /**
    * Extra attributes attached to every published Pub/Sub message. Alchemy
    * writes no ownership markers here (they would reach every subscriber);
@@ -143,7 +143,7 @@ export class NotificationNotResolved extends Data.TaggedError(
   "GCP.Storage.NotificationNotResolved",
 )<{
   bucketName: string;
-  notificationId?: string;
+  notificationId?: string | undefined;
 }> {}
 
 export class NotificationServiceAccountMissing extends Data.TaggedError(

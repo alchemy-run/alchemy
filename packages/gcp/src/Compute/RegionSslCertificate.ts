@@ -17,9 +17,9 @@ export type RegionSslCertificateType = "SELF_MANAGED" | "MANAGED";
 
 export type RegionSslCertificateSelfManaged = {
   /** PEM-encoded certificate chain. Leaf first, then intermediates. */
-  certificate?: string;
+  certificate?: string | undefined;
   /** PEM-encoded private key. Write-only on insert. */
-  privateKey?: string;
+  privateKey?: string | undefined;
 };
 
 export type RegionSslCertificateManaged = {
@@ -27,7 +27,7 @@ export type RegionSslCertificateManaged = {
    * Domains for a Google-managed certificate. Regional managed certs
    * are not generally available; prefer `SELF_MANAGED`.
    */
-  domains?: string[];
+  domains?: string[] | undefined;
 };
 
 export type RegionSslCertificateProps = {
@@ -36,47 +36,47 @@ export type RegionSslCertificateProps = {
    * generated from the stack, stage, and logical id. Changing it replaces
    * the resource.
    */
-  sslCertificateName?: string;
+  sslCertificateName?: string | undefined;
   /**
    * Region the certificate lives in (e.g. `us-central1`). Immutable —
    * changing it replaces the resource. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  region?: string;
+  region?: string | undefined;
   /**
    * Optional description. Compute SSL certificates have no labels field
    * and no update API, so Alchemy ownership is stored in a `[alchemy …]`
    * prefix and any description change replaces the certificate.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * `SELF_MANAGED` (upload PEM) or `MANAGED`. Inferred from
    * `managed.domains` vs `certificate` / `selfManaged` when omitted.
    * Immutable — changing it replaces the certificate.
    * @default "SELF_MANAGED"
    */
-  type?: RegionSslCertificateType;
+  type?: RegionSslCertificateType | undefined;
   /**
    * PEM certificate chain for a self-managed certificate. Immutable —
    * changing it replaces the certificate.
    */
-  certificate?: string;
+  certificate?: string | undefined;
   /**
    * PEM private key for a self-managed certificate. Write-only; not
    * returned by the API. Immutable — changing it replaces the certificate.
    */
-  privateKey?: string;
+  privateKey?: string | undefined;
   /**
    * Nested self-managed payload. `certificate` / `privateKey` on the
    * resource take precedence when both are set.
    */
-  selfManaged?: RegionSslCertificateSelfManaged;
+  selfManaged?: RegionSslCertificateSelfManaged | undefined;
   /**
    * Google-managed certificate configuration. Immutable — changing domains
    * replaces the certificate.
    */
-  managed?: RegionSslCertificateManaged;
+  managed?: RegionSslCertificateManaged | undefined;
 };
 
 export type RegionSslCertificate = Resource<
@@ -234,10 +234,10 @@ const hasOwnershipMarker = (description: string | undefined): boolean =>
   (description ?? "").startsWith("[alchemy ");
 
 const typeOf = (props: {
-  type?: string;
-  managed?: RegionSslCertificateManaged;
-  certificate?: string;
-  selfManaged?: RegionSslCertificateSelfManaged;
+  type?: string | undefined;
+  managed?: RegionSslCertificateManaged | undefined;
+  certificate?: string | undefined;
+  selfManaged?: RegionSslCertificateSelfManaged | undefined;
 }): RegionSslCertificateType => {
   if (props.type === "MANAGED" || props.type === "SELF_MANAGED") {
     return props.type;
@@ -250,9 +250,9 @@ const asType = (type: string | undefined): RegionSslCertificateType =>
   type === "MANAGED" ? "MANAGED" : "SELF_MANAGED";
 
 const selfManagedOf = (props: {
-  certificate?: string;
-  privateKey?: string;
-  selfManaged?: RegionSslCertificateSelfManaged;
+  certificate?: string | undefined;
+  privateKey?: string | undefined;
+  selfManaged?: RegionSslCertificateSelfManaged | undefined;
 }) => ({
   certificate: props.certificate ?? props.selfManaged?.certificate,
   privateKey: props.privateKey ?? props.selfManaged?.privateKey,

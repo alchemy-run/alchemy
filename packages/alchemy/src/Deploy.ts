@@ -16,7 +16,7 @@ export interface DeployOptions<A> extends Plan.MakePlanOptions {
   stage: string;
   dev?: boolean;
   /** See {@link evalStack} — when set, scoped resources outlive `deploy`. */
-  scope?: Scope.Scope;
+  scope?: Scope.Scope | undefined;
 }
 
 export type DeployResult<A> = Effect.Effect<

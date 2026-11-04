@@ -58,7 +58,7 @@ export type ConfigProps = {
   /**
    * Single Page Application support.
    */
-  historyChange?: boolean;
+  historyChange?: boolean | undefined;
   /**
    * Zaraz workflow mode. When omitted, the current workflow is retained.
    */
@@ -127,7 +127,7 @@ export type ConfigAttributes = {
   /**
    * Single Page Application support.
    */
-  historyChange?: boolean | null;
+  historyChange?: boolean | null | undefined;
   /**
    * Current Zaraz workflow mode.
    */

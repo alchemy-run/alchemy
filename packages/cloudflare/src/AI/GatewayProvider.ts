@@ -48,18 +48,18 @@ export type GatewayProviderProps = {
    * (used when a request does not name a specific key).
    * @default false
    */
-  defaultConfig?: boolean;
+  defaultConfig?: boolean | undefined;
   /**
    * Maximum number of requests allowed per `rateLimitPeriod` through this
    * key. Omit for no limit. Changing the limit triggers a replacement
    * (Cloudflare exposes no update API for provider configs).
    */
-  rateLimit?: number;
+  rateLimit?: number | undefined;
   /**
    * The rate limit window in seconds.
    * @default 60
    */
-  rateLimitPeriod?: number;
+  rateLimitPeriod?: number | undefined;
 };
 
 export type GatewayProviderAttributes = {

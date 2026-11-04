@@ -117,31 +117,31 @@ export interface ServiceLoadBalancerRule {
    * listener. Mixing owned strings and shared references within one service
    * is a typed error ({@link MixedListenerOwnership}).
    */
-  listen?: ServiceListenSpec | Listener;
+  listen?: ServiceListenSpec | Listener | undefined;
   /**
    * Forward matched requests to the container at this port/protocol. A target
    * group is created per distinct `forward` + `container` pair.
    * @default the main container's port
    */
-  forward?: ServiceListenSpec;
+  forward?: ServiceListenSpec | undefined;
   /**
    * Redirect matched requests (HTTP 301) to this port/protocol. Mutually
    * exclusive with {@link forward}.
    */
-  redirect?: ServiceListenSpec;
+  redirect?: ServiceListenSpec | undefined;
   /**
    * Name of the container receiving traffic — the main container by default,
    * or a sidecar's container name.
    */
-  container?: string;
+  container?: string | undefined;
   /** Match on the request path (`*` and `?` wildcards). */
-  path?: string | string[];
+  path?: string | string[] | undefined;
   /** Match on the `Host` header (`*` and `?` wildcards). */
-  host?: string | string[];
+  host?: string | string[] | undefined;
   /** Match on a named HTTP header. */
-  header?: { name: string; values: string[] };
+  header?: { name: string; values: string[] } | undefined;
   /** Match on query-string key/value pairs. */
-  query?: { key?: string; value: string }[];
+  query?: { key?: string | undefined; value: string }[] | undefined;
   /**
    * The rule's evaluation priority (1–50000, lower first). When omitted, a
    * deterministic priority is derived by hashing the rule's namespaced
@@ -150,7 +150,7 @@ export interface ServiceLoadBalancerRule {
    * `ListenerRulePriorityInUse` error naming the priority; set an explicit
    * `priority` to resolve it (the engine never probes for free slots).
    */
-  priority?: number;
+  priority?: number | undefined;
 }
 
 /** Object form of the {@link ServiceLoadBalancerConfig.domain} prop. */
@@ -187,17 +187,17 @@ export interface ServiceDomainConfig {
  */
 export interface ServiceTargetHealthCheck {
   /** Health-check path (HTTP/HTTPS checks). */
-  path?: string;
+  path?: string | undefined;
   /** Approximate interval between checks, e.g. `"15 seconds"`. */
-  interval?: Duration.Input;
+  interval?: Duration.Input | undefined;
   /** Time to wait for a response, e.g. `"5 seconds"`. */
-  timeout?: Duration.Input;
+  timeout?: Duration.Input | undefined;
   /** Consecutive successes before a target is healthy. */
-  healthyThreshold?: number;
+  healthyThreshold?: number | undefined;
   /** Consecutive failures before a target is unhealthy. */
-  unhealthyThreshold?: number;
+  unhealthyThreshold?: number | undefined;
   /** HTTP codes counted as healthy, e.g. `"200-299"`. */
-  successCodes?: string;
+  successCodes?: string | undefined;
 }
 
 /** Object form of the {@link ServicePropsBase.loadBalancer} prop. */
@@ -249,25 +249,25 @@ export interface ServiceManagedIngress {
   /** Whether the service owns its ALB or shares a foreign listener. */
   kind: "owned" | "shared";
   /** ARN of the (owned or shared) load balancer, for URL derivation. */
-  loadBalancerArn?: string;
+  loadBalancerArn?: string | undefined;
   /** ARN of the primary listener. */
-  listenerArn?: string;
+  listenerArn?: string | undefined;
   /** Port of the primary listener. */
-  listenerPort?: number;
+  listenerPort?: number | undefined;
   /** Protocol of the primary listener (`HTTP` / `HTTPS`). */
-  listenerProtocol?: string;
+  listenerProtocol?: string | undefined;
   /** Id of the composed managed security group, when no `securityGroups` were supplied. */
-  securityGroupId?: string;
+  securityGroupId?: string | undefined;
   /** Custom domain pointed at the owned load balancer (URL derivation prefers it). */
-  domain?: string;
+  domain?: string | undefined;
   /** Target groups to wire into the ECS service definition. */
   targets: {
     /** ARN of the composed target group. */
     targetGroupArn: string;
     /** Container port receiving traffic. Defaults to the main container's port. */
-    containerPort?: number;
+    containerPort?: number | undefined;
     /** Container name receiving traffic. Defaults to the main container. */
-    container?: string;
+    container?: string | undefined;
   }[];
 }
 
@@ -465,13 +465,13 @@ export interface ServiceContainerHealthCheck {
    */
   command: string[];
   /** Seconds-granularity period between checks, e.g. `"30 seconds"`. */
-  interval?: Duration.Input;
+  interval?: Duration.Input | undefined;
   /** Time to wait for a check before counting it failed, e.g. `"5 seconds"`. */
-  timeout?: Duration.Input;
+  timeout?: Duration.Input | undefined;
   /** Consecutive failures before the container is unhealthy. */
-  retries?: number;
+  retries?: number | undefined;
   /** Grace period before failed checks count, e.g. `"10 seconds"`. */
-  startPeriod?: Duration.Input;
+  startPeriod?: Duration.Input | undefined;
 }
 
 /** Retention policy for the service's auto-created CloudWatch log group. */
@@ -567,7 +567,7 @@ export interface ServicePropsBase extends PlatformProps {
    * {@link capacityProviderStrategy} (which it must not be combined with).
    * The cluster needs the Fargate capacity providers associated.
    */
-  capacity?: ServiceCapacityConfig;
+  capacity?: ServiceCapacityConfig | undefined;
 
   /**
    * Autoscale the service's desired count: composes an Application Auto
@@ -583,7 +583,7 @@ export interface ServicePropsBase extends PlatformProps {
    * `AWS.CloudMap.Service` and wires it into the ECS service's
    * {@link serviceRegistries}.
    */
-  serviceRegistry?: ServiceRegistryConfig;
+  serviceRegistry?: ServiceRegistryConfig | undefined;
 
   /**
    * Load balancer target groups to wire to the service. **User-supplied** —
@@ -629,13 +629,13 @@ export interface ServicePropsBase extends PlatformProps {
    * inline infrastructure is reaped (deleted) so nothing is stranded.
    * @default false
    */
-  loadBalancer?: boolean | Listener | ServiceLoadBalancerConfig;
+  loadBalancer?: boolean | Listener | ServiceLoadBalancerConfig | undefined;
 
   /**
    * Legacy alias for {@link loadBalancer}.
    * @deprecated use `loadBalancer: true`
    */
-  public?: boolean;
+  public?: boolean | undefined;
 
   /**
    * @internal Resolved managed-ingress wiring computed by the Service
@@ -754,7 +754,7 @@ export interface ServicePropsBase extends PlatformProps {
    * User-defined tags to apply to the ECS service and generated ingress
    * resources. Reconciled in place against observed service tags.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 /**
@@ -820,7 +820,7 @@ export interface ImageOwningServicePropsBase
    * `{ efs, path }`, which composes the volume AND mounts it at `path` on
    * the primary container with transit encryption enabled.
    */
-  volumes?: (ecs.Volume | ServiceEfsVolume)[];
+  volumes?: (ecs.Volume | ServiceEfsVolume)[] | undefined;
 }
 
 /** Bundle an inline Effect program (`main`) into the service's image. */
@@ -877,29 +877,29 @@ export interface Service extends Resource<
      * foreign listener's ALB DNS + protocol/port (best-effort — undefined
      * when not derivable).
      */
-    url?: string;
+    url?: string | undefined;
 
     /**
      * ARN of the load balancer serving the service's managed ingress (the
      * composed ALB when owned; the shared listener's ALB otherwise).
      */
-    loadBalancerArn?: string;
+    loadBalancerArn?: string | undefined;
 
     /**
      * ARN of the first managed target group, when `loadBalancer` is set.
      */
-    targetGroupArn?: string;
+    targetGroupArn?: string | undefined;
 
     /**
      * ARN of the primary listener, when `loadBalancer` is set.
      */
-    listenerArn?: string;
+    listenerArn?: string | undefined;
 
     /**
      * Id of the Alchemy-managed security group composed for managed ingress
      * (only when `loadBalancer` is set and no `securityGroups` supplied).
      */
-    securityGroupId?: string;
+    securityGroupId?: string | undefined;
 
     /**
      * @internal Marks attrs written by the composed-ingress shape ("owned" |
@@ -907,44 +907,46 @@ export interface Service extends Resource<
      * created inline by the provider — the marker gates the migration reap
      * and the legacy delete path.
      */
-    ingressKind?: "owned" | "shared";
+    ingressKind?: "owned" | "shared" | undefined;
 
     /**
      * Desired count, networking, load balancers, service registries, the
      * declared deployment/placement/execute-command settings and the tags,
      * as observed. Lets `alchemy drift` detect out-of-band changes.
      */
-    configuration?: Record<string, unknown>;
+    configuration?: Record<string, unknown> | undefined;
 
     /** Family of the synthesized task definition (image-owning form only). */
-    taskFamily?: string;
+    taskFamily?: string | undefined;
     /** Name of the primary container (image-owning form only). */
-    containerName?: string;
+    containerName?: string | undefined;
     /** Container port receiving traffic (image-owning form only). */
-    port?: number;
+    port?: number | undefined;
     /** Image URI the synthesized task definition runs. */
-    imageUri?: string;
+    imageUri?: string | undefined;
     /** ECR repository name holding the service's image. */
-    repositoryName?: string;
+    repositoryName?: string | undefined;
     /** ECR repository URI holding the service's image. */
-    repositoryUri?: string;
+    repositoryUri?: string | undefined;
     /** ARN of the synthesized task role. */
-    taskRoleArn?: string;
+    taskRoleArn?: string | undefined;
     /** Name of the synthesized task role. */
-    taskRoleName?: string;
+    taskRoleName?: string | undefined;
     /** ARN of the synthesized execution role. */
-    executionRoleArn?: string;
+    executionRoleArn?: string | undefined;
     /** Name of the synthesized execution role. */
-    executionRoleName?: string;
+    executionRoleName?: string | undefined;
     /** CloudWatch log group of the synthesized task definition. */
-    logGroupName?: string;
+    logGroupName?: string | undefined;
     /** ARN of the CloudWatch log group. */
-    logGroupArn?: string;
+    logGroupArn?: string | undefined;
     /** Content hash of the service's container image. */
-    code?: {
-      /** Content hash of the service's container image. */
-      hash: string;
-    };
+    code?:
+      | {
+          /** Content hash of the service's container image. */
+          hash: string;
+        }
+      | undefined;
   },
   TaskBindingContract,
   Providers
@@ -2511,8 +2513,8 @@ type ServiceConvergenceMode = "stable" | "drained" | "deleted";
 const observeServiceConvergence = (input: {
   clusterArn: string;
   serviceName: string;
-  expectedTaskDefinitionArn?: string;
-  expectedDeploymentId?: string;
+  expectedTaskDefinitionArn?: string | undefined;
+  expectedDeploymentId?: string | undefined;
   mode: ServiceConvergenceMode;
 }): Effect.Effect<
   ServiceConvergenceSnapshot,
@@ -2625,10 +2627,10 @@ const observeServiceConvergence = (input: {
 const waitForServiceConvergence = (input: {
   clusterArn: string;
   serviceName: string;
-  expectedTaskDefinitionArn?: string;
-  expectedDeploymentId?: string;
+  expectedTaskDefinitionArn?: string | undefined;
+  expectedDeploymentId?: string | undefined;
   mode: ServiceConvergenceMode;
-  timeout?: Duration.Input;
+  timeout?: Duration.Input | undefined;
 }): Effect.Effect<
   ServiceConvergenceSnapshot,
   ecs.DescribeServicesError | elbv2.DescribeTargetHealthError | ServiceDidNotStabilize,

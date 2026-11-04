@@ -25,19 +25,19 @@ export interface LanguageModelParameters {
   /**
    * Maximum number of tokens the model may generate in the response.
    */
-  maxTokens?: number;
+  maxTokens?: number | undefined;
   /**
    * Sampling temperature. Lower values make the output more deterministic.
    */
-  temperature?: number;
+  temperature?: number | undefined;
   /**
    * Nucleus-sampling probability mass.
    */
-  topP?: number;
+  topP?: number | undefined;
   /**
    * Sequences that stop generation when the model emits them.
    */
-  stopSequences?: string[];
+  stopSequences?: string[] | undefined;
   /**
    * Model-specific request fields passed through verbatim as the Converse
    * API's `additionalModelRequestFields` — e.g. `{ top_k: 50 }` for
@@ -231,7 +231,7 @@ export interface MakeLanguageModelOptions {
     request: ConverseStreamRequest,
   ) => Effect.Effect<bedrock.ConverseStreamResponse, bedrock.ConverseStreamError>;
   /** Default inference parameters for every call. */
-  readonly parameters?: LanguageModelParameters;
+  readonly parameters?: LanguageModelParameters | undefined;
 }
 
 /**

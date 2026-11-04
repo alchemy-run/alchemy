@@ -28,7 +28,7 @@ export interface Commit extends GitCommit {
 
 export interface ChangelogOptions {
   /** Start of the range. Defaults to the closest tag before `to`. */
-  from?: string;
+  from?: string | undefined;
   to: string;
   /** `<owner>/<repo>`. */
   repo: string;

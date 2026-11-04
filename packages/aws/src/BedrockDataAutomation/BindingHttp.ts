@@ -25,10 +25,12 @@ import type { DataAutomationProject } from "./DataAutomationProject.ts";
  */
 export const makeBdaProjectHttpBinding = <
   I extends {
-    dataAutomationConfiguration?: {
-      dataAutomationProjectArn: string;
-      stage?: string;
-    };
+    dataAutomationConfiguration?:
+      | {
+          dataAutomationProjectArn: string;
+          stage?: string | undefined;
+        }
+      | undefined;
   },
   A,
   E,
@@ -138,7 +140,7 @@ export const makeBdaLibraryHttpBinding = <I extends { libraryArn: string }, A, E
  * (cross-region inference profiles fan out to sibling regions).
  */
 export const makeBdaBlueprintOptimizationHttpBinding = <
-  I extends { blueprint?: { blueprintArn: string; stage?: string } },
+  I extends { blueprint?: { blueprintArn: string; stage?: string | undefined } | undefined },
   A,
   E,
   R,

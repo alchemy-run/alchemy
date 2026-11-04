@@ -163,7 +163,7 @@ export type PolicyProps = {
    *
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Decision the policy enforces when its rules match. Changing the decision
    * triggers replacement.
@@ -178,47 +178,47 @@ export type PolicyProps = {
    * Rules combined with logical NOT. A request matching any exclude rule is
    * rejected by the policy even if it satisfied an include rule.
    */
-  exclude?: PolicyExcludeRuleInput[];
+  exclude?: PolicyExcludeRuleInput[] | undefined;
   /**
    * Rules combined with logical AND. A request must satisfy every require
    * rule in addition to an include rule.
    */
-  require?: PolicyRequireRuleInput[];
+  require?: PolicyRequireRuleInput[] | undefined;
   /**
    * Duration of issued session tokens. Format: `300ms`, `2h45m`, etc. When
    * unset, applications using this policy fall back to their own configured
    * session duration.
    */
-  sessionDuration?: string;
+  sessionDuration?: string | undefined;
   /**
    * When true, Access requires an administrator to approve each authentication
    * request before the user is admitted.
    *
    * @default false
    */
-  approvalRequired?: boolean;
+  approvalRequired?: boolean | undefined;
   /**
    * When true, users must enter a justification when logging in to any
    * application that consumes this policy.
    *
    * @default false
    */
-  purposeJustificationRequired?: boolean;
+  purposeJustificationRequired?: boolean | undefined;
   /**
    * Custom message shown on the purpose justification screen.
    */
-  purposeJustificationPrompt?: string;
+  purposeJustificationPrompt?: string | undefined;
   /**
    * Administrators who can approve a temporary authentication request.
    */
-  approvalGroups?: PolicyApprovalGroup[];
+  approvalGroups?: PolicyApprovalGroup[] | undefined;
   /**
    * Serve applications in an isolated browser for users matching this
    * policy. Requires Clientless Web Isolation on the account.
    *
    * @default false
    */
-  isolationRequired?: boolean;
+  isolationRequired?: boolean | undefined;
   /**
    * How users may connect to targets secured by an infrastructure
    * application: allowed SSH usernames, RDP clipboard formats.
@@ -228,18 +228,18 @@ export type PolicyProps = {
    * connectionRules: { ssh: { usernames: ["root", "ubuntu"] } }
    * ```
    */
-  connectionRules?: PolicyConnectionRules;
+  connectionRules?: PolicyConnectionRules | undefined;
   /**
    * Multi-factor authentication settings enforced by this policy.
    */
-  mfaConfig?: PolicyMfaConfig;
+  mfaConfig?: PolicyMfaConfig | undefined;
   /**
    * Adopt an existing reusable policy with the same name when the engine has
    * no prior state for this logical id.
    *
    * @default false
    */
-  adopt?: boolean;
+  adopt?: boolean | undefined;
 };
 
 export declare namespace Policy {
@@ -554,22 +554,22 @@ const findPolicyByName = (acct: string, name: string) =>
   );
 
 type ObservedPolicy = {
-  id?: string | null;
-  name?: string | null;
-  decision?: PolicyDecision | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  decision?: PolicyDecision | null | undefined;
+  createdAt?: string | null | undefined;
+  updatedAt?: string | null | undefined;
 };
 
 // Distilled response shapes (Get / List / Create / Update) all carry the same
 // set of fields we care about, but typed wider than `ObservedPolicy`. Narrow
 // at the API boundary so the rest of the reconciler stays in our shape.
 type RawPolicy = {
-  id?: string | null;
-  name?: string | null;
-  decision?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  decision?: string | null | undefined;
+  createdAt?: string | null | undefined;
+  updatedAt?: string | null | undefined;
 } & { [K in (typeof PRESERVED_FIELDS)[number]]?: unknown };
 
 const toObserved = (r: RawPolicy): ObservedPolicy => ({

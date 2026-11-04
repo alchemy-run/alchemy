@@ -33,6 +33,9 @@ import { pathToFileURL } from "node:url";
  */
 import type { BindingHooks } from "@alchemy.run/cloudflare-runtime/core";
 import type { Adapter, Builder, Emulator } from "@sveltejs/kit";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import { generateWorkerShim } from "./WorkerShim.ts";
 
 export interface CloudflareAdapterResult {
@@ -454,14 +457,13 @@ const openPlatformProxy: OpenDevPlatformProxy = async (options) => {
       : undefined),
     bindings: options.bindings as BindingHooks,
     ...(options.assets !== undefined ? { assets: { ...options.assets } } : undefined),
-    ...(options.services !== undefined
-      ? {
-          services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
-        }
-      : undefined),
-    ...(options.workerd !== undefined
-      ? { workerd: options.workerd as Parameters<typeof getPlatformProxy>[0]["workerd"] }
-      : undefined),
+    ...Rec.filterMap(
+      {
+        services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
+        workerd: options.workerd as Parameters<typeof getPlatformProxy>[0]["workerd"],
+      },
+      Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+    ),
   });
 };
 

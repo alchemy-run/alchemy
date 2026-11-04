@@ -164,7 +164,7 @@ export interface Studio extends Resource<
 export const Studio = Resource<Studio>("AWS.EMR.Studio");
 
 const toTagRecord = (
-  tags: ReadonlyArray<{ Key?: string; Value?: string }> | undefined,
+  tags: ReadonlyArray<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

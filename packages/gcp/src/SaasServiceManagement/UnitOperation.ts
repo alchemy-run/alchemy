@@ -32,26 +32,26 @@ import {
 const COLLECTION = "unitOperations";
 
 export type UnitOperationVariable = {
-  type?: saasservicemgmt.UnitVariableTypeEnum | (string & {});
-  value?: string;
-  variable?: string;
+  type?: saasservicemgmt.UnitVariableTypeEnum | (string & {}) | undefined;
+  value?: string | undefined;
+  variable?: string | undefined;
 };
 
 export type UnitOperationProvision = {
   /** Release to provision. Accepts a release id or full resource name. */
-  release?: string;
+  release?: string | undefined;
   /** Input variables. Maximum 100. */
-  inputVariables?: UnitOperationVariable[];
+  inputVariables?: UnitOperationVariable[] | undefined;
 };
 
 export type UnitOperationFlagUpdate = {
   /** Flag release to apply. */
-  flagRelease?: string;
+  flagRelease?: string | undefined;
 };
 
 export type UnitOperationSchedule = {
   /** RFC3339 start time. If omitted, the next maintenance window is used. */
-  startTime?: string;
+  startTime?: string | undefined;
 };
 
 export type UnitOperationCondition = {
@@ -69,14 +69,14 @@ export type UnitOperationProps = {
    * If omitted, a unique RFC1035 name is generated. Immutable —
    * changing it replaces the operation.
    */
-  unitOperationId?: string;
+  unitOperationId?: string | undefined;
   /**
    * Region of the operation (`us-central1`, …). Immutable — changing it
    * replaces the operation. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Unit this operation acts on. Accepts a unit id or a full resource
    * name. Immutable — changing it replaces the operation.
@@ -86,47 +86,47 @@ export type UnitOperationProps = {
    * Provision the unit. Mutually exclusive with `upgrade`,
    * `deprovision`, and `flagUpdate`. Immutable.
    */
-  provision?: UnitOperationProvision;
+  provision?: UnitOperationProvision | undefined;
   /**
    * Upgrade a provisioned unit. Mutually exclusive with the other
    * operation types. Immutable.
    */
-  upgrade?: UnitOperationProvision;
+  upgrade?: UnitOperationProvision | undefined;
   /**
    * Deprovision a provisioned unit. Mutually exclusive with the other
    * operation types. Immutable.
    */
-  deprovision?: boolean;
+  deprovision?: boolean | undefined;
   /**
    * Push a flag release. Mutually exclusive with the other operation
    * types. Immutable.
    */
-  flagUpdate?: UnitOperationFlagUpdate;
+  flagUpdate?: UnitOperationFlagUpdate | undefined;
   /**
    * Parent unit operation, for tracing child work.
    */
-  parentUnitOperation?: string;
+  parentUnitOperation?: string | undefined;
   /**
    * Rollout that created this operation. Filtering only.
    */
-  rollout?: string;
+  rollout?: string | undefined;
   /**
    * When to run the operation.
    */
-  schedule?: UnitOperationSchedule;
+  schedule?: UnitOperationSchedule | undefined;
   /**
    * Request cancellation. May fail if the operation is already
    * executing.
    */
-  cancel?: boolean;
+  cancel?: boolean | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Unstructured annotations preserved across updates.
    */
-  annotations?: Record<string, string>;
+  annotations?: Record<string, string> | undefined;
 };
 
 export type UnitOperation = Resource<
@@ -229,10 +229,10 @@ export type UnitOperation = Resource<
 export const UnitOperation = Resource<UnitOperation>("GCP.SaasServiceManagement.UnitOperation");
 
 const operationKind = (props: {
-  provision?: UnitOperationProvision;
-  upgrade?: UnitOperationProvision;
-  deprovision?: boolean;
-  flagUpdate?: UnitOperationFlagUpdate;
+  provision?: UnitOperationProvision | undefined;
+  upgrade?: UnitOperationProvision | undefined;
+  deprovision?: boolean | undefined;
+  flagUpdate?: UnitOperationFlagUpdate | undefined;
 }) => {
   if (props.provision !== undefined) return "provision";
   if (props.upgrade !== undefined) return "upgrade";

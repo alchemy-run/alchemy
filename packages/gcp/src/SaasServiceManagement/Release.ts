@@ -36,17 +36,17 @@ export type ReleaseBlueprint = {
    * URI of the OCI blueprint package. Hostname may be omitted to use
    * the regional Artifact Registry path. Immutable.
    */
-  package?: string;
+  package?: string | undefined;
   /** Actuation engine (`terraform`, `helm`, …). Output-only. */
-  engine?: string;
+  engine?: string | undefined;
   /** Version metadata from the image manifest. Output-only. */
-  version?: string;
+  version?: string | undefined;
 };
 
 export type ReleaseVariable = {
-  type?: saasservicemgmt.UnitVariableTypeEnum | (string & {});
-  value?: string;
-  variable?: string;
+  type?: saasservicemgmt.UnitVariableTypeEnum | (string & {}) | undefined;
+  value?: string | undefined;
+  variable?: string | undefined;
 };
 
 export type ReleaseProps = {
@@ -73,7 +73,7 @@ export type ReleaseProps = {
    * Blueprint package that actuates units of this release. `package` is
    * immutable — changing it replaces the release.
    */
-  blueprint?: ReleaseBlueprint;
+  blueprint?: ReleaseBlueprint | undefined;
   /**
    * Default values for input variables declared on the blueprint.
    * Maximum 100.

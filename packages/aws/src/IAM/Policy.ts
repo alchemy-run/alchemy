@@ -34,7 +34,7 @@ export interface PolicyDocument {
 
 export interface PolicyStatement {
   Effect: "Allow" | "Deny";
-  Sid?: string;
+  Sid?: string | undefined;
   Action?: IamAction[] | string[];
   Resource?: string | string[];
   Condition?: Record<string, Record<string, string | string[]>>;

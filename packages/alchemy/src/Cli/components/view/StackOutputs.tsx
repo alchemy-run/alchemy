@@ -8,7 +8,7 @@ import { Box, useCliEnvironment } from "../ui/index.ts";
 export interface StackOutputsProps {
   readonly value: unknown;
   readonly offset?: number;
-  readonly limit?: number;
+  readonly limit?: number | undefined;
 }
 
 export function StackOutputs({

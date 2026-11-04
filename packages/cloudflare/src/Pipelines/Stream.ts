@@ -59,10 +59,12 @@ export interface StreamHttp {
    */
   authentication?: boolean;
   /** CORS configuration for browser-originated ingestion. */
-  cors?: {
-    /** Allowed origins, e.g. `["https://app.example.com"]` or `["*"]`. */
-    origins?: string[];
-  };
+  cors?:
+    | {
+        /** Allowed origins, e.g. `["https://app.example.com"]` or `["*"]`. */
+        origins?: string[] | undefined;
+      }
+    | undefined;
 }
 
 export interface StreamProps {
@@ -529,11 +531,11 @@ export const StreamProvider = () =>
 interface ObservedStream {
   id: string;
   name: string;
-  endpoint?: string | null;
+  endpoint?: string | null | undefined;
   http: {
     enabled: boolean;
     authentication: boolean;
-    cors?: { origins?: readonly string[] | null } | null;
+    cors?: { origins?: readonly string[] | null | undefined } | null | undefined;
   };
   workerBinding: { enabled: boolean };
   version: number;
@@ -611,7 +613,7 @@ const canonicalFormat = (format: StreamFormat | undefined) => {
 interface DesiredHttp {
   enabled: boolean;
   authentication: boolean;
-  cors?: { origins: string[] };
+  cors?: { origins: string[] } | undefined;
 }
 
 /**

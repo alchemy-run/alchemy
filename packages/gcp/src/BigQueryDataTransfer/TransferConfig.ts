@@ -31,17 +31,17 @@ export type ScheduleOptions = {
    * Disable automatic scheduling. Runs can still be started with
    * StartManualTransferRuns. When true, `schedule` is ignored.
    */
-  disableAutoScheduling?: boolean;
+  disableAutoScheduling?: boolean | undefined;
   /**
    * RFC3339 time to start scheduling runs. The first run is at or after
    * this time according to `schedule`.
    */
-  startTime?: string;
+  startTime?: string | undefined;
   /**
    * RFC3339 time to stop scheduling runs. A run is not scheduled at or
    * after this time.
    */
-  endTime?: string;
+  endTime?: string | undefined;
 };
 
 export type EventDrivenSchedule = {
@@ -49,19 +49,19 @@ export type EventDrivenSchedule = {
    * Pub/Sub subscription that triggers runs. Only `google_cloud_storage`
    * supports this. Format: `projects/{project}/subscriptions/{subscription}`.
    */
-  pubsubSubscription?: string;
+  pubsubSubscription?: string | undefined;
 };
 
 export type TimeBasedSchedule = {
   /** RFC3339 time to start scheduling runs. */
-  startTime?: string;
+  startTime?: string | undefined;
   /** RFC3339 time to stop scheduling runs. */
-  endTime?: string;
+  endTime?: string | undefined;
   /**
    * Recurrence in UTC (e.g. `"every 24 hours"`, `"first sunday of quarter
    * 00:00"`). Empty uses the data source default.
    */
-  schedule?: string;
+  schedule?: string | undefined;
 };
 
 export type ScheduleOptionsV2 = {
@@ -69,17 +69,17 @@ export type ScheduleOptionsV2 = {
    * Event-driven schedule. Cannot be combined with `timeBasedSchedule` or
    * `manualSchedule`.
    */
-  eventDrivenSchedule?: EventDrivenSchedule;
+  eventDrivenSchedule?: EventDrivenSchedule | undefined;
   /**
    * Time-based schedule. Cannot be combined with `eventDrivenSchedule` or
    * `manualSchedule`. Replaces top-level `schedule` / `scheduleOptions`.
    */
-  timeBasedSchedule?: TimeBasedSchedule;
+  timeBasedSchedule?: TimeBasedSchedule | undefined;
   /**
    * Manual schedule (equivalent to `disableAutoScheduling: true`). Empty
    * object selects this mode.
    */
-  manualSchedule?: Record<string, never>;
+  manualSchedule?: Record<string, never> | undefined;
 };
 
 export type EncryptionConfiguration = {

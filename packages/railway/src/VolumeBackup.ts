@@ -58,9 +58,9 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  */
 export type VolumeBackupVolume = {
   readonly volumeInstanceId: string;
-  readonly volumeId?: string;
-  readonly projectId?: string;
-  readonly environmentId?: string;
+  readonly volumeId?: string | undefined;
+  readonly projectId?: string | undefined;
+  readonly environmentId?: string | undefined;
 };
 
 /**
@@ -82,7 +82,7 @@ export interface VolumeBackupProps {
    * Environment whose volume instance to snapshot. Defaults to the
    * Volume's environment. Changing it replaces the backup.
    */
-  environment?: Ref<VolumeBackupEnvironment>;
+  environment?: Ref<VolumeBackupEnvironment> | undefined;
   /**
    * Backup name. If omitted, a unique name is generated from the stack,
    * stage and logical ID. Changing it replaces the backup.
@@ -386,10 +386,10 @@ const toAttrs = (
   backup: CloudBackup,
   context: {
     volumeInstanceId: string;
-    volumeId?: string;
-    projectId?: string;
-    environmentId?: string;
-    schedules?: VolumeBackupScheduleKind[];
+    volumeId?: string | undefined;
+    projectId?: string | undefined;
+    environmentId?: string | undefined;
+    schedules?: VolumeBackupScheduleKind[] | undefined;
   },
 ): VolumeBackup["Attributes"] => ({
   volumeInstanceBackupId: backup.id,
@@ -408,7 +408,10 @@ const toAttrs = (
   schedules: context.schedules ?? [],
 });
 
-const findBackup = (backups: readonly CloudBackup[], match: { id?: string; name?: string }) => {
+const findBackup = (
+  backups: readonly CloudBackup[],
+  match: { id?: string | undefined; name?: string },
+) => {
   if (match.id !== undefined && match.id.length > 0) {
     const byId = backups.find((backup) => backup.id === match.id);
     if (byId !== undefined) return byId;
@@ -559,7 +562,7 @@ const waitUntilReady = (volumeInstanceId: string) =>
 const waitForBackup = (input: {
   volumeInstanceId: string;
   name: string;
-  id?: string;
+  id?: string | undefined;
   previousIds: ReadonlySet<string>;
 }) =>
   listBackups(input.volumeInstanceId).pipe(
@@ -600,10 +603,10 @@ const waitUntilGone = (volumeInstanceId: string, volumeInstanceBackupId: string)
   );
 
 const observeInstance = Effect.fn(function* (input: {
-  volumeInstanceId?: string;
-  volumeId?: string;
-  projectId?: string;
-  environmentId?: string;
+  volumeInstanceId?: string | undefined;
+  volumeId?: string | undefined;
+  projectId?: string | undefined;
+  environmentId?: string | undefined;
 }) {
   if (input.volumeInstanceId !== undefined && input.volumeInstanceId.length > 0) {
     const byId = yield* getByInstanceId(input.volumeInstanceId);

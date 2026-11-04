@@ -44,7 +44,7 @@ export interface ZoneProps {
    * If omitted, a unique `*.com` name is generated from the stack, stage,
    * and logical ID.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Zone mode. Primary zones are edited via the Cloud API (RRSets);
    * secondary zones are transferred from primary nameservers via AXFR.

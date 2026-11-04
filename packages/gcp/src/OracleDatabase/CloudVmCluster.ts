@@ -44,45 +44,45 @@ export type DataCollectionOptions = {
 
 export type CloudVmClusterPropertiesInput = {
   /** License type. Required on create. */
-  licenseType?: oracle.CloudVmClusterPropertiesLicenseTypeEnum | (string & {});
+  licenseType?: oracle.CloudVmClusterPropertiesLicenseTypeEnum | (string & {}) | undefined;
   /** Enabled CPU cores. Required on create. */
-  cpuCoreCount?: number;
+  cpuCoreCount?: number | undefined;
   /** OCPU count per VM. */
-  ocpuCount?: number;
+  ocpuCount?: number | undefined;
   /** Node count. */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
   /** Grid Infrastructure version. */
-  giVersion?: string;
+  giVersion?: string | undefined;
   /** OS image version. */
-  systemVersion?: string;
+  systemVersion?: string | undefined;
   /** Memory in GB. */
-  memorySizeGb?: number;
+  memorySizeGb?: number | undefined;
   /** Local storage per VM in GB. */
-  dbNodeStorageSizeGb?: number;
+  dbNodeStorageSizeGb?: number | undefined;
   /** DATA disk group size in TB. */
-  dataStorageSizeTb?: number;
+  dataStorageSizeTb?: number | undefined;
   /** Hostname prefix. */
-  hostnamePrefix?: string;
+  hostnamePrefix?: string | undefined;
   /** SSH public keys. */
-  sshPublicKeys?: string[];
+  sshPublicKeys?: string[] | undefined;
   /** SCAN listener TCP port. */
-  scanListenerPortTcp?: number;
+  scanListenerPortTcp?: number | undefined;
   /** SCAN listener TLS port. */
-  scanListenerPortTcpSsl?: number;
+  scanListenerPortTcpSsl?: number | undefined;
   /** Disk redundancy (`HIGH`, `NORMAL`). */
-  diskRedundancy?: oracle.CloudVmClusterPropertiesDiskRedundancyEnum | (string & {});
+  diskRedundancy?: oracle.CloudVmClusterPropertiesDiskRedundancyEnum | (string & {}) | undefined;
   /** Time zone. */
-  timeZone?: TimeZone;
+  timeZone?: TimeZone | undefined;
   /** OCI cluster name. */
-  clusterName?: string;
+  clusterName?: string | undefined;
   /** Use local backup. */
-  localBackupEnabled?: boolean;
+  localBackupEnabled?: boolean | undefined;
   /** Use sparse disk group. */
-  sparseDiskgroupEnabled?: boolean;
+  sparseDiskgroupEnabled?: boolean | undefined;
   /** Diagnostics collection options. */
-  diagnosticsDataCollectionOptions?: DataCollectionOptions;
+  diagnosticsDataCollectionOptions?: DataCollectionOptions | undefined;
   /** Database server OCIDs. */
-  dbServerOcids?: string[];
+  dbServerOcids?: string[] | undefined;
 };
 
 export type CloudVmClusterProps = {
@@ -90,68 +90,68 @@ export type CloudVmClusterProps = {
    * VM Cluster id. If omitted, a unique RFC1035 name is generated.
    * Immutable.
    */
-  cloudVmClusterId?: string;
+  cloudVmClusterId?: string | undefined;
   /**
    * Region. Immutable.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Exadata Infrastructure
    * (`projects/{project}/locations/{region}/cloudExadataInfrastructures/{id}`).
    * Immutable.
    */
-  exadataInfrastructure?: string;
+  exadataInfrastructure?: string | undefined;
   /**
    * Display name.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * VPC network. Immutable. Required unless `odbSubnet` is set.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Cluster IP CIDR. Immutable.
    */
-  cidr?: string;
+  cidr?: string | undefined;
   /**
    * Backup subnet CIDR. Immutable.
    */
-  backupSubnetCidr?: string;
+  backupSubnetCidr?: string | undefined;
   /**
    * ODB Network. Immutable.
    */
-  odbNetwork?: string;
+  odbNetwork?: string | undefined;
   /**
    * ODB Subnet for IP allocation. Immutable.
    */
-  odbSubnet?: string;
+  odbSubnet?: string | undefined;
   /**
    * Backup ODB Subnet. Immutable.
    */
-  backupOdbSubnet?: string;
+  backupOdbSubnet?: string | undefined;
   /**
    * Exascale storage vault. Immutable.
    */
-  exascaleDbStorageVault?: string;
+  exascaleDbStorageVault?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * VM cluster properties.
    */
-  properties?: CloudVmClusterPropertiesInput;
+  properties?: CloudVmClusterPropertiesInput | undefined;
   /** License type. Convenience alias for `properties.licenseType`. */
-  licenseType?: oracle.CloudVmClusterPropertiesLicenseTypeEnum | (string & {});
+  licenseType?: oracle.CloudVmClusterPropertiesLicenseTypeEnum | (string & {}) | undefined;
   /** CPU core count. Convenience alias for `properties.cpuCoreCount`. */
-  cpuCoreCount?: number;
+  cpuCoreCount?: number | undefined;
   /** Grid Infrastructure version. Convenience alias for `properties.giVersion`. */
-  giVersion?: string;
+  giVersion?: string | undefined;
   /** Hostname prefix. Convenience alias for `properties.hostnamePrefix`. */
-  hostnamePrefix?: string;
+  hostnamePrefix?: string | undefined;
   /** SSH public keys. Convenience alias for `properties.sshPublicKeys`. */
-  sshPublicKeys?: string[];
+  sshPublicKeys?: string[] | undefined;
 };
 
 export type CloudVmCluster = Resource<

@@ -32,7 +32,7 @@ export interface LogOptions extends BuildOptions {
 
 export interface QueryOptions extends LogOptions {
   readonly limit?: number;
-  readonly since?: Date;
+  readonly since?: Date | undefined;
 }
 
 /**

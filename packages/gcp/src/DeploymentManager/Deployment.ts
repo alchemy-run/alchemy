@@ -29,11 +29,11 @@ export type ImportFile = {
   /**
    * Import name, as referenced from `target.config` (`path` / `type`).
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Full contents of the imported template or file.
    */
-  content?: string;
+  content?: string | undefined;
 };
 
 export type ConfigFile = {

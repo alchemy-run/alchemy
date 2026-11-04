@@ -242,10 +242,10 @@ const observeAssociation = (zoneId: string, hostname: string) =>
   );
 
 type AssociationShape = {
-  certId?: string | null;
-  enabled?: boolean | null;
-  status?: string | null;
-  certStatus?: string | null;
+  certId?: string | null | undefined;
+  enabled?: boolean | null | undefined;
+  status?: string | null | undefined;
+  certStatus?: string | null | undefined;
 };
 
 const toAttributes = (

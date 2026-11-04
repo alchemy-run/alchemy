@@ -349,7 +349,7 @@ export const QueueLive = Layer.effect(
  * rides on the message metadata when present, defaulting to text.
  */
 const decodePulledMessage = (message: {
-  body?: string | null;
+  body?: string | null | undefined;
   metadata?: unknown;
 }): { body: string | Uint8Array; contentType: string } => {
   const metadata = message.metadata;

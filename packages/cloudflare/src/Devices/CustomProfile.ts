@@ -56,7 +56,7 @@ export interface DeviceCustomProfileProps {
   /**
    * A human-readable description of the profile.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Routes that WARP will tunnel for matched devices. Mutually exclusive
    * with {@link exclude}. Pushed to the per-profile include list endpoint.
@@ -570,7 +570,7 @@ const buildAttrs = Effect.fn(function* (accountId: string, profile: ObservedProf
 const denull = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const normalizeServiceMode = (
-  sm: { mode?: string | null; port?: number | null } | null | undefined,
+  sm: { mode?: string | null | undefined; port?: number | null | undefined } | null | undefined,
 ): DeviceDefaultProfile.ServiceModeV2 | undefined =>
   sm && sm.mode != null
     ? {
@@ -581,8 +581,8 @@ const normalizeServiceMode = (
 
 const normalizeSplit = (
   entry:
-    | { address: string; description?: string | null }
-    | { host: string; description?: string | null },
+    | { address: string; description?: string | null | undefined }
+    | { host: string; description?: string | null | undefined },
 ): DeviceDefaultProfile.SplitTunnelEntry => ({
   address: "address" in entry ? entry.address : "",
   host: "host" in entry ? entry.host : undefined,
@@ -591,8 +591,8 @@ const normalizeSplit = (
 
 const normalizeFallback = (entry: {
   suffix: string;
-  description?: string | null;
-  dnsServer?: string[] | null;
+  description?: string | null | undefined;
+  dnsServer?: string[] | null | undefined;
 }): DeviceDefaultProfile.FallbackDomain => ({
   suffix: entry.suffix,
   description: denull(entry.description),
@@ -605,7 +605,9 @@ const normalizeFallback = (entry: {
  */
 const encodeSplit = (
   e: DeviceDefaultProfile.SplitTunnelEntry,
-): { address: string; description?: string } | { host: string; description?: string } => {
+):
+  | { address: string; description?: string | undefined }
+  | { host: string; description?: string | undefined } => {
   if (e.host && !e.address) {
     return e.description !== undefined
       ? { host: e.host, description: e.description }
@@ -618,8 +620,12 @@ const encodeSplit = (
 
 const encodeFallback = (
   d: DeviceDefaultProfile.FallbackDomain,
-): { suffix: string; description?: string; dnsServer?: string[] } => {
-  const out: { suffix: string; description?: string; dnsServer?: string[] } = {
+): { suffix: string; description?: string | undefined; dnsServer?: string[] | undefined } => {
+  const out: {
+    suffix: string;
+    description?: string | undefined;
+    dnsServer?: string[] | undefined;
+  } = {
     suffix: d.suffix,
   };
   if (d.description !== undefined) out.description = d.description;

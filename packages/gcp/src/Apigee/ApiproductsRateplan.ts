@@ -12,11 +12,11 @@ const MAX_NAME_LENGTH = 255;
 
 export type Money = {
   /** ISO 4217 currency code. */
-  currencyCode?: string;
+  currencyCode?: string | undefined;
   /** Whole units of the amount. */
-  units?: string;
+  units?: string | undefined;
   /** Nano (10^-9) units of the amount. */
-  nanos?: number;
+  nanos?: number | undefined;
 };
 
 export type ApiproductsRateplanProps = {
@@ -45,7 +45,7 @@ export type ApiproductsRateplanProps = {
   /**
    * ISO 4217 currency code used for billing.
    */
-  currencyCode?: string;
+  currencyCode?: string | undefined;
   /**
    * Rate plan state (`DRAFT` or `PUBLISHED`).
    * @default "DRAFT"
@@ -72,7 +72,7 @@ export type ApiproductsRateplanProps = {
   /**
    * One-time setup fee.
    */
-  setupFee?: Money;
+  setupFee?: Money | undefined;
   /**
    * Fixed recurring fee billed in advance.
    */

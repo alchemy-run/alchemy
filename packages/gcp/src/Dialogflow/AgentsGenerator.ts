@@ -32,27 +32,27 @@ import {
 
 export type GeneratorModelParameter = {
   /** Sampling temperature. */
-  temperature?: number;
+  temperature?: number | undefined;
   /** Maximum decode steps. */
-  maxDecodeSteps?: number;
+  maxDecodeSteps?: number | undefined;
   /** Top-K sampling. */
-  topK?: number;
+  topK?: number | undefined;
   /** Top-P (nucleus) sampling. */
-  topP?: number;
+  topP?: number | undefined;
 };
 
 export type GeneratorPlaceholder = {
   /** Placeholder id referenced from the prompt. */
-  id?: string;
+  id?: string | undefined;
   /** Human-readable placeholder name. */
-  name?: string;
+  name?: string | undefined;
 };
 
 export type GeneratorLlmModelSettings = {
   /** LLM model id. */
-  model?: string;
+  model?: string | undefined;
   /** Model prompt text. */
-  promptText?: string;
+  promptText?: string | undefined;
 };
 
 export type AgentsGeneratorProps = {
@@ -66,31 +66,31 @@ export type AgentsGeneratorProps = {
    * Generator id (the `{generator}` segment). Server-assigned when
    * omitted. Immutable — changing it replaces the generator.
    */
-  generatorId?: string;
+  generatorId?: string | undefined;
   /**
    * Location used when `agent` is an id rather than a resource name.
    * Immutable — changing it replaces the generator.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Human-readable name. Generators have no labels field, so Alchemy
    * stamps ownership into this field and strips it from attributes.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Prompt phrase the generator fills in.
    * @default "Say hello."
    */
-  promptText?: string;
+  promptText?: string | undefined;
   /** Language code for the prompt (`en`, `en-US`, …). */
-  languageCode?: string;
+  languageCode?: string | undefined;
   /** Decoding parameters. */
-  modelParameter?: GeneratorModelParameter;
+  modelParameter?: GeneratorModelParameter | undefined;
   /** Placeholders referenced from `promptText`. */
-  placeholders?: GeneratorPlaceholder[];
+  placeholders?: GeneratorPlaceholder[] | undefined;
   /** LLM model settings. */
-  llmModelSettings?: GeneratorLlmModelSettings;
+  llmModelSettings?: GeneratorLlmModelSettings | undefined;
 };
 
 export type AgentsGenerator = Resource<

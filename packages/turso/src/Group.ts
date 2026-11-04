@@ -54,7 +54,7 @@ export interface GroupProps {
    * SQLite extensions enabled for the group's databases: `"all"`, or a list
    * of extension names. Set at creation; changing it replaces the group.
    */
-  extensions?: "all" | string[];
+  extensions?: "all" | string[] | undefined;
   /**
    * Prevent the group (and its databases) from being deleted. While
    * enabled, destroying or replacing the group fails; set it to `false`

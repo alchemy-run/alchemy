@@ -39,26 +39,28 @@ export type PhraseMatchRuleGroupType =
 
 export type ExactMatchConfig = {
   /** Whether matching is case sensitive. */
-  caseSensitive?: boolean;
+  caseSensitive?: boolean | undefined;
 };
 
 export type PhraseMatchRule = {
   /** Phrase or regex to match. */
-  query?: string;
+  query?: string | undefined;
   /** When true, the phrase must be absent from the transcript. */
-  negated?: boolean;
+  negated?: boolean | undefined;
   /** Match configuration. */
-  config?: {
-    /** Exact-match options. */
-    exactMatchConfig?: ExactMatchConfig;
-  };
+  config?:
+    | {
+        /** Exact-match options. */
+        exactMatchConfig?: ExactMatchConfig | undefined;
+      }
+    | undefined;
 };
 
 export type PhraseMatchRuleGroup = {
   /** How rules in this group combine (`ALL_OF` or `ANY_OF`). */
-  type?: PhraseMatchRuleGroupType;
+  type?: PhraseMatchRuleGroupType | undefined;
   /** Phrase match rules in this group. */
-  phraseMatchRules?: PhraseMatchRule[];
+  phraseMatchRules?: PhraseMatchRule[] | undefined;
 };
 
 export type PhraseMatcherProps = {
@@ -85,7 +87,7 @@ export type PhraseMatcherProps = {
    * How rule groups combine. Required by the API.
    * @default "ALL_OF"
    */
-  type?: PhraseMatcherType;
+  type?: PhraseMatcherType | undefined;
   /**
    * When true, the matcher is applied to conversations.
    * @default false

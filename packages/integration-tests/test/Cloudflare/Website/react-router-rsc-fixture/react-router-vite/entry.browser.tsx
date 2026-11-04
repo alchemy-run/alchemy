@@ -5,6 +5,9 @@ import {
   encodeReply,
   setServerCallback,
 } from "@vitejs/plugin-rsc/browser";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { startTransition, StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
 import type { DataRouter, unstable_RSCPayload as RSCServerPayload } from "react-router";
@@ -33,9 +36,10 @@ createFromReadableStream<RSCServerPayload>(getRSCStream()).then((payload) => {
       <StrictMode>
         <RSCHydratedRouter createFromReadableStream={createFromReadableStream} payload={payload} />
       </StrictMode>,
-      {
-        formState,
-      },
+      Record.filterMap(
+        { formState },
+        Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+      ),
     );
   });
 });

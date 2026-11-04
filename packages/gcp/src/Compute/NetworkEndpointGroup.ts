@@ -25,17 +25,17 @@ export type NetworkEndpointType =
 
 export type NetworkEndpointSpec = {
   /** VM instance name or URL. Required for `GCE_VM_IP` / `GCE_VM_IP_PORT`. */
-  instance?: string;
+  instance?: string | undefined;
   /** IPv4 address of the endpoint. */
-  ipAddress?: string;
+  ipAddress?: string | undefined;
   /** IPv6 address of the endpoint. */
-  ipv6Address?: string;
+  ipv6Address?: string | undefined;
   /** Port. Omitted endpoints use the group's `defaultPort`. */
-  port?: number;
+  port?: number | undefined;
   /** FQDN. Only valid for FQDN internet endpoints. */
-  fqdn?: string;
+  fqdn?: string | undefined;
   /** PSC consumer destination port (`GCE_VM_IP_PORTMAP` only). */
-  clientDestinationPort?: number;
+  clientDestinationPort?: number | undefined;
 };
 
 export type NetworkEndpointGroupProps = {
@@ -334,12 +334,12 @@ const toApiEndpoint = (
 });
 
 const endpointKey = (endpoint: {
-  instance?: string;
-  ipAddress?: string;
-  ipv6Address?: string;
-  port?: number;
-  fqdn?: string;
-  clientDestinationPort?: number;
+  instance?: string | undefined;
+  ipAddress?: string | undefined;
+  ipv6Address?: string | undefined;
+  port?: number | undefined;
+  fqdn?: string | undefined;
+  clientDestinationPort?: number | undefined;
 }) =>
   [
     endpoint.instance ? lastSegment(endpoint.instance) : "",

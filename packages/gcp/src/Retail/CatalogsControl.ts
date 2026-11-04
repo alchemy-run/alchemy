@@ -38,69 +38,73 @@ export type CatalogsControlProps = {
    * replaces the control.
    * @default "default_catalog"
    */
-  catalog?: string;
+  catalog?: string | undefined;
   /**
    * Location used when `catalog` is a bare id. Immutable.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Control id (`[a-z-_]`, 4-63 characters). If omitted, a unique id is
    * generated. Immutable — changing it replaces the control.
    */
-  controlId?: string;
+  controlId?: string | undefined;
   /**
    * Human-readable name (max 128 characters).
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Solution types. Immutable. Only `SOLUTION_TYPE_SEARCH` is supported.
    * @default ["SOLUTION_TYPE_SEARCH"]
    */
-  solutionTypes?: Array<
-    | "SOLUTION_TYPE_UNSPECIFIED"
-    | "SOLUTION_TYPE_RECOMMENDATION"
-    | "SOLUTION_TYPE_SEARCH"
-    | (string & {})
-  >;
+  solutionTypes?:
+    | Array<
+        | "SOLUTION_TYPE_UNSPECIFIED"
+        | "SOLUTION_TYPE_RECOMMENDATION"
+        | "SOLUTION_TYPE_SEARCH"
+        | (string & {})
+      >
+    | undefined;
   /**
    * Search use cases.
    * @default ["SEARCH_SOLUTION_USE_CASE_SEARCH"]
    */
-  searchSolutionUseCase?: Array<
-    | "SEARCH_SOLUTION_USE_CASE_UNSPECIFIED"
-    | "SEARCH_SOLUTION_USE_CASE_SEARCH"
-    | "SEARCH_SOLUTION_USE_CASE_BROWSE"
-    | (string & {})
-  >;
+  searchSolutionUseCase?:
+    | Array<
+        | "SEARCH_SOLUTION_USE_CASE_UNSPECIFIED"
+        | "SEARCH_SOLUTION_USE_CASE_SEARCH"
+        | "SEARCH_SOLUTION_USE_CASE_BROWSE"
+        | (string & {})
+      >
+    | undefined;
   /**
    * Two-way synonym set (at least two terms).
    */
-  synonyms?: string[];
+  synonyms?: string[] | undefined;
   /**
    * Redirect URI.
    */
-  redirectUri?: string;
+  redirectUri?: string | undefined;
   /**
    * Filter expression.
    */
-  filter?: string;
+  filter?: string | undefined;
   /**
    * Boost strength in `[-1, 1]`.
    */
-  boost?: number;
+  boost?: number | undefined;
   /**
    * Filter selecting products to boost. Used with `boost`.
    */
-  productsFilter?: string;
+  productsFilter?: string | undefined;
   /**
    * Terms to drop from the query.
    */
-  ignoreTerms?: string[];
+  ignoreTerms?: string[] | undefined;
   /**
    * Trigger conditions. Omit to always apply the action.
    */
-  condition?: ControlCondition;
+  condition?: ControlCondition | undefined;
 };
 
 export type CatalogsControl = Resource<
@@ -171,11 +175,11 @@ const defaultSolutionTypes = ["SOLUTION_TYPE_SEARCH"] as const;
 const defaultUseCase = ["SEARCH_SOLUTION_USE_CASE_SEARCH"] as const;
 
 const actionKind = (input: {
-  synonyms?: string[];
-  redirectUri?: string;
-  filter?: string;
-  boost?: number;
-  ignoreTerms?: string[];
+  synonyms?: string[] | undefined;
+  redirectUri?: string | undefined;
+  filter?: string | undefined;
+  boost?: number | undefined;
+  ignoreTerms?: string[] | undefined;
 }) => {
   if (input.redirectUri) return "redirect";
   if (input.filter) return "filter";

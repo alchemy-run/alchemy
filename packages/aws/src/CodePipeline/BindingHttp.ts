@@ -49,7 +49,12 @@ const BindPipelinePolicy = Effect.gen(function* () {
  * callable injects the bound {@link Pipeline}'s name and the deploy-time
  * half grants `actions` on the pipeline ARN.
  */
-export const makeCodePipelineNameHttpBinding = <I extends { name?: string }, A, E, R>(options: {
+export const makeCodePipelineNameHttpBinding = <
+  I extends { name?: string | undefined },
+  A,
+  E,
+  R,
+>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.CodePipeline.GetPipelineState`. */
   tag: string;
   /** The distilled operation; `name` is injected from the pipeline. */
@@ -84,7 +89,7 @@ export const makeCodePipelineNameHttpBinding = <I extends { name?: string }, A, 
  * action-addressed operations authorize against sub-resource ARNs).
  */
 export const makeCodePipelinePipelineNameHttpBinding = <
-  I extends { pipelineName?: string },
+  I extends { pipelineName?: string | undefined },
   A,
   E,
   R,

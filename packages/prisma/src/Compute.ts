@@ -133,7 +133,7 @@ export interface ComputeCommandBuild {
    *
    * @default path
    */
-  cwd?: string;
+  cwd?: string | undefined;
   /**
    * Build output directory, relative to `cwd`.
    */
@@ -141,7 +141,7 @@ export interface ComputeCommandBuild {
   /**
    * Entrypoint inside `outdir`.
    */
-  entrypoint?: string;
+  entrypoint?: string | undefined;
   /**
    * Environment variables supplied to the build command.
    * Ambient `PRISMA_SERVICE_TOKEN` and `PRISMA_API_TOKEN` credentials are not
@@ -156,19 +156,19 @@ export interface ComputeCommandBuild {
    * env: { NPM_TOKEN: Redacted.make(process.env.NPM_TOKEN!) }
    * ```
    */
-  env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+  env?: Record<string, string | Redacted.Redacted<string> | undefined> | undefined;
   /**
    * Maximum bytes retained from each build output stream.
    *
    * @default 1048576 (1 MiB)
    */
-  outputLimitBytes?: number;
+  outputLimitBytes?: number | undefined;
   /**
    * Maximum wall-clock time for the build command.
    *
    * @default 900 (15 minutes)
    */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
 }
 
 export interface ComputeAutoBuild {
@@ -181,7 +181,7 @@ export interface ComputeAutoBuild {
    *
    * @default "auto"
    */
-  framework?: ComputeAutoBuildFramework;
+  framework?: ComputeAutoBuildFramework | undefined;
   /**
    * Environment variables supplied to the build command.
    * Ambient `PRISMA_SERVICE_TOKEN` and `PRISMA_API_TOKEN` credentials are not
@@ -195,19 +195,19 @@ export interface ComputeAutoBuild {
    * env: { NPM_TOKEN: Redacted.make(process.env.NPM_TOKEN!) }
    * ```
    */
-  env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+  env?: Record<string, string | Redacted.Redacted<string> | undefined> | undefined;
   /**
    * Maximum bytes retained from each framework build output stream.
    *
    * @default 1048576 (1 MiB)
    */
-  outputLimitBytes?: number;
+  outputLimitBytes?: number | undefined;
   /**
    * Maximum wall-clock time for the framework build command.
    *
    * @default 900 (15 minutes)
    */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
 }
 
 export interface ComputeStaticBuild {
@@ -223,25 +223,25 @@ export interface ComputeStaticBuild {
    * Optional shell command that creates the static output directory. Omit it
    * when `outdir` already contains the files to deploy.
    */
-  command?: string;
+  command?: string | undefined;
   /**
    * Working directory for the build command and `outdir`.
    *
    * @default path
    */
-  cwd?: string;
+  cwd?: string | undefined;
   /**
    * HTML file served at the root and for SPA fallbacks.
    *
    * @default "index.html"
    */
-  indexPage?: string;
+  indexPage?: string | undefined;
   /**
    * Serve the index page when no static file matches the request.
    *
    * @default false
    */
-  spa?: boolean;
+  spa?: boolean | undefined;
   /**
    * Environment variables supplied to the build command.
    * Ambient `PRISMA_SERVICE_TOKEN` and `PRISMA_API_TOKEN` credentials are not
@@ -255,19 +255,19 @@ export interface ComputeStaticBuild {
    * env: { NPM_TOKEN: Redacted.make(process.env.NPM_TOKEN!) }
    * ```
    */
-  env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+  env?: Record<string, string | Redacted.Redacted<string> | undefined> | undefined;
   /**
    * Maximum bytes retained from each build output stream.
    *
    * @default 1048576 (1 MiB)
    */
-  outputLimitBytes?: number;
+  outputLimitBytes?: number | undefined;
   /**
    * Maximum wall-clock time for the build command.
    *
    * @default 900 (15 minutes)
    */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
 }
 
 export type ComputeBuild = ComputeCommandBuild | ComputeAutoBuild | ComputeStaticBuild;
@@ -291,7 +291,7 @@ export interface ComputeDev {
   /**
    * Local command to run during `alchemy dev`.
    */
-  command?: string;
+  command?: string | undefined;
   /**
    * Working directory for the dev command.
    *
@@ -339,31 +339,31 @@ export interface ComputeProps extends PlatformProps {
   /**
    * App display name. If omitted, Alchemy generates a stable physical name.
    */
-  appName?: string;
+  appName?: string | undefined;
   /**
    * Region where the App is placed.
    *
    * @default The project's default region, falling back to "us-east-1"
    */
-  regionId?: PrismaRegionId;
+  regionId?: PrismaRegionId | undefined;
   /**
    * Branch ID to attach the App to. Mutually exclusive with branchGitName.
    * If both branch fields are omitted, Alchemy attaches to the project's
    * current default branch.
    */
-  branchId?: string;
+  branchId?: string | undefined;
   /**
    * Branch git name to attach the App to. Mutually exclusive with branchId.
    *
    * @default The project's current default branch
    */
-  branchGitName?: string;
+  branchGitName?: string | undefined;
   /**
    * Application directory used for pre-built artifacts and build commands.
    *
    * @default "."
    */
-  path?: string;
+  path?: string | undefined;
   /**
    * Additional files or directories to exclude from path deployments. Static
    * build patterns are relative to the configured output directory; other
@@ -372,53 +372,53 @@ export interface ComputeProps extends PlatformProps {
    * `.env*`, `.git`, and `.alchemy` are always excluded. Static index pages
    * must remain present after exclusions.
    */
-  archiveIgnore?: readonly string[];
+  archiveIgnore?: readonly string[] | undefined;
   /**
    * Entrypoint relative to the deployed artifact directory.
    * If omitted, Alchemy reads `package.json#main`.
    */
-  entrypoint?: string;
+  entrypoint?: string | undefined;
   /**
    * Entry module for an effect-native Compute app.
    *
    * This is required when you pass an inline Effect implementation to
    * `Prisma.Compute`, and ignored for external path deployments.
    */
-  main?: string;
+  main?: string | undefined;
   /**
    * Exported symbol inside `main` for effect-native Compute apps.
    *
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Bundler options for effect-native Compute apps.
    */
-  bundle?: ComputeBundleOptions;
+  bundle?: ComputeBundleOptions | undefined;
   /**
    * Effect-native runtime exports populated by the Platform constructor.
    *
    * @internal
    */
-  exports?: string[] | Record<string, unknown>;
+  exports?: string[] | Record<string, unknown> | undefined;
   /**
    * Build command and output directory. Set to `"auto"` or `{ type: "auto" }`
    * to use Prisma Compute-style framework detection for Next.js, Nuxt, Astro,
    * TanStack Start, Vite, or Bun. Set to `false` to upload `path` as a
    * pre-built artifact.
    */
-  build?: ComputeBuild | false | "auto";
+  build?: ComputeBuild | false | "auto" | undefined;
   /**
    * Path to a pre-created `tar.gz` artifact file. When supplied, Alchemy reads
    * and uploads it directly.
    */
-  artifactPath?: string;
+  artifactPath?: string | undefined;
   /**
    * HTTP port exposed by the application.
    *
    * @default 8080
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Runtime environment variables to sync through Prisma's environment
    * variable API before creating a new deployment. Set a value to `null`
@@ -442,57 +442,57 @@ export interface ComputeProps extends PlatformProps {
    * }
    * ```
    */
-  env?: Record<string, string | Redacted.Redacted<string> | null | undefined>;
+  env?: Record<string, string | Redacted.Redacted<string> | null | undefined> | undefined;
   /**
    * Prisma environment variable class used by the `env` convenience property.
    *
    * @default "production"
    */
-  envClass?: "production" | "preview";
+  envClass?: "production" | "preview" | undefined;
   /**
    * Create the next deployment by reusing the previous code artifact.
    *
    * @default false
    */
-  skipCodeUpload?: boolean;
+  skipCodeUpload?: boolean | undefined;
   /**
    * Start the created/reused deployment.
    * Set `skipPromote: true` when disabling start.
    *
    * @default true
    */
-  start?: boolean;
+  start?: boolean | undefined;
   /**
    * Do not promote the deployment to the stable App endpoint.
    *
    * @default false
    */
-  skipPromote?: boolean;
+  skipPromote?: boolean | undefined;
   /**
    * Delete the previously promoted deployment after the new one is promoted.
    *
    * @default false
    */
-  destroyOldDeployment?: boolean;
+  destroyOldDeployment?: boolean | undefined;
   /**
    * Poll timeout while waiting for start/stop.
    *
    * @default 120
    */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
   /**
    * Poll interval while waiting for start/stop.
    *
    * @default 1000
    */
-  pollIntervalMs?: number;
+  pollIntervalMs?: number | undefined;
   /**
    * Verify that Prisma's public preview/App URL has reached the edge after
    * the Management API reports the deployment as running.
    *
    * @default true
    */
-  verifyUrl?: boolean;
+  verifyUrl?: boolean | undefined;
   /**
    * Optional application-level health check. Without this option, URL
    * verification only waits for Prisma edge routing to stop returning its
@@ -504,18 +504,18 @@ export interface ComputeProps extends PlatformProps {
    * Health checks run only during cloud deployment, not `alchemy dev`, and
    * cannot be combined with `verifyUrl: false` or `start: false`.
    */
-  healthCheck?: ComputeHealthCheck;
+  healthCheck?: ComputeHealthCheck | undefined;
   /**
    * Maximum time to wait for Prisma's public URL to stop returning the
    * platform-level "Service not found" page.
    *
    * @default 60
    */
-  urlReadinessTimeoutSeconds?: number;
+  urlReadinessTimeoutSeconds?: number | undefined;
   /**
    * Local development behavior for `alchemy dev`.
    */
-  dev?: ComputeDev;
+  dev?: ComputeDev | undefined;
 }
 
 export interface Compute extends Resource<
@@ -571,33 +571,35 @@ export interface Compute extends Resource<
      */
     previousDeploymentAction: "stopped" | "destroyed" | "still-active" | null | undefined;
     /** Stable App endpoint readiness observed after promotion. */
-    readinessStatus?: "ready" | "pending" | "skipped";
+    readinessStatus?: "ready" | "pending" | "skipped" | undefined;
     /** Old deployment cleanup that will be retried before another generation. */
-    pendingDeploymentCleanup?: {
-      deploymentId: string;
-      action: "stop" | "destroy";
-    };
+    pendingDeploymentCleanup?:
+      | {
+          deploymentId: string;
+          action: "stop" | "destroy";
+        }
+      | undefined;
     /**
      * Environment variable keys managed by this Compute resource.
      *
      * This includes explicit `env` props and env vars added by bindings.
      */
-    environmentKeys?: string[];
+    environmentKeys?: string[] | undefined;
     /**
      * Environment variable IDs created by this Compute resource, keyed by
      * variable name. IDs are the ownership boundary for shared branch/project
      * environment-variable namespaces.
      */
-    environmentVariableIds?: Record<string, string>;
+    environmentVariableIds?: Record<string, string> | undefined;
     /**
      * Prisma environment class used for the managed environment variable keys.
      */
-    environmentClass?: "production" | "preview";
+    environmentClass?: "production" | "preview" | undefined;
     /**
      * Branch ID used for managed preview branch environment overrides, or null
      * for project-level environment templates.
      */
-    environmentBranchId?: string | null;
+    environmentBranchId?: string | null | undefined;
     /**
      * Fingerprint of the uploaded artifact/reused artifact inputs and the
      * branch attachment that Prisma resolves environment variables from.

@@ -110,7 +110,7 @@ export interface PostgresProps {
    * Defaults to the project's primary environment. Changing it replaces
    * Postgres.
    */
-  environment?: Ref<PostgresEnvironment>;
+  environment?: Ref<PostgresEnvironment> | undefined;
   /**
    * Service name. Unique per Project. If omitted, a unique name is
    * generated from the stack, stage and logical ID. Used as the private

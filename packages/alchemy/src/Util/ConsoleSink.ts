@@ -40,8 +40,8 @@ export const prettyLine = (options: {
   readonly date: Date;
   readonly level: LogLevel.Severity;
   readonly text: string;
-  readonly resource?: string;
-  readonly colors?: boolean;
+  readonly resource?: string | undefined;
+  readonly colors?: boolean | undefined;
 }): string => {
   // Detect the color level unless the caller decided.
   const style = terminalStyle(options.colors === undefined ? {} : { colors: options.colors });

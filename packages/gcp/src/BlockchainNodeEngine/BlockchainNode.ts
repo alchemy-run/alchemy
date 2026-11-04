@@ -43,17 +43,17 @@ export type ValidatorConfig = {
    * Ethereum address the beacon client sends fee rewards to when the
    * validator client has no recipient configured.
    */
-  beaconFeeRecipient?: string;
+  beaconFeeRecipient?: string | undefined;
   /**
    * MEV-relay URLs. When set, a GCP-managed MEV-boost service is
    * configured on the beacon client.
    */
-  mevRelayUrls?: string[];
+  mevRelayUrls?: string[] | undefined;
   /**
    * Deploy a GCP-managed validator client next to the beacon client.
    * Immutable — changing it replaces the node.
    */
-  managedValidatorClient?: boolean;
+  managedValidatorClient?: boolean | undefined;
 };
 
 export type GethDetails = {
@@ -61,7 +61,7 @@ export type GethDetails = {
    * Geth garbage collection mode (`FULL` or `ARCHIVE`). Immutable —
    * changing it replaces the node.
    */
-  garbageCollectionMode?: bne.GethDetailsGarbageCollectionModeEnum | (string & {});
+  garbageCollectionMode?: bne.GethDetailsGarbageCollectionModeEnum | (string & {}) | undefined;
 };
 
 export type EthereumDetails = {
@@ -70,47 +70,47 @@ export type EthereumDetails = {
    * changing it replaces the node.
    * @default "FULL"
    */
-  nodeType?: bne.EthereumDetailsNodeTypeEnum | (string & {});
+  nodeType?: bne.EthereumDetailsNodeTypeEnum | (string & {}) | undefined;
   /**
    * Enable JSON-RPC `debug` namespace methods. Immutable — changing it
    * replaces the node.
    * @default false
    */
-  apiEnableDebug?: boolean;
+  apiEnableDebug?: boolean | undefined;
   /**
    * Ethereum network (`MAINNET`, `TESTNET_SEPOLIA`, `TESTNET_HOLESKY`,
    * `TESTNET_GOERLI_PRATER`). Immutable — changing it replaces the node.
    * @default "TESTNET_SEPOLIA"
    */
-  network?: bne.EthereumDetailsNetworkEnum | (string & {});
+  network?: bne.EthereumDetailsNetworkEnum | (string & {}) | undefined;
   /**
    * Validator / MEV configuration. `beaconFeeRecipient` and
    * `mevRelayUrls` update in place; `managedValidatorClient` is
    * immutable.
    */
-  validatorConfig?: ValidatorConfig;
+  validatorConfig?: ValidatorConfig | undefined;
   /**
    * Geth-specific options. Immutable.
    */
-  gethDetails?: GethDetails;
+  gethDetails?: GethDetails | undefined;
   /**
    * Execution client (`GETH` or `ERIGON`). Immutable — changing it
    * replaces the node.
    * @default "GETH"
    */
-  executionClient?: bne.EthereumDetailsExecutionClientEnum | (string & {});
+  executionClient?: bne.EthereumDetailsExecutionClientEnum | (string & {}) | undefined;
   /**
    * Consensus client (`LIGHTHOUSE` or `ERIGON_EMBEDDED_CONSENSUS_LAYER`).
    * Immutable — changing it replaces the node.
    * @default "LIGHTHOUSE"
    */
-  consensusClient?: bne.EthereumDetailsConsensusClientEnum | (string & {});
+  consensusClient?: bne.EthereumDetailsConsensusClientEnum | (string & {}) | undefined;
   /**
    * Enable JSON-RPC `admin` namespace methods. Immutable — changing it
    * replaces the node.
    * @default false
    */
-  apiEnableAdmin?: boolean;
+  apiEnableAdmin?: boolean | undefined;
 };
 
 export type EndpointInfo = {

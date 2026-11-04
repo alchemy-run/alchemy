@@ -41,35 +41,39 @@ export interface NetworkAclEntryProps {
    * Whether this is an egress (outbound) rule.
    * @default false
    */
-  egress?: boolean;
+  egress?: boolean | undefined;
   /**
    * The IPv4 CIDR block.
    * Either cidrBlock or ipv6CidrBlock must be specified.
    */
-  cidrBlock?: string;
+  cidrBlock?: string | undefined;
   /**
    * The IPv6 CIDR block.
    * Either cidrBlock or ipv6CidrBlock must be specified.
    */
-  ipv6CidrBlock?: string;
+  ipv6CidrBlock?: string | undefined;
   /**
    * ICMP type and code. Required if protocol is 1 (ICMP) or 58 (ICMPv6).
    */
-  icmpTypeCode?: {
-    /** The ICMP code. Use -1 to specify all codes. */
-    code?: number;
-    /** The ICMP type. Use -1 to specify all types. */
-    type?: number;
-  };
+  icmpTypeCode?:
+    | {
+        /** The ICMP code. Use -1 to specify all codes. */
+        code?: number | undefined;
+        /** The ICMP type. Use -1 to specify all types. */
+        type?: number | undefined;
+      }
+    | undefined;
   /**
    * The port range for TCP/UDP protocols.
    */
-  portRange?: {
-    /** The first port in the range. */
-    from?: number;
-    /** The last port in the range. */
-    to?: number;
-  };
+  portRange?:
+    | {
+        /** The first port in the range. */
+        from?: number | undefined;
+        /** The last port in the range. */
+        to?: number | undefined;
+      }
+    | undefined;
 }
 
 export interface NetworkAclEntry extends Resource<
@@ -87,19 +91,23 @@ export interface NetworkAclEntry extends Resource<
     /** The rule action (allow or deny). */
     ruleAction: EC2.RuleAction;
     /** The IPv4 CIDR block. */
-    cidrBlock?: string;
+    cidrBlock?: string | undefined;
     /** The IPv6 CIDR block. */
-    ipv6CidrBlock?: string;
+    ipv6CidrBlock?: string | undefined;
     /** The ICMP type and code. */
-    icmpTypeCode?: {
-      code?: number;
-      type?: number;
-    };
+    icmpTypeCode?:
+      | {
+          code?: number | undefined;
+          type?: number | undefined;
+        }
+      | undefined;
     /** The port range. */
-    portRange?: {
-      from?: number;
-      to?: number;
-    };
+    portRange?:
+      | {
+          from?: number | undefined;
+          to?: number | undefined;
+        }
+      | undefined;
   },
   never,
   Providers

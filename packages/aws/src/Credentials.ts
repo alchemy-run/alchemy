@@ -56,12 +56,12 @@ export const makeAssumeRoleResolver = (options: {
   /** Layer supplying the long-lived credentials used to sign `AssumeRole`. */
   readonly base: Layer.Layer<Credentials>;
   /** STS role session name. @default "alchemy" */
-  readonly roleSessionName?: string;
+  readonly roleSessionName?: string | undefined;
   /**
    * Region for the STS endpoint. STS `AssumeRole` is global, so this only
    * selects the regional STS endpoint. @default "us-east-1"
    */
-  readonly region?: string;
+  readonly region?: string | undefined;
 }): Effect.Effect<Effect.Effect<ResolvedCredentials, AwsCredentialProviderError>> =>
   Effect.gen(function* () {
     const resolve = Effect.gen(function* () {
@@ -147,12 +147,12 @@ export const fromAssumeRole = (options: {
   /** Static credentials used to sign the `AssumeRole` call. */
   readonly base: Layer.Layer<Credentials>;
   /** STS role session name. @default "alchemy" */
-  readonly roleSessionName?: string;
+  readonly roleSessionName?: string | undefined;
   /**
    * Region for the STS endpoint. STS `AssumeRole` is global, so this only
    * selects the regional STS endpoint. @default "us-east-1"
    */
-  readonly region?: string;
+  readonly region?: string | undefined;
 }): Layer.Layer<Credentials> =>
   Layer.effect(
     Credentials,

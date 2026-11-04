@@ -26,7 +26,7 @@ export type CertificateProps = {
    *
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The CA certificate content (PEM). Client certificates presented to
    * Access-protected applications must chain to this CA. The certificate
@@ -39,7 +39,7 @@ export type CertificateProps = {
    *
    * @default []
    */
-  associatedHostnames?: string[];
+  associatedHostnames?: string[] | undefined;
 };
 
 export type Certificate = Resource<
@@ -281,9 +281,9 @@ const toAttrs = (observed: ObservedCertificate, accountId: string, certificate: 
 });
 
 type ObservedCertificate = {
-  id?: string | null;
-  name?: string | null;
-  fingerprint?: string | null;
-  associatedHostnames?: string[] | null;
-  expiresOn?: string | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  fingerprint?: string | null | undefined;
+  associatedHostnames?: string[] | null | undefined;
+  expiresOn?: string | null | undefined;
 };

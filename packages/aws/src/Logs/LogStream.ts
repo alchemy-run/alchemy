@@ -27,7 +27,7 @@ export interface LogStream extends Resource<
   {
     logStreamName: string;
     logGroupName: string;
-    logStreamArn?: string;
+    logStreamArn?: string | undefined;
   },
   never,
   Providers

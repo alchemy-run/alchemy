@@ -50,7 +50,7 @@ export type DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProps = {
    * Image payload for this feedback, if the comment is an image.
    * Immutable — changing it replaces the message.
    */
-  image?: string;
+  image?: string | undefined;
 };
 
 export type DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage = Resource<

@@ -242,7 +242,7 @@ interface TarHeader {
   readonly mode: number;
   readonly size: number;
   readonly type: "file" | "symlink" | "pax";
-  readonly linkname?: string;
+  readonly linkname?: string | undefined;
 }
 
 const paxRecord = (key: string, value: string) => {

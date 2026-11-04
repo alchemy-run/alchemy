@@ -10,7 +10,7 @@ export interface AccessSecretVersionRequest {
    * Version id or alias. `latest` is the most recently created version.
    * @default "latest"
    */
-  version?: string;
+  version?: string | undefined;
 }
 
 /**

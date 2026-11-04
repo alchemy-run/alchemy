@@ -126,9 +126,9 @@ export declare namespace DeviceDefaultProfile {
     /** CIDR-form route, e.g. `"10.0.0.0/8"` or `"1.2.3.4/32"`. */
     address: string;
     /** Hostname-form route, e.g. `"example.com"`. */
-    host?: string;
+    host?: string | undefined;
     /** Free-form description shown in the dashboard. */
-    description?: string;
+    description?: string | undefined;
   }
   /**
    * Local-fallback DNS configuration for a given DNS suffix.
@@ -137,9 +137,9 @@ export declare namespace DeviceDefaultProfile {
     /** DNS suffix, e.g. `"corp.example.com"`. */
     suffix: string;
     /** Optional free-form description. */
-    description?: string;
+    description?: string | undefined;
     /** DNS resolvers (IPv4/IPv6) used for names matching `suffix`. */
-    dnsServer?: string[];
+    dnsServer?: string[] | undefined;
   }
   /**
    * Tunneling-mode configuration.
@@ -148,7 +148,7 @@ export declare namespace DeviceDefaultProfile {
     /** `"warp"` for the full WireGuard tunnel, `"proxy"` for SOCKS. */
     mode: "warp" | "proxy";
     /** Local SOCKS port when `mode === "proxy"`. Ignored otherwise. */
-    port?: number;
+    port?: number | undefined;
   }
 }
 
@@ -497,8 +497,8 @@ const denull = <T>(v: T | null | undefined): T | undefined => (v == null ? undef
 
 const normalizeSplit = (
   entry:
-    | { address: string; description?: string | null }
-    | { host: string; description?: string | null },
+    | { address: string; description?: string | null | undefined }
+    | { host: string; description?: string | null | undefined },
 ): DeviceDefaultProfile.SplitTunnelEntry => ({
   address: "address" in entry ? entry.address : "",
   host: "host" in entry ? entry.host : undefined,
@@ -507,8 +507,8 @@ const normalizeSplit = (
 
 const normalizeFallback = (entry: {
   suffix: string;
-  description?: string | null;
-  dnsServer?: string[] | null;
+  description?: string | null | undefined;
+  dnsServer?: string[] | null | undefined;
 }): DeviceDefaultProfile.FallbackDomain => ({
   suffix: entry.suffix,
   description: denull(entry.description),
@@ -521,7 +521,9 @@ const normalizeFallback = (entry: {
  */
 const encodeSplit = (
   e: DeviceDefaultProfile.SplitTunnelEntry,
-): { address: string; description?: string } | { host: string; description?: string } => {
+):
+  | { address: string; description?: string | undefined }
+  | { host: string; description?: string | undefined } => {
   if (e.host && !e.address) {
     return e.description !== undefined
       ? { host: e.host, description: e.description }
@@ -534,8 +536,12 @@ const encodeSplit = (
 
 const encodeFallback = (
   d: DeviceDefaultProfile.FallbackDomain,
-): { suffix: string; description?: string; dnsServer?: string[] } => {
-  const out: { suffix: string; description?: string; dnsServer?: string[] } = {
+): { suffix: string; description?: string | undefined; dnsServer?: string[] | undefined } => {
+  const out: {
+    suffix: string;
+    description?: string | undefined;
+    dnsServer?: string[] | undefined;
+  } = {
     suffix: d.suffix,
   };
   if (d.description !== undefined) out.description = d.description;

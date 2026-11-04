@@ -11,18 +11,18 @@ export interface TransportEvent {
   stage: "request" | "completed" | "forwarded" | "dropped" | "cut" | "held" | "upstream-error";
   method: string;
   path: string;
-  machineId?: string;
-  name?: string;
-  phase?: string;
-  status?: number;
-  image?: string;
-  digest?: string;
-  instanceId?: string;
-  state?: string;
-  cordoned?: boolean;
-  minSecretsVersion?: number;
-  secretsVersion?: number;
-  checks?: { name?: string; status?: string }[];
+  machineId?: string | undefined;
+  name?: string | undefined;
+  phase?: string | undefined;
+  status?: number | undefined;
+  image?: string | undefined;
+  digest?: string | undefined;
+  instanceId?: string | undefined;
+  state?: string | undefined;
+  cordoned?: boolean | undefined;
+  minSecretsVersion?: number | undefined;
+  secretsVersion?: number | undefined;
+  checks?: { name?: string | undefined; status?: string | undefined }[] | undefined;
 }
 
 export interface FaultRule {

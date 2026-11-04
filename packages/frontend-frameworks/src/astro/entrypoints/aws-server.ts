@@ -18,6 +18,8 @@
  */
 import { createApp } from "astro/app/entrypoint";
 import { setGetEnv } from "astro/env/setup";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import {
   toBufferedLambdaHandler,
   toLambdaHandler,
@@ -35,13 +37,18 @@ setGetEnv((key) => process.env[key]);
 
 const app = createApp();
 
-const fetchHandler: FetchHandler = (request) =>
-  app.render(request, {
+const fetchHandler: FetchHandler = (request) => {
+  // The Function URL (and CloudFront in front of it) prepend the viewer
+  // ip to `x-forwarded-for`; surface it as `Astro.clientAddress`.
+  const clientAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined;
+  return app.render(request, {
     addCookieHeader: true,
-    // The Function URL (and CloudFront in front of it) prepend the viewer
-    // ip to `x-forwarded-for`; surface it as `Astro.clientAddress`.
-    clientAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined,
+    ...Record.filterMap(
+      { clientAddress },
+      Result.fromNullishOr(() => undefined),
+    ),
   });
+};
 
 const streaming =
   typeof __ALCHEMY_ASTRO_AWS_STREAMING__ === "boolean" ? __ALCHEMY_ASTRO_AWS_STREAMING__ : true;

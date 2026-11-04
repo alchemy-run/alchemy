@@ -109,7 +109,7 @@ export interface PutOptions {
   /**
    * `Content-Type` to store with the object.
    */
-  contentType?: string;
+  contentType?: string | undefined;
   /**
    * Byte length of the body. Required by some stores for streaming bodies.
    */
@@ -129,26 +129,26 @@ export interface PutOptions {
   /**
    * User-defined metadata to store alongside the object.
    */
-  metadata?: Record<string, string>;
+  metadata?: Record<string, string> | undefined;
 }
 
 export interface ListOptions {
   /**
    * Only list keys starting with this prefix.
    */
-  prefix?: string;
+  prefix?: string | undefined;
   /**
    * Roll keys sharing a prefix up to `delimitedPrefixes` at this separator.
    */
-  delimiter?: string;
+  delimiter?: string | undefined;
   /**
    * Continue a truncated listing from the previous result's `cursor`.
    */
-  cursor?: string;
+  cursor?: string | undefined;
   /**
    * Maximum number of objects to return in one page.
    */
-  limit?: number;
+  limit?: number | undefined;
   /**
    * Start listing after this key.
    */
@@ -192,12 +192,12 @@ export interface PresignGetOptions {
    * Seconds the minted URL stays valid.
    * @default 900
    */
-  expiresIn?: number;
+  expiresIn?: number | undefined;
   /**
    * `Content-Type` the response is served with, signed into the URL as a
    * `response-content-type` override. The downloader sends nothing extra.
    */
-  contentType?: string;
+  contentType?: string | undefined;
 }
 
 export interface PresignPutOptions {
@@ -205,12 +205,12 @@ export interface PresignPutOptions {
    * Seconds the minted URL stays valid.
    * @default 900
    */
-  expiresIn?: number;
+  expiresIn?: number | undefined;
   /**
    * `Content-Type` signed into the URL. An uploader using the presigned PUT
    * URL must send exactly this `Content-Type` or the signature check fails.
    */
-  contentType?: string;
+  contentType?: string | undefined;
 }
 
 /**

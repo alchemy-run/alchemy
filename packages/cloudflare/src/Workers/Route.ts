@@ -45,7 +45,7 @@ export interface WorkerRouteProps {
    *
    * Mutable — updated in place.
    */
-  script?: string;
+  script?: string | undefined;
 }
 
 export interface WorkerRouteAttributes {
@@ -62,7 +62,7 @@ export interface WorkerRouteAttributes {
    * the local edge listener under `alchemy dev` — or `undefined` for a
    * wildcard host.
    */
-  url?: string;
+  url?: string | undefined;
 }
 
 export type WorkerRoute = Resource<
@@ -335,7 +335,7 @@ interface ObservedRoute {
 const normalizeRoute = (raw: {
   id: string;
   pattern: string;
-  script?: string | null;
+  script?: string | null | undefined;
 }): ObservedRoute => ({
   id: raw.id,
   pattern: raw.pattern,

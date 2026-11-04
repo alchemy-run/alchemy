@@ -2,7 +2,7 @@ import * as elasticache from "@distilled.cloud/aws/elasticache";
 import * as Effect from "effect/Effect";
 
 export const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: Array<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

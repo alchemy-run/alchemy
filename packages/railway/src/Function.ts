@@ -143,7 +143,7 @@ export interface FunctionProps<
    *
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Bundler configuration for {@link main}: rolldown `input`/`output`
    * overrides, plus `install` for packages Railway should `bun install`

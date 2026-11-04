@@ -39,13 +39,13 @@ export type Codebase = {
    * `projects/{project}/locations/{location}/connections/{connection}/gitRepositoryLinks/{repositoryLink}`.
    * The connection must use the Firebase App Hosting GitHub App.
    */
-  repository?: string;
+  repository?: string | undefined;
   /**
    * Directory relative to the repository root used as the web app root.
    * Defaults to the repository root. For a monorepo this is the directory
    * that contains `package.json` or `apphosting.yaml`.
    */
-  rootDirectory?: string;
+  rootDirectory?: string | undefined;
 };
 
 export type RunService = {
@@ -53,12 +53,12 @@ export type RunService = {
    * Cloud Run service name
    * `projects/{project}/locations/{location}/services/{serviceId}`.
    */
-  service?: string;
+  service?: string | undefined;
 };
 
 export type ManagedResource = {
   /** Cloud Run service managed by App Hosting. */
-  runService?: RunService;
+  runService?: RunService | undefined;
 };
 
 export type BackendProps = {

@@ -27,26 +27,26 @@ const MAX_NAME_LENGTH = 60;
 
 export type FeatureGroupBigQueryTimeSeries = {
   /** Timestamp column. Defaults to `feature_timestamp`. */
-  timestampColumn?: string;
+  timestampColumn?: string | undefined;
 };
 
 export type FeatureGroupBigQuery = {
   /**
    * BigQuery table or view URI (`bq://project.dataset.table`). Immutable.
    */
-  inputUri?: string;
+  inputUri?: string | undefined;
   /** Convenience alias for `bigQuerySource.inputUri`. Immutable. */
-  bigQuerySource?: { inputUri?: string };
+  bigQuerySource?: { inputUri?: string | undefined } | undefined;
   /** Treat the source as a single snapshot rather than a time series. */
-  staticDataSource?: boolean;
+  staticDataSource?: boolean | undefined;
   /** Collapse rows per entity including nulls. */
-  dense?: boolean;
+  dense?: boolean | undefined;
   /**
    * Columns used as entity ids. Defaults to `entity_id`.
    */
-  entityIdColumns?: string[];
+  entityIdColumns?: string[] | undefined;
   /** Time-series options. */
-  timeSeries?: FeatureGroupBigQueryTimeSeries;
+  timeSeries?: FeatureGroupBigQueryTimeSeries | undefined;
 };
 
 export type FeatureGroupProps = {

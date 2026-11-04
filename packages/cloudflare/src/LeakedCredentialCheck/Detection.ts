@@ -25,14 +25,14 @@ export interface LeakedCredentialDetectionProps {
    * updated in place via PUT. At least one of `username`/`password`
    * should be set.
    */
-  username?: string;
+  username?: string | undefined;
   /**
    * Ruleset expression locating the password in the request, e.g.
    * `lookup_json_string(http.request.body.raw, "secret")`. This is an
    * expression over the request (not a secret value). Mutable — updated
    * in place via PUT.
    */
-  password?: string;
+  password?: string | undefined;
 }
 
 export interface LeakedCredentialDetectionAttributes {
@@ -275,9 +275,9 @@ export const LeakedCredentialDetectionProvider = () =>
 // ---------------------------------------------------------------------------
 
 type ObservedDetection = {
-  id?: string | null;
-  username?: string | null;
-  password?: string | null;
+  id?: string | null | undefined;
+  username?: string | null | undefined;
+  password?: string | null | undefined;
 };
 
 /**

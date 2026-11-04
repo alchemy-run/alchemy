@@ -169,7 +169,7 @@ export const isResourceExpr = <Value = any, Req = any>(
 export class ResourceExpr<Value, Req = never> extends BaseExpr<Value, Req> {
   readonly kind = "ResourceExpr";
   readonly src: ResourceLike;
-  readonly stables?: Record<string, any>;
+  readonly stables: Record<string, any> | undefined;
   constructor(src: ResourceLike, stables?: Record<string, any>) {
     super();
     this.src = src;
@@ -450,7 +450,7 @@ export class RefExpr<A> extends BaseExpr<A, never> {
    * resource `Type`), served as literals by the proxy instead of
    * `PropExpr`s — mirrors {@link ResourceExpr}'s `stables`.
    */
-  readonly stables?: Record<string, any>;
+  readonly stables: Record<string, any> | undefined;
   constructor(
     stack: string | undefined,
     stage: string | undefined,

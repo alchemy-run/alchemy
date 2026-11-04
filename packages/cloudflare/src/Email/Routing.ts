@@ -53,7 +53,7 @@ export type RoutingProps = {
    *
    * @see https://developers.cloudflare.com/email-service/configuration/email-routing-addresses/#subaddressing
    */
-  subaddressing?: boolean;
+  subaddressing?: boolean | undefined;
 };
 
 export type Routing = Resource<

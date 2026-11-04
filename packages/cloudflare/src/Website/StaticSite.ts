@@ -61,7 +61,7 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    * });
    * ```
    */
-  dev?: StaticSiteDevCommand | StaticSiteDevWorker;
+  dev?: StaticSiteDevCommand | StaticSiteDevWorker | undefined;
 }
 
 /**

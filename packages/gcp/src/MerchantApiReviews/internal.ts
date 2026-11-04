@@ -20,14 +20,14 @@ export const DEFAULT_LANGUAGE = "en";
 export const DEFAULT_COUNTRY = "US";
 
 export type ReviewCustomAttribute = {
-  name?: string;
-  value?: string;
-  groupValues?: ReviewCustomAttribute[];
+  name?: string | undefined;
+  value?: string | undefined;
+  groupValues?: ReviewCustomAttribute[] | undefined;
 };
 
 export type ReviewLinkProps = {
-  link?: string;
-  type?: reviews.ReviewLinkTypeEnum | (string & {});
+  link?: string | undefined;
+  type?: reviews.ReviewLinkTypeEnum | (string & {}) | undefined;
 };
 
 const markerOf = (stack: string, stage: string, id: string) =>
@@ -142,8 +142,8 @@ export const hasCustomOwnership = (custom: readonly ReviewCustomAttribute[] | un
 export const ownedByAlchemy = (
   id: string,
   input: {
-    customAttributes?: readonly ReviewCustomAttribute[];
-    content?: string;
+    customAttributes?: readonly ReviewCustomAttribute[] | undefined;
+    content?: string | undefined;
   },
 ) =>
   Effect.gen(function* () {
@@ -160,8 +160,8 @@ export const ownedByAlchemy = (
   });
 
 export const hasAlchemyOwnership = (input: {
-  customAttributes?: readonly ReviewCustomAttribute[];
-  content?: string;
+  customAttributes?: readonly ReviewCustomAttribute[] | undefined;
+  content?: string | undefined;
 }) => hasCustomOwnership(input.customAttributes) || hasOwnershipMarker(input.content);
 
 export const accountIdOf = (account: string) =>

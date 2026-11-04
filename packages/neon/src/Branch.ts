@@ -62,13 +62,13 @@ export type BranchProps = {
    * Branch name. If omitted, a unique name is generated from
    * `${app}-${stage}-${id}`.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The parent branch to fork from. Accepts a `Branch`, a
    * `{ branchId }`, or `{ name }` to look up by name. Defaults to the
    * project's default branch.
    */
-  parentBranch?: ParentBranchSource;
+  parentBranch?: ParentBranchSource | undefined;
   /**
    * A Log Sequence Number on the parent branch. The new branch is created
    * with parent data as of this LSN.
@@ -84,7 +84,7 @@ export type BranchProps = {
    *
    * @default false
    */
-  protected?: boolean;
+  protected?: boolean | undefined;
   /**
    * Initialization source.
    *
@@ -105,7 +105,7 @@ export type BranchProps = {
    *
    * @default [{ type: "read_write" }]
    */
-  endpoints?: BranchEndpointConfig[];
+  endpoints?: BranchEndpointConfig[] | undefined;
   /**
    * SQL migrations to apply against the branch. Accepts a directory path, a
    * `Drizzle.Schema` resource, or `{ dir, table? }`.

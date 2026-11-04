@@ -77,7 +77,7 @@ export type TopicRetentionConfig = {
    * omitted, messages are retained until `perPartitionBytes` is
    * exhausted.
    */
-  period?: string;
+  period?: string | undefined;
 };
 
 export type TopicReservationConfig = {

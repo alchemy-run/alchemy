@@ -26,13 +26,13 @@ export interface LoggingRuleSettings {
  */
 export interface LoggingSnapshot {
   /** Whether PII is redacted from activity logs. */
-  redactPii?: boolean;
+  redactPii?: boolean | undefined;
   /** Logging settings for DNS queries. */
-  dns?: LoggingRuleSettings;
+  dns?: LoggingRuleSettings | undefined;
   /** Logging settings for HTTP requests. */
-  http?: LoggingRuleSettings;
+  http?: LoggingRuleSettings | undefined;
   /** Logging settings for layer-4 (network) sessions. */
-  l4?: LoggingRuleSettings;
+  l4?: LoggingRuleSettings | undefined;
 }
 
 export interface LoggingProps {
@@ -41,18 +41,18 @@ export interface LoggingProps {
    * (PII fields include source IP, user email, user ID, device ID, URL,
    * referrer, and user agent).
    */
-  redactPii?: boolean;
+  redactPii?: boolean | undefined;
   /**
    * Logging settings per rule type. Only the rule types (and fields) you
    * declare are converged; everything else keeps its current value.
    */
   settingsByRuleType?: {
     /** Logging settings for DNS queries. */
-    dns?: LoggingRuleSettings;
+    dns?: LoggingRuleSettings | undefined;
     /** Logging settings for HTTP requests. */
-    http?: LoggingRuleSettings;
+    http?: LoggingRuleSettings | undefined;
     /** Logging settings for layer-4 (network) sessions. */
-    l4?: LoggingRuleSettings;
+    l4?: LoggingRuleSettings | undefined;
   };
 }
 

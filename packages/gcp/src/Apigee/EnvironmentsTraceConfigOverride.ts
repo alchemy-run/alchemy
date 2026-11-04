@@ -22,11 +22,11 @@ export type TraceSamplingConfig = {
   /**
    * Sampler. `OFF` is the default; `PROBABILITY` uses `samplingRate`.
    */
-  sampler?: apigee.GoogleCloudApigeeV1TraceSamplingConfigSamplerEnum | (string & {});
+  sampler?: apigee.GoogleCloudApigeeV1TraceSamplingConfigSamplerEnum | (string & {}) | undefined;
   /**
    * Sampling rate when using `PROBABILITY`. Must be `> 0` and `<= 0.5`.
    */
-  samplingRate?: number;
+  samplingRate?: number | undefined;
 };
 
 export type EnvironmentsTraceConfigOverrideProps = {

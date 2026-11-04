@@ -49,7 +49,7 @@ export class Browser extends Plugin.Service<
      * resolve the service designator the binding should target.
      */
     readonly register: (props: {
-      readonly headful?: boolean;
+      readonly headful?: boolean | undefined;
     }) => Effect.Effect<
       WorkerdConfig.ServiceDesignator,
       ConfigError,
@@ -146,7 +146,7 @@ export const BrowserLive = Layer.effect(
 
         return {
           api: {
-            register: (props: { readonly headful?: boolean }) =>
+            register: (props: { readonly headful?: boolean | undefined }) =>
               Plugin.use(Loopback.Loopback, (loopback) =>
                 Effect.map(loopback.api.route(LOOPBACK_TARGET_BROWSER, handler), (service) => {
                   used = true;

@@ -20,7 +20,7 @@ export type Void = typeof kVoid;
 export interface Config {
   services?: Array<Service>;
   sockets?: Array<Socket>;
-  v8Flags?: ReadonlyArray<string>;
+  v8Flags?: ReadonlyArray<string> | undefined;
   extensions?: Array<Extension>;
   autogates?: Array<string>;
   structuredLogging?: boolean;
@@ -97,13 +97,13 @@ export type Worker = (
   bindings?: Array<Worker_Binding>;
   globalOutbound?: ServiceDesignator;
   cacheApiOutbound?: ServiceDesignator;
-  durableObjectNamespaces?: Array<Worker_DurableObjectNamespace>;
+  durableObjectNamespaces?: Array<Worker_DurableObjectNamespace> | undefined;
   durableObjectUniqueKeyModifier?: string;
   durableObjectStorage?: Worker_DurableObjectStorage;
   moduleFallback?: string;
-  tails?: Array<ServiceDesignator>;
-  streamingTails?: Array<ServiceDesignator>;
-  containerEngine?: Worker_ContainerEngine;
+  tails?: Array<ServiceDesignator> | undefined;
+  streamingTails?: Array<ServiceDesignator> | undefined;
+  containerEngine?: Worker_ContainerEngine | undefined;
   workflowsEngine?: WorkflowsEngine;
   accessBlobHeader?: string;
   accessBindingService?: ServiceDesignator;
@@ -260,7 +260,7 @@ export type Worker_DurableObjectNamespace = {
    * workerd will talk to the configured container engine to start containers for each
    * Durable Object based on the given image.
    */
-  container?: Worker_DurableObjectNamespace_ContainerOptions;
+  container?: Worker_DurableObjectNamespace_ContainerOptions | undefined;
 } & ({ uniqueKey?: string } | { ephemeralLocal?: Void });
 
 export type ExternalServer = { address?: string } & (

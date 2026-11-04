@@ -74,7 +74,7 @@ export interface WorkflowProps {
    * Changing the name replaces the workflow.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * S3 location of the workflow definition — a YAML file that defines the
    * DAG structure using supported AWS operators.

@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const DispatchNamespaceBindingWorker = {
   worker: () =>
@@ -63,7 +65,10 @@ export const remote = (
         name: props.binding,
         type: "dispatch_namespace",
         namespace: props.namespace,
-        outbound: props.outbound,
+        ...Record.filterMap(
+          { outbound: props.outbound },
+          Result.fromNullishOr(() => undefined),
+        ),
       },
       (service) => ({
         name: props.binding,

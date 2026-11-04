@@ -182,7 +182,12 @@ const command = Command.make(
     const bucketById = new Uint8Array(MAX);
     const idInfo = new Map<
       number,
-      { sym?: string; path?: string; line?: number; flags?: string }
+      {
+        sym: string | undefined;
+        path: string | undefined;
+        line: number | undefined;
+        flags: string | undefined;
+      }
     >();
     const compositeByBucket = new Map<string, number>();
     const symCount = new Map<string, number>();

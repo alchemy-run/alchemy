@@ -26,14 +26,14 @@ export interface InstanceProps {
   /**
    * Explicit instance ARN to adopt.
    */
-  instanceArn?: string;
+  instanceArn?: string | undefined;
   /**
    * Friendly instance name.
    *
    * When `mode` is `"account"`, this name is passed to `CreateInstance`.
    * When `mode` is `"existing"`, it is used only for discovery.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * How Alchemy should satisfy this resource.
    *
@@ -45,7 +45,7 @@ export interface InstanceProps {
    *
    * @default "existing"
    */
-  mode?: "existing" | "account";
+  mode?: "existing" | "account" | undefined;
 }
 
 export interface Instance extends Resource<

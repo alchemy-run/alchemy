@@ -96,7 +96,7 @@ export interface ComputeEnvironmentProps {
   /**
    * User-defined tags to apply to the compute environment.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface ComputeEnvironment extends Resource<
@@ -178,7 +178,7 @@ const toAttributes = (ce: batch.ComputeEnvironmentDetail, tags: Record<string, s
   tags,
 });
 
-const observedTagsOf = (ce: { tags?: { [key: string]: string | undefined } }) =>
+const observedTagsOf = (ce: { tags?: { [key: string]: string | undefined } | undefined }) =>
   Object.fromEntries(
     Object.entries(ce.tags ?? {}).filter((e): e is [string, string] => typeof e[1] === "string"),
   );

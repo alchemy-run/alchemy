@@ -28,7 +28,7 @@ type Check = (url: string, mode: Mode) => Effect.Effect<void, unknown>;
 interface Variant {
   readonly fixture: string;
   readonly entries: ReadonlyArray<string>;
-  readonly config?: string;
+  readonly config?: string | undefined;
   readonly main?: string;
   readonly assets: Cloudflare.Website.ViteProps["assets"];
 }

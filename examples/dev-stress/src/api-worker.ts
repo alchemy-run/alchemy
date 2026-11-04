@@ -16,6 +16,8 @@
  *   - `GET /aws/*`  → CROSS-CLOUD: fetches the AWS Lambda function URL
  *                     served by the floci emulator over its own TLS cert
  */
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { API_MARKER } from "./api/marker.ts";
 import { message } from "./api/message.ts";
 
@@ -67,7 +69,10 @@ export default {
       const upstream = await fetch(target, {
         method: request.method,
         headers: { "content-type": "application/json" },
-        body: request.method === "GET" ? undefined : await request.text(),
+        ...Record.filterMap(
+          { body: request.method === "GET" ? undefined : await request.text() },
+          Result.fromNullishOr(() => undefined),
+        ),
       });
       return new Response(await upstream.text(), {
         status: upstream.status,

@@ -21,39 +21,39 @@ export interface UserPoolPasswordPolicy {
    * Minimum password length (6-99).
    * @default 8
    */
-  minimumLength?: number;
+  minimumLength?: number | undefined;
   /**
    * Require at least one uppercase letter.
    * @default true
    */
-  requireUppercase?: boolean;
+  requireUppercase?: boolean | undefined;
   /**
    * Require at least one lowercase letter.
    * @default true
    */
-  requireLowercase?: boolean;
+  requireLowercase?: boolean | undefined;
   /**
    * Require at least one number.
    * @default true
    */
-  requireNumbers?: boolean;
+  requireNumbers?: boolean | undefined;
   /**
    * Require at least one symbol.
    * @default true
    */
-  requireSymbols?: boolean;
+  requireSymbols?: boolean | undefined;
   /**
    * Number of previous passwords a user cannot reuse. Requires the
    * `ESSENTIALS` or `PLUS` feature tier.
    */
-  passwordHistorySize?: number;
+  passwordHistorySize?: number | undefined;
   /**
    * How long an admin-set temporary password stays valid, e.g.
    * `"7 days"` (0-365 days). Rounded to whole days on the wire
    * (`TemporaryPasswordValidityDays`).
    * @default 7 days
    */
-  temporaryPasswordValidity?: Duration.Input;
+  temporaryPasswordValidity?: Duration.Input | undefined;
 }
 
 /**
@@ -833,7 +833,7 @@ export const UserPoolProvider = () =>
        * whole number of days (desired durations are converted first). */
       const normalizedPasswordPolicy = (
         policy: Omit<UserPoolPasswordPolicy, "temporaryPasswordValidity"> & {
-          temporaryPasswordValidityDays?: number;
+          temporaryPasswordValidityDays?: number | undefined;
         },
       ): Required<
         Omit<UserPoolPasswordPolicy, "passwordHistorySize" | "temporaryPasswordValidity">

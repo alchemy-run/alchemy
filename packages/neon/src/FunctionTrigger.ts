@@ -18,7 +18,9 @@ export interface FunctionTriggerCommonProps {
   };
   /** Unique name among visible triggers, including inherited ones. Generated when omitted. */ name?: string;
   /** POST delivery path, without a query string. @default "/" */ path?: string;
-  /** Enable delivery. Inherited triggers remain disabled unless explicitly enabled. */ enabled?: boolean;
+  /** Enable delivery. Inherited triggers remain disabled unless explicitly enabled. */ enabled?:
+    | boolean
+    | undefined;
 }
 export type FunctionTriggerProps = FunctionTriggerCommonProps &
   (
@@ -33,7 +35,7 @@ export type FunctionTriggerProps = FunctionTriggerCommonProps &
         /** Successful upload event. */ type: "storage_object_created";
         /** Same-branch bucket and optional byte-exact object-key prefix. */ storageObjectCreated: {
           bucket: { projectId: string; branchId: string; bucketName: string };
-          prefix?: string;
+          prefix?: string | undefined;
         };
         schedule?: never;
       }
@@ -101,7 +103,7 @@ const scopeOf = (fn: { projectId: string; branchId: string }) => ({
 });
 const observe = Effect.fn(function* (
   scope: { project_id: string; branch_id: string },
-  identity: { id?: string; name?: string },
+  identity: { id?: string | undefined; name?: string },
 ) {
   const { triggers } = yield* Neon.listProjectBranchTriggers(scope);
   return triggers.find((trigger) =>

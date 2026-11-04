@@ -100,7 +100,7 @@ interface SessionEntry {
   readonly owners: Set<SessionOwner>;
   readonly testOwned: boolean;
   readonly connections: Set<Connection>;
-  connection?: Connection;
+  connection?: Connection | undefined;
   closed: boolean;
 }
 

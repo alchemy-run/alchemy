@@ -26,7 +26,7 @@ export interface ManagedDatabase {
 
 export interface CreateManagedDatabaseOptions {
   /** Seed the new database from an existing database (e.g. a template). */
-  seed?: DatabaseSeed;
+  seed?: DatabaseSeed | undefined;
   /** Maximum size of the database, e.g. `"256mb"`. */
   sizeLimit?: string;
 }
@@ -125,9 +125,9 @@ export const ManageDatabasesHttp = Layer.effect(
         );
 
       const toManaged = (db: {
-        Name?: string;
-        DbId?: string;
-        Hostname?: string;
+        Name?: string | undefined;
+        DbId?: string | undefined;
+        Hostname?: string | undefined;
       }): ManagedDatabase => ({
         name: db.Name ?? "",
         dbId: db.DbId ?? "",

@@ -30,9 +30,9 @@ const COLLECTION = "multicloudDataTransferConfigs";
 
 export type StateMetadata = {
   /** Transient or rest state (`ADDING`, `ACTIVE`, `DELETING`, …). */
-  state?: string;
+  state?: string | undefined;
   /** RFC3339 time when a transient state becomes effective. */
-  effectiveTime?: string;
+  effectiveTime?: string | undefined;
 };
 
 export type StateTimeline = {

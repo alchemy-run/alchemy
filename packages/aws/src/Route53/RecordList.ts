@@ -15,7 +15,7 @@ export interface RecordListProps {
    * name, so one list may span several zones (e.g. certificate validation
    * records for `example.com` and `example.org`).
    */
-  hostedZoneId?: string;
+  hostedZoneId?: string | undefined;
   /**
    * Records to publish.
    *

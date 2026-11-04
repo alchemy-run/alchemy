@@ -12,14 +12,14 @@ export interface SqlConnectionInfo {
   /** Endpoint port. */
   port: number;
   /** Database name, when one was requested. */
-  database?: string;
+  database?: string | undefined;
   /** Login user, when the credential strategy resolves one. */
-  username?: string;
+  username?: string | undefined;
   /**
    * Login password (or short-lived IAM auth token), when the credential
    * strategy resolves one.
    */
-  password?: Redacted.Redacted<string>;
+  password?: Redacted.Redacted<string> | undefined;
   /** Whether the connection requires TLS. */
   ssl: boolean;
   /**
@@ -47,18 +47,18 @@ export interface SqlConnectionUrlOptions {
    * URL scheme.
    * @default "postgresql"
    */
-  scheme?: string;
+  scheme?: string | undefined;
   host: string;
-  port?: number;
-  database?: string;
-  username?: string;
-  password?: string | Redacted.Redacted<string>;
+  port?: number | undefined;
+  database?: string | undefined;
+  username?: string | undefined;
+  password?: string | Redacted.Redacted<string> | undefined;
   /**
    * When `true`, appends `sslmode={sslMode}` to the URL query (the
    * postgres-flavored TLS opt-in that both `postgres.js` and Hyperdrive
    * origins understand).
    */
-  ssl?: boolean;
+  ssl?: boolean | undefined;
   /**
    * `sslmode` value appended when {@link SqlConnectionUrlOptions.ssl} is
    * `true`. `node-pg`'s URL parser treats `require` as full-verification
@@ -68,9 +68,9 @@ export interface SqlConnectionUrlOptions {
    * provided out-of-band.
    * @default "require"
    */
-  sslMode?: "require" | "no-verify";
+  sslMode?: "require" | "no-verify" | undefined;
   /** Extra query parameters to append verbatim. */
-  params?: Record<string, string>;
+  params?: Record<string, string> | undefined;
 }
 
 /**

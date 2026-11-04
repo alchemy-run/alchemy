@@ -26,17 +26,15 @@ import type * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import { childProcessLogger } from "./ChildOutput.ts";
 import { devChildUrlMarker, type DevChildPayload } from "./DevChild.ts";
-import type { FrameworkDevServer } from "./Framework.ts";
+import type { FrameworkDevOptions, FrameworkDevServer } from "./Framework.ts";
 
 /** The structural slice of a framework-integration module the runner drives. */
 interface FrameworkModule {
   readonly make: (options: Record<string, unknown>) => Effect.Effect<
     {
-      readonly dev: (options: {
-        readonly root?: string;
-        readonly port?: number;
-        readonly host?: string;
-      }) => Effect.Effect<FrameworkDevServer, unknown, Scope.Scope>;
+      readonly dev: (
+        options: FrameworkDevOptions,
+      ) => Effect.Effect<FrameworkDevServer, unknown, Scope.Scope>;
     },
     unknown,
     FileSystem.FileSystem | Path.Path

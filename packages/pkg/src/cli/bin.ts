@@ -60,7 +60,7 @@ export const packCommand = Command.make(
         groups: group,
         registry,
         out,
-        since: Option.getOrUndefined(since),
+        ...(Option.isSome(since) ? { since: since.value } : {}),
         all,
         rebuildAllPaths,
       });

@@ -113,7 +113,7 @@ export interface LegacyPipelineProps {
    * logical ID.
    * @default ${app}-${id}-${stage}-${suffix}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Ingest sources accepted by the pipeline.
    * @default [{ type: "http" }, { type: "binding" }]
@@ -337,15 +337,15 @@ interface ObservedLegacyPipeline {
     compression: { type: string };
     path: {
       bucket: string;
-      filename?: string | null;
-      filepath?: string | null;
-      prefix?: string | null;
+      filename?: string | null | undefined;
+      filepath?: string | null | undefined;
+      prefix?: string | null | undefined;
     };
   };
   source: readonly {
     type: string;
-    authentication?: boolean | null;
-    cors?: { origins?: readonly string[] | null } | null;
+    authentication?: boolean | null | undefined;
+    cors?: { origins?: readonly string[] | null | undefined } | null | undefined;
   }[];
 }
 

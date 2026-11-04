@@ -207,9 +207,9 @@ type ObservedEntry = {
   id: string;
   enabled: boolean;
   name: string;
-  pattern: { regex: string; validation?: "luhn" | (string & {}) | null };
-  description?: string | null;
-  profileId?: string | null;
+  pattern: { regex: string; validation?: "luhn" | (string & {}) | null | undefined };
+  description?: string | null | undefined;
+  profileId?: string | null | undefined;
 };
 
 /**

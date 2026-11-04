@@ -23,19 +23,19 @@ export interface DBProxyTargetGroupProps {
    * Target group name.
    * @default "default"
    */
-  targetGroupName?: string;
+  targetGroupName?: string | undefined;
   /**
    * Cluster targets registered with the proxy.
    */
-  dbClusterIdentifiers?: string[];
+  dbClusterIdentifiers?: string[] | undefined;
   /**
    * Instance targets registered with the proxy.
    */
-  dbInstanceIdentifiers?: string[];
+  dbInstanceIdentifiers?: string[] | undefined;
   /**
    * Connection pool configuration.
    */
-  connectionPoolConfig?: rds.ConnectionPoolConfiguration;
+  connectionPoolConfig?: rds.ConnectionPoolConfiguration | undefined;
 }
 
 export interface DBProxyTargetGroup extends Resource<

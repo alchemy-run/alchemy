@@ -37,7 +37,7 @@ export type PdfInstruction = {
   /**
    * Cloud Storage URI of the PDF (`gs://...`).
    */
-  gcsFileUri?: string;
+  gcsFileUri?: string | undefined;
 };
 
 export type CsvInstruction = {
@@ -45,7 +45,7 @@ export type CsvInstruction = {
    * Cloud Storage URI of the CSV (`gs://...`). Deprecated — the API
    * only accepts PDF instructions.
    */
-  gcsFileUri?: string;
+  gcsFileUri?: string | undefined;
 };
 
 export type InstructionProps = {
@@ -82,7 +82,7 @@ export type InstructionProps = {
    * Deprecated CSV instruction. Immutable — changing it replaces the
    * instruction.
    */
-  csvInstruction?: CsvInstruction;
+  csvInstruction?: CsvInstruction | undefined;
 };
 
 export type Instruction = Resource<

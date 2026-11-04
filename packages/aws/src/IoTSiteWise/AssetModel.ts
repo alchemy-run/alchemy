@@ -270,9 +270,9 @@ const waitForAssetModelState = (assetModelId: string, target: "ACTIVE" | "DELETE
  * exist (matched by name). Entries without a match are sent id-less and
  * get new ids.
  */
-const withObservedIds = <T extends { id?: string; name: string }>(
+const withObservedIds = <T extends { id?: string | undefined; name: string }>(
   desired: readonly T[],
-  observed: readonly { id?: string; name: string }[],
+  observed: readonly { id?: string | undefined; name: string }[],
 ): T[] =>
   desired.map((item) => {
     if (item.id !== undefined) return item;

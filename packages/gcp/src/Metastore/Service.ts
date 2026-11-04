@@ -34,23 +34,23 @@ export type HiveMetastoreConfig = {
    * Hive metastore schema version. Immutable.
    * @default "3.1.2"
    */
-  version?: string;
+  version?: string | undefined;
   /**
    * hive-site.xml overrides applied to the primary service.
    */
-  configOverrides?: Record<string, string>;
+  configOverrides?: Record<string, string> | undefined;
   /**
    * Endpoint protocol (`THRIFT` or `GRPC`).
    */
-  endpointProtocol?: metastore.HiveMetastoreConfigEndpointProtocolEnum | (string & {});
+  endpointProtocol?: metastore.HiveMetastoreConfigEndpointProtocolEnum | (string & {}) | undefined;
   /**
    * Kerberos service-principal configuration.
    */
-  kerberosConfig?: metastore.KerberosConfig;
+  kerberosConfig?: metastore.KerberosConfig | undefined;
   /**
    * Auxiliary Hive versions keyed by service name.
    */
-  auxiliaryVersions?: metastore.AuxiliaryVersionConfigMap;
+  auxiliaryVersions?: metastore.AuxiliaryVersionConfigMap | undefined;
 };
 
 export type ServiceProps = {

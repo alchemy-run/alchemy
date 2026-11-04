@@ -22,13 +22,13 @@ export interface SubscriptionFilterProps {
    * filter within the log group (put semantics upsert by name). If omitted, a
    * unique name is generated. Changing this value replaces the filter.
    */
-  filterName?: string;
+  filterName?: string | undefined;
   /**
    * Filter pattern selecting which log events are delivered to the
    * destination. An empty string matches every log event.
    * @default ""
    */
-  filterPattern?: string;
+  filterPattern?: string | undefined;
   /**
    * ARN of the destination that receives matching log events: a Lambda
    * function, a Kinesis stream, a Firehose delivery stream, or a cross-account
@@ -40,18 +40,18 @@ export interface SubscriptionFilterProps {
    * destination. Required for Kinesis / Firehose destinations; not used for
    * Lambda destinations (which authorize via a Lambda resource policy).
    */
-  roleArn?: string;
+  roleArn?: string | undefined;
   /**
    * How log data is distributed to a Kinesis stream destination.
    * @default "ByLogStream"
    */
-  distribution?: SubscriptionDistribution;
+  distribution?: SubscriptionDistribution | undefined;
   /**
    * Whether the subscription filter applies to transformed logs when a log
    * transformer is configured on the log group.
    * @default false
    */
-  applyOnTransformedLogs?: boolean;
+  applyOnTransformedLogs?: boolean | undefined;
 }
 
 export interface SubscriptionFilter extends Resource<
@@ -62,13 +62,13 @@ export interface SubscriptionFilter extends Resource<
     logGroupName: string;
     filterPattern: string;
     destinationArn: string;
-    roleArn?: string;
-    distribution?: SubscriptionDistribution;
+    roleArn?: string | undefined;
+    distribution?: SubscriptionDistribution | undefined;
     /**
      * Whether the filter applies to transformed logs, as observed. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    applyOnTransformedLogs?: boolean;
+    applyOnTransformedLogs?: boolean | undefined;
   },
   never,
   Providers
@@ -133,7 +133,7 @@ export const SubscriptionFilterProvider = () =>
   Provider.effect(
     SubscriptionFilter,
     Effect.gen(function* () {
-      const toFilterName = (id: string, props: { filterName?: string } = {}) =>
+      const toFilterName = (id: string, props: { filterName?: string | undefined } = {}) =>
         props.filterName
           ? Effect.succeed(props.filterName)
           : createPhysicalName({ id, maxLength: 512 });

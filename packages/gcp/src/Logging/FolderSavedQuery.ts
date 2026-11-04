@@ -27,14 +27,14 @@ export type FolderSavedQueryLoggingQuery = {
   /**
    * Advanced Logging Query Language filter. Max 20,000 characters.
    */
-  filter?: string;
+  filter?: string | undefined;
 };
 
 export type FolderSavedQueryOpsAnalyticsQuery = {
   /**
    * Log Analytics SQL query text.
    */
-  sqlQueryText?: string;
+  sqlQueryText?: string | undefined;
 };
 
 export type FolderSavedQueryProps = {
@@ -42,13 +42,13 @@ export type FolderSavedQueryProps = {
    * Folder id (`folders/{folder}` or the numeric id). When omitted, the
    * stack project is used. Immutable — changing it replaces the query.
    */
-  folderId?: string;
+  folderId?: string | undefined;
   /**
    * Location of the saved query. Immutable — changing it replaces the
    * query.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Saved query id (the `{query}` segment of
    * `{parent}/locations/{location}/savedQueries/{query}`). If omitted, a
@@ -56,7 +56,7 @@ export type FolderSavedQueryProps = {
    * underscores, hyphens, periods; first character must be alphanumeric.
    * Immutable — changing it replaces the query.
    */
-  savedQueryId?: string;
+  savedQueryId?: string | undefined;
   /**
    * User-specified title shown in Logs Explorer.
    */
@@ -66,23 +66,23 @@ export type FolderSavedQueryProps = {
    * `SHARED` queries are owned by the parent resource.
    * @default "PRIVATE"
    */
-  visibility?: "PRIVATE" | "SHARED";
+  visibility?: "PRIVATE" | "SHARED" | undefined;
   /**
    * Human-readable description. Saved queries have no labels field, so
    * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
    * from attributes.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Logs Explorer query. At least one of `loggingQuery` or
    * `opsAnalyticsQuery` is required.
    */
-  loggingQuery?: FolderSavedQueryLoggingQuery;
+  loggingQuery?: FolderSavedQueryLoggingQuery | undefined;
   /**
    * Log Analytics SQL query. At least one of `loggingQuery` or
    * `opsAnalyticsQuery` is required.
    */
-  opsAnalyticsQuery?: FolderSavedQueryOpsAnalyticsQuery;
+  opsAnalyticsQuery?: FolderSavedQueryOpsAnalyticsQuery | undefined;
 };
 
 export type FolderSavedQuery = Resource<

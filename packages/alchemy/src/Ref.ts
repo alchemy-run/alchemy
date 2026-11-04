@@ -16,8 +16,8 @@ export interface Ref<R extends ResourceLike = ResourceLike> {
 
 export interface RefMetadata<R extends ResourceLike> {
   id: R["LogicalId"];
-  stack?: string;
-  stage?: string;
+  stack?: string | undefined;
+  stage?: string | undefined;
   /**
    * The resource type of the ref's target (e.g.
    * `"Cloudflare.KV.Namespace"`). Known statically — `MyResource.ref`
@@ -25,7 +25,7 @@ export interface RefMetadata<R extends ResourceLike> {
    * bindings, capability helpers) that read `.Type` can identify a ref
    * exactly like a locally-declared resource.
    */
-  type?: string;
+  type?: string | undefined;
 }
 
 export const ref = <R extends ResourceLike>(
@@ -34,8 +34,8 @@ export const ref = <R extends ResourceLike>(
     stack,
     stage,
   }: {
-    stack?: string;
-    stage?: string;
+    stack?: string | undefined;
+    stage?: string | undefined;
   } = {},
   type?: string,
 ): Ref<R> => {

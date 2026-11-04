@@ -182,7 +182,7 @@ export interface StateStoreLifecycle<Options = StateStoreOptions> {
   readonly bootstrap?: (
     input: Options & {
       /** Redeploy an existing store instead of adopting it. */
-      readonly force?: boolean;
+      readonly force?: boolean | undefined;
     },
   ) => Effect.Effect<StateStoreBootstrap, ContributionFailure, ContributionServices>;
   /** Delete the store and its backing resources. Idempotent. */
@@ -191,7 +191,7 @@ export interface StateStoreLifecycle<Options = StateStoreOptions> {
   ) => Effect.Effect<StateStoreTeardown, ContributionFailure, ContributionServices>;
   /** The store's past log entries, oldest first. */
   readonly logs?: (
-    input: Options & { readonly limit?: number; readonly since?: Date },
+    input: Options & { readonly limit?: number | undefined; readonly since?: Date | undefined },
   ) => Effect.Effect<ReadonlyArray<StateStoreLogEntry>, ContributionFailure, ContributionServices>;
   /** The store's log entries as they happen. */
   readonly tailLogs?: (

@@ -2,6 +2,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const WorkflowsBindingWorker = {
   worker: () =>
@@ -233,7 +235,7 @@ export interface LocalWorkflowProps {
    * routed through the dev-registry proxy. This enables service-binding
    * style cross-process Workflow access during local development.
    */
-  readonly scriptName?: string;
+  readonly scriptName?: string | undefined;
 }
 
 /**
@@ -325,7 +327,10 @@ export const remote = (props: RemoteWorkflowProps) =>
       type: "workflow",
       workflowName: props.workflowName,
       className: props.className,
-      scriptName: props.scriptName,
+      ...Record.filterMap(
+        { scriptName: props.scriptName },
+        Result.fromNullishOr(() => undefined),
+      ),
     },
     (service) => ({
       name: props.binding,

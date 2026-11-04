@@ -37,7 +37,7 @@ export const toTagRecord = (tags: organizations.Tag[] | undefined): Organization
       .map((tag) => [tag.Key, tag.Value]),
   );
 
-export const collectPages = <Page extends { NextToken?: string }, Item, E, R>(
+export const collectPages = <Page extends { NextToken?: string | undefined }, Item, E, R>(
   fetch: (nextToken?: string) => Effect.Effect<Page, E, R>,
   select: (page: Page) => ReadonlyArray<Item> | undefined,
 ) =>

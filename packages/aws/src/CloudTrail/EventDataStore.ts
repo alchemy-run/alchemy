@@ -103,12 +103,12 @@ export interface EventDataStoreProps {
    * stopped store keeps its collected events queryable.
    * @default true (AWS default)
    */
-  ingestionEnabled?: boolean;
+  ingestionEnabled?: boolean | undefined;
   /**
    * Tags to apply to the event data store. Merged with internal Alchemy
    * tags.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface EventDataStore extends Resource<

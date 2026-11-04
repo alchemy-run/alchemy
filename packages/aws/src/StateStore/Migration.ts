@@ -219,7 +219,8 @@ const rollbackStage = Effect.fn(function* (
 
 /** Keep the stages a request selects: all of them, one stack's, or one. */
 const selected =
-  (options: { stack?: string; stage?: string }) => (entry: { stack: string; stage: string }) =>
+  (options: { stack?: string | undefined; stage?: string | undefined }) =>
+  (entry: { stack: string; stage: string }) =>
     (options.stack === undefined || entry.stack === options.stack) &&
     (options.stage === undefined || entry.stage === options.stage);
 

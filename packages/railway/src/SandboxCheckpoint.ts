@@ -36,7 +36,7 @@ export interface SandboxCheckpointProps {
    * snapshot without capturing the source again. Removing it restores
    * the generated name.
    */
-  name?: string;
+  name?: string | undefined;
 }
 
 export type SandboxCheckpoint = Resource<

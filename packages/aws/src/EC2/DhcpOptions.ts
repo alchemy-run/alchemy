@@ -52,7 +52,7 @@ export interface DhcpOptionsProps {
    * is associated on create/update; on delete (or when this is cleared) the VPC
    * is re-associated with the account's default options set. Mutable.
    */
-  vpcId?: VpcId;
+  vpcId?: VpcId | undefined;
 
   /**
    * Tags to assign to the DHCP options set.
@@ -82,7 +82,7 @@ export interface DhcpOptions extends Resource<
     /**
      * The ID of the VPC this options set is associated with, if any.
      */
-    vpcId?: VpcId;
+    vpcId?: VpcId | undefined;
   },
   never,
   Providers

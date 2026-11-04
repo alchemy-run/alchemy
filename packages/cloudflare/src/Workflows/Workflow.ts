@@ -52,12 +52,14 @@ export interface WorkflowCronSchedule {
 export type WorkflowBackoff = "constant" | "linear" | "exponential";
 
 export interface WorkflowStepConfig {
-  retries?: {
-    limit: number;
-    delay: string | number;
-    backoff?: WorkflowBackoff;
-  };
-  timeout?: string | number;
+  retries?:
+    | {
+        limit: number;
+        delay: string | number;
+        backoff?: WorkflowBackoff;
+      }
+    | undefined;
+  timeout?: string | number | undefined;
 }
 
 export interface WorkflowStepContextData {
@@ -295,23 +297,23 @@ export interface WorkflowRefProps {
    * Changing this name replaces the Workflow. Fixed names must be unique to
    * each independently managed stack and stage.
    */
-  workflowName?: string;
+  workflowName?: string | undefined;
   /**
    * Name of the exported `WorkflowEntrypoint` class.
    *
    * @default name
    */
-  className?: string;
+  className?: string | undefined;
   /**
    * Worker script that hosts the Workflow class. Omit this when the workflow
    * is hosted by the Worker that declares the binding.
    */
-  scriptName?: Input<string>;
+  scriptName?: Input<string> | undefined;
   /**
    * Limits applied to the workflow. Only applies when the workflow is hosted by
    * the Worker that declares the binding; ignored when `scriptName` is set.
    */
-  limits?: WorkflowLimits;
+  limits?: WorkflowLimits | undefined;
   /**
    * Cron expressions that create a new Workflow instance on each match.
    * Wrangler-compatible: `schedules: ["0 * * * *"]`.
@@ -325,7 +327,7 @@ export interface WorkflowRefProps {
    *
    * Account-wide limit: 100 cron expressions.
    */
-  schedules?: string[];
+  schedules?: string[] | undefined;
   /**
    * Restrict where the Workflow's instances run and store data, e.g. for
    * GDPR or FedRAMP. Workers anywhere can still create and manage instances.
@@ -335,7 +337,7 @@ export interface WorkflowRefProps {
    * its instances. Ignored when `scriptName` is set; set it on the Worker
    * that hosts the Workflow. Local development ignores it.
    */
-  jurisdiction?: WorkflowJurisdiction;
+  jurisdiction?: WorkflowJurisdiction | undefined;
 }
 
 /**
@@ -351,11 +353,11 @@ export interface WorkflowProps {
    * Changing this name replaces the Workflow. Fixed names must be unique to
    * each independently managed stack and stage.
    */
-  workflowName?: string;
+  workflowName?: string | undefined;
   /**
    * Limits applied to the workflow.
    */
-  limits?: WorkflowLimits;
+  limits?: WorkflowLimits | undefined;
   /**
    * Cron expressions that create a new Workflow instance on each match.
    * Wrangler-compatible: `schedules: ["0 * * * *"]`.
@@ -366,7 +368,7 @@ export interface WorkflowProps {
    *
    * Account-wide limit: 100 cron expressions.
    */
-  schedules?: string[];
+  schedules?: string[] | undefined;
   /**
    * Restrict where the Workflow's instances run and store data, e.g. for
    * GDPR or FedRAMP. Workers anywhere can still create and manage instances.
@@ -375,7 +377,7 @@ export interface WorkflowProps {
    * change it, so changing or removing it replaces the Workflow and deletes
    * its instances. Local development ignores it.
    */
-  jurisdiction?: WorkflowJurisdiction;
+  jurisdiction?: WorkflowJurisdiction | undefined;
 }
 
 /**
@@ -388,17 +390,17 @@ export interface WorkflowLike<Params = unknown> {
   kind: TypeId;
   name: string;
   /** Account-global Workflow name, when explicitly configured. */
-  workflowName?: string;
+  workflowName?: string | undefined;
   /** @internal phantom */
-  className?: string;
+  className?: string | undefined;
   /** @internal phantom */
-  scriptName?: Input<string>;
+  scriptName?: Input<string> | undefined;
   /** @internal phantom */
-  limits?: WorkflowLimits;
+  limits?: WorkflowLimits | undefined;
   /** @internal phantom */
-  schedules?: string[];
+  schedules?: string[] | undefined;
   /** @internal phantom */
-  jurisdiction?: WorkflowJurisdiction;
+  jurisdiction?: WorkflowJurisdiction | undefined;
   /** @internal phantom */
   Params?: Params;
 }
@@ -1154,21 +1156,21 @@ export interface WorkflowResourceProps {
    *
    * @internal
    */
-  workflowName?: string;
+  workflowName?: string | undefined;
   className: string;
   /** Hosting Worker script, supplied here or through a host binding. */
-  scriptName?: string;
-  limits?: WorkflowLimits;
+  scriptName?: string | undefined;
+  limits?: WorkflowLimits | undefined;
   /**
    * Cron expressions that create a new Workflow instance on each match.
    * Pass an empty array to remove all schedules.
    */
-  schedules?: string[];
+  schedules?: string[] | undefined;
   /**
    * Jurisdiction where instances run and store data. Fixed at creation;
    * changing it replaces the Workflow.
    */
-  jurisdiction?: WorkflowJurisdiction;
+  jurisdiction?: WorkflowJurisdiction | undefined;
 }
 
 export interface WorkflowResourceAttrs {

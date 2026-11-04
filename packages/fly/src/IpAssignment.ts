@@ -46,7 +46,7 @@ export interface IpAssignmentProps {
    * Private network a `private_v6` address is reachable from. Defaults
    * to the organization's network. Create-only; changing it replaces.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Organization slug. Defaults to the current token's org. Not a
    * replacement key.

@@ -43,10 +43,9 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
   Alchemy.Stack.useSync(({ stage }) => ({
     main: import.meta.url,
     observability: { enabled: true },
-    domain:
-      stage === "prod"
-        ? { name: "otel.alchemy.run", aliases: ["analytics.alchemy.run"] }
-        : undefined,
+    ...(stage === "prod" && {
+      domain: { name: "otel.alchemy.run", aliases: ["analytics.alchemy.run"] },
+    }),
   })),
   Effect.gen(function* () {
     const tokenValue = yield* (yield* IngestToken).token;

@@ -68,14 +68,14 @@ export interface EventSourceMappingProps {
    * - Kinesis: default 100, max 10,000
    * - DynamoDB Streams: default 100, max 10,000
    */
-  batchSize?: number;
+  batchSize?: number | undefined;
   /**
    * The maximum amount of time that Lambda spends gathering records before
    * invoking the function (e.g. `"5 seconds"`). Rounded to whole seconds on
    * the wire.
    * @default 0
    */
-  maximumBatchingWindow?: Duration.Input;
+  maximumBatchingWindow?: Duration.Input | undefined;
   /**
    * Whether the event source mapping is active.
    * @default true
@@ -92,34 +92,34 @@ export interface EventSourceMappingProps {
   /**
    * The timestamp to start reading from when `startingPosition` is `AT_TIMESTAMP`.
    */
-  startingPositionTimestamp?: Date;
+  startingPositionTimestamp?: Date | undefined;
   /**
    * (Kinesis and DynamoDB Streams) The number of batches to process from each shard concurrently.
    * @default 1
    */
-  parallelizationFactor?: number;
+  parallelizationFactor?: number | undefined;
   /**
    * (Kinesis and DynamoDB Streams) Split the batch in two and retry if the function returns an error.
    * @default false
    */
-  bisectBatchOnFunctionError?: boolean;
+  bisectBatchOnFunctionError?: boolean | undefined;
   /**
    * (Kinesis and DynamoDB Streams) Discard records older than the specified
    * age (e.g. `"1 hour"`). Rounded to whole seconds on the wire.
    * @default infinite (omit to never expire records)
    */
-  maximumRecordAge?: Duration.Input;
+  maximumRecordAge?: Duration.Input | undefined;
   /**
    * (Kinesis and DynamoDB Streams) Discard records after the specified number of retries.
    * @default -1 (infinite)
    */
-  maximumRetryAttempts?: number;
+  maximumRetryAttempts?: number | undefined;
   /**
    * (Kinesis and DynamoDB Streams) The duration of a processing window for
    * tumbling windows (e.g. `"30 seconds"`). Rounded to whole seconds on the
    * wire.
    */
-  tumblingWindow?: Duration.Input;
+  tumblingWindow?: Duration.Input | undefined;
   /**
    * A list of current response type enums applied to the event source mapping.
    * Defaults to `["ReportBatchItemFailures"]` for SQS, Kinesis and DynamoDB
@@ -127,7 +127,7 @@ export interface EventSourceMappingProps {
    * `provisionedPollerConfig.MinimumPollers` is set — they reject it otherwise.
    * @default ["ReportBatchItemFailures"] (SQS, Kinesis, DynamoDB Streams)
    */
-  functionResponseTypes?: FunctionResponseType[];
+  functionResponseTypes?: FunctionResponseType[] | undefined;
   /**
    * (SQS) Scaling configuration for the event source.
    */
@@ -135,30 +135,30 @@ export interface EventSourceMappingProps {
   /**
    * (Kinesis and DynamoDB Streams) A destination for records that failed processing.
    */
-  destinationConfig?: lambda.DestinationConfig;
+  destinationConfig?: lambda.DestinationConfig | undefined;
   /**
    * Filter criteria to control which records are sent to the function.
    */
-  filterCriteria?: lambda.FilterCriteria;
+  filterCriteria?: lambda.FilterCriteria | undefined;
   /**
    * The ARN of an AWS KMS key to encrypt the filter criteria.
    */
-  kmsKeyArn?: string;
+  kmsKeyArn?: string | undefined;
   /**
    * Metrics configuration for the event source mapping. Defaulted only for
    * SQS, Kinesis and DynamoDB Streams sources, or other sources (Kafka/MSK)
    * with `provisionedPollerConfig.MinimumPollers` set.
    * @default { Metrics: ["EventCount"] } (where supported)
    */
-  metricsConfig?: lambda.EventSourceMappingMetricsConfig;
+  metricsConfig?: lambda.EventSourceMappingMetricsConfig | undefined;
   /**
    * (SQS, MSK, self-managed Kafka) Provisioned poller configuration.
    */
-  provisionedPollerConfig?: lambda.ProvisionedPollerConfig;
+  provisionedPollerConfig?: lambda.ProvisionedPollerConfig | undefined;
   /**
    * (Amazon MSK) Configuration for an Amazon Managed Streaming for Apache Kafka event source.
    */
-  amazonManagedKafkaEventSourceConfig?: lambda.AmazonManagedKafkaEventSourceConfig;
+  amazonManagedKafkaEventSourceConfig?: lambda.AmazonManagedKafkaEventSourceConfig | undefined;
   /**
    * (Self-managed Kafka) Configuration for a self-managed Apache Kafka event source.
    */
@@ -603,7 +603,7 @@ export const EventSourceMappingProvider = () =>
       });
 
       const withoutConsumerGroupId = <
-        C extends { ConsumerGroupId?: string; SchemaRegistryConfig?: unknown },
+        C extends { ConsumerGroupId?: string | undefined; SchemaRegistryConfig?: unknown },
       >(
         config: C | undefined,
       ): C | undefined =>

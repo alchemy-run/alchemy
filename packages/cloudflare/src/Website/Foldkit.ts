@@ -22,7 +22,7 @@ export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends 
    * Cannot be combined with Foldkit's `ssr.build`, which generates the
    * Worker handler from the app's server entry.
    */
-  main?: string;
+  main?: string | undefined;
   /**
    * Foldkit project root directory, resolved from the working directory.
    * @default process.cwd()
@@ -212,7 +212,7 @@ export const Foldkit: {
           | InputProps<FoldkitProps<Bindings>>
           | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
       ) => effectClass(Foldkit(id, propsEff))
-    : Worker(
+    : Worker<Bindings, WorkerAssetsConfig, Req>(
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => {
           const { main, rootDir, memo, ...workerProps } = props ?? {};

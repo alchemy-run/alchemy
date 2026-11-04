@@ -148,7 +148,7 @@ export const makeTestSqlClient = (): SqlClient & { readonly db: Database } => {
 export interface MemoryBlobStore extends BlobStoreShape {
   readonly objects: Map<string, Uint8Array>;
   /** Every `get`, with its range — for asserting window fetch counts. */
-  readonly gets: Array<{ key: string; offset?: number; length?: number }>;
+  readonly gets: Array<{ key: string; offset?: number | undefined; length?: number | undefined }>;
 }
 
 export const makeMemoryBlobStore = (): MemoryBlobStore => {

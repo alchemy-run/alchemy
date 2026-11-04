@@ -52,8 +52,8 @@ export interface HostedProgramProps {
   handler?: string;
   port?: number;
   env?: Record<string, any>;
-  isExternal?: boolean;
-  build?: HetznerBuildOptions;
+  isExternal?: boolean | undefined;
+  build?: HetznerBuildOptions | undefined;
   /**
    * Extra host directories packed into the unit archive (framework
    * client assets, Next.js `.next`, …). Hashed into `code.hash` so

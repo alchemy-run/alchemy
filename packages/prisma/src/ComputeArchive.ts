@@ -52,16 +52,16 @@ export interface ComputeArchiveOptions {
    * parent (`..`) segments, and negated patterns are rejected. Sensitive
    * Alchemy, Git, and dotenv files are always excluded.
    */
-  ignore?: readonly string[];
+  ignore?: readonly string[] | undefined;
   /**
    * Artifact-relative prefix applied to custom ignore patterns after they are
    * validated.
    */
-  ignorePrefix?: string;
+  ignorePrefix?: string | undefined;
   /**
    * Artifact-relative files that must remain present after exclusions.
    */
-  requiredFiles?: readonly string[];
+  requiredFiles?: readonly string[] | undefined;
   /**
    * Maximum uncompressed bytes accepted across all archived files. Values
    * above the provider's 768 MiB hard ceiling are rejected.

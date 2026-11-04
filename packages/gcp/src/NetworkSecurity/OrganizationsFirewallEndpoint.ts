@@ -67,7 +67,7 @@ export type OrganizationsFirewallEndpointProps = {
    * Project billed for the endpoint. Required for organization-scoped
    * endpoints. Defaults to the stack project.
    */
-  billingProjectId?: string;
+  billingProjectId?: string | undefined;
   /**
    * Endpoint settings. `jumboFramesEnabled` is immutable.
    */

@@ -409,7 +409,7 @@ const readTopic = Effect.fn(function* ({
   topicName,
 }: {
   id: string;
-  topicArn?: string;
+  topicArn?: string | undefined;
   topicName: string;
 }) {
   const resolvedTopicArn = topicArn ?? (yield* findTopicArnByName(topicName));

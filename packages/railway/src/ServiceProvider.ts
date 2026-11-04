@@ -248,22 +248,22 @@ const instanceSettingsDelta = (input: {
   sourceRepo: string | undefined;
   registryCredentials: { username: string; password: string } | undefined;
   props: {
-    rootDirectory?: string;
-    buildCommand?: string;
-    preDeploy?: { command: string | null };
-    startCommand?: string;
-    healthcheckPath?: string;
-    healthcheck?: string;
-    healthcheckTimeout?: number;
-    cronSchedule?: string;
-    restartPolicyType?: RestartPolicyType;
-    restartPolicyMaxRetries?: number;
-    drainingSeconds?: number;
-    overlapSeconds?: number;
-    sleepApplication?: boolean;
-    dockerfilePath?: string | null;
-    builder?: Builder;
-    watchPatterns?: string[];
+    rootDirectory?: string | undefined;
+    buildCommand?: string | undefined;
+    preDeploy?: { command: string | null } | undefined;
+    startCommand?: string | undefined;
+    healthcheckPath?: string | undefined;
+    healthcheck?: string | undefined;
+    healthcheckTimeout?: number | undefined;
+    cronSchedule?: string | undefined;
+    restartPolicyType?: RestartPolicyType | undefined;
+    restartPolicyMaxRetries?: number | undefined;
+    drainingSeconds?: number | undefined;
+    overlapSeconds?: number | undefined;
+    sleepApplication?: boolean | undefined;
+    dockerfilePath?: string | null | undefined;
+    builder?: Builder | undefined;
+    watchPatterns?: string[] | undefined;
   };
 }): ServiceInstanceUpdateInput | undefined => {
   const instance = input.instance;

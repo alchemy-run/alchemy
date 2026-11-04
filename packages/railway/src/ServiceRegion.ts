@@ -140,7 +140,7 @@ export const readServiceRegion = Effect.fn(function* (input: {
   environmentId: string;
   projectId: string;
   serviceId: string;
-  legacy?: string | null;
+  legacy?: string | null | undefined;
 }) {
   if (input.environmentId.length === 0 || input.serviceId.length === 0) {
     return observedRegion({}, input.legacy);
@@ -154,7 +154,7 @@ const waitUntilRegion = (input: {
   projectId: string;
   serviceId: string;
   region: string;
-  legacy?: string | null;
+  legacy?: string | null | undefined;
 }) =>
   readServiceRegion(input).pipe(
     Effect.flatMap((observed) =>
@@ -201,8 +201,8 @@ export const syncServiceRegion = Effect.fn(function* (input: {
   projectId: string;
   serviceId: string;
   region: string | undefined;
-  legacy?: string | null;
-  fallbackReplicas?: number | null;
+  legacy?: string | null | undefined;
+  fallbackReplicas?: number | null | undefined;
 }) {
   if (input.region === undefined) return yield* readServiceRegion(input);
   const desired = input.region;

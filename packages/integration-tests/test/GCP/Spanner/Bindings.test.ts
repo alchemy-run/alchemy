@@ -15,7 +15,9 @@ let baseUrl: string;
 let member: string;
 let names: { instance: string; schema: string; app: string };
 
-type Policy = { bindings?: { role?: string; members?: string[] }[] };
+type Policy = {
+  bindings?: { role?: string | undefined; members?: string[] | undefined }[] | undefined;
+};
 
 const rolesOf = (policy: Policy) =>
   (policy.bindings ?? [])

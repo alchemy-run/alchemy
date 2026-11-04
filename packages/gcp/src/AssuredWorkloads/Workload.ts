@@ -54,28 +54,28 @@ export type ResourceSettings = {
    * KeyRing this is the keyring id. Folders ignore this — Google assigns
    * the folder id.
    */
-  resourceId?: string;
+  resourceId?: string | undefined;
   /**
    * Resource kind this setting applies to (`CONSUMER_FOLDER`,
    * `CONSUMER_PROJECT`, `ENCRYPTION_KEYS_PROJECT`, `KEYRING`).
    */
-  resourceType?: ResourceType;
+  resourceType?: ResourceType | undefined;
   /**
    * User-assigned display name used when creating the resource.
    */
-  displayName?: string;
+  displayName?: string | undefined;
 };
 
 export type ResourceInfo = {
   /**
    * Resource identifier. For a project this is the project number.
    */
-  resourceId?: string;
+  resourceId?: string | undefined;
   /**
    * Resource kind (`CONSUMER_FOLDER`, `CONSUMER_PROJECT`,
    * `ENCRYPTION_KEYS_PROJECT`, `KEYRING`).
    */
-  resourceType?: ResourceType;
+  resourceType?: ResourceType | undefined;
 };
 
 export type KmsSettings = {
@@ -103,19 +103,19 @@ export type PartnerPermissions = {
    * Allow the partner to view inspectability logs and monitoring
    * violations.
    */
-  dataLogsViewer?: boolean;
+  dataLogsViewer?: boolean | undefined;
   /**
    * Allow the partner to view violation alerts.
    */
-  assuredWorkloadsMonitoring?: boolean;
+  assuredWorkloadsMonitoring?: boolean | undefined;
   /**
    * Allow the partner to view support-case details for an AXT log.
    */
-  accessTransparencyLogsSupportCaseViewer?: boolean;
+  accessTransparencyLogsSupportCaseViewer?: boolean | undefined;
   /**
    * Allow the partner to view Access Approval logs.
    */
-  serviceAccessApprover?: boolean;
+  serviceAccessApprover?: boolean | undefined;
 };
 
 export type WorkloadProps = {
@@ -147,7 +147,7 @@ export type WorkloadProps = {
    * Format `billingAccounts/{billing_account_id}`. Immutable — changing
    * it replaces the workload.
    */
-  billingAccount?: string;
+  billingAccount?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */

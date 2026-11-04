@@ -48,7 +48,7 @@ export const locationParent = (project: string, location: string) =>
 export const expandSfdcInstance = (value: string, project: string, location: string) =>
   value.includes("/") ? value : `${locationParent(project, location)}/sfdcInstances/${value}`;
 
-export const isDeleted = (resource: { deleteTime?: string }) =>
+export const isDeleted = (resource: { deleteTime?: string | undefined }) =>
   (resource.deleteTime ?? "").length > 0;
 
 export const productParent = (project: string, location: string, product: string) =>

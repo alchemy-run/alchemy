@@ -50,7 +50,7 @@ export interface DataCellsFilterProps {
   /**
    * Row-level filter. Defaults to all rows.
    */
-  rowFilter?: RowFilterSpec;
+  rowFilter?: RowFilterSpec | undefined;
   /**
    * Include-list of visible column names. Mutually exclusive with
    * `excludedColumnNames`.

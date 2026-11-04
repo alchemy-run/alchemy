@@ -1,7 +1,6 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
 import bun from "bun:test";
-import type { HookOptions } from "node:test";
 import type { AlchemyContext } from "alchemy/AlchemyContext";
 import type { CompiledStack, StackDefinition } from "alchemy/Stack";
 import type { Stage } from "alchemy/Stage";
@@ -11,6 +10,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import * as Core from "./Core.ts";
+
+type HookOptions = Extract<Parameters<typeof bun.beforeAll>[1], object>;
 
 export {
   executeWhenReady,

@@ -30,14 +30,14 @@ export interface DockerBuildSource {
   context: string;
   dockerfile: string;
   platform: string;
-  buildArgs?: Record<string, string>;
+  buildArgs?: Record<string, string> | undefined;
 }
 
 export type DockerBuildHashMode = "all" | "effective";
 
 interface DockerIgnore {
   content: string;
-  path?: string;
+  path?: string | undefined;
   rules: IgnoreRules;
 }
 

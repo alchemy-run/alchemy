@@ -113,7 +113,7 @@ const toCredentials = (
 export const mintAccessToken = (config: {
   readonly clientId: string;
   readonly clientSecret: string;
-  readonly apiBaseUrl?: string;
+  readonly apiBaseUrl?: string | undefined;
 }) =>
   loginWithUniversalAuth({
     clientId: config.clientId,
@@ -139,7 +139,7 @@ export const mintAccessToken = (config: {
 export const mintAccessTokenFromOidc = (config: {
   readonly identityId: string;
   readonly jwt: Redacted.Redacted<string>;
-  readonly apiBaseUrl?: string;
+  readonly apiBaseUrl?: string | undefined;
 }) =>
   loginWithOidcAuth({
     identityId: config.identityId,

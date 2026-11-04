@@ -60,7 +60,7 @@ export const makeKinesisAccountHttpBinding = <I, A, E, R>(options: {
  */
 export const makeStreamHttpBinding = <
   K extends "StreamARN" | "StreamName" | "ResourceARN",
-  I extends { [P in K]?: string },
+  I extends { [P in K]?: string | undefined },
   A,
   E,
   R,
@@ -106,7 +106,12 @@ export const makeStreamHttpBinding = <
  * injects the bound {@link StreamConsumer}'s ARN as `ConsumerARN` and the
  * deploy-time half grants `actions` on the consumer ARN.
  */
-export const makeConsumerHttpBinding = <I extends { ConsumerARN?: string }, A, E, R>(options: {
+export const makeConsumerHttpBinding = <
+  I extends { ConsumerARN?: string | undefined },
+  A,
+  E,
+  R,
+>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Kinesis.SubscribeToShard`. */
   tag: string;
   /** The distilled operation; `ConsumerARN` is injected from the consumer. */

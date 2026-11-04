@@ -77,7 +77,7 @@ const applicationArn = (region: string, account: string, name: string): string =
 
 /** Convert a CodeDeploy wire tag list into a plain record. */
 const toTagRecord = (
-  tags: ReadonlyArray<{ Key?: string; Value?: string }> | undefined,
+  tags: ReadonlyArray<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

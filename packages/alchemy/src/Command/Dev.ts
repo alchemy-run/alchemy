@@ -27,7 +27,7 @@ export interface DevProps extends CommandProps {
    *
    * @default false
    */
-  waitForUrl?: boolean;
+  waitForUrl?: boolean | undefined;
   /**
    * The port the command listens on. Alchemy sets `PORT` to it, over any
    * `env.PORT`, and the resource is ready once the port accepts a
@@ -37,7 +37,7 @@ export interface DevProps extends CommandProps {
    * The resource fails if the command exits before the port opens, or if
    * another process already listens on the port when the command starts.
    */
-  port?: number;
+  port?: number | undefined;
 }
 
 export interface Dev extends Resource<

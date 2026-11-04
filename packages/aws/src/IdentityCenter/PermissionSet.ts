@@ -22,7 +22,7 @@ export interface PermissionSetProps {
    * Explicit IAM Identity Center instance ARN.
    * If omitted, Alchemy adopts the only visible instance.
    */
-  instanceArn?: string;
+  instanceArn?: string | undefined;
   /**
    * Permission set name.
    */
@@ -30,17 +30,17 @@ export interface PermissionSetProps {
   /**
    * Optional human-readable description.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Optional session duration, e.g. `"8 hours"` or `Duration.hours(8)`.
    * Sent to Identity Center as an ISO-8601 string such as `PT8H` (a bare
    * number is milliseconds).
    */
-  sessionDuration?: Duration.Input;
+  sessionDuration?: Duration.Input | undefined;
   /**
    * Optional relay state passed to supported applications.
    */
-  relayState?: string;
+  relayState?: string | undefined;
 }
 
 export interface PermissionSet extends Resource<

@@ -36,7 +36,7 @@ export interface BaseDatabaseProps {
    * Create-only for PostgreSQL databases; MySQL databases reconcile
    * changes in place ({@link MySQLDatabaseProps.replicas}).
    */
-  replicas?: number;
+  replicas?: number | undefined;
 
   /**
    * Whether deploy requests must be approved by a database administrator

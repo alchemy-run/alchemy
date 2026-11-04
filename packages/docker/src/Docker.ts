@@ -124,8 +124,8 @@ export class Docker extends Context.Service<
         /** Host devices in Docker's `host:container[:permissions]` form. */
         device?: Array<string> | undefined;
         command: Array<string> | undefined;
-        label?: Record<string, string>;
-        context?: string;
+        label?: Record<string, string> | undefined;
+        context?: string | undefined;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a container. */
       readonly inspect: (
@@ -162,22 +162,22 @@ export class Docker extends Context.Service<
           context: string;
           /** Image tags to build and publish together. */
           tag: string | [string, ...string[]];
-          file?: string;
-          platform?: string;
-          target?: string;
-          "build-arg"?: Record<string, string>;
+          file?: string | undefined;
+          platform?: string | undefined;
+          target?: string | undefined;
+          "build-arg"?: Record<string, string> | undefined;
           /**
            * BuildKit secrets, keyed by id (`RUN --mount=type=secret,id=<id>`).
            * Values reach `docker` through its environment, never its argv,
            * and are not written to the image.
            */
-          secrets?: Record<string, string | Redacted.Redacted<string>>;
-          "cache-from"?: Array<string>;
-          "cache-to"?: Array<string>;
-          args?: Array<string>;
-          engineContext?: string;
+          secrets?: Record<string, string | Redacted.Redacted<string>> | undefined;
+          "cache-from"?: Array<string> | undefined;
+          "cache-to"?: Array<string> | undefined;
+          args?: Array<string> | undefined;
+          engineContext?: string | undefined;
           /** Registry auth for the build itself (base images, caches); publishes nothing. */
-          credentials?: RegistryCredentials;
+          credentials?: RegistryCredentials | undefined;
         },
         session?: ScopedPlanStatusSession,
         registry?: RegistryCredentials,
@@ -228,9 +228,9 @@ export class Docker extends Context.Service<
       readonly create: (options: {
         name: string;
         driver?: string;
-        opt?: Record<string, string>;
-        label?: Record<string, string>;
-        context?: string;
+        opt?: Record<string, string> | undefined;
+        label?: Record<string, string> | undefined;
+        context?: string | undefined;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Removes a volume. */
       readonly remove: (
@@ -273,20 +273,20 @@ export class Docker extends Context.Service<
         driver: string;
         ipv6?: boolean;
         label?: Record<string, string>;
-        context?: string;
+        context?: string | undefined;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Connects a container to a network. */
       readonly connect: (options: {
         network: string;
         container: string;
-        alias?: string[];
-        context?: string;
+        alias?: string[] | undefined;
+        context?: string | undefined;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Disconnects a container from a network. */
       readonly disconnect: (options: {
         network: string;
         container: string;
-        context?: string;
+        context?: string | undefined;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a network. */
       readonly inspect: (
@@ -302,11 +302,11 @@ export class Docker extends Context.Service<
     readonly swarm: {
       /** Initializes swarm mode on the engine (`docker swarm init`). */
       readonly init: (options: {
-        context?: string;
-        "advertise-addr"?: string;
-        "listen-addr"?: string;
-        "default-addr-pool"?: string[];
-        "default-addr-pool-mask-length"?: number;
+        context?: string | undefined;
+        "advertise-addr"?: string | undefined;
+        "listen-addr"?: string | undefined;
+        "default-addr-pool"?: string[] | undefined;
+        "default-addr-pool-mask-length"?: number | undefined;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Reads the engine's swarm state (`docker info --format '{{json .Swarm}}'`). */
       readonly info: (context?: string) => Effect.Effect<Docker.SwarmInfo, PlatformError>;
@@ -321,41 +321,41 @@ export class Docker extends Context.Service<
       readonly create: (options: {
         name: string;
         image: string;
-        context?: string;
+        context?: string | undefined;
         replicas?: number;
         "endpoint-mode"?: "vip" | "dnsrr";
         network?: string[];
         constraint?: string[];
-        "replicas-max-per-node"?: number;
+        "replicas-max-per-node"?: number | undefined;
         "placement-pref"?: string[];
-        "update-parallelism"?: number;
-        "update-delay"?: string;
-        "update-monitor"?: string;
-        "update-failure-action"?: "pause" | "continue" | "rollback";
-        "update-max-failure-ratio"?: number;
-        "update-order"?: "stop-first" | "start-first";
-        "rollback-parallelism"?: number;
-        "rollback-delay"?: string;
-        "rollback-monitor"?: string;
-        "rollback-failure-action"?: "pause" | "continue" | "rollback";
-        "rollback-max-failure-ratio"?: number;
-        "rollback-order"?: "stop-first" | "start-first";
-        "restart-condition"?: "none" | "on-failure" | "any";
-        "restart-delay"?: string;
-        "restart-max-attempts"?: number;
-        "restart-window"?: string;
-        "health-cmd"?: string;
+        "update-parallelism"?: number | undefined;
+        "update-delay"?: string | undefined;
+        "update-monitor"?: string | undefined;
+        "update-failure-action"?: "pause" | "continue" | "rollback" | undefined;
+        "update-max-failure-ratio"?: number | undefined;
+        "update-order"?: "stop-first" | "start-first" | undefined;
+        "rollback-parallelism"?: number | undefined;
+        "rollback-delay"?: string | undefined;
+        "rollback-monitor"?: string | undefined;
+        "rollback-failure-action"?: "pause" | "continue" | "rollback" | undefined;
+        "rollback-max-failure-ratio"?: number | undefined;
+        "rollback-order"?: "stop-first" | "start-first" | undefined;
+        "restart-condition"?: "none" | "on-failure" | "any" | undefined;
+        "restart-delay"?: string | undefined;
+        "restart-max-attempts"?: number | undefined;
+        "restart-window"?: string | undefined;
+        "health-cmd"?: string | undefined;
         /** `--no-healthcheck`: disable any healthcheck defined by the image. */
         "no-healthcheck"?: boolean;
-        "health-interval"?: string;
-        "health-timeout"?: string;
-        "health-retries"?: number;
-        "health-start-period"?: string;
-        "stop-grace-period"?: string;
+        "health-interval"?: string | undefined;
+        "health-timeout"?: string | undefined;
+        "health-retries"?: number | undefined;
+        "health-start-period"?: string | undefined;
+        "stop-grace-period"?: string | undefined;
         mount?: string[];
         secret?: string[];
         config?: string[];
-        "read-only"?: boolean;
+        "read-only"?: boolean | undefined;
         publish?: string[];
         label?: Record<string, string>;
         env?: Record<string, string>;
@@ -366,7 +366,7 @@ export class Docker extends Context.Service<
       readonly update: (options: {
         id: string;
         image: string;
-        context?: string;
+        context?: string | undefined;
         replicas?: number;
         "endpoint-mode"?: "vip" | "dnsrr";
         /** Networks to detach, by name or id; applied before `network-add`. */
@@ -374,31 +374,31 @@ export class Docker extends Context.Service<
         "network-add"?: string[];
         "constraint-add"?: string[];
         "constraint-rm"?: string[];
-        "replicas-max-per-node"?: number;
-        "update-parallelism"?: number;
-        "update-delay"?: string;
-        "update-monitor"?: string;
-        "update-failure-action"?: "pause" | "continue" | "rollback";
-        "update-max-failure-ratio"?: number;
-        "update-order"?: "stop-first" | "start-first";
-        "rollback-parallelism"?: number;
-        "rollback-delay"?: string;
-        "rollback-monitor"?: string;
-        "rollback-failure-action"?: "pause" | "continue" | "rollback";
-        "rollback-max-failure-ratio"?: number;
-        "rollback-order"?: "stop-first" | "start-first";
-        "restart-condition"?: "none" | "on-failure" | "any";
-        "restart-delay"?: string;
-        "restart-max-attempts"?: number;
-        "restart-window"?: string;
-        "health-cmd"?: string;
+        "replicas-max-per-node"?: number | undefined;
+        "update-parallelism"?: number | undefined;
+        "update-delay"?: string | undefined;
+        "update-monitor"?: string | undefined;
+        "update-failure-action"?: "pause" | "continue" | "rollback" | undefined;
+        "update-max-failure-ratio"?: number | undefined;
+        "update-order"?: "stop-first" | "start-first" | undefined;
+        "rollback-parallelism"?: number | undefined;
+        "rollback-delay"?: string | undefined;
+        "rollback-monitor"?: string | undefined;
+        "rollback-failure-action"?: "pause" | "continue" | "rollback" | undefined;
+        "rollback-max-failure-ratio"?: number | undefined;
+        "rollback-order"?: "stop-first" | "start-first" | undefined;
+        "restart-condition"?: "none" | "on-failure" | "any" | undefined;
+        "restart-delay"?: string | undefined;
+        "restart-max-attempts"?: number | undefined;
+        "restart-window"?: string | undefined;
+        "health-cmd"?: string | undefined;
         /** `--no-healthcheck`: disable any healthcheck defined by the image. */
         "no-healthcheck"?: boolean;
-        "health-interval"?: string;
-        "health-timeout"?: string;
-        "health-retries"?: number;
-        "health-start-period"?: string;
-        "stop-grace-period"?: string;
+        "health-interval"?: string | undefined;
+        "health-timeout"?: string | undefined;
+        "health-retries"?: number | undefined;
+        "health-start-period"?: string | undefined;
+        "stop-grace-period"?: string | undefined;
         "mount-add"?: string[];
         /** Mount targets to remove. */
         "mount-rm"?: string[];
@@ -408,7 +408,7 @@ export class Docker extends Context.Service<
         "config-add"?: string[];
         /** Config names to remove; applied before `config-add`. */
         "config-rm"?: string[];
-        "read-only"?: boolean;
+        "read-only"?: boolean | undefined;
         "publish-add"?: string[];
         /** Published ports to remove, as `target=<port>,protocol=<p>,mode=<m>`. */
         "publish-rm"?: string[];
@@ -417,7 +417,7 @@ export class Docker extends Context.Service<
         "env-add"?: Record<string, string>;
         /** Environment variable names to remove. */
         "env-rm"?: string[];
-        args?: string;
+        args?: string | undefined;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a service. */
       readonly inspect: (

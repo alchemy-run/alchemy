@@ -50,7 +50,7 @@ export interface LaunchTemplateProps extends PlatformProps {
   /**
    * Launch template name. If omitted, a deterministic name is generated.
    */
-  launchTemplateName?: string;
+  launchTemplateName?: string | undefined;
   /**
    * AMI ID to launch.
    */
@@ -62,64 +62,66 @@ export interface LaunchTemplateProps extends PlatformProps {
   /**
    * Security groups to attach to the primary network interface.
    */
-  securityGroupIds?: Input<SecurityGroupId>[];
+  securityGroupIds?: Input<SecurityGroupId>[] | undefined;
   /**
    * Optional EC2 key pair name for SSH access.
    */
-  keyName?: string;
+  keyName?: string | undefined;
   /**
    * Optional IAM instance profile name to attach at launch.
    */
-  instanceProfileName?: string;
+  instanceProfileName?: string | undefined;
   /**
    * User data script to provide at launch time.
    */
-  userData?: string;
+  userData?: string | undefined;
   /**
    * Whether to associate a public IPv4 address on launch.
    */
-  associatePublicIpAddress?: boolean;
+  associatePublicIpAddress?: boolean | undefined;
   /**
    * Instance Metadata Service (IMDS) options for launched instances, e.g.
    * requiring IMDSv2 and limiting the hop count. Changes publish a new
    * template version. Unset fields keep the AMI / account defaults.
    */
-  metadataOptions?: InstanceMetadataOptions;
+  metadataOptions?: InstanceMetadataOptions | undefined;
   /**
    * User-defined tags to apply to the launch template and launched instances.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
   /**
    * Module entrypoint for the bundled instance program.
    * When omitted, the launch template behaves as a low-level EC2 primitive.
    */
-  main?: string;
+  main?: string | undefined;
   /**
    * Named export to load from `main`.
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Port exposed by the process, if any.
    * @default 3000
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Additional environment variables for the hosted process.
    */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Bundler configuration for the hosted process entrypoint.
    */
-  build?: {
-    input?: Partial<rolldown.InputOptions>;
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  build?:
+    | {
+        input?: Partial<rolldown.InputOptions> | undefined;
+        output?: Partial<rolldown.OutputOptions> | undefined;
+      }
+    | undefined;
   /**
    * Additional managed policy ARNs for the managed instance role.
    * This can only be used when Alchemy manages the instance profile.
    */
-  roleManagedPolicyArns?: string[];
+  roleManagedPolicyArns?: string[] | undefined;
 }
 
 export interface LaunchTemplate extends Resource<
@@ -153,42 +155,44 @@ export interface LaunchTemplate extends Resource<
     /**
      * ARN of the managed instance role, when Alchemy manages IAM.
      */
-    roleArn?: string;
+    roleArn?: string | undefined;
     /**
      * Name of the managed instance role, when Alchemy manages IAM.
      */
-    roleName?: string;
+    roleName?: string | undefined;
     /**
      * Name of the inline policy on the managed instance role.
      */
-    policyName?: string;
+    policyName?: string | undefined;
     /**
      * Name of the instance profile launched instances use; the managed one
      * when Alchemy manages IAM.
      */
-    instanceProfileName?: string;
+    instanceProfileName?: string | undefined;
     /**
      * Whether Alchemy manages the instance profile/role for the hosted
      * program.
      */
-    managedIam?: boolean;
+    managedIam?: boolean | undefined;
     /**
      * systemd unit name running the hosted program on instances.
      */
-    runtimeUnitName?: string;
+    runtimeUnitName?: string | undefined;
     /**
      * S3 key prefix where the bundled program assets are staged.
      */
-    assetPrefix?: string;
+    assetPrefix?: string | undefined;
     /**
      * Bundled program code metadata.
      */
-    code?: {
-      /**
-       * Content hash of the bundled entrypoint.
-       */
-      hash: string;
-    };
+    code?:
+      | {
+          /**
+           * Content hash of the bundled entrypoint.
+           */
+          hash: string;
+        }
+      | undefined;
   },
   {
     /**
@@ -283,7 +287,7 @@ export const LaunchTemplateProvider = () =>
         resourceType: "AWS.AutoScaling.LaunchTemplate",
       });
 
-      const toName = (id: string, props: { launchTemplateName?: string } = {}) =>
+      const toName = (id: string, props: { launchTemplateName?: string | undefined } = {}) =>
         props.launchTemplateName
           ? Effect.succeed(props.launchTemplateName)
           : createPhysicalName({ id, maxLength: 128, lowercase: true });
@@ -348,11 +352,13 @@ export const LaunchTemplateProvider = () =>
         launchTemplateId: LaunchTemplateId;
         news: LaunchTemplateProps;
         runtime: {
-          userData?: string;
-          instanceProfileName?: string;
-          code?: {
-            hash: string;
-          };
+          userData?: string | undefined;
+          instanceProfileName?: string | undefined;
+          code?:
+            | {
+                hash: string;
+              }
+            | undefined;
         };
       }) {
         const created = yield* ec2.createLaunchTemplateVersion({
@@ -590,7 +596,7 @@ const isLaunchTemplateNotFound = (error: unknown) => {
   );
 };
 
-const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
+const toTagRecord = (tags?: Array<{ Key?: string | undefined; Value?: string | undefined }>) =>
   Object.fromEntries(
     (tags ?? [])
       .filter((tag): tag is { Key: string; Value: string } =>

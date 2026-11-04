@@ -147,7 +147,7 @@ export const StageResource = Resource<ApiGatewayV2Stage>("AWS.ApiGatewayV2.Stage
 
 export interface StageInputProps extends Omit<
   {
-    [K in keyof StageProps]?: Input<StageProps[K]>;
+    [K in keyof StageProps]?: Input<StageProps[K]> | undefined;
   },
   "apiId"
 > {

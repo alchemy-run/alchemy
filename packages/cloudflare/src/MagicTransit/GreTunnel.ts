@@ -86,37 +86,37 @@ export interface GreTunnelProps {
   /**
    * A /127 IPv6 prefix from within the account's `virtual_subnet6` space.
    */
-  interfaceAddress6?: string;
+  interfaceAddress6?: string | undefined;
   /**
    * An optional description of the GRE tunnel.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Time To Live (TTL) in number of hops of the GRE tunnel.
    * @default 64
    */
-  ttl?: number;
+  ttl?: number | undefined;
   /**
    * Maximum Transmission Unit (MTU) in bytes for the GRE tunnel. Minimum
    * value is 576.
    * @default 1476
    */
-  mtu?: number;
+  mtu?: number | undefined;
   /**
    * Tunnel health-check configuration.
    */
-  healthCheck?: MagicTunnelHealthCheck;
+  healthCheck?: MagicTunnelHealthCheck | undefined;
   /**
    * BGP configuration. The update API cannot change BGP settings —
    * changing this triggers a replacement.
    */
-  bgp?: MagicTunnelBgp;
+  bgp?: MagicTunnelBgp | undefined;
   /**
    * True if automatic stateful return routing should be enabled. Requires
    * the `coupler_integration` account flag.
    * @default false
    */
-  automaticReturnRouting?: boolean;
+  automaticReturnRouting?: boolean | undefined;
 }
 
 export interface GreTunnelAttributes {
@@ -355,19 +355,26 @@ interface ObservedGreTunnel {
   cloudflareGreEndpoint: string;
   customerGreEndpoint: string;
   interfaceAddress: string;
-  interfaceAddress6?: string | null;
-  description?: string | null;
-  ttl?: number | null;
-  mtu?: number | null;
-  healthCheck?: {
-    direction?: string | null;
-    enabled?: boolean | null;
-    rate?: string | null;
-    target?: { effective?: string | null; saved?: string | null } | string | null;
-    type?: string | null;
-  } | null;
-  createdOn?: string | null;
-  modifiedOn?: string | null;
+  interfaceAddress6?: string | null | undefined;
+  description?: string | null | undefined;
+  ttl?: number | null | undefined;
+  mtu?: number | null | undefined;
+  healthCheck?:
+    | {
+        direction?: string | null | undefined;
+        enabled?: boolean | null | undefined;
+        rate?: string | null | undefined;
+        target?:
+          | { effective?: string | null | undefined; saved?: string | null | undefined }
+          | string
+          | null
+          | undefined;
+        type?: string | null | undefined;
+      }
+    | null
+    | undefined;
+  createdOn?: string | null | undefined;
+  modifiedOn?: string | null | undefined;
 }
 
 /**

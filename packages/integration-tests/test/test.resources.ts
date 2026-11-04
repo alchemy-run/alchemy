@@ -306,12 +306,12 @@ export const artifactProbeProvider = () =>
 // TestResource
 
 export type TestResourceProps = {
-  string?: string;
+  string?: string | undefined;
   stringArray?: string[];
   object?: {
     string: string;
   };
-  replaceString?: string;
+  replaceString?: string | undefined;
   redacted?: Redacted.Redacted<string>;
   redactedArray?: Redacted.Redacted<string>[];
 };

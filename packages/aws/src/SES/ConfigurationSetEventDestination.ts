@@ -87,13 +87,15 @@ export interface ConfigurationSetEventDestination extends Resource<
      * Enabled state, matching event types and destination, as observed.
      * Lets `alchemy drift` detect out-of-band changes.
      */
-    configuration?: {
-      enabled: boolean;
-      matchingEventTypes: string[];
-      snsTopicArn?: string;
-      eventBusArn?: string;
-      cloudWatchDimensionConfigurations?: unknown;
-    };
+    configuration?:
+      | {
+          enabled: boolean;
+          matchingEventTypes: string[];
+          snsTopicArn?: string | undefined;
+          eventBusArn?: string | undefined;
+          cloudWatchDimensionConfigurations?: unknown;
+        }
+      | undefined;
   },
   never,
   Providers

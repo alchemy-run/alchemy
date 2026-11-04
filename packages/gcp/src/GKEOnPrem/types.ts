@@ -1,11 +1,11 @@
 export type ClusterUser = {
   /** Principal granted cluster-admin (user clusters) or cluster-view (admin). */
-  username?: string;
+  username?: string | undefined;
 };
 
 export type Authorization = {
   /** Users granted bootstrap RBAC on the cluster. */
-  adminUsers?: ClusterUser[];
+  adminUsers?: ClusterUser[] | undefined;
 };
 
 export type BinaryAuthorization = {
@@ -13,64 +13,64 @@ export type BinaryAuthorization = {
    * Binauthz evaluation mode (`DISABLED`,
    * `PROJECT_SINGLETON_POLICY_ENFORCE`).
    */
-  evaluationMode?: string;
+  evaluationMode?: string | undefined;
 };
 
 export type NodeTaint = {
   /** Taint effect (`NO_SCHEDULE`, `PREFER_NO_SCHEDULE`, `NO_EXECUTE`). */
-  effect?: string;
+  effect?: string | undefined;
   /** Taint key. */
-  key?: string;
+  key?: string | undefined;
   /** Taint value. */
-  value?: string;
+  value?: string | undefined;
 };
 
 export type BareMetalNodeConfig = {
   /** Node IPv4 used for SSH and Kubernetes. */
-  nodeIp?: string;
+  nodeIp?: string | undefined;
   /** Kubernetes labels applied to this node. */
-  labels?: Record<string, string | undefined>;
+  labels?: Record<string, string | undefined> | undefined;
 };
 
 export type BareMetalKubeletConfig = {
   /** Registry pull QPS limit. `0` means unlimited. */
-  registryPullQps?: number;
+  registryPullQps?: number | undefined;
   /** Burst size for registry pulls. */
-  registryBurst?: number;
+  registryBurst?: number | undefined;
   /** When true, kubelet pulls one image at a time. */
-  serializeImagePullsDisabled?: boolean;
+  serializeImagePullsDisabled?: boolean | undefined;
 };
 
 export type BareMetalNodePoolConfig = {
   /** Kubernetes labels applied to every node in the pool. */
-  labels?: Record<string, string | undefined>;
+  labels?: Record<string, string | undefined> | undefined;
   /** Machine addresses that make up the pool. Required on create. */
-  nodeConfigs?: BareMetalNodeConfig[];
+  nodeConfigs?: BareMetalNodeConfig[] | undefined;
   /** Modifiable kubelet settings. */
-  kubeletConfig?: BareMetalKubeletConfig;
+  kubeletConfig?: BareMetalKubeletConfig | undefined;
   /** Node OS (`LINUX`). */
-  operatingSystem?: string;
+  operatingSystem?: string | undefined;
   /** Initial taints assigned to nodes of this pool. */
-  taints?: NodeTaint[];
+  taints?: NodeTaint[] | undefined;
 };
 
 export type BareMetalControlPlaneNodePoolConfig = {
   /** Node pool that runs the control plane. */
-  nodePoolConfig?: BareMetalNodePoolConfig;
+  nodePoolConfig?: BareMetalNodePoolConfig | undefined;
 };
 
 export type BareMetalApiServerArgument = {
   /** API server flag name without leading dashes. */
-  argument?: string;
+  argument?: string | undefined;
   /** Flag value passed on the command line. */
-  value?: string;
+  value?: string | undefined;
 };
 
 export type BareMetalControlPlaneConfig = {
   /** Control plane node pool. Required on create. */
-  controlPlaneNodePoolConfig?: BareMetalControlPlaneNodePoolConfig;
+  controlPlaneNodePoolConfig?: BareMetalControlPlaneNodePoolConfig | undefined;
   /** Extra kube-apiserver arguments. */
-  apiServerArgs?: BareMetalApiServerArgument[];
+  apiServerArgs?: BareMetalApiServerArgument[] | undefined;
 };
 
 export type BareMetalSecurityConfig = {
@@ -94,23 +94,23 @@ export type BareMetalClusterUpgradePolicy = {
 
 export type BareMetalLvpConfig = {
   /** Host path used for local persistent volumes. */
-  path?: string;
+  path?: string | undefined;
   /** StorageClass name created for those volumes. */
-  storageClass?: string;
+  storageClass?: string | undefined;
 };
 
 export type BareMetalLvpShareConfig = {
   /** Shared-filesystem LVP path and StorageClass. */
-  lvpConfig?: BareMetalLvpConfig;
+  lvpConfig?: BareMetalLvpConfig | undefined;
   /** Number of subdirectories created under the share path. */
-  sharedPathPvCount?: number;
+  sharedPathPvCount?: number | undefined;
 };
 
 export type BareMetalStorageConfig = {
   /** Local PVs backed by subdirectories of a shared filesystem. */
-  lvpShareConfig?: BareMetalLvpShareConfig;
+  lvpShareConfig?: BareMetalLvpShareConfig | undefined;
   /** Local PVs backed by mounted node disks. */
-  lvpNodeMountsConfig?: BareMetalLvpConfig;
+  lvpNodeMountsConfig?: BareMetalLvpConfig | undefined;
 };
 
 export type BareMetalNodeAccessConfig = {
@@ -120,30 +120,30 @@ export type BareMetalNodeAccessConfig = {
 
 export type BareMetalIslandModeCidrConfig = {
   /** Service CIDR blocks (RFC1918). Mutable from 1.15. */
-  serviceAddressCidrBlocks?: string[];
+  serviceAddressCidrBlocks?: string[] | undefined;
   /** Pod CIDR blocks (RFC1918). Immutable after create. */
-  podAddressCidrBlocks?: string[];
+  podAddressCidrBlocks?: string[] | undefined;
 };
 
 export type BareMetalSrIovConfig = {
   /** Install the SR-IOV operator. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 };
 
 export type BareMetalMultipleNetworkInterfacesConfig = {
   /** Enable multiple network interfaces for pods. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 };
 
 export type BareMetalNetworkConfig = {
   /** Island-mode pod and service CIDRs. */
-  islandModeCidr?: BareMetalIslandModeCidrConfig;
+  islandModeCidr?: BareMetalIslandModeCidrConfig | undefined;
   /** SR-IOV operator config. */
-  srIovConfig?: BareMetalSrIovConfig;
+  srIovConfig?: BareMetalSrIovConfig | undefined;
   /** Enable advanced Anthos networking features. */
-  advancedNetworking?: boolean;
+  advancedNetworking?: boolean | undefined;
   /** Multiple network interfaces. */
-  multipleNetworkInterfacesConfig?: BareMetalMultipleNetworkInterfacesConfig;
+  multipleNetworkInterfacesConfig?: BareMetalMultipleNetworkInterfacesConfig | undefined;
 };
 
 export type BareMetalMaintenanceConfig = {
@@ -160,75 +160,75 @@ export type BareMetalWorkloadNodeConfig = {
 
 export type BareMetalVipConfig = {
   /** VIP reserved for the Kubernetes API. */
-  controlPlaneVip?: string;
+  controlPlaneVip?: string | undefined;
   /** VIP reserved for ingress. */
-  ingressVip?: string;
+  ingressVip?: string | undefined;
 };
 
 export type BareMetalLoadBalancerAddressPool = {
   /** Address pool name. */
-  pool?: string;
+  pool?: string | undefined;
   /** CIDRs or ranges in the pool. */
-  addresses?: string[];
+  addresses?: string[] | undefined;
   /** Avoid IPs ending in `.0` or `.255`. */
-  avoidBuggyIps?: boolean;
+  avoidBuggyIps?: boolean | undefined;
   /** Disable automatic assignment from this pool. */
-  manualAssign?: boolean;
+  manualAssign?: boolean | undefined;
 };
 
 export type BareMetalLoadBalancerNodePoolConfig = {
   /** Node pool that runs the load balancer. */
-  nodePoolConfig?: BareMetalNodePoolConfig;
+  nodePoolConfig?: BareMetalNodePoolConfig | undefined;
 };
 
 export type BareMetalMetalLbConfig = {
   /** Non-overlapping address pools. Ingress VIP must be included. */
-  addressPools?: BareMetalLoadBalancerAddressPool[];
+  addressPools?: BareMetalLoadBalancerAddressPool[] | undefined;
   /** Load balancer node pool. Defaults to the control plane pool. */
-  loadBalancerNodePoolConfig?: BareMetalLoadBalancerNodePoolConfig;
+  loadBalancerNodePoolConfig?: BareMetalLoadBalancerNodePoolConfig | undefined;
 };
 
 export type BareMetalPortConfig = {
   /** Port the control plane load balancer listens on. */
-  controlPlaneLoadBalancerPort?: number;
+  controlPlaneLoadBalancerPort?: number | undefined;
 };
 
 export type BareMetalManualLbConfig = {
   /** Enable manual load balancing. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 };
 
 export type BareMetalBgpPeerConfig = {
   /** Control plane node IPs that peer with the external device. */
-  controlPlaneNodes?: string[];
+  controlPlaneNodes?: string[] | undefined;
   /** Peer ASN. */
-  asn?: string;
+  asn?: string | undefined;
   /** Peer IP address. */
-  ipAddress?: string;
+  ipAddress?: string | undefined;
 };
 
 export type BareMetalBgpLbConfig = {
   /** Load balancer node pool. Defaults to the control plane pool. */
-  loadBalancerNodePoolConfig?: BareMetalLoadBalancerNodePoolConfig;
+  loadBalancerNodePoolConfig?: BareMetalLoadBalancerNodePoolConfig | undefined;
   /** Cluster ASN. Mutable after create. */
-  asn?: string;
+  asn?: string | undefined;
   /** Non-overlapping address pools. */
-  addressPools?: BareMetalLoadBalancerAddressPool[];
+  addressPools?: BareMetalLoadBalancerAddressPool[] | undefined;
   /** BGP peers advertised by control plane nodes. */
-  bgpPeerConfigs?: BareMetalBgpPeerConfig[];
+  bgpPeerConfigs?: BareMetalBgpPeerConfig[] | undefined;
 };
 
 export type BareMetalLoadBalancerConfig = {
   /** Control plane and ingress VIPs. */
-  vipConfig?: BareMetalVipConfig;
+  vipConfig?: BareMetalVipConfig | undefined;
   /** MetalLB configuration. */
-  metalLbConfig?: BareMetalMetalLbConfig;
+  metalLbConfig?: BareMetalMetalLbConfig | undefined;
   /** Load balancer listen ports. */
-  portConfig?: BareMetalPortConfig;
+  portConfig?: BareMetalPortConfig | undefined;
   /** Manual load balancer. */
-  manualLbConfig?: BareMetalManualLbConfig;
+  manualLbConfig?: BareMetalManualLbConfig | undefined;
   /** BGP load balancer. Implies advanced networking. */
-  bgpLbConfig?: BareMetalBgpLbConfig;
+  bgpLbConfig?: BareMetalBgpLbConfig | undefined;
 };
 
 export type BareMetalClusterOperationsConfig = {
@@ -255,196 +255,196 @@ export type BareMetalNodePoolUpgradePolicy = {
 
 export type VmwareAutoResizeConfig = {
   /** Enable control plane node auto-resizing. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 };
 
 export type VmwareControlPlaneVsphereConfig = {
   /** vSphere datastore for control plane nodes. */
-  datastore?: string;
+  datastore?: string | undefined;
   /** vSphere storage policy for control plane nodes. */
-  storagePolicyName?: string;
+  storagePolicyName?: string | undefined;
 };
 
 export type VmwareControlPlaneNodeConfig = {
   /** Memory in MB per control plane node. Default 8192. */
-  memory?: string;
+  memory?: string | undefined;
   /** Auto-resize configuration. */
-  autoResizeConfig?: VmwareAutoResizeConfig;
+  autoResizeConfig?: VmwareAutoResizeConfig | undefined;
   /** CPUs per control plane node. Default 4. */
-  cpus?: string;
+  cpus?: string | undefined;
   /** vSphere-specific control plane settings. */
-  vsphereConfig?: VmwareControlPlaneVsphereConfig;
+  vsphereConfig?: VmwareControlPlaneVsphereConfig | undefined;
   /** Replica count. Must be 1 or 3. Default 1. */
-  replicas?: string;
+  replicas?: string | undefined;
 };
 
 export type VmwareStorageConfig = {
   /** Disable vSphere CSI in the user cluster. Enabled by default. */
-  vsphereCsiDisabled?: boolean;
+  vsphereCsiDisabled?: boolean | undefined;
 };
 
 export type VmwareVCenterConfig = {
   /** vCenter CA certificate public key for SSL verification. */
-  caCertData?: string;
+  caCertData?: string | undefined;
   /** vCenter datastore. */
-  datastore?: string;
+  datastore?: string | undefined;
   /** vCenter datacenter. */
-  datacenter?: string;
+  datacenter?: string | undefined;
   /** vCenter cluster. */
-  cluster?: string;
+  cluster?: string | undefined;
   /** vCenter folder. */
-  folder?: string;
+  folder?: string | undefined;
   /** Output-only vCenter address. */
-  address?: string;
+  address?: string | undefined;
   /** vCenter resource pool. */
-  resourcePool?: string;
+  resourcePool?: string | undefined;
   /** vCenter storage policy. */
-  storagePolicyName?: string;
+  storagePolicyName?: string | undefined;
 };
 
 export type VmwareVipConfig = {
   /** VIP reserved for the Kubernetes API. */
-  controlPlaneVip?: string;
+  controlPlaneVip?: string | undefined;
   /** VIP reserved for ingress. */
-  ingressVip?: string;
+  ingressVip?: string | undefined;
 };
 
 export type VmwareF5BigIpConfig = {
   /** Pre-existing F5 partition. */
-  partition?: string;
+  partition?: string | undefined;
   /** SNAT pool name. */
-  snatPool?: string;
+  snatPool?: string | undefined;
   /** Load balancer IP. */
-  address?: string;
+  address?: string | undefined;
 };
 
 export type VmwareManualLbConfig = {
   /** NodePort for the control plane service. */
-  controlPlaneNodePort?: number;
+  controlPlaneNodePort?: number | undefined;
   /** NodePort for ingress HTTP. */
-  ingressHttpNodePort?: number;
+  ingressHttpNodePort?: number | undefined;
   /** NodePort for ingress HTTPS. */
-  ingressHttpsNodePort?: number;
+  ingressHttpsNodePort?: number | undefined;
   /** NodePort for the konnectivity sidecar. */
-  konnectivityServerNodePort?: number;
+  konnectivityServerNodePort?: number | undefined;
 };
 
 export type VmwareHostIp = {
   /** IP or CIDR. */
-  ip?: string;
+  ip?: string | undefined;
   /** Hostname. VM name is used when empty. */
-  hostname?: string;
+  hostname?: string | undefined;
 };
 
 export type VmwareIpBlock = {
   /** Netmask. */
-  netmask?: string;
+  netmask?: string | undefined;
   /** Per-node IP assignments. */
-  ips?: VmwareHostIp[];
+  ips?: VmwareHostIp[] | undefined;
   /** Gateway. */
-  gateway?: string;
+  gateway?: string | undefined;
 };
 
 export type VmwareSeesawConfig = {
   /** Enable a highly-available Seesaw pair. */
-  enableHa?: boolean;
+  enableHa?: boolean | undefined;
   /** IP blocks used by Seesaw. */
-  ipBlocks?: VmwareIpBlock[];
+  ipBlocks?: VmwareIpBlock[] | undefined;
   /** VM names created for this Seesaw group. */
-  vms?: string[];
+  vms?: string[] | undefined;
   /** Seesaw group name, typically `seesaw-for-{cluster}`. */
-  group?: string;
+  group?: string | undefined;
   /** IP announced by the Seesaw master. */
-  masterIp?: string;
+  masterIp?: string | undefined;
   /** Stackdriver name. */
-  stackdriverName?: string;
+  stackdriverName?: string | undefined;
 };
 
 export type VmwareAddressPool = BareMetalLoadBalancerAddressPool;
 
 export type VmwareMetalLbConfig = {
   /** Non-overlapping address pools. Ingress VIP must be included. */
-  addressPools?: VmwareAddressPool[];
+  addressPools?: VmwareAddressPool[] | undefined;
 };
 
 export type VmwareLoadBalancerConfig = {
   /** Control plane and ingress VIPs. */
-  vipConfig?: VmwareVipConfig;
+  vipConfig?: VmwareVipConfig | undefined;
   /** F5 BIG-IP configuration. */
-  f5Config?: VmwareF5BigIpConfig;
+  f5Config?: VmwareF5BigIpConfig | undefined;
   /** Manual load balancer. */
-  manualLbConfig?: VmwareManualLbConfig;
+  manualLbConfig?: VmwareManualLbConfig | undefined;
   /** Output-only Seesaw configuration. */
-  seesawConfig?: VmwareSeesawConfig;
+  seesawConfig?: VmwareSeesawConfig | undefined;
   /** MetalLB configuration. */
-  metalLbConfig?: VmwareMetalLbConfig;
+  metalLbConfig?: VmwareMetalLbConfig | undefined;
 };
 
 export type VmwareControlPlaneV2Config = {
   /** Static IPs for control plane V2 nodes. */
-  controlPlaneIpBlock?: VmwareIpBlock;
+  controlPlaneIpBlock?: VmwareIpBlock | undefined;
 };
 
 export type VmwareHostConfig = {
   /** NTP servers. */
-  ntpServers?: string[];
+  ntpServers?: string[] | undefined;
   /** DNS servers. */
-  dnsServers?: string[];
+  dnsServers?: string[] | undefined;
   /** DNS search domains. */
-  dnsSearchDomains?: string[];
+  dnsSearchDomains?: string[] | undefined;
 };
 
 export type VmwareStaticIpConfig = {
   /** Static IP blocks assigned to nodes. */
-  ipBlocks?: VmwareIpBlock[];
+  ipBlocks?: VmwareIpBlock[] | undefined;
 };
 
 export type VmwareDhcpIpConfig = {
   /** Use DHCP for node IPs. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 };
 
 export type VmwareNetworkConfig = {
   /** vCenter network name. Inherited from the admin cluster. */
-  vcenterNetwork?: string;
+  vcenterNetwork?: string | undefined;
   /** Common host network settings. */
-  hostConfig?: VmwareHostConfig;
+  hostConfig?: VmwareHostConfig | undefined;
   /** Control plane V2 IP config. */
-  controlPlaneV2Config?: VmwareControlPlaneV2Config;
+  controlPlaneV2Config?: VmwareControlPlaneV2Config | undefined;
   /** Service CIDR blocks. Single range. Immutable. */
-  serviceAddressCidrBlocks?: string[];
+  serviceAddressCidrBlocks?: string[] | undefined;
   /** Pod CIDR blocks. Single range. Immutable. */
-  podAddressCidrBlocks?: string[];
+  podAddressCidrBlocks?: string[] | undefined;
   /** Static IP configuration. */
-  staticIpConfig?: VmwareStaticIpConfig;
+  staticIpConfig?: VmwareStaticIpConfig | undefined;
   /** DHCP IP configuration. */
-  dhcpIpConfig?: VmwareDhcpIpConfig;
+  dhcpIpConfig?: VmwareDhcpIpConfig | undefined;
 };
 
 export type VmwareDataplaneV2Config = {
   /** Enable Dataplane V2 on Windows nodes. */
-  windowsDataplaneV2Enabled?: boolean;
+  windowsDataplaneV2Enabled?: boolean | undefined;
   /** Enable Dataplane V2. */
-  dataplaneV2Enabled?: boolean;
+  dataplaneV2Enabled?: boolean | undefined;
   /** Advanced networking. Requires Dataplane V2. */
-  advancedNetworking?: boolean;
+  advancedNetworking?: boolean | undefined;
   /** Dataplane V2 forward mode. */
-  forwardMode?: string;
+  forwardMode?: string | undefined;
 };
 
 export type VmwareAAGConfig = {
   /** Disable anti-affinity (spread across three hosts). Enabled by default. */
-  aagConfigDisabled?: boolean;
+  aagConfigDisabled?: boolean | undefined;
 };
 
 export type VmwareAutoRepairConfig = {
   /** Enable auto repair. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 };
 
 export type VmwareClusterUpgradePolicy = {
   /** Restrict the upgrade to the control plane. */
-  controlPlaneOnly?: boolean;
+  controlPlaneOnly?: boolean | undefined;
 };
 
 export type VmwareNodePoolAutoscalingConfig = {
@@ -498,5 +498,5 @@ export type VmwareNodeConfig = {
 
 export type Fleet = {
   /** Output-only Hub membership resource name. */
-  membership?: string;
+  membership?: string | undefined;
 };

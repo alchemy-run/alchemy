@@ -39,12 +39,12 @@ export interface CertificateProps {
   /**
    * Additional domain names to include on the certificate.
    */
-  subjectAlternativeNames?: string[];
+  subjectAlternativeNames?: string[] | undefined;
   /**
    * Validation method for the certificate request.
    * @default "DNS"
    */
-  validationMethod?: acm.ValidationMethod;
+  validationMethod?: acm.ValidationMethod | undefined;
   /**
    * Route 53 hosted zone used to auto-create DNS validation records.
    *
@@ -55,7 +55,7 @@ export interface CertificateProps {
    * left to the caller (external DNS) and the certificate is returned
    * pending.
    */
-  hostedZoneId?: string;
+  hostedZoneId?: string | undefined;
   /**
    * Who publishes the DNS validation records (with `validationMethod:
    * "DNS"`).
@@ -108,7 +108,7 @@ export interface CertificateProps {
   /**
    * User-defined tags to apply to the certificate.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 /**

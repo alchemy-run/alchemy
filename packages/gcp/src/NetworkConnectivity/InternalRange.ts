@@ -39,13 +39,13 @@ export type InternalRangeAllocationOptions = {
    * Auto-allocation strategy used when `ipCidrRange` is omitted and
    * `prefixLength` is set.
    */
-  allocationStrategy?: InternalRangeAllocationStrategy;
+  allocationStrategy?: InternalRangeAllocationStrategy | undefined;
   /**
    * Maximum expected parallelism of range-creation requests against the
    * same peered space. Required when `allocationStrategy` is
    * `RANDOM_FIRST_N_AVAILABLE`.
    */
-  firstAvailableRangesLookupSize?: number;
+  firstAvailableRangesLookupSize?: number | undefined;
 };
 
 export type InternalRangeMigration = {

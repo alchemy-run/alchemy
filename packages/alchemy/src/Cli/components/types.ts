@@ -33,7 +33,7 @@ export interface CycleChoice<State> {
   readonly description?: string;
   readonly states: ReadonlyArray<{
     readonly value: State;
-    readonly label?: string;
+    readonly label?: string | undefined;
     readonly icon?: string;
     readonly variant?: "neutral" | "accent" | "info" | "success" | "warning" | "error";
   }>;

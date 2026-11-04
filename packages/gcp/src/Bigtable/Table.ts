@@ -21,28 +21,28 @@ import {
 
 export type GcRule = {
   /** Keep only the most recent N versions of each cell. */
-  maxNumVersions?: number;
+  maxNumVersions?: number | undefined;
   /** Delete cells older than this duration (e.g. `"2592000s"`). */
-  maxAge?: string;
+  maxAge?: string | undefined;
 };
 
 export type ColumnFamily = {
   /** Garbage-collection rule for this family. */
-  gcRule?: GcRule;
+  gcRule?: GcRule | undefined;
 };
 
 export type ChangeStreamConfig = {
   /**
    * How long change-stream data is retained (`1d`–`7d`, e.g. `"86400s"`).
    */
-  retentionPeriod?: string;
+  retentionPeriod?: string | undefined;
 };
 
 export type AutomatedBackupPolicy = {
   /** How long automated backups are retained (`3d`–`90d`). */
-  retentionPeriod?: string;
+  retentionPeriod?: string | undefined;
   /** Backup frequency. Only `"24h"` is supported. */
-  frequency?: string;
+  frequency?: string | undefined;
 };
 
 export type TableProps = {
@@ -57,31 +57,31 @@ export type TableProps = {
    * is generated from the stack, stage, and logical id. Must be 1-50
    * characters. Immutable — changing it replaces the table.
    */
-  tableId?: string;
+  tableId?: string | undefined;
   /**
    * Column families keyed by family id. Omitted on update leaves families
    * unchanged; a provided map is reconciled (create / update / drop).
    */
-  columnFamilies?: Record<string, ColumnFamily>;
+  columnFamilies?: Record<string, ColumnFamily> | undefined;
   /**
    * Protect the table (and its instance) from Admin API deletes.
    * Disabled automatically on destroy.
    * @default false
    */
-  deletionProtection?: boolean;
+  deletionProtection?: boolean | undefined;
   /**
    * Timestamp granularity. Immutable.
    * @default "MILLIS"
    */
-  granularity?: bigtable.TableGranularityEnum | (string & {});
+  granularity?: bigtable.TableGranularityEnum | (string & {}) | undefined;
   /**
    * Enable a change stream on this table.
    */
-  changeStreamConfig?: ChangeStreamConfig;
+  changeStreamConfig?: ChangeStreamConfig | undefined;
   /**
    * Automated backup policy. Omit to disable.
    */
-  automatedBackupPolicy?: AutomatedBackupPolicy;
+  automatedBackupPolicy?: AutomatedBackupPolicy | undefined;
 };
 
 export type Table = Resource<

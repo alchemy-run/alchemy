@@ -146,11 +146,11 @@ export interface HandleInput {
   /** Epoch milliseconds. */
   readonly now: number;
   /** The flow the command belongs to; the command id when it starts one. */
-  readonly correlationId?: string;
+  readonly correlationId?: string | undefined;
   /** The span that sent the command. */
-  readonly trace?: TraceJson;
+  readonly trace?: TraceJson | undefined;
   /** Link to `trace` instead of continuing it. */
-  readonly link?: boolean;
+  readonly link?: boolean | undefined;
 }
 
 /**
@@ -471,7 +471,7 @@ export interface Accepted {
  */
 export interface ProjectionOptions {
   /** Hand the handler up to `size` accepted deliveries at once, waiting up to `wait` ms to fill. */
-  readonly batch?: { readonly size: number; readonly waitMillis: number };
+  readonly batch?: { readonly size: number; readonly waitMillis: number } | undefined;
 }
 
 /**

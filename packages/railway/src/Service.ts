@@ -94,7 +94,7 @@ export interface ServiceProps extends PlatformProps {
    * `env`. Upserted as service-scoped Railway variables with
    * `skipDeploys: true`; this Service owns the subsequent deploy.
    */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Private-mesh RPC token. Minted by a child `Alchemy.Random`
    * (`{logicalId}RpcToken`) and persisted in state. Set automatically.
@@ -105,14 +105,14 @@ export interface ServiceProps extends PlatformProps {
    * overrides, plus `install` for packages that must ship as real
    * `node_modules` (see {@link RailwayBuildOptions}).
    */
-  build?: RailwayBuildOptions;
+  build?: RailwayBuildOptions | undefined;
   /**
    * Extra files/directories copied into `/app` in the generated
    * Dockerfile (`COPY dest /app/dest`). Website composites use this to
    * bake the framework `clientDirectory` (or Next.js `.next`) so asset
    * changes rebuild on Railway.
    */
-  extraFiles?: ReadonlyArray<ExtraFile>;
+  extraFiles?: ReadonlyArray<ExtraFile> | undefined;
   /**
    * Named export to load from `main`.
    *

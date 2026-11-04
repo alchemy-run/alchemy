@@ -229,9 +229,9 @@ export class AppRenameNotSupported extends Data.TaggedError("AppRenameNotSupport
 }> {}
 
 type ObservedApp = {
-  id?: string | null;
-  createdAt?: string | null;
-  name?: string | null;
+  id?: string | null | undefined;
+  createdAt?: string | null | undefined;
+  name?: string | null | undefined;
   accountId: string;
 };
 

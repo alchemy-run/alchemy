@@ -273,7 +273,7 @@ export const ownedByTopicLabels = (
 
 export const listSubscriptions = (
   parent: string,
-  options?: { showDeleted?: boolean; filter?: string },
+  options?: { showDeleted?: boolean; filter?: string | undefined },
 ) =>
   parent.length === 0
     ? emptyList<cloudsupport.SupportEventSubscription>()

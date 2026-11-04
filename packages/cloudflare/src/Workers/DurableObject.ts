@@ -57,11 +57,11 @@ export interface DurableObjectLike<Shape = any> {
   kind: TypeId;
   name: string;
   /** @internal phantom */
-  className?: string;
+  className?: string | undefined;
   /** @internal phantom */
-  scriptName?: Input<string>;
+  scriptName?: Input<string> | undefined;
   /** @internal phantom */
-  transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[];
+  transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[] | undefined;
   /** @internal phantom */
   storage?: "sqlite" | "legacy-kv";
   /** @internal Durable Object-managed Containers attached to the class. */

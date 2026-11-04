@@ -128,7 +128,7 @@ const runDrift = (
   options: {
     readonly dryRun: boolean;
     /** Check and repair only these resources; the rest of the stage is untouched. */
-    readonly only?: ReadonlyArray<string>;
+    readonly only?: ReadonlyArray<string> | undefined;
   },
 ): Effect.Effect<DriftResult, any, State> =>
   Effect.gen(function* () {

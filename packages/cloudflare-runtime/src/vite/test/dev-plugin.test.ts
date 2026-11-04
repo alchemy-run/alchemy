@@ -102,7 +102,7 @@ describe("dev plugin", () => {
       main: "./worker-entry.ts",
     }) as Array<vite.Plugin>;
     for (const plugin of plugins) {
-      plugin.configureServer = undefined;
+      delete plugin.configureServer;
     }
     const server = await createDevServer(plugins);
     try {

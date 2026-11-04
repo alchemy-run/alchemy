@@ -40,11 +40,11 @@ export type ConsumerProps = {
    * left there expires after the queue's retention period, so give the
    * dead-letter queue its own consumer.
    */
-  deadLetterQueue?: string;
+  deadLetterQueue?: string | undefined;
   /**
    * Consumer settings.
    */
-  settings?: ConsumerSettings;
+  settings?: ConsumerSettings | undefined;
 };
 
 export interface ConsumerSettings {
@@ -52,25 +52,25 @@ export interface ConsumerSettings {
    * The maximum number of messages per batch.
    * @default 10
    */
-  batchSize?: number;
+  batchSize?: number | undefined;
   /**
    * The maximum number of concurrent consumer invocations.
    */
-  maxConcurrency?: number;
+  maxConcurrency?: number | undefined;
   /**
    * The maximum number of retries for a message.
    * @default 3
    */
-  maxRetries?: number;
+  maxRetries?: number | undefined;
   /**
    * The maximum time to wait for a batch to fill, in milliseconds.
    * @default 5000
    */
-  maxWaitTimeMs?: number;
+  maxWaitTimeMs?: number | undefined;
   /**
    * The number of seconds to wait before retrying a message.
    */
-  retryDelay?: number;
+  retryDelay?: number | undefined;
 }
 
 export type Consumer = Resource<
@@ -81,20 +81,20 @@ export type Consumer = Resource<
     queueId: string;
     scriptName: string;
     accountId: string;
-    deadLetterQueue?: string;
-    settings?: ConsumerSettings;
+    deadLetterQueue?: string | undefined;
+    settings?: ConsumerSettings | undefined;
     /**
      * Dev only, live queues only: the real queue's name, resolved from the
      * cloud so the local runtime can wire the broker + pull loop for a
      * locally-running consumer of an `Alchemy.remote()` queue.
      */
-    queueName?: string;
+    queueName?: string | undefined;
     /**
      * Dev only, live queues only: id of the `http_pull` consumer attached
      * to the real queue so the local runtime can drain it via the HTTP
      * pull API. Deleted when this resource is deleted.
      */
-    pullConsumerId?: string;
+    pullConsumerId?: string | undefined;
   },
   never,
   Providers
@@ -663,9 +663,9 @@ export const ConsumerProviderLive = () =>
 type ObservedConsumer = { consumerId: string; scriptName: string | undefined };
 
 const toObserved = (c: {
-  consumerId?: string | null;
-  scriptName?: string | null;
-  type?: "worker" | "http_pull" | null;
+  consumerId?: string | null | undefined;
+  scriptName?: string | null | undefined;
+  type?: "worker" | "http_pull" | null | undefined;
 }): ObservedConsumer | undefined =>
   c.consumerId && c.type === "worker"
     ? { consumerId: c.consumerId, scriptName: c.scriptName ?? undefined }

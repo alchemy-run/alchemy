@@ -105,7 +105,7 @@ export interface DockerfileBuild {
    * Secrets are left out of the image's content hash, so rotating one does
    * not rebuild the image.
    */
-  secrets?: Record<string, Redacted.Redacted<string>>;
+  secrets?: Record<string, Redacted.Redacted<string>> | undefined;
 }
 
 /** The `build` prop of a source built from the user's own Dockerfile. */
@@ -198,7 +198,11 @@ export class DockerfileBuildConflict extends Data.TaggedError("DockerfileBuildCo
  */
 export const validateDockerfileBuild = (
   id: string,
-  source: { main?: string; image?: string; build?: DockerfileBuild },
+  source: {
+    main?: string | undefined;
+    image?: string | undefined;
+    build?: DockerfileBuild | undefined;
+  },
 ): Effect.Effect<void> =>
   (source.main !== undefined || source.image !== undefined) &&
   (source.build?.args !== undefined || source.build?.secrets !== undefined)
@@ -275,17 +279,17 @@ export interface ResolveContainerImageOptions {
    * Target image platform.
    * @default "linux/amd64"
    */
-  platform?: string;
+  platform?: string | undefined;
   /**
    * Port the generated Dockerfile should `ENV PORT=` + `EXPOSE`
    * (`main` source only).
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * True when the resource was declared without an inline Effect impl —
    * `main` is then bundled as-is without the virtual-entry bootstrap.
    */
-  isExternal?: boolean;
+  isExternal?: boolean | undefined;
   /**
    * The virtual-entry bootstrap wrapped around `main` for Effect-native
    * programs: receives the resolved entry import path and returns the
@@ -302,7 +306,7 @@ export interface ResolveContainerImageOptions {
  */
 const resolveContextPaths = Effect.fn(function* (source: {
   context: string | undefined;
-  dockerfile?: string;
+  dockerfile?: string | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -430,7 +434,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
   /** Bundle the Effect program behind a `main` source. */
   const bundleProgram = Effect.fn(function* (options: {
     source: BundledImageSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
   }) {
     const { source } = options;
@@ -472,9 +476,9 @@ export const makeContainerImageSource = Effect.gen(function* () {
    */
   const computeMainCodeHash = Effect.fn(function* (options: {
     source: BundledImageSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
-    port?: number;
+    port?: number | undefined;
     platform: string;
   }) {
     const bundled = yield* bundleProgram({
@@ -582,7 +586,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
       context: string;
       dockerfile?: string;
       platform?: string;
-      build?: DockerfileBuild;
+      build?: DockerfileBuild | undefined;
     },
   ) {
     const credentials = yield* target.credentials;
@@ -788,9 +792,9 @@ export const makeContainerImageSource = Effect.gen(function* () {
    */
   const hash = Effect.fn(function* (options: {
     source: ImageSourceLike;
-    platform?: string;
-    port?: number;
-    isExternal?: boolean;
+    platform?: string | undefined;
+    port?: number | undefined;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
   }) {
     const platform = options.platform ?? "linux/amd64";
@@ -821,7 +825,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
    */
   const watchMain = Effect.fn(function* (options: {
     source: BundledImageSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
   }) {
     const realMain = yield* resolveMainPath(options.source.main);

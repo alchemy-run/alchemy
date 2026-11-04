@@ -57,24 +57,24 @@ export interface KindClusterConfig {
    * The cluster's nodes.
    * @default a single control-plane node
    */
-  nodes?: KindNode[];
+  nodes?: KindNode[] | undefined;
   /** Cluster networking. */
-  networking?: KindNetworking;
+  networking?: KindNetworking | undefined;
   /** Kubernetes feature gates, e.g. `{ InPlacePodVerticalScaling: true }`. */
-  featureGates?: Record<string, boolean>;
+  featureGates?: Record<string, boolean> | undefined;
   /** API server `--runtime-config` entries, e.g. `{ "api/alpha": "false" }`. */
-  runtimeConfig?: Record<string, string>;
+  runtimeConfig?: Record<string, string> | undefined;
   /** kubeadm config patches (YAML strategic-merge) applied to every node. */
-  kubeadmConfigPatches?: string[];
+  kubeadmConfigPatches?: string[] | undefined;
   /** kubeadm config patches (RFC 6902 JSON patches) applied to every node. */
-  kubeadmConfigPatchesJSON6902?: KindJsonPatch[];
+  kubeadmConfigPatchesJSON6902?: KindJsonPatch[] | undefined;
   /**
    * containerd config patches (TOML). Alchemy appends its own for the image
    * registry.
    */
-  containerdConfigPatches?: string[];
+  containerdConfigPatches?: string[] | undefined;
   /** containerd config patches (RFC 6902 JSON patches). */
-  containerdConfigPatchesJSON6902?: string[];
+  containerdConfigPatchesJSON6902?: string[] | undefined;
 }
 
 /** A node in a kind cluster. */

@@ -238,7 +238,7 @@ export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>
   );
 
 export const listChildResources = <A, E, R>(
-  parents: readonly { name?: string }[],
+  parents: readonly { name?: string | undefined }[],
   list: (name: string) => Effect.Effect<A[], E, R>,
 ) =>
   Effect.forEach(

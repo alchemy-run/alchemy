@@ -4,6 +4,8 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import type { Plan } from "./Backfill.ts";
@@ -316,7 +318,11 @@ const build = (
     readonly initial: Json;
     readonly commands: Map<
       string,
-      { readonly cls: Command.Any; readonly codec: JsonCodec; readonly reply?: JsonCodec }
+      {
+        readonly cls: Command.Any;
+        readonly codec: JsonCodec;
+        readonly reply: JsonCodec | undefined;
+      }
     >;
     readonly rejections: Map<string, JsonCodec>;
     readonly events: Set<string>;
@@ -331,7 +337,10 @@ const build = (
     aggregateByName.set(aggregate.aggregateName, aggregate);
     const def = aggregate.definition;
     const state = jsonCodec(def.state);
-    const commands = new Map<string, { cls: Command.Any; codec: JsonCodec; reply?: JsonCodec }>();
+    const commands = new Map<
+      string,
+      { cls: Command.Any; codec: JsonCodec; reply: JsonCodec | undefined }
+    >();
     const rejections = new Map<string, JsonCodec>();
     for (const command of def.commands) {
       commands.set(command.tag, {
@@ -531,7 +540,10 @@ const build = (
         consumer: owner,
         event: tag,
         source,
-        keyedBy: Key.isAggregate(def.key) ? def.key.aggregateName : undefined,
+        ...Record.filterMap(
+          { keyedBy: Key.isAggregate(def.key) ? def.key.aggregateName : undefined },
+          Result.fromNullishOr(() => undefined),
+        ),
       }),
     );
     return () => [];

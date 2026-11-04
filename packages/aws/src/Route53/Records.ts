@@ -38,7 +38,7 @@ export interface RecordsProps {
    * when no zone matches. Every name in the set lives in the one zone
    * either way.
    */
-  hostedZoneId?: string;
+  hostedZoneId?: string | undefined;
   /**
    * Record type shared by every record in the set.
    */
@@ -47,20 +47,20 @@ export interface RecordsProps {
    * Record names managed by this set. Names contributed through the binding
    * contract (see {@link RecordsBinding}) are merged in at reconcile time.
    */
-  names?: string[];
+  names?: string[] | undefined;
   /**
    * TTL for non-alias records, e.g. `"60 seconds"` (a bare number is
    * milliseconds). Rounded to whole seconds on the wire.
    */
-  ttl?: Duration.Input;
+  ttl?: Duration.Input | undefined;
   /**
    * Record values for non-alias records (shared by every name in the set).
    */
-  records?: string[];
+  records?: string[] | undefined;
   /**
    * Alias target for alias records (shared by every name in the set).
    */
-  aliasTarget?: RecordAliasTarget;
+  aliasTarget?: RecordAliasTarget | undefined;
 }
 
 export interface Records extends Resource<

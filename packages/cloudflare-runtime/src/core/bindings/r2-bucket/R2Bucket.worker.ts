@@ -464,9 +464,9 @@ CREATE TABLE IF NOT EXISTS _mf_multipart_parts (
 // https://github.com/cloudflare/workerd/blob/4290f9717bc94647d9c8afd29602cdac97fdff1b/src/workerd/api/r2-api.capnp
 
 interface R2Range {
-  offset?: number;
-  length?: number;
-  suffix?: number;
+  offset?: number | undefined;
+  length?: number | undefined;
+  suffix?: number | undefined;
 }
 
 interface R2HttpFields {
@@ -475,7 +475,7 @@ interface R2HttpFields {
   contentDisposition?: string;
   contentEncoding?: string;
   cacheControl?: string;
-  cacheExpiry?: number;
+  cacheExpiry?: number | undefined;
 }
 
 interface R2PublishedPart {
@@ -493,29 +493,29 @@ interface R2GetRequest {
   // Specifies that only a specific length (from an optional offset) or suffix
   // of bytes from the object should be returned. Refer to
   // https://developers.cloudflare.com/r2/runtime-apis/#ranged-reads.
-  range?: R2Range;
+  range?: R2Range | undefined;
   rangeHeader?: string;
   // Specifies that the object should only be returned given satisfaction of
   // certain conditions in the R2Conditional.
-  onlyIf?: R2Conditional;
+  onlyIf?: R2Conditional | undefined;
 }
 interface R2PutRequest {
   method: "put";
   object: string;
-  customMetadata?: Record<string, string>;
-  httpMetadata?: R2HttpFields;
-  onlyIf?: R2Conditional;
-  md5?: Uint8Array; // (intentionally sent base64-encoded, unlike the others)
-  sha1?: Uint8Array;
-  sha256?: Uint8Array;
-  sha384?: Uint8Array;
-  sha512?: Uint8Array;
+  customMetadata?: Record<string, string> | undefined;
+  httpMetadata?: R2HttpFields | undefined;
+  onlyIf?: R2Conditional | undefined;
+  md5?: Uint8Array | undefined; // (intentionally sent base64-encoded, unlike the others)
+  sha1?: Uint8Array | undefined;
+  sha256?: Uint8Array | undefined;
+  sha384?: Uint8Array | undefined;
+  sha512?: Uint8Array | undefined;
 }
 interface R2CreateMultipartUploadRequest {
   method: "createMultipartUpload";
   object: string;
-  customMetadata?: Record<string, string>;
-  httpMetadata?: R2HttpFields;
+  customMetadata?: Record<string, string> | undefined;
+  httpMetadata?: R2HttpFields | undefined;
 }
 interface R2UploadPartRequest {
   method: "uploadPart";
@@ -536,12 +536,12 @@ interface R2AbortMultipartUploadRequest {
 }
 interface R2ListRequest {
   method: "list";
-  limit?: number;
+  limit?: number | undefined;
   prefix?: string;
   cursor?: string;
   delimiter?: string;
   startAfter?: string;
-  include?: Array<"httpMetadata" | "customMetadata">;
+  include?: Array<"httpMetadata" | "customMetadata"> | undefined;
 }
 type R2DeleteRequest =
   | { method: "delete"; object: string }
@@ -695,14 +695,14 @@ interface R2HeadResponse {
   // Optional: https://github.com/cloudflare/workerd/blob/4290f9717bc94647d9c8afd29602cdac97fdff1b/src/workerd/api/r2-bucket.c%2B%2B#L113
   customFields?: RawRecord;
   // Optional: https://github.com/cloudflare/workerd/blob/4290f9717bc94647d9c8afd29602cdac97fdff1b/src/workerd/api/r2-bucket.c%2B%2B#L130
-  range?: R2Range;
+  range?: R2Range | undefined;
   // Optional: https://github.com/cloudflare/workerd/blob/4290f9717bc94647d9c8afd29602cdac97fdff1b/src/workerd/api/r2-bucket.c%2B%2B#L140
   checksums?: {
-    0?: string;
-    1?: string;
-    2?: string;
-    3?: string;
-    4?: string;
+    0?: string | undefined;
+    1?: string | undefined;
+    2?: string | undefined;
+    3?: string | undefined;
+    4?: string | undefined;
   };
 }
 interface R2CreateMultipartUploadResponse {
@@ -730,7 +730,7 @@ class InternalR2Object {
   readonly uploaded: number;
   readonly httpMetadata: R2HttpFields;
   readonly customMetadata: Record<string, string>;
-  readonly range?: R2Range;
+  readonly range: R2Range | undefined;
   readonly checksums: R2StringChecksums;
 
   constructor(row: Omit<ObjectRow, "blob_id">, range?: R2Range) {
@@ -824,7 +824,7 @@ interface InternalR2Objects {
   truncated: boolean;
   // A token that can be passed to future list calls to resume listing from
   // that point. Only present if truncated is true.
-  cursor?: string;
+  cursor?: string | undefined;
   // If a delimiter has been specified, contains all prefixes between the
   // specified prefix and the next occurrence of the delimiter. For example, if
   // no prefix is provided and the delimiter is "/", "foo/bar/baz" would return
@@ -845,7 +845,9 @@ const R2_HASH_ALGORITHMS = [
   { name: "SHA-384", field: "sha384" },
   { name: "SHA-512", field: "sha512" },
 ] as const;
-type R2Hashes = Partial<Record<(typeof R2_HASH_ALGORITHMS)[number]["field"], Uint8Array>>;
+type R2Hashes = Partial<
+  Record<(typeof R2_HASH_ALGORITHMS)[number]["field"], Uint8Array | undefined>
+>;
 type DigestAlgorithm = (typeof R2_HASH_ALGORITHMS)[number]["name"];
 
 function serialisedLength(x: string) {

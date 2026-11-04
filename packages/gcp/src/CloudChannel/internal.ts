@@ -92,11 +92,11 @@ export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   if (input.extra === true) {
     return { action: "replace" as const, deleteFirst: false };
@@ -278,15 +278,16 @@ export const toCustomerAttrs = (
 export const desiredCustomer = (input: {
   orgDisplayName: string;
   domain: string;
-  orgPostalAddress?: cloudchannel.GoogleTypePostalAddress;
-  primaryContactInfo?: cloudchannel.GoogleCloudChannelV1ContactInfo;
-  alternateEmail?: string;
-  languageCode?: string;
-  correlationId?: string;
+  orgPostalAddress?: cloudchannel.GoogleTypePostalAddress | undefined;
+  primaryContactInfo?: cloudchannel.GoogleCloudChannelV1ContactInfo | undefined;
+  alternateEmail?: string | undefined;
+  languageCode?: string | undefined;
+  correlationId?: string | undefined;
   customerAttestationState?:
     | cloudchannel.GoogleCloudChannelV1CustomerCustomerAttestationStateEnum
-    | (string & {});
-  channelPartnerId?: string;
+    | (string & {})
+    | undefined;
+  channelPartnerId?: string | undefined;
 }): cloudchannel.GoogleCloudChannelV1Customer => {
   const address = input.orgPostalAddress ?? DEFAULT_POSTAL_ADDRESS;
   const email = input.primaryContactInfo?.email ?? `admin@${input.domain}`;
@@ -359,11 +360,14 @@ export const desiredRepricingConfig = (input: {
   effectiveInvoiceMonth: cloudchannel.GoogleTypeDate;
   rebillingBasis?:
     | cloudchannel.GoogleCloudChannelV1RepricingConfigRebillingBasisEnum
-    | (string & {});
-  adjustmentPercentage?: string;
-  adjustment?: cloudchannel.GoogleCloudChannelV1RepricingAdjustment;
-  entitlementGranularity?: cloudchannel.GoogleCloudChannelV1RepricingConfigEntitlementGranularity;
-  conditionalOverrides?: cloudchannel.GoogleCloudChannelV1ConditionalOverrideList;
+    | (string & {})
+    | undefined;
+  adjustmentPercentage?: string | undefined;
+  adjustment?: cloudchannel.GoogleCloudChannelV1RepricingAdjustment | undefined;
+  entitlementGranularity?:
+    | cloudchannel.GoogleCloudChannelV1RepricingConfigEntitlementGranularity
+    | undefined;
+  conditionalOverrides?: cloudchannel.GoogleCloudChannelV1ConditionalOverrideList | undefined;
 }): cloudchannel.GoogleCloudChannelV1RepricingConfig => ({
   effectiveInvoiceMonth: normalizeDate(input.effectiveInvoiceMonth),
   rebillingBasis: input.rebillingBasis ?? DEFAULT_REBILLING_BASIS,

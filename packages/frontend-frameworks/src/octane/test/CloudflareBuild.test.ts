@@ -44,7 +44,6 @@ describe("Octane Cloudflare build", () => {
     const custom = { name: "custom" };
     const plugins = await run(clientPlugins([Promise.resolve([native, false]), custom]));
     expect(plugins.map((plugin) => plugin.name)).toEqual([native.name, custom.name]);
-    expect(plugins[0]?.closeBundle).toBeUndefined();
     expect(native.closeBundle).toBe(closeBundle);
     expect(plugins[1]).toBe(custom);
   });

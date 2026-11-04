@@ -21,17 +21,17 @@ const MAX_NAME_LENGTH = 63;
 
 export type ProfileConfigCategory = {
   /** Include mediation scoring. */
-  mediation?: boolean;
+  mediation?: boolean | undefined;
   /** Include abuse scoring. */
-  abuse?: boolean;
+  abuse?: boolean | undefined;
   /** Include authorization scoring. */
-  authorization?: boolean;
+  authorization?: boolean | undefined;
   /** Include mTLS scoring. */
-  mtls?: boolean;
+  mtls?: boolean | undefined;
   /** Include CORS scoring. */
-  cors?: boolean;
+  cors?: boolean | undefined;
   /** Include threat-protection scoring. */
-  threat?: boolean;
+  threat?: boolean | undefined;
 };
 
 export type ProfileConfig = {
@@ -41,11 +41,11 @@ export type ProfileConfig = {
 
 export type ScoringConfig = {
   /** Description of the scoring config. */
-  description?: string;
+  description?: string | undefined;
   /** Path of the component config used for scoring. */
-  scorePath?: string;
+  scorePath?: string | undefined;
   /** Title of the config. */
-  title?: string;
+  title?: string | undefined;
 };
 
 export type SecurityProfileProps = {
@@ -67,7 +67,7 @@ export type SecurityProfileProps = {
    * `[alchemy …]` prefix and stripped from attributes. Profiles have no
    * labels field.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Deprecated display name.
    */
@@ -80,7 +80,7 @@ export type SecurityProfileProps = {
   /**
    * Scoring configs in this revision.
    */
-  scoringConfigs?: ScoringConfig[];
+  scoringConfigs?: ScoringConfig[] | undefined;
 };
 
 export type SecurityProfile = Resource<

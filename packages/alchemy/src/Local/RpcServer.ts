@@ -31,12 +31,14 @@ import {
 export class RpcServer extends Context.Service<RpcServer, never>()("alchemy/Local/RpcServer") {}
 
 /**
- * The provider shape served over RPC. The `mode`/`modes` variant machinery
- * (lazy Layer-built Effects, see `ProviderLayer.dual`) is process-local and
- * cannot cross the RPC boundary — the sidecar serves the concrete provider
- * implementation, never the mode-dispatching wrapper.
+ * The provider shape served over RPC. Mode variants and data-plane Layers
+ * are process-local machinery (see `ProviderLayer.dual`); the sidecar serves
+ * the concrete provider implementation, never the mode-dispatching wrapper.
  */
-export type RpcProviderService<R extends ResourceLike> = Omit<ProviderService<R>, "mode" | "modes">;
+export type RpcProviderService<R extends ResourceLike> = Omit<
+  ProviderService<R>,
+  "mode" | "modes" | "localDataPlane" | "liveDataPlane"
+>;
 
 /**
  * The RPC API that is implemented by the server and consumed by {@link RpcProviderProxy}.

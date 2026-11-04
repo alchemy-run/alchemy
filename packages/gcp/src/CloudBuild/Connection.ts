@@ -29,7 +29,7 @@ export type OAuthCredential = {
    * Cloud Build GitHub App, as
    * `projects/{project}/secrets/{secret}/versions/{version}`.
    */
-  oauthTokenSecretVersion?: string;
+  oauthTokenSecretVersion?: string | undefined;
 };
 
 export type GitHubConfig = {
@@ -38,11 +38,11 @@ export type GitHubConfig = {
    * App. Prefer a robot account. The token must be tied to the Cloud Build
    * GitHub App.
    */
-  authorizerCredential?: OAuthCredential;
+  authorizerCredential?: OAuthCredential | undefined;
   /**
    * GitHub App installation id.
    */
-  appInstallationId?: string;
+  appInstallationId?: string | undefined;
 };
 
 export type ServiceDirectoryConfig = {
@@ -50,7 +50,7 @@ export type ServiceDirectoryConfig = {
    * Service Directory service used to reach a private host, as
    * `projects/{project}/locations/{location}/namespaces/{namespace}/services/{service}`.
    */
-  service?: string;
+  service?: string | undefined;
 };
 
 export type UserCredential = {
@@ -58,7 +58,7 @@ export type UserCredential = {
    * Secret Manager resource containing the user token, as
    * `projects/{project}/secrets/{secret}/versions/{version}`.
    */
-  userTokenSecretVersion?: string;
+  userTokenSecretVersion?: string | undefined;
 };
 
 export type GitHubEnterpriseConfig = {
@@ -66,41 +66,41 @@ export type GitHubEnterpriseConfig = {
    * URI of the GitHub Enterprise host. Immutable — changing it replaces
    * the connection.
    */
-  hostUri?: string;
+  hostUri?: string | undefined;
   /**
    * API key used to authenticate webhook events.
    */
-  apiKey?: string;
+  apiKey?: string | undefined;
   /**
    * Id of the GitHub App created from the manifest.
    */
-  appId?: string;
+  appId?: string | undefined;
   /**
    * URL-friendly name of the GitHub App.
    */
-  appSlug?: string;
+  appSlug?: string | undefined;
   /**
    * Secret Manager resource containing the GitHub App private key, as
    * `projects/{project}/secrets/{secret}/versions/{version}`.
    */
-  privateKeySecretVersion?: string;
+  privateKeySecretVersion?: string | undefined;
   /**
    * Secret Manager resource containing the GitHub App webhook secret, as
    * `projects/{project}/secrets/{secret}/versions/{version}`.
    */
-  webhookSecretSecretVersion?: string;
+  webhookSecretSecretVersion?: string | undefined;
   /**
    * Installation id of the GitHub App.
    */
-  appInstallationId?: string;
+  appInstallationId?: string | undefined;
   /**
    * Service Directory config for a private GitHub Enterprise host.
    */
-  serviceDirectoryConfig?: ServiceDirectoryConfig;
+  serviceDirectoryConfig?: ServiceDirectoryConfig | undefined;
   /**
    * SSL certificate used for requests to GitHub Enterprise.
    */
-  sslCa?: string;
+  sslCa?: string | undefined;
 };
 
 export type GitLabConfig = {
@@ -108,29 +108,29 @@ export type GitLabConfig = {
    * GitLab host URI. Defaults to `https://gitlab.com`. Immutable —
    * changing it replaces the connection.
    */
-  hostUri?: string;
+  hostUri?: string | undefined;
   /**
    * Secret Manager resource containing the webhook secret, as
    * `projects/{project}/secrets/{secret}/versions/{version}`. Immutable —
    * changing it replaces the connection.
    */
-  webhookSecretSecretVersion?: string;
+  webhookSecretSecretVersion?: string | undefined;
   /**
    * GitLab personal access token with at least `read_api` scope.
    */
-  readAuthorizerCredential?: UserCredential;
+  readAuthorizerCredential?: UserCredential | undefined;
   /**
    * GitLab personal access token with `api` scope.
    */
-  authorizerCredential?: UserCredential;
+  authorizerCredential?: UserCredential | undefined;
   /**
    * Service Directory config for a private GitLab Enterprise host.
    */
-  serviceDirectoryConfig?: ServiceDirectoryConfig;
+  serviceDirectoryConfig?: ServiceDirectoryConfig | undefined;
   /**
    * SSL certificate used for requests to GitLab Enterprise.
    */
-  sslCa?: string;
+  sslCa?: string | undefined;
 };
 
 export type BitbucketDataCenterConfig = {
@@ -138,29 +138,29 @@ export type BitbucketDataCenterConfig = {
    * URI of the Bitbucket Data Center instance. Immutable — changing it
    * replaces the connection.
    */
-  hostUri?: string;
+  hostUri?: string | undefined;
   /**
    * Secret Manager resource containing the webhook secret, as
    * `projects/{project}/secrets/{secret}/versions/{version}`. Immutable —
    * changing it replaces the connection.
    */
-  webhookSecretSecretVersion?: string;
+  webhookSecretSecretVersion?: string | undefined;
   /**
    * HTTP access token with `REPO_READ` access.
    */
-  readAuthorizerCredential?: UserCredential;
+  readAuthorizerCredential?: UserCredential | undefined;
   /**
    * HTTP access token with `REPO_ADMIN` access.
    */
-  authorizerCredential?: UserCredential;
+  authorizerCredential?: UserCredential | undefined;
   /**
    * Service Directory config for a private Bitbucket Data Center host.
    */
-  serviceDirectoryConfig?: ServiceDirectoryConfig;
+  serviceDirectoryConfig?: ServiceDirectoryConfig | undefined;
   /**
    * SSL certificate used for requests to Bitbucket Data Center.
    */
-  sslCa?: string;
+  sslCa?: string | undefined;
 };
 
 export type BitbucketCloudConfig = {
@@ -168,31 +168,31 @@ export type BitbucketCloudConfig = {
    * Bitbucket Cloud workspace id. Immutable — changing it replaces the
    * connection.
    */
-  workspace?: string;
+  workspace?: string | undefined;
   /**
    * Secret Manager resource containing the webhook secret, as
    * `projects/{project}/secrets/{secret}/versions/{version}`. Immutable —
    * changing it replaces the connection.
    */
-  webhookSecretSecretVersion?: string;
+  webhookSecretSecretVersion?: string | undefined;
   /**
    * Access token with `repository` access.
    */
-  readAuthorizerCredential?: UserCredential;
+  readAuthorizerCredential?: UserCredential | undefined;
   /**
    * Access token with `webhook`, `repository`, `repository:admin`, and
    * `pullrequest` scope.
    */
-  authorizerCredential?: UserCredential;
+  authorizerCredential?: UserCredential | undefined;
 };
 
 export type InstallationState = {
   /** Current step of the installation process. */
-  stage?: string;
+  stage?: string | undefined;
   /** Message describing the next user action, if any. */
-  message?: string;
+  message?: string | undefined;
   /** Link for the next user action, if any. */
-  actionUri?: string;
+  actionUri?: string | undefined;
 };
 
 export type ConnectionProps = {
@@ -203,55 +203,55 @@ export type ConnectionProps = {
    * logical id. Must be unique per project and location. Immutable —
    * changing it replaces the connection.
    */
-  connectionId?: string;
+  connectionId?: string | undefined;
   /**
    * Cloud Build location (`us-central1`, `us-east1`, …). Immutable —
    * changing it replaces the connection. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * When true, repository APIs and webhook processing for this connection
    * are disabled.
    * @default false
    */
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   /**
    * User annotations. Cloud Build connections have no labels, so Alchemy
    * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
    * here for `list` / nuke.
    */
-  annotations?: Record<string, string>;
+  annotations?: Record<string, string> | undefined;
   /**
    * Configuration for github.com. If no SCM config is set, Alchemy
    * defaults to an empty GitHub config on create (installation stays
    * pending until the Cloud Build GitHub App is authorized).
    */
-  githubConfig?: GitHubConfig;
+  githubConfig?: GitHubConfig | undefined;
   /**
    * Configuration for a GitHub Enterprise host. Mutually exclusive with
    * the other SCM configs. Changing `hostUri` replaces the connection.
    */
-  githubEnterpriseConfig?: GitHubEnterpriseConfig;
+  githubEnterpriseConfig?: GitHubEnterpriseConfig | undefined;
   /**
    * Configuration for gitlab.com or GitLab Enterprise. Mutually exclusive
    * with the other SCM configs. Changing `hostUri` or
    * `webhookSecretSecretVersion` replaces the connection.
    */
-  gitlabConfig?: GitLabConfig;
+  gitlabConfig?: GitLabConfig | undefined;
   /**
    * Configuration for Bitbucket Data Center. Mutually exclusive with the
    * other SCM configs. Changing `hostUri` or
    * `webhookSecretSecretVersion` replaces the connection.
    */
-  bitbucketDataCenterConfig?: BitbucketDataCenterConfig;
+  bitbucketDataCenterConfig?: BitbucketDataCenterConfig | undefined;
   /**
    * Configuration for Bitbucket Cloud. Mutually exclusive with the other
    * SCM configs. Changing `workspace` or `webhookSecretSecretVersion`
    * replaces the connection.
    */
-  bitbucketCloudConfig?: BitbucketCloudConfig;
+  bitbucketCloudConfig?: BitbucketCloudConfig | undefined;
 };
 
 export type Connection = Resource<
@@ -777,10 +777,10 @@ const bitbucketCloudChanged = (
 };
 
 const immutableHostOf = (value: {
-  githubEnterpriseConfig?: { hostUri?: string };
-  gitlabConfig?: { hostUri?: string };
-  bitbucketDataCenterConfig?: { hostUri?: string };
-  bitbucketCloudConfig?: { workspace?: string };
+  githubEnterpriseConfig?: { hostUri?: string | undefined } | undefined;
+  gitlabConfig?: { hostUri?: string | undefined } | undefined;
+  bitbucketDataCenterConfig?: { hostUri?: string | undefined } | undefined;
+  bitbucketCloudConfig?: { workspace?: string | undefined } | undefined;
 }) =>
   value.githubEnterpriseConfig?.hostUri ??
   value.gitlabConfig?.hostUri ??
@@ -788,10 +788,10 @@ const immutableHostOf = (value: {
   value.bitbucketCloudConfig?.workspace;
 
 const immutableWebhookOf = (value: {
-  githubEnterpriseConfig?: { webhookSecretSecretVersion?: string };
-  gitlabConfig?: { webhookSecretSecretVersion?: string };
-  bitbucketDataCenterConfig?: { webhookSecretSecretVersion?: string };
-  bitbucketCloudConfig?: { webhookSecretSecretVersion?: string };
+  githubEnterpriseConfig?: { webhookSecretSecretVersion?: string | undefined } | undefined;
+  gitlabConfig?: { webhookSecretSecretVersion?: string | undefined } | undefined;
+  bitbucketDataCenterConfig?: { webhookSecretSecretVersion?: string | undefined } | undefined;
+  bitbucketCloudConfig?: { webhookSecretSecretVersion?: string | undefined } | undefined;
 }) =>
   value.githubEnterpriseConfig?.webhookSecretSecretVersion ??
   value.gitlabConfig?.webhookSecretSecretVersion ??

@@ -64,7 +64,7 @@ export interface ProfileProps {
    * An inline IAM session policy (JSON) applied to the vended session,
    * further restricting the assumed role's effective permissions.
    */
-  sessionPolicy?: string;
+  sessionPolicy?: string | undefined;
   /**
    * Managed policy ARNs that apply to the vended session as a permissions
    * intersection.
@@ -95,7 +95,7 @@ export interface ProfileProps {
    * omitted here keep their AWS default mapping; a field previously managed
    * by this resource and later removed has its custom mapping deleted.
    */
-  attributeMappings?: ProfileAttributeMapping[];
+  attributeMappings?: ProfileAttributeMapping[] | undefined;
   /**
    * Whether the profile is enabled. When disabled, temporary credential
    * requests with this profile fail.

@@ -81,12 +81,17 @@ export const tagRecord = (
 export const collectAllPages = Effect.fn(function* <A, E, R>(
   fetchPage: (
     nextToken: string | undefined,
-  ) => Effect.Effect<{ Items?: readonly A[] | A[]; NextToken?: string }, E, R>,
+  ) => Effect.Effect<
+    { Items?: readonly A[] | A[] | undefined; NextToken?: string | undefined },
+    E,
+    R
+  >,
 ) {
   const items: A[] = [];
   let nextToken: string | undefined = undefined;
   for (let page = 0; page < 100; page++) {
-    const result: { Items?: readonly A[] | A[]; NextToken?: string } = yield* fetchPage(nextToken);
+    const result: { Items?: readonly A[] | A[] | undefined; NextToken?: string | undefined } =
+      yield* fetchPage(nextToken);
     items.push(...(result.Items ?? []));
     nextToken = result.NextToken;
     if (!nextToken) break;

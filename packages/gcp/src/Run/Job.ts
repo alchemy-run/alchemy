@@ -63,7 +63,7 @@ export type JobEnvVar = {
 
 export type JobContainer = {
   /** DNS_LABEL container name. */
-  name?: string;
+  name?: string | undefined;
   /**
    * Container image in Artifact Registry, Container Registry, or Docker Hub.
    */
@@ -168,7 +168,7 @@ export type JobProps = PlatformProps & {
   /**
    * Containers that run as each task. Required unless `main` is set.
    */
-  containers?: JobContainer[];
+  containers?: JobContainer[] | undefined;
   /**
    * Module entrypoint for an Effect-native job (typically
    * `import.meta.url`). Alchemy bundles the program, builds a container,
@@ -179,7 +179,7 @@ export type JobProps = PlatformProps & {
    * Named export to load from `main`.
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Additional environment variables for the Effect-native container.
    */
@@ -187,7 +187,7 @@ export type JobProps = PlatformProps & {
   /**
    * Bundler configuration for `main`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig | undefined;
   /**
    * Max time a task attempt may run (e.g. `"600s"`).
    * @default "600s"
@@ -443,9 +443,9 @@ const toAttrs = (
   project: string,
   region: string,
   extras: {
-    iamGrants?: AppliedIamGrant[];
-    codeHash?: string;
-    serviceAccountUniqueId?: string;
+    iamGrants?: AppliedIamGrant[] | undefined;
+    codeHash?: string | undefined;
+    serviceAccountUniqueId?: string | undefined;
   } = {},
 ): Job["Attributes"] => {
   const name = job.name ?? "";

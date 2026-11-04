@@ -74,7 +74,7 @@ export interface ConnectionProps {
   /**
    * Description of the connection. Max 512 characters.
    */
-  description?: string;
+  description?: string | undefined;
 
   /**
    * The type of authorization to use for the connection.
@@ -185,7 +185,7 @@ export interface Connection extends Resource<
     /** The state of the connection (e.g. `AUTHORIZED`). */
     connectionState: eventbridge.ConnectionState;
     /** ARN of the Secrets Manager secret EventBridge created for the connection. */
-    secretArn?: string;
+    secretArn?: string | undefined;
   },
   never,
   Providers
@@ -295,7 +295,7 @@ export const ConnectionProvider = () =>
               connectionName: ConnectionName;
               connectionArn: ConnectionArn;
               connectionState: eventbridge.ConnectionState;
-              secretArn?: string;
+              secretArn?: string | undefined;
             }[] = [];
             let nextToken: string | undefined;
             do {

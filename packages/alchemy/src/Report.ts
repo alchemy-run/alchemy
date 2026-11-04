@@ -3,6 +3,8 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import { onEvent, type ApplyEvent, type NoteKind } from "./Events.ts";
 import type { NonInteractiveTerminal } from "./Interaction.ts";
@@ -61,7 +63,16 @@ export const resourceSession = (
   id: string,
 ): ScopedPlanStatusSession => ({
   note: (message, options) =>
-    report({ type: "apply.resource.note", fqn, id, message, kind: options?.kind }),
+    report({
+      type: "apply.resource.note",
+      fqn,
+      id,
+      message,
+      ...Record.filterMap(
+        { kind: options?.kind },
+        Result.fromNullishOr(() => undefined),
+      ),
+    }),
 });
 
 /** A session that drops its notes, for calling a provider outside apply. */
@@ -71,7 +82,7 @@ export const noopSession: ScopedPlanStatusSession = {
 
 export interface PlanDisplayOptions {
   /** Show declared resource inputs as structured YAML. */
-  detailed?: boolean;
+  detailed?: boolean | undefined;
   /** Stage displayed in terminal lifecycle updates. */
   stage?: string;
   /** Keep the dev plan mounted as a collapsible widget below static logs. */

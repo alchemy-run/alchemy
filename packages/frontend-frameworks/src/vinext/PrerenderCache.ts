@@ -23,7 +23,7 @@ export type VinextPrerenderKVPair = {
 
 export const vinextCacheNamespaceFromEnv = (
   env: Record<string, unknown>,
-): { namespaceId: string; accountId?: string } | undefined => {
+): { namespaceId: string; accountId?: string | undefined } | undefined => {
   const raw = env[VINEXT_KV_CACHE_BINDING] ?? env[VINEXT_CACHE_BINDING];
   if (!raw || typeof raw !== "object") {
     return undefined;

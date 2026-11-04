@@ -108,8 +108,8 @@ export interface SecretKeyPayload {
   format: SecretKeyFormat;
   algorithm: SecretKeyAlgorithm;
   usages: SecretKeyUsage[];
-  keyBase64?: string;
-  keyJwk?: SecretKeyJwk;
+  keyBase64?: string | undefined;
+  keyJwk?: SecretKeyJwk | undefined;
 }
 
 const unwrap = <A>(value: A | Redacted.Redacted<A> | undefined): A | undefined =>

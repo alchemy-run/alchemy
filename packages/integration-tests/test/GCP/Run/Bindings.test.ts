@@ -22,7 +22,9 @@ let names: {
   job: string;
 };
 
-type Policy = { bindings?: { role?: string; members?: string[] }[] };
+type Policy = {
+  bindings?: { role?: string | undefined; members?: string[] | undefined }[] | undefined;
+};
 
 const rolesOf = (policy: Policy) =>
   (policy.bindings ?? [])

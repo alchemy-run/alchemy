@@ -48,7 +48,7 @@ export interface VinextProps<Bindings extends WorkerBindingProps = {}> extends O
    * The vinext project root (the directory containing `app/` or `pages/`
    * and `vite.config.ts`). Defaults to the process working directory.
    */
-  rootDir?: string;
+  rootDir?: string | undefined;
   /**
    * Controls which files are content-hashed to decide whether the Vite
    * build needs to re-run. By default every project file outside build

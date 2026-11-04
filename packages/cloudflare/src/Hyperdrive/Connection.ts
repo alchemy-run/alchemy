@@ -91,12 +91,12 @@ export type Caching = {
 };
 
 export type Mtls = {
-  caCertificateId?: string;
-  mtlsCertificateId?: string;
+  caCertificateId?: string | undefined;
+  mtlsCertificateId?: string | undefined;
   /**
    * @default "require"
    */
-  sslmode?: "require" | "verify-ca" | "verify-full";
+  sslmode?: "require" | "verify-ca" | "verify-full" | undefined;
 };
 
 export type DevOrigin = PublicOrigin & {
@@ -647,10 +647,10 @@ const observedOrigin = (
 const observedSettings = (config: {
   caching: {
     disabled: boolean;
-    maxAge?: number | null;
-    staleWhileRevalidate?: number | null;
+    maxAge?: number | null | undefined;
+    staleWhileRevalidate?: number | null | undefined;
   };
-  originConnectionLimit?: number | null;
+  originConnectionLimit?: number | null | undefined;
 }): { caching: Caching; originConnectionLimit: number | undefined } => ({
   caching: config.caching.disabled
     ? { disabled: true }

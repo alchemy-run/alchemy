@@ -70,7 +70,7 @@ export interface RecordSetRecord {
    * Optional comment shown in the Hetzner Cloud Console. Does not affect
    * DNS responses.
    */
-  comment?: string;
+  comment?: string | undefined;
 }
 
 export interface RecordSetProps {
@@ -107,7 +107,7 @@ export interface RecordSetProps {
    * User-defined labels. Alchemy ownership labels (`alchemy.stack`,
    * `alchemy.stage`, `alchemy.id`) are always merged in.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Prevent the RRSet from being changed or deleted via the API.
    *
@@ -237,7 +237,10 @@ const normalizeName = (name: string): string => name.toLowerCase().replace(/\.$/
 
 const normalizeType = (type: string): RecordSetType => type.toUpperCase() as RecordSetType;
 
-const compactRecord = (record: { value: string; comment?: string | null }): RecordSetRecord => {
+const compactRecord = (record: {
+  value: string;
+  comment?: string | null | undefined;
+}): RecordSetRecord => {
   const comment = record.comment ?? undefined;
   return comment !== undefined && comment.length > 0
     ? { value: record.value, comment }

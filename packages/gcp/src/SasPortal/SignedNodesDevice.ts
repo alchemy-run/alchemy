@@ -75,7 +75,7 @@ export type SignedNodesDeviceProps = {
    * Manufacturer serial number, if known. Used to locate a device
    * after a signed create when ownership has not been stamped yet.
    */
-  serialNumber?: string;
+  serialNumber?: string | undefined;
   /**
    * FCC identifier of the CBSD, if known.
    */

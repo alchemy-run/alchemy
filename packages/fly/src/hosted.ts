@@ -95,18 +95,18 @@ export type { ExtraFile };
 
 export interface HostedProgramProps {
   main: string;
-  handler?: string;
-  port?: number;
-  image?: string;
-  env?: Record<string, any>;
-  isExternal?: boolean;
-  build?: FlyBuildOptions;
+  handler?: string | undefined;
+  port?: number | undefined;
+  image?: string | undefined;
+  env?: Record<string, any> | undefined;
+  isExternal?: boolean | undefined;
+  build?: FlyBuildOptions | undefined;
   /**
    * Extra host directories baked into the image (framework client
    * assets, Next.js `.next`, …). Hashed into `code.hash` so asset
    * changes rebuild the image.
    */
-  extraFiles?: ReadonlyArray<ExtraFile>;
+  extraFiles?: ReadonlyArray<ExtraFile> | undefined;
 }
 
 export { extraFileDestination };
@@ -196,9 +196,9 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
   );
   const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
-  const redis: { name: string; id?: string }[] = [];
-  const buckets: { name: string; id?: string; values?: Record<string, string> }[] = [];
-  const postgres: { clusterId: string; variableName?: string }[] = [];
+  const redis: { name: string; id?: string | undefined }[] = [];
+  const buckets: { name: string; id?: string | undefined; values?: Record<string, string> }[] = [];
+  const postgres: { clusterId: string; variableName?: string | undefined }[] = [];
   const targets: BoundTarget[] = [];
   for (const binding of active) {
     const target = binding?.data?.target;
@@ -484,7 +484,7 @@ export const createFlyHostedSupport = ({
     id: string;
     appName: string;
     props: HostedProgramProps;
-    previousHash?: string;
+    previousHash?: string | undefined;
     session?: { note: (message: string) => Effect.Effect<void> };
   }) {
     const note = input.session?.note ?? ((_message: string) => Effect.void);

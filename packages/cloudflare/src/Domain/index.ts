@@ -2369,7 +2369,7 @@ export interface DurableObjectsOptions {
    *
    * @default undefined (no jurisdiction restriction)
    */
-  readonly jurisdiction?: DurableObjectJurisdiction;
+  readonly jurisdiction?: DurableObjectJurisdiction | undefined;
   /**
    * How long a deploy waits for the backfill of the views and projections it
    * adds or rebuilds. Past it the deploy fails with `BackfillStillRunning`,

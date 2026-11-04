@@ -172,7 +172,8 @@ describe("resolved config matches @cloudflare/vite-plugin in production", () => 
       expect(actual.define).toEqual(expected.define);
       expect(actual.optimizeDeps.define).toEqual(expected.optimizeDeps.define);
     } finally {
-      process.env.NODE_ENV = previous;
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
     }
   });
 });

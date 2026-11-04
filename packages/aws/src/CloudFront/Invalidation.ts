@@ -33,7 +33,7 @@ export interface InvalidationProps {
    * Wait for the invalidation to complete.
    * @default false
    */
-  wait?: boolean;
+  wait?: boolean | undefined;
 }
 
 export interface Invalidation extends Resource<

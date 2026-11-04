@@ -135,7 +135,7 @@ export const MachineServiceAutostop = machineInputMember<machines.FlyMachineServ
 export interface ProtocolEvent {
   method: string;
   path: string;
-  phase?: string;
+  phase?: string | undefined;
   visible?: boolean;
 }
 

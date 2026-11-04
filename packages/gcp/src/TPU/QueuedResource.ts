@@ -31,11 +31,11 @@ export type MultisliceParams = {
    * Prefix for generated node ids (`np` → `np-0`, `np-1`, …). Defaults to
    * the queued resource id.
    */
-  nodeIdPrefix?: string;
+  nodeIdPrefix?: string | undefined;
   /**
    * Number of nodes to provision. Must be greater than 1.
    */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
 };
 
 export type NodeSpec = {
@@ -49,41 +49,43 @@ export type NodeSpec = {
    * Unqualified node id when requesting a single node. Mutually exclusive
    * with `multisliceParams`.
    */
-  nodeId?: string;
+  nodeId?: string | undefined;
   /**
    * Multislice request. Mutually exclusive with `nodeId`.
    */
-  multisliceParams?: MultisliceParams;
+  multisliceParams?: MultisliceParams | undefined;
   /**
    * Node configuration. Alchemy ownership labels are merged into
    * `node.labels` (QueuedResource has no labels field of its own).
    */
-  node?: NodeProps;
+  node?: NodeProps | undefined;
 };
 
 export type QueueingPolicy = {
   /** Absolute time after which the request fails if still unfulfilled. */
-  validUntilTime?: string;
+  validUntilTime?: string | undefined;
   /** Relative duration after which resources may be created. */
-  validAfterDuration?: string;
+  validAfterDuration?: string | undefined;
   /** Absolute interval during which resources may be created. */
-  validInterval?: {
-    /** Inclusive start (RFC3339). */
-    startTime?: string;
-    /** Exclusive end (RFC3339). */
-    endTime?: string;
-  };
+  validInterval?:
+    | {
+        /** Inclusive start (RFC3339). */
+        startTime?: string | undefined;
+        /** Exclusive end (RFC3339). */
+        endTime?: string | undefined;
+      }
+    | undefined;
   /** Absolute time after which resources may be created. */
-  validAfterTime?: string;
+  validAfterTime?: string | undefined;
   /** Relative duration after which the request fails if still unfulfilled. */
-  validUntilDuration?: string;
+  validUntilDuration?: string | undefined;
 };
 
 export type Guaranteed = {
   /**
    * Minimum duration the resources must be allocated (`3600s`, …).
    */
-  minDuration?: string;
+  minDuration?: string | undefined;
 };
 
 export type QueuedResourceProps = {

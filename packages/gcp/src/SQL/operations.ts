@@ -22,7 +22,7 @@ const operationNameOf = (operation: sqladmin.Operation) =>
 export const waitForSqlOperation = (
   project: string,
   operation: sqladmin.Operation,
-  options: { budget: Duration.Input; notFoundOk?: boolean },
+  options: { budget: Duration.Input; notFoundOk?: boolean | undefined },
 ) =>
   Effect.gen(function* () {
     const name = operationNameOf(operation);

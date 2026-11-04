@@ -80,7 +80,7 @@ export const makeWriteQueueHttpClient = (
         cause: new Error("unsupported"),
       }),
     ),
-    send: (body: unknown, options?: { contentType?: "json" | "text" }) =>
+    send: (body: unknown, options?: { contentType?: "json" | "text" | undefined }) =>
       push([{ body, contentType: options?.contentType }]),
     sendBatch: (messages: ReadonlyArray<SendMessage>) => push(messages),
   };

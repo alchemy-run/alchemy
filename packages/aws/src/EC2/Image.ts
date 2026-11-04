@@ -26,7 +26,7 @@ export interface FindImageOptions {
    * CPU architecture to filter on.
    * @default "x86_64"
    */
-  architecture?: ImageArchitecture;
+  architecture?: ImageArchitecture | undefined;
   /**
    * Human-readable label for the lookup (informational only).
    */
@@ -82,7 +82,7 @@ const requireImageId = (options: FindImageOptions) =>
 export const image = (options: FindImageOptions) => requireImageId(options);
 
 const amazonLinux2023Options = (options?: {
-  architecture?: ImageArchitecture;
+  architecture?: ImageArchitecture | undefined;
 }): FindImageOptions => ({
   owners: ["amazon"],
   // `al2023-ami-2023.*` selects the standard image. The broader
@@ -93,7 +93,9 @@ const amazonLinux2023Options = (options?: {
   description: "Amazon Linux 2023",
 });
 
-const amazonLinux2Options = (options?: { architecture?: ImageArchitecture }): FindImageOptions => ({
+const amazonLinux2Options = (options?: {
+  architecture?: ImageArchitecture | undefined;
+}): FindImageOptions => ({
   owners: ["amazon"],
   name: ["amzn2-ami-hvm-*-*-gp2"],
   architecture: options?.architecture,
@@ -113,14 +115,14 @@ const amazonLinux2Options = (options?: { architecture?: ImageArchitecture }): Fi
  * });
  * ```
  */
-export const amazonLinux2023 = (options?: { architecture?: ImageArchitecture }) =>
+export const amazonLinux2023 = (options?: { architecture?: ImageArchitecture | undefined }) =>
   image(amazonLinux2023Options(options));
 
 /**
  * Resolve the latest Amazon Linux 2 AMI ID for the current region as an
  * `Output<string>`.
  */
-export const amazonLinux2 = (options?: { architecture?: ImageArchitecture }) =>
+export const amazonLinux2 = (options?: { architecture?: ImageArchitecture | undefined }) =>
   image(amazonLinux2Options(options));
 
 /**
@@ -128,7 +130,7 @@ export const amazonLinux2 = (options?: { architecture?: ImageArchitecture }) =>
  * preferring Amazon Linux 2023 and falling back to Amazon Linux 2. Dies if
  * neither is available.
  */
-export const amazonLinux = (options?: { architecture?: ImageArchitecture }) =>
+export const amazonLinux = (options?: { architecture?: ImageArchitecture | undefined }) =>
   getAmi(amazonLinux2023Options(options)).pipe(
     Output.flatMap((al2023) =>
       al2023?.ImageId
@@ -153,7 +155,7 @@ export const amazonLinux = (options?: { architecture?: ImageArchitecture }) =>
  * });
  * ```
  */
-export const ubuntu2404 = (options?: { architecture?: ImageArchitecture }) =>
+export const ubuntu2404 = (options?: { architecture?: ImageArchitecture | undefined }) =>
   image({
     owners: ["099720109477"],
     name: [
@@ -168,7 +170,7 @@ export const ubuntu2404 = (options?: { architecture?: ImageArchitecture }) =>
  * Resolve the latest Canonical Ubuntu 22.04 LTS AMI ID for the current
  * region as an `Output<string>`.
  */
-export const ubuntu2204 = (options?: { architecture?: ImageArchitecture }) =>
+export const ubuntu2204 = (options?: { architecture?: ImageArchitecture | undefined }) =>
   image({
     owners: ["099720109477"],
     name: [

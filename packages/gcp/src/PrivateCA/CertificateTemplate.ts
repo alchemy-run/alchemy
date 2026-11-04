@@ -25,13 +25,13 @@ const MAX_NAME_LENGTH = 63;
 /** CEL expression used to validate a certificate Subject / SAN. */
 export type CelExpression = {
   /** CEL text. */
-  expression?: string;
+  expression?: string | undefined;
   /** Short title shown in UIs. */
-  title?: string;
+  title?: string | undefined;
   /** Longer description of the expression. */
-  description?: string;
+  description?: string | undefined;
   /** Source location used in error reporting. */
-  location?: string;
+  location?: string | undefined;
 };
 
 /**
@@ -42,14 +42,14 @@ export type CertificateIdentityConstraints = {
   /**
    * Copy the requested Subject into the issued certificate.
    */
-  allowSubjectPassthrough?: boolean;
+  allowSubjectPassthrough?: boolean | undefined;
   /**
    * Copy the requested Subject Alternative Names into the issued
    * certificate.
    */
-  allowSubjectAltNamesPassthrough?: boolean;
+  allowSubjectAltNamesPassthrough?: boolean | undefined;
   /** Optional CEL expression evaluated against the resolved identity. */
-  celExpression?: CelExpression;
+  celExpression?: CelExpression | undefined;
 };
 
 export type KnownCertificateExtension =
@@ -63,78 +63,78 @@ export type KnownCertificateExtension =
 
 export type ObjectId = {
   /** OID path, most significant component first (e.g. `[1, 3, 6, 1]`). */
-  objectIdPath?: number[];
+  objectIdPath?: number[] | undefined;
 };
 
 /** X.509 extensions that may be copied from a certificate request. */
 export type CertificateExtensionConstraints = {
   /** Named X.509 extensions that may appear on issued certificates. */
-  knownExtensions?: Array<KnownCertificateExtension | (string & {})>;
+  knownExtensions?: Array<KnownCertificateExtension | (string & {})> | undefined;
   /** Custom extension OIDs that may appear on issued certificates. */
-  additionalExtensions?: ObjectId[];
+  additionalExtensions?: ObjectId[] | undefined;
 };
 
 export type KeyUsageOptions = {
-  digitalSignature?: boolean;
-  contentCommitment?: boolean;
-  keyEncipherment?: boolean;
-  dataEncipherment?: boolean;
-  keyAgreement?: boolean;
-  certSign?: boolean;
-  crlSign?: boolean;
-  encipherOnly?: boolean;
-  decipherOnly?: boolean;
+  digitalSignature?: boolean | undefined;
+  contentCommitment?: boolean | undefined;
+  keyEncipherment?: boolean | undefined;
+  dataEncipherment?: boolean | undefined;
+  keyAgreement?: boolean | undefined;
+  certSign?: boolean | undefined;
+  crlSign?: boolean | undefined;
+  encipherOnly?: boolean | undefined;
+  decipherOnly?: boolean | undefined;
 };
 
 export type ExtendedKeyUsageOptions = {
-  serverAuth?: boolean;
-  clientAuth?: boolean;
-  codeSigning?: boolean;
-  emailProtection?: boolean;
-  timeStamping?: boolean;
-  ocspSigning?: boolean;
+  serverAuth?: boolean | undefined;
+  clientAuth?: boolean | undefined;
+  codeSigning?: boolean | undefined;
+  emailProtection?: boolean | undefined;
+  timeStamping?: boolean | undefined;
+  ocspSigning?: boolean | undefined;
 };
 
 export type KeyUsage = {
-  baseKeyUsage?: KeyUsageOptions;
-  extendedKeyUsage?: ExtendedKeyUsageOptions;
-  unknownExtendedKeyUsages?: ObjectId[];
+  baseKeyUsage?: KeyUsageOptions | undefined;
+  extendedKeyUsage?: ExtendedKeyUsageOptions | undefined;
+  unknownExtendedKeyUsages?: ObjectId[] | undefined;
 };
 
 export type CaOptions = {
   /** When missing, the basic-constraints extension is omitted. */
-  isCa?: boolean;
+  isCa?: boolean | undefined;
   /** Depth of allowed subordinate CAs. Omitted when unset. */
-  maxIssuerPathLength?: number;
+  maxIssuerPathLength?: number | undefined;
 };
 
 export type NameConstraints = {
-  critical?: boolean;
-  permittedDnsNames?: string[];
-  excludedDnsNames?: string[];
-  permittedIpRanges?: string[];
-  excludedIpRanges?: string[];
-  permittedEmailAddresses?: string[];
-  excludedEmailAddresses?: string[];
-  permittedUris?: string[];
-  excludedUris?: string[];
+  critical?: boolean | undefined;
+  permittedDnsNames?: string[] | undefined;
+  excludedDnsNames?: string[] | undefined;
+  permittedIpRanges?: string[] | undefined;
+  excludedIpRanges?: string[] | undefined;
+  permittedEmailAddresses?: string[] | undefined;
+  excludedEmailAddresses?: string[] | undefined;
+  permittedUris?: string[] | undefined;
+  excludedUris?: string[] | undefined;
 };
 
 export type X509Extension = {
-  objectId?: ObjectId;
-  critical?: boolean;
+  objectId?: ObjectId | undefined;
+  critical?: boolean | undefined;
   /** Base64-encoded extension value. */
-  value?: string;
+  value?: string | undefined;
 };
 
 /** X.509 values applied to every certificate issued with this template. */
 export type X509Parameters = {
-  keyUsage?: KeyUsage;
-  caOptions?: CaOptions;
-  policyIds?: ObjectId[];
-  aiaOcspServers?: string[];
-  nameConstraints?: NameConstraints;
-  additionalExtensions?: X509Extension[];
+  keyUsage?: KeyUsage | undefined;
+  caOptions?: CaOptions | undefined;
+  policyIds?: ObjectId[] | undefined;
+  aiaOcspServers?: string[] | undefined;
+  nameConstraints?: NameConstraints | undefined;
+  additionalExtensions?: X509Extension[] | undefined;
 };
 
 export type CertificateTemplateProps = {

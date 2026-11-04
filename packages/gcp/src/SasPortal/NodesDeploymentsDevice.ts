@@ -68,7 +68,7 @@ export type NodesDeploymentsDeviceProps = {
    * FCC identifier of the CBSD. Immutable — changing it replaces the
    * device.
    */
-  fccId?: string;
+  fccId?: string | undefined;
   /**
    * Frequency ranges available for new grants.
    */

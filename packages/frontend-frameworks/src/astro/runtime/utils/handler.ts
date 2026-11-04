@@ -12,6 +12,8 @@ import { setGetEnv } from "astro/env/setup";
  * virtual module served by this package's config plugin.
  */
 import { env as globalEnv } from "cloudflare:workers";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import {
   cacheProviderEnabled,
   compileImageConfig,
@@ -107,13 +109,16 @@ export async function handle(
   const locals = createLocals(context);
 
   const waitUntil: RenderOptions["waitUntil"] = context.waitUntil.bind(context);
+  const clientAddress = getClientAddress(request);
 
   const response = await app.render(request, {
-    routeData,
     locals,
     waitUntil,
     prerenderedErrorPageFetch: createErrorPageFetch(env),
-    clientAddress: getClientAddress(request),
+    ...Record.filterMap(
+      { routeData, clientAddress },
+      Result.fromNullishOr(() => undefined),
+    ),
   });
 
   // Collect cookies before any rebuild: `setCookieHeaders` looks the

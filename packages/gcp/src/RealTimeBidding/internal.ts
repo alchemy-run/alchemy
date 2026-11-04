@@ -11,46 +11,46 @@ export const PROBE_NAME = `${PROBE_PARENT}/pretargetingConfigs/0`;
 export type TargetingMode = rtb.StringTargetingDimensionTargetingModeEnum | (string & {});
 
 export type StringTargetingDimensionValue = {
-  targetingMode?: TargetingMode;
-  values?: string[];
+  targetingMode?: TargetingMode | undefined;
+  values?: string[] | undefined;
 };
 
 export type NumericTargetingDimensionValue = {
-  includedIds?: string[];
-  excludedIds?: string[];
+  includedIds?: string[] | undefined;
+  excludedIds?: string[] | undefined;
 };
 
 export type CreativeDimensionsValue = {
-  width?: string;
-  height?: string;
+  width?: string | undefined;
+  height?: string | undefined;
 };
 
 export type AppTargetingValue = {
-  mobileAppTargeting?: StringTargetingDimensionValue;
-  mobileAppCategoryTargeting?: NumericTargetingDimensionValue;
+  mobileAppTargeting?: StringTargetingDimensionValue | undefined;
+  mobileAppCategoryTargeting?: NumericTargetingDimensionValue | undefined;
 };
 
 export type PretargetingState = rtb.PretargetingConfigStateEnum | (string & {});
 
 export type PretargetingSpec = {
-  allowedUserTargetingModes?: string[];
-  excludedContentLabelIds?: string[];
-  includedLanguages?: string[];
-  webTargeting?: StringTargetingDimensionValue;
-  includedPlatforms?: string[];
-  includedFormats?: string[];
-  maximumQps?: string;
-  geoTargeting?: NumericTargetingDimensionValue;
-  includedEnvironments?: string[];
-  userListTargeting?: NumericTargetingDimensionValue;
-  publisherTargeting?: StringTargetingDimensionValue;
-  includedUserIdTypes?: string[];
-  minimumViewabilityDecile?: number;
-  verticalTargeting?: NumericTargetingDimensionValue;
-  includedCreativeDimensions?: CreativeDimensionsValue[];
-  interstitialTargeting?: string;
-  appTargeting?: AppTargetingValue;
-  includedMobileOperatingSystemIds?: string[];
+  allowedUserTargetingModes?: string[] | undefined;
+  excludedContentLabelIds?: string[] | undefined;
+  includedLanguages?: string[] | undefined;
+  webTargeting?: StringTargetingDimensionValue | undefined;
+  includedPlatforms?: string[] | undefined;
+  includedFormats?: string[] | undefined;
+  maximumQps?: string | undefined;
+  geoTargeting?: NumericTargetingDimensionValue | undefined;
+  includedEnvironments?: string[] | undefined;
+  userListTargeting?: NumericTargetingDimensionValue | undefined;
+  publisherTargeting?: StringTargetingDimensionValue | undefined;
+  includedUserIdTypes?: string[] | undefined;
+  minimumViewabilityDecile?: number | undefined;
+  verticalTargeting?: NumericTargetingDimensionValue | undefined;
+  includedCreativeDimensions?: CreativeDimensionsValue[] | undefined;
+  interstitialTargeting?: string | undefined;
+  appTargeting?: AppTargetingValue | undefined;
+  includedMobileOperatingSystemIds?: string[] | undefined;
 };
 
 export const lastSegment = (value: string) => {
@@ -119,10 +119,10 @@ export const jsonEqual = (left: unknown, right: unknown) =>
   fingerprint(left) === fingerprint(right);
 
 export const replaceOnIdentity = (input: {
-  previousParent?: string;
+  previousParent?: string | undefined;
   nextParent: string;
-  previousId?: string;
-  nextId?: string;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
 }) => {
   if (
     input.previousParent !== undefined &&

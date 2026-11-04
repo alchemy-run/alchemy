@@ -30,7 +30,7 @@ const COLLECTION = "saas";
 
 export type SaasLocation = {
   /** Location id, e.g. `us-central1`. */
-  name?: string;
+  name?: string | undefined;
 };
 
 export type SaasCondition = {
@@ -60,7 +60,7 @@ export type SaaProps = {
    * Locations the product is offered in. Rollouts use this list to
    * build a plan. Defaults to the resource location.
    */
-  locations?: SaasLocation[];
+  locations?: SaasLocation[] | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */

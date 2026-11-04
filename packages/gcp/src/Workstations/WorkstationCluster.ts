@@ -34,7 +34,7 @@ export type DomainConfig = {
   /**
    * Domain used by Workstations for HTTP ingress. Immutable.
    */
-  domain?: string;
+  domain?: string | undefined;
 };
 
 export type GatewayConfig = {
@@ -42,7 +42,7 @@ export type GatewayConfig = {
    * Whether HTTP/2 is enabled for this workstation cluster.
    * @default false
    */
-  http2Enabled?: boolean;
+  http2Enabled?: boolean | undefined;
 };
 
 export type PrivateClusterConfig = {
@@ -50,13 +50,13 @@ export type PrivateClusterConfig = {
    * Whether the Workstations endpoint is private. Immutable.
    * @default false
    */
-  enablePrivateEndpoint?: boolean;
+  enablePrivateEndpoint?: boolean | undefined;
   /**
    * Additional projects allowed to attach to the cluster's service
    * attachment. The cluster project and VPC host project are allowed by
    * default.
    */
-  allowedProjects?: string[];
+  allowedProjects?: string[] | undefined;
 };
 
 export type WorkstationClusterProps = {

@@ -40,7 +40,7 @@ export type CertificateMapEntryProps = {
    * logical id. Must be 1-63 characters, start with a letter, and match
    * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable — changing it replaces the entry.
    */
-  certificateMapEntryId?: string;
+  certificateMapEntryId?: string | undefined;
   /**
    * Certificate Manager location. Used when `certificateMap` is a bare
    * id. Certificate maps are global resources; omit or set `"global"`.
@@ -48,15 +48,15 @@ export type CertificateMapEntryProps = {
    * normalized to `global`.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Human-readable description.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Certificate resource names served for this hostname (or PRIMARY
    * matcher). Up to four certificates, each
@@ -64,20 +64,20 @@ export type CertificateMapEntryProps = {
    * Bare certificate ids are qualified with the entry's project and
    * location. Mutable.
    */
-  certificates?: string[];
+  certificates?: string[] | undefined;
   /**
    * Hostname (FQDN, e.g. `www.example.com`) or wildcard (`*.example.com`)
    * used as SNI. Mutually exclusive with `matcher`. Immutable — changing
    * it replaces the entry.
    */
-  hostname?: string;
+  hostname?: string | undefined;
   /**
    * Predefined matcher when this entry is not selected by SNI. `PRIMARY`
    * is served when the client omits SNI or the hostname is not in the
    * map. Mutually exclusive with `hostname`. Immutable — changing it
    * replaces the entry. If both are set, `hostname` is used.
    */
-  matcher?: CertificateMapEntryMatcher;
+  matcher?: CertificateMapEntryMatcher | undefined;
 };
 
 export type CertificateMapEntry = Resource<
@@ -225,7 +225,7 @@ const normalizeMatcher = (matcher: string | undefined) => {
 };
 
 const matchOf = (
-  props: { hostname?: string; matcher?: string },
+  props: { hostname?: string | undefined; matcher?: string | undefined },
   fallback?: Match,
 ): Match | undefined => {
   if (props.hostname !== undefined && props.hostname !== "") {

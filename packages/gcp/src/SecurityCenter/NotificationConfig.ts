@@ -26,7 +26,7 @@ export type StreamingConfig = {
   /**
    * Finding filter. Empty matches every finding in the parent.
    */
-  filter?: string;
+  filter?: string | undefined;
 };
 
 export type NotificationConfigProps = {

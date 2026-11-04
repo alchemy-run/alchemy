@@ -12,7 +12,7 @@ import { loadVinextBuildConfig, type VinextBuildConfig } from "./BuildConfig.ts"
 export type VinextPrerenderResult = {
   readonly ran: boolean;
   /** Absolute path of the RSC worker entry after path-table injection. */
-  readonly entryPath?: string;
+  readonly entryPath?: string | undefined;
 };
 
 const PATH_TABLE_START = "/* __VINEXT_PREGENERATED_CONCRETE_PATHS_START__ */";
@@ -118,7 +118,7 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   )) as {
     runPrerender: (options: {
       root: string;
-      concurrency?: number;
+      concurrency?: number | undefined;
       nextConfig: unknown;
       routeRootConfig: unknown;
     }) => Promise<{ routes?: readonly unknown[] } | null>;

@@ -32,13 +32,13 @@ const OWNERSHIP_TRUE = "true";
 
 export type RuleCondition = {
   /** CEL expression that must match for the rule to apply. */
-  expression?: string;
+  expression?: string | undefined;
   /** Short title for the expression. */
-  title?: string;
+  title?: string | undefined;
   /** Longer description of the expression. */
-  description?: string;
+  description?: string | undefined;
   /** Source location used in error reporting. */
-  location?: string;
+  location?: string | undefined;
 };
 
 export type RepositoriesRuleProps = {

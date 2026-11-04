@@ -79,8 +79,8 @@ const fromArrayValue = (value: rdsdata.ArrayValue): unknown[] =>
  * to rows keyed by column label.
  */
 export const toRows = (response: {
-  records?: rdsdata.Field[][];
-  columnMetadata?: rdsdata.ColumnMetadata[];
+  records?: rdsdata.Field[][] | undefined;
+  columnMetadata?: rdsdata.ColumnMetadata[] | undefined;
 }): Record<string, unknown>[] => {
   const metadata = response.columnMetadata ?? [];
   return (response.records ?? []).map((record) => {

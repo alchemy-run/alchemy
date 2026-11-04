@@ -27,7 +27,7 @@ export interface WebsiteRouterBindTargets {
    * then already cover attached-site hostnames (e.g. a wildcard
    * certificate).
    */
-  certificate?: Certificate;
+  certificate?: Certificate | undefined;
   /**
    * The Router's alias record set (`AWS.Route53.Records` by default, or
    * the record set of the Router domain's DNS adapter, e.g.
@@ -36,7 +36,7 @@ export interface WebsiteRouterBindTargets {
    * Without an explicit zone, the set infers it from the first bound
    * hostname.
    */
-  records?: DnsAliasSet;
+  records?: DnsAliasSet | undefined;
 }
 
 /**
@@ -363,11 +363,11 @@ export interface RouterBucketRouteProps {
   /**
    * Additional origin path prefix (used by SsrSite).
    */
-  originPath?: Input<string>;
+  originPath?: Input<string> | undefined;
   /**
    * Version token for invalidation (used by SsrSite).
    */
-  version?: Input<string>;
+  version?: Input<string> | undefined;
 }
 
 /**
@@ -428,14 +428,16 @@ export interface SsrSiteRouteTargets {
   /**
    * Optional bucket route for the static asset origin.
    */
-  assets?: {
-    /**
-     * Path pattern the assets should be served under (e.g. `/_assets/*`).
-     */
-    pattern: string;
-    /**
-     * S3 bucket route for the assets, including the OAC and version token.
-     */
-    route: RouterBucketRouteProps;
-  };
+  assets?:
+    | {
+        /**
+         * Path pattern the assets should be served under (e.g. `/_assets/*`).
+         */
+        pattern: string;
+        /**
+         * S3 bucket route for the assets, including the OAC and version token.
+         */
+        route: RouterBucketRouteProps;
+      }
+    | undefined;
 }

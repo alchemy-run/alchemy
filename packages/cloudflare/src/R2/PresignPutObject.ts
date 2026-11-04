@@ -19,7 +19,7 @@ export interface PresignPutObjectRequest {
    * `Content-Type` header or R2 rejects the upload with a signature
    * mismatch. Omit to leave the Content-Type unconstrained.
    */
-  contentType?: string;
+  contentType?: string | undefined;
 }
 
 /**

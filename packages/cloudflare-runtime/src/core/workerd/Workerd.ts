@@ -37,7 +37,7 @@ export interface ServeOptions {
    * starting is not captured; startup failures surface as typed errors
    * instead.
    */
-  readonly onOutput?: OutputSink;
+  readonly onOutput?: OutputSink | undefined;
   /**
    * Called once when the process exits after it finished starting, for
    * example when V8 aborts on heap exhaustion. Not called when the scope
@@ -48,9 +48,9 @@ export interface ServeOptions {
    * Path to the workerd binary to run instead of the one from the `workerd`
    * package. Takes precedence over {@link PATH_ENV}.
    */
-  readonly bin?: string;
+  readonly bin?: string | undefined;
   /** Extra environment variables for the workerd process. */
-  readonly env?: Record<string, string>;
+  readonly env?: Record<string, string> | undefined;
 }
 
 /** How much trailing stderr output is kept for {@link WorkerdExit}. */

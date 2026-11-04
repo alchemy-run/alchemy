@@ -37,7 +37,7 @@ export const RetrieveAccountExternalAccountHttp = Layer.effect(
       const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(`Stripe.RetrieveAccountExternalAccount(${externalAccount.LogicalId})`)(
-        function* (request?: { expand?: string[] }) {
+        function* (request?: { expand?: string[] | undefined }) {
           return yield* auth(
             GetAccountExternalAccount({
               ...request,

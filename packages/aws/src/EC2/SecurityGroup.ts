@@ -59,38 +59,38 @@ export interface SecurityGroupRuleData {
    * The start of the port range.
    * For ICMP, use the ICMP type number.
    */
-  fromPort?: number;
+  fromPort?: number | undefined;
 
   /**
    * The end of the port range.
    * For ICMP, use the ICMP code.
    */
-  toPort?: number;
+  toPort?: number | undefined;
 
   /**
    * IPv4 CIDR ranges to allow.
    */
-  cidrIpv4?: string;
+  cidrIpv4?: string | undefined;
 
   /**
    * IPv6 CIDR ranges to allow.
    */
-  cidrIpv6?: string;
+  cidrIpv6?: string | undefined;
 
   /**
    * ID of a security group to allow traffic from/to.
    */
-  referencedGroupId?: SecurityGroupId;
+  referencedGroupId?: SecurityGroupId | undefined;
 
   /**
    * ID of a prefix list.
    */
-  prefixListId?: string;
+  prefixListId?: string | undefined;
 
   /**
    * Description for the rule.
    */
-  description?: string;
+  description?: string | undefined;
 }
 
 export interface SecurityGroupProps {
@@ -125,7 +125,7 @@ export interface SecurityGroupProps {
   /**
    * Tags to assign to the security group.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface SecurityGroup extends Resource<
@@ -165,18 +165,20 @@ export interface SecurityGroup extends Resource<
     /**
      * The inbound rules associated with the security group.
      */
-    ingressRules?: Array<{
-      securityGroupRuleId: string;
-      ipProtocol: string;
-      fromPort?: number;
-      toPort?: number;
-      cidrIpv4?: string;
-      cidrIpv6?: string;
-      referencedGroupId?: string;
-      prefixListId?: string;
-      description?: string;
-      isEgress: false;
-    }>;
+    ingressRules?:
+      | Array<{
+          securityGroupRuleId: string;
+          ipProtocol: string;
+          fromPort?: number | undefined;
+          toPort?: number | undefined;
+          cidrIpv4?: string | undefined;
+          cidrIpv6?: string | undefined;
+          referencedGroupId?: string | undefined;
+          prefixListId?: string | undefined;
+          description?: string | undefined;
+          isEgress: false;
+        }>
+      | undefined;
 
     /**
      * The outbound rules associated with the security group.
@@ -184,13 +186,13 @@ export interface SecurityGroup extends Resource<
     egressRules?: Array<{
       securityGroupRuleId: string;
       ipProtocol: string;
-      fromPort?: number;
-      toPort?: number;
-      cidrIpv4?: string;
-      cidrIpv6?: string;
-      referencedGroupId?: string;
-      prefixListId?: string;
-      description?: string;
+      fromPort?: number | undefined;
+      toPort?: number | undefined;
+      cidrIpv4?: string | undefined;
+      cidrIpv6?: string | undefined;
+      referencedGroupId?: string | undefined;
+      prefixListId?: string | undefined;
+      description?: string | undefined;
       isEgress: true;
     }>;
 

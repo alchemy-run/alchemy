@@ -17,24 +17,24 @@ export type DatastoreConfig = {
   /**
    * Google Cloud project that owns the destination bucket or dataset.
    */
-  projectId?: string;
+  projectId?: string | undefined;
   /**
    * Cloud Storage bucket name. Required when `targetType` is `gcs`.
    */
-  bucketName?: string;
+  bucketName?: string | undefined;
   /**
    * Path inside the Cloud Storage bucket. Required when `targetType` is
    * `gcs`.
    */
-  path?: string;
+  path?: string | undefined;
   /**
    * BigQuery dataset name. Required when `targetType` is `bigquery`.
    */
-  datasetName?: string;
+  datasetName?: string | undefined;
   /**
    * BigQuery table prefix. Required when `targetType` is `bigquery`.
    */
-  tablePrefix?: string;
+  tablePrefix?: string | undefined;
 };
 
 export type AnalyticsDatastoreProps = {
@@ -56,7 +56,7 @@ export type AnalyticsDatastoreProps = {
   /**
    * Destination configuration.
    */
-  datastoreConfig?: DatastoreConfig;
+  datastoreConfig?: DatastoreConfig | undefined;
 };
 
 export type AnalyticsDatastore = Resource<

@@ -58,16 +58,18 @@ export interface EgressOnlyInternetGateway extends Resource<
     /**
      * Information about the attachment of the egress-only internet gateway.
      */
-    attachments?: Array<{
-      /**
-       * The current state of the attachment.
-       */
-      state: "attaching" | "attached" | "detaching" | "detached";
-      /**
-       * The ID of the VPC.
-       */
-      vpcId: VpcId;
-    }>;
+    attachments?:
+      | Array<{
+          /**
+           * The current state of the attachment.
+           */
+          state: "attaching" | "attached" | "detaching" | "detached";
+          /**
+           * The ID of the VPC.
+           */
+          vpcId: VpcId;
+        }>
+      | undefined;
   },
   never,
   Providers

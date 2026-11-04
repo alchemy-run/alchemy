@@ -158,14 +158,14 @@ export interface FlattenedItem {
    * For resource items, the {@link ProviderMode} the node's provider was
    * resolved for. `undefined` for mode-agnostic providers.
    */
-  providerMode?: ProviderMode;
+  providerMode?: ProviderMode | undefined;
   /**
    * For resource items planned as a mode-switch replacement, the mode the
    * old generation was created with (always differs from `providerMode`).
    */
-  fromProviderMode?: ProviderMode;
+  fromProviderMode?: ProviderMode | undefined;
   /** Safe YAML detail attached only when the caller opts into detailed view. */
-  propertyYaml?: DeclaredPropertyYaml;
+  propertyYaml?: DeclaredPropertyYaml | undefined;
 }
 
 export interface FlattenTreeOptions {

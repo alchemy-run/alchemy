@@ -14,8 +14,20 @@ import type { APIRoute } from "astro";
 import { fetchWithRedirects } from "astro/assets";
 import { imageConfig } from "astro:assets";
 import { env } from "cloudflare:workers";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 
 export const prerender = false;
+
+const remoteImageOptions = {
+  domains: imageConfig.domains,
+  remotePatterns: imageConfig.remotePatterns.map(({ hostname, pathname, protocol, port }) =>
+    Record.filterMap(
+      { hostname, pathname, protocol, port },
+      Result.fromNullishOr(() => undefined),
+    ),
+  ),
+};
 
 export const GET: APIRoute = async ({ request }) => {
   try {
@@ -28,7 +40,7 @@ export const GET: APIRoute = async ({ request }) => {
     let response: Response;
 
     if (isRemote) {
-      if (!isRemoteAllowed(href, imageConfig)) {
+      if (!isRemoteAllowed(href, remoteImageOptions)) {
         return new Response("Forbidden", { status: 403 });
       }
       response = await fetchWithRedirects({

@@ -92,7 +92,7 @@ export interface ServicePropsBase extends PlatformProps {
    * Service labels. Alchemy's internal ownership labels are added
    * automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 }
 
 /**
@@ -154,7 +154,7 @@ export declare namespace Service {
 
   interface PortMapping {
     /** Published port on the swarm node. Omit to let Swarm assign one dynamically. */
-    external?: number;
+    external?: number | undefined;
     /** Container port receiving traffic. */
     internal: number;
     /**
@@ -162,14 +162,14 @@ export declare namespace Service {
      *
      * @default "tcp"
      */
-    protocol?: "tcp" | "udp";
+    protocol?: "tcp" | "udp" | undefined;
     /**
      * Publish through the swarm routing mesh (`ingress`) or directly on each
      * node (`host`).
      *
      * @default "ingress"
      */
-    mode?: "ingress" | "host";
+    mode?: "ingress" | "host" | undefined;
   }
 
   interface VolumeMapping {
@@ -189,7 +189,7 @@ export declare namespace Service {
     /** Network name. */
     name: string;
     /** Network aliases for the service's tasks. */
-    aliases?: string[];
+    aliases?: string[] | undefined;
   }
 
   interface Placement {
@@ -281,7 +281,7 @@ export interface Service extends Resource<
     /** Swarm service name. */
     name: string;
     /** Docker context the service is deployed to. */
-    context?: string;
+    context?: string | undefined;
     /** Image reference the service runs. */
     image: string;
     /** Desired number of replicas. */
@@ -299,10 +299,12 @@ export interface Service extends Resource<
     /** Last update timestamp in milliseconds since epoch. */
     updatedAt: number;
     /** Content hash of the bundled program's image (`main` form only). */
-    code?: {
-      /** Content hash of the bundled program's image. */
-      hash: string;
-    };
+    code?:
+      | {
+          /** Content hash of the bundled program's image. */
+          hash: string;
+        }
+      | undefined;
   },
   never,
   Providers

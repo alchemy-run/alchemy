@@ -66,7 +66,7 @@ export type EncodedValue =
       readonly $: "error";
       readonly name: string;
       readonly message: string;
-      readonly stack?: string;
+      readonly stack?: string | undefined;
     }
   | {
       readonly $: "durable-object-id";

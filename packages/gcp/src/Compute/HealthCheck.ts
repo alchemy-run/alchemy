@@ -21,19 +21,19 @@ export type HealthCheckProxyHeader = "NONE" | "PROXY_V1";
 
 export type HttpHealthCheck = {
   /** Host header. Empty uses the destination IP. */
-  host?: string;
+  host?: string | undefined;
   /** TCP port (default 80). */
-  port?: number;
+  port?: number | undefined;
   /** Named port on the instance group. Not supported on most backends. */
-  portName?: string;
+  portName?: string | undefined;
   /** How the health-check port is selected. */
-  portSpecification?: HealthCheckPortSpecification;
+  portSpecification?: HealthCheckPortSpecification | undefined;
   /** Request path. Default `/`. */
-  requestPath?: string;
+  requestPath?: string | undefined;
   /** ASCII response body that must appear in the first 1024 bytes. */
-  response?: string;
+  response?: string | undefined;
   /** Proxy header prepended to the probe. Default `NONE`. */
-  proxyHeader?: HealthCheckProxyHeader;
+  proxyHeader?: HealthCheckProxyHeader | undefined;
 };
 
 export type HttpsHealthCheck = HttpHealthCheck;
@@ -41,35 +41,35 @@ export type Http2HealthCheck = HttpHealthCheck;
 
 export type TcpHealthCheck = {
   /** TCP port (default 80). */
-  port?: number;
+  port?: number | undefined;
   /** Named port on the instance group. Not supported on most backends. */
-  portName?: string;
+  portName?: string | undefined;
   /** How the health-check port is selected. */
-  portSpecification?: HealthCheckPortSpecification;
+  portSpecification?: HealthCheckPortSpecification | undefined;
   /** ASCII payload sent after the TCP handshake. */
-  request?: string;
+  request?: string | undefined;
   /** ASCII response that must be received for the probe to pass. */
-  response?: string;
+  response?: string | undefined;
   /** Proxy header prepended to the probe. Default `NONE`. */
-  proxyHeader?: HealthCheckProxyHeader;
+  proxyHeader?: HealthCheckProxyHeader | undefined;
 };
 
 export type SslHealthCheck = TcpHealthCheck;
 
 export type GrpcHealthCheck = {
   /** TCP port. */
-  port?: number;
+  port?: number | undefined;
   /** Named port on the instance group. Not supported on most backends. */
-  portName?: string;
+  portName?: string | undefined;
   /** How the health-check port is selected. */
-  portSpecification?: HealthCheckPortSpecification;
+  portSpecification?: HealthCheckPortSpecification | undefined;
   /** gRPC service name. Empty checks all services at the backend. */
-  grpcServiceName?: string;
+  grpcServiceName?: string | undefined;
 };
 
 export type HealthCheckLogConfig = {
   /** Export health-check logs. Default false. */
-  enable?: boolean;
+  enable?: boolean | undefined;
 };
 
 export type HealthCheckProps = {

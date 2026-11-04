@@ -41,13 +41,13 @@ export type DataMaskingPolicy = {
    * `FIRST_FOUR_CHARACTERS`, `EMAIL_MASK`, `DATE_YEAR_MASK`,
    * `RANDOM_HASH`). Mutually exclusive with `routine`.
    */
-  predefinedExpression?: DataMaskingPolicyPredefinedExpression;
+  predefinedExpression?: DataMaskingPolicyPredefinedExpression | undefined;
   /**
    * BigQuery routine that implements a custom masking function, as
    * `projects/{project}/datasets/{dataset}/routines/{routine}`. Mutually
    * exclusive with `predefinedExpression`.
    */
-  routine?: string;
+  routine?: string | undefined;
 };
 
 export type DataGovernanceTag = {
@@ -55,11 +55,11 @@ export type DataGovernanceTag = {
    * Namespaced tag key (`parent-id/pii`). Tag keys are globally unique
    * Resource Manager keys.
    */
-  key?: string;
+  key?: string | undefined;
   /**
    * Short tag value (`sensitive`).
    */
-  value?: string;
+  value?: string | undefined;
 };
 
 export type DataPolicyProps = {

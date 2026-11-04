@@ -26,7 +26,7 @@ import type { Stream } from "./Stream.ts";
  * stream's ARN.
  */
 export const makeStreamMediaHttpBinding = <
-  I extends { StreamARN?: string; StreamName?: string },
+  I extends { StreamARN?: string | undefined; StreamName?: string | undefined },
   A,
   E,
   R,
@@ -85,7 +85,7 @@ export const makeStreamMediaHttpBinding = <
  */
 export const makeChannelSignalingHttpBinding = <
   K extends "ChannelARN" | "channelArn",
-  I extends { [P in K]?: string },
+  I extends { [P in K]?: string | undefined },
   A,
   E,
   R,

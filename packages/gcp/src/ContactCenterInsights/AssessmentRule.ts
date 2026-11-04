@@ -25,16 +25,16 @@ import {
 
 export type ScheduleInfo = {
   /** Time zone used to interpret `schedule`. Defaults to UTC. */
-  timeZone?: string;
+  timeZone?: string | undefined;
   /** RFC3339 start. Omitted starts as soon as the rule is created. */
-  startTime?: string;
+  startTime?: string | undefined;
   /** RFC3339 end. Omitted keeps scheduling until the rule is deleted. */
-  endTime?: string;
+  endTime?: string | undefined;
   /**
    * Groc expression (e.g. `"every 5 minutes"` or
    * `"every 1 hours synchronized"`).
    */
-  schedule?: string;
+  schedule?: string | undefined;
 };
 
 export type SampleRule = {
@@ -43,13 +43,13 @@ export type SampleRule = {
    * `quality_metadata.agent_info.agent_id` is supported. Empty samples
    * at the project level.
    */
-  dimension?: string;
+  dimension?: string | undefined;
   /** Filter selecting conversations to sample. Empty applies to all. */
-  conversationFilter?: string;
+  conversationFilter?: string | undefined;
   /** Fraction of conversations to sample, in `[0, 1]`. */
-  samplePercentage?: number;
+  samplePercentage?: number | undefined;
   /** Absolute number of conversations to sample. */
-  sampleRow?: string;
+  sampleRow?: string | undefined;
 };
 
 export type AssessmentRuleProps = {

@@ -122,7 +122,7 @@ export type DirectoryServiceProps = {
    * and logical ID.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Service protocol: `tcp` (arbitrary TCP, e.g. a database) or `http`
    * (plain HTTP/HTTPS origins).
@@ -136,29 +136,31 @@ export type DirectoryServiceProps = {
   /**
    * Port the service listens on. Only valid for `type: "tcp"` services.
    */
-  tcpPort?: number;
+  tcpPort?: number | undefined;
   /**
    * Port for plain HTTP traffic. Only valid for `type: "http"` services.
    * @default 80
    */
-  httpPort?: number;
+  httpPort?: number | undefined;
   /**
    * Port for HTTPS traffic. Only valid for `type: "http"` services.
    * @default 443
    */
-  httpsPort?: number;
+  httpsPort?: number | undefined;
   /**
    * Application protocol hint for `tcp` services (e.g. `postgresql`).
    */
-  appProtocol?: DirectoryServiceAppProtocol;
+  appProtocol?: DirectoryServiceAppProtocol | undefined;
   /**
    * TLS settings used when connecting to the service.
    * @default { certVerificationMode: "verify_full" }
    */
-  tlsSettings?: {
-    /** Certificate verification mode (e.g. `verify_full`). */
-    certVerificationMode: string;
-  };
+  tlsSettings?:
+    | {
+        /** Certificate verification mode (e.g. `verify_full`). */
+        certVerificationMode: string;
+      }
+    | undefined;
 };
 
 export type DirectoryServiceAttributes = {
@@ -551,19 +553,19 @@ const toHostAttributes = (host: ObservedService["host"]): DirectoryService.HostA
 
 const toAttributes = (
   service: {
-    serviceId?: string | null;
+    serviceId?: string | null | undefined;
     name: string;
     // Distilled widens generated string enums to open unions (`string & {}`);
     // the API only ever returns the known variants here.
     type: string;
     host: ObservedService["host"];
-    tcpPort?: number | null;
-    httpPort?: number | null;
-    httpsPort?: number | null;
-    appProtocol?: DirectoryServiceAppProtocol | null;
-    tlsSettings?: { certVerificationMode: string } | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
+    tcpPort?: number | null | undefined;
+    httpPort?: number | null | undefined;
+    httpsPort?: number | null | undefined;
+    appProtocol?: DirectoryServiceAppProtocol | null | undefined;
+    tlsSettings?: { certVerificationMode: string } | null | undefined;
+    createdAt?: string | null | undefined;
+    updatedAt?: string | null | undefined;
   },
   accountId: string,
 ): DirectoryServiceAttributes => ({

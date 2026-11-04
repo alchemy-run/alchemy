@@ -29,9 +29,9 @@ import {
 
 export type Owner = {
   /** Owner display name. */
-  displayName?: string;
+  displayName?: string | undefined;
   /** Owner email. Required by the API when `owner` is set. */
-  email?: string;
+  email?: string | undefined;
 };
 
 export type ApiProps = {
@@ -50,7 +50,7 @@ export type ApiProps = {
   /**
    * Display name. Defaults to the API id.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Human-readable description. APIs have no labels field, so Alchemy
    * stamps ownership into a `[alchemy …]` prefix and strips it from

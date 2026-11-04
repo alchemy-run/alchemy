@@ -55,7 +55,10 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  * `Railway.Project` (its primary environment), a `Railway.Environment`,
  * or an `{ environmentId }` stub.
  */
-export type SandboxEnvironment = { readonly environmentId: string; readonly projectId?: string };
+export type SandboxEnvironment = {
+  readonly environmentId: string;
+  readonly projectId?: string | undefined;
+};
 
 /**
  * Sandbox identity for {@link Exec} / helpers. Accepts a
@@ -376,7 +379,7 @@ const isGone = (sandbox: CloudSandbox | undefined) =>
 
 const toAttrs = (
   sandbox: CloudSandbox,
-  fallback?: { projectId?: string },
+  fallback?: { projectId?: string | undefined },
 ): Sandbox["Attributes"] => ({
   sandboxId: sandbox.id,
   environmentId: sandbox.environmentId,

@@ -57,7 +57,7 @@ export interface DynamoDBStateOptions {
    *
    * @default the account's default store, table `alchemy-state`
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * A full table name instead of one derived from
    * {@link DynamoDBStateOptions.name}, e.g. an existing table. It must have

@@ -184,10 +184,15 @@ export const makeStatementExecutor = (options: {
  * GCP Data APIs return; `nullValue` cells become `null`.
  */
 export const rowsFromCells = (
-  columns: ReadonlyArray<{ readonly name?: string }> | undefined,
+  columns: ReadonlyArray<{ readonly name?: string | undefined }> | undefined,
   rows:
     | ReadonlyArray<{
-        readonly values?: ReadonlyArray<{ readonly value?: string; readonly nullValue?: boolean }>;
+        readonly values?:
+          | ReadonlyArray<{
+              readonly value?: string | undefined;
+              readonly nullValue?: boolean | undefined;
+            }>
+          | undefined;
       }>
     | undefined,
 ): Rows => {

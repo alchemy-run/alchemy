@@ -191,7 +191,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           server.config.logger.error(
             `Failed to restart the Vite dev server after Worker recovery: ${String(error)}`,
             {
-              error: error instanceof Error ? error : undefined,
+              ...(error instanceof Error ? { error } : {}),
               timestamp: true,
             },
           );
@@ -255,7 +255,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           .then(restartRuntime)
           .catch((error: unknown) => {
             server.config.logger.error(`Failed to reload the Worker runtime: ${String(error)}`, {
-              error: error instanceof Error ? error : undefined,
+              ...(error instanceof Error ? { error } : {}),
               timestamp: true,
             });
           });

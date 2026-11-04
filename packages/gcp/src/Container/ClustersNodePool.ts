@@ -30,44 +30,44 @@ const MAX_NAME_LENGTH = 40;
 
 export type ClustersNodePoolAutoscaling = {
   /** Enable the cluster autoscaler for this pool. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /** Minimum nodes per zone. Mutually exclusive with `totalMinNodeCount`. */
-  minNodeCount?: number;
+  minNodeCount?: number | undefined;
   /** Maximum nodes per zone. Mutually exclusive with `totalMaxNodeCount`. */
-  maxNodeCount?: number;
+  maxNodeCount?: number | undefined;
   /** Minimum nodes across all zones. */
-  totalMinNodeCount?: number;
+  totalMinNodeCount?: number | undefined;
   /** Maximum nodes across all zones. */
-  totalMaxNodeCount?: number;
+  totalMaxNodeCount?: number | undefined;
   /** Scale-up location policy (`BALANCED`, `ANY`). */
-  locationPolicy?: container.NodePoolAutoscalingLocationPolicyEnum | (string & {});
+  locationPolicy?: container.NodePoolAutoscalingLocationPolicyEnum | (string & {}) | undefined;
   /** Allow NAP to delete this pool. */
-  autoprovisioned?: boolean;
+  autoprovisioned?: boolean | undefined;
 };
 
 export type ClustersNodePoolManagement = {
   /** Automatically repair unhealthy nodes. */
-  autoRepair?: boolean;
+  autoRepair?: boolean | undefined;
   /** Automatically upgrade nodes. */
-  autoUpgrade?: boolean;
+  autoUpgrade?: boolean | undefined;
 };
 
 export type ClustersNodePoolUpgradeSettings = {
   /** Extra nodes created during an upgrade. */
-  maxSurge?: number;
+  maxSurge?: number | undefined;
   /** Nodes allowed to be unavailable during an upgrade. */
-  maxUnavailable?: number;
+  maxUnavailable?: number | undefined;
   /** Upgrade strategy (`SURGE`, `BLUE_GREEN`). */
-  strategy?: container.UpgradeSettingsStrategyEnum | (string & {});
+  strategy?: container.UpgradeSettingsStrategyEnum | (string & {}) | undefined;
 };
 
 export type ClustersNodePoolTaint = {
   /** Taint key. */
-  key?: string;
+  key?: string | undefined;
   /** Taint value. */
-  value?: string;
+  value?: string | undefined;
   /** Taint effect (`NO_SCHEDULE`, `PREFER_NO_SCHEDULE`, `NO_EXECUTE`). */
-  effect?: container.NodeTaintEffectEnum | (string & {});
+  effect?: container.NodeTaintEffectEnum | (string & {}) | undefined;
 };
 
 export type ClustersNodePoolProps = {
@@ -202,7 +202,7 @@ export type ClustersNodePoolProps = {
   /**
    * Cluster autoscaler settings for this pool.
    */
-  autoscaling?: ClustersNodePoolAutoscaling;
+  autoscaling?: ClustersNodePoolAutoscaling | undefined;
   /**
    * Auto-repair / auto-upgrade settings.
    */

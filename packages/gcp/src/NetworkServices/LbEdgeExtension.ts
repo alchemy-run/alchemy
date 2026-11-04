@@ -40,7 +40,7 @@ export type ExtensionChainMatchCondition = {
    * CEL expression used to select requests. See the Service Extensions
    * CEL matcher language reference.
    */
-  celExpression?: string;
+  celExpression?: string | undefined;
 };
 
 export type ExtensionChainExtension = {
@@ -48,55 +48,55 @@ export type ExtensionChainExtension = {
    * Extension name logged in HTTP request logs. RFC1034, 1-63
    * characters. Required except on AuthzExtension.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * `:authority` header sent from Envoy to the callout. Required for
    * callout extensions; forbidden for plugin extensions.
    */
-  authority?: string;
+  authority?: string | undefined;
   /**
    * Backend service URL (callout) or WasmPlugin resource name (plugin).
    */
-  service?: string;
+  service?: string | undefined;
   /**
    * Events that invoke this extension. `LbEdgeExtension` must list only
    * `REQUEST_HEADERS`.
    */
-  supportedEvents?: string[];
+  supportedEvents?: string[] | undefined;
   /**
    * Per-message timeout between 10ms and 10000ms. Required for callouts.
    */
-  timeout?: string;
+  timeout?: string | undefined;
   /**
    * Continue request processing if the callout fails or times out.
    * @default false
    */
-  failOpen?: boolean;
+  failOpen?: boolean | undefined;
   /** HTTP headers forwarded to the extension. Omitted sends every header. */
-  forwardHeaders?: string[];
+  forwardHeaders?: string[] | undefined;
   /** Envoy attributes forwarded to the extension. Omitted sends none. */
-  forwardAttributes?: string[];
+  forwardAttributes?: string[] | undefined;
   /**
    * Metadata included in `ProcessingRequest.metadata_context`. Must not
    * be set for plugin extensions.
    */
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | undefined;
   /** Request body send mode (`STREAMED` or `FULL_DUPLEX_STREAMED`). */
-  requestBodySendMode?: string;
+  requestBodySendMode?: string | undefined;
   /** Response body send mode. */
-  responseBodySendMode?: string;
+  responseBodySendMode?: string | undefined;
   /**
    * Run the callout asynchronously without pausing the request.
    * @default false
    */
-  observabilityMode?: boolean;
+  observabilityMode?: boolean | undefined;
 };
 
 export type ExtensionChain = {
   /** Chain name logged in HTTP request logs. RFC1034, 1-63 characters. */
-  name?: string;
+  name?: string | undefined;
   /** Conditions under which this chain runs. */
-  matchCondition?: ExtensionChainMatchCondition;
+  matchCondition?: ExtensionChainMatchCondition | undefined;
   /**
    * Extensions executed for a matching request. `LbEdgeExtension` and
    * `LbRouteExtension` allow one extension per chain.

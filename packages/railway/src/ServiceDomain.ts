@@ -37,7 +37,7 @@ const serviceDomainUpdate = Query.fn(
     environmentId: string;
     serviceDomainId: string;
     serviceId: string;
-    targetPort?: number;
+    targetPort?: number | undefined;
   }) => Railway.serviceDomainUpdate({ input }),
 );
 
@@ -138,8 +138,8 @@ export const deleteOwnedServiceDomain = Effect.fn(function* (input: {
   projectId: string;
   environmentId: string;
   serviceId: string;
-  domainId?: string;
-  domain?: string;
+  domainId?: string | undefined;
+  domain?: string | undefined;
 }) {
   if (input.domainId === undefined && input.domain === undefined) return;
 
@@ -198,7 +198,7 @@ const listedOrUndefined = (input: {
   projectId: string;
   environmentId: string;
   serviceId: string;
-  domainId?: string | null;
+  domainId?: string | null | undefined;
 }) =>
   listServiceDomains(input.projectId, input.environmentId, input.serviceId).pipe(
     Effect.map((rows) =>
@@ -292,7 +292,7 @@ const createViaMutation = (input: {
   projectId: string;
   environmentId: string;
   serviceId: string;
-  domainId?: string;
+  domainId?: string | undefined;
 }) => {
   const listed =
     input.domainId === undefined
@@ -392,10 +392,10 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
   projectId: string;
   environmentId: string;
   serviceId: string;
-  domainId?: string | null;
+  domainId?: string | null | undefined;
   /** DNS label claimed via `serviceDomainUpdate`, Terraform-style. */
   subdomain?: string;
-  targetPort?: number;
+  targetPort?: number | undefined;
 }) {
   let current: CloudDomain | undefined = yield* listedOrUndefined(input);
 

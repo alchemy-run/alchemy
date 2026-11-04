@@ -204,9 +204,7 @@ const makeEvent = (overrides: Partial<LambdaFunctionURLEvent> = {}): LambdaFunct
     routeKey: "$default",
     rawPath: "/",
     rawQueryString: "",
-    cookies: undefined,
     headers: { host: "example.lambda-url.us-east-1.on.aws", "x-forwarded-proto": "https" },
-    queryStringParameters: undefined,
     requestContext: {
       accountId: "123456789012",
       apiId: "api-id",
@@ -225,10 +223,7 @@ const makeEvent = (overrides: Partial<LambdaFunctionURLEvent> = {}): LambdaFunct
       time: "09/Mar/2026:00:00:00 +0000",
       timeEpoch: 1741478400000,
     },
-    body: undefined,
-    pathParameters: undefined,
     isBase64Encoded: false,
-    stageVariables: undefined,
   };
 
   return {

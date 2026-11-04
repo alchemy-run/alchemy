@@ -100,32 +100,32 @@ export interface IssuingPersonalizationDesignProps {
    * Friendly display name. If omitted, a unique name is generated from
    * the stack, stage, and logical id. Mutable.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Lookup key used to retrieve this design from a static string. Unique
    * per account, max 200 characters. If omitted, a unique key is
    * generated. Mutable — a change transfers the key onto this design.
    */
-  lookupKey?: string;
+  lookupKey?: string | undefined;
   /**
    * File id (`file_…`) of the card logo. Must have purpose
    * `issuing_logo` (PNG, 1000×200, black on white). Mutable.
    */
-  cardLogo?: string;
+  cardLogo?: string | undefined;
   /**
    * Carrier-letter copy. Omit or leave empty to clear. Mutable.
    */
-  carrierText?: IssuingPersonalizationDesignCarrierText;
+  carrierText?: IssuingPersonalizationDesignCarrierText | undefined;
   /**
    * Default-design preference. Mutable.
    */
-  preferences?: IssuingPersonalizationDesignPreferences;
+  preferences?: IssuingPersonalizationDesignPreferences | undefined;
   /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
    * not contain `:`. Mutable.
    */
-  metadata?: Record<string, string>;
+  metadata?: Record<string, string> | undefined;
 }
 
 export type IssuingPersonalizationDesign = Resource<
@@ -379,9 +379,9 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
 });
 
 const observe = Effect.fn(function* (input: {
-  id?: string;
+  id?: string | undefined;
   logicalId: string;
-  lookupKey?: string;
+  lookupKey?: string | undefined;
 }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);

@@ -70,8 +70,8 @@ interface KubeConfigUser {
 /** The resolved connection material for one kubeconfig context. */
 export interface ResolvedKubeContext {
   endpoint: string;
-  certificateAuthorityData?: string;
-  insecureSkipTlsVerify?: boolean;
+  certificateAuthorityData?: string | undefined;
+  insecureSkipTlsVerify?: boolean | undefined;
   user: KubeConfigUser;
 }
 
@@ -104,8 +104,8 @@ export const resolveKubeConfigPath = Effect.fn(function* (explicit: string | und
 
 /** Load a kubeconfig file and resolve one context to its cluster + user. */
 export const resolveKubeContext = Effect.fn(function* (options: {
-  path?: string;
-  context?: string;
+  path?: string | undefined;
+  context?: string | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const configPath = yield* resolveKubeConfigPath(options.path);
@@ -184,8 +184,8 @@ interface ExecCredentialStatus {
 
 /** Credentials minted by a user's auth stanza for one request. */
 export interface MintedCredentials {
-  token?: string;
-  clientCert?: { certificate: string; key: string };
+  token?: string | undefined;
+  clientCert?: { certificate: string; key: string } | undefined;
 }
 
 // Exec plugin invocations are cached per (command, args) until their

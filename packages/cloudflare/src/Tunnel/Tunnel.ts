@@ -19,12 +19,12 @@ export type TunnelProps = {
    *
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Secret used by the tunnel connector. If omitted, Cloudflare generates one.
    * Must be at least 32 bytes encoded as base64.
    */
-  tunnelSecret?: Redacted.Redacted<string>;
+  tunnelSecret?: Redacted.Redacted<string> | undefined;
   /**
    * Where the tunnel configuration lives.
    * - `"cloudflare"` - managed remotely via the API (default)
@@ -32,24 +32,24 @@ export type TunnelProps = {
    *
    * @default "cloudflare"
    */
-  configSrc?: "cloudflare" | "local";
+  configSrc?: "cloudflare" | "local" | undefined;
   /**
    * Ingress rules describing how requests are routed. Must end with a
    * catch-all rule (e.g. `{ service: "http_status:404" }`). Only honored when
    * `configSrc` is `"cloudflare"`.
    */
-  ingress?: Tunnel.IngressRule[];
+  ingress?: Tunnel.IngressRule[] | undefined;
   /**
    * Origin request configuration applied to all rules. Only honored when
    * `configSrc` is `"cloudflare"`.
    */
-  originRequest?: Tunnel.OriginRequestConfig;
+  originRequest?: Tunnel.OriginRequestConfig | undefined;
   /**
    * Whether to adopt an existing tunnel with the same name when create fails.
    *
    * @default false
    */
-  adopt?: boolean;
+  adopt?: boolean | undefined;
 };
 
 export declare namespace Tunnel {
@@ -235,11 +235,11 @@ export const TunnelProvider = () =>
       // state-persistence failures.
       let observed:
         | {
-            id?: string | null;
-            name?: string | null;
-            accountTag?: string | null;
-            createdAt?: string | null;
-            deletedAt?: string | null;
+            id?: string | null | undefined;
+            name?: string | null | undefined;
+            accountTag?: string | null | undefined;
+            createdAt?: string | null | undefined;
+            deletedAt?: string | null | undefined;
           }
         | undefined;
       if (output?.tunnelId) {

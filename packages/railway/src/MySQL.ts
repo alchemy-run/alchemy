@@ -169,7 +169,7 @@ export interface MySQLProps {
    * Defaults to the project's primary environment. Changing it replaces
    * MySQL.
    */
-  environment?: Ref<MySQLEnvironment>;
+  environment?: Ref<MySQLEnvironment> | undefined;
   /**
    * Service name. Unique per Project. If omitted, a unique name is
    * generated from the stack, stage and logical ID. Used as the private

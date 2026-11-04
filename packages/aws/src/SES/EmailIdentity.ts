@@ -54,7 +54,7 @@ export interface EmailIdentityProps {
    * subdomain to complete setup. Leave undefined to keep SES's current
    * setting — there is no removal path once one is configured.
    */
-  mailFromDomain?: string;
+  mailFromDomain?: string | undefined;
   /**
    * What SES does when the custom MAIL FROM domain's MX record can't be read:
    * fall back to the SES default (`USE_DEFAULT_VALUE`) or reject the message
@@ -90,12 +90,12 @@ export interface EmailIdentity extends Resource<
      * detect out-of-band changes.
      */
     configuration?: {
-      configurationSetName?: string;
-      dkimSigningEnabled?: boolean;
-      dkimSigningKeyLength?: string;
-      feedbackForwardingEnabled?: boolean;
-      mailFromDomain?: string;
-      mailFromBehaviorOnMxFailure?: string;
+      configurationSetName?: string | undefined;
+      dkimSigningEnabled?: boolean | undefined;
+      dkimSigningKeyLength?: string | undefined;
+      feedbackForwardingEnabled?: boolean | undefined;
+      mailFromDomain?: string | undefined;
+      mailFromBehaviorOnMxFailure?: string | undefined;
       tags: Record<string, string>;
     };
   },

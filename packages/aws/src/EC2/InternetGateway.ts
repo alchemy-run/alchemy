@@ -32,13 +32,13 @@ export interface InternetGatewayProps {
    * If provided, the internet gateway will be automatically attached to the VPC.
    * Optional - you can create an unattached internet gateway and attach it later.
    */
-  vpcId?: VpcId;
+  vpcId?: VpcId | undefined;
 
   /**
    * Tags to assign to the internet gateway.
    * These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id).
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface InternetGateway extends Resource<
@@ -56,23 +56,25 @@ export interface InternetGateway extends Resource<
     /**
      * The ID of the VPC the internet gateway is attached to (if any).
      */
-    vpcId?: VpcId;
+    vpcId?: VpcId | undefined;
     /**
      * The ID of the AWS account that owns the internet gateway.
      */
-    ownerId?: string;
+    ownerId?: string | undefined;
     /**
      * The attachments for the internet gateway.
      */
-    attachments?: Array<{
-      state: "attaching" | "available" | "detaching" | "detached";
-      vpcId: string;
-    }>;
+    attachments?:
+      | Array<{
+          state: "attaching" | "available" | "detaching" | "detached";
+          vpcId: string;
+        }>
+      | undefined;
     /**
      * Tags on the internet gateway, as observed. Lets `alchemy drift`
      * detect out-of-band changes.
      */
-    tags?: Record<string, string>;
+    tags?: Record<string, string> | undefined;
   },
   never,
   Providers

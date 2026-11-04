@@ -149,8 +149,8 @@ const toCommonName = (id: string, commonName: string | undefined, existing?: str
   });
 
 type SslCertSecrets = {
-  privateKey?: string;
-  serverCaCert?: string;
+  privateKey?: string | undefined;
+  serverCaCert?: string | undefined;
 };
 
 const toAttrs = (
@@ -206,7 +206,7 @@ const observe = (
 const waitForOperation = (
   project: string,
   operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
+  options?: { notFoundOk?: boolean | undefined },
 ) =>
   waitForSqlOperation(project, operation, {
     budget: "10 minutes",

@@ -30,11 +30,11 @@ interface StackCommandOptions {
   readonly main: string;
   readonly stage: string;
   readonly envFile: Option.Option<string>;
-  readonly profile?: string;
+  readonly profile?: string | undefined;
   readonly dryRun?: boolean;
   readonly force?: boolean;
-  readonly include?: ReadonlyArray<string>;
-  readonly exclude?: ReadonlyArray<string>;
+  readonly include?: ReadonlyArray<string> | undefined;
+  readonly exclude?: ReadonlyArray<string> | undefined;
   readonly yes?: boolean;
   readonly destroy?: boolean;
   readonly adopt?: boolean;

@@ -1054,7 +1054,7 @@ export const ClusterProvider = () =>
           }
           yield* waitUntilGone(name);
         });
-        const isInternal = (error: { _tag: string; code?: number }) =>
+        const isInternal = (error: { _tag: string; code?: number | undefined }) =>
           error._tag === "GCP.OperationFailed" && error.code === 13;
         yield* create.pipe(
           Effect.tapError((error) => (isInternal(error) ? removeFailed : Effect.void)),

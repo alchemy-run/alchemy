@@ -13,6 +13,8 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { chat } from "../src/ai/EffectApi.ts";
@@ -87,7 +89,10 @@ const invoke = (
         new Request("https://example.invalid/chat", {
           method: "POST",
           body,
-          signal,
+          ...Record.filterMap(
+            { signal },
+            Result.fromNullishOr(() => undefined),
+          ),
           headers: {
             "content-type": "application/json",
             ...(authorization == null ? {} : { authorization }),

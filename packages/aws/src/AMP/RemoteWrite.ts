@@ -13,14 +13,14 @@ export interface RemoteWriteSample {
    * Sample timestamp in epoch **milliseconds**.
    * @default the time of the remote-write call
    */
-  timestamp?: number;
+  timestamp?: number | undefined;
 }
 
 export interface RemoteWriteSeries {
   /** Metric name (becomes the `__name__` label). */
   name: string;
   /** Additional labels for the series. */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /** Samples to append, oldest first. */
   samples: RemoteWriteSample[];
 }

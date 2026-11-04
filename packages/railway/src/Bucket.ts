@@ -86,7 +86,7 @@ export interface BucketProps {
    * `{ environmentId }`. Defaults to the project's primary environment.
    * Changing it replaces the Bucket.
    */
-  environment?: Ref<BucketEnvironment>;
+  environment?: Ref<BucketEnvironment> | undefined;
   /**
    * Display name. Unique per project. If omitted, a unique name is
    * generated from the stack, stage and logical ID. Changing it updates
@@ -100,7 +100,7 @@ export interface BucketProps {
    *
    * @default "sjc"
    */
-  region?: string;
+  region?: string | undefined;
 }
 
 export type Bucket = Resource<
@@ -308,7 +308,7 @@ class BucketDeployPending extends Data.TaggedError("Railway.BucketDeployPending"
 }> {}
 
 type BucketInstanceConfig = {
-  region?: string | null;
+  region?: string | null | undefined;
   isDeleted?: boolean | null;
   isCreated?: boolean | null;
 };
@@ -372,9 +372,9 @@ const toAttrs = (
   bucket: CloudBucket,
   extra: {
     environmentId: string;
-    region?: string;
+    region?: string | undefined;
     credentials?: BucketS3CredentialsResultItem;
-    previous?: Bucket["Attributes"];
+    previous?: Bucket["Attributes"] | undefined;
   },
 ): Bucket["Attributes"] => ({
   bucketId: bucket.id,

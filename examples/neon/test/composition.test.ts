@@ -3,6 +3,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import nativeAI from "../src/ai/native.ts";
 import bare from "../src/forms/bare.ts";
 import hono from "../src/forms/hono.ts";
@@ -92,9 +94,9 @@ test("cron writes are idempotent and the preview only enables its own upload tri
 const invokeNativeAI = Effect.fn(function* (options: {
   path?: string;
   method?: string;
-  authorization?: string;
+  authorization?: string | undefined;
   body?: string;
-  paid?: string;
+  paid?: string | undefined;
 }) {
   const names = ["EXAMPLE_API_KEY", "AI_MODEL", "AI_ALLOW_PAID"] as const;
   return yield* Effect.acquireUseRelease(
@@ -113,7 +115,10 @@ const invokeNativeAI = Effect.fn(function* (options: {
           () =>
             new Request(`https://example.invalid${options.path ?? "/chat"}`, {
               method,
-              body: method === "POST" ? (options.body ?? '{"prompt":"Hello"}') : undefined,
+              ...Record.filterMap(
+                { body: method === "POST" ? (options.body ?? '{"prompt":"Hello"}') : undefined },
+                Result.fromNullishOr(() => undefined),
+              ),
               headers: {
                 "content-type": "application/json",
                 ...(options.authorization === undefined

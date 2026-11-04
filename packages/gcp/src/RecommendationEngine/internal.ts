@@ -19,28 +19,28 @@ export type CatalogItemImage = {
   /** Image URI. */
   uri: string;
   /** Height in pixels. */
-  height?: number;
+  height?: number | undefined;
   /** Width in pixels. */
-  width?: number;
+  width?: number | undefined;
 };
 
 export type CatalogItemExactPrice = {
   /** Display price. */
-  displayPrice?: number;
+  displayPrice?: number | undefined;
   /** Price before discount. */
-  originalPrice?: number;
+  originalPrice?: number | undefined;
 };
 
 export type CatalogItemPriceRange = {
   /** Minimum price. */
-  min?: number;
+  min?: number | undefined;
   /** Maximum price. */
-  max?: number;
+  max?: number | undefined;
 };
 
 export type ProductCatalogItem = {
   /** Cost map, e.g. `{ manufacturing: 45.5 }`. */
-  costs?: Record<string, number | undefined>;
+  costs?: Record<string, number | undefined> | undefined;
   /** Online stock state. */
   stockState?:
     | "STOCK_STATE_UNSPECIFIED"
@@ -48,26 +48,27 @@ export type ProductCatalogItem = {
     | "OUT_OF_STOCK"
     | "PREORDER"
     | "BACKORDER"
-    | (string & {});
+    | (string & {})
+    | undefined;
   /** Product images. */
   images?: CatalogItemImage[];
   /** Exact product price. */
-  exactPrice?: CatalogItemExactPrice;
+  exactPrice?: CatalogItemExactPrice | undefined;
   /** Canonical product detail URI. */
-  canonicalProductUri?: string;
+  canonicalProductUri?: string | undefined;
   /** Price range for variants. */
-  priceRange?: CatalogItemPriceRange;
+  priceRange?: CatalogItemPriceRange | undefined;
   /** ISO-4217 currency code. Required when a price is set. */
-  currencyCode?: string;
+  currencyCode?: string | undefined;
   /** Available quantity (int64 as a decimal string). */
-  availableQuantity?: string;
+  availableQuantity?: string | undefined;
 };
 
 export type FeatureMap = {
   /** Categorical features (`{ colors: { value: ["yellow"] } }`). */
-  categoricalFeatures?: Record<string, { value?: string[] } | undefined>;
+  categoricalFeatures?: Record<string, { value?: string[] | undefined } | undefined> | undefined;
   /** Numerical features (`{ lengths_cm: { value: [2.3] } }`). */
-  numericalFeatures?: Record<string, { value?: number[] } | undefined>;
+  numericalFeatures?: Record<string, { value?: number[] | undefined } | undefined> | undefined;
 };
 
 export type CatalogItem = recommendationengine.GoogleCloudRecommendationengineV1beta1CatalogItem;
@@ -258,10 +259,10 @@ export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
 }) => {
   const idChanged =
     input.previousId !== undefined &&

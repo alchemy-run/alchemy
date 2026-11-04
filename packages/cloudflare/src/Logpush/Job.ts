@@ -133,7 +133,7 @@ export interface JobProps {
    * Whether the job actively pushes logs.
    * @default false
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Filter expression (JSON-encoded) selecting which events to push.
    * See https://developers.cloudflare.com/logs/reference/filters/.
@@ -149,7 +149,7 @@ export interface JobProps {
   /**
    * Structured output configuration (fields, format, delimiters, sampling).
    */
-  outputOptions?: OutputOptions;
+  outputOptions?: OutputOptions | undefined;
   /**
    * Maximum uncompressed file size of a batch, in bytes. Between 5 MB and
    * 1 GB, or `0` to disable the limit.
@@ -161,7 +161,7 @@ export interface JobProps {
    * or `0` to disable the limit.
    * @default 30
    */
-  maxUploadIntervalSeconds?: number;
+  maxUploadIntervalSeconds?: number | undefined;
   /**
    * Maximum number of log lines per batch. Between 1,000 and 1,000,000,
    * or `0` to disable the limit.

@@ -139,7 +139,7 @@ export type ReadError<D> =
   | RpcClientError.RpcClientError;
 
 interface CallOptions {
-  readonly headers?: Headers.Input;
+  readonly headers?: Headers.Input | undefined;
 }
 
 /** The typed client of a view exposed in an Api. */
@@ -168,7 +168,7 @@ export interface ViewClient<V extends View.Any> {
   readonly events: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      readonly after?: number;
+      readonly after?: number | undefined;
       readonly where?: Filter<View.EventOf<V>>;
     },
   ) => Stream.Stream<
@@ -184,7 +184,7 @@ export interface ViewClient<V extends View.Any> {
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: number;
+      readonly after?: number | undefined;
     },
   ) => Effect.Effect<
     View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>>,
@@ -239,7 +239,7 @@ export interface StreamClient<S extends DomainStream.Any> {
   readonly events: (
     key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
-      readonly after?: number;
+      readonly after?: number | undefined;
       readonly where?: Filter<DomainStream.EventOf<S>>;
     },
   ) => Stream.Stream<
@@ -253,7 +253,7 @@ export interface StreamClient<S extends DomainStream.Any> {
       readonly where?: Filter<DomainStream.EventOf<S>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: number;
+      readonly after?: number | undefined;
     },
   ) => Effect.Effect<
     View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>>,
@@ -285,7 +285,7 @@ export interface AggregateClient<A extends Aggregate.Any> {
    */
   readonly events: (
     key: Aggregate.IdOf<A>,
-    options?: CallOptions & { readonly after?: number },
+    options?: CallOptions & { readonly after?: number | undefined },
   ) => Stream.Stream<
     Recorded<Aggregate.EventOf<A>, Aggregate.IdOf<A>> | Read.CaughtUp,
     ReadError<A["definition"]["read"]>
@@ -900,7 +900,7 @@ const liveReads = (
     {
       readonly rpc: Rpc.AnyWithProps;
       readonly mode: "watch" | "events";
-      readonly store?: AggregateStore | ViewStore | StreamStore;
+      readonly store: AggregateStore | ViewStore | StreamStore | undefined;
     }
   >();
   for (const entry of entries) {

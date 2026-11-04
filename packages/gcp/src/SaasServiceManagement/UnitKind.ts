@@ -35,26 +35,26 @@ export type UnitKindBoundaryType = saasservicemgmt.UnitKindBoundaryTypeEnum | (s
 
 export type UnitKindDependency = {
   /** UnitKind resource name this kind depends on. Immutable. */
-  unitKind?: string;
+  unitKind?: string | undefined;
   /** Alias used in variable mappings. */
-  alias?: string;
+  alias?: string | undefined;
 };
 
 export type UnitKindFromMapping = {
-  outputVariable?: string;
-  dependency?: string;
+  outputVariable?: string | undefined;
+  dependency?: string | undefined;
 };
 
 export type UnitKindToMapping = {
-  inputVariable?: string;
-  ignoreForLookup?: boolean;
-  dependency?: string;
+  inputVariable?: string | undefined;
+  ignoreForLookup?: boolean | undefined;
+  dependency?: string | undefined;
 };
 
 export type UnitKindVariableMapping = {
-  variable?: string;
-  from?: UnitKindFromMapping;
-  to?: UnitKindToMapping;
+  variable?: string | undefined;
+  from?: UnitKindFromMapping | undefined;
+  to?: UnitKindToMapping | undefined;
 };
 
 export type UnitKindProps = {
@@ -90,7 +90,7 @@ export type UnitKindProps = {
    * Other unit kinds this kind depends on. Immutable — changing them
    * replaces the unit kind.
    */
-  dependencies?: UnitKindDependency[];
+  dependencies?: UnitKindDependency[] | undefined;
   /**
    * Input variable mappings to or from dependencies. Maximum 100.
    */

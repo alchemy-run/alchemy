@@ -51,13 +51,13 @@ export interface OriginEndpointProps {
   /**
    * Optional description of the origin endpoint (up to 1024 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * The size of the window (1 minute - 14 days, e.g. `"1 hour"` or
    * `Duration.hours(1)`) from which viewers can start over or catch up on
    * previously streamed content. Sent to the API in whole seconds.
    */
-  startoverWindow?: Duration.Input;
+  startoverWindow?: Duration.Input | undefined;
   /**
    * HLS manifest configurations served by the endpoint.
    */
@@ -91,7 +91,7 @@ export interface OriginEndpointProps {
    * (`mediapackagev2:GetObject` / `mediapackagev2:GetHeadObject`). Omitting
    * it removes any existing policy.
    */
-  policy?: string;
+  policy?: string | undefined;
   /**
    * CDN authorization for the endpoint policy: the Secrets Manager secrets
    * holding the CDN identifier and the role MediaPackage assumes to read
@@ -238,10 +238,10 @@ export const OriginEndpointProvider = () =>
         ChannelName: string;
         OriginEndpointName: string;
         ContainerType: mediapackagev2.ContainerType;
-        HlsManifests?: mediapackagev2.GetHlsManifestConfiguration[];
-        LowLatencyHlsManifests?: mediapackagev2.GetLowLatencyHlsManifestConfiguration[];
-        DashManifests?: mediapackagev2.GetDashManifestConfiguration[];
-        MssManifests?: mediapackagev2.GetMssManifestConfiguration[];
+        HlsManifests?: mediapackagev2.GetHlsManifestConfiguration[] | undefined;
+        LowLatencyHlsManifests?: mediapackagev2.GetLowLatencyHlsManifestConfiguration[] | undefined;
+        DashManifests?: mediapackagev2.GetDashManifestConfiguration[] | undefined;
+        MssManifests?: mediapackagev2.GetMssManifestConfiguration[] | undefined;
       }) => ({
         channelGroupName: endpoint.ChannelGroupName,
         channelName: endpoint.ChannelName,

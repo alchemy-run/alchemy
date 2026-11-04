@@ -50,7 +50,7 @@ export const resolveZoneId = ({
 type ZoneListItem = {
   id: string;
   name: string;
-  account: { id?: string | null };
+  account: { id?: string | null | undefined };
 };
 
 export const findZoneByName = ({

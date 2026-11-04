@@ -29,9 +29,9 @@ export interface AccountName extends Resource<
     /** The 12-digit AWS account ID the name belongs to. */
     accountId: string;
     /** The state of the account, e.g. `ACTIVE`. */
-    accountState?: string;
+    accountState: string | undefined;
     /** ISO-8601 timestamp of when the account was created. */
-    accountCreatedDate?: string;
+    accountCreatedDate: string | undefined;
   },
   never,
   Providers

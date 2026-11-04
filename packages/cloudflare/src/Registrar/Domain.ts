@@ -27,16 +27,16 @@ export interface DomainSettings {
   /**
    * Whether the registration auto-renews before it expires.
    */
-  autoRenew?: boolean;
+  autoRenew?: boolean | undefined;
   /**
    * Whether the registrar transfer lock is in place (blocks transfers to
    * another registrar).
    */
-  locked?: boolean;
+  locked?: boolean | undefined;
   /**
    * Whether WHOIS information is redacted.
    */
-  privacy?: boolean;
+  privacy?: boolean | undefined;
 }
 
 export interface DomainProps {
@@ -55,17 +55,17 @@ export interface DomainProps {
    * Whether the registration auto-renews before it expires. Mutable —
    * updated in place. When omitted, the current value is left untouched.
    */
-  autoRenew?: boolean;
+  autoRenew?: boolean | undefined;
   /**
    * Whether the registrar transfer lock is in place. Mutable — updated in
    * place. When omitted, the current value is left untouched.
    */
-  locked?: boolean;
+  locked?: boolean | undefined;
   /**
    * Whether WHOIS information is redacted. Mutable — updated in place.
    * When omitted, the current value is left untouched.
    */
-  privacy?: boolean;
+  privacy?: boolean | undefined;
 }
 
 export interface DomainAttributes {

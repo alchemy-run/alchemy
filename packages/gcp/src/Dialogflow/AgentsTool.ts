@@ -32,23 +32,25 @@ import {
 
 export type ToolFunctionSpec = {
   /** JSON Schema for the tool input. */
-  inputSchema?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | undefined;
   /** JSON Schema for the tool output. */
-  outputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown> | undefined;
 };
 
 export type ToolOpenApiSpec = {
   /** OpenAPI schema as YAML or JSON text. */
-  textSchema?: string;
+  textSchema?: string | undefined;
 };
 
 export type ToolDataStoreSpec = {
   /** Data store connections. */
-  dataStoreConnections?: Array<{
-    dataStore?: string;
-    dataStoreType?: string;
-    documentProcessingMode?: string;
-  }>;
+  dataStoreConnections?:
+    | Array<{
+        dataStore?: string | undefined;
+        dataStoreType?: string | undefined;
+        documentProcessingMode?: string | undefined;
+      }>
+    | undefined;
 };
 
 export type AgentsToolProps = {
@@ -62,32 +64,32 @@ export type AgentsToolProps = {
    * Tool id (the `{tool}` segment). Server-assigned when omitted.
    * Immutable — changing it replaces the tool.
    */
-  toolId?: string;
+  toolId?: string | undefined;
   /**
    * Location used when `agent` is an id rather than a resource name.
    * Immutable — changing it replaces the tool.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Human-readable name. Tools have no labels field, so Alchemy stamps
    * ownership into `displayName` and `description`.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Human-readable description. Required by the API; Alchemy stamps
    * ownership into this field.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Client-side function spec. Used when neither `openApiSpec` nor
    * `dataStoreSpec` is set.
    */
-  functionSpec?: ToolFunctionSpec;
+  functionSpec?: ToolFunctionSpec | undefined;
   /** OpenAPI tool spec. Mutually exclusive with the other specs. */
-  openApiSpec?: ToolOpenApiSpec;
+  openApiSpec?: ToolOpenApiSpec | undefined;
   /** Data-store tool spec. Mutually exclusive with the other specs. */
-  dataStoreSpec?: ToolDataStoreSpec;
+  dataStoreSpec?: ToolDataStoreSpec | undefined;
 };
 
 export type AgentsTool = Resource<

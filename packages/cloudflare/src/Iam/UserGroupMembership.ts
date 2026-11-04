@@ -231,8 +231,8 @@ export const UserGroupMembershipProvider = () =>
 
 type ObservedMember = {
   id: string;
-  email?: string | null;
-  status?: string | null;
+  email?: string | null | undefined;
+  status?: string | null | undefined;
 };
 
 /**

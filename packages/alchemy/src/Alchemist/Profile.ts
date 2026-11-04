@@ -39,8 +39,8 @@ export interface ConfigureField {
   readonly label: string;
   readonly secret: boolean;
   readonly required: boolean;
-  readonly description?: string;
-  readonly placeholder?: string;
+  readonly description?: string | undefined;
+  readonly placeholder?: string | undefined;
 }
 
 export interface ConfigureMethod {
@@ -60,8 +60,8 @@ export interface AuthProviderDescriptor {
 export interface ConfigureInput extends ProviderContext {
   readonly provider: string;
   readonly action: "add" | "reconfigure";
-  readonly method?: string;
-  readonly values?: Readonly<Record<string, Redacted.Redacted<string>>>;
+  readonly method?: string | undefined;
+  readonly values?: Readonly<Record<string, Redacted.Redacted<string>>> | undefined;
 }
 
 /**
@@ -102,8 +102,8 @@ export const list = Effect.fn("Alchemist.profile.list")(function* () {
 export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
   readonly name: string;
   readonly includeProviderStatus?: boolean;
-  readonly entrypoint?: string;
-  readonly envFile?: string;
+  readonly entrypoint?: string | undefined;
+  readonly envFile?: string | undefined;
 }) {
   const includeProviderStatus = input.includeProviderStatus ?? true;
   const profiles = yield* ProfileStore;
@@ -187,9 +187,9 @@ export const deleteProfile = Effect.fn("Alchemist.profile.delete")(function* (in
 
 /** Every registered auth provider and how it can be configured. */
 export const providers = Effect.fn("Alchemist.profile.providers")(function* (input: {
-  readonly profile?: string;
-  readonly entrypoint?: string;
-  readonly envFile?: string;
+  readonly profile?: string | undefined;
+  readonly entrypoint?: string | undefined;
+  readonly envFile?: string | undefined;
 }) {
   const profiles = yield* ProfileStore;
   const profile = input.profile ?? (yield* profiles.current).name;
@@ -321,7 +321,7 @@ export const removeProvider = Effect.fn("Alchemist.profile.removeProvider")(func
  */
 export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
   input: ProviderContext & {
-    readonly providers?: ReadonlyArray<string>;
+    readonly providers?: ReadonlyArray<string> | undefined;
   },
 ) {
   const profiles = yield* ProfileStore;

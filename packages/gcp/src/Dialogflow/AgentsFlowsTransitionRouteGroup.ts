@@ -25,22 +25,28 @@ import {
 
 export type TransitionRoute = {
   /** Intent that triggers this route. */
-  intent?: string;
+  intent?: string | undefined;
   /** Condition expression. */
-  condition?: string;
+  condition?: string | undefined;
   /** Target flow resource name. */
-  targetFlow?: string;
+  targetFlow?: string | undefined;
   /** Target page resource name. */
-  targetPage?: string;
+  targetPage?: string | undefined;
   /** Description of the route. */
-  description?: string;
+  description?: string | undefined;
   /** Fulfillment run when the route matches. */
-  triggerFulfillment?: {
-    messages?: Array<{
-      text?: { text?: string[]; allowPlaybackInterruption?: boolean };
-    }>;
-    tag?: string;
-  };
+  triggerFulfillment?:
+    | {
+        messages?:
+          | Array<{
+              text?:
+                | { text?: string[] | undefined; allowPlaybackInterruption?: boolean | undefined }
+                | undefined;
+            }>
+          | undefined;
+        tag?: string | undefined;
+      }
+    | undefined;
 };
 
 export type AgentsFlowsTransitionRouteGroupProps = {
@@ -60,7 +66,7 @@ export type AgentsFlowsTransitionRouteGroupProps = {
    * labels or description field, so Alchemy stamps ownership into this
    * field for `list` / nuke.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /** Transition routes in the group. */
   transitionRoutes?: TransitionRoute[];
   /** Language code of the route group. */

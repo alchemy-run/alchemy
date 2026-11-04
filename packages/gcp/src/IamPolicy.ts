@@ -30,16 +30,16 @@ import * as Schedule from "effect/Schedule";
  * service's generated `Policy` type is structurally compatible.
  */
 export interface IamPolicy {
-  version?: number;
-  etag?: string;
-  bindings?: ReadonlyArray<IamPolicyBinding>;
-  auditConfigs?: ReadonlyArray<unknown>;
+  version?: number | undefined;
+  etag?: string | undefined;
+  bindings?: ReadonlyArray<IamPolicyBinding> | undefined;
+  auditConfigs?: ReadonlyArray<unknown> | undefined;
 }
 
 export interface IamPolicyBinding {
-  role?: string;
-  members?: ReadonlyArray<string>;
-  condition?: IamCondition;
+  role?: string | undefined;
+  members?: ReadonlyArray<string> | undefined;
+  condition?: IamCondition | undefined;
 }
 
 /**
@@ -48,9 +48,9 @@ export interface IamPolicyBinding {
  * Cloud SQL, Memorystore, …): `resource.name == "projects/p/…"`.
  */
 export interface IamCondition {
-  title?: string;
-  expression?: string;
-  description?: string;
+  title?: string | undefined;
+  expression?: string | undefined;
+  description?: string | undefined;
 }
 
 /** Condition identity: two conditions are the same binding iff equal. */
@@ -463,7 +463,7 @@ export const updateIamMembership = (options: {
   add?: Iterable<string>;
   remove?: Iterable<string>;
   /** Manage the bindings carrying exactly this condition. */
-  condition?: IamCondition;
+  condition?: IamCondition | undefined;
 }) => {
   const target = TARGETS[options.kind](targetName(options.kind, options.name));
   const member = principal(options.member);
@@ -523,7 +523,7 @@ export const revokeIamMembership = (options: {
   name: string;
   member: string;
   roles: Iterable<string>;
-  condition?: IamCondition;
+  condition?: IamCondition | undefined;
 }) =>
   updateIamMembership({
     kind: options.kind,

@@ -83,15 +83,15 @@ export type R2Etag =
 /** Decoded form of workerd's `R2Conditional` binding metadata. */
 export interface R2Conditional {
   /** Performs the operation if the object's ETag matches ("If-Match"). */
-  readonly etagMatches?: ReadonlyArray<R2Etag>;
+  readonly etagMatches?: ReadonlyArray<R2Etag> | undefined;
   /** Performs the operation if the object's ETag does NOT match ("If-None-Match"). */
-  readonly etagDoesNotMatch?: ReadonlyArray<R2Etag>;
+  readonly etagDoesNotMatch?: ReadonlyArray<R2Etag> | undefined;
   /** Performs the operation if the object was uploaded BEFORE the given date ("If-Unmodified-Since"). */
-  readonly uploadedBefore?: Date;
+  readonly uploadedBefore?: Date | undefined;
   /** Performs the operation if the object was uploaded AFTER the given date ("If-Modified-Since"). */
-  readonly uploadedAfter?: Date;
+  readonly uploadedAfter?: Date | undefined;
   /** Truncates dates to seconds before performing comparisons. */
-  readonly secondsGranularity?: boolean;
+  readonly secondsGranularity?: boolean | undefined;
 }
 
 function identity(ms: number) {

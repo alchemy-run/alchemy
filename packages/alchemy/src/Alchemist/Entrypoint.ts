@@ -71,9 +71,9 @@ export const importStack = Effect.fn("Alchemist.importStack")(function* (main: s
  */
 export interface Target {
   /** Stack entrypoint. @default "alchemy.run.ts" */
-  readonly entrypoint?: string;
+  readonly entrypoint?: string | undefined;
   /** Profile whose credentials the run uses. Falls back to the active profile. */
-  readonly profile?: string;
+  readonly profile?: string | undefined;
   /** `.env` file layered under the process environment. */
-  readonly envFile?: string;
+  readonly envFile?: string | undefined;
 }

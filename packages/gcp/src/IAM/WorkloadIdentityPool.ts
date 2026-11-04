@@ -40,7 +40,7 @@ export type WorkloadIdentityPoolProps = {
    * existing tokens grant access again once it is re-enabled.
    * @default false
    */
-  disabled?: boolean;
+  disabled?: boolean | undefined;
 };
 
 export type WorkloadIdentityPool = Resource<

@@ -21,7 +21,11 @@ describe.sequential(
     // `Lambda.Function` forms run the same end-to-end delivery check.
     const deliversThroughEventSource = (
       stack: Test.ScratchStack,
-      deployFunction: Effect.Effect<{ functionName: string; functionUrl?: string }, any, any>,
+      deployFunction: Effect.Effect<
+        { functionName: string; functionUrl?: string | undefined },
+        any,
+        any
+      >,
     ) =>
       Effect.gen(function* () {
         yield* stack.destroy();

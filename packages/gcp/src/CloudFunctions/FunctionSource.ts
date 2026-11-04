@@ -62,9 +62,9 @@ export const makeFunctionSource = Effect.gen(function* () {
   /** Bundle `main` and hash the archive's content (no upload). */
   const bundle = Effect.fn(function* (options: {
     main: string;
-    handler?: string;
-    build?: Bundle.BundleConfig;
-    isExternal?: boolean;
+    handler?: string | undefined;
+    build?: Bundle.BundleConfig | undefined;
+    isExternal?: boolean | undefined;
   }) {
     const realMain = yield* resolveMainPath(options.main);
     const cwd = yield* findCwdForBundle(realMain);
@@ -113,7 +113,7 @@ export const makeFunctionSource = Effect.gen(function* () {
   const upload = Effect.fn(function* (options: {
     parent: string;
     files: ReadonlyArray<{ path: string; content: string | Uint8Array }>;
-    kmsKeyName?: string;
+    kmsKeyName?: string | undefined;
   }) {
     const archive = yield* zipFiles(options.files);
     const target = yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({

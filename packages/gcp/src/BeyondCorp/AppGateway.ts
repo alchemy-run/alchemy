@@ -33,9 +33,9 @@ const COLLECTION = "appGateways";
 
 export type AppGatewayAllocatedConnection = {
   /** PSC URI of an allocated connection. */
-  pscUri?: string;
+  pscUri?: string | undefined;
   /** Ingress port of an allocated connection. */
-  ingressPort?: number;
+  ingressPort?: number | undefined;
 };
 
 export type AppGatewayProps = {

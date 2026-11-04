@@ -84,7 +84,7 @@ export class PrismaApiError extends Data.TaggedError("PrismaApiError")<{
   status: number;
   message: string;
   /** Raw response bodies may contain credentials and are always redacted. */
-  body?: Redacted.Redacted<string>;
+  body?: Redacted.Redacted<string> | undefined;
 }> {}
 
 export class PrismaApiDecodeError extends Data.TaggedError("PrismaApiDecodeError")<{
@@ -96,11 +96,13 @@ export class PrismaApiDecodeError extends Data.TaggedError("PrismaApiDecodeError
 }> {}
 
 interface RequestOptions {
-  query?: object;
+  query?: object | undefined;
   body?: unknown;
-  headers?: Record<string, string>;
-  timeout?: Duration.Input;
-  onSuccessfulBodyLength?: (bodyLength: number) => Effect.Effect<void, PrismaApiDecodeError>;
+  headers?: Record<string, string> | undefined;
+  timeout?: Duration.Input | undefined;
+  onSuccessfulBodyLength?:
+    | ((bodyLength: number) => Effect.Effect<void, PrismaApiDecodeError>)
+    | undefined;
 }
 
 export interface PrismaManagementClient {

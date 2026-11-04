@@ -43,7 +43,7 @@ export interface Swarm extends Resource<
     /** This node's id in the swarm (a manager). */
     nodeId: string;
     /** Docker context the swarm was initialized on. */
-    context?: string;
+    context?: string | undefined;
     /** Number of manager nodes. */
     managers: number;
     /** Number of nodes in the swarm. */

@@ -1,3 +1,5 @@
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { makeRemoteBinding } from "../remote-bindings/RemoteBindings.ts";
 
 export interface RemoteVpcNetworkProps {
@@ -11,8 +13,10 @@ export const remote = (props: RemoteVpcNetworkProps) =>
     {
       name: props.binding,
       type: "vpc_network",
-      tunnelId: props.tunnelId,
-      networkId: props.networkId,
+      ...Record.filterMap(
+        { tunnelId: props.tunnelId, networkId: props.networkId },
+        Result.fromNullishOr(() => undefined),
+      ),
     },
     (service) => ({
       name: props.binding,

@@ -89,8 +89,8 @@ type ImageBuild =
       readonly kind: "external";
       readonly context: string;
       readonly dockerfile: string;
-      readonly buildArgs?: Record<string, string>;
-      readonly buildSecrets?: Record<string, Redacted.Redacted<string>>;
+      readonly buildArgs?: Record<string, string> | undefined;
+      readonly buildSecrets?: Record<string, Redacted.Redacted<string>> | undefined;
     }
   | {
       readonly kind: "remote";

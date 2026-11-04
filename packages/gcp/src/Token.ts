@@ -18,7 +18,7 @@ export interface ServiceAccountKey {
 export interface MintedToken {
   readonly accessToken: Redacted.Redacted<string>;
   readonly expirationMs: number;
-  readonly project?: string;
+  readonly project?: string | undefined;
 }
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";

@@ -85,7 +85,7 @@ const servicesOf = (value: unknown) =>
 export interface ReadinessEvent extends TransportEvent {
   metadata?: Record<string, string>;
   metadataOnly?: boolean;
-  skipLaunch?: boolean;
+  skipLaunch?: boolean | undefined;
   services?: ReturnType<typeof servicesOf>;
   serviceConfig?: string;
 }

@@ -32,11 +32,11 @@ import {
 
 export type ApplicationInfo = {
   /** Email addresses that receive applications (max 255 chars each). */
-  emails?: string[];
+  emails?: string[] | undefined;
   /** URIs for an online application form (max 2000 chars each). */
-  uris?: string[];
+  uris?: string[] | undefined;
   /** Free-text instructions a candidate can follow (max 3000 chars). */
-  instruction?: string;
+  instruction?: string | undefined;
 };
 
 export type CompensationRange = {

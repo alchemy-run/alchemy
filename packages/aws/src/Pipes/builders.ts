@@ -81,7 +81,7 @@ interface PipeBuilderState {
   filters: string[];
   enrichment?: {
     fn: Function;
-    parameters?: pipes.PipeEnrichmentParameters;
+    parameters?: pipes.PipeEnrichmentParameters | undefined;
   };
 }
 

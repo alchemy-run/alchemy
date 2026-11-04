@@ -71,7 +71,7 @@ export interface NextjsBaseProps {
   /**
    * Static asset upload configuration.
    */
-  assets?: WebsiteAssetsConfig;
+  assets?: WebsiteAssetsConfig | undefined;
   /**
    * Optional custom domain. A string is shorthand for `{ name }`; `null`
    * explicitly clears a previously set domain. Set `domain.router` to

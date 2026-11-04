@@ -392,7 +392,7 @@ export const listDependencies = (parent: string) =>
   );
 
 export const listChildResources = <A, E, R>(
-  parents: readonly { name?: string }[],
+  parents: readonly { name?: string | undefined }[],
   list: (name: string) => Effect.Effect<A[], E, R>,
 ) =>
   Effect.forEach(
@@ -443,8 +443,8 @@ export const projectNameOf = (value: string | undefined, fallback = "") => {
 
 export class ApihubInstanceFailed extends Data.TaggedError("GCP.ApiHub.InstanceFailed")<{
   resourceName: string;
-  state?: string;
-  message?: string;
+  state?: string | undefined;
+  message?: string | undefined;
 }> {}
 
 /** API hub instance provisioning takes up to ~15 minutes. */

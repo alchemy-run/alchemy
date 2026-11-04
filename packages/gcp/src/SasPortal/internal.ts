@@ -48,11 +48,11 @@ export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   if (input.extra === true) {
     return { action: "replace" as const, deleteFirst: false };
@@ -829,67 +829,67 @@ export const scanOwnedNodeNodeNode = (id: string, parent?: string) =>
 
 export type FrequencyRange = {
   /** Lowest frequency of the range in MHz. */
-  lowFrequencyMhz?: number;
+  lowFrequencyMhz?: number | undefined;
   /** Highest frequency of the range in MHz. */
-  highFrequencyMhz?: number;
+  highFrequencyMhz?: number | undefined;
 };
 
 export type InstallationParams = {
-  height?: number;
-  horizontalAccuracy?: number;
-  antennaGain?: number;
-  antennaAzimuth?: number;
-  verticalAccuracy?: number;
-  latitude?: number;
-  heightType?: string;
-  indoorDeployment?: boolean;
-  eirpCapability?: number;
-  antennaModel?: string;
-  longitude?: number;
-  antennaDowntilt?: number;
-  antennaBeamwidth?: number;
-  cpeCbsdIndication?: boolean;
+  height?: number | undefined;
+  horizontalAccuracy?: number | undefined;
+  antennaGain?: number | undefined;
+  antennaAzimuth?: number | undefined;
+  verticalAccuracy?: number | undefined;
+  latitude?: number | undefined;
+  heightType?: string | undefined;
+  indoorDeployment?: boolean | undefined;
+  eirpCapability?: number | undefined;
+  antennaModel?: string | undefined;
+  longitude?: number | undefined;
+  antennaDowntilt?: number | undefined;
+  antennaBeamwidth?: number | undefined;
+  cpeCbsdIndication?: boolean | undefined;
 };
 
 export type DeviceModel = {
-  name?: string;
-  softwareVersion?: string;
-  firmwareVersion?: string;
-  hardwareVersion?: string;
-  vendor?: string;
+  name?: string | undefined;
+  softwareVersion?: string | undefined;
+  firmwareVersion?: string | undefined;
+  hardwareVersion?: string | undefined;
+  vendor?: string | undefined;
 };
 
 export type DeviceAirInterface = {
-  supportedSpec?: string;
-  radioTechnology?: string;
+  supportedSpec?: string | undefined;
+  radioTechnology?: string | undefined;
 };
 
 export type DeviceConfig = {
-  state?: string;
-  installationParams?: InstallationParams;
-  measurementCapabilities?: string[];
-  model?: DeviceModel;
-  airInterface?: DeviceAirInterface;
-  callSign?: string;
-  category?: string;
-  userId?: string;
+  state?: string | undefined;
+  installationParams?: InstallationParams | undefined;
+  measurementCapabilities?: string[] | undefined;
+  model?: DeviceModel | undefined;
+  airInterface?: DeviceAirInterface | undefined;
+  callSign?: string | undefined;
+  category?: string | undefined;
+  userId?: string | undefined;
 };
 
 export type DeviceMetadata = {
-  interferenceCoordinationGroup?: string;
-  commonChannelGroup?: string;
-  antennaModel?: string;
+  interferenceCoordinationGroup?: string | undefined;
+  commonChannelGroup?: string | undefined;
+  antennaModel?: string | undefined;
 };
 
 export type DeviceGrant = {
-  grantId?: string;
-  maxEirp?: number;
-  channelType?: string;
-  expireTime?: string;
-  lastHeartbeatTransmitExpireTime?: string;
-  suspensionReason?: string[];
-  frequencyRange?: FrequencyRange;
-  state?: string;
+  grantId?: string | undefined;
+  maxEirp?: number | undefined;
+  channelType?: string | undefined;
+  expireTime?: string | undefined;
+  lastHeartbeatTransmitExpireTime?: string | undefined;
+  suspensionReason?: string[] | undefined;
+  frequencyRange?: FrequencyRange | undefined;
+  state?: string | undefined;
 };
 
 export const frequencyRangesOf = (
@@ -947,11 +947,11 @@ export const deviceGrantsOf = (
 
 export const deviceBody = (input: {
   displayName: string;
-  serialNumber?: string;
-  fccId?: string;
-  grantRangeAllowlists?: FrequencyRange[];
-  preloadedConfig?: DeviceConfig;
-  deviceMetadata?: DeviceMetadata;
+  serialNumber?: string | undefined;
+  fccId?: string | undefined;
+  grantRangeAllowlists?: FrequencyRange[] | undefined;
+  preloadedConfig?: DeviceConfig | undefined;
+  deviceMetadata?: DeviceMetadata | undefined;
 }): sasportal.SasPortalDevice => ({
   displayName: input.displayName,
   serialNumber: input.serialNumber,

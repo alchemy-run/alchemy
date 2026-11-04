@@ -3,6 +3,8 @@ import { describe, expect, it, test } from "@alchemy.run/test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { LoggingCli, formatPlanLines } from "@/Cli/LoggingCli.ts";
 import { Cli } from "@/Report.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
@@ -107,7 +109,10 @@ it.effect(
           fqn: "Website",
           id: "Website",
           message,
-          kind,
+          ...Record.filterMap(
+            { kind },
+            Result.fromNullishOr(() => undefined),
+          ),
         });
       const status = (status: "updating" | "updated") =>
         session.emit({

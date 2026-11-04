@@ -28,7 +28,7 @@ export interface IpsecTunnelProps {
    * The IP address assigned to the customer side of the IPsec tunnel. Not
    * required, but must be set for proactive traceroutes to work.
    */
-  customerEndpoint?: string;
+  customerEndpoint?: string | undefined;
   /**
    * A 31-bit prefix (/31 in CIDR notation) from RFC1918 private space; one
    * host for each side of the tunnel.
@@ -37,44 +37,46 @@ export interface IpsecTunnelProps {
   /**
    * A /127 IPv6 prefix from within the account's `virtual_subnet6` space.
    */
-  interfaceAddress6?: string;
+  interfaceAddress6?: string | undefined;
   /**
    * An optional description of the IPsec tunnel.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Pre-shared key for the tunnel. Write-only — Cloudflare never returns
    * it, so the value is carried in state. When omitted, Cloudflare leaves
    * the tunnel without a PSK until one is generated via the dashboard/API.
    */
-  psk?: Redacted.Redacted<string>;
+  psk?: Redacted.Redacted<string> | undefined;
   /**
    * If `true`, IPsec replay protection is supported in the
    * Cloudflare-to-customer direction.
    * @default false
    */
-  replayProtection?: boolean;
+  replayProtection?: boolean | undefined;
   /**
    * Tunnel health-check configuration.
    */
-  healthCheck?: MagicTunnelHealthCheck;
+  healthCheck?: MagicTunnelHealthCheck | undefined;
   /**
    * BGP configuration for the tunnel.
    */
-  bgp?: MagicTunnelBgp;
+  bgp?: MagicTunnelBgp | undefined;
   /**
    * Custom remote identities for IKE negotiation.
    */
-  customRemoteIdentities?: {
-    /** Identifier of the FQDN remote identity. */
-    fqdnId?: string;
-  };
+  customRemoteIdentities?:
+    | {
+        /** Identifier of the FQDN remote identity. */
+        fqdnId?: string | undefined;
+      }
+    | undefined;
   /**
    * True if automatic stateful return routing should be enabled. Requires
    * the `coupler_integration` account flag.
    * @default false
    */
-  automaticReturnRouting?: boolean;
+  automaticReturnRouting?: boolean | undefined;
 }
 
 export interface IpsecTunnelAttributes {
@@ -297,20 +299,27 @@ interface ObservedIpsecTunnel {
   name: string;
   cloudflareEndpoint: string;
   interfaceAddress: string;
-  customerEndpoint?: string | null;
-  interfaceAddress6?: string | null;
-  description?: string | null;
-  allowNullCipher?: boolean | null;
-  replayProtection?: boolean | null;
-  healthCheck?: {
-    direction?: string | null;
-    enabled?: boolean | null;
-    rate?: string | null;
-    target?: { effective?: string | null; saved?: string | null } | string | null;
-    type?: string | null;
-  } | null;
-  createdOn?: string | null;
-  modifiedOn?: string | null;
+  customerEndpoint?: string | null | undefined;
+  interfaceAddress6?: string | null | undefined;
+  description?: string | null | undefined;
+  allowNullCipher?: boolean | null | undefined;
+  replayProtection?: boolean | null | undefined;
+  healthCheck?:
+    | {
+        direction?: string | null | undefined;
+        enabled?: boolean | null | undefined;
+        rate?: string | null | undefined;
+        target?:
+          | { effective?: string | null | undefined; saved?: string | null | undefined }
+          | string
+          | null
+          | undefined;
+        type?: string | null | undefined;
+      }
+    | null
+    | undefined;
+  createdOn?: string | null | undefined;
+  modifiedOn?: string | null | undefined;
 }
 
 /**

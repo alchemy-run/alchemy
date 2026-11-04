@@ -58,7 +58,7 @@ export type ProductsSfdcInstanceProps = {
   /**
    * Salesforce org id.
    */
-  sfdcOrgId?: string;
+  sfdcOrgId?: string | undefined;
   /**
    * Auth config ids tried when opening a channel to Salesforce.
    */

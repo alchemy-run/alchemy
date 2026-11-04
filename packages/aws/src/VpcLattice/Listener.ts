@@ -44,7 +44,7 @@ export interface ListenerProps {
    * Listener port. Defaults to the protocol's default port (80 for HTTP,
    * 443 for HTTPS). Immutable — changing it replaces the listener.
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Action applied to requests that match no rule: forward to weighted
    * target groups or return a fixed response status.
@@ -79,7 +79,7 @@ export interface Listener extends Resource<
     /**
      * Listener port.
      */
-    port?: number;
+    port?: number | undefined;
     /**
      * ID of the owning lattice service.
      */
@@ -87,7 +87,7 @@ export interface Listener extends Resource<
     /**
      * ARN of the owning lattice service.
      */
-    serviceArn?: string;
+    serviceArn?: string | undefined;
     /**
      * Current tags reported for the listener.
      */

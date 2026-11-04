@@ -37,7 +37,7 @@ export interface ListenerProps {
    * regardless of source port, for stateful applications.
    * @default "NONE"
    */
-  clientAffinity?: "NONE" | "SOURCE_IP";
+  clientAffinity?: "NONE" | "SOURCE_IP" | undefined;
 }
 
 export interface Listener extends Resource<

@@ -247,63 +247,63 @@ export interface TerminalConfigurationProps {
    * lookup key when the Stripe id is missing — this object has no
    * metadata.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Offline transaction collection. `null` clears it on update.
    */
-  offline?: TerminalOffline | null;
+  offline?: TerminalOffline | null | undefined;
   /**
    * On-reader tipping by currency. `null` clears it on update.
    */
-  tipping?: TerminalTipping | null;
+  tipping?: TerminalTipping | null | undefined;
   /**
    * Daily reboot window. `null` clears it on update.
    */
-  rebootWindow?: TerminalRebootWindow | null;
+  rebootWindow?: TerminalRebootWindow | null | undefined;
   /**
    * Cellular connectivity. `null` clears it on update.
    */
-  cellular?: TerminalCellular | null;
+  cellular?: TerminalCellular | null | undefined;
   /**
    * Reader Wi-Fi. `null` clears it on update. Passwords are write-only.
    */
-  wifi?: TerminalWifi | null;
+  wifi?: TerminalWifi | null | undefined;
   /**
    * BBPOS WisePad 3 splash screen. `null` clears it on update.
    */
-  bbposWisepad3?: TerminalDeviceConfig | null;
+  bbposWisepad3?: TerminalDeviceConfig | null | undefined;
   /**
    * BBPOS WisePOS E splash screen. `null` clears it on update.
    */
-  bbposWiseposE?: TerminalDeviceConfig | null;
+  bbposWiseposE?: TerminalDeviceConfig | null | undefined;
   /**
    * Stripe S700 splash screen. `null` clears it on update.
    */
-  stripeS700?: TerminalDeviceConfig | null;
+  stripeS700?: TerminalDeviceConfig | null | undefined;
   /**
    * Stripe S710 splash screen. `null` clears it on update.
    */
-  stripeS710?: TerminalDeviceConfig | null;
+  stripeS710?: TerminalDeviceConfig | null | undefined;
   /**
    * Verifone M425 splash screen. `null` clears it on update.
    */
-  verifoneM425?: TerminalDeviceConfig | null;
+  verifoneM425?: TerminalDeviceConfig | null | undefined;
   /**
    * Verifone P400 splash screen. `null` clears it on update.
    */
-  verifoneP400?: TerminalDeviceConfig | null;
+  verifoneP400?: TerminalDeviceConfig | null | undefined;
   /**
    * Verifone P630 splash screen. `null` clears it on update.
    */
-  verifoneP630?: TerminalDeviceConfig | null;
+  verifoneP630?: TerminalDeviceConfig | null | undefined;
   /**
    * Verifone UX700 splash screen. `null` clears it on update.
    */
-  verifoneUx700?: TerminalDeviceConfig | null;
+  verifoneUx700?: TerminalDeviceConfig | null | undefined;
   /**
    * Verifone V660p splash screen. `null` clears it on update.
    */
-  verifoneV660p?: TerminalDeviceConfig | null;
+  verifoneV660p?: TerminalDeviceConfig | null | undefined;
 }
 
 type DeviceKey = (typeof DEVICE_MAP)[number][0];
@@ -736,7 +736,10 @@ const findByName = Effect.fn(function* (name: string) {
   return configurations.find((configuration) => (configuration.name ?? "") === name);
 });
 
-const observe = Effect.fn(function* (input: { id?: string; name?: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: string | undefined;
+  name?: string | undefined;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

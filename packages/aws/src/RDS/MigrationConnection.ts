@@ -1,6 +1,8 @@
 import { withMySqlExecutor, withPgExecutor } from "@alchemy.run/sql/Migrations/Executors";
 import type { MigrationError, SqlExecutor } from "@alchemy.run/sql/Migrations/Format";
 import type * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 
 /**
  * Where and as whom a migration connects. Plain JSON: the Lambda transport
@@ -47,7 +49,10 @@ export const withMigrationConnection = <A, E, R>(
         {
           host: target.host,
           port: target.port,
-          database: target.database,
+          ...Record.filterMap(
+            { database: target.database },
+            Result.fromNullishOr(() => undefined),
+          ),
           user: target.username,
           password: target.password,
           ssl: { rejectUnauthorized: false },

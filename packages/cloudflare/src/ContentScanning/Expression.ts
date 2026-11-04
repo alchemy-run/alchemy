@@ -236,7 +236,7 @@ export const ExpressionProvider = () =>
     }),
   });
 
-type ObservedExpression = { id?: string | null; payload?: string | null };
+type ObservedExpression = { id?: string | null | undefined; payload?: string | null | undefined };
 
 /**
  * Find the first expression on the zone matching `predicate`, terminating

@@ -47,10 +47,12 @@ export interface PackageInstallPlan {
 }
 
 export interface PackageInstallIdentity extends PackageInstallPlan {
-  readonly lockfile?: {
-    readonly name: string;
-    readonly hash: string;
-  };
+  readonly lockfile?:
+    | {
+        readonly name: string;
+        readonly hash: string;
+      }
+    | undefined;
 }
 
 export interface HashPackageInstallIdentityOptions {
@@ -65,7 +67,7 @@ export interface InstallResolvedPackagesOptions {
   /** Locked parent-package → child-package versions used to pin transitives. */
   readonly overrides?: PackageOverrides;
   readonly architecture: "x86_64" | "arm64";
-  readonly runNpmInstall?: NpmInstallRunner;
+  readonly runNpmInstall?: NpmInstallRunner | undefined;
 }
 
 export interface InstallPackagesOptions {
@@ -85,8 +87,8 @@ interface PackageJson {
 }
 
 interface CatalogSource {
-  readonly catalog?: Record<string, string>;
-  readonly catalogs?: Record<string, Record<string, string>>;
+  readonly catalog?: Record<string, string> | undefined;
+  readonly catalogs?: Record<string, Record<string, string>> | undefined;
 }
 
 const builtins = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
@@ -585,7 +587,7 @@ interface LockedGraphRoot<Node> {
 interface LockedGraphDependency<Node> {
   readonly dependencyName: string;
   readonly installSpec: string;
-  readonly node?: Node;
+  readonly node?: Node | undefined;
 }
 
 /**
@@ -1191,7 +1193,7 @@ const findBunPackageDescriptor = (
 interface YarnLockEntry {
   readonly selectors: ReadonlyArray<string>;
   readonly version: string;
-  readonly resolution?: string;
+  readonly resolution?: string | undefined;
   readonly dependencies: Readonly<Record<string, string>>;
 }
 

@@ -60,12 +60,12 @@ export interface ServeOptions {
    * Whether to throw an error if the port is not available.
    * @default false
    */
-  readonly strictPort?: boolean;
+  readonly strictPort?: boolean | undefined;
   /**
    * The host to serve the proxy on.
    * @default "localhost"
    */
-  readonly host?: string;
+  readonly host?: string | undefined;
   /**
    * How long a connection accepted while no upstream is set waits for one
    * before it is answered with a 502.

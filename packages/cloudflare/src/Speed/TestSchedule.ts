@@ -68,14 +68,14 @@ export interface TestScheduleProps {
    * region is created and the old one deleted).
    * @default "us-central1"
    */
-  region?: TestRegion;
+  region?: TestRegion | undefined;
   /**
    * How often the test runs. The API has no update call, so changing the
    * frequency is converged in place by deleting and re-creating the
    * schedule (same identity — not a replacement).
    * @default WEEKLY for free plans, DAILY for paid plans (API default)
    */
-  frequency?: TestFrequency;
+  frequency?: TestFrequency | undefined;
 }
 
 export interface TestScheduleAttributes {
@@ -318,9 +318,9 @@ export const TestScheduleProvider = () =>
 
 /** The observed shape shared by get and create responses. */
 interface ObservedSchedule {
-  url?: string | null;
-  region?: string | null;
-  frequency?: string | null;
+  url?: string | null | undefined;
+  region?: string | null | undefined;
+  frequency?: string | null | undefined;
 }
 
 /**

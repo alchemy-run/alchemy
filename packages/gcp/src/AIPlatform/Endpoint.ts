@@ -34,23 +34,23 @@ export type ClientConnectionConfig = {
 
 export type PredictRequestResponseLoggingConfig = {
   /** Enable request/response logging. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /** Sampling rate in `(0, 1]`. */
-  samplingRate?: number;
+  samplingRate?: number | undefined;
   /** BigQuery destination for logs. */
-  bigqueryDestination?: { outputUri?: string };
+  bigqueryDestination?: { outputUri?: string | undefined } | undefined;
 };
 
 export type PrivateServiceConnectConfig = {
   /** Expose the endpoint via Private Service Connect. */
   enablePrivateServiceConnect?: boolean;
   /** Projects allowed to create forwarding rules. */
-  projectAllowlist?: string[];
+  projectAllowlist?: string[] | undefined;
 };
 
 export type GenAiAdvancedFeaturesConfig = {
   /** Enable native RAG on GenAI endpoints. */
-  ragConfig?: { enableRag?: boolean };
+  ragConfig?: { enableRag?: boolean } | undefined;
 };
 
 export type GdcConfig = {

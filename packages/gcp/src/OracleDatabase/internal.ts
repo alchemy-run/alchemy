@@ -201,8 +201,8 @@ export const replaceOnIdentity = (input: {
   previousLocation: string;
   nextLocation: string;
   extra?: boolean;
-  previousParent?: string;
-  nextParent?: string;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
 }) => {
   const parentChanged =
     (input.previousParent ?? "") !== "" &&

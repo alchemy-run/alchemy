@@ -25,29 +25,29 @@ const MAX_NAME_LENGTH = 63;
 
 export type VpnTunnelCipherSuitePhase1 = {
   /** Phase 1 encryption algorithms (for example `AES-CBC-256`). */
-  encryption?: string[];
+  encryption?: string[] | undefined;
   /** Phase 1 integrity algorithms (for example `HMAC-SHA2-256-128`). */
-  integrity?: string[];
+  integrity?: string[] | undefined;
   /** Phase 1 PRF algorithms (for example `PRF-HMAC-SHA2-256`). */
-  prf?: string[];
+  prf?: string[] | undefined;
   /** Phase 1 Diffie-Hellman groups (for example `Group-14`). */
-  dh?: string[];
+  dh?: string[] | undefined;
 };
 
 export type VpnTunnelCipherSuitePhase2 = {
   /** Phase 2 encryption algorithms (for example `AES-CBC-128`). */
-  encryption?: string[];
+  encryption?: string[] | undefined;
   /** Phase 2 integrity algorithms (for example `HMAC-SHA2-256-128`). */
-  integrity?: string[];
+  integrity?: string[] | undefined;
   /** Phase 2 PFS groups (for example `Group-14`). */
-  pfs?: string[];
+  pfs?: string[] | undefined;
 };
 
 export type VpnTunnelCipherSuiteProps = {
   /** Cipher configuration for IKE phase 1. */
-  phase1?: VpnTunnelCipherSuitePhase1;
+  phase1?: VpnTunnelCipherSuitePhase1 | undefined;
   /** Cipher configuration for IKE phase 2. */
-  phase2?: VpnTunnelCipherSuitePhase2;
+  phase2?: VpnTunnelCipherSuitePhase2 | undefined;
 };
 
 export type VpnTunnelProps = {

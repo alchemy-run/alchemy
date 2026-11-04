@@ -47,7 +47,7 @@ export interface TopicRuleProps {
    * The version of the SQL rules engine to use (`2015-10-08` or `2016-03-23`).
    * @default "2016-03-23"
    */
-  awsIotSqlVersion?: string;
+  awsIotSqlVersion?: string | undefined;
 
   /**
    * The action to take when an error occurs.

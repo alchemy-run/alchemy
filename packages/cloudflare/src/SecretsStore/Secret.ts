@@ -45,7 +45,7 @@ export type StoreSecretProps = {
   /**
    * Optional free-form description.
    */
-  comment?: string;
+  comment?: string | undefined;
 };
 
 export type Secret = Resource<
@@ -139,7 +139,7 @@ export const SecretProviderLive = () =>
             name: string;
             storeId: string;
             status: string;
-            comment?: string | null;
+            comment?: string | null | undefined;
           }
         | undefined;
       if (output?.secretId) {

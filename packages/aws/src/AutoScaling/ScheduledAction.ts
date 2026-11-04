@@ -24,7 +24,7 @@ export interface ScheduledActionProps {
   /**
    * Scheduled action name. If omitted, a deterministic name is generated.
    */
-  scheduledActionName?: string;
+  scheduledActionName?: string | undefined;
   /**
    * Auto Scaling Group whose capacity the action changes.
    */
@@ -33,32 +33,32 @@ export interface ScheduledActionProps {
    * Cron expression describing a recurring schedule (e.g. `"0 9 * * MON-FRI"`).
    * Omit for a one-time action scheduled via `startTime`.
    */
-  recurrence?: string;
+  recurrence?: string | undefined;
   /**
    * ISO-8601 timestamp the action first runs (recurring) or the single time it
    * runs (one-time). Must be in the future.
    */
-  startTime?: string;
+  startTime?: string | undefined;
   /**
    * ISO-8601 timestamp after which the recurring action stops running.
    */
-  endTime?: string;
+  endTime?: string | undefined;
   /**
    * IANA time zone the `recurrence` is evaluated in (e.g. `"America/New_York"`).
    */
-  timeZone?: string;
+  timeZone?: string | undefined;
   /**
    * Minimum group size to set when the action runs.
    */
-  minSize?: number;
+  minSize?: number | undefined;
   /**
    * Maximum group size to set when the action runs.
    */
-  maxSize?: number;
+  maxSize?: number | undefined;
   /**
    * Desired capacity to set when the action runs.
    */
-  desiredCapacity?: number;
+  desiredCapacity?: number | undefined;
 }
 
 export interface ScheduledAction extends Resource<
@@ -80,31 +80,31 @@ export interface ScheduledAction extends Resource<
     /**
      * Cron expression for recurring actions.
      */
-    recurrence?: string;
+    recurrence?: string | undefined;
     /**
      * ISO-8601 time the action first fires.
      */
-    startTime?: string;
+    startTime?: string | undefined;
     /**
      * ISO-8601 time after which the recurrence stops.
      */
-    endTime?: string;
+    endTime?: string | undefined;
     /**
      * IANA timezone the recurrence is evaluated in.
      */
-    timeZone?: string;
+    timeZone?: string | undefined;
     /**
      * Minimum group size applied when the action fires.
      */
-    minSize?: number;
+    minSize?: number | undefined;
     /**
      * Maximum group size applied when the action fires.
      */
-    maxSize?: number;
+    maxSize?: number | undefined;
     /**
      * Desired capacity applied when the action fires.
      */
-    desiredCapacity?: number;
+    desiredCapacity?: number | undefined;
   },
   never,
   Providers
@@ -156,7 +156,7 @@ export const ScheduledActionProvider = () =>
   Provider.effect(
     ScheduledAction,
     Effect.gen(function* () {
-      const toName = (id: string, props: { scheduledActionName?: string } = {}) =>
+      const toName = (id: string, props: { scheduledActionName?: string | undefined } = {}) =>
         props.scheduledActionName
           ? Effect.succeed(props.scheduledActionName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });

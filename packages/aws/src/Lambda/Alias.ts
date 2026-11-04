@@ -25,23 +25,23 @@ export interface AliasProps {
   /**
    * Name of the alias. If omitted, a unique name is generated.
    */
-  aliasName?: string;
+  aliasName?: string | undefined;
   /**
    * Description of the alias.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Weighted routing configuration for shifting traffic to an additional
    * function version.
    */
-  routingConfig?: Lambda.AliasRoutingConfiguration;
+  routingConfig?: Lambda.AliasRoutingConfiguration | undefined;
   /**
    * Asynchronous invocation settings (retries, event age, destinations)
    * scoped to this alias. Omit to remove any existing alias-level config and
    * fall back to Lambda's defaults (2 retries, 6-hour max event age, no
    * destinations).
    */
-  eventInvokeConfig?: EventInvokeConfig;
+  eventInvokeConfig?: EventInvokeConfig | undefined;
 }
 
 export interface Alias extends Resource<
@@ -71,21 +71,21 @@ export interface Alias extends Resource<
     /**
      * Description of the alias.
      */
-    description?: string;
+    description?: string | undefined;
     /**
      * Weighted routing configuration for this alias.
      */
-    routingConfig?: Lambda.AliasRoutingConfiguration;
+    routingConfig?: Lambda.AliasRoutingConfiguration | undefined;
     /**
      * Latest Lambda revision id for this alias.
      */
-    revisionId?: string;
+    revisionId?: string | undefined;
     /**
      * Asynchronous invocation config (retries, maximum event age,
      * destinations) scoped to the alias, as observed. Lets `alchemy drift`
      * detect out-of-band changes.
      */
-    eventInvokeConfig?: ObservedEventInvokeConfig;
+    eventInvokeConfig?: ObservedEventInvokeConfig | undefined;
   },
   never,
   Providers

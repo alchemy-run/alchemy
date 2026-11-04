@@ -31,7 +31,7 @@ export interface IngressRule {
    * Public or private hostname this rule matches. Omit for the catch-all
    * rule (which must be last in the list).
    */
-  hostname?: string;
+  hostname?: string | undefined;
   /**
    * Upstream URL or pseudo-service. Common values:
    * - `http://service.namespace.svc.cluster.local:80` — forward to a K8s Service
@@ -44,12 +44,12 @@ export interface IngressRule {
    * Optional URL path prefix the rule matches. When omitted, the rule
    * matches every path for the hostname.
    */
-  path?: string;
+  path?: string | undefined;
   /**
    * Per-rule origin tuning. Merges with (and overrides) the resource-level
    * `originRequest` defaults.
    */
-  originRequest?: OriginRequest;
+  originRequest?: OriginRequest | undefined;
 }
 
 export interface ConfigurationProps {
@@ -159,16 +159,16 @@ export const Configuration = Resource<Configuration>("Cloudflare.Tunnel.Configur
 // ---------------------------------------------------------------------------
 
 interface ObservedIngressRule {
-  readonly hostname?: string;
-  readonly service?: string;
-  readonly path?: string;
-  readonly originRequest?: Record<string, unknown>;
+  readonly hostname?: string | undefined;
+  readonly service?: string | undefined;
+  readonly path?: string | undefined;
+  readonly originRequest?: Record<string, unknown> | undefined;
 }
 
 interface ObservedConfig {
-  readonly ingress?: ReadonlyArray<ObservedIngressRule>;
-  readonly originRequest?: Record<string, unknown>;
-  readonly version?: number;
+  readonly ingress?: ReadonlyArray<ObservedIngressRule> | undefined;
+  readonly originRequest?: Record<string, unknown> | undefined;
+  readonly version?: number | undefined;
 }
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
@@ -188,12 +188,15 @@ const stripNulls = (v: unknown): unknown => {
 
 const narrowConfig = (raw: {
   config?: {
-    ingress?: ReadonlyArray<{
-      hostname?: string | null;
-      service?: string;
-      path?: string | null;
-      originRequest?: Record<string, unknown> | null;
-    }> | null;
+    ingress?:
+      | ReadonlyArray<{
+          hostname?: string | null | undefined;
+          service?: string | undefined;
+          path?: string | null | undefined;
+          originRequest?: Record<string, unknown> | null | undefined;
+        }>
+      | null
+      | undefined;
     originRequest?: Record<string, unknown> | null;
   } | null;
   version?: number | null;

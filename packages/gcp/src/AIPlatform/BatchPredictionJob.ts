@@ -168,7 +168,7 @@ export type BatchPredictionJob = Resource<
     /** RFC3339 end timestamp. */
     endTime: string | undefined;
     /** Failure/cancel status, if any. */
-    error: { code?: number; message?: string } | undefined;
+    error: { code?: number | undefined; message?: string | undefined } | undefined;
   },
   never,
   Providers

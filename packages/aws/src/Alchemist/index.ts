@@ -17,7 +17,7 @@ import * as AWSRegion from "../Region.ts";
 
 export interface AwsTarget extends Alchemist.Target {
   readonly profile: string;
-  readonly region?: string;
+  readonly region?: string | undefined;
 }
 
 const environment = Effect.fn(function* (target: AwsTarget) {

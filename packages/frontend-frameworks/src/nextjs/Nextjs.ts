@@ -361,12 +361,12 @@ export const make = (
           Effect.provideService(FileSystem.FileSystem, fs),
           Effect.mapError((error) => fail(error.message)(error.cause)),
         );
-        const output: FrameworkCore.BuildOutput = {
+        const output = {
           distDirectory: p.distDirectory,
           clientDirectory: p.clientDirectory,
           serverModules: FrameworkCore.sortServerModules(files, WORKER_ENTRY_MODULE),
-          externalWorkspaces: new Set(),
-        };
+          externalWorkspaces: new Set<string>(),
+        } satisfies FrameworkCore.BuildOutput;
         return output;
       });
 

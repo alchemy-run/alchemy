@@ -38,7 +38,7 @@ export interface Context extends Resource<
     /** Human-readable description. */
     description: string;
     /** Docker endpoint the context targets. */
-    docker?: string;
+    docker?: string | undefined;
   },
   never,
   Providers

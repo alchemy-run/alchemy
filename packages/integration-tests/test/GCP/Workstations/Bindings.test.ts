@@ -25,7 +25,12 @@ let workstationName: string;
 
 const member = () => `serviceAccount:${hostAccount}`;
 
-const rolesIn = (bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArray<string> }>) =>
+const rolesIn = (
+  bindings: ReadonlyArray<{
+    role?: string | undefined;
+    members?: ReadonlyArray<string> | undefined;
+  }>,
+) =>
   bindings
     .filter((binding) => (binding.members ?? []).includes(member()))
     .map((binding) => binding.role)

@@ -157,13 +157,13 @@ export const sharingKind = (config: analyticshub.SharingEnvironmentConfig | unde
   config?.dcrExchangeConfig !== undefined ? "dcr" : "default";
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  previousLocation?: string;
-  nextLocation?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  previousLocation?: string | undefined;
+  nextLocation?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   const idChanged =
     input.previousId !== undefined &&
@@ -310,7 +310,7 @@ export const listExchangesInProject = (project: string, region: string) =>
   ).pipe(Effect.map((groups) => groups.flat()));
 
 export const listChildResources = <A, E, R>(
-  parents: readonly { name?: string }[],
+  parents: readonly { name?: string | undefined }[],
   list: (name: string) => Effect.Effect<A[], E, R>,
 ) =>
   Effect.forEach(
@@ -319,7 +319,7 @@ export const listChildResources = <A, E, R>(
     { concurrency: 4 },
   ).pipe(Effect.map((groups) => groups.flat()));
 
-export const namedOf = <T extends { name?: string }>(items: readonly T[]) =>
+export const namedOf = <T extends { name?: string | undefined }>(items: readonly T[]) =>
   items.filter((item) => (item.name ?? "").length > 0);
 
 export const ownershipLabels = (id: string) => createInternalLabels(id);

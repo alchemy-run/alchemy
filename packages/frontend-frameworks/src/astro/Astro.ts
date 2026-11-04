@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type * as ViteModule from "vite";
 import * as FrameworkCore from "../core/index.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";
@@ -126,7 +128,10 @@ export const makeAstroInlineConfig = (inputs: AstroConfigInputs): AstroInlineCon
     ...user,
     root: inputs.root,
     integrations: [...(user?.integrations ?? []), inputs.integration],
-    server,
+    ...Record.filterMap(
+      { server },
+      Result.fromNullishOr(() => undefined),
+    ),
     vite: {
       ...user?.vite,
       plugins: [...(user?.vite?.plugins ?? []), ...(inputs.extraVitePlugins ?? [])],

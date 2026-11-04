@@ -40,6 +40,8 @@
  * SDK v3 in Node, for bodies of 2 MB or more) get one from the proxy;
  * connecting to workerd's own port directly, they wait out their timeout.
  */
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { XMLBuilder, XMLParser, XMLValidator } from "fast-xml-parser";
 import { assert, hexEncode, type Awaitable } from "../../internal/shared.worker.ts";
 import {
@@ -1252,7 +1254,7 @@ async function serveR2Object(
   // `bucket.get()` and discards the body
   const object = await bucket.get(key, {
     onlyIf: request.headers,
-    range: hasRange ? request.headers : undefined,
+    ...(hasRange ? { range: request.headers } : {}),
   });
   if (object === null) return handlers.notFound();
 
@@ -1767,12 +1769,13 @@ async function listObjects(
   try {
     result = await bucket.list({
       prefix,
-      delimiter,
       // For max-keys=0, list one key anyway: IsTruncated reports whether
       // any matching keys exist
       limit: Math.max(limit, 1),
-      startAfter,
-      cursor: continuationToken,
+      ...Record.filterMap(
+        { delimiter, startAfter, cursor: continuationToken },
+        Result.fromNullishOr(() => undefined),
+      ),
     });
   } catch (e) {
     return bindingError(e);
@@ -1871,8 +1874,11 @@ const OBJECT_OPERATIONS: Record<
       const object = await bucket.put(key, body, {
         httpMetadata: c.req.raw.headers,
         customMetadata: collectCustomMetadata(c),
-        onlyIf: hasConditional ? c.req.raw.headers : undefined,
-        storageClass,
+        ...(hasConditional ? { onlyIf: c.req.raw.headers } : {}),
+        ...Record.filterMap(
+          { storageClass },
+          Result.fromNullishOr(() => undefined),
+        ),
       });
       if (object === null) return preconditionFailed();
       return new Response(null, { headers: { ETag: object.httpEtag } });
@@ -1897,17 +1903,25 @@ const OBJECT_OPERATIONS: Record<
       const source = parseCopySource(c, bucketId);
       if (source instanceof Response) return source;
 
-      const sourceObject = await source.bucket.get(source.key, {
-        onlyIf: copySourceConditionals(c),
-      });
+      const onlyIf = copySourceConditionals(c);
+      const sourceObject = await source.bucket.get(
+        source.key,
+        Record.filterMap(
+          { onlyIf },
+          Result.fromNullishOr(() => undefined),
+        ),
+      );
       if (sourceObject === null) return noSuchKey();
       if (!("body" in sourceObject)) return preconditionFailed();
 
+      const httpMetadata = directive === "COPY" ? sourceObject.httpMetadata : c.req.raw.headers;
+      const customMetadata =
+        directive === "COPY" ? sourceObject.customMetadata : collectCustomMetadata(c);
       const object = await bucket.put(key, sourceObject.body, {
-        httpMetadata: directive === "COPY" ? sourceObject.httpMetadata : c.req.raw.headers,
-        customMetadata:
-          directive === "COPY" ? sourceObject.customMetadata : collectCustomMetadata(c),
-        storageClass,
+        ...Record.filterMap(
+          { httpMetadata, customMetadata, storageClass },
+          Result.fromNullishOr(() => undefined),
+        ),
       });
       if (object === null) return preconditionFailed();
       return xmlResponse("CopyObjectResult", {
@@ -1933,7 +1947,10 @@ const OBJECT_OPERATIONS: Record<
       const upload = await bucket.createMultipartUpload(key, {
         httpMetadata: c.req.raw.headers,
         customMetadata: collectCustomMetadata(c),
-        storageClass,
+        ...Record.filterMap(
+          { storageClass },
+          Result.fromNullishOr(() => undefined),
+        ),
       });
       return xmlResponse("InitiateMultipartUploadResult", {
         UploadId: upload.uploadId,
@@ -1995,7 +2012,13 @@ const MULTIPART_OPERATIONS: Record<
 
       let sourceObject: R2ObjectBody | null;
       try {
-        sourceObject = await source.bucket.get(source.key, { range });
+        sourceObject = await source.bucket.get(
+          source.key,
+          Record.filterMap(
+            { range },
+            Result.fromNullishOr(() => undefined),
+          ),
+        );
       } catch (e) {
         return bindingError(e);
       }

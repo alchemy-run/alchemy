@@ -2,6 +2,8 @@ import type { ReadWriteBucketClient } from "@alchemy.run/cloudflare/R2/ReadWrite
 import * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 
 /** Real native R2 bodies cross the public read/write binding in these routes. */
@@ -57,8 +59,10 @@ export const streamRoutes = (
         onlyIf: { etagDoesNotMatch: "*" },
         ...(contentLength === null ? {} : { contentLength: Number(contentLength) }),
         ...(sha256 === null ? {} : { sha256 }),
-        httpMetadata: object.httpMetadata,
-        customMetadata: object.customMetadata,
+        ...Record.filterMap(
+          { httpMetadata: object.httpMetadata, customMetadata: object.customMetadata },
+          Result.fromNullishOr(() => undefined),
+        ),
       })
       .pipe(
         Effect.flatMap((stored) =>

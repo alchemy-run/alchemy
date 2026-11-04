@@ -27,19 +27,19 @@ export type ApiTarget = {
   /**
    * Canonical service name, e.g. `translate.googleapis.com`.
    */
-  service?: string;
+  service?: string | undefined;
   /**
    * Allowed methods. Empty means all methods for `service`. A trailing
    * `*` wildcard is allowed (`Get*`).
    */
-  methods?: string[];
+  methods?: string[] | undefined;
 };
 
 export type BrowserKeyRestrictions = {
   /**
    * Referrer URL regular expressions allowed to call with this key.
    */
-  allowedReferrers?: string[];
+  allowedReferrers?: string[] | undefined;
 };
 
 export type AndroidApplication = {
@@ -47,59 +47,59 @@ export type AndroidApplication = {
    * SHA-1 fingerprint of the app signing cert. Colon-separated and
    * compact hex are both accepted; the API stores the compact form.
    */
-  sha1Fingerprint?: string;
+  sha1Fingerprint?: string | undefined;
   /**
    * Android application package name.
    */
-  packageName?: string;
+  packageName?: string | undefined;
 };
 
 export type AndroidKeyRestrictions = {
   /**
    * Android apps allowed to call with this key.
    */
-  allowedApplications?: AndroidApplication[];
+  allowedApplications?: AndroidApplication[] | undefined;
 };
 
 export type ServerKeyRestrictions = {
   /**
    * Caller IP addresses (or CIDRs) allowed to call with this key.
    */
-  allowedIps?: string[];
+  allowedIps?: string[] | undefined;
 };
 
 export type IosKeyRestrictions = {
   /**
    * iOS bundle IDs allowed to call with this key.
    */
-  allowedBundleIds?: string[];
+  allowedBundleIds?: string[] | undefined;
 };
 
 export type KeyRestrictions = {
   /**
    * Allowed API targets. Empty / omitted allows every enabled service.
    */
-  apiTargets?: ApiTarget[];
+  apiTargets?: ApiTarget[] | undefined;
   /**
    * HTTP referrer restrictions. Mutually exclusive with android, iOS,
    * and server restrictions.
    */
-  browserKeyRestrictions?: BrowserKeyRestrictions;
+  browserKeyRestrictions?: BrowserKeyRestrictions | undefined;
   /**
    * Android app restrictions. Mutually exclusive with browser, iOS, and
    * server restrictions.
    */
-  androidKeyRestrictions?: AndroidKeyRestrictions;
+  androidKeyRestrictions?: AndroidKeyRestrictions | undefined;
   /**
    * Caller IP restrictions. Mutually exclusive with browser, Android,
    * and iOS restrictions.
    */
-  serverKeyRestrictions?: ServerKeyRestrictions;
+  serverKeyRestrictions?: ServerKeyRestrictions | undefined;
   /**
    * iOS bundle-id restrictions. Mutually exclusive with browser,
    * Android, and server restrictions.
    */
-  iosKeyRestrictions?: IosKeyRestrictions;
+  iosKeyRestrictions?: IosKeyRestrictions | undefined;
 };
 
 export type KeyProps = {

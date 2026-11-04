@@ -46,11 +46,11 @@ export type SqlServerDatabaseDetails = {
   /**
    * SQL Server compatibility level (e.g. `150`).
    */
-  compatibilityLevel?: number;
+  compatibilityLevel?: number | undefined;
   /**
    * SQL Server recovery model (`FULL`, `SIMPLE`, `BULK_LOGGED`).
    */
-  recoveryModel?: string;
+  recoveryModel?: string | undefined;
 };
 
 export type DatabaseProps = {
@@ -72,12 +72,12 @@ export type DatabaseProps = {
    * Character set (e.g. `utf8mb4` on MySQL, `UTF8` on PostgreSQL). The
    * engine may reject in-place charset changes (PostgreSQL).
    */
-  charset?: string;
+  charset?: string | undefined;
   /**
    * Collation (e.g. `utf8mb4_unicode_ci` on MySQL, `en_US.UTF8` on
    * PostgreSQL). The engine may reject in-place collation changes.
    */
-  collation?: string;
+  collation?: string | undefined;
   /**
    * SQL Server–only settings. Ignored on MySQL and PostgreSQL.
    */
@@ -114,7 +114,7 @@ export type DatabaseProps = {
    * instance's IP but no authorized networks).
    * @default "data-api" when the instance has `dataApiAccess: true`, otherwise "connector"
    */
-  migrationsTransport?: MigrationsTransport;
+  migrationsTransport?: MigrationsTransport | undefined;
   /**
    * Built-in database user that `migrations` log in as. It owns the tables
    * the migrations create.
@@ -338,7 +338,7 @@ const getByName = (project: string, instance: string, databaseName: string) =>
 const waitForOperation = (
   project: string,
   operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
+  options?: { notFoundOk?: boolean | undefined },
 ) =>
   waitForSqlOperation(project, operation, {
     budget: "10 minutes",

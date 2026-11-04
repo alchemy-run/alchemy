@@ -15,14 +15,14 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * (Stream preview URLs, Images variant URLs) use it, as Miniflare uses its
    * public URL. Defaults to the runtime's own entry address.
    */
-  readonly publicUrl?: string;
+  readonly publicUrl?: string | undefined;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
   readonly bindings: B;
   readonly modules: ReadonlyArray<Module>;
-  readonly assets?: Assets;
-  readonly hyperdrives?: Record<string, HyperdriveOrigin>;
-  readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
+  readonly assets?: Assets | undefined;
+  readonly hyperdrives?: Record<string, HyperdriveOrigin> | undefined;
+  readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace> | undefined;
   /**
    * Workflows whose `WorkflowEntrypoint` class is exported by this worker.
    * Each entry hosts a local engine service (`workflows:<name>`) in this
@@ -42,7 +42,7 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * fire during local development. The route is also reachable manually
    * (Miniflare-compatible: `?cron=<expr>&time=<epoch-millis>`).
    */
-  readonly crons?: ReadonlyArray<string>;
+  readonly crons?: ReadonlyArray<string> | undefined;
   /**
    * Names of tail consumer workers (the deployed `tail_consumers` setting).
    * workerd delivers this worker's trace events to each consumer's `tail()`
@@ -52,7 +52,7 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * may (re)start at any time. Events produced while a consumer is not
    * running are dropped with a warning, matching dev-registry semantics.
    */
-  readonly tails?: ReadonlyArray<string>;
+  readonly tails?: ReadonlyArray<string> | undefined;
   /**
    * Names of streaming tail consumer workers (the deployed
    * `streaming_tail_consumers` setting). The handler contract differs from
@@ -71,28 +71,30 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * any time. Sessions started while a consumer is not running are dropped
    * with a warning, matching dev-registry semantics.
    */
-  readonly streamingTails?: ReadonlyArray<string>;
+  readonly streamingTails?: ReadonlyArray<string> | undefined;
   /**
    * Whether the Cache API (`caches.default` / `caches.open()`) stores
    * responses. Defaults to `true`; when `false` every cache operation is a
    * no-op (matching production behaviour on `workers.dev` subdomains).
    */
-  readonly cache?: boolean;
+  readonly cache?: boolean | undefined;
   /**
    * Per-worker `request.cf` blob. Merged the way Miniflare does — used
    * verbatim unless the request carries an `MF-CF-Blob` header. Falls back
    * to the runtime-wide `Cf` reference (a static placeholder by default).
    */
-  readonly cf?: Record<string, unknown>;
+  readonly cf?: Record<string, unknown> | undefined;
   /**
    * Simulates a request that passed Cloudflare Access: every request's
    * `ctx.access` carries `aud`, and `ctx.access.getIdentity()` resolves
    * `identity`. Mirrors Wrangler's `access.dev` config.
    */
-  readonly access?: {
-    readonly aud?: string;
-    readonly identity?: Record<string, unknown>;
-  };
+  readonly access?:
+    | {
+        readonly aud?: string;
+        readonly identity?: Record<string, unknown>;
+      }
+    | undefined;
   /**
    * Controls how output from the underlying `workerd` process is surfaced.
    *
@@ -102,9 +104,9 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * (message + stack) to stderr, and optionally `onOutput` to capture the
    * process output instead of inheriting the parent process's stdio.
    */
-  readonly logging?: WorkerdLogging;
+  readonly logging?: WorkerdLogging | undefined;
   /** Overrides for the `workerd` process that serves this worker. */
-  readonly workerd?: WorkerdOptions;
+  readonly workerd?: WorkerdOptions | undefined;
   /**
    * Called after the `workerd` process exited on its own (for example when
    * V8 ran out of heap) and a replacement process is serving on the same
@@ -114,7 +116,7 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * Automatic recovery is limited to three restarts within a rolling minute,
    * with backoff between attempts. A failed replacement stops recovery.
    */
-  readonly onRestart?: (exit: WorkerdExit) => void;
+  readonly onRestart?: ((exit: WorkerdExit) => void) | undefined;
   /**
    * Runs once, after bindings are prepared and container images are built or
    * pulled, immediately before the first `workerd` process is spawned. A
@@ -124,7 +126,7 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * process's still-running container, which that process's teardown then
    * removes.
    */
-  readonly beforeServe?: Effect.Effect<void>;
+  readonly beforeServe?: Effect.Effect<void> | undefined;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
 }
 
@@ -179,11 +181,16 @@ export type Module =
     };
 
 export interface Assets {
-  directory?: string;
-  headers?: string;
-  redirects?: string;
-  htmlHandling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none";
-  notFoundHandling?: "none" | "404-page" | "single-page-application";
+  directory?: string | undefined;
+  headers?: string | undefined;
+  redirects?: string | undefined;
+  htmlHandling?:
+    | "auto-trailing-slash"
+    | "force-trailing-slash"
+    | "drop-trailing-slash"
+    | "none"
+    | undefined;
+  notFoundHandling?: "none" | "404-page" | "single-page-application" | undefined;
   /**
    * URL path prefix the assets are served under (`assets.base_path`), e.g.
    * `/subpath` serves `public/test.txt` at `/subpath/test.txt`. The Asset
@@ -191,7 +198,7 @@ export interface Assets {
    */
   basePath?: string;
   runWorkerFirst?: Array<string> | boolean;
-  serveDirectly?: boolean;
+  serveDirectly?: boolean | undefined;
 }
 
 export interface DurableObjectNamespace {

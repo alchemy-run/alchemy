@@ -45,7 +45,7 @@ export interface ResourceGroupProps {
    * from the app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The scope of the resource group: a scope key (typically
    * `com.cloudflare.api.account.{accountId}`) and the objects it
@@ -237,7 +237,7 @@ export const ResourceGroupProvider = () =>
 
 type ObservedResourceGroup = {
   id: string;
-  name?: string | null;
+  name?: string | null | undefined;
   scope: iam.ResourceGroupsListResultItemScope;
 };
 

@@ -22,16 +22,16 @@ export type DataStoresDocumentContent = {
    * MIME type (`text/plain`, `text/html`, `application/pdf`,
    * `application/json`, …).
    */
-  mimeType?: string;
+  mimeType?: string | undefined;
   /**
    * Cloud Storage URI (`gs://bucket/path`). Max 2.5 MB for text, 200 MB
    * otherwise.
    */
-  uri?: string;
+  uri?: string | undefined;
   /**
    * Raw bytes as a base64 string. Max 1,000,000 bytes.
    */
-  rawBytes?: string;
+  rawBytes?: string | undefined;
 };
 
 export type DataStoresBranchesDocumentProps = {
@@ -63,7 +63,7 @@ export type DataStoresBranchesDocumentProps = {
   /**
    * Unstructured content. Required for `CONTENT_REQUIRED` data stores.
    */
-  content?: DataStoresDocumentContent;
+  content?: DataStoresDocumentContent | undefined;
   /**
    * Parent document id for two-level hierarchies (RFC-1034, max 63).
    */

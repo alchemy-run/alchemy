@@ -37,7 +37,7 @@ export interface FlowProps {
    * from the app, stage and logical ID. Changing the name replaces the flow
    * (MediaConnect has no rename operation).
    */
-  flowName?: string;
+  flowName?: string | undefined;
   /**
    * Availability Zone the flow is created in. Must be within the current
    * region. Changing the Availability Zone replaces the flow.
@@ -176,7 +176,7 @@ export const FlowProvider = () =>
   Provider.effect(
     Flow,
     Effect.gen(function* () {
-      const toName = (id: string, props: { flowName?: string }) =>
+      const toName = (id: string, props: { flowName?: string | undefined }) =>
         props.flowName ? Effect.succeed(props.flowName) : createPhysicalName({ id, maxLength: 60 });
 
       const readFlow = Effect.fn(function* (flowArn: string) {

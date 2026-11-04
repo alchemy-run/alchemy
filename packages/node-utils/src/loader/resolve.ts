@@ -69,7 +69,7 @@ export class SpecifierResolver {
 
   constructor(options: SpecifierResolverOptions) {
     this.#options = {
-      tsconfig: options.tsconfig ? "auto" : undefined,
+      ...(options.tsconfig ? { tsconfig: "auto" as const } : {}),
       // TypeScript source first, then Node's implicit extensions.
       extensions: [".ts", ".tsx", ".mts", ".cts", ".jsx", ".js", ".mjs", ".cjs", ".json", ".node"],
       // TypeScript's emitted-extension substitution: `./x.js` may point at

@@ -39,20 +39,20 @@ export type GkeCluster = {
    * `projects/{project}/locations/{location}/clusters/{cluster}` or the
    * cluster id.
    */
-  cluster?: string;
+  cluster?: string | undefined;
   /**
    * Access the cluster using the DNS endpoint. Cannot be combined with
    * `internalIp`.
    */
-  dnsEndpoint?: boolean;
+  dnsEndpoint?: boolean | undefined;
   /**
    * Access a private cluster using the private control-plane IP.
    */
-  internalIp?: boolean;
+  internalIp?: boolean | undefined;
   /**
    * Optional HTTP proxy URL for the Kubernetes API server.
    */
-  proxyUrl?: string;
+  proxyUrl?: string | undefined;
 };
 
 export type AnthosCluster = {
@@ -61,7 +61,7 @@ export type AnthosCluster = {
    * `projects/{project}/locations/{location}/memberships/{membership}`
    * or the membership id.
    */
-  membership?: string;
+  membership?: string | undefined;
 };
 
 export type CloudRunLocation = {
@@ -69,7 +69,7 @@ export type CloudRunLocation = {
    * Cloud Run location
    * `projects/{project}/locations/{location}` or a location id.
    */
-  location?: string;
+  location?: string | undefined;
 };
 
 export type CustomTarget = {
@@ -78,19 +78,19 @@ export type CustomTarget = {
    * `projects/{project}/locations/{location}/customTargetTypes/{customTargetType}`
    * or the type id.
    */
-  customTargetType?: string;
+  customTargetType?: string | undefined;
 };
 
 export type MultiTarget = {
   /** Child target ids. */
-  targetIds?: string[];
+  targetIds?: string[] | undefined;
 };
 
 export type DefaultPool = {
   /** Cloud Storage location for execution outputs. */
-  artifactStorage?: string;
+  artifactStorage?: string | undefined;
   /** Service account used for execution. */
-  serviceAccount?: string;
+  serviceAccount?: string | undefined;
 };
 
 export type PrivatePool = {
@@ -98,11 +98,11 @@ export type PrivatePool = {
    * Cloud Build worker pool
    * `projects/{project}/locations/{location}/workerPools/{pool}`.
    */
-  workerPool?: string;
+  workerPool?: string | undefined;
   /** Cloud Storage location for execution outputs. */
-  artifactStorage?: string;
+  artifactStorage?: string | undefined;
   /** Service account used for execution. */
-  serviceAccount?: string;
+  serviceAccount?: string | undefined;
 };
 
 export type ExecutionConfig = {
@@ -110,24 +110,24 @@ export type ExecutionConfig = {
    * Usages this configuration applies to (`RENDER`, `DEPLOY`, `VERIFY`,
    * `PREDEPLOY`, `POSTDEPLOY`, `ANALYSIS`).
    */
-  usages?: Array<clouddeploy.ExecutionConfigUsagesItemEnum | (string & {})>;
+  usages?: Array<clouddeploy.ExecutionConfigUsagesItemEnum | (string & {})> | undefined;
   /** Cloud Build execution timeout (10m–24h, seconds format). */
-  executionTimeout?: string;
+  executionTimeout?: string | undefined;
   /** Default Cloud Build pool. */
-  defaultPool?: DefaultPool;
+  defaultPool?: DefaultPool | undefined;
   /**
    * Worker pool resource name. If omitted, the default Cloud Build pool
    * is used.
    */
-  workerPool?: string;
+  workerPool?: string | undefined;
   /** Cloud Storage location for execution outputs. */
-  artifactStorage?: string;
+  artifactStorage?: string | undefined;
   /** Private Cloud Build pool. */
-  privatePool?: PrivatePool;
+  privatePool?: PrivatePool | undefined;
   /** Extra logging when running builds. */
-  verbose?: boolean;
+  verbose?: boolean | undefined;
   /** Service account used for execution. */
-  serviceAccount?: string;
+  serviceAccount?: string | undefined;
 };
 
 export type TargetProps = {
@@ -144,7 +144,7 @@ export type TargetProps = {
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * GKE cluster destination. Mutually exclusive with `run`,
    * `anthosCluster`, `customTarget`, and `multiTarget`.

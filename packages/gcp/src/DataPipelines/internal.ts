@@ -162,12 +162,12 @@ export const scheduleKey = (
 });
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousLocation?: string;
-  nextLocation?: string;
-  previousType?: string;
-  nextType?: string;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousLocation?: string | undefined;
+  nextLocation?: string | undefined;
+  previousType?: string | undefined;
+  nextType?: string | undefined;
 }) => {
   if (
     input.previousId !== undefined &&

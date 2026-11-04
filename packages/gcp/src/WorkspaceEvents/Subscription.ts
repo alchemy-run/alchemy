@@ -35,11 +35,11 @@ export type PayloadOptions = {
    * Whether the event payload includes data about the changed resource.
    * Chat and Drive events only.
    */
-  includeResource?: boolean;
+  includeResource?: boolean | undefined;
   /**
    * Comma-separated fields to include when `includeResource` is true.
    */
-  fieldMask?: string;
+  fieldMask?: string | undefined;
 };
 
 export type DriveOptions = {
@@ -48,7 +48,7 @@ export type DriveOptions = {
    * folder or shared drive. Immutable — changing it replaces the
    * subscription.
    */
-  includeDescendants?: boolean;
+  includeDescendants?: boolean | undefined;
 };
 
 export type SubscriptionProps = {

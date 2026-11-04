@@ -33,79 +33,81 @@ import {
 
 export type GroupKind = {
   /** API group string (empty string for the core group). */
-  resourceGroup?: string;
+  resourceGroup?: string | undefined;
   /** Kind in UpperCamelCase singular form. */
-  resourceKind?: string;
+  resourceKind?: string | undefined;
 };
 
 export type SubstitutionRule = {
   /** Regex compared against fields matched by `targetJsonPath`. */
-  originalValuePattern?: string;
+  originalValuePattern?: string | undefined;
   /** JSONPath that selects fields to substitute. */
-  targetJsonPath?: string;
+  targetJsonPath?: string | undefined;
   /** Replacement value. Empty string removes the field. */
-  newValue?: string;
+  newValue?: string | undefined;
   /** Restrict substitution to these group kinds. */
-  targetGroupKinds?: GroupKind[];
+  targetGroupKinds?: GroupKind[] | undefined;
   /** Restrict substitution to these namespaces. */
-  targetNamespaces?: string[];
+  targetNamespaces?: string[] | undefined;
 };
 
 export type VolumeDataRestorePolicyBinding = {
   /** Policy applied to volumes in scope. */
-  policy?: gkebackup.VolumeDataRestorePolicyBindingPolicyEnum | (string & {});
+  policy?: gkebackup.VolumeDataRestorePolicyBindingPolicyEnum | (string & {}) | undefined;
   /** Volume type this binding applies to. */
-  volumeType?: gkebackup.VolumeDataRestorePolicyBindingVolumeTypeEnum | (string & {});
+  volumeType?: gkebackup.VolumeDataRestorePolicyBindingVolumeTypeEnum | (string & {}) | undefined;
 };
 
 export type TransformationRuleAction = {
   /** JSON Pointer for the operation path. */
-  path?: string;
+  path?: string | undefined;
   /** JSON Patch operation. */
-  op?: gkebackup.TransformationRuleActionOpEnum | (string & {});
+  op?: gkebackup.TransformationRuleActionOpEnum | (string & {}) | undefined;
   /** JSON Pointer for move/copy source. */
-  fromPath?: string;
+  fromPath?: string | undefined;
   /** Desired value for add/replace/test. */
-  value?: string;
+  value?: string | undefined;
 };
 
 export type ResourceFilter = {
   /** JSONPath filtering expression. */
-  jsonPath?: string;
+  jsonPath?: string | undefined;
   /** Restrict transformation to these group kinds. */
-  groupKinds?: GroupKind[];
+  groupKinds?: GroupKind[] | undefined;
   /** Restrict transformation to these namespaces. */
-  namespaces?: string[];
+  namespaces?: string[] | undefined;
 };
 
 export type TransformationRule = {
   /** JSON Patch actions, executed in order. */
-  fieldActions?: TransformationRuleAction[];
+  fieldActions?: TransformationRuleAction[] | undefined;
   /** Human-readable description of the rule. */
-  description?: string;
+  description?: string | undefined;
   /** Filter selecting which restored resources the rule applies to. */
-  resourceFilter?: ResourceFilter;
+  resourceFilter?: ResourceFilter | undefined;
 };
 
 export type RestoreOrder = {
   /** Group-kind dependency pairs that order restore. */
-  groupKindDependencies?: Array<{
-    /** Group kind that must be restored first. */
-    satisfying?: GroupKind;
-    /** Group kind that depends on `satisfying`. */
-    requiring?: GroupKind;
-  }>;
+  groupKindDependencies?:
+    | Array<{
+        /** Group kind that must be restored first. */
+        satisfying?: GroupKind | undefined;
+        /** Group kind that depends on `satisfying`. */
+        requiring?: GroupKind | undefined;
+      }>
+    | undefined;
 };
 
 export type ClusterResourceRestoreScope = {
   /** Restore only these cluster-scoped group kinds. */
-  selectedGroupKinds?: GroupKind[];
+  selectedGroupKinds?: GroupKind[] | undefined;
   /** When true, restore no cluster-scoped resources. */
-  noGroupKinds?: boolean;
+  noGroupKinds?: boolean | undefined;
   /** When true, restore all valid cluster-scoped resources. */
-  allGroupKinds?: boolean;
+  allGroupKinds?: boolean | undefined;
   /** Restore all valid cluster-scoped resources except these. */
-  excludedGroupKinds?: GroupKind[];
+  excludedGroupKinds?: GroupKind[] | undefined;
 };
 
 export type RestoreConfig = {
@@ -115,45 +117,54 @@ export type RestoreConfig = {
    */
   namespacedResourceRestoreMode?:
     | gkebackup.RestoreConfigNamespacedResourceRestoreModeEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
   /** Substitution rules applied during restore. */
-  substitutionRules?: SubstitutionRule[];
+  substitutionRules?: SubstitutionRule[] | undefined;
   /** Namespaces excluded from restoration. */
-  excludedNamespaces?: { namespaces?: string[] };
+  excludedNamespaces?: { namespaces?: string[] | undefined } | undefined;
   /** Per-volume-type restore policy bindings. */
-  volumeDataRestorePolicyBindings?: VolumeDataRestorePolicyBinding[];
+  volumeDataRestorePolicyBindings?: VolumeDataRestorePolicyBinding[] | undefined;
   /** When true, restore all namespaced resources in the Backup. */
-  allNamespaces?: boolean;
+  allNamespaces?: boolean | undefined;
   /** Transformation rules applied during restore. */
-  transformationRules?: TransformationRule[];
+  transformationRules?: TransformationRule[] | undefined;
   /** Custom restore ordering. */
-  restoreOrder?: RestoreOrder;
+  restoreOrder?: RestoreOrder | undefined;
   /**
    * How volume data is restored.
    * @default "NO_VOLUME_DATA_RESTORATION"
    */
-  volumeDataRestorePolicy?: gkebackup.RestoreConfigVolumeDataRestorePolicyEnum | (string & {});
+  volumeDataRestorePolicy?:
+    | gkebackup.RestoreConfigVolumeDataRestorePolicyEnum
+    | (string & {})
+    | undefined;
   /**
    * How to handle cluster-scoped resources that already exist.
    */
   clusterResourceConflictPolicy?:
     | gkebackup.RestoreConfigClusterResourceConflictPolicyEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
   /** Cluster-scoped resources to restore. */
-  clusterResourceRestoreScope?: ClusterResourceRestoreScope;
+  clusterResourceRestoreScope?: ClusterResourceRestoreScope | undefined;
   /** Restore only these namespaces and their resources. */
-  selectedNamespaces?: { namespaces?: string[] };
+  selectedNamespaces?: { namespaces?: string[] | undefined } | undefined;
   /** Restore only these ProtectedApplications and their resources. */
-  selectedApplications?: {
-    namespacedNames?: Array<{
-      /** Kubernetes namespace. */
-      namespace?: string;
-      /** Kubernetes resource name. */
-      name?: string;
-    }>;
-  };
+  selectedApplications?:
+    | {
+        namespacedNames?:
+          | Array<{
+              /** Kubernetes namespace. */
+              namespace?: string | undefined;
+              /** Kubernetes resource name. */
+              name?: string | undefined;
+            }>
+          | undefined;
+      }
+    | undefined;
   /** When true, restore no namespaced resources. */
-  noNamespaces?: boolean;
+  noNamespaces?: boolean | undefined;
 };
 
 export type RestorePlanProps = {

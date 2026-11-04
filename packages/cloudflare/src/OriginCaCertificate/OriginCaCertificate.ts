@@ -355,13 +355,13 @@ const sameHostnames = (observed: readonly string[], desired: readonly string[]) 
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
 type CertificateShape = {
-  id?: string | null;
-  certificate?: string | null;
-  csr?: string | null;
+  id?: string | null | undefined;
+  certificate?: string | null | undefined;
+  csr?: string | null | undefined;
   hostnames: readonly string[];
-  requestType?: string | null;
-  requestedValidity?: number | null;
-  expiresOn?: string | null;
+  requestType?: string | null | undefined;
+  requestedValidity?: number | null | undefined;
+  expiresOn?: string | null | undefined;
 };
 
 /**

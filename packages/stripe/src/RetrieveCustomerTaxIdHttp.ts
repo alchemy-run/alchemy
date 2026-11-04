@@ -37,7 +37,7 @@ export const RetrieveCustomerTaxIdHttp = Layer.effect(
       const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(`Stripe.RetrieveCustomerTaxId(${taxId.LogicalId})`)(function* (request?: {
-        expand?: string[];
+        expand?: string[] | undefined;
       }) {
         return yield* auth(
           GetCustomerTaxIdsById({

@@ -47,20 +47,20 @@ export type PscConfig = {
    * Subnetwork resource paths used for IPAM
    * (`projects/{project}/regions/{region}/subnetworks/{subnetwork}`).
    */
-  subnetworks?: string[];
+  subnetworks?: string[] | undefined;
   /**
    * Max number of PSC connections for this policy (int64 string).
    */
-  limit?: string;
+  limit?: string | undefined;
   /**
    * Authorization mechanism for producer instance location.
    */
-  producerInstanceLocation?: PscConfigProducerInstanceLocation;
+  producerInstanceLocation?: PscConfigProducerInstanceLocation | undefined;
   /**
    * Projects, folders, or organizations the producer instance may live
    * in, e.g. `"projects/my-project"`.
    */
-  allowedGoogleProducersResourceHierarchyLevel?: string[];
+  allowedGoogleProducersResourceHierarchyLevel?: string[] | undefined;
 };
 
 export type AutoSubnetworkConfig = {
@@ -73,11 +73,11 @@ export type AutoSubnetworkConfig = {
 };
 
 export type AutoCreatedSubnetworkInfo = {
-  internalRange?: string;
-  internalRangeRef?: string;
-  subnetwork?: string;
-  subnetworkRef?: string;
-  delinked?: boolean;
+  internalRange?: string | undefined;
+  internalRangeRef?: string | undefined;
+  subnetwork?: string | undefined;
+  subnetworkRef?: string | undefined;
+  delinked?: boolean | undefined;
 };
 
 export type ServiceConnectionPolicyProps = {

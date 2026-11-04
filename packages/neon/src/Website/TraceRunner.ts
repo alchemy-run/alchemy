@@ -29,9 +29,12 @@ NodeRuntime.runMain(
           processCwd: input.root,
           conditions: ["node", "production"],
           // Next's manifests already trace its runtime without dev bundlers.
-          ignore: input.next
-            ? (file) => file.replaceAll("\\", "/").includes("/node_modules/next/")
-            : undefined,
+          ...(input.next
+            ? {
+                ignore: (file: string) =>
+                  file.replaceAll("\\", "/").includes("/node_modules/next/"),
+              }
+            : {}),
           analysis: {
             emitGlobs,
             computeFileReferences: true,

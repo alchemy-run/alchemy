@@ -17,7 +17,7 @@ export interface ConsumeOptions {
    * At most this many records, from 1 to 10000.
    * @default 100
    */
-  maxRecords?: number;
+  maxRecords?: number | undefined;
 }
 
 /**

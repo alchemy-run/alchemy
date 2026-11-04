@@ -37,7 +37,7 @@ export interface CollectionProps {
    * The collection type. Changing the type replaces the collection.
    * @default "SEARCH"
    */
-  type?: CollectionType;
+  type?: CollectionType | undefined;
   /**
    * A human-readable description of the collection.
    */
@@ -79,23 +79,23 @@ export interface Collection extends Resource<
     /**
      * Collection type (`SEARCH`, `TIMESERIES`, or `VECTORSEARCH`).
      */
-    type?: string;
+    type?: string | undefined;
     /**
      * Collection status (e.g. `ACTIVE`, `CREATING`, `DELETING`).
      */
-    status?: string;
+    status?: string | undefined;
     /**
      * ARN of the KMS key encrypting the collection.
      */
-    kmsKeyArn?: string;
+    kmsKeyArn?: string | undefined;
     /**
      * OpenSearch endpoint for data-plane requests.
      */
-    collectionEndpoint?: string;
+    collectionEndpoint?: string | undefined;
     /**
      * OpenSearch Dashboards endpoint for the collection.
      */
-    dashboardEndpoint?: string;
+    dashboardEndpoint?: string | undefined;
   },
   {},
   Providers

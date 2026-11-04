@@ -42,11 +42,11 @@ export type ScheduleSpec = {
    * Unix-cron schedule (for example `"0 0 * * *"`). When set, Data
    * Pipelines creates an internal Cloud Scheduler job.
    */
-  schedule?: string;
+  schedule?: string | undefined;
   /**
    * tz-database time zone used to interpret `schedule`. Empty uses UTC.
    */
-  timeZone?: string;
+  timeZone?: string | undefined;
 };
 
 export type Workload = datapipelines.GoogleCloudDatapipelinesV1Workload;
@@ -89,7 +89,7 @@ export type PipelineProps = {
    * Cron used to launch batch jobs. Omit to manage jobs with
    * `pipelines.run` instead of Cloud Scheduler.
    */
-  scheduleInfo?: ScheduleSpec;
+  scheduleInfo?: ScheduleSpec | undefined;
   /**
    * Service account email for the internal Cloud Scheduler job. Defaults
    * to the Compute Engine default service account.

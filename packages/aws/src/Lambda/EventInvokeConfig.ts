@@ -75,7 +75,7 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
 }: {
   functionName: string;
   /** Alias name (or version) to scope the config to. Omit for `$LATEST`. */
-  qualifier?: string;
+  qualifier?: string | undefined;
   config: EventInvokeConfig | undefined;
 }) {
   const observed = yield* observeConfig(functionName, qualifier);

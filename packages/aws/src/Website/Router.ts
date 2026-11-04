@@ -433,12 +433,14 @@ const buildRouterRequestFunctionCode = ({
   hostRedirect,
 }: {
   kvNamespace: string;
-  userInjection?: string;
-  hostRedirect?: {
-    to: string;
-    hosts: string[];
-    cloudfrontDefault: boolean;
-  };
+  userInjection?: string | undefined;
+  hostRedirect?:
+    | {
+        to: string;
+        hosts: string[];
+        cloudfrontDefault: boolean;
+      }
+    | undefined;
 }) => `import cf from "cloudfront";
 async function handler(event) {
   ${userInjection ?? ""}

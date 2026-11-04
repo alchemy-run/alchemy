@@ -160,10 +160,10 @@ const resolveName = (id: string, name: string | undefined) =>
 
 const buildAttributes = (
   tokenData: {
-    id?: string | null;
-    name?: string | null;
+    id?: string | null | undefined;
+    name?: string | null | undefined;
     // Distilled widened generated string enums to open unions (`string & {}`).
-    status?: string | null;
+    status?: string | null | undefined;
   },
   value: Redacted.Redacted<string>,
   accountId: string,

@@ -17,26 +17,26 @@ export type SingleTenantHsmAddQuorumMember = {
    * PEM-encoded RSA-2048 public key of the 2FA key for the new quorum
    * member.
    */
-  twoFactorPublicKeyPem?: string;
+  twoFactorPublicKeyPem?: string | undefined;
 };
 
 export type SingleTenantHsmRemoveQuorumMember = {
   /**
    * PEM-encoded RSA-2048 public key of the 2FA key to remove.
    */
-  twoFactorPublicKeyPem?: string;
+  twoFactorPublicKeyPem?: string | undefined;
 };
 
 export type SingleTenantHsmRegisterTwoFactorAuthKeys = {
   /**
    * PEM-encoded RSA-2048 public keys for M-of-N quorum auth.
    */
-  twoFactorPublicKeyPems?: string[];
+  twoFactorPublicKeyPems?: string[] | undefined;
   /**
    * Required approver count (M). Must be `>= 2` and
    * `<= totalApproverCount - 1`.
    */
-  requiredApproverCount?: number;
+  requiredApproverCount?: number | undefined;
 };
 
 export type SingleTenantHsmInstanceProposalProps = {
@@ -54,55 +54,55 @@ export type SingleTenantHsmInstanceProposalProps = {
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Proposal id (the last path segment). If omitted, a unique name is
    * generated from the stack, stage, and logical id. Must match
    * `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it replaces the
    * proposal.
    */
-  proposalId?: string;
+  proposalId?: string | undefined;
   /**
    * Time-to-live for the proposal (e.g. `"3600s"`). Input-only.
    * Proposals expire after this duration. Immutable.
    */
-  ttl?: string;
+  ttl?: string | undefined;
   /**
    * Refresh the instance so it stays active. Mutually exclusive with
    * the other operation fields. Immutable.
    */
-  refreshSingleTenantHsmInstance?: boolean;
+  refreshSingleTenantHsmInstance?: boolean | undefined;
   /**
    * Enable a DISABLED instance. Mutually exclusive with the other
    * operation fields. Immutable.
    */
-  enableSingleTenantHsmInstance?: boolean;
+  enableSingleTenantHsmInstance?: boolean | undefined;
   /**
    * Disable an ACTIVE instance. Mutually exclusive with the other
    * operation fields. Immutable.
    */
-  disableSingleTenantHsmInstance?: boolean;
+  disableSingleTenantHsmInstance?: boolean | undefined;
   /**
    * Delete the instance. Mutually exclusive with the other operation
    * fields. Immutable.
    */
-  deleteSingleTenantHsmInstance?: boolean;
+  deleteSingleTenantHsmInstance?: boolean | undefined;
   /**
    * Add a quorum member. Mutually exclusive with the other operation
    * fields. Immutable.
    */
-  addQuorumMember?: SingleTenantHsmAddQuorumMember;
+  addQuorumMember?: SingleTenantHsmAddQuorumMember | undefined;
   /**
    * Remove a quorum member. Mutually exclusive with the other
    * operation fields. Immutable.
    */
-  removeQuorumMember?: SingleTenantHsmRemoveQuorumMember;
+  removeQuorumMember?: SingleTenantHsmRemoveQuorumMember | undefined;
   /**
    * Register 2FA keys to finish instance setup. Required while the
    * instance is `PENDING_TWO_FACTOR_AUTH_REGISTRATION`. Mutually
    * exclusive with the other operation fields. Immutable.
    */
-  registerTwoFactorAuthKeys?: SingleTenantHsmRegisterTwoFactorAuthKeys;
+  registerTwoFactorAuthKeys?: SingleTenantHsmRegisterTwoFactorAuthKeys | undefined;
 };
 
 export type SingleTenantHsmInstanceProposalAttrs = {
@@ -326,13 +326,13 @@ const toBody = (
 });
 
 const operationKey = (props: {
-  refreshSingleTenantHsmInstance?: boolean;
-  enableSingleTenantHsmInstance?: boolean;
-  disableSingleTenantHsmInstance?: boolean;
-  deleteSingleTenantHsmInstance?: boolean;
-  addQuorumMember?: SingleTenantHsmAddQuorumMember;
-  removeQuorumMember?: SingleTenantHsmRemoveQuorumMember;
-  registerTwoFactorAuthKeys?: SingleTenantHsmRegisterTwoFactorAuthKeys;
+  refreshSingleTenantHsmInstance?: boolean | undefined;
+  enableSingleTenantHsmInstance?: boolean | undefined;
+  disableSingleTenantHsmInstance?: boolean | undefined;
+  deleteSingleTenantHsmInstance?: boolean | undefined;
+  addQuorumMember?: SingleTenantHsmAddQuorumMember | undefined;
+  removeQuorumMember?: SingleTenantHsmRemoveQuorumMember | undefined;
+  registerTwoFactorAuthKeys?: SingleTenantHsmRegisterTwoFactorAuthKeys | undefined;
 }) => {
   if (props.refreshSingleTenantHsmInstance) return "refresh";
   if (props.enableSingleTenantHsmInstance) return "enable";
@@ -362,7 +362,7 @@ const getByName = (name: string) =>
 const paginate = <A, E, R>(
   fetch: (
     pageToken: string | undefined,
-  ) => Effect.Effect<{ items: A[]; nextPageToken?: string }, E, R>,
+  ) => Effect.Effect<{ items: A[]; nextPageToken?: string | undefined }, E, R>,
 ) =>
   Effect.gen(function* () {
     const found: A[] = [];

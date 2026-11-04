@@ -22,7 +22,7 @@ export interface SvelteKitProps<Bindings extends WorkerBindingProps = {}> extend
    * directory.
    * @default process.cwd()
    */
-  rootDir?: string;
+  rootDir?: string | undefined;
   /**
    * Controls which files are content-hashed to decide whether a rebuild is
    * needed. By default every non-gitignored file under `rootDir` (plus the
@@ -207,7 +207,7 @@ export const SvelteKit: {
         id: string,
         propsEff?: SvelteKitInput<Bindings> | Effect.Effect<SvelteKitInput<Bindings>, never, Req>,
       ) => effectClass(SvelteKit(id, propsEff))
-    : Worker(
+    : Worker<Bindings, WorkerAssetsConfig, Req>(
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,

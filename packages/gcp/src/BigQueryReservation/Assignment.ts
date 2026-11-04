@@ -72,7 +72,7 @@ export type AssignmentProps = {
    * Principal that must run jobs to use this assignment. When empty,
    * any job of `jobType` on `assignee` uses the reservation.
    */
-  principal?: string;
+  principal?: string | undefined;
   /**
    * Per-assignment scheduling policy. Preview.
    */

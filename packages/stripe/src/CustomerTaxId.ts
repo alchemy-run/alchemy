@@ -200,10 +200,10 @@ const listAlchemyCustomers = Effect.fn(function* () {
 });
 
 const observe = Effect.fn(function* (input: {
-  id?: string;
-  customer?: string;
-  type?: string;
-  value?: string;
+  id?: string | undefined;
+  customer?: string | undefined;
+  type?: string | undefined;
+  value?: string | undefined;
 }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id, input.customer);

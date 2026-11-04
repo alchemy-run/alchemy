@@ -27,7 +27,7 @@ export interface HostnameRouteProps {
   /**
    * Optional human-readable note attached to the route. Mutable.
    */
-  comment?: string;
+  comment?: string | undefined;
 }
 
 export type HostnameRouteAttributes = {
@@ -205,12 +205,12 @@ export const HostnameRouteProvider = () =>
  * Structural shape shared by get/list/create/patch responses.
  */
 type ObservedRoute = {
-  id?: string | null;
-  comment?: string | null;
-  createdAt?: string | null;
-  deletedAt?: string | null;
-  hostname?: string | null;
-  tunnelId?: string | null;
+  id?: string | null | undefined;
+  comment?: string | null | undefined;
+  createdAt?: string | null | undefined;
+  deletedAt?: string | null | undefined;
+  hostname?: string | null | undefined;
+  tunnelId?: string | null | undefined;
 };
 
 /**

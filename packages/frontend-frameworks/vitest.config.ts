@@ -8,7 +8,7 @@ export default defineConfig({
     // Windows CI has been failing the suite with "Worker exited unexpectedly"
     // after every test file passed (vitest fork teardown). Cap workers like
     // cloudflare-runtime so a dying fork cannot fail a green run.
-    maxWorkers: process.platform === "win32" ? 2 : undefined,
+    ...(process.platform === "win32" && { maxWorkers: 2 }),
     pool: "forks",
   },
 });

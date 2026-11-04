@@ -32,60 +32,60 @@ const COLLECTION = "grpcRoutes";
 
 export type GrpcRouteMethodMatch = {
   /** How to match the method name. Defaults to `EXACT`. */
-  type?: string;
+  type?: string | undefined;
   /** gRPC service name. Omitted matches every service. */
-  grpcService?: string;
+  grpcService?: string | undefined;
   /** gRPC method name. Omitted matches every method. */
-  grpcMethod?: string;
+  grpcMethod?: string | undefined;
   /**
    * Case-sensitive matching. Defaults to true. Must not be set with
    * `REGULAR_EXPRESSION`.
    */
-  caseSensitive?: boolean;
+  caseSensitive?: boolean | undefined;
 };
 
 export type GrpcRouteHeaderMatch = {
   /** How to match the header value. Defaults to `EXACT`. */
-  type?: string;
+  type?: string | undefined;
   /** Header key. */
-  key?: string;
+  key?: string | undefined;
   /** Header value. */
-  value?: string;
+  value?: string | undefined;
 };
 
 export type GrpcRouteRouteMatch = {
   /** gRPC method matcher. Omitted matches every method. */
-  method?: GrpcRouteMethodMatch;
+  method?: GrpcRouteMethodMatch | undefined;
   /** Header matchers. */
   headers?: GrpcRouteHeaderMatch[];
 };
 
 export type GrpcRouteDestination = {
   /** BackendService or Service Directory service URL. */
-  serviceName?: string;
+  serviceName?: string | undefined;
   /** Traffic weight relative to other destinations. */
-  weight?: number;
+  weight?: number | undefined;
 };
 
 export type GrpcRouteFaultInjectionDelay = {
   /** Fixed delay before forwarding (duration string). */
-  fixedDelay?: string;
+  fixedDelay?: string | undefined;
   /** Percentage of traffic delayed, 0-100. */
-  percentage?: number;
+  percentage?: number | undefined;
 };
 
 export type GrpcRouteFaultInjectionAbort = {
   /** HTTP status used to abort, 200-599. */
-  httpStatus?: number;
+  httpStatus?: number | undefined;
   /** Percentage of traffic aborted, 0-100. */
-  percentage?: number;
+  percentage?: number | undefined;
 };
 
 export type GrpcRouteFaultInjectionPolicy = {
   /** Delay injection. */
-  delay?: GrpcRouteFaultInjectionDelay;
+  delay?: GrpcRouteFaultInjectionDelay | undefined;
   /** Abort injection. */
-  abort?: GrpcRouteFaultInjectionAbort;
+  abort?: GrpcRouteFaultInjectionAbort | undefined;
 };
 
 export type GrpcRouteRetryPolicy = {
@@ -95,27 +95,27 @@ export type GrpcRouteRetryPolicy = {
    */
   retryConditions?: string[];
   /** Allowed retry count. Defaults to 1. */
-  numRetries?: number;
+  numRetries?: number | undefined;
 };
 
 export type GrpcRouteStatefulSessionAffinityPolicy = {
   /** Cookie TTL for the `GSSA` session cookie (`0s` is a session cookie). */
-  cookieTtl?: string;
+  cookieTtl?: string | undefined;
 };
 
 export type GrpcRouteRouteAction = {
   /** Destinations that receive matched traffic. */
-  destinations?: GrpcRouteDestination[];
+  destinations?: GrpcRouteDestination[] | undefined;
   /** Fault injection. */
-  faultInjectionPolicy?: GrpcRouteFaultInjectionPolicy;
+  faultInjectionPolicy?: GrpcRouteFaultInjectionPolicy | undefined;
   /** End-to-end timeout including retries. */
-  timeout?: string;
+  timeout?: string | undefined;
   /** Retry policy. */
-  retryPolicy?: GrpcRouteRetryPolicy;
+  retryPolicy?: GrpcRouteRetryPolicy | undefined;
   /** Cookie-based session affinity. */
-  statefulSessionAffinity?: GrpcRouteStatefulSessionAffinityPolicy;
+  statefulSessionAffinity?: GrpcRouteStatefulSessionAffinityPolicy | undefined;
   /** Idle timeout. `0s` disables it. */
-  idleTimeout?: string;
+  idleTimeout?: string | undefined;
 };
 
 export type GrpcRouteRouteRule = {
@@ -125,7 +125,7 @@ export type GrpcRouteRouteRule = {
    */
   matches?: GrpcRouteRouteMatch[];
   /** How to route matched traffic. */
-  action?: GrpcRouteRouteAction;
+  action?: GrpcRouteRouteAction | undefined;
 };
 
 export type GrpcRouteProps = {

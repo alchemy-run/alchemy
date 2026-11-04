@@ -82,7 +82,7 @@ export const cloneFixture = Effect.fn(function* (
   sourceDir: string,
   options: {
     prefix: string;
-    tempRoot?: string;
+    tempRoot?: string | undefined;
     entries?: string[];
   },
 ) {
