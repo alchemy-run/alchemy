@@ -20,6 +20,7 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -333,9 +334,19 @@ export const VolumeProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);

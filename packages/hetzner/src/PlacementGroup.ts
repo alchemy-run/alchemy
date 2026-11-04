@@ -19,6 +19,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -205,10 +206,20 @@ export const PlacementGroupProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* toName(id, olds?.name, output?.name);
       const existing = yield* observe({ id: output?.id, name, logicalId: id });
       if (existing === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: existing.id,
+          claimedName: olds?.name,
+          foundName: existing.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(existing);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),

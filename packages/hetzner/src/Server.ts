@@ -24,6 +24,7 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -892,10 +893,20 @@ export const ServerProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createServerName(id, olds?.name, output?.name);
       const found = yield* observe({ id, name, outputId: output?.id ?? output?.serverId });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id ?? previous?.serverId,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = {
         ...toAttrs(found),
         privateKey: output?.privateKey,
