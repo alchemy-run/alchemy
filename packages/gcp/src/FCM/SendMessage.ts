@@ -13,7 +13,7 @@ export type SendMessageShape = () => Effect.Effect<
 >;
 
 /**
- * Send a message to specified target (a [Firebase Installation ID (FID)](/docs/cloud-messaging/android/get-started#access-firebase-installation-id), registration token, topic, or condition).
+ * Send a message to specified target (a [Firebase Installation ID (FID)](https://firebase.google.com/docs/cloud-messaging/android/get-started#access-firebase-installation-id), registration token, topic, or condition).
  *
  * A call on the stack's project, so it takes no resource.
  * Provide {@link SendMessageHttp}. The host gets `roles/cloudmessaging.editor` on the project.

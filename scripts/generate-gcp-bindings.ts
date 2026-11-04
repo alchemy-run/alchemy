@@ -419,6 +419,16 @@ const nameStyleFields = (resource: object, method: DiscoveryMethod) => {
 const childFieldsOf = (variant: { children: [string, string][] }) =>
   variant.children.filter(([, field]) => field !== "");
 
+/**
+ * Discovery descriptions link into the API's own docs site with root-relative
+ * paths (`/docs/cloud-messaging/…`), which would resolve against alchemy.run:
+ * point them at the docs host.
+ */
+const absoluteLinks = (text: string, documentationLink: string | undefined) => {
+  const origin = documentationLink?.match(/^https?:\/\/[^/]+/)?.[0] ?? "https://cloud.google.com";
+  return text.replace(/\]\(\/(?!\/)/g, `](${origin}/`);
+};
+
 // ============ Classification ============
 
 interface Variant {
@@ -465,7 +475,7 @@ interface Api extends ApiConfig {
   /** Import alias, e.g. `pubsub`. */
   ns: string;
   importPath: string;
-  doc: DiscoveryResource & { name: string; rootUrl: string };
+  doc: DiscoveryResource & { name: string; rootUrl: string; documentationLink?: string };
   moduleSource: string;
 }
 
@@ -815,7 +825,10 @@ const classify = (options: {
     const binding = bindings.get(name) ?? {
       name,
       verb,
-      description: (method.description ?? "").split(/(?<=\.)\s/)[0] ?? "",
+      description: absoluteLinks(
+        (method.description ?? "").split(/(?<=\.)\s/)[0] ?? "",
+        api.doc.documentationLink,
+      ),
       variants: [],
     };
     if (
