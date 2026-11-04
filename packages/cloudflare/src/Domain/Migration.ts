@@ -131,6 +131,8 @@ const MigrationLive = () =>
           .pipe(
             Stream.filter((object) => object.hasStoredData === true),
             Stream.runCollect,
+            // The upload deleted the class: nothing of it is left to move.
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed([])),
           );
         const ids = Array.from(objects, (object) => object.id).filter(
           (id): id is string => typeof id === "string",
