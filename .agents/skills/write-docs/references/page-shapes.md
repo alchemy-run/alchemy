@@ -22,8 +22,8 @@ Every hub has the same five parts, in order:
    Never describe the package ("`@alchemy.run/fly` puts Fly in one typed
    program"). Never use trivia (see SKILL.md rules).
 2. **The What is link**, right after the intro, on its own line:
-   "**New to X?** [What is X?](/x/what-is-x) walks through …, once each, and
-   shows how Alchemy models every one."
+   "**New to X?** Start with [What is X?](/x/what-is-x)." Nothing more: the
+   page title says what it is.
 3. **`## A taste`**: two or three small, complete snippets that declare a
    resource, write a runtime and deploy the Stack, each led by one line.
    Lead-in lines, not headings.
