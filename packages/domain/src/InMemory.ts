@@ -74,6 +74,13 @@ export interface Control {
   }>;
 }
 
+/** A scheduled command's latest arming: the id it commits with, when it is due, and whether it was cancelled. */
+interface Armed {
+  readonly commandId: string;
+  readonly at: number;
+  readonly cancelled: boolean;
+}
+
 /** A scheduled command: when it is due, and how to send it. */
 interface Timer {
   readonly at: number;
@@ -410,8 +417,8 @@ export const make = (
                 state: Json;
                 version: number;
                 readonly receipts: Map<string, SendResult>;
-                /** Ids cancelled and not scheduled again since. */
-                readonly cancelled: Set<string>;
+                /** The latest arming of each scheduled command, by its name. */
+                readonly scheduled: Map<string, Armed>;
                 readonly events: Array<StoredEvent>;
                 /** How far its events were routed to each view and projection. */
                 routed: Routed | undefined;
@@ -443,7 +450,7 @@ export const make = (
                   state: null,
                   version: 0,
                   receipts: new Map(),
-                  cancelled: new Set(),
+                  scheduled: new Map(),
                   events: [],
                   routed: undefined,
                 }),
@@ -529,35 +536,38 @@ export const make = (
             });
           const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
             lock.withPermits(1)(commit(id, command, meta));
-          const executed = (id: string, commandId: string) => instance(id).receipts.has(commandId);
           return {
             send,
-            schedule: (id, command, meta, due) =>
+            schedule: (id, name, command, meta, due) =>
               lock.withPermits(1)(
                 Effect.suspend(() => {
-                  const fields = { aggregate: kit.name, id, commandId: meta.commandId };
-                  if (executed(id, meta.commandId)) return Effect.fail(new AlreadyExecuted(fields));
-                  instance(id).cancelled.delete(meta.commandId);
+                  const { scheduled } = instance(id);
+                  // The same arming again (a policy or step ran again): leave it as it is.
+                  const armed = scheduled.get(name);
+                  if (armed?.commandId === meta.commandId) return Effect.succeed(armed.at);
                   const at = "at" in due ? due.at : now() + due.afterMillis;
+                  scheduled.set(name, { commandId: meta.commandId, at, cancelled: false });
                   return timer(
-                    `${modelName}/${kit.name}/${id}/${meta.commandId}`,
+                    `${modelName}/${kit.name}/${id}/${name}`,
                     at,
                     commit(id, command, meta).pipe(Effect.asVoid),
                     lock.withPermits(1),
                   ).pipe(Effect.as(at));
                 }),
               ),
-            unschedule: (id, commandId) =>
+            unschedule: (id, name) =>
               lock.withPermits(1)(
                 Effect.suspend(
                   (): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
-                    const fields = { aggregate: kit.name, id, commandId };
-                    if (executed(id, commandId)) return Effect.fail(new AlreadyExecuted(fields));
-                    const { cancelled } = instance(id);
-                    if (cancelled.has(commandId)) return Effect.fail(new AlreadyCancelled(fields));
-                    if (!timers.delete(`${modelName}/${kit.name}/${id}/${commandId}`))
-                      return Effect.fail(new NotScheduled(fields));
-                    cancelled.add(commandId);
+                    const fields = { aggregate: kit.name, id, commandId: name };
+                    const current = instance(id);
+                    const armed = current.scheduled.get(name);
+                    if (!armed) return Effect.fail(new NotScheduled(fields));
+                    if (current.receipts.has(armed.commandId))
+                      return Effect.fail(new AlreadyExecuted(fields));
+                    if (armed.cancelled) return Effect.fail(new AlreadyCancelled(fields));
+                    timers.delete(`${modelName}/${kit.name}/${id}/${name}`);
+                    current.scheduled.set(name, { ...armed, cancelled: true });
                     return Effect.void;
                   },
                 ),
