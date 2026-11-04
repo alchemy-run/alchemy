@@ -12,7 +12,14 @@ import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
 import type { Servable } from "./Api.ts";
 import { DefinitionError, DuplicateTool, ToolNameTooLong } from "./DefinitionError.ts";
-import { type Operation, operationsOf, outsideClient } from "./ReadRpcs.ts";
+import {
+  type ClientOf,
+  exposedOf,
+  type OnceCallName,
+  type Operation,
+  operationsOf,
+  outsideClient,
+} from "./ReadRpcs.ts";
 
 /** What {@link toToolkit} reads from an Api class: what it serves, its RPCs, and its in-process client. */
 export interface Toolable {
@@ -45,7 +52,21 @@ const failures = (schemas: ReadonlyArray<Schema.Top>): Schema.Top => {
   return list.length === 0 ? Schema.Never : list.length === 1 ? list[0]! : Schema.Union(list);
 };
 
-export interface ToolkitOptions<R = never> {
+/**
+ * A call {@link toToolkit} can give as a tool: a command's tag
+ * (`DepositMoney`), or a read that returns once as `<Name>.<operation>`
+ * (`AccountSummary.get`). `watch` and `events` are streams, not tools.
+ */
+export type Exposable<A extends Toolable> = OnceCallName<ClientOf<A>>;
+
+export interface ToolkitOptions<A extends Toolable, R = never> {
+  /**
+   * The calls to give as tools, by name. No tool is given unless it is
+   * listed, so a call the Api later adds, or a field a reply later gains,
+   * never reaches an agent by accident: list each call on purpose.
+   * @default []
+   */
+  readonly expose?: ReadonlyArray<Exposable<A>>;
   /**
    * The headers each call carries to the Api's middleware (a session cookie,
    * a bearer token), read in the context of the call. By default, the
@@ -171,11 +192,11 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
 );
 
 /**
- * An Effect AI `Toolkit` with one tool per call of the Api that returns once:
- * each command's `send` (a write), and each `get`, `peek`, `list` and
- * `snapshot` (reads).
- * `watch` and `events` are streams, not one tool result, so they stay on the
- * Api's own clients.
+ * An Effect AI `Toolkit` with one tool per call `options.expose` lists: a
+ * command (a write), or a `get`, `peek`, `list` or `snapshot` (reads). No
+ * tool is given unless it is listed. `watch` and `events` are streams, not
+ * one tool result, so they stay on the Api's own clients. Convenient for
+ * internal tools and agents working on your own data.
  *
  * A tool is named `<api>_<name>_<operation>` (`BankApi_DepositMoney_send`),
  * with every character other than a letter, digit, `_` or `-` replaced by
@@ -199,6 +220,7 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
  * import { LanguageModel } from "effect/ai";
  *
  * const { toolkit, layer } = DomainAi.toToolkit(CustomerApi, {
+ *   expose: ["TransferMoney", "AccountSummary.get"],
  *   // The signed-in customer's session, for the Api's session middleware.
  *   headers: Effect.map(CurrentSession, (s) => ({ authorization: `Bearer ${s.token}` })),
  * });
@@ -211,12 +233,12 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
  */
 export const toToolkit = <A extends Toolable, R = never>(
   api: A,
-  options: ToolkitOptions<R> = {},
+  options: ToolkitOptions<A, R> = {},
 ): ApiToolkit<Services<A> | R> => {
   // A tool name a model provider would refuse fails the Layer, like the model's own definition problems.
   const problems: Array<DefinitionError> = [];
   const names = new Set<string>();
-  const tools = operationsOf(api.serves)
+  const tools = exposedOf(operationsOf(api.serves), options.expose)
     .filter(isToolCall)
     .map(toolOf(api.apiName))
     .filter(({ tool }) => {
@@ -267,7 +289,8 @@ export const toToolkit = <A extends Toolable, R = never>(
 };
 
 /**
- * Serve an Api's tools ({@link toToolkit}) from Effect's `McpServer`. Provide
+ * Serve an Api's tools ({@link toToolkit}) from Effect's `McpServer`. Only
+ * the calls `options.expose` lists are served; nothing is by default. Provide
  * an `McpServer` transport, such as `McpServer.layerHttp`. Over HTTP, each
  * call carries the headers of the MCP request to the Api's middleware, so
  * the Api authenticates an MCP client as it does any other.
@@ -278,7 +301,9 @@ export const toToolkit = <A extends Toolable, R = never>(
  * import { McpProtocol, McpServer } from "effect/ai";
  * import * as HttpRouter from "effect/http/HttpRouter";
  *
- * const Mcp = DomainAi.toMcp(CustomerApi).pipe(
+ * const Mcp = DomainAi.toMcp(CustomerApi, {
+ *   expose: ["DepositMoney", "AccountSummary.get"],
+ * }).pipe(
  *   Layer.provide(
  *     McpServer.layerHttp({
  *       name: "bank",
@@ -295,7 +320,7 @@ export const toToolkit = <A extends Toolable, R = never>(
  */
 export const toMcp = <A extends Toolable, R = never>(
   api: A,
-  options: ToolkitOptions<R> = {},
+  options: ToolkitOptions<A, R> = {},
 ): Layer.Layer<never, never, Services<A> | R> => {
   const { toolkit, layer } = toToolkit(api, options);
   return McpServer.toolkit(toolkit).pipe(Layer.provide(layer)) as Layer.Layer<

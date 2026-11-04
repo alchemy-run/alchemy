@@ -1466,13 +1466,17 @@ export type Worker<Bindings = any> = Resource<
      */
     cache?: WorkerCache;
     /**
-     * Workers Observability traces settings contributed by
-     * `Cloudflare.Telemetry()`. Deep-merged into upload metadata: bound
-     * traces fill in when `WorkerProps.observability.traces` is omitted,
-     * and never clobber the default logs config. An explicit
-     * `observability.traces` object wins.
+     * Workers Observability traces and logs fields set on
+     * `Cloudflare.Telemetry()` — only the fields its caller set, so
+     * they can be merged with `WorkerProps.observability` field by field.
+     * Where the props omit `traces` / `logs`, these fill in over the
+     * defaults (on); a field set to different values in both fails the
+     * deploy with `ObservabilityConflictError`.
      */
-    observability?: Pick<WorkerObservability, "traces">;
+    observability?: {
+      traces?: Partial<NonNullable<WorkerObservability["traces"]>>;
+      logs?: Partial<NonNullable<WorkerObservability["logs"]>>;
+    };
     containers?: {
       className: string;
       /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
@@ -2592,13 +2596,16 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * registers the close promise with workerd's `ctx.waitUntil` — so
  * finalizers added with `Effect.addFinalizer` inside a handler run *after*
  * the response is sent, without blocking it, and the Worker stays alive
- * until they settle. Streaming responses transfer the scope to the stream,
- * so those finalizers run when the stream completes instead.
+ * until they settle. A streamed response body or RPC result keeps the
+ * scope open until it has been sent.
  *
  * For ad-hoc background work, `Cloudflare.waitUntil(effect)` forks an
  * Effect with the caller's full context and keeps the invocation alive
- * until it settles. It is `RuntimeContext`-colored, so it can only run
- * inside a handler.
+ * until it settles. The event's scope stays open until then too, so the
+ * work can use what the handler acquired on it, and its spans and logs are
+ * exported with the event's. What the work acquires itself is released when
+ * it finishes. It is `RuntimeContext`-colored, so it can only run inside a
+ * handler.
  *
  * The constructor is evaluated once per isolate: the bridge builds the
  * Worker's layer stack on the first event and every later event reuses the

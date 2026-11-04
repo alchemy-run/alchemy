@@ -259,13 +259,7 @@ export const GlobalsLive = Layer.effect(
                     // through, as Miniflare's interceptor does.
                     compatibilityFlags: ["connect_pass_through", "experimental"],
                     modules: outboundModules,
-                    bindings: [
-                      {
-                        name: "CF_WORKER_ZONE",
-                        text: worker.zone ?? `${worker.name}.example.com`,
-                      },
-                      { name: "CF_IMAGE", service: cfImage },
-                    ],
+                    bindings: [{ name: "CF_IMAGE", service: cfImage }],
                   },
                 },
               ],

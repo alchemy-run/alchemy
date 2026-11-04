@@ -40,7 +40,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   profile: process.env.ALCHEMY_PROFILE,
 });
 
-const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
+// Postgres, an image build on a Fly remote builder and the site, like fly-microservices.
+const stack = beforeAll(deploy(Stack), { timeout: 400_000 });
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 180_000,

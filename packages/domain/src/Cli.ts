@@ -19,7 +19,7 @@ import {
   DuplicateFlag,
   ReservedFlag,
 } from "./DefinitionError.ts";
-import { type Operation, operationsOf } from "./ReadRpcs.ts";
+import { exposedOf, type OnceCallName, type Operation, operationsOf } from "./ReadRpcs.ts";
 
 /**
  * A command line for an Api: one subcommand per thing it serves, run as a client of the
@@ -55,8 +55,22 @@ export class CallRejected extends Data.TaggedError("CallRejected")<{
   override readonly [Runtime.errorReported] = false;
 }
 
+/**
+ * A call {@link toCli} can run: a command's tag (`DepositMoney`), or a read
+ * that returns once as `<Name>.<operation>` (`AccountSummary.get`).
+ */
+export type Exposable<A extends Cliable> = OnceCallName<
+  A["client"] extends Effect.Effect<infer Client, any, any> ? Client : never
+>;
+
 /** How {@link toCli} builds the command line. */
-export interface Options<E = never, R = never> {
+export interface Options<A extends Cliable, E = never, R = never> {
+  /**
+   * The calls to give subcommands, by name. No subcommand is built unless
+   * its call is listed: list each call on purpose.
+   * @default []
+   */
+  readonly expose?: ReadonlyArray<Exposable<A>>;
   /** The root command: the name a person types. Default: the Api's name in kebab-case. */
   readonly name?: string;
   /** The root command's help text. */
@@ -315,7 +329,7 @@ const commandOf = <E, R>(
   api: Cliable,
   op: Operation,
   name: string,
-  options: Options<E, R>,
+  options: Pick<Options<Cliable, E, R>, "headers">,
   problems: Array<DefinitionError>,
 ): Command.Command<string, unknown, {}, Failure<E>, R> => {
   const { rpc } = op;
@@ -401,8 +415,9 @@ const commandOf = <E, R>(
 
 /**
  * An Effect CLI command for an Api: a client that calls the deployed Api over
- * its HTTP protocol, so a person or an agent in a terminal can run any
- * request/response call. The tree is read from what the Api serves:
+ * its HTTP protocol, so a person or an agent in a terminal can run the
+ * request/response calls `options.expose` lists. Nothing is exposed by
+ * default. The tree is read from those calls:
  *
  * - each command, view, stream and aggregate is a subcommand named in kebab-case (`AccountSummary` →
  *   `account-summary`). A command runs as that subcommand; a view, an
@@ -440,6 +455,7 @@ const commandOf = <E, R>(
  *
  * const bank = toCli(CustomerApi, {
  *   name: "bank",
+ *   expose: ["DepositMoney", "AccountSummary.get"],
  *   headers: Config.redacted("BANK_TOKEN").pipe(
  *     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
  *   ),
@@ -457,12 +473,12 @@ const commandOf = <E, R>(
  */
 export const toCli = <A extends Cliable, E = never, R = never>(
   api: A,
-  options: Options<E, R> = {},
+  options: Options<A, E, R> = {},
 ): Command.Command<string, unknown, {}, Failure<E>, ClientServices<A> | R> => {
   // A name the CLI cannot give fails every run, like the model's own definition problems.
   const problems: Array<DefinitionError> = [];
   const byName = new Map<string, Array<Operation>>();
-  for (const op of operationsOf(api.serves)) {
+  for (const op of exposedOf(operationsOf(api.serves), options.expose)) {
     const ops = byName.get(op.name) ?? [];
     ops.push(op);
     byName.set(op.name, ops);
