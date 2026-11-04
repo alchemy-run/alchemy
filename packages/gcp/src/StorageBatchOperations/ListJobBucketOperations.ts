@@ -3,20 +3,18 @@ import type * as storagebatchoperations from "@distilled.cloud/gcp/storagebatcho
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Job } from "./Job.ts";
 
 export interface ListJobBucketOperationsRequest extends Omit<
   storagebatchoperations.ListProjectsLocationsJobsBucketOperationsRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the job (`jobs/{job}`). */
-  job: string;
-}
+> {}
 
-export type ListJobBucketOperationsShape = () => Effect.Effect<
+export type ListJobBucketOperationsShape = (
+  resource: Job,
+) => Effect.Effect<
   (
-    request: ListJobBucketOperationsRequest,
+    request?: ListJobBucketOperationsRequest,
   ) => Effect.Effect<
     storagebatchoperations.ListBucketOperationsResponse,
     storagebatchoperations.ListProjectsLocationsJobsBucketOperationsError,
@@ -27,14 +25,14 @@ export type ListJobBucketOperationsShape = () => Effect.Effect<
 /**
  * Lists BucketOperations in a given project and job.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ListJobBucketOperationsHttp}. The host gets `roles/storagebatchoperations.viewer` on the project.
+ * Bind it to a {@link Job} and provide {@link ListJobBucketOperationsHttp}. The
+ * host gets `roles/storagebatchoperations.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `bucketOperations.list`
  * ```typescript
- * const listJobBucketOperations = yield* GCP.StorageBatchOperations.ListJobBucketOperations();
- * const response = yield* listJobBucketOperations({ location: "us-central1", job: "..." });
+ * const listJobBucketOperations = yield* GCP.StorageBatchOperations.ListJobBucketOperations(job);
+ * const response = yield* listJobBucketOperations();
  * ```
  *
  * @binding

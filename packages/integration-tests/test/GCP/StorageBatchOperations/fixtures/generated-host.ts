@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeJob } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated StorageBatchOperations binding as its own
@@ -15,48 +16,22 @@ export default class StorageBatchOperationsGeneratedHost extends GCP.Function<St
   "StorageBatchOperationsGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.StorageBatchOperations.CancelJob();
-    const p1 = yield* GCP.StorageBatchOperations.CreateJob();
-    const p2 = yield* GCP.StorageBatchOperations.DeleteJob();
-    const p3 = yield* GCP.StorageBatchOperations.GetJob();
-    const p4 = yield* GCP.StorageBatchOperations.GetJobBucketOperation();
-    const p5 = yield* GCP.StorageBatchOperations.ListJobBucketOperations();
-    const p6 = yield* GCP.StorageBatchOperations.ListJobs();
+    const p0 = yield* GCP.StorageBatchOperations.CancelJob(ProbeJob);
+    const p1 = yield* GCP.StorageBatchOperations.GetJob(ProbeJob);
+    const p2 = yield* GCP.StorageBatchOperations.GetJobBucketOperation(ProbeJob);
+    const p3 = yield* GCP.StorageBatchOperations.ListJobBucketOperations(ProbeJob);
+    const p4 = yield* GCP.StorageBatchOperations.ListJobs();
     return {
       fetch: serveProbes({
         CancelJob: probeOutcome(
-          Retry.none(
-            p0({
-              job: "alchemy-missing",
-              location: "global",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        CreateJob: probeOutcome(
-          Retry.none(
-            p1({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        DeleteJob: probeOutcome(
-          Retry.none(p2({ job: "alchemy-missing", location: "global" } as never)),
-        ),
-        GetJob: probeOutcome(
-          Retry.none(p3({ job: "alchemy-missing", location: "global" } as never)),
-        ),
+        GetJob: probeOutcome(Retry.none(p1({} as never))),
         GetJobBucketOperation: probeOutcome(
-          Retry.none(
-            p4({
-              job: "alchemy-missing",
-              bucketOperation: "alchemy-missing",
-              location: "global",
-            } as never),
-          ),
+          Retry.none(p2({ bucketOperation: "alchemy-missing" } as never)),
         ),
-        ListJobBucketOperations: probeOutcome(
-          Retry.none(p5({ job: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListJobs: probeOutcome(Retry.none(p6({ location: "global" } as never))),
+        ListJobBucketOperations: probeOutcome(Retry.none(p3({} as never))),
+        ListJobs: probeOutcome(Retry.none(p4({ location: "global" } as never))),
       }),
     };
   }).pipe(
@@ -64,8 +39,6 @@ export default class StorageBatchOperationsGeneratedHost extends GCP.Function<St
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.StorageBatchOperations.CancelJobHttp,
-          GCP.StorageBatchOperations.CreateJobHttp,
-          GCP.StorageBatchOperations.DeleteJobHttp,
           GCP.StorageBatchOperations.GetJobHttp,
           GCP.StorageBatchOperations.GetJobBucketOperationHttp,
           GCP.StorageBatchOperations.ListJobBucketOperationsHttp,

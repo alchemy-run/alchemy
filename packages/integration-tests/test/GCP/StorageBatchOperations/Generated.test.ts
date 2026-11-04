@@ -75,7 +75,7 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("project", { concurrent: true }, () => {
+    describe("Job", { concurrent: true }, () => {
       test.provider(
         "CancelJob (storagebatchoperations.projects.locations.jobs.cancel)",
         () => probe("CancelJob", false),
@@ -85,24 +85,8 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "CreateJob (storagebatchoperations.projects.locations.jobs.create)",
-        () => probe("CreateJob", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteJob (storagebatchoperations.projects.locations.jobs.delete)",
-        () => probe("DeleteJob", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "GetJob (storagebatchoperations.projects.locations.jobs.get)",
-        () => probe("GetJob", false),
+        () => probe("GetJob", true),
         {
           tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"],
           timeout: 600_000,
@@ -118,12 +102,15 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListJobBucketOperations (storagebatchoperations.projects.locations.jobs.bucketOperations.list)",
-        () => probe("ListJobBucketOperations", false),
+        () => probe("ListJobBucketOperations", true),
         {
           tags: ["provider:gcp", "provider:gcp:storagebatchoperations", "live"],
           timeout: 600_000,
         },
       );
+    });
+
+    describe("project", { concurrent: true }, () => {
       test.provider(
         "ListJobs (storagebatchoperations.projects.locations.jobs.list)",
         () => probe("ListJobs", true),

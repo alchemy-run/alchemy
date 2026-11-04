@@ -2455,6 +2455,10 @@ import {
 import { ObjectAccessControl, ObjectAccessControlProvider } from "./Storage/ObjectAccessControl.ts";
 import { PutObjectHttp } from "./Storage/PutObjectHttp.ts";
 import {
+  Job as StorageBatchOperationsJob,
+  JobProvider as StorageBatchOperationsJobProvider,
+} from "./StorageBatchOperations/Job.ts";
+import {
   ReportConfig as StorageInsightsReportConfig,
   ReportConfigProvider as StorageInsightsReportConfigProvider,
 } from "./StorageInsights/ReportConfig.ts";
@@ -3528,6 +3532,7 @@ const makeProviders = () =>
           TranslateGlossary,
           BatchJob,
           StorageInsightsReportConfig,
+          StorageBatchOperationsJob,
           TranslateModel,
           WorkstationCluster,
           WorkstationClustersWorkstationConfig,
@@ -4647,6 +4652,7 @@ const makeProviders = () =>
                 TranslateGlossaryProvider(),
                 BatchJobProvider(),
                 StorageInsightsReportConfigProvider(),
+                StorageBatchOperationsJobProvider(),
                 TranslateModelProvider(),
               ),
               Layer.mergeAll(

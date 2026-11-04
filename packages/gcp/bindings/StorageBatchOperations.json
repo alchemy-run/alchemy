@@ -1,9 +1,15 @@
 {
   "discovery": "storagebatchoperations-v1",
   "module": "storagebatchoperations_v1",
-  "resources": {},
+  "resources": {
+    "Job": {
+      "pattern": "projects/*/locations/*/jobs/*"
+    }
+  },
   "probes": {
-    "resources": {},
+    "resources": {
+      "Job": "ProbeJob"
+    },
     "enable": ["storagebatchoperations.googleapis.com"],
     "location": "global"
   }
