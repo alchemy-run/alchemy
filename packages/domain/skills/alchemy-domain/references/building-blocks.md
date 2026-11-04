@@ -336,7 +336,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },   // filters, sort orders and scopes are input fields
   success: LedgerRow,              // the result, or with `paged`, one entry of a page
   paged: true,                     // result { entries, cursor }; leave out for one result
-  from: [Ledger],                  // projections it reads: `atLeast` waits on them
+  waitsFor: [Ledger],              // `atLeast` waits on these; reads outside their stores aren't covered
   middleware: [Session],
   rejects: [NotOwner],
   // per request, before the store is read; may read middleware context and the model's views

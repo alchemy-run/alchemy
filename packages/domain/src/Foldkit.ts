@@ -59,12 +59,12 @@ type QueryRefusal<Q extends Query.Any> =
   | Readonly<{ _tag: "Unknown" }>;
 
 /**
- * A query refusal (`Rejected`, `Denied`) is final. `TimedOut` (only for a query that reads
- * projections) means they did not reach `atLeast` in time; `Unknown` is transport or a defect.
+ * A query refusal (`Rejected`, `Denied`) is final. `TimedOut` (only for a query with
+ * `waitsFor`) means its projections did not reach `atLeast` in time; `Unknown` is transport or a defect.
  * Both can be asked again.
  */
 export type QueryFailure<Q extends Query.Any> =
-  NonNullable<Q["definition"]["from"]> extends readonly []
+  NonNullable<Q["definition"]["waitsFor"]> extends readonly []
     ? QueryRefusal<Q>
     : QueryRefusal<Q> | Readonly<{ _tag: "TimedOut" }>;
 

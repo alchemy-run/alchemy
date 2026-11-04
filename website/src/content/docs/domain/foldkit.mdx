@@ -155,7 +155,7 @@ Bank.Message.match(result, {
 });
 ```
 
-Keep the `requestId` of the page in flight in the Model, and drop a reply with another id: an older request can answer after a newer one. A query changes nothing, so ask `TimedOut` and `Unknown` again with a new id. `TimedOut` is in the type only for a query with `from`. `CommandHeaders.get` receives the query name, as it receives a command tag.
+Keep the `requestId` of the page in flight in the Model, and drop a reply with another id: an older request can answer after a newer one. A query changes nothing, so ask `TimedOut` and `Unknown` again with a new id. `TimedOut` is in the type only for a query with `waitsFor`. `CommandHeaders.get` receives the query name, as it receives a command tag.
 
 ## Seed the first paint
 

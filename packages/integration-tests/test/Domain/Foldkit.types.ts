@@ -148,7 +148,7 @@ class Entries extends Domain.Query("Entries", {
   input: { counter: CounterId },
   success: Row,
   paged: true,
-  from: [Ledger],
+  waitsFor: [Ledger],
   rejects: [Limit],
 }) {}
 class Count extends Domain.Query("Count", { success: Schema.Number }) {}

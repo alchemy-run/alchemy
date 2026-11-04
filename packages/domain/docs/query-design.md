@@ -63,7 +63,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },
   success: LedgerEntry,            // the result, or with `paged`, one entry of a page
   paged: true,                     // the result is { entries, cursor }
-  from: [Ledger],                  // the projections it reads; `atLeast` waits on them
+  waitsFor: [Ledger],              // `atLeast` waits on these before the store is read
   middleware: [Session],
   rejects: [NotOwner],
   // Per request, before the store is read: may this caller ask this question?
@@ -82,7 +82,7 @@ The options:
 | `input` | The query's fields, like a command's `input`. Filters, sort keys and scopes are fields here. |
 | `success` | The schema of the result, or with `paged`, of one entry of a page. Named like a command's or an RPC's `success`. |
 | `paged` | Answer a page at a time: the result is `{ entries: Success[], cursor: string \| null }`, and the client pages with `after` and `take`. Default `false`. |
-| `from` | The projections whose stores the query reads. `atLeast` waits on each. |
+| `waitsFor` | The projections `atLeast` waits on before the handler reads. They may be keyed differently: the keys come from the write's own events. Reads outside their stores are not covered. |
 | `middleware` | Guards the query in an Api, in order. What it provides is what `validate`, `visible` and the handler may read. |
 | `rejects` | The rejections it may fail with; they reach the client typed. |
 | `validate` | Per request: `(input, { atLeast }) => Effect<void, Rejection>`. |
@@ -125,7 +125,7 @@ Why a model member, and not a service the Api requires directly:
 
 - The model already builds every handler with the model's own services available, so a handler can resolve a view or a port while it is constructed.
 - `Model.layer(handlers)` requires the implementation by type, and a story gets it from the same `layer` option as the projections.
-- The model can check the declaration when it is built: `from` must name projections it hosts.
+- The model can check the declaration when it is built: `waitsFor` must name projections it hosts.
 - The Api finds the query's runner in `Model.Internals`, as it finds a command's aggregate.
 
 ## Api and client
@@ -152,9 +152,9 @@ const page = yield* bank.AccountLedger(
 const next = yield* bank.AccountLedger({ account: accountId }, { after: page.cursor!, take: 20 });
 ```
 
-The wire value is `{ input, after?, take?, atLeast? }`, so a query's own fields never collide with the paging and consistency options. The success schema is `success`, or a page of it when the query is `paged`. The error schema is the union of `rejects`, plus `ConsistencyTimeout` when `from` is not empty. As with every entry, anything else (an infrastructure error, an undeclared rejection) becomes a defect, so it never reaches the client as an error it cannot decode.
+The wire value is `{ input, after?, take?, atLeast? }`, so a query's own fields never collide with the paging and consistency options. The success schema is `success`, or a page of it when the query is `paged`. The error schema is the union of `rejects`, plus `ConsistencyTimeout` when `waitsFor` is not empty. As with every entry, anything else (an infrastructure error, an undeclared rejection) becomes a defect, so it never reaches the client as an error it cannot decode.
 
-The client's error type is `QueryError<Q>`: the declared rejections, the middleware's errors, `ConsistencyTimeout` when the query has `from`, and `RpcClientError`.
+The client's error type is `QueryError<Q>`: the declared rejections, the middleware's errors, `ConsistencyTimeout` when the query has `waitsFor`, and `RpcClientError`.
 
 ## Authorization
 
@@ -183,17 +183,17 @@ const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
 const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
 ```
 
-`atLeast` is `{ stream, version }`, the same value a view's `get` takes, so a command's client result can be passed as is. For each projection in `from`, the query waits until it has handled every event of that command it consumes, then runs the handler.
+`atLeast` is `{ stream, version }`, the same value a view's `get` takes, so a command's client result can be passed as is. For each projection in `waitsFor`, the query waits until it has handled every event of that command it consumes, then runs the handler.
 
 The command's events are not on the wire: the client only has `stream` and `version`. So `Projection.Progress.caughtUp` now accepts a receipt without `events`, and looks them up. It reads the aggregate's events up to `version` (clamped to the instance's current version) from a small window before it, widening the window until it reaches an event of an earlier command, and keeps the events that share the last one's `commandId`. Usually that is one read of a handful of events. Then it waits exactly as before: for each key those events route to, until the key's checkpoint for the stream reaches the event's `seq`.
 
 Failure modes:
 
 - **Timeout.** After 10 seconds (the same default as views and streams), the query fails with `Domain.ConsistencyTimeout { view, key, stream, version }`, where `view` names the projection. It is typed on the wire, so a client can retry or show a stale notice. `ConsistencyTimeout` becomes a schema-backed tagged error for this; its fields and tag are unchanged.
-- **A receipt from another aggregate.** If no projection in `from` consumes that aggregate, there is nothing to wait for and the query runs at once.
+- **A receipt from another aggregate.** If no projection in `waitsFor` consumes that aggregate, there is nothing to wait for and the query runs at once.
 - **A version beyond the instance's.** It is clamped to the current version. A forged receipt can make the query wait at most for events that exist.
 - **A no-op command** (accepted with no events) has `version` equal to the instance's current version, so the wait covers the instance's last command. That is stricter than needed, and harmless.
-- **No `from`.** `atLeast` is accepted and ignored.
+- **No `waitsFor`.** `atLeast` is accepted and ignored.
 
 Like `caughtUp` today, the wait covers events a projection consumes directly from the aggregate. A projection fed by a view is not waited on through the view.
 
@@ -274,7 +274,7 @@ A query is a request-response RPC, so `Domain.protocolWebSocket` sends it over H
 
 - **A view over all keys, or a view with SQL storage.** That makes the platform a query engine, and couples the read model to one store. Projections already let the app pick the store; what was missing is serving it.
 - **`Domain.Api` routes with a raw handler** (`Domain.Route("GET /ledger/:id", handler)`). It would fix routing, but not typing, authorization or testing: the handler would still do its own auth and return untyped JSON. Declaring the query as a message is what makes `validate`, `rejects` and stories possible.
-- **The Api requiring the implementation directly**, as an Effect service, without making queries model members. It works, but stories would need a second place to provide implementations, the handler could not resolve model services at construction, and nothing would check `from`.
+- **The Api requiring the implementation directly**, as an Effect service, without making queries model members. It works, but stories would need a second place to provide implementations, the handler could not resolve model services at construction, and nothing would check `waitsFor`.
 - **A generic `where: Filter<Row>` and `orderBy: OrderBy<Row>` input.** Rejected for the reasons under Pagination.
 - **Per-row authorization that rejects.** Rejected: it leaks the existence of hidden rows and breaks paging.
 - **Per-row authorization only, without `validate`.** Rejected: most rules are about the question, not the rows, and per-row checks that need lookups cost one lookup per row.

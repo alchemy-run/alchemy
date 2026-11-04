@@ -79,7 +79,7 @@ const read = Command.mapMessage(
 );
 ```
 
-Args are `{ input, requestId, atLeast?, after?, take? }`. `SucceededAccountLedger` carries `{ requestId, result }`; a paged `result` is `{ entries, cursor }`, and `cursor` is `null` on the last page. `FailedAccountLedger` carries `Rejected`, `Denied`, `TimedOut` (only for a query with `from`: its projections did not reach `atLeast`), or `Unknown`. Keep the in-flight `requestId` in the Model and drop a reply with another id. Ask `TimedOut` and `Unknown` again with a new id: a query changes nothing. Pass a command's `receipt` as `atLeast` to read your own write. `CommandHeaders.get` receives the query name.
+Args are `{ input, requestId, atLeast?, after?, take? }`. `SucceededAccountLedger` carries `{ requestId, result }`; a paged `result` is `{ entries, cursor }`, and `cursor` is `null` on the last page. `FailedAccountLedger` carries `Rejected`, `Denied`, `TimedOut` (only for a query with `waitsFor`: its projections did not reach `atLeast`), or `Unknown`. Keep the in-flight `requestId` in the Model and drop a reply with another id. Ask `TimedOut` and `Unknown` again with a new id: a query changes nothing. Pass a command's `receipt` as `atLeast` to read your own write. `CommandHeaders.get` receives the query name.
 
 More: [Integrate with Foldkit: Ask a query](https://alchemy.run/domain/foldkit#ask-a-query), [Query](https://alchemy.run/domain/query).
 

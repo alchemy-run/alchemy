@@ -35,7 +35,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },
   success: LedgerRow,
   paged: true,
-  from: [Ledger],
+  waitsFor: [Ledger],
   middleware: [Session],
   rejects: [NotOwner],
   validate: Effect.fn(function* ({ account }) {
@@ -48,7 +48,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
 
 - `input` holds the query's fields, like a command's. Filters, sort orders and scopes are fields too.
 - `success` is the result. With `paged: true` it is one entry of a page, and the result is `{ entries, cursor }`. Leave `paged` out for a query with one result.
-- `from` names the projections whose store it reads, so a read can wait for a write.
+- `waitsFor` names the projections a read waits on when it passes a write to read at least. They may be keyed differently: the keys come from that write's events. Data the handler reads from anywhere else is not covered.
 - `middleware`, `rejects` and `validate` work as they do for commands and views.
 
 `LedgerRow` is a schema, so the rows are checked and encoded on the way to the client:
@@ -112,7 +112,7 @@ export class CustomerApi extends Domain.Api(
 const page = yield* bank.AccountLedger({ account: accountId }, { take: 20 });
 ```
 
-The result is decoded from the `success` schema. The error type lists the query's rejections, its middleware's errors, `ConsistencyTimeout` when it reads from projections, and `RpcClientError`, so `Effect.catchTag` handles each.
+The result is decoded from the `success` schema. The error type lists the query's rejections, its middleware's errors, `ConsistencyTimeout` when it has `waitsFor`, and `RpcClientError`, so `Effect.catchTag` handles each.
 
 A Foldkit app asks a query through a Command from `@alchemy.run/domain/Foldkit`. See [Integrate with Foldkit: Ask a query](/domain/foldkit#ask-a-query).
 
@@ -192,7 +192,7 @@ A page `visible` trimmed can be shorter than `take` without being the last one, 
 
 ## Read your own write
 
-The projection's store is eventually consistent with the model. A client that has just sent a command passes the command's result as `atLeast`, and the query waits until every projection in `from` has handled that command's events.
+The projection's store is eventually consistent with the model. A client that has just sent a command passes the command's result as `atLeast`, and the query waits until every projection in `waitsFor` has handled that command's events.
 
 ```typescript
 const receipt = yield* bank.WithdrawMoney(accountId, { amount: 30 }, mfa);
@@ -201,7 +201,7 @@ const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receip
 
 The client's receipt carries only the command's `stream` and `version`, so the server reads that command's events back from its aggregate to know which keys to wait on. A wait that lasts longer than 10 seconds fails with `ConsistencyTimeout`, typed, so the client can retry or show that the data is behind.
 
-Without `from`, `atLeast` waits for nothing. A command handled by a saga or a policy (here, the debit of a transfer) is not the client's own write: poll for it, or watch a view.
+Without `waitsFor`, `atLeast` waits for nothing. A command handled by a saga or a policy (here, the debit of a transfer) is not the client's own write: poll for it, or watch a view.
 
 ## Test it
 

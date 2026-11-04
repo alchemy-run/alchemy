@@ -333,7 +333,7 @@ export type CommandClient<C extends Command.Any> =
 
 /**
  * Everything a query can fail with: its rejections, `ConsistencyTimeout` when
- * it reads from projections, its middleware's errors, transport.
+ * it has `waitsFor`, its middleware's errors, transport.
  */
 export type QueryError<Q extends Query.Any> =
   | Query.FailureOf<Q>

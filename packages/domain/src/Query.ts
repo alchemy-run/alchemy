@@ -113,7 +113,7 @@ export interface AnyDefinition {
   readonly input?: Fields;
   readonly success?: Schema.Top;
   readonly paged?: boolean;
-  readonly from?: ReadonlyArray<Projection.Any>;
+  readonly waitsFor?: ReadonlyArray<Projection.Any>;
   readonly middleware?: Middleware.List;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly validate?: (input: never, request: Request) => Effect.Effect<void, unknown, unknown>;
@@ -148,11 +148,13 @@ export type NeedsOf<Q extends Any> = Q extends Any ? Q["~needs"] : never;
 
 /**
  * What running a query can fail with, besides its middleware's errors: its
- * rejections, and `ConsistencyTimeout` when it reads from projections.
+ * rejections, and `ConsistencyTimeout` when it has `waitsFor`.
  */
 export type FailureOf<Q extends Any> =
   | Aggregate.InstanceOf<NonNullable<Q["definition"]["rejects"]>[number]>
-  | (NonNullable<Q["definition"]["from"]> extends readonly [] ? never : View.ConsistencyTimeout);
+  | (NonNullable<Q["definition"]["waitsFor"]> extends readonly []
+      ? never
+      : View.ConsistencyTimeout);
 
 /**
  * Type-level identity of a query's implementation in an Effect's requirements.
@@ -187,8 +189,13 @@ export interface Definition<
    * @default false
    */
   readonly paged?: P;
-  /** The projections whose stores it reads. A read `atLeast` a write waits on each. */
-  readonly from?: From;
+  /**
+   * The projections a read `atLeast` a write waits on, before the handler
+   * reads their store. They may be keyed differently: the keys to wait on
+   * come from the command's own events. Reads outside these projections'
+   * stores are not covered by `atLeast`.
+   */
+  readonly waitsFor?: From;
   /**
    * Middleware that guards the query when an Api exposes it, in order. What
    * it provides is what `validate`, `visible` and the handler may read.
@@ -243,7 +250,7 @@ export interface Definition<
  *   input: { account: AccountId },
  *   success: LedgerEntry,
  *   paged: true,
- *   from: [Ledger],
+ *   waitsFor: [Ledger],
  *   middleware: [Session],
  *   rejects: [NotOwner],
  *   validate: Effect.fn(function* ({ account }) {
@@ -307,7 +314,7 @@ export const make = <
   const rejects = definition.rejects ?? [];
   const errors: ReadonlyArray<Schema.Top> = [
     ...rejects,
-    ...((definition.from ?? []).length > 0 ? [View.ConsistencyTimeout] : []),
+    ...((definition.waitsFor ?? []).length > 0 ? [View.ConsistencyTimeout] : []),
   ];
   const middleware = definition.middleware ?? [];
   const rpc = Rpc.make(name, {
@@ -430,7 +437,7 @@ export const host = (
         // Judge the request first: a refused caller never waits on a projection.
         if (validate) yield* validate(input, { atLeast });
         if (atLeast) {
-          for (const projection of def.from ?? []) {
+          for (const projection of def.waitsFor ?? []) {
             yield* progress(projection)
               .caughtUp(atLeast)
               .pipe(

@@ -371,6 +371,16 @@ export class VisibleWithoutPaging extends Data.TaggedError("VisibleWithoutPaging
   }
 }
 
+/** A query waits for a projection the Domain does not list. */
+export class UnknownWait extends Data.TaggedError("UnknownWait")<{
+  readonly query: string;
+  readonly projection: string;
+}> {
+  override get message() {
+    return `${this.query} waits for ${this.projection}, which is not in the Domain`;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -408,7 +418,8 @@ export type Reason =
   | ModelHostedTwice
   | LazyViewNeedsOneSource
   | PagedWithoutSuccess
-  | VisibleWithoutPaging;
+  | VisibleWithoutPaging
+  | UnknownWait;
 
 /**
  * A domain definition error, found while the kernel is built or when a

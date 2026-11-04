@@ -148,7 +148,7 @@ class WalletMovements extends Domain.Query("WalletMovements", {
   input: { wallet: Schema.String },
   success: Movement,
   paged: true,
-  from: [Ledger],
+  waitsFor: [Ledger],
   middleware: [ViewerSession],
   rejects: [NotYours],
   validate: Effect.fn(function* ({ wallet }) {
@@ -189,7 +189,7 @@ const LargeMovementsLive = LargeMovements.toLayer(
 class Total extends Domain.Query("Total", {
   input: { wallet: Schema.String },
   success: Schema.Struct({ total: Schema.Number, movements: Schema.Number }),
-  from: [Ledger],
+  waitsFor: [Ledger],
 }) {}
 const TotalLive = Total.toLayer(
   Effect.gen(function* () {
@@ -460,7 +460,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
         Effect.provide(InMemory),
       ) as Effect.Effect<unknown>,
     );
-    expect(String(exit)).toContain("Total consumes Ledger, which is not in the Domain");
+    expect(String(exit)).toContain("Total waits for Ledger, which is not in the Domain");
   });
 
   it("refuses a model with a query named like one of its commands", async () => {
@@ -492,7 +492,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
       "Query 'Pages' is `paged` but declares no `success`: name the schema of one entry",
       "Query 'Judged' declares `visible` but is not `paged`: only the entries of a page are judged",
       "Two entities are named 'WalletOwner'",
-      "Total consumes Ledger, which is not in the Domain",
+      "Total waits for Ledger, which is not in the Domain",
       "Duplicate query 'Total'",
     ]);
   });

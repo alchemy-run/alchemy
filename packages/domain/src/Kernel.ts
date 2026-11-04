@@ -28,6 +28,7 @@ import {
   UnhandledCommand,
   UnknownEvent,
   UnknownSource,
+  UnknownWait,
   UnknownStream,
   UnmatchedRoute,
   VisibleWithoutPaging,
@@ -689,9 +690,9 @@ const build = (
     const def = query.definition;
     if (def.paged && !def.success) problem(new PagedWithoutSuccess({ query: name }));
     if (def.visible && !def.paged) problem(new VisibleWithoutPaging({ query: name }));
-    for (const projection of def.from ?? []) {
+    for (const projection of def.waitsFor ?? []) {
       if (projectionByName.get(projection.projectionName) !== projection) {
-        problem(new UnknownSource({ consumer: name, source: projection.projectionName }));
+        problem(new UnknownWait({ query: name, projection: projection.projectionName }));
       }
     }
   }

@@ -219,7 +219,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   input: { account: AccountId },
   success: LedgerRow,
   paged: true,
-  from: [Ledger],
+  waitsFor: [Ledger],
   middleware: [Session],
   rejects: [NotOwner],
   validate: Effect.fn(function* ({ account }) {
