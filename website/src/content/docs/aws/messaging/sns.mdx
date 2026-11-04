@@ -14,9 +14,9 @@ A [Queue](/aws/messaging/sqs) hands each message to one consumer. A Topic hands 
 <Fanout
   item={{ title: "message", lines: ['"orderId": "o_104"', '"total": 120'] }}
   routes={[
-    { target: { label: "EmailJobs", type: "SQS Queue" }, copy: "copy" },
-    { target: { label: "AnalyticsJobs", type: "SQS Queue" }, copy: "copy" },
-    { target: { label: "Audit", type: "Lambda Function" }, copy: "copy" },
+    { target: { label: "EmailJobs", type: "SQS Queue" } },
+    { target: { label: "AnalyticsJobs", type: "SQS Queue" } },
+    { target: { label: "Audit", type: "Lambda Function" } },
   ]}
   caption="Api publishes once, and each subscription gets a copy of its own. Deleting the copy in EmailJobs leaves the others untouched."
 />

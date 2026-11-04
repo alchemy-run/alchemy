@@ -15,8 +15,7 @@
  *     ]}
  *   />
  *
- * A route without `condition` takes everything. `copy` puts a labelled chip on
- * the delivery, to show each target receives its own copy. `group` draws a
+ * A route without `condition` takes everything. `group` draws a
  * border around the conditions, for rules that live on a bus.
  */
 import "./diagram.css";
@@ -26,7 +25,6 @@ interface Route {
   condition?: string[];
   target: { label: string; type?: string };
   match?: boolean;
-  copy?: string;
 }
 interface Props {
   item: { title: string; lines: string[] };
@@ -50,7 +48,7 @@ const ROW_GAP = 14;
 
 const X_ITEM = 8;
 const X_COND = X_ITEM + ITEM_W + 64;
-const X_TARGET = (hasCond ? X_COND + condW : X_COND) + (routes.some((r) => r.copy) ? 110 : routes.some((r) => r.match === false) ? 88 : 64);
+const X_TARGET = (hasCond ? X_COND + condW : X_COND) + (routes.some((r) => r.match === false) ? 88 : 64);
 const W = X_TARGET + TW + 8;
 
 let y = 8 + GROUP_TOP;
@@ -109,12 +107,6 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
                 ) : (
                   <text x={X_COND + condW + 12} y={mid + 4} class="alc-fig__type">no match</text>
                 )}
-              </g>
-            )}
-            {r.copy && ok && (
-              <g>
-                <rect x={X_TARGET - 92} y={mid - 11} width={60} height={22} rx="4" class="alc-fig__box alc-fig__box--accent" />
-                <text x={X_TARGET - 62} y={mid + 4} text-anchor="middle" class="alc-fig__small">{r.copy}</text>
               </g>
             )}
             <rect x={X_TARGET} y={mid - 23} width={TW} height={46} rx="8" class:list={["alc-fig__box", !ok && "alc-fig__box--muted"]} opacity={ok ? 1 : 0.6} />

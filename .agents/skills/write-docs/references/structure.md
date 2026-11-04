@@ -65,7 +65,7 @@ mixing them on a page is fine.
 | --- | --- | --- |
 | What holds what? What is the platform made of? | `DAG` with `groups` (borders) | `aws/what-is-aws`, `aws/networking` |
 | What connects to what, and what flows where? (rarely: reach for a component below first) | `DAG` (arrows) | `aws/frontend/websites` |
-| Where does one event or message go, and why? Routing by content, broadcast copies, filters | `Fanout` (the item's JSON, each route's condition, match or not, a copy chip per delivery) | `aws/messaging/eventbridge`, `aws/messaging/sns` |
+| Where does one event or message go, and why? Routing by content, broadcast copies, filters | `Fanout` (the item's JSON, each route's condition, match or not). No labels sitting on a line: a "copy" chip on each delivery was rejected | `aws/messaging/eventbridge`, `aws/messaging/sns` |
 | What's in a queue right now, and who holds what? | `Queue` (`messages` for a standard queue in no order, `groups` for FIFO message groups) | `aws/messaging/sqs` |
 | How do compute and shared storage spread over zones? | `Zones` | `aws/data/rds` |
 | Who manages each layer, you or the platform? | `Responsibility` | `aws/compute/choosing-a-runtime` |
@@ -77,7 +77,7 @@ mixing them on a page is fine.
 | How is data laid out, and what does a query read? | `Records` | `aws/data/dynamodb`, `aws/data/s3` |
 | How does a value or a line of code travel from deploy to run time? | `Sequence` (a value's journey) or `Timeline` (what runs when) | `aws/security/secrets-env`, `infrastructure-as-effects/phases` |
 | How do copies relate over time? | `BranchGraph` | `neon/data/branching` |
-| What nests inside what, to any depth, and what applies to each branch? | `Tree`: nested borders, each parent drawn around its children (`scopes` tag the container a policy is attached to; `dashed`, `wide`, `specs` for a box's own properties) | `aws/accounts-and-regions`, `aws/compute/ec2`, `aws/compute/eks` |
+| What nests inside what, to any depth, and what applies to each branch? | `Tree`: nested borders, each parent drawn around its children and shrunk to fit them, so there's no empty space on the right (`scopes` tag the container a policy is attached to; `dashed`, `wide`, `specs` for a box's own properties) | `aws/accounts-and-regions`, `aws/compute/ec2`, `aws/compute/eks` |
 
 Each component's JSDoc has its props and a usage example. Read it before using
 one.

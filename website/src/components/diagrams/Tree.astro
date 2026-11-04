@@ -104,7 +104,8 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
 
 <style>
   .alc-tree {
-    max-width: 44rem;
+    width: fit-content;
+    max-width: min(44rem, 100%);
     margin-inline: auto;
     font-family: var(--alc-font-mono);
   }

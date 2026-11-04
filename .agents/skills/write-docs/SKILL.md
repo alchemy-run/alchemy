@@ -129,7 +129,7 @@ Each of these was a correction. Don't relearn them.
   three boxes, writer and reader arrows into a volume box, `t3.small → size →
   instance`, Deployment `creates` Pods, and a Web Function lane of scattered
   bars. Each became a picture of the thing itself: the event's JSON against each
-  rule's pattern (`Fanout`), a copy per subscriber, the queue's contents in no
+  rule's pattern (`Fanout`), one line per subscriber, the queue's contents in no
   order and FIFO groups in line (`Queue`), zones under one shared volume
   (`Zones`), properties written inside the instance, objects on the API server
   above Pods on nodes (`Tree`), and the Lambda page's spike absorbed by one
