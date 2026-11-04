@@ -90,7 +90,9 @@ export const scan = Effect.fn("Alchemist.Drift.scan")(function* (input: ScanOpti
  * Repair the drift `scan` found: reconcile each drifted or missing resource
  * back to its last-deployed desired state. Only those resources are touched;
  * they are re-read first, so one that is back in sync is left alone, and
- * drift that appeared after the scan waits for the next one.
+ * drift that appeared after the scan waits for the next one. The stack's
+ * outputs are left as they were; deploy afterwards to refresh them, as
+ * `alchemy deploy --detect-drift` does.
  */
 export const execute = Effect.fn("Alchemist.Drift.execute")(function* (scan: DriftScan) {
   const only = scan.resources

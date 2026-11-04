@@ -137,47 +137,49 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
   );
 
   // #2987: a scheduled `alchemy drift` must tell drift (2) from a clean
-  // stage (0) and a failed check (1) without parsing the printed plan.
-  it.live("drift exits 0 in sync, 2 on unrepaired drift, 1 when it can't check", () =>
+  // stage (0) and a failed check (1) without parsing the printed plan, and a
+  // repair must leave the stack's outputs pointing at the recreated resource.
+  it.live("drift exits 0 in sync, 2 on drift, 1 when it can't check", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-exit-codes-" });
       const project = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-drift-project-" });
-      const run = (args: ReadonlyArray<string>, cloud?: string) =>
+      const run = (args: ReadonlyArray<string>, env: Record<string, string> = {}) =>
         Effect.gen(function* () {
           const handle = yield* ChildProcess.make(
             "bun",
             [CLI, ...args, "--config", DRIFT_FIXTURE, "--stage", "cli_drift"],
             {
               cwd: project,
-              env: { ALCHEMY_HOME: home, ...(cloud ? { DRIFT_FIXTURE_CLOUD: cloud } : {}) },
+              env: { ALCHEMY_HOME: home, ...env },
               extendEnv: true,
               stdin: "ignore",
-              stdout: "pipe",
-              stderr: "pipe",
+              stdout: "ignore",
+              stderr: "ignore",
               killSignal: "SIGTERM",
               forceKillAfter: "1 second",
             },
           );
-          const [output, exitCode] = yield* Effect.all(
-            [
-              Stream.merge(handle.stdout, handle.stderr).pipe(Stream.decodeText, Stream.mkString),
-              handle.exitCode,
-            ],
-            { concurrency: 2 },
-          );
-          return { exitCode, output };
+          return yield* handle.exitCode;
         }).pipe(Effect.scoped);
+      const outputs = fs
+        .readFileString(
+          `${project}/.alchemy/state/CliDriftExitCodes/cli_drift/__stack_output__.json`,
+        )
+        .pipe(Effect.map((text) => JSON.parse(text) as unknown));
 
+      const missing = { DRIFT_FIXTURE_CLOUD: "missing", DRIFT_FIXTURE_GENERATION: "2" };
       const exitCodes = {
-        deploy: (yield* run(["deploy", "--yes"])).exitCode,
-        inSync: (yield* run(["drift"])).exitCode,
-        drifted: (yield* run(["drift"], "missing")).exitCode,
-        unreadable: (yield* run(["drift"], "broken")).exitCode,
-        repaired: (yield* run(["drift", "--repair", "--yes"], "missing")).exitCode,
-        destroy: (yield* run(["destroy", "--yes"])).exitCode,
+        deploy: yield* run(["deploy", "--yes"]),
+        inSync: yield* run(["drift"]),
+        drifted: yield* run(["drift"], missing),
+        unreadable: yield* run(["drift"], { DRIFT_FIXTURE_CLOUD: "broken" }),
+        repaired: yield* run(["deploy", "--detect-drift", "--yes"], missing),
       };
-      expect(exitCodes).toEqual({
+      const repairedOutputs = yield* outputs;
+      const destroy = yield* run(["destroy", "--yes"]);
+
+      expect({ ...exitCodes, destroy }).toEqual({
         deploy: 0,
         inSync: 0,
         drifted: 2,
@@ -185,6 +187,7 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
         repaired: 0,
         destroy: 0,
       });
+      expect(JSON.stringify(repairedOutputs)).toContain("Probe#2");
     }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   );
 
