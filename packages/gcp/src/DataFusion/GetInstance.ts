@@ -3,20 +3,18 @@ import type * as datafusion from "@distilled.cloud/gcp/datafusion_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface GetInstanceRequest extends Omit<
   datafusion.GetProjectsLocationsInstancesRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-}
+> {}
 
-export type GetInstanceShape = () => Effect.Effect<
+export type GetInstanceShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
-    request: GetInstanceRequest,
+    request?: GetInstanceRequest,
   ) => Effect.Effect<
     datafusion.Instance,
     datafusion.GetProjectsLocationsInstancesError,
@@ -27,14 +25,14 @@ export type GetInstanceShape = () => Effect.Effect<
 /**
  * Gets details of a single Data Fusion instance.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetInstanceHttp}. The host gets `roles/datafusion.viewer` on the project.
+ * Bind it to a {@link Instance} and provide {@link GetInstanceHttp}. The
+ * host gets `roles/datafusion.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `instances.get`
  * ```typescript
- * const getInstance = yield* GCP.DataFusion.GetInstance();
- * const response = yield* getInstance({ location: "us-central1", instance: "..." });
+ * const getInstance = yield* GCP.DataFusion.GetInstance(instance);
+ * const response = yield* getInstance();
  * ```
  *
  * @binding

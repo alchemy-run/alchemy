@@ -3,20 +3,19 @@ import type * as datafusion from "@distilled.cloud/gcp/datafusion_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface DeleteInstanceDnsPeeringRequest extends Omit<
   datafusion.DeleteProjectsLocationsInstancesDnsPeeringsRequest,
   "name"
 > {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-  /** Id of the dnsPeering (`dnsPeerings/{dnsPeering}`). */
+  /** Id of the dnsPeering under the bound resource (`dnsPeerings/{dnsPeering}`). */
   dnsPeering: string;
 }
 
-export type DeleteInstanceDnsPeeringShape = () => Effect.Effect<
+export type DeleteInstanceDnsPeeringShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
     request: DeleteInstanceDnsPeeringRequest,
   ) => Effect.Effect<
@@ -29,14 +28,14 @@ export type DeleteInstanceDnsPeeringShape = () => Effect.Effect<
 /**
  * Deletes DNS peering on the given resource.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link DeleteInstanceDnsPeeringHttp}. The host gets `roles/datafusion.admin` on the project.
+ * Bind it to a {@link Instance} and provide {@link DeleteInstanceDnsPeeringHttp}. The
+ * host gets `roles/datafusion.admin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `dnsPeerings.delete`
  * ```typescript
- * const deleteInstanceDnsPeering = yield* GCP.DataFusion.DeleteInstanceDnsPeering();
- * const response = yield* deleteInstanceDnsPeering({ location: "us-central1", instance: "...", dnsPeering: "..." });
+ * const deleteInstanceDnsPeering = yield* GCP.DataFusion.DeleteInstanceDnsPeering(instance);
+ * const response = yield* deleteInstanceDnsPeering({ dnsPeering: "..." });
  * ```
  *
  * @binding

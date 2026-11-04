@@ -70,31 +70,15 @@ describe.skipIf(!!process.env.FAST)(
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 1_800_000 },
+      { timeout: 3_600_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+    afterAll(sharedStack.destroy(), { timeout: 3_600_000 });
 
-    describe("project", { concurrent: true }, () => {
-      test.provider(
-        "CreateInstance (datafusion.projects.locations.instances.create)",
-        () => probe("CreateInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
-          timeout: 600_000,
-        },
-      );
+    describe("Instance", { concurrent: true }, () => {
       test.provider(
         "CreateInstanceDnsPeering (datafusion.projects.locations.instances.dnsPeerings.create)",
         () => probe("CreateInstanceDnsPeering", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteInstance (datafusion.projects.locations.instances.delete)",
-        () => probe("DeleteInstance", false),
         {
           tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
           timeout: 600_000,
@@ -110,7 +94,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "GetInstance (datafusion.projects.locations.instances.get)",
-        () => probe("GetInstance", false),
+        () => probe("GetInstance", true),
         {
           tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
           timeout: 600_000,
@@ -118,12 +102,23 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListInstanceDnsPeerings (datafusion.projects.locations.instances.dnsPeerings.list)",
-        () => probe("ListInstanceDnsPeerings", false),
+        () => probe("ListInstanceDnsPeerings", true),
         {
           tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
           timeout: 600_000,
         },
       );
+      test.provider(
+        "RestartInstance (datafusion.projects.locations.instances.restart)",
+        () => probe("RestartInstance", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("project", { concurrent: true }, () => {
       test.provider(
         "ListInstances (datafusion.projects.locations.instances.list)",
         () => probe("ListInstances", true),
@@ -135,22 +130,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ListVersions (datafusion.projects.locations.versions.list)",
         () => probe("ListVersions", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchInstance (datafusion.projects.locations.instances.patch)",
-        () => probe("PatchInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "RestartInstance (datafusion.projects.locations.instances.restart)",
-        () => probe("RestartInstance", false),
         {
           tags: ["provider:gcp", "provider:gcp:datafusion", "live"],
           timeout: 600_000,

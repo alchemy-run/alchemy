@@ -1,12 +1,19 @@
 {
   "discovery": "datafusion-v1",
   "module": "datafusion_v1",
-  "resources": {},
+  "resources": {
+    "Instance": {
+      "pattern": "projects/*/locations/*/instances/*"
+    }
+  },
   "permissions": {
     "datafusion.projects.locations.versions.list": "datafusion.instances.list"
   },
   "probes": {
-    "resources": {},
-    "enable": ["datafusion.googleapis.com"]
+    "resources": {
+      "Instance": "ProbeInstance"
+    },
+    "enable": ["datafusion.googleapis.com"],
+    "deployMinutes": 60
   }
 }

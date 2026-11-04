@@ -3,20 +3,18 @@ import type * as datafusion from "@distilled.cloud/gcp/datafusion_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface CreateInstanceDnsPeeringRequest extends Omit<
   datafusion.CreateProjectsLocationsInstancesDnsPeeringsRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-}
+> {}
 
-export type CreateInstanceDnsPeeringShape = () => Effect.Effect<
+export type CreateInstanceDnsPeeringShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
-    request: CreateInstanceDnsPeeringRequest,
+    request?: CreateInstanceDnsPeeringRequest,
   ) => Effect.Effect<
     datafusion.DnsPeering,
     datafusion.CreateProjectsLocationsInstancesDnsPeeringsError,
@@ -27,14 +25,14 @@ export type CreateInstanceDnsPeeringShape = () => Effect.Effect<
 /**
  * Creates DNS peering on the given resource.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link CreateInstanceDnsPeeringHttp}. The host gets `roles/datafusion.admin` on the project.
+ * Bind it to a {@link Instance} and provide {@link CreateInstanceDnsPeeringHttp}. The
+ * host gets `roles/datafusion.admin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `dnsPeerings.create`
  * ```typescript
- * const createInstanceDnsPeering = yield* GCP.DataFusion.CreateInstanceDnsPeering();
- * const response = yield* createInstanceDnsPeering({ location: "us-central1", instance: "..." });
+ * const createInstanceDnsPeering = yield* GCP.DataFusion.CreateInstanceDnsPeering(instance);
+ * const response = yield* createInstanceDnsPeering();
  * ```
  *
  * @binding

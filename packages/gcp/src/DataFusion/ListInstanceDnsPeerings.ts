@@ -3,20 +3,18 @@ import type * as datafusion from "@distilled.cloud/gcp/datafusion_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Instance } from "./Instance.ts";
 
 export interface ListInstanceDnsPeeringsRequest extends Omit<
   datafusion.ListProjectsLocationsInstancesDnsPeeringsRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the instance (`instances/{instance}`). */
-  instance: string;
-}
+> {}
 
-export type ListInstanceDnsPeeringsShape = () => Effect.Effect<
+export type ListInstanceDnsPeeringsShape = (
+  resource: Instance,
+) => Effect.Effect<
   (
-    request: ListInstanceDnsPeeringsRequest,
+    request?: ListInstanceDnsPeeringsRequest,
   ) => Effect.Effect<
     datafusion.ListDnsPeeringsResponse,
     datafusion.ListProjectsLocationsInstancesDnsPeeringsError,
@@ -27,14 +25,14 @@ export type ListInstanceDnsPeeringsShape = () => Effect.Effect<
 /**
  * Lists DNS peerings for a given resource.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ListInstanceDnsPeeringsHttp}. The host gets `roles/datafusion.viewer` on the project.
+ * Bind it to a {@link Instance} and provide {@link ListInstanceDnsPeeringsHttp}. The
+ * host gets `roles/datafusion.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `dnsPeerings.list`
  * ```typescript
- * const listInstanceDnsPeerings = yield* GCP.DataFusion.ListInstanceDnsPeerings();
- * const response = yield* listInstanceDnsPeerings({ location: "us-central1", instance: "..." });
+ * const listInstanceDnsPeerings = yield* GCP.DataFusion.ListInstanceDnsPeerings(instance);
+ * const response = yield* listInstanceDnsPeerings();
  * ```
  *
  * @binding

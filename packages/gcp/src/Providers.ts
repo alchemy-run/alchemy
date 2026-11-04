@@ -1010,6 +1010,10 @@ import {
 } from "./Dataform/Repository.ts";
 import { Team, TeamProvider } from "./Dataform/Team.ts";
 import {
+  Instance as DataFusionInstance,
+  InstanceProvider as DataFusionInstanceProvider,
+} from "./DataFusion/Instance.ts";
+import {
   AnnotationSpecSet as DatalabelingAnnotationSpecSet,
   AnnotationSpecSetProvider as DatalabelingAnnotationSpecSetProvider,
 } from "./DataLabeling/AnnotationSpecSet.ts";
@@ -3543,6 +3547,7 @@ const makeProviders = () =>
           StorageBatchOperationsJob,
           NotebooksInstance,
           IDSEndpoint,
+          DataFusionInstance,
           TranslateModel,
           WorkstationCluster,
           WorkstationClustersWorkstationConfig,
@@ -4665,6 +4670,7 @@ const makeProviders = () =>
                 StorageBatchOperationsJobProvider(),
                 NotebooksInstanceProvider(),
                 IDSEndpointProvider(),
+                DataFusionInstanceProvider(),
                 TranslateModelProvider(),
               ),
               Layer.mergeAll(
