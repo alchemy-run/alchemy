@@ -1,3 +1,4 @@
+import * as FanOut from "@alchemy.run/domain/FanOut";
 import type * as cf from "@cloudflare/workers-types";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Clock from "effect/Clock";
@@ -16,7 +17,8 @@ import * as Move from "../Workers/internal/DurableObjectMove.ts";
 import { makeRpcStub } from "../Workers/Rpc.ts";
 import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
 import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
-import { task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
+import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
+import { backfillRuntime } from "./Runtime.ts";
 import { MIGRATION_WORKFLOW } from "./Version.ts";
 
 /**
@@ -129,6 +131,8 @@ export const sharedClasses = Effect.fn(function* () {
       env: Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment)),
     };
     workers.set(host, classes);
+    // The migration run's root and relays: see `migration`.
+    routes.set(MIGRATION_ROUTE, migrationObject(classes));
   }
   const shared = classes;
   return {
@@ -384,60 +388,242 @@ const source = (classes: Classes, route: string, impl: ObjectImpl): ObjectImpl =
     });
   });
 
-/** How many objects one step of the migration moves, and how long each may take. */
-const STEP = 25;
-const MOVE_WAIT_MS = 10_000;
+// ---------------------------------------------------------------- the migration run
 
 /**
- * Move each listed object of one old class (by hex id) to its key's object in
- * the shared class. The deploy lists the ids and waits for the instances.
+ * The migration run's route in the shared class. Its root (`run:<target>`)
+ * holds the objects to move, page by page, and drives a `FanOut` run over
+ * them; its relays (`relay:<target>:<name>`) each move a share.
  */
-const migration = (params: {
+const MIGRATION_ROUTE = "~migration";
+
+/** One object to move: its old class, its route in the shared class, and its hex id. */
+interface MoveItem {
+  readonly c: string;
+  readonly r: string;
+  readonly id: string;
+}
+
+/** A pass of a migration run. */
+interface MovePass extends FanOut.Pass {
+  readonly target: string;
+}
+
+/** What a migration run moves: the pages of ids the deploy listed. */
+export interface MovePlan {
+  readonly pages: ReadonlyArray<{
+    readonly n: number;
+    readonly className: string;
+    readonly size: number;
+  }>;
+}
+
+/** A page of ids the deploy listed, as the root keeps it. */
+interface StoredPage {
   readonly className: string;
   readonly route: string;
   readonly ids: ReadonlyArray<string>;
-}) =>
+}
+
+const pageKey = (target: string, n: string | number) => `mg:page:${target}:${n}`;
+const skipKey = (target: string) => `mg:skip:${target}`;
+
+/** How long a pass of a migration run keeps at it before the root starts another. */
+const MIGRATION_PASS_MS = 5 * 60_000;
+
+/** The root and relay objects of a migration run. */
+const migrationStub = (classes: Classes, key: string) =>
+  makeRpcStub<Stub>(
+    (
+      classes.env?.[SHARED_CLASS] as { getByName: (name: string) => unknown } | undefined
+    )?.getByName(`${MIGRATION_ROUTE}/${key}`) ??
+      classes.namespace.getByName(`${MIGRATION_ROUTE}/${key}`),
+  );
+
+const orDie = <A>(effect: Effect.Effect<unknown, unknown>) =>
+  effect.pipe(Effect.orDie) as Effect.Effect<A>;
+
+/**
+ * Move one object: find its key (its name), and ask its new object to move
+ * its data, waiting up to `waitMillis` for the flip. `skipped` for an object
+ * that knows neither its name nor its key.
+ */
+const moveOne = (classes: Classes, item: MoveItem, waitMillis: number) =>
   Effect.gen(function* () {
-    const env = (yield* WorkerEnvironment) as Record<string, any>;
-    const legacy = env[params.className];
-    const shared = env[SHARED_CLASS];
-    if (legacy === undefined || shared === undefined)
-      return { moved: 0, skipped: params.ids.length };
-    let moved = 0;
-    let skipped = 0;
-    for (let i = 0; i < params.ids.length; i += STEP) {
-      const step = yield* task(
-        `move-${i}`,
-        Effect.forEach(
-          params.ids.slice(i, i + STEP),
-          (hex) =>
+    const legacy = classes.env?.[item.c];
+    const shared = classes.env?.[SHARED_CLASS];
+    if (legacy === undefined || shared === undefined) return "skipped" as const;
+    const id = legacy.idFromString(item.id);
+    const name = yield* orDie<string | null>(makeRpcStub<Stub>(legacy.get(id)).domainName!());
+    if (name === null) return "skipped" as const;
+    const scoped = id.jurisdiction === undefined ? shared : shared.jurisdiction(id.jurisdiction);
+    const target = makeRpcStub<Stub>(scoped.getByName(`${item.r}/${name}`));
+    return (yield* orDie<boolean>(target.domainMove!(waitMillis)))
+      ? ("moved" as const)
+      : ("pending" as const);
+  });
+
+/** How a migration run's relays list a page and move an object: see `FanOut`. */
+const migrationWork = (classes: Classes): FanOut.Work<MovePass, MoveItem> => ({
+  label: "move",
+  list: (pass, path) =>
+    orDie<FanOut.Listed<MoveItem>>(
+      migrationStub(classes, `run:${pass.target}`).mgList!(pass.target, path),
+    ),
+  handle: (pass, item, waitMillis) =>
+    Effect.flatMap(moveOne(classes, item, waitMillis), (outcome) =>
+      outcome === "skipped"
+        ? Effect.as(
+            orDie(
+              migrationStub(classes, `run:${pass.target}`).mgSkip!(pass.target, item.c, item.id),
+            ),
+            true,
+          )
+        : Effect.succeed(outcome === "moved"),
+    ),
+  describe: (item) => `${item.c}/${item.id}`,
+  relay: (name, pass, entries) =>
+    orDie<FanOut.Result>(
+      migrationStub(classes, `relay:${pass.target}:${name}`).mgRelay!(name, pass, entries),
+    ),
+});
+
+/** A frontier entry's name in the root's marks of what is done. */
+const entryKey = (entry: FanOut.Entry<MoveItem>) =>
+  "path" in entry ? `p:${entry.path}` : `i:${entry.ref.c}/${entry.ref.id}`;
+
+interface MigrationRun {
+  readonly begin: (target: string, plan: MovePlan) => Effect.Effect<FanOut.Begin<MovePlan>>;
+  readonly progress: (target: string) => Effect.Effect<FanOut.Progress>;
+  readonly run: (id: string) => Effect.Effect<void>;
+}
+
+/** The objects of a migration run: its root, and its relays. */
+const migrationObject = (classes: Classes): ObjectImpl =>
+  Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    return Effect.gen(function* () {
+      const work = migrationWork(classes);
+      const relay = FanOut.makeRelay(work);
+      let run: MigrationRun | undefined;
+      const runtime: { readonly storage: FanOut.Storage; readonly jobs: FanOut.Jobs } =
+        yield* backfillRuntime({ uuidV4: () => Effect.sync(() => crypto.randomUUID()) }, (id) =>
+          run!.run(id),
+        );
+      const makeMigrationRun = (): MigrationRun =>
+        FanOut.makeRun<MovePlan, MovePass, MoveItem>(
+          runtime.storage,
+          runtime.jobs,
+          relay,
+          entryKey,
+          {
+            label: "move",
+            firstPhase: "move",
+            nextPhase: () => "complete",
+            pass: (target, _, deadline) => ({ target, deadline }),
+            roots: (pass) => [{ path: pass.target }],
+            samePlan: (a, b) =>
+              a.pages.map((page) => `${page.className}#${page.n}`).join(",") ===
+              b.pages.map((page) => `${page.className}#${page.n}`).join(","),
+          },
+          { waitMillis: MIGRATION_PASS_MS, againMillis: 1_000 },
+        );
+      run = makeMigrationRun();
+      const storage = runtime.storage;
+      return {
+        /** Keep a page of ids the deploy listed, for a run to move. */
+        mgAdd: (target: string, n: number, page: StoredPage) =>
+          storage.put({ [pageKey(target, n)]: page }),
+        mgBegin: (target: string, plan: MovePlan) => run!.begin(target, plan),
+        mgProgress: (target: string) =>
+          Effect.gen(function* () {
+            const progress = yield* run!.progress(target);
+            const skipped = (yield* storage.get<Record<string, number>>(skipKey(target))) ?? {};
+            return { ...progress, skipped };
+          }),
+        /** What a path lists: the run's pages (its root), or a page's objects. */
+        mgList: (target: string, path: string) =>
+          Effect.gen(function* () {
+            if (path === target) {
+              const state = yield* storage.get<{ plan: MovePlan }>(
+                `run:${encodeURIComponent(target)}`,
+              );
+              return {
+                entries: (state?.plan.pages ?? []).map((page) => ({ path: `${target}#${page.n}` })),
+              } satisfies FanOut.Listed<MoveItem>;
+            }
+            const page = yield* storage.get<StoredPage>(
+              pageKey(target, path.slice(path.lastIndexOf("#") + 1)),
+            );
+            return {
+              entries: (page?.ids ?? []).map((id) => ({
+                ref: { c: page!.className, r: page!.route, id },
+              })),
+            } satisfies FanOut.Listed<MoveItem>;
+          }),
+        /** An object that can't be moved (it knows neither its name nor its key): its class is kept. */
+        mgSkip: (target: string, className: string) =>
+          storage.exclusive(
             Effect.gen(function* () {
-              const id = legacy.idFromString(hex);
-              const old = makeRpcStub<Stub>(legacy.get(id));
-              const name = (yield* old.domainName!().pipe(
-                Effect.mapError(failed(`reading ${params.className} ${hex}`)),
-              )) as string | null;
-              if (name === null) return false;
-              const scoped =
-                id.jurisdiction === undefined ? shared : shared.jurisdiction(id.jurisdiction);
-              const target = makeRpcStub<Stub>(scoped.getByName(`${params.route}/${name}`));
-              // Keep asking until it has moved: each call waits a while for the move.
-              for (let tries = 0; ; tries++) {
-                const done = (yield* target.domainMove!(MOVE_WAIT_MS).pipe(
-                  Effect.mapError(failed(`moving ${params.className} ${name}`)),
-                )) as boolean;
-                if (done) return true;
-                if (tries >= 20)
-                  return yield* new DomainMoveFailed({
-                    message: `moving ${params.className} ${name}: still copying after ${tries} waits`,
-                  });
-              }
+              const skipped = (yield* storage.get<Record<string, number>>(skipKey(target))) ?? {};
+              yield* storage.put({
+                [skipKey(target)]: { ...skipped, [className]: (skipped[className] ?? 0) + 1 },
+              });
             }),
-          { concurrency: 6 },
-        ),
-        { retries: { limit: 5, delay: "2 seconds", backoff: "exponential" } },
-      );
-      for (const done of step) done ? moved++ : skipped++;
+          ),
+        mgRelay: (name: string, pass: MovePass, entries: ReadonlyArray<FanOut.Entry<MoveItem>>) =>
+          relay.run(name, pass, entries),
+      };
+    }).pipe(Effect.provideService(DurableObjectState, state));
+  });
+
+/** What the deploy asks the migration Workflow to do. */
+type MigrationParams =
+  /** Keep pages of ids in the run's root. */
+  | {
+      readonly op: "add";
+      readonly target: string;
+      readonly pages: ReadonlyArray<StoredPage & { readonly n: number }>;
     }
-    return { moved, skipped };
+  /** Start the run, and wait until it is complete: each check's output is its progress. */
+  | { readonly op: "run"; readonly target: string; readonly plan: MovePlan }
+  /** A record of a complete pass over a class (see `Version.passMarker`): nothing to do. */
+  | { readonly op: "mark" };
+
+/**
+ * The deploy's channel into the Worker: it hands the run its pages, then
+ * starts it and waits. The run itself goes on in Durable Objects.
+ */
+const migration = (params: MigrationParams) =>
+  Effect.gen(function* () {
+    if (params.op === "mark") return {};
+    const env = (yield* WorkerEnvironment) as Record<string, any>;
+    const root = makeRpcStub<Stub>(
+      env[SHARED_CLASS].getByName(`${MIGRATION_ROUTE}/run:${params.target}`),
+    );
+    const call = <A>(what: string, effect: Effect.Effect<unknown, unknown>) =>
+      effect.pipe(Effect.mapError(failed(what))) as Effect.Effect<A, DomainMoveFailed>;
+    if (params.op === "add") {
+      for (const { n, ...page } of params.pages)
+        yield* task(`add-${n}`, call("keeping a page", root.mgAdd!(params.target, n, page)), {
+          retries: { limit: 10, delay: "2 seconds", backoff: "exponential" },
+        });
+      return {};
+    }
+    yield* task("begin", call("starting the run", root.mgBegin!(params.target, params.plan)), {
+      retries: { limit: 10, delay: "2 seconds", backoff: "exponential" },
+    });
+    for (let check = 0; ; check++) {
+      const progress = yield* task(
+        `check-${check}`,
+        call<FanOut.Progress & { readonly skipped: Record<string, number> }>(
+          "reading progress",
+          root.mgProgress!(params.target),
+        ).pipe(Effect.map((progress) => [progress])),
+        { retries: { limit: 10, delay: "2 seconds", backoff: "exponential" } },
+      );
+      if (progress[0]!.phase === "complete") return { progress: progress[0]! };
+      // Soon at first, then less often: each check is a step (an instance has 10,000).
+      yield* sleep(`wait-${check}`, `${Math.min(10_000, Math.round(500 * 1.25 ** check))} millis`);
+    }
   });

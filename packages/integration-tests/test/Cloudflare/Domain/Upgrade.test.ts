@@ -126,10 +126,7 @@ const migrationWorkflow = Effect.fn(function* (scriptName: string) {
   return (binding as { readonly workflowName: string }).workflowName;
 });
 
-/**
- * How many objects the Worker's migration Workflow moved, from its complete
- * instances (the passes' markers move none).
- */
+/** How many objects the Worker's migration runs moved, from their complete instances. */
 const movedBy = Effect.fn(function* (scriptName: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const workflowName = yield* migrationWorkflow(scriptName);
@@ -138,14 +135,15 @@ const movedBy = Effect.fn(function* (scriptName: string) {
     .pipe(Stream.runCollect);
   let moved = 0;
   for (const instance of instances) {
-    if (!instance.id.startsWith("migrate-")) continue;
+    // Each deploy's run reports how many objects it moved.
+    if (!instance.id.startsWith("mg-run-")) continue;
     const { output } = yield* workflows.getInstance({
       accountId,
       workflowName,
       instanceId: instance.id,
     });
     const parsed = typeof output === "string" ? JSON.parse(output) : output;
-    moved += (parsed as { moved?: number } | null)?.moved ?? 0;
+    moved += (parsed as { progress?: { instances?: number } } | null)?.progress?.instances ?? 0;
   }
   return moved;
 });
@@ -476,7 +474,7 @@ test.provider(
           accountId,
           workflowName,
           instanceId,
-          params: { className, route: className, ids: [] },
+          params: { op: "mark" },
         });
         yield* workflows.getInstance({ accountId, workflowName, instanceId, simple: true }).pipe(
           Effect.repeat({
