@@ -1,3 +1,4 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as mwaa from "@distilled.cloud/aws/mwaa";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -352,6 +353,9 @@ const sameConfigOptions = (
   const bMap = b ?? {};
   return ea.every(([k, v]) => configValue(bMap[k]) === configValue(v));
 };
+
+/** The modules MWAA creates `airflow-{environment}-{module}` log groups for. */
+const MWAA_LOG_MODULES = ["DAGProcessing", "Scheduler", "Task", "WebServer", "Worker"] as const;
 
 export const EnvironmentProvider = () =>
   Provider.effect(
@@ -709,6 +713,16 @@ export const EnvironmentProvider = () =>
               while: (e) => e instanceof Error && !e.message.includes("terminal state"),
               schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(90)]),
             }),
+          );
+          // MWAA creates a log group per enabled module and leaves them when
+          // the environment is deleted, so every environment would leak them.
+          yield* Effect.forEach(
+            MWAA_LOG_MODULES,
+            (module) =>
+              logs
+                .deleteLogGroup({ logGroupName: `airflow-${name}-${module}` })
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+            { discard: true },
           );
         }),
 

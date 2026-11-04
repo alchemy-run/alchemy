@@ -177,7 +177,9 @@ emit: { TransferRequested: { out: moved("out"), in: moved("in") } },
 
 A view keyed by a different aggregate than its source uses `keyOf`, returning `undefined` to skip. A view about something with no aggregate of its own (an org) takes a string Schema as `key` (`key: OrgId`); its `keyOf` returns the value, and reads take the value (`watch(orgId)`). Policies, projections and streams take a Schema `key` the same way (`Domain.Key.Any` is either). Don't declare an empty aggregate only to key something. Add derived fields with `computed: { total: (v) => ... }`.
 
-More: [View](https://alchemy.run/domain/view), [Views as security boundaries](https://alchemy.run/domain/view-security).
+When you change what a deployed view computes (`evolve`, `emit`, `keyOf`, `state`, the events or sources it reads), bump its `version` in the declaration (`version: 1`), and only ever increase it. The deploy recomputes it from the events: in place for a view keyed by the one aggregate it reads, from the history otherwise, and rebuilds whatever reads it.
+
+More: [View](https://alchemy.run/domain/view), [Views as security boundaries](https://alchemy.run/domain/view-security), [Change a view: bump its version](https://alchemy.run/domain/model#change-a-view-bump-its-version).
 
 ## Policy
 
@@ -200,7 +202,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 );
 ```
 
-The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Both fail with `AlreadyExecuted` when the instance already handled a command with that id; `unschedule` also fails with `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
+The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Scheduling again under the same `commandId` replaces that command, pending or already run, so a deadline can be armed again; a policy that runs again for the same event arms nothing new. `unschedule` fails with `AlreadyExecuted` (it ran), `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
 
 More: [Policy](https://alchemy.run/domain/policy).
 
@@ -342,11 +344,7 @@ Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { c
 
 More: [Api](https://alchemy.run/domain/api).
 
-`toHttpApi(CustomerApi)` from `@alchemy.run/domain/Http` publishes every call of the Api as a plain HTTP JSON API with an OpenAPI document. See [hosting.md](hosting.md#plain-http-and-openapi).
-
-`toMcp(CustomerApi)` from `@alchemy.run/domain/Ai` gives an agent each call that returns once as an MCP tool; `toToolkit` gives the same tools to an in-app agent. See [hosting.md](hosting.md#mcp).
-
-`toCli(CustomerApi)` from `@alchemy.run/domain/Cli` runs each call that returns once from a terminal, over the deployed Api's HTTP protocol. See [hosting.md](hosting.md#cli).
+An Api is the domain's interface for its own clients. For a public or partner API, write a separate `HttpApi` with its own response schemas that calls the Api in process; see [hosting.md](hosting.md#public-and-partner-apis). `toHttpApi`, `toMcp` and `toCli` publish only the calls their `expose` option lists, as the domain shapes them, which is convenient for internal tools only; see [hosting.md](hosting.md#conveniences-for-internal-tools).
 
 ## Model
 

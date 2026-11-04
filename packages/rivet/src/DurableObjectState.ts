@@ -1,9 +1,11 @@
+import { EventLifetime } from "alchemy/Workers/EventLifetime";
 import { gateExclusive, gateStorage } from "alchemy/Workers/InputGate";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import { notAwaited, openSection, within, type Activation } from "./internal/Calls.ts";
 
 /**
@@ -481,12 +483,20 @@ export const makeDurableObjectState = (
   return {
     id: { name, toString: () => name },
     storage,
+    // As on Cloudflare: the work runs with the caller's context and a scope
+    // of its own, and the call's scope stays open until it settles.
     waitUntil: (effect) =>
-      Effect.flatMap(Effect.context<never>(), (context) =>
-        Effect.sync(() =>
-          c.waitUntil(Effect.runPromise(effect.pipe(Effect.provideContext(context)) as never)),
-        ),
-      ),
+      Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
+        const lifetime = yield* Effect.serviceOption(EventLifetime);
+        yield* Effect.sync(() => {
+          const promise = Effect.runPromise(
+            effect.pipe(Effect.scoped, Effect.provideContext(context)) as never,
+          );
+          if (Option.isSome(lifetime)) lifetime.value.extend(promise);
+          c.waitUntil(promise);
+        });
+      }),
   };
 };
 

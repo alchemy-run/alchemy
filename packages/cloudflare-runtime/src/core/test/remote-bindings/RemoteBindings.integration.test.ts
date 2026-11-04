@@ -1,6 +1,7 @@
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -88,7 +89,14 @@ export default {
 
 describe.skipIf(!accountId)("RemoteBindings (integration)", () => {
   const services = RuntimeServices.layerRuntime({ api: { accountId: accountId! } }).pipe(
-    Layer.provide(Layer.mergeAll(Credentials.fromEnv(), NodeServices.layer, FetchHttpClient.layer)),
+    Layer.provide(
+      Layer.mergeAll(
+        Credentials.fromEnv(),
+        NodeServices.layer,
+        FetchHttpClient.layer,
+        SecureRandom.layerWebCrypto,
+      ),
+    ),
   );
 
   const remoteBindings = [

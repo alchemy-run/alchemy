@@ -11,14 +11,18 @@ import {
   makeDurableObjectInstance,
   type DurableObjectInstance,
 } from "alchemy/Workers/DurableObjectBridge";
+import { EventLifetime } from "alchemy/Workers/EventLifetime";
 import { InputGateLive } from "alchemy/Workers/InputGate";
 import type { WorkerBuild } from "alchemy/Workers/Worker";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as HttpBody from "effect/http/HttpBody";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
@@ -71,7 +75,7 @@ const handleRequest = (
   return instance.execute(
     (shape) =>
       Effect.gen(function* () {
-        const response = yield* instance
+        let response = yield* instance
           .fetch(shape, request)
           .pipe(
             Effect.provideService(
@@ -79,7 +83,23 @@ const handleRequest = (
               HttpServerRequest.fromWeb(request),
             ),
           );
-        return HttpServerResponse.toWeb(response);
+        // A streamed body is read after the call returns: it runs with the
+        // call's context, and the call stays open until it settles.
+        const context = yield* Effect.context<never>();
+        const lifetime = yield* Effect.serviceOption(EventLifetime);
+        if (response.body._tag === "Stream" && Option.isSome(lifetime)) {
+          let done!: () => void;
+          lifetime.value.extend(new Promise<void>((resolve) => (done = resolve)));
+          response = HttpServerResponse.setBody(
+            response,
+            HttpBody.stream(
+              Stream.ensuring(response.body.stream, Effect.sync(done)),
+              response.body.contentType,
+              response.body.contentLength,
+            ),
+          );
+        }
+        return HttpServerResponse.toWeb(response, { context });
       }).pipe(Effect.provideService(Awaiting, awaiting)),
     async (exit) =>
       Exit.isSuccess(exit)

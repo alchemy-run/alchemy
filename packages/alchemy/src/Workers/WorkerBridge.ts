@@ -15,8 +15,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import { isScopeEjected } from "../Http.ts";
+import * as Stream from "effect/Stream";
 import { buildEventTelemetry } from "../TelemetryRuntime.ts";
+import { EventLifetime, makeEventLifetime } from "./EventLifetime.ts";
 import type { Pin, WorkerBuild } from "./Worker.ts";
 
 export interface ProcessEventOptions<T, Build extends WorkerBuild<any, any>> {
@@ -40,7 +41,7 @@ export interface ProcessEventOptions<T, Build extends WorkerBuild<any, any>> {
    */
   readonly waitUntil: Pin;
   /** Turn the handler's exit into the value returned to the engine. */
-  readonly onExit: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => T | Promise<T>;
+  readonly onExit: (exit: Exit.Exit<any, any>, lifetime: EventLifetime["Service"]) => T | Promise<T>;
 }
 
 /**
@@ -48,19 +49,23 @@ export interface ProcessEventOptions<T, Build extends WorkerBuild<any, any>> {
  * selected handler with a fresh request `Scope` provided as `Scope.Scope`
  * (so `Effect.addFinalizer` in a handler attaches to the request scope) and
  * the event's telemetry exporters, then close the scope into `waitUntil`
- * after the response — unless a consumer ejected the scope to outlive the
- * handler (a streaming body, an RPC stream).
+ * after the response. Closing waits for the work the event was told about
+ * through its {@link EventLifetime}: `waitUntil` work, and a streamed body
+ * or RPC stream.
  */
 export const processEvent = <T, Build extends WorkerBuild<any, any>>(
   build: (pin: Pin) => Promise<Build>,
   { makeEffect, services, waitUntil, onExit }: ProcessEventOptions<T, Build>,
 ): Promise<T> => {
   const scope = Scope.makeUnsafe();
+  // Work the event hands to `waitUntil` runs after it returns, in its
+  // context: the request scope waits for it before closing.
+  const event = makeEventLifetime(scope);
   return build(waitUntil)
     .then(
       (built) => {
         const [eff, captured] = makeEffect(built);
-        return eff.pipe(
+        return Effect.andThen(event.holdExporters, eff).pipe(
           // Per-event services take precedence over the captured services
           // and the built isolate context: the real per-event execution
           // context (init only ever sees the reference's deferred default),
@@ -71,6 +76,7 @@ export const processEvent = <T, Build extends WorkerBuild<any, any>>(
             Layer.mergeAll(
               services?.(built) ?? Layer.empty,
               Layer.succeed(Scope.Scope, scope),
+              Layer.succeed(EventLifetime, event.lifetime),
               // The configured telemetry exporters. Constructed as part of
               // this per-event layer, but `buildEventTelemetry` attaches
               // their batching fibers and flush finalizers to the request
@@ -91,20 +97,21 @@ export const processEvent = <T, Build extends WorkerBuild<any, any>>(
       // path can envelope-encode it like any other handler defect.
       (error) => Exit.die(error),
     )
-    .then((exit) => onExit(exit, scope))
+    .then((exit) => {
+      event.holdScope();
+      return onExit(exit, event.lifetime);
+    })
     .finally(() =>
-      isScopeEjected(scope)
-        ? undefined
-        : waitUntil(
-            // The HttpMiddleware tracer ends the request's root span in a
-            // dispatcher task scheduled after the handler effect resolves.
-            // Yield one macrotask before closing the scope so that span
-            // reaches the telemetry exporter's buffer before the scope's
-            // flush finalizer runs.
-            new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
-              Effect.runPromise(Scope.close(scope, Exit.void)),
-            ),
-          ),
+      waitUntil(
+        // The HttpMiddleware tracer ends the request's root span in a
+        // dispatcher task scheduled after the handler effect resolves.
+        // Yield one macrotask before closing the scope so that span
+        // reaches the telemetry exporter's buffer before the scope's
+        // flush finalizer runs.
+        new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
+          Effect.runPromise(Scope.close(scope, Exit.void)),
+        ),
+      ),
     );
 };
 
@@ -139,5 +146,24 @@ export const dispatchRpcMethod = (
       ),
     );
   }
-  return toRpcEffect(dispatcher(...args));
+  return withEventContext(toRpcEffect(dispatcher(...args)));
 };
+
+/**
+ * The RPC transport reads a Stream result after the call has returned, outside
+ * the event's fiber. Run it with the call's context, so its spans reach the
+ * event's exporters and the `waitUntil` work it hands off joins the event.
+ */
+export const withEventContext = <E, R>(
+  effect: Effect.Effect<unknown, E, R>,
+): Effect.Effect<unknown, E, R> =>
+  effect.pipe(
+    Effect.flatMap((value) =>
+      Stream.isStream(value)
+        ? Effect.map(Effect.context<never>(), (context) =>
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- an RPC Stream result needs no more than the call's context
+            Stream.provideContext(value as Stream.Stream<unknown, unknown, never>, context),
+          )
+        : Effect.succeed(value),
+    ),
+  );

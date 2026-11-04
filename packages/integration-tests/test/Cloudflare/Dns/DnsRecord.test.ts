@@ -14,6 +14,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -24,28 +25,28 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 // Deterministic per-test record names. Each test owns a disjoint subdomain so
 // reruns and parallel runs never collide, and the same name is reused on every
 // run (never derive physical names from Date.now()/random).
-const NAME_DEFAULT = `alchemy-dnsrecord-default.${zoneName}`;
-const NAME_UPDATE = `alchemy-dnsrecord-update.${zoneName}`;
-const NAME_REPLACE = `alchemy-dnsrecord-replace.${zoneName}`;
-const NAME_ADOPT = `alchemy-dnsrecord-adopt.${zoneName}`;
-const NAME_ADOPT_RELATIVE = "alchemy-dnsrecord-relative-adopt";
+const NAME_DEFAULT = `${testName("alchemy-dnsrecord-default")}.${zoneName}`;
+const NAME_UPDATE = `${testName("alchemy-dnsrecord-update")}.${zoneName}`;
+const NAME_REPLACE = `${testName("alchemy-dnsrecord-replace")}.${zoneName}`;
+const NAME_ADOPT = `${testName("alchemy-dnsrecord-adopt")}.${zoneName}`;
+const NAME_ADOPT_RELATIVE = testName("alchemy-dnsrecord-relative-adopt");
 const NAME_ADOPT_RELATIVE_FQDN = `${NAME_ADOPT_RELATIVE}.${zoneName}`;
-const NAME_LIST = `alchemy-dnsrecord-list.${zoneName}`;
-const NAME_MX = `alchemy-dnsrecord-mx.${zoneName}`;
-const NAME_MX_AMBIG = `alchemy-dnsrecord-mx-ambig.${zoneName}`;
+const NAME_LIST = `${testName("alchemy-dnsrecord-list")}.${zoneName}`;
+const NAME_MX = `${testName("alchemy-dnsrecord-mx")}.${zoneName}`;
+const NAME_MX_AMBIG = `${testName("alchemy-dnsrecord-mx-ambig")}.${zoneName}`;
 const NAME_SVCB = `_alchemy-dnsrecord._tcp.${zoneName}`;
 const NAME_SVCB_ADOPT = `_alchemy-dnsrecord-adopt._tcp.${zoneName}`;
-const NAME_HTTPS = `alchemy-dnsrecord-https.${zoneName}`;
+const NAME_HTTPS = `${testName("alchemy-dnsrecord-https")}.${zoneName}`;
 
 const SVCB_DATA_V1 = {
   priority: 1,
-  target: `svc.${zoneName}.`,
+  target: `${testName("svc")}.${zoneName}.`,
   value: 'alpn="h2" port="443"',
 } satisfies Cloudflare.DNS.RecordData;
 
 const SVCB_DATA_V2 = {
   priority: 1,
-  target: `svc.${zoneName}.`,
+  target: `${testName("svc")}.${zoneName}.`,
   value: 'mandatory="alpn,port" alpn="h2,h3" port="8443"',
 } satisfies Cloudflare.DNS.RecordData;
 const resolveZoneId = Effect.gen(function* () {
@@ -560,7 +561,7 @@ test.provider(
           zoneId,
           name: NAME_MX,
           type: "MX",
-          content: `mx1.${zoneName}`,
+          content: `${testName("mx1")}.${zoneName}`,
           priority: 1,
           ttl: 1,
         })
@@ -575,7 +576,7 @@ test.provider(
         zoneId,
         name: NAME_MX,
         type: "MX",
-        content: `mx2.${zoneName}`,
+        content: `${testName("mx2")}.${zoneName}`,
         priority: 10,
         ttl: 1,
       });
@@ -586,14 +587,14 @@ test.provider(
             zoneId,
             name: NAME_MX,
             type: "MX",
-            content: `mx1.${zoneName}`,
+            content: `${testName("mx1")}.${zoneName}`,
             priority: 1,
           }).pipe(adopt(true));
           const backup = yield* Cloudflare.DNS.Record("BackupMx", {
             zoneId,
             name: NAME_MX,
             type: "MX",
-            content: `mx2.${zoneName}`,
+            content: `${testName("mx2")}.${zoneName}`,
             priority: 10,
           }).pipe(adopt(true));
           return { primary, backup };
@@ -612,14 +613,14 @@ test.provider(
             zoneId,
             name: NAME_MX,
             type: "MX",
-            content: `mx1.${zoneName}`,
+            content: `${testName("mx1")}.${zoneName}`,
             priority: 1,
           }).pipe(adopt(true));
           const backup = yield* Cloudflare.DNS.Record("BackupMx", {
             zoneId,
             name: NAME_MX,
             type: "MX",
-            content: `mx2.${zoneName}`,
+            content: `${testName("mx2")}.${zoneName}`,
             priority: 20,
           }).pipe(adopt(true));
           return { primary, backup };
@@ -657,7 +658,7 @@ test.provider(
           zoneId,
           name: NAME_MX_AMBIG,
           type: "MX",
-          content: `mx.${zoneName}`,
+          content: `${testName("mx")}.${zoneName}`,
           priority: 1,
           ttl: 1,
         })
@@ -672,7 +673,7 @@ test.provider(
         zoneId,
         name: NAME_MX_AMBIG,
         type: "MX",
-        content: `mx.${zoneName}`,
+        content: `${testName("mx")}.${zoneName}`,
         priority: 10,
         ttl: 1,
       });
@@ -684,7 +685,7 @@ test.provider(
               zoneId,
               name: NAME_MX_AMBIG,
               type: "MX",
-              content: `mx.${zoneName}`,
+              content: `${testName("mx")}.${zoneName}`,
             }).pipe(adopt(true));
           }),
         )
@@ -776,7 +777,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const zoneId = yield* resolveZoneId;
-      const name = `alchemy-dnsrecord-missing.${zoneName}`;
+      const name = `${testName("alchemy-dnsrecord-missing")}.${zoneName}`;
       const props = { zoneId, name, type: "A" as const, content: "192.0.2.1" };
       const record = yield* stack.deploy(
         Cloudflare.DNS.Record("MissingRecord", props).pipe(adopt(true)),

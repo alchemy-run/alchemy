@@ -75,7 +75,7 @@ Deletion runs in passes: each pass attempts every remaining resource, failures a
 
 `--concurrency` bounds how many providers are scanned/deleted in parallel (default 16; `0` = unbounded, which is usually *slower* because it triggers provider-side rate limiting and retry backoff). Resources within a provider always delete concurrently.
 
-`--timeout` is a per-provider timeout in seconds for each `list`/`delete` call (default 120), so one slow or hanging provider can't stall the whole run. Scan failures are swallowed — the provider contributes 0 resources — and logged to the run log in `.alchemy/log`.
+`--scan-timeout` bounds each provider's `list` call (default 60s) and `--timeout` each `delete` call (default 120s), so one slow or hanging provider can't stall the whole run. Scan failures are swallowed — the provider contributes 0 resources — and logged to the run log in `.alchemy/log`.
 
 ## Flags
 
@@ -87,7 +87,8 @@ Deletion runs in passes: each pass attempts every remaining resource, failures a
 | `--yes`               | Skip the confirmation prompt                                                                                                                                           |
 | `--dry-run`           | Report what would be deleted, then exit without deleting                                                                                                               |
 | `--concurrency <n>`   | Max number of providers scanned/deleted in parallel (resources within a provider are always deleted concurrently). Use 0 for unbounded. Default: 16 — unbounded tends to be slower because it triggers provider-side rate limiting and retry backoff. |
-| `--timeout <s>`       | Per-provider timeout (seconds) for each list/delete call, so one slow or hanging provider can't stall the whole run. Default: 120.                                     |
+| `--timeout <s>`       | Per-provider timeout (seconds) for each delete call, so one slow or hanging provider can't stall the whole run. Default: 120.                                          |
+| `--scan-timeout <s>`  | Per-provider timeout (seconds) for each list call during the scan. Default: 60.                                                                                        |
 | `--include <glob>`    | Glob of provider IDs to include (e.g. `'Cloudflare.*'` or `'Cloudflare.Worker'`). Repeatable; when omitted, every provider is included.                                |
 | `--exclude <glob>`    | Glob of provider IDs to exclude (applied after `--include`). Repeatable.                                                                                               |
 | `--filter <expr>`     | JavaScript expression evaluated with `resource` in scope. Any resource for which an expression is truthy is **spared**. Repeatable.                                    |

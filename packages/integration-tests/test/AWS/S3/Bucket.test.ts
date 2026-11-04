@@ -434,10 +434,22 @@ test.provider(
           policy,
         });
       const bucket = yield* stack.deploy(program([], "managed"));
-      const readRule = S3.getBucketEncryption({ Bucket: bucket.bucketName }).pipe(
-        Effect.map((result) => result.ServerSideEncryptionConfiguration!.Rules[0]!),
-      );
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+      // S3 serves stale encryption reads for a while after a write (worst on a
+      // re-created bucket name), so poll until the expected value shows up.
+      const blockedTypes = (expected: ReadonlyArray<string>) =>
+        S3.getBucketEncryption({ Bucket: bucket.bucketName }).pipe(
+          Effect.map(
+            (result) =>
+              result.ServerSideEncryptionConfiguration!.Rules[0]!.BlockedEncryptionTypes
+                ?.EncryptionType,
+          ),
+          Effect.repeat({
+            until: (types) => JSON.stringify(types) === JSON.stringify(expected),
+            schedule: Schedule.spaced("2 seconds"),
+            times: 15,
+          }),
+        );
+      expect(yield* blockedTypes(["NONE"])).toEqual(["NONE"]);
       const deny: AWS.IAM.PolicyStatement[] = [
         {
           Effect: "Deny",
@@ -470,7 +482,7 @@ test.provider(
         const updated = yield* stack.deploy(desired);
         expect(updated.bucketName).toBe(bucket.bucketName);
         const expected = types.length ? ["SSE-C"] : ["NONE"];
-        expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(expected);
+        expect(yield* blockedTypes(expected)).toEqual(expected);
         yield* Effect.gen(function* () {
           yield* S3.putBucketPolicy({
             Bucket: bucket.bucketName,
@@ -487,7 +499,7 @@ test.provider(
             yield* stack.deploy(program(undefined, "omitted", deny));
           }
           expect(yield* probeWrite).toBe(true);
-          expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(expected);
+          expect(yield* blockedTypes(expected)).toEqual(expected);
         }).pipe(
           Effect.ensuring(S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(Effect.orDie)),
         );
@@ -501,7 +513,7 @@ test.provider(
           ),
         ).toBe(false);
         yield* stack.deploy(program(undefined, "default"));
-        expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+        expect(yield* blockedTypes(["NONE"])).toEqual(["NONE"]);
       }
       const desired = program([], "repair");
       yield* stack.deploy(desired);
@@ -518,7 +530,7 @@ test.provider(
       });
       expect((yield* stack.plan(desired)).resources.ManagedEncryptionBlocks?.action).toBe("update");
       yield* stack.deploy(desired);
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
+      expect(yield* blockedTypes(["NONE"])).toEqual(["NONE"]);
       expect(
         (yield* stack.plan(program([], "repair"))).resources.ManagedEncryptionBlocks?.action,
       ).toBe("noop");

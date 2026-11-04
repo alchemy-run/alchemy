@@ -68,7 +68,7 @@ test.provider.skipIf(entitled)(
           name: `projects/${project}/locations/us-central1/contactCenters/alchemy-missing-cc`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

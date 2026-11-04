@@ -1,8 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { runInBackground } from "../EventLifetime.ts";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 
@@ -81,19 +80,6 @@ export interface WorkerdDurableObjectState {
   ): Effect.Effect<void, never, RuntimeContext>;
 }
 
-/**
- * Told of every promise the current event hands to `waitUntil`, so the event
- * keeps its telemetry open until that work settles. Provided per event by
- * the bridge, and read from the calling fiber, so it works for state
- * captured when the object was constructed too.
- *
- * @internal
- */
-export class BackgroundWork extends Context.Service<
-  BackgroundWork,
-  (promise: Promise<unknown>) => void
->()("Cloudflare.DurableObjectState/BackgroundWork") {}
-
 export const fromDurableObjectState = (
   state: cf.DurableObjectState,
 ): WorkerdDurableObjectState => ({
@@ -101,18 +87,7 @@ export const fromDurableObjectState = (
   container: state.container,
   storage: fromDurableObjectStorage(state.storage),
   raw: state,
-  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<R>();
-      // Register the promise with workerd un-awaited — waitUntil extends the
-      // event's lifetime without blocking the caller.
-      const track = yield* Effect.serviceOption(BackgroundWork);
-      yield* Effect.sync(() => {
-        const promise = Effect.runPromiseWith(context)(effect);
-        if (Option.isSome(track)) track.value(promise);
-        state.waitUntil(promise);
-      });
-    }),
+  waitUntil: (effect) => runInBackground(effect, (promise) => state.waitUntil(promise)),
   blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();

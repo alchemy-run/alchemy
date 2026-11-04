@@ -13,6 +13,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 /**
  * Upgrading a Worker that an earlier Alchemy release deployed with
@@ -90,9 +91,12 @@ export default {
 
 type Scratch = { name: string; stage: string };
 
-/** A deterministic per-stage script name. */
-const scriptNameFor = (scratch: Scratch, suffix: string) =>
-  `alchemy-test-upgrade-${suffix}-${scratch.stage}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+/**
+ * A deterministic per-stage script name, short enough for workers.dev
+ * previews (54 characters) under any stage.
+ */
+const scriptNameFor = (_scratch: Scratch, suffix: string) =>
+  testName(`alchemy-test-upgrade-${suffix}`);
 
 /**
  * Deploy a Worker the way an earlier Alchemy release did: a `migrations`

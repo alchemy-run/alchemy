@@ -1,4 +1,5 @@
 import type { HttpEffect } from "alchemy/Http";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -74,7 +75,7 @@ export const serveRailwayRpc = <Req = never>(
             }
           });
     const forwarded = header(headers, "x-forwarded-host");
-    const expected = yield* Effect.sync(() => process.env[RPC_TOKEN_ENV] ?? "");
+    const expected = yield* Config.String(RPC_TOKEN_ENV).pipe(Effect.orElseSucceed(() => ""));
     const provided = header(headers, RPC_TOKEN_HEADER);
     if (
       !isPrivateMesh(host) ||

@@ -53,7 +53,7 @@ const OpenAccountLive = OpenAccount.toLayer(
 class Sales extends Domain.Model("Sales", { aggregates: [Account], sagas: [OpenAccount] }) {}
 class Support extends Domain.Model("Support", { aggregates: [Account], sagas: [OpenAccount] }) {}
 
-describe("Domain model isolation", () => {
+describe("Domain model isolation", { tags: ["unit", "local"] }, () => {
   it.live("two models with the same definitions on one platform keep separate data", () =>
     Effect.gen(function* () {
       const platform = yield* Layer.build(InMemory);

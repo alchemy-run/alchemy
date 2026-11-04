@@ -129,24 +129,17 @@ needs to be persisted to disk.
 ### More than one store per account
 
 By default the state-store Worker is named `alchemy-state-store`. Pass
-`name` for a separate store, for example one per team. It gets its own
-Worker, its own secrets in the Secrets Store, and its own cached
-credentials:
+`workerName` for a separate store, for example one per team. It gets its own
+Worker, its own secrets in the Secrets Store, and its own cached credentials:
 
 ```typescript
-state: Cloudflare.state({ name: "team-a" }), // Worker alchemy-state-store-team-a
+state: Cloudflare.state({ workerName: "team-a-state" }),
 ```
 
-Pass `workerName` instead to choose the full Worker name yourself:
-
-```typescript
-state: Cloudflare.state({ workerName: "acme-state" }),
-```
-
-Address a named store from the CLI with `--name`:
+Address it from the CLI with `--name`, which takes the Worker name:
 
 ```sh
-alchemy state list --backend cloudflare --name team-a
+alchemy state list --backend cloudflare --name team-a-state
 ```
 
 `AWS.state({ name })` does the same with a separate DynamoDB table,

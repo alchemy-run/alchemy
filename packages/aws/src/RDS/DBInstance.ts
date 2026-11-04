@@ -16,6 +16,7 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toWireDays, toWireSeconds } from "alchemy/Util/Duration";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -313,6 +314,13 @@ export interface DBInstanceProps {
    * bookkeeping row in one transaction; MySQL and MariaDB commit DDL
    * implicitly, so their DDL is not rolled back if a later statement fails.
    * Deleting the instance never touches the database.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -2413,13 +2421,9 @@ export const DBInstanceProvider = () =>
           const finalDBSnapshotIdentifier = skipFinalSnapshot
             ? undefined
             : (output.finalDBSnapshotIdentifier ??
-              (yield* Effect.sync(
-                () =>
-                  `${output.dbInstanceIdentifier}-final-${new Date()
-                    .toISOString()
-                    .replaceAll(/[:.]/g, "-")
-                    .toLowerCase()}`,
-              )));
+              `${output.dbInstanceIdentifier}-final-${DateTime.formatIso(yield* DateTime.now)
+                .replaceAll(/[:.]/g, "-")
+                .toLowerCase()}`);
           yield* rds
             .deleteDBInstance({
               DBInstanceIdentifier: output.dbInstanceIdentifier,
