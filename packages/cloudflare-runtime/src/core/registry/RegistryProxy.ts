@@ -22,7 +22,11 @@ import * as WorkerdConfig from "../workerd/Config.ts";
 import * as Registry from "./Registry.ts";
 import {
   HEADER_REGISTRY_UPDATE_SECRET,
+  resolvedTargetKey,
+  STORAGE_CANDIDATE_STALE_AFTER_MS,
+  storageCandidateName,
   type ResolvedTargetMap,
+  type StorageTarget,
   type Subscriber,
 } from "./RegistryTypes.shared.ts";
 
@@ -40,6 +44,13 @@ export class RegistryProxy extends Plugin.Service<
     readonly subscribe: <T extends Subscriber>(
       subscriber: T,
     ) => Effect.Effect<ServiceDesignatorFromSubscriber<T>>;
+    /**
+     * Route a storage simulator service through the elected owner of the
+     * storage directory `target.scope`, and register this runtime as a
+     * candidate owner of it. Returns a designator for the registry proxy's
+     * `ExternalStorage` entrypoint.
+     */
+    readonly storage: (target: StorageTarget) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
   }
 >()("cloudflare-runtime/plugin/RegistryProxy") {}
 
@@ -83,6 +94,56 @@ export const RegistryProxyLive = Layer.effect(
         // The proxy's update socket is reachable by any local process, so
         // pushes must prove they came from the process that owns the proxy.
         const updateSecret = NodeCrypto.randomBytes(32).toString("hex");
+        // Storage directories this runtime is a candidate owner of.
+        const storageScopes = new Set<string>();
+        // Lets the proxy recognise itself as the elected storage owner.
+        const ownerId = yield* random.uuidV4();
+
+        const subscribeOnce = (subscriber: Subscriber) => {
+          const key = resolvedTargetKey(subscriber);
+          if (!subscribed.some((existing) => resolvedTargetKey(existing) === key)) {
+            subscribed.push(subscriber);
+          }
+        };
+
+        /**
+         * Advertise this runtime as a candidate owner of each storage
+         * directory it binds. The entry has a short staleness window, so a
+         * runtime that dies without cleaning up stops owning the storage
+         * within seconds.
+         */
+        const registerStorageCandidates = (ports: Record<string, number>) =>
+          Effect.forEach(
+            storageScopes,
+            Effect.fnUntraced(function* (scope) {
+              const debugPort = ports[SOCKET_DEBUG_PORT];
+              if (!debugPort) {
+                return yield* SystemError.make({
+                  subtag: "RegistryProxyDebugPort",
+                  message: "Debug port not found.",
+                  detail: { debugPort },
+                });
+              }
+              // Wall-clock time, compared across processes; never a test clock.
+              // oxlint-disable-next-line effecttsgo/global-date-in-effect -- cross-process ordering needs real time
+              const created = Date.now();
+              yield* registry.write({
+                scriptName: storageCandidateName(`${ownerId}:${scope}`),
+                debugPortAddress: `127.0.0.1:${debugPort}`,
+                instanceId: yield* random.uuidV4(),
+                staleAfterMs: STORAGE_CANDIDATE_STALE_AFTER_MS,
+                services: [
+                  {
+                    kind: "storage-owner",
+                    scope,
+                    ownerId,
+                    created,
+                  },
+                ],
+              });
+            }),
+            { discard: true },
+          );
 
         return {
           defer: Effect.gen(function* () {
@@ -113,6 +174,7 @@ export const RegistryProxyLive = Layer.effect(
                     name: "REGISTRY_UPDATE_SECRET",
                     data: new TextEncoder().encode(updateSecret),
                   },
+                  { name: "REGISTRY_OWNER_ID", text: ownerId },
                 ],
                 durableObjectStorage: { inMemory: WorkerdConfig.kVoid },
                 durableObjectNamespaces: durableObjects.map((subscriber) => ({
@@ -132,80 +194,96 @@ export const RegistryProxyLive = Layer.effect(
             return { sockets: [socket], services: [service] };
           }),
           start: (ports) =>
-            // When the worker starts, publish it to the registry.
-            // If we have external services, subscribe to the registry and push updates to the proxy.
-            Effect.all(
-              [
-                Effect.gen(function* () {
-                  const debugPort = ports[SOCKET_DEBUG_PORT];
-                  if (!debugPort) {
-                    return yield* SystemError.make({
-                      subtag: "RegistryProxyDebugPort",
-                      message: "Debug port not found.",
-                      detail: { debugPort },
-                    });
-                  }
-                  yield* registry.write({
-                    scriptName: worker.name,
-                    debugPortAddress: `127.0.0.1:${debugPort}`,
-                    // `start` runs again for a replacement process on the same ports.
-                    instanceId: yield* random.uuidV4(),
-                    services: [
-                      {
-                        kind: "worker",
-                        // TODO: The fetch service should be the service name for the top of the middleware chain.
-                        fetchService: SERVICE_USER_WORKER,
-                        rpcService: SERVICE_USER_WORKER,
-                      },
-                      ...published.map((service) => ({
-                        ...service,
-                        service: "service" in service ? service.service : SERVICE_USER_WORKER,
-                      })),
-                    ],
-                  });
-                }),
-                Effect.gen(function* () {
-                  if (subscribed.length === 0) {
-                    return;
-                  }
-                  const proxyPort = ports[SOCKET_REGISTRY_PROXY];
-                  if (!proxyPort) {
-                    return yield* SystemError.make({
-                      subtag: "RegistryProxyPort",
-                      message: "Registry proxy port not found.",
-                      detail: { proxyPort },
-                    });
-                  }
-                  // A replacement process starts with the original module
-                  // snapshot. Restore current targets before announcing it as
-                  // ready, then subscribe afresh for subsequent changes.
-                  const update = (targets: ResolvedTargetMap) =>
-                    HttpClient.filterStatusOk(http)
-                      .post(`http://127.0.0.1:${proxyPort}/`, {
-                        headers: { [HEADER_REGISTRY_UPDATE_SECRET]: updateSecret },
-                        body: HttpBody.jsonUnsafe(targets),
-                      })
-                      .pipe(
-                        Effect.mapError((cause) =>
-                          SystemError.make({
-                            subtag: "RegistryProxyUpdate",
-                            message: "Failed to update the registry proxy targets.",
-                            cause,
-                          }),
-                        ),
-                      );
-                  yield* registry.read(subscribed).pipe(Effect.flatMap(update));
-                  yield* registry
-                    .subscribe(subscribed)
-                    .pipe(Stream.runForEach(update), Effect.forkScoped);
-                }),
-              ],
-              { concurrency: "unbounded", discard: true },
+            // Register as a storage candidate first, so the targets pushed
+            // below already include this runtime when it is the owner.
+            registerStorageCandidates(ports).pipe(
+              // When the worker starts, publish it to the registry.
+              // If we have external services, subscribe to the registry and push updates to the proxy.
+              Effect.andThen(
+                Effect.all(
+                  [
+                    Effect.gen(function* () {
+                      const debugPort = ports[SOCKET_DEBUG_PORT];
+                      if (!debugPort) {
+                        return yield* SystemError.make({
+                          subtag: "RegistryProxyDebugPort",
+                          message: "Debug port not found.",
+                          detail: { debugPort },
+                        });
+                      }
+                      yield* registry.write({
+                        scriptName: worker.name,
+                        debugPortAddress: `127.0.0.1:${debugPort}`,
+                        // `start` runs again for a replacement process on the same ports.
+                        instanceId: yield* random.uuidV4(),
+                        services: [
+                          {
+                            kind: "worker",
+                            // TODO: The fetch service should be the service name for the top of the middleware chain.
+                            fetchService: SERVICE_USER_WORKER,
+                            rpcService: SERVICE_USER_WORKER,
+                          },
+                          ...published.map((service) => ({
+                            ...service,
+                            service: "service" in service ? service.service : SERVICE_USER_WORKER,
+                          })),
+                        ],
+                      });
+                    }),
+                    Effect.gen(function* () {
+                      if (subscribed.length === 0) {
+                        return;
+                      }
+                      const proxyPort = ports[SOCKET_REGISTRY_PROXY];
+                      if (!proxyPort) {
+                        return yield* SystemError.make({
+                          subtag: "RegistryProxyPort",
+                          message: "Registry proxy port not found.",
+                          detail: { proxyPort },
+                        });
+                      }
+                      // A replacement process starts with the original module
+                      // snapshot. Restore current targets before announcing it as
+                      // ready, then subscribe afresh for subsequent changes.
+                      const update = (targets: ResolvedTargetMap) =>
+                        HttpClient.filterStatusOk(http)
+                          .post(`http://127.0.0.1:${proxyPort}/`, {
+                            headers: { [HEADER_REGISTRY_UPDATE_SECRET]: updateSecret },
+                            body: HttpBody.jsonUnsafe(targets),
+                          })
+                          .pipe(
+                            Effect.mapError((cause) =>
+                              SystemError.make({
+                                subtag: "RegistryProxyUpdate",
+                                message: "Failed to update the registry proxy targets.",
+                                cause,
+                              }),
+                            ),
+                          );
+                      yield* registry.read(subscribed).pipe(Effect.flatMap(update));
+                      yield* registry
+                        .subscribe(subscribed)
+                        .pipe(Stream.runForEach(update), Effect.forkScoped);
+                    }),
+                  ],
+                  { concurrency: "unbounded", discard: true },
+                ),
+              ),
             ),
           api: {
             publish: (entry) =>
               Effect.sync(() => {
                 published.push(entry);
+              }),
+            storage: (target) =>
+              Effect.sync(() => {
+                storageScopes.add(target.scope);
+                subscribeOnce({ kind: "storage-owner", scope: target.scope });
+                return {
+                  name: SERVICE_REGISTRY_PROXY,
+                  entrypoint: "ExternalStorage",
+                  props: { json: JSON.stringify(target) },
+                };
               }),
             subscribe: <T extends Subscriber>(subscriber: T) =>
               Effect.sync<ServiceDesignatorFromSubscriber<T>>(() => {
@@ -243,6 +321,10 @@ export const RegistryProxyLive = Layer.effect(
                         json: JSON.stringify(subscriber),
                       },
                     };
+                  case "storage-owner":
+                    // Storage is routed through `storage`, which knows the
+                    // service to reach on the owner.
+                    throw new Error("Use `RegistryProxy.storage` to route storage.");
                 }
               }),
           },
@@ -264,7 +346,7 @@ const buildWorkerModules = async (
   const worker = await RegistryProxyWorker.worker();
   const main = [
     `import { makeExternalDurableObject, Target } from "./${worker.main}";`,
-    `export { default, ExternalService, ExternalWorkflow, ExternalQueueConsumer } from "./${worker.main}";`,
+    `export { default, ExternalService, ExternalStorage, ExternalWorkflow, ExternalQueueConsumer } from "./${worker.main}";`,
     `Target.set(${JSON.stringify(targets)});`,
     ...durableObjects.map(
       (subscriber) =>

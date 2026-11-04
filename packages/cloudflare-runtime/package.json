@@ -620,6 +620,12 @@
       "worker": "./src/core/registry/RegistryTypes.shared.ts",
       "import": "./dist/core/node/registry/RegistryTypes.shared.mjs"
     },
+    "./core/registry/SharedStorage": {
+      "types": "./dist/core/node/registry/SharedStorage.d.mts",
+      "bun": "./src/core/registry/SharedStorage.ts",
+      "worker": "./src/core/registry/SharedStorage.ts",
+      "import": "./dist/core/node/registry/SharedStorage.mjs"
+    },
     "./core/remote-bindings": {
       "types": "./dist/core/node/remote-bindings/index.d.mts",
       "bun": "./src/core/remote-bindings/index.ts",
