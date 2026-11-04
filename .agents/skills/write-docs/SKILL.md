@@ -64,7 +64,7 @@ Each of these was a correction. Don't relearn them.
 - **The hub says what the platform is**, at a high level and technically:
   "Fly.io runs your apps as fast-booting virtual machines…". Never "the package
   puts X in one typed program".
-- **The hub and What is never overlap.** The hub is intro, taste, where to
+- **The hub and What is never overlap.** The hub is intro, quick example, where to
   start, and the `<HubMap />` docs map, with no diagram. What is explains and
   draws the platform. A hub diagram that repeated What is was rejected.
   More: [Hub](references/page-shapes.md#hub).
