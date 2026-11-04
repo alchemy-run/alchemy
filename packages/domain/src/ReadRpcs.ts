@@ -268,6 +268,8 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
       const rpc = served.rpc as Rpc.AnyWithProps;
       return [{ served, name: served.tag, operation: "send", rpc, stream: false }];
     }
+    // A query is one RPC the Api's own client calls; the derived surfaces do not serve it yet.
+    if (served.kind === "Query") return [];
     const name = nameOf(served);
     return Object.entries(readRpcs(served)).flatMap(([call, read]) => {
       if (read === undefined) return [];

@@ -19,6 +19,7 @@ import {
   MissingInitial,
   MissingKeyOf,
   NoEmitter,
+  PagedWithoutSuccess,
   type Reason,
   TwoWriters,
   NewerGeneration,
@@ -27,8 +28,10 @@ import {
   UnhandledCommand,
   UnknownEvent,
   UnknownSource,
+  UnknownWait,
   UnknownStream,
   UnmatchedRoute,
+  VisibleWithoutPaging,
   WriterKeyMismatch,
 } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
@@ -51,6 +54,7 @@ import type {
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
+import type * as Query from "./Query.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
@@ -65,6 +69,7 @@ export interface Definitions {
   readonly policies: ReadonlyArray<Policy.Any>;
   readonly projections: ReadonlyArray<Projection.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
+  readonly queries?: ReadonlyArray<Query.Any>;
 }
 
 /**
@@ -660,6 +665,35 @@ const build = (
         continue;
       }
       writers.set(stream.streamName, projection);
+    }
+  }
+
+  // ---------------------------------------------------------------- queries
+  // A query is a method of an Api's client, beside its commands, views,
+  // streams and aggregates, so it shares their names.
+  const callNames = new Set([
+    ...sources.keys(),
+    ...streamNames,
+    ...definitions.aggregates.flatMap((aggregate) =>
+      aggregate.definition.commands.map((command: Command.Any) => command.tag),
+    ),
+  ]);
+  const queryNames = new Set<string>();
+  for (const query of definitions.queries ?? []) {
+    const name = query.queryName;
+    if (queryNames.has(name)) {
+      problem(new DuplicateDefinition({ kind: "query", entity: name }));
+      continue;
+    }
+    queryNames.add(name);
+    if (callNames.has(name)) problem(new DuplicateName({ entity: name }));
+    const def = query.definition;
+    if (def.paged && !def.success) problem(new PagedWithoutSuccess({ query: name }));
+    if (def.visible && !def.paged) problem(new VisibleWithoutPaging({ query: name }));
+    for (const projection of def.waitsFor ?? []) {
+      if (projectionByName.get(projection.projectionName) !== projection) {
+        problem(new UnknownWait({ query: name, projection: projection.projectionName }));
+      }
     }
   }
 

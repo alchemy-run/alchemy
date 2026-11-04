@@ -139,6 +139,34 @@ export type Props = {
   dev?: DevOrigin;
 };
 
+/**
+ * Props for {@link Connection.lookup}: find a Hyperdrive configuration this
+ * stack doesn't manage, by its id or its name.
+ */
+export type ConnectionLookup = (
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing Hyperdrive configuration.
+       */
+      hyperdriveId: string;
+    }
+  | {
+      /**
+       * The name of the existing Hyperdrive configuration.
+       */
+      name: string;
+    }
+) & {
+  /**
+   * Local development origin. The Cloudflare API never returns the origin
+   * password of an existing configuration, so `alchemy dev` can only
+   * emulate the binding when a `dev` origin is set. Without it, a locally
+   * running Worker that binds the lookup fails with
+   * `HyperdriveDevOriginUnsupported`.
+   */
+  dev?: DevOrigin;
+};
+
 export type Connection = Resource<
   "Cloudflare.Hyperdrive",
   Props,
@@ -161,7 +189,8 @@ export type Connection = Resource<
     dev: DevOrigin | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectionLookup
 >;
 
 /**
@@ -221,6 +250,55 @@ export type Connection = Resource<
  * const url = yield* hd.connectionString;
  * ```
  *
+ * ### Looking up an existing configuration
+ * `Connection.lookup` binds a configuration Alchemy doesn't manage (created
+ * in the dashboard or by another system), found by `hyperdriveId` or `name`.
+ * It is read during plan/deploy and never created, updated or deleted. The
+ * Worker binding is named after the id or name you look it up by, so inside
+ * an Effect Worker the props must evaluate the same at runtime as at deploy:
+ * derive a per-stage name from `yield* Stage`, never from `process.env`.
+ *
+ * **Example:** By name
+ * ```typescript
+ * const db = Cloudflare.Hyperdrive.Connection.lookup({ name: "shared-postgres" });
+ * const hd = yield* Cloudflare.Hyperdrive.Connect(db);
+ * ```
+ *
+ * **Example:** A per-stage name
+ * ```typescript
+ * const db = Cloudflare.Hyperdrive.Connection.lookup({
+ *   name: `postgres-${yield* Stage}`,
+ * });
+ * const hd = yield* Cloudflare.Hyperdrive.Connect(db);
+ * ```
+ *
+ * **Example:** By ID, in an async Worker's `env`
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     HD: Cloudflare.Hyperdrive.Connection.lookup({
+ *       hyperdriveId: "a76a99bc342644deb02c38d66082262a",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Dev origin for `alchemy dev`
+ * ```typescript
+ * const db = Cloudflare.Hyperdrive.Connection.lookup({
+ *   name: "shared-postgres",
+ *   dev: {
+ *     scheme: "postgres",
+ *     host: "localhost",
+ *     port: 5432,
+ *     database: "app",
+ *     user: "postgres",
+ *     password: yield* Config.redacted("DEV_DB_PASSWORD"),
+ *   },
+ * });
+ * ```
+ *
  * @resource
  * @product Hyperdrive
  * @category Storage & Databases
@@ -250,6 +328,29 @@ export const ProviderLive = () =>
           ),
         ),
       );
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const config =
+        "hyperdriveId" in props
+          ? yield* hyperdrive
+              .getConfig({ accountId, hyperdriveId: props.hyperdriveId })
+              .pipe(Effect.catchTag("HyperdriveConfigNotFound", () => Effect.undefined))
+          : yield* findByName(props.name);
+      if (!config) return undefined;
+      return {
+        hyperdriveId: config.id,
+        name: config.name,
+        accountId,
+        // The origin password is write-only: the API never returns it.
+        origin: { ...config.origin } as Origin,
+        mtls: {
+          caCertificateId: config.mtls?.caCertificateId ?? undefined,
+          mtlsCertificateId: config.mtls?.mtlsCertificateId ?? undefined,
+          sslmode: config.mtls?.sslmode ?? undefined,
+        } as Mtls,
+        dev: props.dev,
+      };
     }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

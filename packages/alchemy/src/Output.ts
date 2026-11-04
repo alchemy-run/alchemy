@@ -331,25 +331,32 @@ export const isLookupExpr = <A = any>(node: any): node is LookupExpr<A> =>
  * every resolver runs it like any plan-time effect) that also serves the
  * target's `Type` and `LogicalId` as literals, like {@link RefExpr}, so
  * duck-typing classifiers (Worker env bindings) treat it as the resource.
+ *
+ * Its upstream is the props themselves, so Outputs among them resolve first
+ * and become dependencies of whatever binds the lookup.
  */
 export class LookupExpr<A> extends BaseExpr<A, never> {
   readonly kind = "EffectExpr";
-  readonly expr: Expr<void> = VoidExpr;
-  readonly f: () => Effect.Effect<A>;
+  readonly expr: any;
+  readonly f: (props: any) => Effect.Effect<A>;
   readonly lookupType: string;
-  readonly lookupProps: unknown;
   readonly stables: { Type: string; LogicalId: string };
-  constructor(type: string, props: unknown, logicalId: string, effect: Effect.Effect<A>) {
+  constructor(
+    type: string,
+    props: unknown,
+    logicalId: string,
+    lookup: (props: any) => Effect.Effect<A>,
+  ) {
     super();
     this.lookupType = type;
-    this.lookupProps = props;
+    this.expr = props;
     this.stables = { Type: type, LogicalId: logicalId };
     // Every attribute read evaluates this expression; call the provider once.
     let resolved: { value: A } | undefined;
-    this.f = () =>
+    this.f = (props) =>
       resolved
         ? Effect.succeed(resolved.value)
-        : Effect.tap(effect, (value) =>
+        : Effect.tap(lookup(props), (value) =>
             Effect.sync(() => {
               resolved = { value };
             }),
@@ -357,7 +364,7 @@ export class LookupExpr<A> extends BaseExpr<A, never> {
     return proxy(this);
   }
   [inspect](): string {
-    return `${this.lookupType}.lookup(${JSON.stringify(this.lookupProps)})`;
+    return `${this.lookupType}.lookup(${this.stables.LogicalId})`;
   }
 }
 

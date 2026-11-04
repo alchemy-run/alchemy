@@ -93,9 +93,10 @@ export type LookupMethod<R extends ResourceLike> = [R["Lookup"]] extends [never]
        * Reference a resource this stack does not manage, found by the key
        * its type declares as `Lookup` (e.g. `Worker.lookup({ name })`).
        * Resolves through the provider's `lookup` during plan/deploy; nothing
-       * is created, adopted or written to state.
+       * is created, adopted or written to state. Props may be Outputs of
+       * other resources: the lookup waits for them, and depends on them.
        */
-      lookup(props: R["Lookup"]): R;
+      lookup(props: PropsInput<R["Lookup"]>): R;
     };
 
 export type LogicalId = string;
@@ -384,12 +385,12 @@ const lookupLogicalId = (type: string, props: unknown): string => {
   return values.length > 0 ? values.join("-") : type;
 };
 
-const lookup = <R extends ResourceLike>(type: string, props: R["Lookup"]): R =>
+const lookup = <R extends ResourceLike>(type: string, props: PropsInput<R["Lookup"]>): R =>
   new Output.LookupExpr(
     type,
     props,
     lookupLogicalId(type, props),
-    Effect.gen(function* () {
+    Effect.fn(function* (resolved: R["Lookup"]) {
       // The looked-up resource lives in the real cloud, so even an
       // `alchemy dev` run asks the live provider.
       const provider = yield* findProviderByType<R>(type, "live");
@@ -401,18 +402,18 @@ const lookup = <R extends ResourceLike>(type: string, props: R["Lookup"]): R =>
           }),
         );
       }
-      const attrs = yield* provider.lookup(props).pipe(Effect.orDie);
+      const attrs = yield* provider.lookup(resolved).pipe(Effect.orDie);
       if (attrs === undefined) {
         return yield* Effect.die(
           new LookupNotFoundError({
-            message: `${type}.lookup(${JSON.stringify(props)}) found no resource`,
+            message: `${type}.lookup(${JSON.stringify(resolved)}) found no resource`,
             type,
-            props,
+            props: resolved,
           }),
         );
       }
       return attrs;
-    }) as Effect.Effect<R["Attributes"]>,
+    }) as (props: R["Lookup"]) => Effect.Effect<R["Attributes"]>,
   ) as unknown as R;
 
 export const missingImplementation = (type: string, id: string) =>
@@ -637,7 +638,7 @@ export function Resource<R extends ResourceLike>(
     ref: (id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R> =>
       Effect.succeed(Output.of(makeRef<R>(id, options, type)) as unknown as R),
 
-    lookup: (props: R["Lookup"]): R => lookup<R>(type, props),
+    lookup: (props: PropsInput<R["Lookup"]>): R => lookup<R>(type, props),
 
     Type: type,
     Provider: ProviderTag,
