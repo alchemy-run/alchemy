@@ -103,7 +103,8 @@ export const stamp = Effect.fn(function* <Kind extends string>(
 export const lifecycle = <Kind extends string, E, R>(
   sweep: (attrs: RuntimeObjectsAttributes<Kind>) => Effect.Effect<void, E, R>,
 ) => ({
-  stables: ["tags", "owner", "prefix"] as const,
+  // Mutable: `ProviderService.stables` is an array of attribute keys.
+  stables: ["tags", "owner", "prefix"] as Array<keyof RuntimeObjectsAttributes<Kind>>,
   nuke: { skip: true },
   list: () => Effect.succeed([]),
   read: Effect.fn(function* ({ output }: { output?: RuntimeObjectsAttributes<Kind> }) {
