@@ -142,12 +142,31 @@ export interface StreamAttributes {
  * `StreamSink` — the Effect Schema's `Type` when the stream was declared
  * with one.
  */
+/**
+ * Props for {@link Stream.lookup}: find a stream this stack doesn't manage,
+ * by its id or its name.
+ */
+export type StreamLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing stream.
+       */
+      streamId: string;
+    }
+  | {
+      /**
+       * The name of the existing stream.
+       */
+      name: string;
+    };
+
 export interface Stream<A = unknown> extends Resource<
   StreamTypeId,
   StreamProps,
   StreamAttributes,
   never,
-  Providers
+  Providers,
+  StreamLookup
 > {
   /**
    * The Effect Schema the stream was declared with, if any. Used by the
@@ -325,6 +344,20 @@ const constructStream = (id: string, props: unknown) =>
  * });
  * ```
  *
+ * ### Looking up an existing Stream
+ * `Stream.lookup` binds a stream Alchemy doesn't manage (created with
+ * wrangler or by another stack), found by `streamId` or `name`. It is read
+ * during plan/deploy and never created, replaced or deleted. A looked-up
+ * stream carries no Effect Schema, so its records are untyped JSON objects.
+ *
+ * **Example:** Send events to an existing stream from a Worker
+ * ```typescript
+ * const events = yield* Cloudflare.Basin.WriteStream(
+ *   Cloudflare.Basin.Stream.lookup({ name: "events" }),
+ * );
+ * yield* events.send([{ type: "page_view", path: "/" }]);
+ * ```
+ *
  * @see https://developers.cloudflare.com/pipelines/
  *
  * @resource
@@ -394,6 +427,14 @@ export const StreamProvider = () =>
         : ({ action: "update" } as const);
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "streamId" in props
+          ? yield* getStream(accountId, props.streamId)
+          : yield* findStreamByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
