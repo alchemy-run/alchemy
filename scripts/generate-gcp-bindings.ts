@@ -1,5 +1,6 @@
 /**
- * Generate GCP bindings: one `Binding.Service` + `<Op>Http.ts` layer per
+ * Generate GCP bindings: one `<Op>.ts` per discovery method, holding the
+ * `Binding.Service` contract and its `<Op>Http` layer, per
  * discovery method that runs against a resource Alchemy manages.
  *
  *   node scripts/generate-gcp-bindings.ts                 # every configured service
@@ -931,10 +932,12 @@ const emitProjectContract = (service: string, binding: Binding) => {
     ...childFieldsOf(first).map(([, field]) => `${field}: "..."`),
     ...required.map((f) => `${f}: ${f === "body" ? "{}" : `"..."`}`),
   ];
-  return `${HEADER(service)}${apiImports(binding, true)}
+  return `${HEADER(service)}${apiImports(binding, false)}
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface ${binding.name}Request
   extends Omit<${first.api.ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ") || "never"}>${locationField}
@@ -965,7 +968,7 @@ export interface ${binding.name}
   extends Binding.Service<${binding.name}, "GCP.${service}.${binding.name}", ${binding.name}Shape> {}
 
 export const ${binding.name} = Binding.Service<${binding.name}>("GCP.${service}.${binding.name}");
-`;
+${emitProjectHttp(service, binding)}`;
 };
 
 const emitProjectHttp = (service: string, binding: Binding) => {
@@ -976,11 +979,7 @@ const emitProjectHttp = (service: string, binding: Binding) => {
       role: "${v.role}",${v.also.length ? `\n      also: ${JSON.stringify(v.also)},` : ""}
     },`,
   );
-  return `${HEADER(service)}${apiImports(binding, false)}
-import * as Layer from "effect/Layer";
-import { makeGcpProjectBinding } from "../HttpBinding.ts";
-import { ${binding.name}, type ${binding.name}Shape } from "./${binding.name}.ts";
-
+  return `
 /**
  * HTTP implementation of {@link ${binding.name}}.
  *
@@ -1076,10 +1075,12 @@ const emitContract = (service: string, config: ServiceConfig, binding: Binding) 
   const grants = [
     ...new Set(binding.variants.flatMap((v) => [v.role, ...v.also].map((r) => `\`${r}\``))),
   ].join(", ");
-  return `${HEADER(service)}${apiImports(binding, true)}
+  return `${HEADER(service)}${apiImports(binding, false)}
 import * as ${bindingNs} from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGcpBinding } from "../HttpBinding.ts";
 ${resourceTypes.map((r) => `import type { ${importName(config.resources[r]!, r)} } from "./${config.resources[r]!.file ?? r}.ts";`).join("\n")}
 
 export interface ${binding.name}Request
@@ -1113,7 +1114,7 @@ export interface ${binding.name}
   extends ${bindingNs}.Service<${binding.name}, "GCP.${service}.${binding.name}", ${binding.name}Shape> {}
 
 export const ${binding.name} = ${bindingNs}.Service<${binding.name}>("GCP.${service}.${binding.name}");
-`;
+${emitHttp(service, config, binding)}`;
 };
 
 const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
@@ -1146,11 +1147,7 @@ const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
       iam: ${iam},
     },`;
   });
-  return `${HEADER(service)}${apiImports(binding, false)}
-import * as Layer from "effect/Layer";
-import { makeGcpBinding } from "../HttpBinding.ts";
-import { ${binding.name}, type ${binding.name}Shape } from "./${binding.name}.ts";
-
+  return `
 /**
  * HTTP implementation of {@link ${binding.name}}.
  *
@@ -1329,8 +1326,9 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
       generated.add(file);
       continue;
     }
-    // Only binding implementations count; resource providers call lifecycle ops.
-    if (!file.endsWith("Http.ts")) continue;
+    // Only binding implementations count (a file with an `@provides` layer,
+    // or shared `*Http.ts` scaffolding); resource providers call lifecycle ops.
+    if (!file.endsWith("Http.ts") && !/@provides /.test(source)) continue;
     for (const imp of source.matchAll(
       /import \* as (\w+) from "@distilled\.cloud\/gcp\/(?:unstable\/)?(\w+)"/g,
     )) {
@@ -1367,7 +1365,7 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
   const handWritten = new Set(files.filter((f) => !generated.has(f)));
   const written = new Set<string>();
   for (const binding of bindings) {
-    for (const file of [`${binding.name}.ts`, `${binding.name}Http.ts`]) {
+    for (const file of [`${binding.name}.ts`]) {
       if (handWritten.has(file)) {
         return yield* Effect.die(
           new Error(
@@ -1380,11 +1378,7 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
       path.join(serviceDir, `${binding.name}.ts`),
       emitContract(service, config, binding),
     );
-    yield* fs.writeFileString(
-      path.join(serviceDir, `${binding.name}Http.ts`),
-      emitHttp(service, config, binding),
-    );
-    written.add(`${binding.name}.ts`).add(`${binding.name}Http.ts`);
+    written.add(`${binding.name}.ts`);
   }
   const serviceNames = config.auditServices ?? [
     ...new Set(apis.map((api) => new URL(api.doc.rootUrl).host.replace(/^[a-z0-9-]+\.mtls\./, ""))),
@@ -1432,10 +1426,7 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
   yield* fs.writeFileString(
     path.join(serviceDir, "generated.ts"),
     `${HEADER(service)}${
-      [
-        ...bindings.flatMap((b) => [`./${b.name}.ts`, `./${b.name}Http.ts`]),
-        ...auditLogs.map((file) => `./${file}`),
-      ]
+      [...bindings.map((b) => `./${b.name}.ts`), ...auditLogs.map((file) => `./${file}`)]
         .map((file) => `export * from "${file}";`)
         .join("\n") || "export {};"
     }\n`,

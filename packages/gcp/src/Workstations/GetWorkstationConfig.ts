@@ -1,7 +1,9 @@
-import type * as workstations from "@distilled.cloud/gcp/workstations_v1";
+import * as workstations from "@distilled.cloud/gcp/workstations_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigHttpBinding } from "./BindingHttp.ts";
 import type { WorkstationClustersWorkstationConfig } from "./WorkstationClustersWorkstationConfig.ts";
 
 export interface GetWorkstationConfigRequest extends Omit<
@@ -45,4 +47,22 @@ export interface GetWorkstationConfig extends Binding.Service<
 
 export const GetWorkstationConfig = Binding.Service<GetWorkstationConfig>(
   "GCP.Workstations.GetWorkstationConfig",
+);
+
+/**
+ * HTTP implementation of {@link GetWorkstationConfig}.
+ *
+ * @layer
+ * @provides GCP.Workstations.GetWorkstationConfig
+ */
+export const GetWorkstationConfigHttp = Layer.effect(
+  GetWorkstationConfig,
+  makeConfigHttpBinding({
+    tag: "GCP.Workstations.GetWorkstationConfig",
+    iam: {
+      role: "roles/workstations.workstationCreator",
+      on: "workstations.workstationConfig",
+    },
+    operation: workstations.getProjectsLocationsWorkstationClustersWorkstationConfigs,
+  }),
 );

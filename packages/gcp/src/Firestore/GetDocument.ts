@@ -1,8 +1,10 @@
-import type * as firestore from "@distilled.cloud/gcp/firestore_v1";
+import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Database } from "./Database.ts";
+import { makeDocumentHttpBinding } from "./DocumentHttp.ts";
 
 export interface GetDocumentRequest extends Omit<
   firestore.GetProjectsDatabasesDocumentsRequest,
@@ -47,3 +49,18 @@ export interface GetDocument extends Binding.Service<
 > {}
 
 export const GetDocument = Binding.Service<GetDocument>("GCP.Firestore.GetDocument");
+
+/**
+ * HTTP implementation of {@link GetDocument}.
+ *
+ * @layer
+ * @provides GCP.Firestore.GetDocument
+ */
+export const GetDocumentHttp = Layer.effect(
+  GetDocument,
+  makeDocumentHttpBinding({
+    tag: "GCP.Firestore.GetDocument",
+    iam: { role: "roles/datastore.viewer", scopeByCondition: true },
+    operation: firestore.getProjectsDatabasesDocuments,
+  }),
+);

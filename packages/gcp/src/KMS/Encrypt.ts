@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/gcp/cloudkms_v1";
+import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCryptoKeyHttpBinding } from "./BindingHttp.ts";
 import type { CryptoKey } from "./CryptoKey.ts";
 
 export interface EncryptRequest extends Omit<
@@ -45,3 +47,18 @@ export interface Encrypt extends Binding.Service<
 > {}
 
 export const Encrypt = Binding.Service<Encrypt>("GCP.KMS.Encrypt");
+
+/**
+ * HTTP implementation of {@link Encrypt}.
+ *
+ * @layer
+ * @provides GCP.KMS.Encrypt
+ */
+export const EncryptHttp = Layer.effect(
+  Encrypt,
+  makeCryptoKeyHttpBinding({
+    tag: "GCP.KMS.Encrypt",
+    iam: { role: "roles/cloudkms.cryptoKeyEncrypter", on: "kms.cryptoKey" },
+    operation: kms.encryptProjectsLocationsKeyRingsCryptoKeys,
+  }),
+);

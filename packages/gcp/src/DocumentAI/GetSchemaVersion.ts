@@ -1,7 +1,9 @@
-import type * as documentai from "@distilled.cloud/gcp/documentai_v1";
+import * as documentai from "@distilled.cloud/gcp/documentai_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSchemaVersionHttpBinding } from "./BindingHttp.ts";
 import type { SchemasSchemaVersion } from "./SchemasSchemaVersion.ts";
 
 export interface GetSchemaVersionRequest extends Omit<
@@ -43,4 +45,19 @@ export interface GetSchemaVersion extends Binding.Service<
 
 export const GetSchemaVersion = Binding.Service<GetSchemaVersion>(
   "GCP.DocumentAI.GetSchemaVersion",
+);
+
+/**
+ * HTTP implementation of {@link GetSchemaVersion}.
+ *
+ * @layer
+ * @provides GCP.DocumentAI.GetSchemaVersion
+ */
+export const GetSchemaVersionHttp = Layer.effect(
+  GetSchemaVersion,
+  makeSchemaVersionHttpBinding({
+    tag: "GCP.DocumentAI.GetSchemaVersion",
+    operation: documentai.getProjectsLocationsSchemasSchemaVersions,
+    iam: { role: "roles/documentai.viewer" },
+  }),
 );

@@ -2,7 +2,9 @@ import type * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Bucket } from "./Bucket.ts";
+import { makeStorageBucketBinding } from "./BucketHttp.ts";
 import type { ObjectNotFound, ObjectRequestFailed, PutObjectContent } from "./ObjectMedia.ts";
 
 /** Write-only client for one Cloud Storage bucket. */
@@ -41,3 +43,19 @@ export interface WriteBucket extends Binding.Service<
 > {}
 
 export const WriteBucket = Binding.Service<WriteBucket>("GCP.Storage.WriteBucket");
+
+/**
+ * HTTP implementation of {@link WriteBucket} over the Cloud Storage JSON API.
+ *
+ * @layer
+ * @provides GCP.Storage.WriteBucket
+ * @category Storage
+ */
+export const WriteBucketHttp = Layer.effect(
+  WriteBucket,
+  makeStorageBucketBinding({
+    tag: "GCP.Storage.WriteBucket",
+    role: "roles/storage.objectUser",
+    makeClient: (helpers, name) => helpers.makeWrite(name),
+  }),
+);

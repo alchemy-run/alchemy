@@ -10,7 +10,6 @@ export * from "./FirewallPolicy.ts";
 export * from "./ForwardingRule.ts";
 export * from "./PacketMirroring.ts";
 export * from "./GetInstance.ts";
-export * from "./GetInstanceHttp.ts";
 export * from "./GlobalAddress.ts";
 export * from "./HealthCheck.ts";
 export {
@@ -82,9 +81,7 @@ export * from "./RegionNetworkFirewallPolicy.ts";
 export * from "./RegionNotificationEndpoint.ts";
 export * from "./RegionSecurityPolicy.ts";
 export * from "./StartInstance.ts";
-export * from "./StartInstanceHttp.ts";
 export * from "./StopInstance.ts";
-export * from "./StopInstanceHttp.ts";
 export * from "./Subnetwork.ts";
 export * from "./UrlMap.ts";
 export * from "./RegionUrlMap.ts";

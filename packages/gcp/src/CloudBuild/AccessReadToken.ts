@@ -1,7 +1,10 @@
-import type * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
+import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as GCPBindings from "../GCPBindings.ts";
+import { makeRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 export interface AccessReadTokenRequest extends Omit<
@@ -43,3 +46,31 @@ export interface AccessReadToken extends Binding.Service<
 > {}
 
 export const AccessReadToken = Binding.Service<AccessReadToken>("GCP.CloudBuild.AccessReadToken");
+
+/**
+ * HTTP implementation of {@link AccessReadToken}.
+ *
+ * @layer
+ * @provides GCP.CloudBuild.AccessReadToken
+ */
+export const AccessReadTokenHttp = Layer.effect(
+  AccessReadToken,
+  Effect.gen(function* () {
+    const access = yield* GCPBindings.withCredentials(
+      cloudbuild.accessReadTokenProjectsLocationsConnectionsRepositories,
+    );
+    return yield* makeRepositoryHttpBinding<
+      cloudbuild.AccessReadTokenProjectsLocationsConnectionsRepositoriesRequest,
+      cloudbuild.FetchReadTokenResponse,
+      cloudbuild.AccessReadTokenProjectsLocationsConnectionsRepositoriesError
+    >({
+      tag: "GCP.CloudBuild.AccessReadToken",
+      iam: { role: "roles/cloudbuild.readTokenAccessor" },
+      operation: (input) =>
+        access({
+          ...input,
+          body: input.body ?? {},
+        }),
+    });
+  }),
+);

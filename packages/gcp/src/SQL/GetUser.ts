@@ -1,7 +1,9 @@
-import type * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
+import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSqlUserHttpBinding } from "./BindingHttp.ts";
 import type { User } from "./User.ts";
 
 export interface GetUserRequest extends Omit<
@@ -43,3 +45,21 @@ export interface GetUser extends Binding.Service<
 > {}
 
 export const GetUser = Binding.Service<GetUser>("GCP.SQL.GetUser");
+
+/**
+ * HTTP implementation of {@link GetUser}.
+ *
+ * @layer
+ * @provides GCP.SQL.GetUser
+ */
+export const GetUserHttp = Layer.effect(
+  GetUser,
+  makeSqlUserHttpBinding({
+    tag: "GCP.SQL.GetUser",
+    // `users.get` is not evaluated against the instance's resource name, so
+    // an instance-scoped IAM Condition never matches it (observed:
+    // SqlInstanceNotAuthorized); no narrower predefined role has it.
+    iam: { role: "roles/cloudsql.viewer" },
+    operation: sqladmin.getUsers,
+  }),
+);

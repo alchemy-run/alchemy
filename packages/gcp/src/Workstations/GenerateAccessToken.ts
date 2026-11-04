@@ -1,7 +1,9 @@
-import type * as workstations from "@distilled.cloud/gcp/workstations_v1";
+import * as workstations from "@distilled.cloud/gcp/workstations_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGenerateAccessTokenHttpBinding } from "./BindingHttp.ts";
 import type { WorkstationClustersWorkstationConfigsWorkstation } from "./WorkstationClustersWorkstationConfigsWorkstation.ts";
 
 export interface GenerateAccessTokenRequest extends Omit<
@@ -47,4 +49,20 @@ export interface GenerateAccessToken extends Binding.Service<
 
 export const GenerateAccessToken = Binding.Service<GenerateAccessToken>(
   "GCP.Workstations.GenerateAccessToken",
+);
+
+/**
+ * HTTP implementation of {@link GenerateAccessToken}.
+ *
+ * @layer
+ * @provides GCP.Workstations.GenerateAccessToken
+ */
+export const GenerateAccessTokenHttp = Layer.effect(
+  GenerateAccessToken,
+  makeGenerateAccessTokenHttpBinding({
+    tag: "GCP.Workstations.GenerateAccessToken",
+    iam: { role: "roles/workstations.user", on: "workstations.workstation" },
+    operation:
+      workstations.generateAccessTokenProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations,
+  }),
 );

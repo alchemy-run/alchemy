@@ -1,7 +1,9 @@
-import type * as containeranalysis from "@distilled.cloud/gcp/containeranalysis_v1";
+import * as containeranalysis from "@distilled.cloud/gcp/containeranalysis_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOccurrenceHttpBinding } from "./BindingHttp.ts";
 import type { Occurrence } from "./Occurrence.ts";
 
 export interface GetOccurrenceRequest extends Omit<
@@ -44,3 +46,19 @@ export interface GetOccurrence extends Binding.Service<
 > {}
 
 export const GetOccurrence = Binding.Service<GetOccurrence>("GCP.ContainerAnalysis.GetOccurrence");
+
+/**
+ * HTTP implementation of {@link GetOccurrence}.
+ *
+ * @layer
+ * @provides GCP.ContainerAnalysis.GetOccurrence
+ */
+export const GetOccurrenceHttp = Layer.effect(
+  GetOccurrence,
+  makeOccurrenceHttpBinding({
+    tag: "GCP.ContainerAnalysis.GetOccurrence",
+    // Occurrences have no IAM policy of their own.
+    iam: { role: "roles/containeranalysis.occurrences.viewer" },
+    operation: containeranalysis.getProjectsOccurrences,
+  }),
+);

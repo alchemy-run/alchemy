@@ -1,7 +1,9 @@
-import type * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
+import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConnectorHttpBinding } from "./BindingHttp.ts";
 import type { ServicesConnector } from "./ServicesConnector.ts";
 
 export interface ExecuteQueryRequest extends Omit<
@@ -46,3 +48,18 @@ export interface ExecuteQuery extends Binding.Service<
 > {}
 
 export const ExecuteQuery = Binding.Service<ExecuteQuery>("GCP.FirebaseDataConnect.ExecuteQuery");
+
+/**
+ * HTTP implementation of {@link ExecuteQuery}.
+ *
+ * @layer
+ * @provides GCP.FirebaseDataConnect.ExecuteQuery
+ */
+export const ExecuteQueryHttp = Layer.effect(
+  ExecuteQuery,
+  makeConnectorHttpBinding({
+    tag: "GCP.FirebaseDataConnect.ExecuteQuery",
+    iam: { role: "roles/firebasedataconnect.dataViewer" },
+    operation: firebasedataconnect.executeQueryProjectsLocationsServicesConnectors,
+  }),
+);

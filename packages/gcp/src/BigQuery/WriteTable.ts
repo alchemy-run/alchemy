@@ -3,7 +3,9 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Table } from "./Table.ts";
+import { makeBigQueryTableBinding, writeTableIam } from "./TableHttp.ts";
 
 /** Per-row errors from a `tabledata.insertAll` request. */
 export class InsertRowsFailed extends Data.TaggedError("GCP.BigQuery.InsertRowsFailed")<{
@@ -61,3 +63,19 @@ export interface WriteTable extends Binding.Service<
 > {}
 
 export const WriteTable = Binding.Service<WriteTable>("GCP.BigQuery.WriteTable");
+
+/**
+ * HTTP implementation of {@link WriteTable} over the BigQuery REST API.
+ *
+ * @layer
+ * @provides GCP.BigQuery.WriteTable
+ * @category BigQuery
+ */
+export const WriteTableHttp = Layer.effect(
+  WriteTable,
+  makeBigQueryTableBinding({
+    tag: "GCP.BigQuery.WriteTable",
+    iam: writeTableIam,
+    makeClient: (helpers, table) => helpers.makeWrite(table),
+  }),
+);

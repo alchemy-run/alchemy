@@ -1,7 +1,9 @@
-import type * as composer from "@distilled.cloud/gcp/composer_v1";
+import * as composer from "@distilled.cloud/gcp/composer_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeUserWorkloadsConfigMapHttpBinding } from "./BindingHttp.ts";
 import type { EnvironmentsUserWorkloadsConfigMap } from "./EnvironmentsUserWorkloadsConfigMap.ts";
 
 export interface GetUserWorkloadsConfigMapRequest extends Omit<
@@ -46,4 +48,19 @@ export interface GetUserWorkloadsConfigMap extends Binding.Service<
 
 export const GetUserWorkloadsConfigMap = Binding.Service<GetUserWorkloadsConfigMap>(
   "GCP.Composer.GetUserWorkloadsConfigMap",
+);
+
+/**
+ * HTTP implementation of {@link GetUserWorkloadsConfigMap}.
+ *
+ * @layer
+ * @provides GCP.Composer.GetUserWorkloadsConfigMap
+ */
+export const GetUserWorkloadsConfigMapHttp = Layer.effect(
+  GetUserWorkloadsConfigMap,
+  makeUserWorkloadsConfigMapHttpBinding({
+    tag: "GCP.Composer.GetUserWorkloadsConfigMap",
+    iam: { role: "roles/composer.viewer" },
+    operation: composer.getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps,
+  }),
 );
