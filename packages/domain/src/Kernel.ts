@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -18,6 +19,7 @@ import {
   MissingInitial,
   MissingKeyOf,
   NoEmitter,
+  PagedWithoutSuccess,
   type Reason,
   TwoWriters,
   NewerGeneration,
@@ -26,8 +28,10 @@ import {
   UnhandledCommand,
   UnknownEvent,
   UnknownSource,
+  UnknownWait,
   UnknownStream,
   UnmatchedRoute,
+  VisibleWithoutPaging,
   WriterKeyMismatch,
 } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
@@ -50,6 +54,7 @@ import type {
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
+import type * as Query from "./Query.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
@@ -64,6 +69,7 @@ export interface Definitions {
   readonly policies: ReadonlyArray<Policy.Any>;
   readonly projections: ReadonlyArray<Projection.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
+  readonly queries?: ReadonlyArray<Query.Any>;
 }
 
 /**
@@ -662,6 +668,35 @@ const build = (
     }
   }
 
+  // ---------------------------------------------------------------- queries
+  // A query is a method of an Api's client, beside its commands, views,
+  // streams and aggregates, so it shares their names.
+  const callNames = new Set([
+    ...sources.keys(),
+    ...streamNames,
+    ...definitions.aggregates.flatMap((aggregate) =>
+      aggregate.definition.commands.map((command: Command.Any) => command.tag),
+    ),
+  ]);
+  const queryNames = new Set<string>();
+  for (const query of definitions.queries ?? []) {
+    const name = query.queryName;
+    if (queryNames.has(name)) {
+      problem(new DuplicateDefinition({ kind: "query", entity: name }));
+      continue;
+    }
+    queryNames.add(name);
+    if (callNames.has(name)) problem(new DuplicateName({ entity: name }));
+    const def = query.definition;
+    if (def.paged && !def.success) problem(new PagedWithoutSuccess({ query: name }));
+    if (def.visible && !def.paged) problem(new VisibleWithoutPaging({ query: name }));
+    for (const projection of def.waitsFor ?? []) {
+      if (projectionByName.get(projection.projectionName) !== projection) {
+        problem(new UnknownWait({ query: name, projection: projection.projectionName }));
+      }
+    }
+  }
+
   // ------------------------------------------------------------ generations
   const versions = new Map<string, number>();
   const generations = new Map<string, number>();
@@ -1142,7 +1177,7 @@ const build = (
           } as HandleResult;
         });
         return Effect.gen(function* () {
-          const started = yield* Effect.sync(() => Date.now());
+          const started = yield* Clock.currentTimeMillis;
           const result = yield* decideAndCommit.pipe(
             Effect.annotateLogs(base),
             Effect.withSpan(`Domain.decide ${aggregate.aggregateName}.${tag}`, {
@@ -1163,7 +1198,7 @@ const build = (
           yield* Telemetry.record(
             Telemetry.commandDuration,
             tags,
-            (yield* Effect.sync(() => Date.now())) - started,
+            (yield* Clock.currentTimeMillis) - started,
           );
           return result;
         });
@@ -1425,7 +1460,7 @@ const build = (
         ).pipe(
           Effect.onExit((exit) =>
             Effect.gen(function* () {
-              const now = yield* Effect.sync(() => Date.now());
+              const now = yield* Clock.currentTimeMillis;
               const tags = { "domain.kind": "policy", "domain.consumer": policy.policyName };
               yield* Telemetry.record(Telemetry.lag, tags, now - delivery.envelope.at);
               yield* Telemetry.record(Telemetry.runs, {

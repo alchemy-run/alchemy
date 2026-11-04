@@ -12,8 +12,18 @@ const journal = (url: string) =>
 
 type TestFn = (name: string, effect: Effect.Effect<void, unknown, any>, options?: object) => void;
 
-export const scheduledConformanceTests = (test: TestFn, { baseUrl }: { baseUrl: () => string }) => {
-  const options = { timeout: 120_000 };
+export const scheduledConformanceTests = (
+  test: TestFn,
+  {
+    baseUrl,
+    kind,
+  }: {
+    baseUrl: () => string;
+    /** Whether the host under test runs in a real cloud or on this machine. */
+    kind: "live" | "local";
+  },
+) => {
+  const options = { timeout: 120_000, tags: [kind] };
 
   test(
     "a singleton runs on one runner at a time",

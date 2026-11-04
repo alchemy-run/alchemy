@@ -15,12 +15,10 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Exit from "effect/Exit";
-import * as EffectHttp from "effect/http/HttpEffect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { isScopeEjected } from "../Http.ts";
 import {
   ErrorTag,
   encodeRpcError,
@@ -33,6 +31,7 @@ import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 import { Self } from "../Self.ts";
 import { StackContext } from "../StackContext.ts";
 import { Stage } from "../Stage.ts";
+import type { EventLifetime } from "./EventLifetime.ts";
 import { WorkerEnvironment } from "./WorkerEnvironment.ts";
 
 export { WorkerEnvironment } from "./WorkerEnvironment.ts";
@@ -256,18 +255,20 @@ export const getWorkerExport = <Export = any, Runtime = WorkerRuntimeContextLike
  * stream envelope (keeping the request scope open until the stream settles),
  * a typed failure becomes an error envelope, and a defect is thrown.
  */
-export const handleRpcExit = async (exit: Exit.Exit<any, any>, scope?: Scope.Closeable) => {
+export const handleRpcExit = async (
+  exit: Exit.Exit<any, any>,
+  lifetime?: EventLifetime["Service"],
+) => {
   if (exit._tag === "Success") {
     if (Stream.isStream(exit.value)) {
       let stream = exit.value as Stream.Stream<any, any, any>;
-      if (scope !== undefined && !isScopeEjected(scope)) {
+      if (lifetime !== undefined) {
         // The RPC transport drains the encoded ReadableStream *after* this
-        // function returns, so the request scope must outlive the handler:
-        // eject it from the bridge's close-on-return path and close it when
-        // the stream settles instead — mirroring `scopeTransferToStream` on
-        // the fetch path.
-        EffectHttp.scopeDisableClose(scope);
-        stream = stream.pipe(Stream.onExit((streamExit) => Scope.close(scope, streamExit)));
+        // function returns, so the event must outlive the handler until the
+        // stream settles.
+        let done!: () => void;
+        lifetime.extend(new Promise<void>((resolve) => (done = resolve)));
+        stream = stream.pipe(Stream.onExit(() => Effect.sync(done)));
       }
       return await Effect.runPromise(toRpcStream(stream) as Effect.Effect<RpcStreamEnvelope>);
     }

@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/rivet",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "Durable Objects on Rivet 3 control planes, with nodes hosted on any cloud, for Alchemy.",
   "keywords": [
     "actors",

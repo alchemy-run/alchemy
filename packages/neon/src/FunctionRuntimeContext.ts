@@ -30,6 +30,7 @@ export const makeFunctionRuntimeContext = (id: string): FunctionRuntimeContext =
     Type: "Neon.Function",
     id,
     env,
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime ctx.get must read raw env, never Config (see unpackEnvValue)
     get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key])),
     set: (key, value) =>
       Effect.sync(() => {

@@ -15,10 +15,10 @@ import {
   makeConsoleLogger,
 } from "@/Cli/GlobalLog.ts";
 import { emit } from "@/Events.ts";
-import { makePlainConsoleSink } from "@/Util/ConsoleSink.ts";
+import { makePlainConsoleSink, prettyLine } from "@/Util/ConsoleSink.ts";
 import { jsonLogger, parseRecord } from "@/Util/LogRecord.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { logResourceLine } from "@/Util/ResourceOutput.ts";
+import { formatResourceTag, logResourceLine } from "@/Util/ResourceOutput.ts";
 import { processTrace } from "@/Util/TraceParent.ts";
 
 /**
@@ -93,7 +93,7 @@ describe("makeConsoleLogger", { tags: ["unit", "local"] }, () => {
       Effect.andThen(
         Effect.sync(() => {
           expect(lines).toHaveLength(1);
-          expect(lines[0]).toMatch(/\x1b\[[\d;]+mINFO\x1b\[0m/);
+          expect(lines[0]).toMatch(/\x1b\[[\d;]+mINFO\x1b\[39m/);
           expect(lines[0]).toMatch(/: plain message$/);
         }),
       ),
@@ -166,4 +166,29 @@ describe("lazyRunLog", { tags: ["unit", "local"] }, () => {
       });
     }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   );
+});
+
+describe("color levels", { tags: ["unit", "local"] }, () => {
+  it("downsamples to the detected level when colors aren't set explicitly", () => {
+    const forced = process.env.FORCE_COLOR;
+    process.env.FORCE_COLOR = "1";
+    try {
+      const line = prettyLine({
+        date: new Date(0),
+        level: "Info",
+        text: "x",
+        resource: "Site/Worker",
+      });
+      expect(line).toContain("\u001b[");
+      expect(line).not.toContain("38;2;");
+      expect(formatResourceTag("Site/Worker")).not.toContain("38;2;");
+      // An explicit choice still means truecolor.
+      expect(prettyLine({ date: new Date(0), level: "Info", text: "x", colors: true })).toContain(
+        "38;2;",
+      );
+    } finally {
+      if (forced === undefined) delete process.env.FORCE_COLOR;
+      else process.env.FORCE_COLOR = forced;
+    }
+  });
 });

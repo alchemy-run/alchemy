@@ -10,10 +10,7 @@ import {
   type EntrypointExports,
 } from "./WorkerRuntime.ts";
 
-export {
-  BackgroundWork,
-  type DurableObjectAbortOptions,
-} from "alchemy/Workers/Workerd/DurableObjectState";
+export { type DurableObjectAbortOptions } from "alchemy/Workers/Workerd/DurableObjectState";
 
 export class DurableObjectState extends Context.Service<
   DurableObjectState,

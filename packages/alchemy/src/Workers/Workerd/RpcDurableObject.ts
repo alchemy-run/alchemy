@@ -16,6 +16,7 @@ import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 import * as Scope from "effect/Scope";
 import { RuntimeContext } from "../../RuntimeContext.ts";
+import { EventLifetime, makeEventLifetime } from "../EventLifetime.ts";
 import * as RpcWebSocket from "./RpcWebSocket.ts";
 
 /**
@@ -60,22 +61,32 @@ const makeHandlers = Effect.fn(function* <I>(
         const memoMap = Layer.makeMemoMapUnsafe();
         const context = yield* Layer.buildWithMemoMap(handlers, memoMap, instanceScope);
         const services = Layer.succeedContext(context);
-        const http = Effect.gen(function* () {
-          const handler = yield* RpcServer.toHttpEffect(schema).pipe(
-            Effect.provide(Layer.mergeAll(services, RpcSerialization.layerNdjson)),
-          );
-          return yield* handler;
-        });
         const state = yield* State;
         const runtime = yield* RuntimeContext;
         const lifetime = Layer.succeed(RpcRequestLifetime, (effect) =>
           Effect.withFiber((fiber) =>
-            // RpcServer sends Exit before finalization and drops sends after disconnect.
-            state
-              .waitUntil(Fiber.await(fiber))
-              .pipe(Effect.provideService(RuntimeContext, runtime), Effect.andThen(effect)),
+            Effect.gen(function* () {
+              // RpcServer sends Exit before finalization and drops sends after disconnect.
+              yield* state
+                .waitUntil(Fiber.await(fiber))
+                .pipe(Effect.provideService(RuntimeContext, runtime));
+              // The request's scope closes once it has replied and the work
+              // it handed to `waitUntil` has settled, so that work can still
+              // use what the handler acquired.
+              const request = makeEventLifetime(yield* Effect.scope);
+              return yield* effect.pipe(
+                Effect.provideService(EventLifetime, request.lifetime),
+                Effect.ensuring(Effect.sync(request.holdScope)),
+              );
+            }),
           ),
         );
+        const http = Effect.gen(function* () {
+          const handler = yield* RpcServer.toHttpEffect(schema.middleware(RpcRequestLifetime)).pipe(
+            Effect.provide(Layer.mergeAll(services, lifetime, RpcSerialization.layerNdjson)),
+          );
+          return yield* handler;
+        });
         const transport = yield* RpcWebSocket.make(state).pipe(
           Effect.provide(RpcSerialization.layerJson),
         );

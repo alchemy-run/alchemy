@@ -137,10 +137,8 @@ const serve = Effect.fn(function* (
   workflows: unknown,
 ) {
   // The classes' own environment, which the deploy packs into one secret.
-  yield* Effect.sync(() => {
-    const packed = globalThis.process?.env?.CLUSTER_ENV;
-    if (packed) Object.assign(globalThis.process.env, JSON.parse(packed));
-  });
+  const packed = yield* Config.String("CLUSTER_ENV").pipe(Config.withDefault(""));
+  if (packed) yield* Effect.sync(() => Object.assign(globalThis.process.env, JSON.parse(packed)));
   const objectSharding = makeObjectSharding(() => entities as never);
   registry.sharding = objectSharding;
   // The isolate's own scope: built once, never closed (workerd has no

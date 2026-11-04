@@ -260,8 +260,14 @@ export const ScheduledActionProvider = () =>
             AutoScalingGroupName: autoScalingGroupName,
             ScheduledActionName: scheduledActionName,
             Recurrence: news.recurrence,
-            StartTime: news.startTime ? new Date(news.startTime) : undefined,
-            EndTime: news.endTime ? new Date(news.endTime) : undefined,
+            StartTime: news.startTime
+              ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(news.startTime)
+              : undefined,
+            EndTime: news.endTime
+              ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(news.endTime)
+              : undefined,
             TimeZone: news.timeZone,
             MinSize: news.minSize,
             MaxSize: news.maxSize,

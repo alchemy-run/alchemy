@@ -35,8 +35,18 @@ const freshId = (prefix: string) =>
 
 type TestFn = (name: string, effect: Effect.Effect<void, unknown, any>, options?: object) => void;
 
-export const workflowConformanceTests = (test: TestFn, { baseUrl }: { baseUrl: () => string }) => {
-  const options = { timeout: 90_000 };
+export const workflowConformanceTests = (
+  test: TestFn,
+  {
+    baseUrl,
+    kind,
+  }: {
+    baseUrl: () => string;
+    /** Whether the host under test runs in a real cloud or on this machine. */
+    kind: "live" | "local";
+  },
+) => {
+  const options = { timeout: 90_000, tags: [kind] };
   const url = () => `${baseUrl()}/wf`;
 
   const start = (workflow: string, id: string, query = "") =>

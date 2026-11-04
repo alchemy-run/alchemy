@@ -1,5 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { runInBackground } from "alchemy/Workers/EventLifetime";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -192,6 +193,8 @@ export const WorkerExecutionContext = Context.Reference<WorkerExecutionContextSe
 );
 export type WorkerExecutionContext = typeof WorkerExecutionContext;
 
+export { EventLifetime, makeEventLifetime, runInBackground } from "alchemy/Workers/EventLifetime";
+
 export const fromExecutionContext = (
   ctx: cf.ExecutionContext,
   env?: Record<string, unknown>,
@@ -202,13 +205,7 @@ export const fromExecutionContext = (
   exports: makeEntrypointExports((name, options) =>
     getLoopbackEntrypoint(ctx.exports, name, options),
   ),
-  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<R>();
-      // Register the promise with workerd un-awaited — waitUntil extends the
-      // invocation's lifetime without blocking the response.
-      yield* Effect.sync(() => ctx.waitUntil(Effect.runPromiseWith(context)(effect)));
-    }),
+  waitUntil: (effect) => runInBackground(effect, (promise) => ctx.waitUntil(promise)),
   passThroughOnException: () => Effect.sync(() => ctx.passThroughOnException()),
   cache: {
     purge: (options) =>

@@ -45,14 +45,17 @@ export const conformanceTests = (
   test: TestFn,
   {
     baseUrl,
+    kind,
     external = true,
   }: {
     baseUrl: () => string;
+    /** Whether the host under test runs in a real cloud or on this machine. */
+    kind: "live" | "local";
     /** Whether the host runs an existing Effect Cluster program (not on Workers). */
     external?: boolean;
   },
 ) => {
-  const options = { timeout: 120_000 };
+  const options = { timeout: 120_000, tags: [kind] };
 
   test(
     "messages to one entity run in order against its state",

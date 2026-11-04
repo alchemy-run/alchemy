@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { Base64 } from "effect/encoding";
@@ -219,7 +220,7 @@ export const makeOperations = Effect.gen(function* () {
   const resolveCached = (owner: string, repo: string) =>
     Effect.gen(function* () {
       const key = cacheKey(owner, repo);
-      const now = yield* Effect.sync(() => Date.now());
+      const now = yield* Clock.currentTimeMillis;
       const hit = resolveCache.get(key);
       if (hit !== undefined && hit.expires > now) return hit.entry;
       const entry = yield* registryStub().resolve(owner, repo);

@@ -69,7 +69,7 @@ export interface WorkerBundleEngine<Options extends WorkerBundleOptions, ModuleR
   readonly moduleRules?: (
     options: Options,
     main: string,
-  ) => Effect.Effect<ModuleRule[] | undefined, never, FileSystem.FileSystem>;
+  ) => Effect.Effect<ModuleRule[] | undefined, never, FileSystem.FileSystem | Path.Path>;
   /** Rewrite a build failure, e.g. to point at the engine's own options. */
   readonly mapError?: (error: Bundle.BundleError) => Bundle.BundleError;
   /**
@@ -164,10 +164,9 @@ export const makeWorkerBundle = <Options extends WorkerBundleOptions, ModuleRule
         Promise.all([engine.loadCompatPlugins(), import("rolldown/plugins")]),
       );
       const realMain = yield* sanitizeMain(options.main);
-      const moduleRules =
-        engine.moduleRules === undefined
-          ? undefined
-          : yield* engine.moduleRules(options, realMain).pipe(Effect.provide(context));
+      const moduleRules = engine.moduleRules
+        ? yield* engine.moduleRules(options, realMain).pipe(Effect.provide(context))
+        : undefined;
       const virtualEntry = engine.virtualEntry(options);
       const cwd = yield* findCwdForBundle(realMain).pipe(
         Effect.mapError((cause) =>

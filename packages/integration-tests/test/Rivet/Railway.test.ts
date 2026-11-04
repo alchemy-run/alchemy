@@ -46,6 +46,6 @@ describe.skipIf(true)(
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 900_000 });
 
-    conformanceTests(test, { baseUrl: () => baseUrl });
+    conformanceTests(test, { baseUrl: () => baseUrl, kind: "live" });
   },
 );

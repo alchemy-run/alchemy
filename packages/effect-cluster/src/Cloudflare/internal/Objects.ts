@@ -16,6 +16,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare/Workers";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine, type ObjectImpl } from "alchemy/Workers/DurableObjectEngine";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import {
   ClusterCron,
   ClusterSchema,
@@ -176,7 +177,7 @@ const clientOf = (
         Headers.fromInput(options?.headers ?? {}),
       );
       return JSON.stringify({
-        requestId: `${Date.now()}-${requests++}`,
+        requestId: `${yield* Clock.currentTimeMillis}-${requests++}`,
         tag,
         payload: yield* encode(payloadCodec(rpc), payload),
         headers: Object.fromEntries(Object.entries(headers)),
@@ -236,7 +237,9 @@ export const makeObjectSharding = (
   ({
     getShardId: (_entityId: string, group: string) => ShardId.make(group, 1),
     hasShardId: () => true,
-    getSnowflake: Effect.sync(() => Snowflake.Snowflake(BigInt(Date.now()) << 22n)),
+    getSnowflake: Effect.map(Clock.currentTimeMillis, (now) =>
+      Snowflake.Snowflake(BigInt(now) << 22n),
+    ),
     isShutdown: Effect.succeed(false),
     makeClient: (entity: AnyEntity) =>
       Effect.succeed((entityId: string) => clientOf(entity, entityId, objects)),
@@ -330,18 +333,18 @@ export const EntityObject = Cloudflare.DurableObject<EntityObjectStub>()(
       const maxIdle = Duration.toMillis(
         Duration.fromInputUnsafe(hosted.options.maxIdleTime ?? "1 minute"),
       );
-      let lastActive = Date.now();
+      let lastActive = yield* Clock.currentTimeMillis;
       let armedAt = 0;
       /** Wake the object at `at`, unless it already wakes sooner. */
       const arm = (at: number) =>
-        Effect.suspend(() => {
-          if (armedAt > Date.now() && armedAt <= at) return Effect.void;
+        Effect.flatMap(Clock.currentTimeMillis, (now) => {
+          if (armedAt > now && armedAt <= at) return Effect.void;
           armedAt = at;
           return setAlarm(at);
         });
       /** A message arrived: keep the instance until it has been idle for `maxIdleTime`. */
-      const touch = Effect.suspend(() => {
-        lastActive = Date.now();
+      const touch = Effect.flatMap(Clock.currentTimeMillis, (now) => {
+        lastActive = now;
         return arm(lastActive + KEEP_AWAKE);
       });
       const concurrency = hosted.options.concurrency ?? 1;
@@ -409,7 +412,7 @@ export const EntityObject = Cloudflare.DurableObject<EntityObjectStub>()(
               JSON.stringify(request),
             );
           }
-          yield* arm(Date.now() + REPLAY_AFTER);
+          yield* arm((yield* Clock.currentTimeMillis) + REPLAY_AFTER);
         }
         const { result, requestId, headers } = yield* handle(rpc, request, payload);
         const exit = yield* Effect.exit(
@@ -474,7 +477,7 @@ export const EntityObject = Cloudflare.DurableObject<EntityObjectStub>()(
         for (const row of pending) {
           yield* run(JSON.parse(row.call) as Call).pipe(permits.withPermits(1), Effect.ignore);
         }
-        const now = Date.now();
+        const now = yield* Clock.currentTimeMillis;
         if (now - lastActive < maxIdle) return yield* arm(now + KEEP_AWAKE);
         const [waiting] = yield* query("SELECT 1 FROM cluster_messages WHERE exit IS NULL LIMIT 1");
         if (waiting !== undefined) yield* arm(now + REPLAY_AFTER);
@@ -547,7 +550,7 @@ export const ScheduledObject = Cloudflare.DurableObject<ScheduledObjectStub>()(
               ),
             );
           }
-          yield* setAlarm(Date.now() + SINGLETON_HEARTBEAT);
+          yield* setAlarm((yield* Clock.currentTimeMillis) + SINGLETON_HEARTBEAT);
         });
         return { ensure: () => reportDefects(beat), alarm: () => beat };
       }
@@ -564,7 +567,7 @@ export const ScheduledObject = Cloudflare.DurableObject<ScheduledObjectStub>()(
         );
       const fire = Effect.gen(function* () {
         const due = yield* readNext;
-        const now = Date.now();
+        const now = yield* Clock.currentTimeMillis;
         if (due === undefined) return yield* writeNext(nextAfter(now));
         if (due > now) return yield* setAlarm(due);
         // A run due longer ago than `skipIfOlderThan` (after an outage) is skipped.

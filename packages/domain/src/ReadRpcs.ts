@@ -4,6 +4,7 @@ import * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
+import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type { Servable } from "./Api.ts";
 import type * as Event from "./Event.ts";
@@ -267,6 +268,8 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
       const rpc = served.rpc as Rpc.AnyWithProps;
       return [{ served, name: served.tag, operation: "send", rpc, stream: false }];
     }
+    // A query is one RPC the Api's own client calls; the derived surfaces do not serve it yet.
+    if (served.kind === "Query") return [];
     const name = nameOf(served);
     return Object.entries(readRpcs(served)).flatMap(([call, read]) => {
       if (read === undefined) return [];
@@ -279,6 +282,52 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
       ];
     });
   });
+
+/**
+ * The name of one call of an Api's client: a command's tag (`DepositMoney`),
+ * or a read as `<Name>.<operation>` (`AccountSummary.get`).
+ */
+export type CallName<Client> = {
+  readonly [K in keyof Client & string]: Client[K] extends (...args: never) => unknown
+    ? K
+    : `${K}.${keyof Client[K] & string}`;
+}[keyof Client & string];
+
+/** The {@link CallName}s of the calls that return once: every call but `watch` and `events`. */
+export type OnceCallName<Client> = {
+  readonly [K in keyof Client & string]: Client[K] extends (...args: never) => unknown
+    ? K
+    : {
+        readonly [O in keyof Client[K] & string]: Client[K][O] extends (
+          ...args: never
+        ) => Stream.Stream<unknown, unknown, unknown>
+          ? never
+          : `${K}.${O}`;
+      }[keyof Client[K] & string];
+}[keyof Client & string];
+
+/** The client an Api's `clientInProcess` builds. */
+export type ClientOf<A> = A extends {
+  readonly clientInProcess: Effect.Effect<infer Client, any, any>;
+}
+  ? Client
+  : never;
+
+/** The {@link CallName} of an operation. */
+export const callName = (op: Operation): string =>
+  op.operation === "send" ? op.name : `${op.name}.${op.operation}`;
+
+/**
+ * The operations a caller listed: nothing is exposed unless it is named.
+ * An Api's calls stay private to its own clients until a surface opts in.
+ */
+export const exposedOf = (
+  operations: ReadonlyArray<Operation>,
+  expose: ReadonlyArray<string> | undefined,
+): ReadonlyArray<Operation> => {
+  const named = new Set(expose ?? []);
+  return operations.filter((op) => named.has(callName(op)));
+};
 
 /**
  * An Api's in-process client for a caller from outside the app, such as an

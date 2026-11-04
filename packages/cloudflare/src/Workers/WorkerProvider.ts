@@ -3818,7 +3818,7 @@ export const LiveWorkerProvider = () =>
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
         const streamingTailConsumers = resolveTailConsumers(news.streamingTailConsumers);
-        const observability = resolveObservability(news, bindings);
+        const observability = yield* resolveObservability(news, bindings);
         const metadata: workers.PutScriptRequest["metadata"] = {
           annotations: news.version
             ? { workersMessage: news.version.message, workersTag: news.version.tag }
@@ -5013,7 +5013,7 @@ export const LiveWorkerProvider = () =>
                         ]),
                       )
                     : undefined,
-                observability: resolveObservability(news, bindings),
+                observability: yield* resolveObservability(news, bindings),
                 tags,
               },
               files: [
@@ -5329,6 +5329,43 @@ export const LiveWorkerProvider = () =>
                 WorkerHasNoVersions: () => Effect.undefined,
                 DispatchNamespaceScriptNotFound: () => Effect.undefined,
                 DispatchNamespaceNotFound: () => Effect.undefined,
+              }),
+            ),
+        ),
+        lookup: Effect.fn(
+          function* ({ name }) {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            const [subdomain, settings] = yield* Effect.all(
+              [
+                workers.getScriptSubdomain({ accountId, scriptName: name }),
+                workers.getScriptScriptAndVersionSetting({ accountId, scriptName: name }),
+              ],
+              { concurrency: 1 },
+            );
+            const urls = subdomain.enabled
+              ? [`https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`]
+              : [];
+            return {
+              accountId,
+              workerId: yield* findWorkerId(accountId, name),
+              workerName: name,
+              namespace: undefined,
+              logpush: settings.logpush ?? undefined,
+              url: urls[0],
+              urls,
+              domain: undefined,
+              tags: settings.tags ?? undefined,
+              durableObjectNamespaces: getDurableObjects(settings.bindings),
+              routes: [],
+              crons: [],
+              tailConsumers: settings.tailConsumers?.map((c) => ({ service: c.service })),
+            } satisfies Worker["Attributes"] as Worker["Attributes"] | undefined;
+          },
+          (effect) =>
+            effect.pipe(
+              Effect.catchTags({
+                WorkerNotFound: () => Effect.undefined,
+                WorkerHasNoVersions: () => Effect.undefined,
               }),
             ),
         ),

@@ -174,7 +174,7 @@ export const WorkerBundle = Shared.makeWorkerBundle<WorkerBundleOptions, Additio
       ? makeEffectVirtualEntry(options.entry.exports, options.stack)
       : undefined,
   moduleRules: (options, main) =>
-    Effect.map(realGlobs(options.rules), (rules) => toModuleRules(main, rules)),
+    realGlobs(options.rules).pipe(Effect.map((rules) => toModuleRules(main, rules))),
   mapError: withRulesHint,
 });
 

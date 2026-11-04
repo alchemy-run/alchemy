@@ -16,6 +16,7 @@ import * as NodeStdio from "@effect/platform-node/NodeStdio";
 import * as NodeTerminal from "@effect/platform-node/NodeTerminal";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -52,6 +53,7 @@ export const workerdBuildOptions: SharedBuildOptions = {
   platform: Layer.mergeAll(
     platformServices,
     FetchHttpClient.layer,
+    SecureRandom.layerWebCrypto,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
   ),
@@ -95,53 +97,49 @@ export const makeWorkerBridge = <Runtime extends WorkerRuntimeContextLike>(
       public readonly env: any,
     ) {
       super(ctx, env);
-      const event = <T>(
-        makeEffect: (
-          built: WorkerBuild<any, Runtime>,
-        ) => readonly [Effect.Effect<any, any, any>, Context.Context<never>],
-        onExit: (
-          exit: Parameters<typeof handleRpcExit>[0],
-          scope: Parameters<typeof handleRpcExit>[1] & {},
-        ) => Promise<T>,
-      ) =>
-        processEvent(build, {
-          makeEffect,
-          services: (built) => options.services(this.ctx, this.env, built),
-          waitUntil: (promise) => this.ctx.waitUntil(promise),
-          onExit,
-        });
-
-      for (const method of options.handlers) {
-        (this as any)[method] = (input: any) =>
-          event(
-            (built) => built.export[method](input, this.env, this.ctx),
-            (exit) =>
-              exit._tag === "Success"
-                ? Promise.resolve(exit.value)
-                : Promise.reject(Cause.squash(exit.cause)),
-          );
-      }
-
       return new Proxy(this, {
         get: (target, prop) => {
           if (typeof prop !== "string" || prop in target) return (target as any)[prop];
           return (...args: unknown[]) =>
-            event(
+            target.event(
               (built) => [dispatchRpcMethod(built.shape(), prop, args), Context.empty()] as const,
               handleRpcExit,
             );
         },
       });
     }
+
+    event<T>(
+      makeEffect: (
+        built: WorkerBuild<any, Runtime>,
+      ) => readonly [Effect.Effect<any, any, any>, Context.Context<never>],
+      onExit: (
+        exit: Parameters<typeof handleRpcExit>[0],
+        lifetime: Parameters<typeof handleRpcExit>[1] & {},
+      ) => Promise<T>,
+    ): Promise<T> {
+      return processEvent(build, {
+        makeEffect,
+        services: (built) => options.services(this.ctx, this.env, built),
+        waitUntil: (promise) => this.ctx.waitUntil(promise),
+        onExit,
+      });
+    }
   }
 
-  // Stub prototype methods so native script validation detects the
-  // standard handler set; per-instance overrides above are what actually
-  // run.
+  // The handlers live on the prototype: native script validation detects
+  // the handler set there, and a handler called over JS RPC (the local
+  // runtime delivers `email` that way) must be a prototype method.
   for (const method of options.handlers) {
     Object.defineProperty(WorkerBridge.prototype, method, {
-      value: function () {
-        throw new Error(`Bridge method '${method}' was called before instance setup`);
+      value: function (this: WorkerBridge, input: any) {
+        return this.event(
+          (built) => built.export[method](input, this.env, this.ctx),
+          (exit) =>
+            exit._tag === "Success"
+              ? Promise.resolve(exit.value)
+              : Promise.reject(Cause.squash(exit.cause)),
+        );
       },
       writable: true,
       configurable: true,

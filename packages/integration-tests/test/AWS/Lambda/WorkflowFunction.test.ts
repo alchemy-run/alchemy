@@ -80,6 +80,7 @@ describe(
       napsWithinMillis: 40_000,
       // Lambda retries a durable step with its own policy.
       recoveryWithinMillis: undefined,
+      tags: ["provider:aws", "provider:aws:lambda", "live"],
       timeout: 180_000,
       unsupported: { raceAll: "aren't supported on Lambda durable functions" },
     });

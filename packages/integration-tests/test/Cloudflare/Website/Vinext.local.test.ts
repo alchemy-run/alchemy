@@ -24,7 +24,9 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
  */
 describe.concurrent(
   "Vinext dev",
-  { tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:website"] },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:website", "local"],
+  },
   () => {
     test.provider(
       "Vinext dev: local dev server renders SSR and serves public files through ASSETS",

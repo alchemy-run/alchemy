@@ -44,8 +44,8 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 300_000 });
 
-    conformanceTests(test as never, { baseUrl: () => baseUrl, external: false });
-    workflowConformanceTests(test as never, { baseUrl: () => baseUrl });
-    scheduledConformanceTests(test as never, { baseUrl: () => baseUrl });
+    conformanceTests(test as never, { baseUrl: () => baseUrl, kind: "live", external: false });
+    workflowConformanceTests(test as never, { baseUrl: () => baseUrl, kind: "live" });
+    scheduledConformanceTests(test as never, { baseUrl: () => baseUrl, kind: "live" });
   },
 );
