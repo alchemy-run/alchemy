@@ -54,7 +54,8 @@ to its provider's existing slugs (e.g. after `"<provider>/what-is-<provider>"`).
 
 ## Diagrams
 
-Use `website/src/components/DAG.astro`. Never embed images or ASCII art. A
+Use `website/src/components/DAG.astro`. Hubs have no diagram; their docs map is
+`website/src/components/HubMap.astro`, drawn from the sidebar. Never embed images or ASCII art. A
 What is page's diagram shows the platform's structure (see SKILL.md), drawn
 with `groups` on the grid.
 

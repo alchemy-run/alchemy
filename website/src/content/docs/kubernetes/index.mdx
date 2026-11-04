@@ -3,26 +3,11 @@ title: Kubernetes
 description: Run containers and Effect programs on any Kubernetes cluster with Alchemy. Declare Deployments, Jobs, raw manifests, and Helm charts in the same typed program as the rest of your infrastructure. No YAML, no kubectl apply.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Kubernetes is the open-source standard for running containers across a cluster of machines, and every major cloud offers it as a managed service.
 
 You describe what should exist, three copies of this server, a job every night, an address in front of them, and the cluster works continuously to make it so, restarting what crashes and moving what was on a machine that died. It runs anywhere, from your laptop to your own servers to EKS, GKE or AKS.
-
-<DAG
-  nodes={[
-    { id: "cluster", label: "Cluster", type: "local · EKS · any kubeconfig", col: 0, row: 0 },
-    { id: "web", label: "Web", type: "Deployment + Service", col: 1, row: 0 },
-    { id: "job", label: "Nightly", type: "CronJob", col: 1, row: 1 },
-    { id: "chart", label: "ingress-nginx", type: "Helm chart", col: 2, row: 0 },
-  ]}
-  edges={[
-    { from: "cluster", to: "web" },
-    { from: "cluster", to: "job" },
-    { from: "cluster", to: "chart" },
-  ]}
-  caption="Every resource names the cluster it runs on."
-/>
 
 ## A taste
 
@@ -72,8 +57,10 @@ When you're ready, point the same resources at a real cluster.
 
 **New to Kubernetes?** [What is Kubernetes?](/kubernetes/what-is-kubernetes) walks through clusters, objects, namespaces, Pods, Deployments, Services, Jobs, images and server-side apply, once each, and shows how Alchemy models every one.
 
-**Want to build one?** The [tutorial](/kubernetes/tutorial/part-1) goes from an empty directory to a local cluster running a service, Effect Jobs, a CronJob and a Helm chart, and ends on a cluster of your own. Start with [Setup](/kubernetes/setup).
+**Want to build?** The [tutorial](/kubernetes/tutorial/part-1) goes from an empty directory to a local cluster running a service, Effect Jobs, a CronJob and a Helm chart, and ends on a cluster of your own. Start with [Setup](/kubernetes/setup).
 
-**Want the whole picture?** Start with where workloads run: [Connecting to clusters](/kubernetes/clusters/connecting), [Container registries](/kubernetes/clusters/registries), [Local clusters](/kubernetes/clusters/local), [Amazon EKS](/kubernetes/clusters/eks) and [Cluster adapters](/kubernetes/clusters/cluster-adapters). Then what runs: [Deployments](/kubernetes/workloads/deployments), [Jobs & CronJobs](/kubernetes/workloads/jobs), [Container images](/kubernetes/workloads/images), [Configuration & bindings](/kubernetes/workloads/bindings) and [How objects are managed](/kubernetes/workloads/object-lifecycle). And everything else: [Manifests](/kubernetes/objects/manifests) and [Helm charts](/kubernetes/objects/helm-charts).
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-Every resource is in the generated [API reference](/providers).
+## The docs
+
+<HubMap />

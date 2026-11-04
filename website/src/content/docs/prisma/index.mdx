@@ -3,26 +3,9 @@ title: Prisma
 description: Declare Prisma Postgres databases, connections, branches and Compute apps as Stack resources with Alchemy, and run the same Stack against a local Postgres in dev.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Prisma is best known for Prisma ORM, a TypeScript ORM that generates a typed client from your schema. Its data platform adds Prisma Postgres, a serverless database, and Prisma Compute, which runs the apps that use it.
-
-A project holds both, so an app and its database run side by side and the app finds its database without any configuration.
-
-<DAG
-  nodes={[
-    { id: "project", label: "app", type: "Project", col: 0, row: 0 },
-    { id: "db", label: "db", type: "Prisma Postgres", col: 1, row: 0 },
-    { id: "app", label: "api", type: "Compute app", col: 1, row: 1 },
-    { id: "worker", label: "Worker", type: "Cloudflare", col: 2, row: 0 },
-  ]}
-  edges={[
-    { from: "project", to: "db" },
-    { from: "project", to: "app" },
-    { from: "db", to: "app", label: "DATABASE_URL" },
-    { from: "db", to: "worker", label: "connection" },
-  ]}
-/>
 
 ## A taste
 
@@ -50,10 +33,10 @@ const sql = yield* SQL.Postgres({ url: db.databaseUrl });
 
 **New to Prisma's platform?** [What is Prisma?](/prisma/what-is-prisma) walks through projects, Prisma Postgres, connections, branches, Compute apps and deployments, once each, and shows how Alchemy models every one.
 
-**Want to build one?** The [tutorial](/prisma/tutorial/part-1) deploys a project, an Effect API, Postgres and a Vite frontend, one step at a time. Start with [Setup](/prisma/setup) to connect your workspace.
+**Want to build?** The [tutorial](/prisma/tutorial/part-1) deploys a project, an Effect API, Postgres and a Vite frontend, one step at a time. Start with [Setup](/prisma/setup) to connect your workspace.
 
-**Want the whole picture?** Start with the database: [Postgres](/prisma/data/postgres), [Connections](/prisma/data/connections), [Branches](/prisma/data/branches), [Buckets](/prisma/data/buckets) and [Drizzle + Postgres](/prisma/data/drizzle-postgres). Then the apps that use it: [Apps](/prisma/compute/apps) and [Deployments](/prisma/compute/deployments).
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-**Using Cloudflare?** [Connect from Workers](/prisma/guides/cloudflare-workers) puts Hyperdrive in front of the database. **Building a website?** [Websites](/prisma/frontend/websites) runs every supported framework on Compute.
+## The docs
 
-Every resource is in the generated [API reference](/providers).
+<HubMap />

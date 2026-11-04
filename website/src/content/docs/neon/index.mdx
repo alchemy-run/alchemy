@@ -3,23 +3,9 @@ title: Neon
 description: Declare Neon Postgres projects, branches and roles, plus Functions, storage, Auth, the Data API and AI Gateway, in an Alchemy Stack, with a branch per preview stage.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Neon started as serverless Postgres and has grown into branchable infrastructure. Storage is separate from compute, so a database scales with load and sleeps when idle. A branch copies the whole database, data included, in a second. Around Postgres, Neon now runs Functions, object storage, user sign-in, a Data API and an AI gateway. Each is attached to a branch, so branching copies the whole backend, not just the data.
-
-<DAG
-  nodes={[
-    { id: "project", label: "app-db", type: "Project", col: 0, row: 0 },
-    { id: "branch", label: "pr-42", type: "Branch", col: 1, row: 0 },
-    { id: "fn", label: "Api", type: "Function", col: 2, row: 0 },
-    { id: "bucket", label: "Uploads", type: "Bucket", col: 2, row: 1 },
-  ]}
-  edges={[
-    { from: "project", to: "branch" },
-    { from: "branch", to: "fn" },
-    { from: "branch", to: "bucket" },
-  ]}
-/>
 
 ## A taste
 
@@ -50,12 +36,10 @@ const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 
 **New to Neon?** [What is Neon?](/neon/what-is-neon) walks through projects, branches, computes, roles, connections, migrations, and the Functions, storage, Auth and AI Gateway around them, once each, and shows how Alchemy models every one.
 
-**Want to build one?** The [upload tutorial](/neon/tutorial) combines a Vite frontend, private files, signed-in users, SQL records and an upload-triggered Function. Start with [Setup](/neon/setup) for credentials and the prerequisites for each feature.
+**Want to build?** The [upload tutorial](/neon/tutorial) combines a Vite frontend, private files, signed-in users, SQL records and an upload-triggered Function. Start with [Setup](/neon/setup) for credentials and the prerequisites for each feature.
 
-**Want the whole picture?** Start with the database: [Branching](/neon/data/branching), [Connections](/neon/data/connections), [Roles](/neon/data/roles) and [Migrations](/neon/data/migrations). Then the organization around it: [Organization governance](/neon/governance).
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-**Going to production?** The guides cover [Production Auth](/neon/guides/production-auth), [AI Gateway setup](/neon/guides/ai-gateway), [Private networking](/neon/guides/private-networking), [Custom domains](/neon/guides/custom-domains), [State and recovery](/neon/guides/state-recovery), [Preview branches per PR](/neon/guides/preview-branches) and [Drizzle ORM](/neon/guides/drizzle).
+## The docs
 
-**Building a website?** Every supported framework deploys as a Neon Function, from [Vite](/neon/frontend/vite) to [Next.js](/neon/frontend/nextjs).
-
-Every resource is in the generated [API reference](/providers).
+<HubMap />

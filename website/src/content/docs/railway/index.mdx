@@ -3,23 +3,9 @@ title: Railway
 description: Run Effect programs on Railway with Alchemy. Declare Projects, Services, Functions, Postgres, MySQL, Redis, Volumes and Buckets in one TypeScript program.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Railway is a cloud for running containers and the databases beside them. A project groups your services, Postgres, MySQL and Redis databases, volumes and buckets. Railway runs each service, gives it a URL, and connects everything in the project over a private network. Environments copy a whole project for staging or a pull request, and you pay only for the CPU and memory you use.
-
-<DAG
-  nodes={[
-    { id: "project", label: "Site", type: "Project", col: 0, row: 0 },
-    { id: "api", label: "Api", type: "Service", col: 1, row: 0 },
-    { id: "pg", label: "Postgres", type: "database", col: 2, row: 0 },
-    { id: "vol", label: "Uploads", type: "Volume", col: 1, row: 1 },
-  ]}
-  edges={[
-    { from: "project", to: "api" },
-    { from: "api", to: "pg", label: "railway.internal" },
-    { from: "api", to: "vol", label: "mounted" },
-  ]}
-/>
 
 ## A taste
 
@@ -72,10 +58,10 @@ export default Alchemy.Stack(
 
 **New to Railway?** [What is Railway?](/railway/what-is-railway) walks through workspaces, projects, environments, services, databases, volumes, variables and networking, once each, and shows how Alchemy models every one.
 
-**Want to build one?** The [tutorial](/railway/tutorial/part-1) goes from an empty directory to a project running an HTTP Service with a Volume and a variable, one step at a time. Start with [Setup](/railway/setup) to connect your workspace.
+**Want to build?** The [tutorial](/railway/tutorial/part-1) goes from an empty directory to a project running an HTTP Service with a Volume and a variable, one step at a time. Start with [Setup](/railway/setup) to connect your workspace.
 
-**Want the whole picture?** The chapters follow the shape of Railway itself. Start with where services run: [Projects](/railway/compute/projects), [Environments](/railway/compute/environments), [Services](/railway/compute/services), [Functions, templates & VMs](/railway/compute/functions) and [Regions](/railway/compute/regions). Then what they store: [Postgres](/railway/data/postgres), [MySQL](/railway/data/mysql), [Mongo](/railway/data/mongo), [Redis](/railway/data/redis), [Volumes](/railway/data/volumes), [Buckets](/railway/data/buckets) and [Variables](/railway/data/variables). And how they're reached: [Custom domains, TCP & private networks](/railway/networking).
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-**Building a website?** [Websites](/railway/frontend/websites) covers every supported framework as a Railway service.
+## The docs
 
-The `examples/railway-service` example puts every resource and binding in one Stack. Every resource is in the generated [API reference](/providers).
+<HubMap />

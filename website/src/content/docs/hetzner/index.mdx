@@ -3,25 +3,11 @@ title: Hetzner
 description: Run Effect programs on Hetzner Cloud Servers with Alchemy. Declare Servers, Services, Volumes, networks, firewalls, load balancers and DNS in one TypeScript program.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Hetzner rents dedicated and cloud servers at a fraction of the large clouds' prices. Hetzner Cloud, its virtual-machine platform, runs in Germany, Finland, the US and Singapore.
 
 Around its Servers, Hetzner Cloud offers just what servers need: network disks, private networks, firewalls, load balancers, IP addresses and DNS. There are no managed functions or queues: you run your own programs on your own machines.
-
-<DAG
-  nodes={[
-    { id: "dns", label: "api.example.com", type: "DNS", col: 0, row: 0 },
-    { id: "server", label: "Box", type: "Server", col: 1, row: 0 },
-    { id: "api", label: "Api", type: "Service", col: 2, row: 0 },
-    { id: "vol", label: "Data", type: "Volume", col: 1, row: 1 },
-  ]}
-  edges={[
-    { from: "dns", to: "server" },
-    { from: "server", to: "api" },
-    { from: "server", to: "vol" },
-  ]}
-/>
 
 ## A taste
 
@@ -74,10 +60,10 @@ export default Alchemy.Stack(
 
 **New to Hetzner?** [What is Hetzner?](/hetzner/what-is-hetzner) walks through projects, locations, Servers, Volumes, networks, firewalls, load balancers and DNS, once each, and shows how Alchemy models every one.
 
-**Want to build one?** The [tutorial](/hetzner/tutorial/part-1) goes from an empty directory to a Server running an HTTP Service with a Volume and a firewall, one step at a time. Start with [Setup](/hetzner/setup) to connect your project.
+**Want to build?** The [tutorial](/hetzner/tutorial/part-1) goes from an empty directory to a Server running an HTTP Service with a Volume and a firewall, one step at a time. Start with [Setup](/hetzner/setup) to connect your project.
 
-**Want the whole picture?** The chapters follow the shape of Hetzner itself. Start with the machine and what runs on it: [Servers](/hetzner/compute/servers) and [Services](/hetzner/compute/services). Then what it keeps: [Volumes](/hetzner/data/volumes) and [Drizzle + Postgres](/hetzner/data/drizzle-postgres). Then how it's reached: [Networks, firewalls & load balancers](/hetzner/networking) and [DNS](/hetzner/networking/dns).
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-**Building a website?** [Websites](/hetzner/frontend/websites) covers every supported framework as a Service on a Server. Several sites can share one.
+## The docs
 
-Every resource is in the generated [API reference](/providers).
+<HubMap />

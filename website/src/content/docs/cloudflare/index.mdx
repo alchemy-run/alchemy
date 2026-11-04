@@ -3,26 +3,11 @@ title: Cloudflare
 description: Build on Cloudflare with Alchemy. Declare Workers, Durable Objects, R2, D1, KV and Queues in TypeScript, and bind each one into the Worker that uses it with a typed client.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Cloudflare runs the largest network on the internet, in more than 340 cities. It serves DNS, caches and protects websites, blocks attacks, and connects offices and devices.
 
 It also runs the Workers developer platform, which runs your code at the edge in every one of those cities, next to storage, databases, queues, AI inference and containers. Its Durable Objects add globally unique, stateful objects that live close to their users, which makes them ideal for agents, WebSockets and real-time coordination.
-
-<DAG
-  nodes={[
-    { id: "worker", label: "Worker", type: "fetch", tone: "accent", col: 0, row: 0 },
-    { id: "uploads", label: "Uploads", type: "R2 Bucket", col: 1, row: 0 },
-    { id: "counter", label: "Counter", type: "Durable Object", col: 1, row: 1 },
-    { id: "jobs", label: "Jobs", type: "Queue", col: 2, row: 0 },
-  ]}
-  edges={[
-    { from: "worker", to: "uploads", label: "binding" },
-    { from: "worker", to: "counter", label: "binding" },
-    { from: "uploads", to: "jobs", dashed: true },
-  ]}
-  caption="A Worker reaches each resource through a binding. Dashed edges are messages delivered later."
-/>
 
 ## A taste
 
@@ -81,14 +66,10 @@ export default Alchemy.Stack(
 
 **New to Cloudflare?** [What is Cloudflare?](/cloudflare/what-is-cloudflare) walks through accounts, zones, Workers, bindings, Durable Objects, storage, queues and workflows, once each, and shows how Alchemy models every one.
 
-**Want to build one?** The [tutorial](/cloudflare/tutorial/part-1) goes from an empty directory to a Worker with storage, tests, local development and CI, one step at a time. Start with [Setup](/cloudflare/setup) to connect your account.
+**Want to build?** The [tutorial](/cloudflare/tutorial/part-1) goes from an empty directory to a Worker with storage, tests, local development and CI, one step at a time. Start with [Setup](/cloudflare/setup) to connect your account.
 
-**Want the whole picture?** The chapters follow the shape of Cloudflare itself. Start with the code: [Workers](/cloudflare/compute/workers), [Durable Objects](/cloudflare/compute/durable-objects), [Workflows](/cloudflare/compute/workflows) and [Containers](/cloudflare/compute/containers). Then what it stores: [KV](/cloudflare/data/kv), [R2](/cloudflare/data/r2), [D1](/cloudflare/data/d1) and [Hyperdrive](/cloudflare/data/hyperdrive). Then how work flows between Workers: [Queues](/cloudflare/messaging/queues) and [Cron triggers](/cloudflare/messaging/cron). Then how traffic reaches them: [Domains & DNS](/cloudflare/networking/domains) and [Custom domains & routes](/cloudflare/networking/custom-domains). And finally how you protect and watch them: [Secrets & env](/cloudflare/security/secrets-env), [Access](/cloudflare/security/access) and [Native tracing](/cloudflare/observability/workers-tracing).
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-**Building a website or an API?** [Frontends](/cloudflare/frontend/frontends) covers every supported framework on Workers with static assets. [Effect HTTP API](/cloudflare/apis/effect-http-api) and [Effect RPC](/cloudflare/apis/effect-rpc) serve typed APIs.
+## The docs
 
-**Building with AI?** [Workers AI](/cloudflare/ai/workers-ai), [AI Gateway](/cloudflare/ai/ai-gateway) and [Vectorize](/cloudflare/ai/vectorize) run models, route calls to providers and search embeddings, all through bindings.
-
-**Working offline?** [Local development](/cloudflare/local-development) runs the whole Stack on your machine.
-
-Every resource is in the generated [API reference](/providers), including the zero-trust and zone-security services these chapters don't cover.
+<HubMap />

@@ -5,24 +5,35 @@ who knows one provider's docs can find their way around any other's.
 
 ## Hub
 
-`<provider>/index.mdx`. In order:
+`<provider>/index.mdx`. The hub answers two questions: what does building on
+this platform with Alchemy feel like, and where do I go next? It never explains
+the platform's concepts. That's the What is page's job, and it is the only page
+that draws the platform. The hub has no diagram.
 
-1. **Opening: what the platform is.** One paragraph, technical, at a high level,
-   and what it's known for. Optionally add a second paragraph with the platform's
-   core structure (AWS: everything lives in an account and a region, and IAM
-   decides what may call what).
+Every hub has the same four parts, in order:
+
+1. **One paragraph on what the platform is**, technical and at a high level,
+   and what it's known for. A second paragraph is fine when it adds what the
+   platform offers (Cloudflare's Workers and Durable Objects), never its
+   structure (accounts, regions, projects, IAM).
 
    > Fly.io is a public cloud that runs your apps as fast-booting virtual machines, called Machines, in dozens of regions close to your users. A built-in proxy sends each request to the nearest Machine. Every app in an organization shares a private network over WireGuard…
 
    Never describe the package ("`@alchemy.run/fly` puts Fly in one typed
    program"). Never use trivia (see SKILL.md rules).
-2. **A DAG** of a small typical app on the platform. Label edges in platform
-   terms (`flycast`, `private network`, `s3:PutObject`), not Alchemy API names
-   (`bindService`, `ConnectPostgres`).
-3. **"A taste"**: two or three small, complete snippets that declare a resource,
-   write a runtime and deploy the Stack.
-4. **"Where to start"**: links to What is, Setup, the tutorial, and the main
-   chapters.
+2. **`## A taste`**: two or three small, complete snippets that declare a
+   resource, write a runtime and deploy the Stack, each led by one line.
+   Lead-in lines, not headings.
+3. **`## Where to start`**: three bold lead-ins, one line each:
+   - **New to X?** [What is X?](/x/what-is-x) and what it walks through.
+   - **Want to build?** Setup, then the tutorial (or the main guide when there's
+     no tutorial).
+   - **Looking for something specific?** "Every section of these docs is listed
+     below, and every resource is in the generated [API reference](/providers)."
+4. **`## The docs`** with `<HubMap />` (import it from
+   `../../../components/HubMap.astro`). It draws one card per sidebar section
+   from the sidebar itself, so it never needs editing. Don't write a prose list
+   of chapter links.
 
 ## What is X?
 

@@ -3,42 +3,15 @@ title: Stripe
 description: Sell subscriptions and onboard merchants from a Cloudflare Worker — catalog, Checkout, the Billing Portal, Connect, and webhooks declared next to the code that uses them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Stripe is financial infrastructure for the internet: payments, subscriptions and billing, invoicing, tax, fraud prevention and payouts to other businesses.
 
 It keeps what you sell, products and their prices, who buys it, and the record of every payment and subscription. Its hosted pages, Checkout and the Billing Portal, collect card details so you never touch them, and webhooks tell your app what happened.
 
-<DAG
-  nodes={[
-    { id: "price", label: "ProMonthly", type: "Price", col: 0, row: 0 },
-    { id: "worker", label: "Api", type: "Worker", col: 1, row: 0 },
-    { id: "key", label: "restricted key", type: "one permission per binding", col: 1, row: 1 },
-    { id: "events", label: "Events", type: "webhook endpoint", col: 2, row: 0 },
-  ]}
-  edges={[
-    { from: "price", to: "worker" },
-    { from: "key", to: "worker" },
-    { from: "events", to: "worker", dashed: true },
-  ]}
-/>
+## A taste
 
-## Where to start
-
-**New to Stripe?** [What is Stripe?](/stripe/what-is-stripe) walks through accounts, keys, products, prices, customers, Checkout, subscriptions, webhooks and Connect, once each, and shows how Alchemy models every one.
-
-**Building a SaaS that charges monthly?** [Sell a subscription](/stripe/guides/subscriptions) uses hosted Checkout, the Billing Portal, and an entitlement record kept current by webhooks, in one Worker.
-
-**Building a platform that pays other businesses?** [Onboard merchants with Connect](/stripe/guides/connect) creates Express accounts, runs hosted onboarding, and keeps a merchant table current from `account.updated`.
-
-**Need to know what Stripe did?** [React to Stripe events](/stripe/guides/webhooks) covers which events to handle and how `consumeEvents` works.
-
-Start with [Setup](/stripe/setup) to connect your account.
-
-## What it looks like
-
-```typescript
-// src/Api.ts
+```typescript title="src/api.ts"
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
@@ -89,16 +62,16 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-Resources like `Product`, `Price`, `Coupon` and `WebhookEndpoint` are managed by the Stack: Alchemy creates, updates and deletes them, and deactivates the ones Stripe won't delete. Bindings like `CreateCustomer` and `CreateCheckoutSession` are what the Worker calls while it runs. Each one adds the permission it needs to a [`RestrictedApiKey`](/providers/stripe/restrictedapikey), and you provide its `*Http` Layer once. And an output like `price.id` is yielded in Construction to get an accessor, then yielded again inside a handler, which is how a resource's id reaches the running Worker.
+Resources like `Product`, `Price`, `Coupon` and `WebhookEndpoint` are managed by the Stack: Alchemy creates, updates and deletes them, and deactivates the ones Stripe won't delete. Bindings like `CreateCustomer` and `CreateCheckoutSession` are what the Worker calls while it runs. Each one adds the permission it needs to a [`RestrictedApiKey`](/stripe/accounts-and-keys), and you provide its `*Http` Layer once. And an output like `price.id` is yielded in Construction to get an accessor, then yielded again inside a handler, which is how a resource's id reaches the running Worker.
 
-## Reference
+## Where to start
 
-[Product](/providers/stripe/product) ·
-[Price](/providers/stripe/price) ·
-[Coupon](/providers/stripe/coupon) ·
-[Customer](/providers/stripe/customer) ·
-[BillingPortalConfiguration](/providers/stripe/billingportalconfiguration) ·
-[WebhookEndpoint](/providers/stripe/webhookendpoint) ·
-[RestrictedApiKey](/providers/stripe/restrictedapikey)
+**New to Stripe?** [What is Stripe?](/stripe/what-is-stripe) walks through accounts, keys, products, prices, customers, Checkout, subscriptions, webhooks and Connect, once each, and shows how Alchemy models every one.
 
-The full list is under **Resources** in the sidebar.
+**Want to build?** Connect your account in [Setup](/stripe/setup), then [Sell a subscription](/stripe/guides/subscriptions) builds Checkout, the Billing Portal and webhooks in one Worker. Paying other businesses? [Onboard merchants with Connect](/stripe/guides/connect).
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

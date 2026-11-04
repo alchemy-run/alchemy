@@ -3,24 +3,9 @@ title: Fly
 description: Run Effect programs on Fly.io with Alchemy. Declare Services, Machines, Volumes, Postgres, Redis and Tigris in TypeScript, in the regions near your users.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Fly.io is a public cloud that runs your apps as fast-booting virtual machines, called Machines, in dozens of regions close to your users. A built-in proxy sends each request to the nearest Machine. Every app in an organization shares a private network over WireGuard, which also reaches your laptop or another cloud. Postgres, Redis and object storage sit on the same network.
-
-<DAG
-  nodes={[
-    { id: "gateway", label: "Gateway", type: "public Service", col: 0, row: 0 },
-    { id: "users", label: "Users", type: "private Service", col: 1, row: 0 },
-    { id: "pg", label: "Postgres", type: "Managed Postgres", col: 2, row: 0 },
-    { id: "vol", label: "Data", type: "Volume", col: 1, row: 1 },
-  ]}
-  edges={[
-    { from: "gateway", to: "users", label: "flycast" },
-    { from: "users", to: "pg", label: "private network" },
-    { from: "gateway", to: "vol" },
-  ]}
-  caption="Services reach each other and their data over Fly's private network."
-/>
 
 ## A taste
 
@@ -64,10 +49,10 @@ export default Alchemy.Stack(
 
 **New to Fly?** [What is Fly?](/fly/what-is-fly) walks through organizations, Apps, Machines, regions, the proxy, private networking, Volumes and managed data, once each, and shows how Alchemy models every one.
 
-**Want to build one?** The [tutorial](/fly/tutorial/part-1) goes from an empty directory to a public Service with a Volume and a secret, one step at a time. Start with [Setup](/fly/setup) to connect your organization.
+**Want to build?** The [tutorial](/fly/tutorial/part-1) goes from an empty directory to a public Service with a Volume and a secret, one step at a time. Start with [Setup](/fly/setup) to connect your organization.
 
-**Want the whole picture?** The chapters follow the shape of Fly itself. Start with where programs run: [Apps](/fly/compute/apps), [Machines](/fly/compute/machines), [Services](/fly/compute/services), [Regions](/fly/compute/regions) and [Sprites](/fly/compute/sprites). Then how they reach each other and the world: [Connect Services](/fly/compute/connecting-services) and [IPs & certificates](/fly/networking). Then what they store: [Volumes](/fly/data/volumes), [Postgres](/fly/data/postgres), [Redis](/fly/data/redis), [Tigris](/fly/data/tigris) and [Secrets](/fly/data/secrets). And how changes roll out: [Blue/green deployments](/fly/compute/deployments).
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-**Building a website?** [Websites](/fly/frontend/websites) covers every supported framework as a Node Service.
+## The docs
 
-Every resource is in the generated [API reference](/providers).
+<HubMap />

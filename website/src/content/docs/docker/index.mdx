@@ -3,25 +3,9 @@ title: Docker
 description: Images, containers, networks, volumes and Swarm services as Stack resources, driven through your active Docker CLI context.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Docker packages a program with everything it needs into an image, and runs images as isolated containers. An image runs the same on a laptop, in CI or on any cloud.
-
-An engine on each machine builds images and runs containers, attached to networks and volumes.
-
-<DAG
-  nodes={[
-    { id: "image", label: "postgres", type: "RemoteImage", col: 0, row: 0 },
-    { id: "container", label: "postgres", type: "Container", col: 1, row: 0 },
-    { id: "net", label: "app-network", type: "Network", col: 2, row: 0 },
-    { id: "vol", label: "postgres-data", type: "Volume", col: 2, row: 1 },
-  ]}
-  edges={[
-    { from: "image", to: "container" },
-    { from: "container", to: "net" },
-    { from: "container", to: "vol" },
-  ]}
-/>
 
 ## A taste
 
@@ -48,8 +32,10 @@ const postgres = yield* Docker.Container("postgres", {
 
 **New to Docker?** [What is Docker?](/docker/what-is-docker) walks through the engine, contexts, images, registries, containers, networks, volumes and Swarm, once each, and shows how Alchemy models every one.
 
-**Ready to go?** [Setup](/docker/setup) connects Alchemy to your engine. Then [Run local services](/docker/local-services) builds the Postgres above step by step, [Build & push images](/docker/build-and-push) builds an image and pushes it to a registry, and [Docker Swarm](/docker/swarm) runs replicated services on one engine or a remote server.
+**Want to build?** Connect Alchemy to your engine in [Setup](/docker/setup), then [Run local services](/docker/local-services) builds Postgres on a network and a volume, step by step.
 
-Most changes to a Network, Volume or Container replace it: the old one is removed before the new one is created. A container, network or volume of the same name that Alchemy didn't create fails the deploy until you opt in to adopting it with `--adopt`.
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-Every resource is in the generated [API reference](/providers).
+## The docs
+
+<HubMap />

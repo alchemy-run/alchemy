@@ -3,25 +3,11 @@ title: GitHub
 description: Repositories, Actions secrets, variables and environments, webhooks, repository event sources and pull request comments as Stack resources — the glue for CI/CD.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 GitHub hosts git repositories and the work around them: reviewing changes in pull requests, tracking issues, and running CI/CD with Actions.
 
 Actions builds, tests and deploys on every push, using credentials kept in its secrets and variables. Environments guard production behind reviews. Webhooks tell other systems when something happens in a repository.
-
-<DAG
-  nodes={[
-    { id: "role", label: "role", type: "cloud credential", col: 0, row: 0 },
-    { id: "vars", label: "Actions", type: "secrets · variables", col: 1, row: 0 },
-    { id: "repo", label: "my-org/api", type: "Repository", col: 2, row: 0 },
-    { id: "worker", label: "Worker", type: "repository events", col: 2, row: 1 },
-  ]}
-  edges={[
-    { from: "role", to: "vars" },
-    { from: "vars", to: "repo" },
-    { from: "repo", to: "worker", dashed: true },
-  ]}
-/>
 
 ## A taste
 
@@ -56,8 +42,10 @@ yield* GitHub.Comment("preview-comment", {
 
 **New to GitHub as infrastructure?** [What is GitHub?](/github/what-is-github) walks through repositories, Actions, secrets, environments, OIDC, webhooks and comments, once each, and shows how Alchemy models every one.
 
-**Ready to go?** [Setup](/github/setup) connects your token. Then read [Repositories](/github/repository), [Actions secrets & variables](/github/actions-config) and [Webhooks & events](/github/events). [CI](/environments/ci) walks through a GitHub Actions workflow with a stage per pull request, and the CI tutorials for [Cloudflare](/cloudflare/tutorial/part-5) and [AWS](/aws/tutorial/part-5) create the deploy credential as code.
+**Want to build?** Connect your token in [Setup](/github/setup), then [CI](/environments/ci) walks through a GitHub Actions workflow with a stage per pull request.
 
-To host Git yourself instead of using GitHub, see [Git](/git).
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-Every resource is in the generated [API reference](/providers).
+## The docs
+
+<HubMap />

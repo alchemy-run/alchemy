@@ -3,26 +3,9 @@ title: GCP
 description: Build on Google Cloud with Alchemy. Declare Cloud Run services, jobs, Firestore, Cloud Storage and Pub/Sub in TypeScript, and let bindings grant each runtime's service account the roles its code uses.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
 Google Cloud is a public cloud for compute, storage, databases, networking, data analytics and AI, in regions around the world. It's strongest at data and machine learning, with BigQuery, Spanner, and Vertex AI with Gemini, and at Kubernetes, with GKE.
-
-Everything lives in a project, and IAM grants each identity, including the service accounts your code runs as, a role on each resource.
-
-<DAG
-  nodes={[
-    { id: "api", label: "Api", type: "Cloud Run service", col: 0, row: 0 },
-    { id: "links", label: "Links", type: "Firestore", col: 1, row: 0 },
-    { id: "events", label: "Events", type: "Pub/Sub topic", col: 1, row: 1 },
-    { id: "worker", label: "Worker", type: "worker pool", col: 2, row: 1 },
-  ]}
-  edges={[
-    { from: "api", to: "links", label: "datastore.user" },
-    { from: "api", to: "events", label: "pubsub.publisher" },
-    { from: "events", to: "worker", dashed: true },
-  ]}
-  caption="Each edge is a role the caller's service account holds on the resource."
-/>
 
 ## A taste
 
@@ -80,10 +63,10 @@ export default Alchemy.Stack(
 
 **New to Google Cloud?** [What is GCP?](/gcp/what-is-gcp) walks through projects, APIs, regions, IAM, runtimes, events and networks, once each, and shows how Alchemy models every one.
 
-**Want to build one?** The [tutorial](/gcp/tutorial/part-1) goes from an empty folder to a tested service deployed from CI, one step at a time. Start with [Setup](/gcp/setup) to connect your project.
+**Want to build?** The [tutorial](/gcp/tutorial/part-1) goes from an empty folder to a tested service deployed from CI, one step at a time. Start with [Setup](/gcp/setup) to connect your project.
 
-**Want the whole picture?** The chapters follow the shape of Google Cloud itself. Start with who may do what: [IAM & bindings](/gcp/security/iam), [Secret Manager & KMS](/gcp/security/secrets-kms) and [Federated identity](/gcp/security/federated-identity). Then where code runs: [Choosing a runtime](/gcp/compute/choosing-a-runtime), [Cloud Run](/gcp/compute/cloud-run), [Cloud Run jobs](/gcp/compute/jobs), [Worker pools](/gcp/compute/worker-pools), [Cloud Functions](/gcp/compute/cloud-functions) and [GKE](/gcp/compute/gke). Then what it stores: [Firestore](/gcp/data/firestore), [Cloud Storage](/gcp/data/storage), [Cloud SQL](/gcp/data/cloud-sql), [BigQuery](/gcp/data/bigquery) and [Memorystore](/gcp/data/memorystore). Then how work flows: [Pub/Sub](/gcp/messaging/pubsub), [Cloud Scheduler](/gcp/messaging/scheduler), [Storage events](/gcp/messaging/storage-events) and [Eventarc](/gcp/messaging/eventarc). And finally the network and how you watch it: [VPC & private networking](/gcp/networking/vpc), [Private services](/gcp/networking/private-services) and [Logging & Monitoring](/gcp/observability/monitoring).
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-**Building a website or an API?** [Websites](/gcp/frontend/websites) covers every supported framework on Cloud Run. [Effect HTTP API](/gcp/apis/effect-http-api) and [Effect RPC](/gcp/apis/effect-rpc) serve typed APIs. [Vertex AI](/gcp/ai/vertex-ai) calls Gemini with no API key.
+## The docs
 
-Every resource is in the generated [API reference](/providers). Alchemy manages infrastructure, not people's content, so APIs whose objects are a person's data, like Gmail, Drive or Calendar, aren't resources, and neither are the advertising APIs that need a user's OAuth consent.
+<HubMap />

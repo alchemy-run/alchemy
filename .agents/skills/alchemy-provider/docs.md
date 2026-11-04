@@ -136,7 +136,7 @@ There is no `guides/` directory.
 
 | Path | Content |
 | --- | --- |
-| `index.mdx` | Overview: what the platform is (not what the package does), a DAG, "A taste" snippets, then where to start |
+| `index.mdx` | Overview: what the platform is (not what the package does), "A taste" snippets, where to start, then `<HubMap />`. No diagram: the What is page draws the platform |
 | `what-is-<provider>.mdx` | the platform's concepts once each, in the order a newcomer meets them, each mapped to Alchemy |
 | `setup.mdx` | credentials, the profile command, CI env vars |
 | `tutorial/part-1.mdx` … `part-5.mdx` | the same five parts as AWS: "Your First Stack" (one storage resource), "Add a <Runtime>" (bind it, GET/PUT routes), "Testing", "Stages", "CI/CD" (the cloud's keyless CI auth, e.g. OIDC or Workload Identity Federation) |
