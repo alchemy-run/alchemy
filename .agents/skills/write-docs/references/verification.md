@@ -79,6 +79,14 @@ went wrong in this repo's docs:
   between classes. Never normalize whitespace file-wide.
 - **Imports sit between the frontmatter and the first paragraph.** A regex that
   cuts "everything before the first sentence" also cuts `import DAG …`.
+- **Code samples contain `import` lines too.** Adding a component import after
+  "the last `import` line" put it inside a TypeScript snippet on four pages, so
+  the diagram silently didn't render. Insert imports only into the block right
+  after the frontmatter, and compute the `../` depth from the docs root
+  (`gcp/compute/x.mdx` needs `../../../../components/`).
+- **A diagram that fails to render leaves no error on the page.** After adding
+  diagrams, count them: the sheet prints how many it found, and 0 or fewer than
+  you added means a broken import or a bad caption string.
 
 After any sweep, read `git diff` for every line that isn't the change you meant,
 and revert and hand-fix those files.
@@ -94,6 +102,20 @@ grep -rnE "This page (introduces|covers|starts)|This chapter|rest of this page|s
 
 Fix each hit in pages you own. List the rest for the user rather than editing
 unrelated pages unasked.
+
+## Review diagrams one at a time
+
+When the user reviews diagrams, show each one on its own, at the size the page
+shows it, in page order, with one line on what it shows:
+
+```sh
+scripts/diagram-sheet.py --split /tmp/review aws/compute/choosing-a-runtime gcp/compute/choosing-a-runtime
+```
+
+Then embed the files in the reply. The two-per-row sheet is for your own
+checking, because it shrinks every diagram and hides text that's too small.
+When a review changes a diagram that another provider has a counterpart of,
+change both.
 
 ## Long pages on a contact sheet
 

@@ -2,6 +2,11 @@
 """Screenshot docs pages from the dev server and put every diagram on one sheet.
 
 Usage: diagram-sheet.py <out.png> <path>...   e.g. diagram-sheet.py /tmp/sheet.png aws/iam cloudflare/data/kv
+       diagram-sheet.py --split <dir> <path>...  one PNG per diagram, at page size
+
+--split writes <dir>/<page>-<n>.png, one file per diagram in page order and
+at the size a reader sees it (the sheet shrinks everything to one width). Use
+it to show diagrams one by one in a review, or to check text is readable.
 
 Each page is shot at 2x in dark mode, every DAG figure is cropped out by its
 panel colour, and the crops are laid out two per row in <out.png>. Read the
@@ -62,7 +67,23 @@ def figures(path):
     return [im.crop((330 * SCALE, s - 5 * SCALE, 970 * SCALE, e + 5 * SCALE)) for s, e in runs if e - s >= 100 * SCALE]
 
 
+def split(out_dir, paths):
+    os.makedirs(out_dir, exist_ok=True)
+    count = 0
+    with tempfile.TemporaryDirectory() as tmp:
+        for page, f in zip(paths, shoot(paths, tmp)):
+            for n, crop in enumerate(figures(f)):
+                name = os.path.join(out_dir, f"{page.strip('/').replace('/', '_')}-{n}.png")
+                # Back to CSS pixels, so the file is the size the page shows.
+                crop.resize((crop.size[0] // SCALE, crop.size[1] // SCALE)).save(name)
+                print(name)
+                count += 1
+    print(f"{count} diagrams -> {out_dir}")
+
+
 def main():
+    if sys.argv[1] == "--split":
+        return split(sys.argv[2], sys.argv[3:])
     out, paths = sys.argv[1], sys.argv[2:]
     with tempfile.TemporaryDirectory() as tmp:
         crops = [c.resize((620, int(c.size[1] * 620 / c.size[0])))
