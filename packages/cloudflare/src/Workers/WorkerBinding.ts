@@ -43,7 +43,7 @@ import { makeRpcStub } from "./Rpc.ts";
 import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import type { URLEffect } from "./Worker.ts";
-import { Worker, WorkerEnvironment } from "./Worker.ts";
+import { Worker, WorkerEnvironment, type RpcMethods } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
 
@@ -279,7 +279,7 @@ export const bindWorker = Effect.fn(function* <Shape, Req = never>(
     // its own construction, and a service binding naming its own script is
     // unnecessary: workerd's `ctx.exports.default` is a loopback to this
     // Worker's default entrypoint, so nothing is deployed for the binding.
-    return makeRpcStub<Shape>(
+    return makeRpcStub<RpcMethods<Shape>>(
       cloudflare_workers.pipe(
         Effect.map(({ exports }) => (exports as Record<string, unknown>).default),
       ),
@@ -306,5 +306,5 @@ export const bindWorker = Effect.fn(function* <Shape, Req = never>(
   const stubEff = WorkerEnvironment.pipe(
     Effect.map((env) => (env as Record<string, unknown>)[worker.LogicalId]),
   );
-  return makeRpcStub<Shape>(stubEff);
+  return makeRpcStub<RpcMethods<Shape>>(stubEff);
 });

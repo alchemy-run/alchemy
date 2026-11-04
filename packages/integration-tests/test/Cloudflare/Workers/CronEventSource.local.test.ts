@@ -7,6 +7,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import CronTestWorker from "./fixtures/cron/cron-worker.ts";
+import ShapeCronWorkerLive, { ShapeCronWorker } from "./fixtures/cron/shape-worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -96,6 +97,76 @@ test.provider(
       );
 
       expect(times).toContain(scheduledTime);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 180_000,
+  },
+);
+
+/**
+ * A Worker that returns `scheduled` from its init shape (and attaches the
+ * schedule with the `crons` prop) gets that method registered as the
+ * scheduled listener, and `scheduled` stays off its RPC surface.
+ */
+test.provider(
+  "local worker fires the shape-level scheduled() via the manual trigger route",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* ShapeCronWorker.pipe(Effect.provide(ShapeCronWorkerLive));
+          return { worker };
+        }),
+      );
+
+      expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
+      expect(deployed.worker.crons).toContain("* * * * *");
+
+      const url = deployed.worker.url;
+      const client = yield* HttpClient.HttpClient;
+
+      yield* Effect.gen(function* () {
+        const res = yield* client.post(`${url}/reset`);
+        if (res.status !== 200) {
+          return yield* Effect.fail(new WorkerNotReady({ status: res.status }));
+        }
+      }).pipe(
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
+
+      const scheduledTime = Date.now();
+      const trigger = yield* client.post(
+        `${url}/cdn-cgi/handler/scheduled?cron=${encodeURIComponent("* * * * *")}&time=${scheduledTime}`,
+      );
+      expect(trigger.status).toBe(200);
+      expect(yield* trigger.text).toBe("ok");
+
+      const times = yield* Effect.gen(function* () {
+        const res = yield* client.get(`${url}/times`);
+        if (res.status !== 200) return [];
+        const body = (yield* res.json) as { times?: unknown };
+        return Array.isArray(body.times) ? body.times : [];
+      }).pipe(
+        Effect.catch(() => Effect.succeed([] as unknown[])),
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (times): boolean => times.length > 0,
+          times: 10,
+        }),
+      );
+      expect(times).toContain(scheduledTime);
+
+      const rpc = yield* client.get(`${url}/rpc`);
+      expect(rpc.status).toBe(200);
+      expect(yield* rpc.json).toEqual({ greeting: "hello cron", scheduled: "undefined" });
 
       yield* stack.destroy();
     }).pipe(logLevel),

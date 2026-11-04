@@ -16,6 +16,7 @@ import * as Schedule from "effect/Schedule";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { withRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { isPlaceholderReset } from "./Placeholder.ts";
+import { isExportedHandlerMethod } from "./WorkerRuntime.ts";
 
 // The transport-agnostic RPC wire protocol (envelopes, error types, stream
 // encode/decode, `asEffectOrStream`, and the plain-`fetch` client/server) now
@@ -62,6 +63,10 @@ export const makeRpcStub = <Shape>(
       if (!isLazy && prop in target) return target[prop];
       if (typeof prop !== "string" && typeof prop !== "symbol") {
         return target[prop];
+      }
+      // ExportedHandler methods are event listeners, not RPC methods.
+      if (typeof prop === "string" && isExportedHandlerMethod(prop)) {
+        return undefined;
       }
       return (...args: any[]) =>
         asEffectOrStream(
