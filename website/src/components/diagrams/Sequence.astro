@@ -41,8 +41,9 @@ interface Props {
 
 const { actors, steps, caption } = Astro.props as Props;
 
-const COL = 168;
-const BOX_W = 132;
+// Boxes widen to fit the longest label or type line, and columns keep a gap between them.
+const BOX_W = Math.max(132, ...actors.map((a) => Math.max(a.label.length * 8, (a.type ?? "").length * 6.6) + 20));
+const COL = BOX_W + 36;
 const BOX_H = 46;
 const ROW = 40;
 const PAD = 16;
