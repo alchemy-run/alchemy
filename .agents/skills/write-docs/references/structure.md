@@ -122,6 +122,9 @@ Rules for every diagram:
 
 ### Component gotchas
 
+- A `caption="…"` is a JSX string: `\"` doesn't escape a quote inside it and the page fails to render (the sheet shows 0 diagrams). Use single quotes inside, `getByName('alice')`, or none.
+- `side` works only on a node with a parent. Two top-level nodes always stack, so wrap them in their container (an account, a project) to sit them side by side.
+
 Each of these came up on a sheet and was fixed:
 
 - **Timeline:** at `end={10}` one unit is about 56px, and a bar's label needs
