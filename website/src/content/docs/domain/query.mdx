@@ -204,7 +204,7 @@ const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receip
 
 `atLeast` is optional, and only for this moment. A read with no write behind it, a screen loading or the next page, leaves it out.
 
-`waitsFor` tells the query which projections to wait on. The caller never names them, nor any key: it passes the one receipt. The server reads that command's events back from its aggregate and routes each through every projection in `waitsFor`, the same way the projection routes them when it handles them, to find the keys to wait on. Here, `WithdrawMoney` on `a-1` recorded `MoneyWithdrawn` at seq 7, and `Ledger` is keyed by account, so the query waits until `Ledger` has handled seq 7 for `a-1`.
+`waitsFor` tells the query which projections to wait on. The caller never names them, nor any key: it passes the receipt. The server reads that command's events back from its aggregate and routes each through every projection in `waitsFor`, the same way the projection routes them when it handles them, to find the keys to wait on. Here, `WithdrawMoney` on `a-1` recorded `MoneyWithdrawn` at seq 7, and `Ledger` is keyed by account, so the query waits until `Ledger` has handled seq 7 for `a-1`.
 
 The projections can be keyed differently. Each finds its own keys in the same events:
 
@@ -229,9 +229,17 @@ const page = yield* bank.BranchActivity({ branch: "b-9" }, { atLeast: receipt })
 
 The deposit's one event, `MoneyDeposited { branchId: "b-9" }`, lands on `Ledger` key `a-1` and on `BranchTotals` key `b-9`, and the query waits for both. A projection that doesn't consume the receipt's aggregate has nothing to wait for.
 
+After commands to two aggregate instances, pass both receipts. The query waits for each, through every projection in `waitsFor`:
+
+```typescript
+const out = yield* bank.WithdrawMoney(checking, { amount: 30 }, mfa);
+const into = yield* bank.DepositMoney(savings, { amount: 30 });
+const total = yield* bank.CombinedBalance({ accounts: [checking, savings] }, { atLeast: [out, into] });
+```
+
 A wait longer than 10 seconds fails with `ConsistencyTimeout`, typed, so the client can retry or show that the data is behind.
 
-Only the stores of the projections in `waitsFor` are covered. Without `waitsFor`, `atLeast` waits for nothing, and data the handler reads from anywhere else may still be behind. `atLeast` takes one receipt: after two commands to the same aggregate instance, pass the later one. A command a saga or a policy sends (here, the debit of a transfer) is not the client's own write, so it has no receipt to pass: poll for it, or watch a view.
+Only the stores of the projections in `waitsFor` are covered. Without `waitsFor`, `atLeast` waits for nothing, and data the handler reads from anywhere else may still be behind. After two commands to the same aggregate instance, the later receipt is enough. A command a saga or a policy sends (here, the debit of a transfer) is not the client's own write, so it has no receipt to pass: poll for it, or watch a view.
 
 ## Test it
 

@@ -106,7 +106,7 @@ type Result<A extends Api.Any, C extends DomainCommand.Any> = Extract<
 type QueryArgs<Q extends Query.Any> = {
   input: Schema.Schema<Query.InputOf<Q>>;
   requestId: typeof Schema.String;
-  atLeast: Schema.optional<typeof Receipt>;
+  atLeast: Schema.optional<typeof Receipts>;
   after: Schema.optional<typeof Schema.String>;
   take: Schema.optional<typeof Schema.Number>;
 };
@@ -140,6 +140,8 @@ type CommandDefinitions<A extends Api.Any> = {
 } & { readonly Message: MessageUnion<Cases<A>> };
 
 const Receipt = Schema.Struct({ stream: Schema.String, version: Schema.Number });
+/** A query's `atLeast`: one receipt, or one per command. */
+const Receipts = Schema.Union([Receipt, Schema.Array(Receipt)]);
 
 /** Build one Foldkit Command per Api command. Provide the Api client at the runtime boundary. */
 function commandDefinitions<A extends Api.Any>(api: A): CommandDefinitions<A>;
@@ -254,7 +256,7 @@ const queryDefinition = (api: Api.Any, query: Query.Any, Message: Schema.Top) =>
     args: {
       input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
       requestId: Schema.String,
-      atLeast: Schema.optional(Receipt),
+      atLeast: Schema.optional(Receipts),
       after: Schema.optional(Schema.String),
       take: Schema.optional(Schema.Number),
     },

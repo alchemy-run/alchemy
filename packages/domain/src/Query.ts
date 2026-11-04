@@ -23,10 +23,24 @@ export interface AtLeast {
   readonly version: number;
 }
 
+/** A receipt on the wire. */
+const Receipt = Schema.Struct({ stream: Schema.String, version: Schema.Number });
+
+/** One receipt, or one per command a client sent before it asks. */
+export type AtLeastInput = AtLeast | ReadonlyArray<AtLeast>;
+
+/** The receipts a client passed as `atLeast`, as a list. @internal */
+export const receiptsOf = (atLeast: AtLeastInput | undefined): ReadonlyArray<AtLeast> =>
+  atLeast === undefined ? [] : Array.isArray(atLeast) ? atLeast : [atLeast as AtLeast];
+
 /** What `validate` sees besides the input. */
 export interface Request {
-  /** The write the client asked to read at least, if any. Pass it to a view's `query`. */
-  readonly atLeast: AtLeast | undefined;
+  /**
+   * The writes the client asked to read at least, one receipt each; empty
+   * when it passed none. A view's `query` takes the receipt of a command on
+   * the view's own key.
+   */
+  readonly atLeast: ReadonlyArray<AtLeast>;
 }
 
 /** The page a paged query's handler is asked for. */
@@ -292,7 +306,8 @@ export interface Definition<
  * Right after its own command, a client passes the command's receipt as
  * `atLeast`. The query finds the keys to wait on in that command's events,
  * waits until every projection in `waitsFor` has handled them, then reads.
- * The caller passes one receipt, never projections or keys.
+ * The caller passes receipts, never projections or keys: one, or one per
+ * command when it wrote to several aggregate instances.
  *
  * **Example:** Reading your own write
  * ```typescript
@@ -334,7 +349,7 @@ export const make = <
   const rpc = Rpc.make(name, {
     payload: {
       input: Schema.Struct(definition.input ?? {}),
-      atLeast: Schema.optional(Schema.Struct({ stream: Schema.String, version: Schema.Number })),
+      atLeast: Schema.optional(Schema.Union([Receipt, Schema.Array(Receipt)])),
       ...(definition.paged
         ? { after: Schema.optional(Schema.String), take: Schema.optional(Schema.Number) }
         : {}),
@@ -409,11 +424,11 @@ export interface QueryClass<
   ): Layer.Layer<QueryKey<Name>, E, R>;
 }
 
-/** How a client asks a query: the page, and the write to read at least. @internal */
+/** How a client asks a query: the page, and the writes to read at least. @internal */
 export interface RunOptions {
   readonly after?: string;
   readonly take?: number;
-  readonly atLeast?: AtLeast;
+  readonly atLeast?: AtLeastInput;
 }
 
 /** A hosted query: `validate`, the `atLeast` wait, the handler, then `visible`. @internal */
@@ -453,17 +468,19 @@ export const host = (
             input,
           ),
         );
+        const receipts = receiptsOf(atLeast);
         // Judge the request first: a refused caller never waits on a projection.
-        if (validate) yield* validate(input, { atLeast });
-        if (atLeast) {
+        if (validate) yield* validate(input, { atLeast: receipts });
+        // Every receipt, through every projection: each command's events name its own keys.
+        for (const receipt of receipts) {
           for (const projection of def.waitsFor ?? []) {
             yield* progress(projection)
-              .caughtUp(atLeast)
+              .caughtUp(receipt)
               .pipe(
                 Effect.withSpan(`Domain.caughtUp ${projection.projectionName}`, {
                   attributes: {
-                    "domain.stream": atLeast.stream,
-                    "domain.version": atLeast.version,
+                    "domain.stream": receipt.stream,
+                    "domain.version": receipt.version,
                   },
                 }),
               );
