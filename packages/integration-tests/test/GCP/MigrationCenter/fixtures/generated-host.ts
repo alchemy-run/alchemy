@@ -67,9 +67,21 @@ export default class MigrationCenterGeneratedHost extends GCP.Function<Migration
         AddGroupAssets: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AggregateAssetValues: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
-        BatchAssetDelete: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
-        BatchAssetUpdate: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        AggregateAssetValues: probeOutcome(
+          Retry.none(
+            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        BatchAssetDelete: probeOutcome(
+          Retry.none(
+            p2({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        BatchAssetUpdate: probeOutcome(
+          Retry.none(
+            p3({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         DeleteAsset: probeOutcome(
           Retry.none(p4({ asset: "alchemy-missing", location: "us-central1" } as never)),
         ),
@@ -104,14 +116,34 @@ export default class MigrationCenterGeneratedHost extends GCP.Function<Migration
         ListSourceErrorFrames: probeOutcome(Retry.none(p27({} as never))),
         ListSources: probeOutcome(Retry.none(p28({ location: "us-central1" } as never))),
         PatchAsset: probeOutcome(
-          Retry.none(p29({ asset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p29({
+              asset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        RemoveGroupAssets: probeOutcome(Retry.none(p30({} as never))),
-        ReportAssetFrames: probeOutcome(Retry.none(p31({ location: "us-central1" } as never))),
-        RunAssetsExportJob: probeOutcome(Retry.none(p32({} as never))),
-        RunImportJob: probeOutcome(Retry.none(p33({} as never))),
-        SendDiscoveryClientHeartbeat: probeOutcome(Retry.none(p34({} as never))),
-        ValidateImportJob: probeOutcome(Retry.none(p35({} as never))),
+        RemoveGroupAssets: probeOutcome(
+          Retry.none(p30({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ReportAssetFrames: probeOutcome(
+          Retry.none(
+            p31({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        RunAssetsExportJob: probeOutcome(
+          Retry.none(p32({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RunImportJob: probeOutcome(
+          Retry.none(p33({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SendDiscoveryClientHeartbeat: probeOutcome(
+          Retry.none(p34({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ValidateImportJob: probeOutcome(
+          Retry.none(p35({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

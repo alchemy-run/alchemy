@@ -16,33 +16,48 @@ export default class AccessApprovalGeneratedHost extends GCP.Function<AccessAppr
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.AccessApproval.ApproveApprovalRequest();
-    const p1 = yield* GCP.AccessApproval.DeleteProjectAccessApprovalSettings();
-    const p2 = yield* GCP.AccessApproval.DismissApprovalRequest();
-    const p3 = yield* GCP.AccessApproval.GetApprovalRequest();
-    const p4 = yield* GCP.AccessApproval.GetProjectAccessApprovalSettings();
-    const p5 = yield* GCP.AccessApproval.GetProjectServiceAccount();
-    const p6 = yield* GCP.AccessApproval.InvalidateApprovalRequest();
-    const p7 = yield* GCP.AccessApproval.ListApprovalRequests();
-    const p8 = yield* GCP.AccessApproval.UpdateProjectAccessApprovalSettings();
+    const p1 = yield* GCP.AccessApproval.DismissApprovalRequest();
+    const p2 = yield* GCP.AccessApproval.GetApprovalRequest();
+    const p3 = yield* GCP.AccessApproval.GetProjectAccessApprovalSettings();
+    const p4 = yield* GCP.AccessApproval.GetProjectServiceAccount();
+    const p5 = yield* GCP.AccessApproval.InvalidateApprovalRequest();
+    const p6 = yield* GCP.AccessApproval.ListApprovalRequests();
+    const p7 = yield* GCP.AccessApproval.UpdateProjectAccessApprovalSettings();
     return {
       fetch: serveProbes({
         ApproveApprovalRequest: probeOutcome(
-          Retry.none(p0({ approvalRequest: "alchemy-missing" } as never)),
+          Retry.none(
+            p0({
+              approvalRequest: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        DeleteProjectAccessApprovalSettings: probeOutcome(Retry.none(p1({} as never))),
         DismissApprovalRequest: probeOutcome(
-          Retry.none(p2({ approvalRequest: "alchemy-missing" } as never)),
+          Retry.none(
+            p1({
+              approvalRequest: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GetApprovalRequest: probeOutcome(
-          Retry.none(p3({ approvalRequest: "alchemy-missing" } as never)),
+          Retry.none(p2({ approvalRequest: "alchemy-missing" } as never)),
         ),
-        GetProjectAccessApprovalSettings: probeOutcome(Retry.none(p4({} as never))),
-        GetProjectServiceAccount: probeOutcome(Retry.none(p5({} as never))),
+        GetProjectAccessApprovalSettings: probeOutcome(Retry.none(p3({} as never))),
+        GetProjectServiceAccount: probeOutcome(Retry.none(p4({} as never))),
         InvalidateApprovalRequest: probeOutcome(
-          Retry.none(p6({ approvalRequest: "alchemy-missing" } as never)),
+          Retry.none(
+            p5({
+              approvalRequest: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ListApprovalRequests: probeOutcome(Retry.none(p7({} as never))),
-        UpdateProjectAccessApprovalSettings: probeOutcome(Retry.none(p8({} as never))),
+        ListApprovalRequests: probeOutcome(Retry.none(p6({} as never))),
+        UpdateProjectAccessApprovalSettings: probeOutcome(
+          Retry.none(p7({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(
@@ -50,7 +65,6 @@ export default class AccessApprovalGeneratedHost extends GCP.Function<AccessAppr
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.AccessApproval.ApproveApprovalRequestHttp,
-          GCP.AccessApproval.DeleteProjectAccessApprovalSettingsHttp,
           GCP.AccessApproval.DismissApprovalRequestHttp,
           GCP.AccessApproval.GetApprovalRequestHttp,
           GCP.AccessApproval.GetProjectAccessApprovalSettingsHttp,

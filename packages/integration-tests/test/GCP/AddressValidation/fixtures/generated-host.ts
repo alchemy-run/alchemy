@@ -19,8 +19,12 @@ export default class AddressValidationGeneratedHost extends GCP.Function<Address
     const p1 = yield* GCP.AddressValidation.ValidateAddress();
     return {
       fetch: serveProbes({
-        ProvideValidationFeedback: probeOutcome(Retry.none(p0({} as never))),
-        ValidateAddress: probeOutcome(Retry.none(p1({} as never))),
+        ProvideValidationFeedback: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ValidateAddress: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

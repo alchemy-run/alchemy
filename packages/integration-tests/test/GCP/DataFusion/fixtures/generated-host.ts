@@ -62,10 +62,22 @@ export default class DataFusionGeneratedHost extends GCP.Function<DataFusionGene
         ListInstances: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
         ListVersions: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
         PatchInstance: probeOutcome(
-          Retry.none(p8({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p8({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         RestartInstance: probeOutcome(
-          Retry.none(p9({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p9({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

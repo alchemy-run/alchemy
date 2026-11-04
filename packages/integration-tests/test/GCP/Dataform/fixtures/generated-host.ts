@@ -70,14 +70,22 @@ export default class DataformGeneratedHost extends GCP.Function<DataformGenerate
     const p44 = yield* GCP.Dataform.WriteWorkspaceFile(ProbeWorkspace);
     return {
       fetch: serveProbes({
-        CommitRepository: probeOutcome(Retry.none(p0({} as never))),
-        CommitWorkspace: probeOutcome(Retry.none(p1({} as never))),
+        CommitRepository: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CommitWorkspace: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ComputeRepositoryAccessTokenStatus: probeOutcome(Retry.none(p2({} as never))),
         CreateRepositoryCompilationResult: probeOutcome(
           Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DeleteFolderTree: probeOutcome(Retry.none(p4({} as never))),
-        DeleteTeamFolderTree: probeOutcome(Retry.none(p5({} as never))),
+        DeleteFolderTree: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeleteTeamFolderTree: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         FetchRepositoryHistory: probeOutcome(Retry.none(p6({} as never))),
         FetchRepositoryRemoteBranches: probeOutcome(Retry.none(p7({} as never))),
         FetchWorkspaceFileDiff: probeOutcome(Retry.none(p8({} as never))),
@@ -92,20 +100,36 @@ export default class DataformGeneratedHost extends GCP.Function<DataformGenerate
         GetTeamFolder: probeOutcome(Retry.none(p15({} as never))),
         GetWorkflowConfig: probeOutcome(Retry.none(p16({} as never))),
         GetWorkspace: probeOutcome(Retry.none(p17({} as never))),
-        InstallWorkspaceNpmPackages: probeOutcome(Retry.none(p18({} as never))),
+        InstallWorkspaceNpmPackages: probeOutcome(
+          Retry.none(p18({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListRepositories: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
         ListRepositoryCompilationResults: probeOutcome(Retry.none(p20({} as never))),
         ListRepositoryReleaseConfigs: probeOutcome(Retry.none(p21({} as never))),
         ListRepositoryWorkflowConfigs: probeOutcome(Retry.none(p22({} as never))),
         ListRepositoryWorkflowInvocations: probeOutcome(Retry.none(p23({} as never))),
         ListRepositoryWorkspaces: probeOutcome(Retry.none(p24({} as never))),
-        MakeWorkspaceDirectory: probeOutcome(Retry.none(p25({} as never))),
-        MoveFolder: probeOutcome(Retry.none(p26({} as never))),
-        MoveRepository: probeOutcome(Retry.none(p27({} as never))),
-        MoveWorkspaceDirectory: probeOutcome(Retry.none(p28({} as never))),
-        MoveWorkspaceFile: probeOutcome(Retry.none(p29({} as never))),
-        PullWorkspace: probeOutcome(Retry.none(p30({} as never))),
-        PushWorkspace: probeOutcome(Retry.none(p31({} as never))),
+        MakeWorkspaceDirectory: probeOutcome(
+          Retry.none(p25({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        MoveFolder: probeOutcome(
+          Retry.none(p26({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        MoveRepository: probeOutcome(
+          Retry.none(p27({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        MoveWorkspaceDirectory: probeOutcome(
+          Retry.none(p28({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        MoveWorkspaceFile: probeOutcome(
+          Retry.none(p29({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PullWorkspace: probeOutcome(
+          Retry.none(p30({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PushWorkspace: probeOutcome(
+          Retry.none(p31({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         QueryFolderContents: probeOutcome(Retry.none(p32({} as never))),
         QueryRepositoryCompilationResult: probeOutcome(
           Retry.none(p33({ compilationResult: "alchemy-missing" } as never)),
@@ -115,12 +139,20 @@ export default class DataformGeneratedHost extends GCP.Function<DataformGenerate
         QueryWorkspaceDirectoryContents: probeOutcome(Retry.none(p36({} as never))),
         ReadRepositoryFile: probeOutcome(Retry.none(p37({} as never))),
         ReadWorkspaceFile: probeOutcome(Retry.none(p38({} as never))),
-        RemoveWorkspaceDirectory: probeOutcome(Retry.none(p39({} as never))),
-        RemoveWorkspaceFile: probeOutcome(Retry.none(p40({} as never))),
-        ResetWorkspace: probeOutcome(Retry.none(p41({} as never))),
+        RemoveWorkspaceDirectory: probeOutcome(
+          Retry.none(p39({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RemoveWorkspaceFile: probeOutcome(
+          Retry.none(p40({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ResetWorkspace: probeOutcome(
+          Retry.none(p41({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SearchTeamFolder: probeOutcome(Retry.none(p42({ location: "us-central1" } as never))),
         SearchWorkspaceFiles: probeOutcome(Retry.none(p43({} as never))),
-        WriteWorkspaceFile: probeOutcome(Retry.none(p44({} as never))),
+        WriteWorkspaceFile: probeOutcome(
+          Retry.none(p44({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

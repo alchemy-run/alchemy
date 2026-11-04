@@ -35,7 +35,13 @@ export default class HypercomputeClusterGeneratedHost extends GCP.Function<Hyper
         ),
         ListClusters: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
         PatchCluster: probeOutcome(
-          Retry.none(p4({ cluster: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p4({
+              cluster: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

@@ -52,7 +52,13 @@ export default class SaasServiceManagementGeneratedHost extends GCP.Function<Saa
         ListUnitOperations: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
         ListUnits: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
         PatchUnitOperation: probeOutcome(
-          Retry.none(p12({ unitOperation: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p12({
+              unitOperation: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

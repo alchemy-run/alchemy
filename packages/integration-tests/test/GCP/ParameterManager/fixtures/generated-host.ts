@@ -65,7 +65,13 @@ export default class ParameterManagerGeneratedHost extends GCP.Function<Paramete
           Retry.none(p8({ template: "alchemy-missing", location: "us-central1" } as never)),
         ),
         PatchTemplate: probeOutcome(
-          Retry.none(p9({ template: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p9({
+              template: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchTemplateVersion: probeOutcome(
           Retry.none(
@@ -73,6 +79,7 @@ export default class ParameterManagerGeneratedHost extends GCP.Function<Paramete
               template: "alchemy-missing",
               version: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),

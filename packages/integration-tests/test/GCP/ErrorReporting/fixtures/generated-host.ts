@@ -15,27 +15,30 @@ export default class ErrorReportingGeneratedHost extends GCP.Function<ErrorRepor
   "ErrorReportingGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.ErrorReporting.DeleteProjectEvents();
-    const p1 = yield* GCP.ErrorReporting.GetGroup();
-    const p2 = yield* GCP.ErrorReporting.ListEvents();
-    const p3 = yield* GCP.ErrorReporting.ListGroupStats();
-    const p4 = yield* GCP.ErrorReporting.ReportEvent();
-    const p5 = yield* GCP.ErrorReporting.UpdateGroup();
+    const p0 = yield* GCP.ErrorReporting.GetGroup();
+    const p1 = yield* GCP.ErrorReporting.ListEvents();
+    const p2 = yield* GCP.ErrorReporting.ListGroupStats();
+    const p3 = yield* GCP.ErrorReporting.ReportEvent();
+    const p4 = yield* GCP.ErrorReporting.UpdateGroup();
     return {
       fetch: serveProbes({
-        DeleteProjectEvents: probeOutcome(Retry.none(p0({} as never))),
-        GetGroup: probeOutcome(Retry.none(p1({ group: "alchemy-missing" } as never))),
-        ListEvents: probeOutcome(Retry.none(p2({ groupId: "alchemy-missing-group" } as never))),
-        ListGroupStats: probeOutcome(Retry.none(p3({} as never))),
-        ReportEvent: probeOutcome(Retry.none(p4({} as never))),
-        UpdateGroup: probeOutcome(Retry.none(p5({ group: "alchemy-missing" } as never))),
+        GetGroup: probeOutcome(Retry.none(p0({ group: "alchemy-missing" } as never))),
+        ListEvents: probeOutcome(Retry.none(p1({ groupId: "alchemy-missing-group" } as never))),
+        ListGroupStats: probeOutcome(Retry.none(p2({} as never))),
+        ReportEvent: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateGroup: probeOutcome(
+          Retry.none(
+            p4({ group: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
-          GCP.ErrorReporting.DeleteProjectEventsHttp,
           GCP.ErrorReporting.GetGroupHttp,
           GCP.ErrorReporting.ListEventsHttp,
           GCP.ErrorReporting.ListGroupStatsHttp,

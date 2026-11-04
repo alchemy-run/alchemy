@@ -100,16 +100,36 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
     const p70 = yield* GCP.Healthcare.UpdateFhirStoreFhir(ProbeFhirStore);
     return {
       fetch: serveProbes({
-        ActivateConsent: probeOutcome(Retry.none(p0({} as never))),
-        ApplyFhirStoreAdminConsents: probeOutcome(Retry.none(p1({} as never))),
-        ApplyFhirStoreConsents: probeOutcome(Retry.none(p2({} as never))),
-        ArchiveUserDataMapping: probeOutcome(Retry.none(p3({} as never))),
-        BulkFhirStoreDelete: probeOutcome(Retry.none(p4({} as never))),
+        ActivateConsent: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ApplyFhirStoreAdminConsents: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ApplyFhirStoreConsents: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ArchiveUserDataMapping: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        BulkFhirStoreDelete: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CapabilitiesFhirStoreFhir: probeOutcome(Retry.none(p5({} as never))),
-        CheckConsentStoreDataAccess: probeOutcome(Retry.none(p6({} as never))),
+        CheckConsentStoreDataAccess: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ConditionalFhirDelete: probeOutcome(Retry.none(p7({ type: "alchemy-missing" } as never))),
-        ConditionalFhirPatch: probeOutcome(Retry.none(p8({ type: "alchemy-missing" } as never))),
-        ConditionalFhirUpdate: probeOutcome(Retry.none(p9({ type: "alchemy-missing" } as never))),
+        ConditionalFhirPatch: probeOutcome(
+          Retry.none(
+            p8({ type: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        ConditionalFhirUpdate: probeOutcome(
+          Retry.none(
+            p9({ type: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         CreateFhirStoreFhir: probeOutcome(
           Retry.none(
             p10({ type: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
@@ -148,12 +168,22 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
             p17({ resourceType: "alchemy-missing", resourceId: "alchemy-missing" } as never),
           ),
         ),
-        EvaluateConsentStoreUserConsents: probeOutcome(Retry.none(p18({} as never))),
-        ExecuteFhirBundle: probeOutcome(Retry.none(p19({} as never))),
+        EvaluateConsentStoreUserConsents: probeOutcome(
+          Retry.none(p18({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExecuteFhirBundle: probeOutcome(
+          Retry.none(p19({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ExplainFhirStoreDataAccess: probeOutcome(Retry.none(p20({} as never))),
-        ExportDicomStore: probeOutcome(Retry.none(p21({} as never))),
-        ExportFhirStore: probeOutcome(Retry.none(p22({} as never))),
-        ExportHl7V2Store: probeOutcome(Retry.none(p23({} as never))),
+        ExportDicomStore: probeOutcome(
+          Retry.none(p21({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExportFhirStore: probeOutcome(
+          Retry.none(p22({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExportHl7V2Store: probeOutcome(
+          Retry.none(p23({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetAttributeDefinition: probeOutcome(Retry.none(p24({} as never))),
         GetConsent: probeOutcome(Retry.none(p25({} as never))),
         GetConsentArtifact: probeOutcome(Retry.none(p26({} as never))),
@@ -181,7 +211,9 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
         ImportHl7V2Store: probeOutcome(
           Retry.none(p40({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        IngestHl7V2StoreMessage: probeOutcome(Retry.none(p41({} as never))),
+        IngestHl7V2StoreMessage: probeOutcome(
+          Retry.none(p41({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListConsentRevisions: probeOutcome(Retry.none(p42({} as never))),
         ListConsentStoreAttributeDefinitions: probeOutcome(Retry.none(p43({} as never))),
         ListConsentStoreConsentArtifacts: probeOutcome(Retry.none(p44({} as never))),
@@ -195,19 +227,33 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
         ListHl7V2StoreMessages: probeOutcome(Retry.none(p52({} as never))),
         PatchFhirStoreFhir: probeOutcome(
           Retry.none(
-            p53({ resourceType: "alchemy-missing", resourceId: "alchemy-missing" } as never),
+            p53({
+              resourceType: "alchemy-missing",
+              resourceId: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
-        QueryConsentStoreAccessibleData: probeOutcome(Retry.none(p54({} as never))),
+        QueryConsentStoreAccessibleData: probeOutcome(
+          Retry.none(p54({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ReadFhirStoreFhir: probeOutcome(
           Retry.none(
             p55({ resourceType: "alchemy-missing", resourceId: "alchemy-missing" } as never),
           ),
         ),
-        RejectConsent: probeOutcome(Retry.none(p56({} as never))),
-        RevokeConsent: probeOutcome(Retry.none(p57({} as never))),
-        RollbackFhirStore: probeOutcome(Retry.none(p58({} as never))),
-        RollbackHl7V2Store: probeOutcome(Retry.none(p59({} as never))),
+        RejectConsent: probeOutcome(
+          Retry.none(p56({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RevokeConsent: probeOutcome(
+          Retry.none(p57({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RollbackFhirStore: probeOutcome(
+          Retry.none(p58({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RollbackHl7V2Store: probeOutcome(
+          Retry.none(p59({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SearchDicomStoreForInstances: probeOutcome(
           Retry.none(p60({ dicomWebPath: "alchemy-missing" } as never)),
         ),
@@ -217,7 +263,9 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
         SearchDicomStoreForStudies: probeOutcome(
           Retry.none(p62({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SearchFhirStoreFhir: probeOutcome(Retry.none(p63({} as never))),
+        SearchFhirStoreFhir: probeOutcome(
+          Retry.none(p63({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SearchSeriesForInstances: probeOutcome(
           Retry.none(p64({ dicomWebPath: "alchemy-missing" } as never)),
         ),
@@ -227,16 +275,32 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
         SearchStudyForSeries: probeOutcome(
           Retry.none(p66({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SetDicomStoreBlobStorageSettings: probeOutcome(Retry.none(p67({} as never))),
+        SetDicomStoreBlobStorageSettings: probeOutcome(
+          Retry.none(p67({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         StoreDicomStoreInstances: probeOutcome(
-          Retry.none(p68({ dicomWebPath: "alchemy-missing" } as never)),
+          Retry.none(
+            p68({
+              dicomWebPath: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         StoreStudyInstances: probeOutcome(
-          Retry.none(p69({ dicomWebPath: "alchemy-missing" } as never)),
+          Retry.none(
+            p69({
+              dicomWebPath: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         UpdateFhirStoreFhir: probeOutcome(
           Retry.none(
-            p70({ resourceType: "alchemy-missing", resourceId: "alchemy-missing" } as never),
+            p70({
+              resourceType: "alchemy-missing",
+              resourceId: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
       }),

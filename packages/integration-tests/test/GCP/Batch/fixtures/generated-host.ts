@@ -24,7 +24,9 @@ export default class BatchGeneratedHost extends GCP.Function<BatchGeneratedHost>
     const p5 = yield* GCP.Batch.ReportState();
     return {
       fetch: serveProbes({
-        CancelJob: probeOutcome(Retry.none(p0({} as never))),
+        CancelJob: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetJob: probeOutcome(Retry.none(p1({} as never))),
         GetJobTaskGroupTask: probeOutcome(
           Retry.none(p2({ taskGroup: "alchemy-missing", task: "alchemy-missing" } as never)),
@@ -33,7 +35,11 @@ export default class BatchGeneratedHost extends GCP.Function<BatchGeneratedHost>
         ListJobTaskGroupTasks: probeOutcome(
           Retry.none(p4({ taskGroup: "alchemy-missing" } as never)),
         ),
-        ReportState: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ReportState: probeOutcome(
+          Retry.none(
+            p5({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

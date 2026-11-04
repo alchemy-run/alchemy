@@ -45,9 +45,15 @@ export default class ContainerGeneratedHost extends GCP.Function<ContainerGenera
     return {
       fetch: serveProbes({
         CheckClusterAutopilotCompatibility: probeOutcome(Retry.none(p0({} as never))),
-        CompleteClusterControlPlaneUpgrade: probeOutcome(Retry.none(p1({} as never))),
-        CompleteClusterIpRotation: probeOutcome(Retry.none(p2({} as never))),
-        CompleteNodePoolUpgrade: probeOutcome(Retry.none(p3({} as never))),
+        CompleteClusterControlPlaneUpgrade: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CompleteClusterIpRotation: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CompleteNodePoolUpgrade: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         FetchClusterUpgradeInfo: probeOutcome(Retry.none(p4({} as never))),
         FetchNodePoolUpgradeInfo: probeOutcome(Retry.none(p5({} as never))),
         GetClusterJwks: probeOutcome(Retry.none(p6({} as never))),
@@ -55,21 +61,51 @@ export default class ContainerGeneratedHost extends GCP.Function<ContainerGenera
         ListAggregatedUsableSubnetworks: probeOutcome(Retry.none(p8({} as never))),
         ListClusterNodePools: probeOutcome(Retry.none(p9({} as never))),
         ListClusters: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
-        RollbackNodePool: probeOutcome(Retry.none(p11({} as never))),
-        SetClusterAddons: probeOutcome(Retry.none(p12({} as never))),
-        SetClusterLegacyAbac: probeOutcome(Retry.none(p13({} as never))),
-        SetClusterLocations: probeOutcome(Retry.none(p14({} as never))),
-        SetClusterLogging: probeOutcome(Retry.none(p15({} as never))),
-        SetClusterMaintenancePolicy: probeOutcome(Retry.none(p16({} as never))),
-        SetClusterMasterAuth: probeOutcome(Retry.none(p17({} as never))),
-        SetClusterMonitoring: probeOutcome(Retry.none(p18({} as never))),
-        SetClusterNetworkPolicy: probeOutcome(Retry.none(p19({} as never))),
-        SetClusterResourceLabels: probeOutcome(Retry.none(p20({} as never))),
-        SetNodePoolAutoscaling: probeOutcome(Retry.none(p21({} as never))),
-        SetNodePoolManagement: probeOutcome(Retry.none(p22({} as never))),
-        SetNodePoolSize: probeOutcome(Retry.none(p23({} as never))),
-        StartClusterIpRotation: probeOutcome(Retry.none(p24({} as never))),
-        UpdateClusterMaster: probeOutcome(Retry.none(p25({} as never))),
+        RollbackNodePool: probeOutcome(
+          Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetClusterAddons: probeOutcome(
+          Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetClusterLegacyAbac: probeOutcome(
+          Retry.none(p13({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetClusterLocations: probeOutcome(
+          Retry.none(p14({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetClusterLogging: probeOutcome(
+          Retry.none(p15({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetClusterMaintenancePolicy: probeOutcome(
+          Retry.none(p16({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetClusterMasterAuth: probeOutcome(
+          Retry.none(p17({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetClusterMonitoring: probeOutcome(
+          Retry.none(p18({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetClusterNetworkPolicy: probeOutcome(
+          Retry.none(p19({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetClusterResourceLabels: probeOutcome(
+          Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetNodePoolAutoscaling: probeOutcome(
+          Retry.none(p21({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetNodePoolManagement: probeOutcome(
+          Retry.none(p22({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetNodePoolSize: probeOutcome(
+          Retry.none(p23({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StartClusterIpRotation: probeOutcome(
+          Retry.none(p24({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateClusterMaster: probeOutcome(
+          Retry.none(p25({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

@@ -46,10 +46,16 @@ export default class FCMGeneratedHost extends GCP.Function<FCMGeneratedHost>()(
         ),
         PatchRegistrationTopicSubscription: probeOutcome(
           Retry.none(
-            p4({ registration: "alchemy-missing", topicSubscription: "alchemy-missing" } as never),
+            p4({
+              registration: "alchemy-missing",
+              topicSubscription: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
-        SendMessage: probeOutcome(Retry.none(p5({} as never))),
+        SendMessage: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

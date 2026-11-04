@@ -43,12 +43,18 @@ export default class AlloyDBGeneratedHost extends GCP.Function<AlloyDBGeneratedH
         CreatesecondaryClusterInstance: probeOutcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ExportCluster: probeOutcome(Retry.none(p2({} as never))),
-        FailoverInstance: probeOutcome(Retry.none(p3({} as never))),
+        ExportCluster: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        FailoverInstance: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ImportCluster: probeOutcome(
           Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        InjectInstanceFault: probeOutcome(Retry.none(p5({} as never))),
+        InjectInstanceFault: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListBackups: probeOutcome(Retry.none(p6({ location: "us-west1" } as never))),
         ListClusterInstances: probeOutcome(Retry.none(p7({} as never))),
         ListClusters: probeOutcome(Retry.none(p8({ location: "us-west1" } as never))),
@@ -56,8 +62,12 @@ export default class AlloyDBGeneratedHost extends GCP.Function<AlloyDBGeneratedH
         ListSupportedDatabaseFlags: probeOutcome(
           Retry.none(p10({ location: "us-west1" } as never)),
         ),
-        PromoteCluster: probeOutcome(Retry.none(p11({} as never))),
-        RestartInstance: probeOutcome(Retry.none(p12({} as never))),
+        PromoteCluster: probeOutcome(
+          Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RestartInstance: probeOutcome(
+          Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RestoreCluster: probeOutcome(
           Retry.none(
             p13({ location: "us-west1", body: { alchemyProbe: "alchemy-missing" } } as never),
@@ -68,8 +78,12 @@ export default class AlloyDBGeneratedHost extends GCP.Function<AlloyDBGeneratedH
             p14({ location: "us-west1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        SwitchoverCluster: probeOutcome(Retry.none(p15({} as never))),
-        UpgradeCluster: probeOutcome(Retry.none(p16({} as never))),
+        SwitchoverCluster: probeOutcome(
+          Retry.none(p15({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpgradeCluster: probeOutcome(
+          Retry.none(p16({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

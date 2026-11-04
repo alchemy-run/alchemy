@@ -18,24 +18,23 @@ export default class DataflowGeneratedHost extends GCP.Function<DataflowGenerate
     const p0 = yield* GCP.Dataflow.AggregatedJob();
     const p1 = yield* GCP.Dataflow.CreateJob();
     const p2 = yield* GCP.Dataflow.CreateTemplate();
-    const p3 = yield* GCP.Dataflow.DeleteProjectSnapshots();
-    const p4 = yield* GCP.Dataflow.GetDebugConfig();
-    const p5 = yield* GCP.Dataflow.GetDebugWorkerStacktraces();
-    const p6 = yield* GCP.Dataflow.GetJob();
-    const p7 = yield* GCP.Dataflow.GetJobExecutionDetails();
-    const p8 = yield* GCP.Dataflow.GetJobMetrics();
-    const p9 = yield* GCP.Dataflow.GetSnapshot();
-    const p10 = yield* GCP.Dataflow.GetStageExecutionDetails();
-    const p11 = yield* GCP.Dataflow.GetTemplate();
-    const p12 = yield* GCP.Dataflow.LaunchFlexTemplate();
-    const p13 = yield* GCP.Dataflow.LaunchTemplate();
-    const p14 = yield* GCP.Dataflow.LeaseJobWorkItem();
-    const p15 = yield* GCP.Dataflow.ListJobMessages();
-    const p16 = yield* GCP.Dataflow.ListJobs();
-    const p17 = yield* GCP.Dataflow.ListJobSnapshots();
-    const p18 = yield* GCP.Dataflow.ListSnapshots();
-    const p19 = yield* GCP.Dataflow.ReportWorkItemStatus();
-    const p20 = yield* GCP.Dataflow.SnapshotJob();
+    const p3 = yield* GCP.Dataflow.GetDebugConfig();
+    const p4 = yield* GCP.Dataflow.GetDebugWorkerStacktraces();
+    const p5 = yield* GCP.Dataflow.GetJob();
+    const p6 = yield* GCP.Dataflow.GetJobExecutionDetails();
+    const p7 = yield* GCP.Dataflow.GetJobMetrics();
+    const p8 = yield* GCP.Dataflow.GetSnapshot();
+    const p9 = yield* GCP.Dataflow.GetStageExecutionDetails();
+    const p10 = yield* GCP.Dataflow.GetTemplate();
+    const p11 = yield* GCP.Dataflow.LaunchFlexTemplate();
+    const p12 = yield* GCP.Dataflow.LaunchTemplate();
+    const p13 = yield* GCP.Dataflow.LeaseJobWorkItem();
+    const p14 = yield* GCP.Dataflow.ListJobMessages();
+    const p15 = yield* GCP.Dataflow.ListJobs();
+    const p16 = yield* GCP.Dataflow.ListJobSnapshots();
+    const p17 = yield* GCP.Dataflow.ListSnapshots();
+    const p18 = yield* GCP.Dataflow.ReportWorkItemStatus();
+    const p19 = yield* GCP.Dataflow.SnapshotJob();
     return {
       fetch: serveProbes({
         AggregatedJob: probeOutcome(Retry.none(p0({} as never))),
@@ -45,20 +44,29 @@ export default class DataflowGeneratedHost extends GCP.Function<DataflowGenerate
         CreateTemplate: probeOutcome(
           Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DeleteProjectSnapshots: probeOutcome(Retry.none(p3({} as never))),
-        GetDebugConfig: probeOutcome(Retry.none(p4({ jobId: "alchemy-missing" } as never))),
+        GetDebugConfig: probeOutcome(
+          Retry.none(
+            p3({ jobId: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         GetDebugWorkerStacktraces: probeOutcome(
-          Retry.none(p5({ location: "us-central1", jobId: "alchemy-missing" } as never)),
+          Retry.none(
+            p4({
+              location: "us-central1",
+              jobId: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        GetJob: probeOutcome(Retry.none(p6({ jobId: "alchemy-missing" } as never))),
+        GetJob: probeOutcome(Retry.none(p5({ jobId: "alchemy-missing" } as never))),
         GetJobExecutionDetails: probeOutcome(
-          Retry.none(p7({ location: "us-central1", jobId: "alchemy-missing" } as never)),
+          Retry.none(p6({ location: "us-central1", jobId: "alchemy-missing" } as never)),
         ),
-        GetJobMetrics: probeOutcome(Retry.none(p8({ jobId: "alchemy-missing" } as never))),
-        GetSnapshot: probeOutcome(Retry.none(p9({ snapshotId: "alchemy-missing" } as never))),
+        GetJobMetrics: probeOutcome(Retry.none(p7({ jobId: "alchemy-missing" } as never))),
+        GetSnapshot: probeOutcome(Retry.none(p8({ snapshotId: "alchemy-missing" } as never))),
         GetStageExecutionDetails: probeOutcome(
           Retry.none(
-            p10({
+            p9({
               stageId: "alchemy-missing",
               jobId: "alchemy-missing",
               location: "us-central1",
@@ -66,19 +74,37 @@ export default class DataflowGeneratedHost extends GCP.Function<DataflowGenerate
           ),
         ),
         GetTemplate: probeOutcome(
-          Retry.none(p11({ gcsPath: "gs://dataflow-templates/latest/Word_Count" } as never)),
+          Retry.none(p10({ gcsPath: "gs://dataflow-templates/latest/Word_Count" } as never)),
         ),
-        LaunchFlexTemplate: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
-        LaunchTemplate: probeOutcome(Retry.none(p13({} as never))),
-        LeaseJobWorkItem: probeOutcome(Retry.none(p14({ jobId: "alchemy-missing" } as never))),
-        ListJobMessages: probeOutcome(Retry.none(p15({ jobId: "alchemy-missing" } as never))),
-        ListJobs: probeOutcome(Retry.none(p16({} as never))),
+        LaunchFlexTemplate: probeOutcome(
+          Retry.none(
+            p11({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        LaunchTemplate: probeOutcome(
+          Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        LeaseJobWorkItem: probeOutcome(
+          Retry.none(
+            p13({ jobId: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        ListJobMessages: probeOutcome(Retry.none(p14({ jobId: "alchemy-missing" } as never))),
+        ListJobs: probeOutcome(Retry.none(p15({} as never))),
         ListJobSnapshots: probeOutcome(
-          Retry.none(p17({ location: "us-central1", jobId: "alchemy-missing" } as never)),
+          Retry.none(p16({ location: "us-central1", jobId: "alchemy-missing" } as never)),
         ),
-        ListSnapshots: probeOutcome(Retry.none(p18({} as never))),
-        ReportWorkItemStatus: probeOutcome(Retry.none(p19({ jobId: "alchemy-missing" } as never))),
-        SnapshotJob: probeOutcome(Retry.none(p20({ jobId: "alchemy-missing" } as never))),
+        ListSnapshots: probeOutcome(Retry.none(p17({} as never))),
+        ReportWorkItemStatus: probeOutcome(
+          Retry.none(
+            p18({ jobId: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        SnapshotJob: probeOutcome(
+          Retry.none(
+            p19({ jobId: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(
@@ -88,7 +114,6 @@ export default class DataflowGeneratedHost extends GCP.Function<DataflowGenerate
           GCP.Dataflow.AggregatedJobHttp,
           GCP.Dataflow.CreateJobHttp,
           GCP.Dataflow.CreateTemplateHttp,
-          GCP.Dataflow.DeleteProjectSnapshotsHttp,
           GCP.Dataflow.GetDebugConfigHttp,
           GCP.Dataflow.GetDebugWorkerStacktracesHttp,
           GCP.Dataflow.GetJobHttp,

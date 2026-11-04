@@ -271,6 +271,7 @@ interface ProbeConfig {
 interface DiscoveryMethod {
   id: string;
   path: string;
+  httpMethod?: string;
   description?: string;
   parameters?: Record<string, { pattern?: string; location?: string }>;
 }
@@ -424,6 +425,8 @@ interface Variant {
   resource: string; // config key
   api: Api;
   methodId: string;
+  /** The method's HTTP verb: only a `GET` is safe to call with placeholder arguments. */
+  httpMethod: string;
   fn: string;
   /** Request field the target's full name goes in (name-style APIs). */
   param: string | undefined;
@@ -826,6 +829,7 @@ const classify = (options: {
       resource: resource.key,
       api,
       methodId: id,
+      httpMethod: method.httpMethod ?? "GET",
       fn,
       param: target.param,
       params,
@@ -1529,12 +1533,12 @@ const probesOf = (config: ServiceConfig, bindings: Binding[]): Probe[] => {
           ? [["location", "string"] as [string, string]]
           : []),
       ];
-      // A call that creates something gets a body with an unknown field:
+      // A call that changes something gets a body with an unknown field:
       // the API rejects it (after the IAM check), so a probe never creates
-      // a resource the stack doesn't own.
-      const creates = /^(create|insert|bulkInsert|clone|duplicate|copy|import|restore|add)/.test(
-        binding.verb,
-      );
+      // a resource the stack doesn't own or rewrites one it does.
+      const creates =
+        variant.httpMethod !== "GET" ||
+        /^(create|insert|bulkInsert|clone|duplicate|copy|import|restore|add)/.test(binding.verb);
       const hasBody = interfaceBody(variant.api.moduleSource, variant.types.request).includes(
         "\n  body",
       );
@@ -1559,6 +1563,16 @@ const probesOf = (config: ServiceConfig, bindings: Binding[]): Probe[] => {
           fields.every(([field]) => KNOWN_FIELDS.has(field)),
         skip:
           probes.skip?.[binding.name] ??
+          // A write with no body to poison and no placeholder to aim at acts
+          // on the testing project itself (`deleteEvents` clears its error
+          // events): never call it.
+          (project &&
+          variant.httpMethod !== "GET" &&
+          !hasBody &&
+          probes.args?.[binding.name] === undefined &&
+          fields.every(([field]) => field === "location")
+            ? `a ${variant.httpMethod} on the project itself: a probe would change the testing project`
+            : undefined) ??
           probes.untestable?.["*"] ??
           (key === undefined ? probes.untestable?.["project"] : undefined) ??
           (key !== undefined && probes.untestable?.[key] !== undefined

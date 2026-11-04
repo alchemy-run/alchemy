@@ -18,7 +18,9 @@ export default class TrafficDirectorGeneratedHost extends GCP.Function<TrafficDi
     const p0 = yield* GCP.TrafficDirector.ClientStatusDiscovery();
     return {
       fetch: serveProbes({
-        ClientStatusDiscovery: probeOutcome(Retry.none(p0({} as never))),
+        ClientStatusDiscovery: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

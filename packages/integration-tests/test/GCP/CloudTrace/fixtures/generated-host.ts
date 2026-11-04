@@ -19,7 +19,9 @@ export default class CloudTraceGeneratedHost extends GCP.Function<CloudTraceGene
     const p1 = yield* GCP.CloudTrace.CreateSpan();
     return {
       fetch: serveProbes({
-        BatchTraceWrite: probeOutcome(Retry.none(p0({} as never))),
+        BatchTraceWrite: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CreateSpan: probeOutcome(
           Retry.none(
             p1({

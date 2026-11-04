@@ -17,12 +17,10 @@ export default class CloudBillingGeneratedHost extends GCP.Function<CloudBilling
   Effect.gen(function* () {
     const p0 = yield* GCP.CloudBilling.GetProjectBillingInfo();
     const p1 = yield* GCP.CloudBilling.ListServices();
-    const p2 = yield* GCP.CloudBilling.UpdateProjectBillingInfo();
     return {
       fetch: serveProbes({
         GetProjectBillingInfo: probeOutcome(Retry.none(p0({} as never))),
         ListServices: probeOutcome(Retry.none(p1({} as never))),
-        UpdateProjectBillingInfo: probeOutcome(Retry.none(p2({} as never))),
       }),
     };
   }).pipe(
@@ -31,7 +29,6 @@ export default class CloudBillingGeneratedHost extends GCP.Function<CloudBilling
         Layer.mergeAll(
           GCP.CloudBilling.GetProjectBillingInfoHttp,
           GCP.CloudBilling.ListServicesHttp,
-          GCP.CloudBilling.UpdateProjectBillingInfoHttp,
         ),
       ),
     ),

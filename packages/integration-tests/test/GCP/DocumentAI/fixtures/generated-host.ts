@@ -40,22 +40,45 @@ export default class DocumentAIGeneratedHost extends GCP.Function<DocumentAIGene
     const p21 = yield* GCP.DocumentAI.UndeployProcessorVersion(OcrBind);
     return {
       fetch: serveProbes({
-        BatchProcessorProcess: probeOutcome(Retry.none(p0({} as never))),
+        BatchProcessorProcess: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         BatchProcessorVersionProcess: probeOutcome(
-          Retry.none(p1({ processorVersion: "alchemy-missing" } as never)),
+          Retry.none(
+            p1({
+              processorVersion: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         DeleteProcessorVersion: probeOutcome(
           Retry.none(p2({ processorVersion: "alchemy-missing" } as never)),
         ),
         DeployProcessorVersion: probeOutcome(
-          Retry.none(p3({ processorVersion: "alchemy-missing" } as never)),
+          Retry.none(
+            p3({
+              processorVersion: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        DisableProcessor: probeOutcome(Retry.none(p4({} as never))),
-        EnableProcessor: probeOutcome(Retry.none(p5({} as never))),
+        DisableProcessor: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        EnableProcessor: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         EvaluateProcessorVersion: probeOutcome(
-          Retry.none(p6({ processorVersion: "alchemy-missing" } as never)),
+          Retry.none(
+            p6({
+              processorVersion: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        GenerateSchemaVersion: probeOutcome(Retry.none(p7({} as never))),
+        GenerateSchemaVersion: probeOutcome(
+          Retry.none(p7({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetProcessorType: probeOutcome(
           Retry.none(p8({ processorType: "alchemy-missing", location: "us" } as never)),
         ),
@@ -76,15 +99,35 @@ export default class DocumentAIGeneratedHost extends GCP.Function<DocumentAIGene
         ListSchemas: probeOutcome(Retry.none(p15({ location: "us" } as never))),
         ListSchemaVersions: probeOutcome(Retry.none(p16({} as never))),
         ProcessProcessorVersion: probeOutcome(
-          Retry.none(p17({ processorVersion: "alchemy-missing" } as never)),
+          Retry.none(
+            p17({
+              processorVersion: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ReviewHumanReviewConfigDocument: probeOutcome(
-          Retry.none(p18({ processor: "alchemy-missing", location: "us" } as never)),
+          Retry.none(
+            p18({
+              processor: "alchemy-missing",
+              location: "us",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        SetDefaultProcessorVersion: probeOutcome(Retry.none(p19({} as never))),
-        TrainProcessorVersion: probeOutcome(Retry.none(p20({} as never))),
+        SetDefaultProcessorVersion: probeOutcome(
+          Retry.none(p19({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        TrainProcessorVersion: probeOutcome(
+          Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         UndeployProcessorVersion: probeOutcome(
-          Retry.none(p21({ processorVersion: "alchemy-missing" } as never)),
+          Retry.none(
+            p21({
+              processorVersion: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

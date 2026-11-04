@@ -69,7 +69,13 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
           ),
         ),
         BackupCluster: probeOutcome(
-          Retry.none(p2({ cluster: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p2({
+              cluster: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         CreateCluster: probeOutcome(
           Retry.none(
@@ -113,11 +119,16 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
               backupCollection: "alchemy-missing",
               backup: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        ExportInstance: probeOutcome(Retry.none(p9({} as never))),
-        FailoverInstance: probeOutcome(Retry.none(p10({} as never))),
+        ExportInstance: probeOutcome(
+          Retry.none(p9({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        FailoverInstance: probeOutcome(
+          Retry.none(p10({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetAclPolicyRevision: probeOutcome(
           Retry.none(p11({ revision: "alchemy-missing" } as never)),
         ),
@@ -186,13 +197,29 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
         ),
         ListInstances: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
         PatchCluster: probeOutcome(
-          Retry.none(p27({ cluster: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p27({
+              cluster: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         RescheduleClusterMaintenance: probeOutcome(
-          Retry.none(p28({ cluster: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p28({
+              cluster: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        RescheduleInstanceMaintenance: probeOutcome(Retry.none(p29({} as never))),
-        UpgradeInstance: probeOutcome(Retry.none(p30({} as never))),
+        RescheduleInstanceMaintenance: probeOutcome(
+          Retry.none(p29({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpgradeInstance: probeOutcome(
+          Retry.none(p30({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

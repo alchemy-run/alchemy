@@ -77,11 +77,21 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
     const p45 = yield* GCP.DLP.SearchConnection();
     return {
       fetch: serveProbes({
-        "ActivateJobTrigger@JobTrigger": probeOutcome(Retry.none(p0({} as never))),
-        "ActivateJobTrigger@LocationsJobTrigger": probeOutcome(Retry.none(p1({} as never))),
-        "CancelDlpJob@DlpJob": probeOutcome(Retry.none(p2({} as never))),
-        "CancelDlpJob@LocationsDlpJob": probeOutcome(Retry.none(p3({} as never))),
-        DeidentifyContent: probeOutcome(Retry.none(p4({} as never))),
+        "ActivateJobTrigger@JobTrigger": probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "ActivateJobTrigger@LocationsJobTrigger": probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "CancelDlpJob@DlpJob": probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "CancelDlpJob@LocationsDlpJob": probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeidentifyContent: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         DeleteConnection: probeOutcome(
           Retry.none(p5({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
@@ -93,7 +103,9 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
         DeleteTableDataProfile: probeOutcome(
           Retry.none(p7({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        FinishDlpJob: probeOutcome(Retry.none(p8({} as never))),
+        FinishDlpJob: probeOutcome(
+          Retry.none(p8({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetColumnDataProfile: probeOutcome(
           Retry.none(
             p9({ columnDataProfile: "alchemy-missing", location: "us-central1" } as never),
@@ -131,9 +143,15 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
             p25({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        HybridDlpJobInspect: probeOutcome(Retry.none(p26({} as never))),
-        HybridJobTriggerInspect: probeOutcome(Retry.none(p27({} as never))),
-        InspectContent: probeOutcome(Retry.none(p28({} as never))),
+        HybridDlpJobInspect: probeOutcome(
+          Retry.none(p26({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        HybridJobTriggerInspect: probeOutcome(
+          Retry.none(p27({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        InspectContent: probeOutcome(
+          Retry.none(p28({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListColumnDataProfiles: probeOutcome(
           Retry.none(
             p29({
@@ -159,10 +177,20 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
         ListStoredInfoTypes: probeOutcome(Retry.none(p40({} as never))),
         ListTableDataProfiles: probeOutcome(Retry.none(p41({ location: "us-central1" } as never))),
         PatchConnection: probeOutcome(
-          Retry.none(p42({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p42({
+              connection: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        RedactImage: probeOutcome(Retry.none(p43({} as never))),
-        ReidentifyContent: probeOutcome(Retry.none(p44({} as never))),
+        RedactImage: probeOutcome(
+          Retry.none(p43({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ReidentifyContent: probeOutcome(
+          Retry.none(p44({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SearchConnection: probeOutcome(Retry.none(p45({ location: "us-central1" } as never))),
       }),
     };

@@ -204,13 +204,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "InitializeProjectSettings (toolresults.projects.initializeSettings)",
-        () => probe("InitializeProjectSettings", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:toolresults", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "InitializeProjectSettings (toolresults.projects.initializeSettings): a POST on the project itself: a probe would change the testing project",
+        () => Effect.void,
       );
       test.provider(
         "ListExecutionClusters (toolresults.projects.histories.executions.clusters.list)",

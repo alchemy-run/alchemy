@@ -51,9 +51,18 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
     return {
       fetch: serveProbes({
         AcknowledgeSubscription: probeOutcome(
-          Retry.none(p0({ subscription: "alchemy-missing" } as never)),
+          Retry.none(
+            p0({
+              subscription: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        CommitSchema: probeOutcome(Retry.none(p1({ schema: "alchemy-missing" } as never))),
+        CommitSchema: probeOutcome(
+          Retry.none(
+            p1({ schema: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         CreateSchema: probeOutcome(
           Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
@@ -100,26 +109,74 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
           Retry.none(p21({ topic: "alchemy-missing" } as never)),
         ),
         ModifySubscriptionAckDeadline: probeOutcome(
-          Retry.none(p22({ subscription: "alchemy-missing" } as never)),
+          Retry.none(
+            p22({
+              subscription: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ModifySubscriptionPushConfig: probeOutcome(
-          Retry.none(p23({ subscription: "alchemy-missing" } as never)),
+          Retry.none(
+            p23({
+              subscription: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        PatchSnapshot: probeOutcome(Retry.none(p24({ snapshot: "alchemy-missing" } as never))),
+        PatchSnapshot: probeOutcome(
+          Retry.none(
+            p24({
+              snapshot: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
         PatchSubscription: probeOutcome(
-          Retry.none(p25({ subscription: "alchemy-missing" } as never)),
+          Retry.none(
+            p25({
+              subscription: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        PatchTopic: probeOutcome(Retry.none(p26({ topic: "alchemy-missing" } as never))),
-        PublishTopic: probeOutcome(Retry.none(p27({ topic: "alchemy-missing" } as never))),
+        PatchTopic: probeOutcome(
+          Retry.none(
+            p26({ topic: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        PublishTopic: probeOutcome(
+          Retry.none(
+            p27({ topic: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         PullSubscription: probeOutcome(
-          Retry.none(p28({ subscription: "alchemy-missing" } as never)),
+          Retry.none(
+            p28({
+              subscription: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        RollbackSchema: probeOutcome(Retry.none(p29({ schema: "alchemy-missing" } as never))),
+        RollbackSchema: probeOutcome(
+          Retry.none(
+            p29({ schema: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         SeekSubscription: probeOutcome(
-          Retry.none(p30({ subscription: "alchemy-missing" } as never)),
+          Retry.none(
+            p30({
+              subscription: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ValidateSchema: probeOutcome(Retry.none(p31({} as never))),
-        ValidateSchemaMessage: probeOutcome(Retry.none(p32({} as never))),
+        ValidateSchema: probeOutcome(
+          Retry.none(p31({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ValidateSchemaMessage: probeOutcome(
+          Retry.none(p32({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

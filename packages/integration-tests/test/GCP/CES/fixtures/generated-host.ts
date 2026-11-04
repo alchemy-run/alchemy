@@ -68,18 +68,33 @@ export default class CESGeneratedHost extends GCP.Function<CESGeneratedHost>()(
     const p40 = yield* GCP.CES.StreamVersionMessage(ProbeVersion);
     return {
       fetch: serveProbes({
-        BatchConversationDelete: probeOutcome(Retry.none(p0({} as never))),
+        BatchConversationDelete: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CancelAssistantSessionAssistantTurn: probeOutcome(
-          Retry.none(p1({ assistantSession: "alchemy-missing" } as never)),
+          Retry.none(
+            p1({
+              assistantSession: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         DeleteAppConversation: probeOutcome(
           Retry.none(p2({ conversation: "alchemy-missing" } as never)),
         ),
-        ExecuteAppTool: probeOutcome(Retry.none(p3({} as never))),
-        ExportApp: probeOutcome(Retry.none(p4({} as never))),
-        GenerateAppOnboardingSuggestions: probeOutcome(Retry.none(p5({} as never))),
+        ExecuteAppTool: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExportApp: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        GenerateAppOnboardingSuggestions: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GenerateSessionChatToken: probeOutcome(
-          Retry.none(p6({ session: "alchemy-missing" } as never)),
+          Retry.none(
+            p6({ session: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         GetAgent: probeOutcome(Retry.none(p7({} as never))),
         GetApp: probeOutcome(Retry.none(p8({} as never))),
@@ -112,17 +127,42 @@ export default class CESGeneratedHost extends GCP.Function<CESGeneratedHost>()(
         RestoreVersion: probeOutcome(
           Retry.none(p31({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        RunSession: probeOutcome(Retry.none(p32({ session: "alchemy-missing" } as never))),
-        SendAppMessage: probeOutcome(Retry.none(p33({} as never))),
-        SendDeploymentMessage: probeOutcome(Retry.none(p34({} as never))),
-        SendVersionMessage: probeOutcome(Retry.none(p35({} as never))),
-        StreamAppMessage: probeOutcome(Retry.none(p36({} as never))),
-        StreamAssistantSessionChatAiAssistant: probeOutcome(
-          Retry.none(p37({ assistantSession: "alchemy-missing" } as never)),
+        RunSession: probeOutcome(
+          Retry.none(
+            p32({ session: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        StreamDeploymentMessage: probeOutcome(Retry.none(p38({} as never))),
-        StreamRunSession: probeOutcome(Retry.none(p39({ session: "alchemy-missing" } as never))),
-        StreamVersionMessage: probeOutcome(Retry.none(p40({} as never))),
+        SendAppMessage: probeOutcome(
+          Retry.none(p33({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SendDeploymentMessage: probeOutcome(
+          Retry.none(p34({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SendVersionMessage: probeOutcome(
+          Retry.none(p35({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StreamAppMessage: probeOutcome(
+          Retry.none(p36({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StreamAssistantSessionChatAiAssistant: probeOutcome(
+          Retry.none(
+            p37({
+              assistantSession: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        StreamDeploymentMessage: probeOutcome(
+          Retry.none(p38({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StreamRunSession: probeOutcome(
+          Retry.none(
+            p39({ session: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        StreamVersionMessage: probeOutcome(
+          Retry.none(p40({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

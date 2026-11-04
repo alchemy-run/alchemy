@@ -28,7 +28,11 @@ export default class CloudProfilerGeneratedHost extends GCP.Function<CloudProfil
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ListProfiles: probeOutcome(Retry.none(p2({} as never))),
-        PatchProfile: probeOutcome(Retry.none(p3({ profile: "alchemy-missing" } as never))),
+        PatchProfile: probeOutcome(
+          Retry.none(
+            p3({ profile: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

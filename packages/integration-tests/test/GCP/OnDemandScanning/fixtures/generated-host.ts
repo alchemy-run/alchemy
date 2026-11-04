@@ -19,7 +19,11 @@ export default class OnDemandScanningGeneratedHost extends GCP.Function<OnDemand
     const p1 = yield* GCP.OnDemandScanning.ListScanVulnerabilities();
     return {
       fetch: serveProbes({
-        AnalyzeScanPackages: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        AnalyzeScanPackages: probeOutcome(
+          Retry.none(
+            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         ListScanVulnerabilities: probeOutcome(
           Retry.none(p1({ scan: "alchemy-missing", location: "us-central1" } as never)),
         ),

@@ -62,7 +62,11 @@ export default class WorkloadManagerGeneratedHost extends GCP.Function<WorkloadM
         ListDeployments: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
         ListEvaluations: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
         ListRules: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
-        WriteInsight: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        WriteInsight: probeOutcome(
+          Retry.none(
+            p10({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

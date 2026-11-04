@@ -196,7 +196,9 @@ export default class NetworkSecurityGeneratedHost extends GCP.Function<NetworkSe
           Retry.none(p52({ location: "us-central1" } as never)),
         ),
         ListUrlLists: probeOutcome(Retry.none(p53({ location: "us-central1" } as never))),
-        "RemoveAddressGroupItems@AddressGroup": probeOutcome(Retry.none(p54({} as never))),
+        "RemoveAddressGroupItems@AddressGroup": probeOutcome(
+          Retry.none(p54({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

@@ -26,7 +26,9 @@ export default class PubSubGeneratedHost extends GCP.Function<PubSubGeneratedHos
         ListSnapshots: probeOutcome(Retry.none(p1({} as never))),
         ListSubscriptions: probeOutcome(Retry.none(p2({} as never))),
         ListTopics: probeOutcome(Retry.none(p3({} as never))),
-        ValidateSchema: probeOutcome(Retry.none(p4({} as never))),
+        ValidateSchema: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

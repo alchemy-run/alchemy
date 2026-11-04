@@ -25,7 +25,9 @@ export default class ApiKeysGeneratedHost extends GCP.Function<ApiKeysGeneratedH
         GetKey: probeOutcome(Retry.none(p0({} as never))),
         ListKeys: probeOutcome(Retry.none(p1({ location: "global" } as never))),
         LookupKey: probeOutcome(Retry.none(p2({} as never))),
-        UndeleteKey: probeOutcome(Retry.none(p3({} as never))),
+        UndeleteKey: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

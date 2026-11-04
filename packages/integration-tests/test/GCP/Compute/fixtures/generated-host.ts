@@ -708,8 +708,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
     const p534 = yield* GCP.Compute.ValidateUrlMap(UrlMap);
     return {
       fetch: serveProbes({
-        AbandonInstanceGroupManagerInstances: probeOutcome(Retry.none(p0({} as never))),
-        AbandonRegionInstanceGroupManagerInstances: probeOutcome(Retry.none(p1({} as never))),
+        AbandonInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AbandonRegionInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         AddBackendBucketSignedUrlKey: probeOutcome(
           Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
@@ -824,24 +828,34 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         AggregatedUrlMapList: probeOutcome(Retry.none(p70({} as never))),
         AggregatedVpnGatewayList: probeOutcome(Retry.none(p71({} as never))),
         AggregatedVpnTunnelList: probeOutcome(Retry.none(p72({} as never))),
-        ApplyInstanceGroupManagerUpdatesToInstances: probeOutcome(Retry.none(p73({} as never))),
+        ApplyInstanceGroupManagerUpdatesToInstances: probeOutcome(
+          Retry.none(p73({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ApplyRegionInstanceGroupManagerUpdatesToInstances: probeOutcome(
-          Retry.none(p74({} as never)),
+          Retry.none(p74({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         AttachGlobalNetworkEndpointGroupNetworkEndpoints: probeOutcome(
-          Retry.none(p75({} as never)),
+          Retry.none(p75({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AttachInstanceDisk: probeOutcome(Retry.none(p76({} as never))),
-        AttachNetworkEndpointGroupNetworkEndpoints: probeOutcome(Retry.none(p77({} as never))),
+        AttachInstanceDisk: probeOutcome(
+          Retry.none(p76({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AttachNetworkEndpointGroupNetworkEndpoints: probeOutcome(
+          Retry.none(p77({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         AttachRegionNetworkEndpointGroupNetworkEndpoints: probeOutcome(
-          Retry.none(p78({} as never)),
+          Retry.none(p78({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         BulkDiskInsert: probeOutcome(
           Retry.none(
             p79({ zone: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        BulkDiskSetLabels: probeOutcome(Retry.none(p80({ zone: "us-central1-a" } as never))),
+        BulkDiskSetLabels: probeOutcome(
+          Retry.none(
+            p80({ zone: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         BulkInstanceInsert: probeOutcome(
           Retry.none(
             p81({ zone: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
@@ -857,17 +871,31 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
             p83({ region: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CalendarAdviceMode: probeOutcome(Retry.none(p84({ region: "us-central1" } as never))),
+        CalendarAdviceMode: probeOutcome(
+          Retry.none(
+            p84({ region: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         CancelInstanceGroupManagerResizeRequest: probeOutcome(
           Retry.none(p85({ resizeRequest: "alchemy-missing" } as never)),
         ),
-        CancelNetworkRequestRemovePeering: probeOutcome(Retry.none(p86({} as never))),
+        CancelNetworkRequestRemovePeering: probeOutcome(
+          Retry.none(p86({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CancelRegionInstanceGroupManagerResizeRequest: probeOutcome(
           Retry.none(p87({ resizeRequest: "alchemy-missing" } as never)),
         ),
         CancelRollout: probeOutcome(Retry.none(p88({ rollout: "alchemy-missing" } as never))),
-        CapacityAdvice: probeOutcome(Retry.none(p89({ region: "us-central1" } as never))),
-        CapacityAdviceHistory: probeOutcome(Retry.none(p90({ region: "us-central1" } as never))),
+        CapacityAdvice: probeOutcome(
+          Retry.none(
+            p89({ region: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        CapacityAdviceHistory: probeOutcome(
+          Retry.none(
+            p90({ region: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         CloneNetworkFirewallPolicyRules: probeOutcome(Retry.none(p91({} as never))),
         CloneRegionNetworkFirewallPolicyRules: probeOutcome(Retry.none(p92({} as never))),
         CreateDiskSnapshot: probeOutcome(
@@ -893,30 +921,44 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
             p99({ networkInterface: "alchemy-missing", accessConfig: "alchemy-missing" } as never),
           ),
         ),
-        DeleteInstanceGroupManagerInstances: probeOutcome(Retry.none(p100({} as never))),
-        DeleteInstanceGroupManagerPerInstanceConfigs: probeOutcome(Retry.none(p101({} as never))),
+        DeleteInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p100({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeleteInstanceGroupManagerPerInstanceConfigs: probeOutcome(
+          Retry.none(p101({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         DeleteInstanceNetworkInterface: probeOutcome(
           Retry.none(p102({ networkInterfaceName: "alchemy-missing" } as never)),
         ),
-        DeleteNodeGroupNodes: probeOutcome(Retry.none(p103({} as never))),
-        DeleteRegionInstanceGroupManagerInstances: probeOutcome(Retry.none(p104({} as never))),
+        DeleteNodeGroupNodes: probeOutcome(
+          Retry.none(p103({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeleteRegionInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p104({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         DeleteRegionInstanceGroupManagerPerInstanceConfigs: probeOutcome(
-          Retry.none(p105({} as never)),
+          Retry.none(p105({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         DeleteRouterNamedSet: probeOutcome(Retry.none(p106({} as never))),
         DeleteRouterRoutePolicy: probeOutcome(Retry.none(p107({} as never))),
-        DeprecateImage: probeOutcome(Retry.none(p108({} as never))),
+        DeprecateImage: probeOutcome(
+          Retry.none(p108({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         DetachGlobalNetworkEndpointGroupNetworkEndpoints: probeOutcome(
-          Retry.none(p109({} as never)),
+          Retry.none(p109({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         DetachInstanceDisk: probeOutcome(
           Retry.none(p110({ deviceName: "alchemy-missing" } as never)),
         ),
-        DetachNetworkEndpointGroupNetworkEndpoints: probeOutcome(Retry.none(p111({} as never))),
-        DetachRegionNetworkEndpointGroupNetworkEndpoints: probeOutcome(
-          Retry.none(p112({} as never)),
+        DetachNetworkEndpointGroupNetworkEndpoints: probeOutcome(
+          Retry.none(p111({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ExpandSubnetworkIpCidrRange: probeOutcome(Retry.none(p113({} as never))),
+        DetachRegionNetworkEndpointGroupNetworkEndpoints: probeOutcome(
+          Retry.none(p112({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExpandSubnetworkIpCidrRange: probeOutcome(
+          Retry.none(p113({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetAcceleratorType: probeOutcome(
           Retry.none(p114({ acceleratorType: "alchemy-missing", zone: "us-central1-a" } as never)),
         ),
@@ -925,7 +967,9 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         GetBackendBucket: probeOutcome(Retry.none(p117({} as never))),
         GetBackendService: probeOutcome(Retry.none(p118({} as never))),
         GetBackendServiceEffectiveSecurityPolicies: probeOutcome(Retry.none(p119({} as never))),
-        GetBackendServiceHealth: probeOutcome(Retry.none(p120({} as never))),
+        GetBackendServiceHealth: probeOutcome(
+          Retry.none(p120({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetCrossSiteNetwork: probeOutcome(Retry.none(p121({} as never))),
         GetDisk: probeOutcome(Retry.none(p122({} as never))),
         GetDiskType: probeOutcome(
@@ -954,6 +998,7 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
               host: "alchemy-missing",
               association: "alchemy-missing",
               zone: "us-central1-a",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -1016,7 +1061,9 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         GetRegionAutoscaler: probeOutcome(Retry.none(p172({} as never))),
         GetRegionBackendBucket: probeOutcome(Retry.none(p173({} as never))),
         GetRegionBackendService: probeOutcome(Retry.none(p174({} as never))),
-        GetRegionBackendServiceHealth: probeOutcome(Retry.none(p175({} as never))),
+        GetRegionBackendServiceHealth: probeOutcome(
+          Retry.none(p175({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetRegionCommitment: probeOutcome(
           Retry.none(p176({ region: "us-central1", commitment: "alchemy-missing" } as never)),
         ),
@@ -1090,6 +1137,7 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
               reservationSlot: "alchemy-missing",
               parentName: "alchemy-missing",
               zone: "us-central1-a",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -1120,7 +1168,9 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         GetTargetHttpsProxy: probeOutcome(Retry.none(p234({} as never))),
         GetTargetInstance: probeOutcome(Retry.none(p235({} as never))),
         GetTargetPool: probeOutcome(Retry.none(p236({} as never))),
-        GetTargetPoolHealth: probeOutcome(Retry.none(p237({} as never))),
+        GetTargetPoolHealth: probeOutcome(
+          Retry.none(p237({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetTargetSslProxy: probeOutcome(Retry.none(p238({} as never))),
         GetTargetTcpProxy: probeOutcome(Retry.none(p239({} as never))),
         GetTargetVpnGateway: probeOutcome(Retry.none(p240({} as never))),
@@ -1131,7 +1181,9 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         GetWireGroup: probeOutcome(Retry.none(p245({ wireGroup: "alchemy-missing" } as never))),
         GetZone: probeOutcome(Retry.none(p246({ zone: "us-central1-a" } as never))),
         GetZoneVmExtensionPolicy: probeOutcome(Retry.none(p247({} as never))),
-        InvalidateUrlMapCache: probeOutcome(Retry.none(p248({} as never))),
+        InvalidateUrlMapCache: probeOutcome(
+          Retry.none(p248({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListAcceleratorTypes: probeOutcome(Retry.none(p249({ zone: "us-central1-a" } as never))),
         ListAddresses: probeOutcome(Retry.none(p250({ region: "us-central1" } as never))),
         ListAutoscalers: probeOutcome(Retry.none(p251({ zone: "us-central1-a" } as never))),
@@ -1159,7 +1211,9 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         ListHttpHealthChecks: probeOutcome(Retry.none(p271({} as never))),
         ListHttpsHealthChecks: probeOutcome(Retry.none(p272({} as never))),
         ListImages: probeOutcome(Retry.none(p273({} as never))),
-        ListInstanceGroupInstances: probeOutcome(Retry.none(p274({} as never))),
+        ListInstanceGroupInstances: probeOutcome(
+          Retry.none(p274({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListInstanceGroupManagerErrors: probeOutcome(Retry.none(p275({} as never))),
         ListInstanceGroupManagerManagedInstances: probeOutcome(Retry.none(p276({} as never))),
         ListInstanceGroupManagerPerInstanceConfigs: probeOutcome(Retry.none(p277({} as never))),
@@ -1188,7 +1242,9 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         ListMachineTypes: probeOutcome(Retry.none(p294({ zone: "us-central1-a" } as never))),
         ListManagedRulesets: probeOutcome(Retry.none(p295({} as never))),
         ListNetworkAttachments: probeOutcome(Retry.none(p296({ region: "us-central1" } as never))),
-        ListNetworkEndpointGroupNetworkEndpoints: probeOutcome(Retry.none(p297({} as never))),
+        ListNetworkEndpointGroupNetworkEndpoints: probeOutcome(
+          Retry.none(p297({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListNetworkEndpointGroups: probeOutcome(
           Retry.none(p298({ zone: "us-central1-a" } as never)),
         ),
@@ -1234,7 +1290,13 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         ),
         ListRegionHealthSources: probeOutcome(Retry.none(p323({ region: "us-central1" } as never))),
         ListRegionInstanceGroupInstances: probeOutcome(
-          Retry.none(p324({ region: "us-central1", instanceGroup: "alchemy-missing" } as never)),
+          Retry.none(
+            p324({
+              region: "us-central1",
+              instanceGroup: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ListRegionInstanceGroupManagerErrors: probeOutcome(Retry.none(p325({} as never))),
         ListRegionInstanceGroupManagerManagedInstances: probeOutcome(Retry.none(p326({} as never))),
@@ -1331,193 +1393,475 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         ListZoneVmExtensionPolicies: probeOutcome(
           Retry.none(p385({ zone: "us-central1-a" } as never)),
         ),
-        PatchAutoscaler: probeOutcome(Retry.none(p386({ zone: "us-central1-a" } as never))),
-        PatchGlobalFrontendSetting: probeOutcome(Retry.none(p387({} as never))),
-        PatchInstanceGroupManagerPerInstanceConfigs: probeOutcome(Retry.none(p388({} as never))),
+        PatchAutoscaler: probeOutcome(
+          Retry.none(
+            p386({ zone: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        PatchGlobalFrontendSetting: probeOutcome(
+          Retry.none(p387({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PatchInstanceGroupManagerPerInstanceConfigs: probeOutcome(
+          Retry.none(p388({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         PatchInstanceSetting: probeOutcome(
           Retry.none(
             p389({ zone: "us-central1-a", body: { fingerprint: "AAAAAAAAAAA=" } } as never),
           ),
         ),
-        PatchNetworkFirewallPolicyPacketMirroringRule: probeOutcome(Retry.none(p390({} as never))),
-        PatchNetworkFirewallPolicyRule: probeOutcome(Retry.none(p391({} as never))),
-        PatchRegionAutoscaler: probeOutcome(Retry.none(p392({ region: "us-central1" } as never))),
+        PatchNetworkFirewallPolicyPacketMirroringRule: probeOutcome(
+          Retry.none(p390({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PatchNetworkFirewallPolicyRule: probeOutcome(
+          Retry.none(p391({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PatchRegionAutoscaler: probeOutcome(
+          Retry.none(
+            p392({ region: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         PatchRegionInstanceGroupManagerPerInstanceConfigs: probeOutcome(
-          Retry.none(p393({} as never)),
+          Retry.none(p393({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        PatchRegionNetworkFirewallPolicyAssociation: probeOutcome(Retry.none(p394({} as never))),
-        PatchRegionNetworkFirewallPolicyRule: probeOutcome(Retry.none(p395({} as never))),
-        PatchRegionSecurityPolicyRule: probeOutcome(Retry.none(p396({} as never))),
+        PatchRegionNetworkFirewallPolicyAssociation: probeOutcome(
+          Retry.none(p394({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PatchRegionNetworkFirewallPolicyRule: probeOutcome(
+          Retry.none(p395({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PatchRegionSecurityPolicyRule: probeOutcome(
+          Retry.none(p396({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         PatchRegionSnapshotSetting: probeOutcome(
-          Retry.none(p397({ region: "us-central1" } as never)),
+          Retry.none(
+            p397({ region: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        PatchRouterNamedSet: probeOutcome(Retry.none(p398({} as never))),
-        PatchRouterRoutePolicy: probeOutcome(Retry.none(p399({} as never))),
-        PatchSecurityPolicyRule: probeOutcome(Retry.none(p400({} as never))),
-        PatchSnapshotSetting: probeOutcome(Retry.none(p401({} as never))),
+        PatchRouterNamedSet: probeOutcome(
+          Retry.none(p398({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PatchRouterRoutePolicy: probeOutcome(
+          Retry.none(p399({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PatchSecurityPolicyRule: probeOutcome(
+          Retry.none(p400({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PatchSnapshotSetting: probeOutcome(
+          Retry.none(p401({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         PerformInstanceMaintenance: probeOutcome(Retry.none(p402({} as never))),
-        PerformNodeGroupMaintenance: probeOutcome(Retry.none(p403({} as never))),
-        PerformReservationBlockMaintenance: probeOutcome(
-          Retry.none(p404({ reservationBlock: "alchemy-missing" } as never)),
+        PerformNodeGroupMaintenance: probeOutcome(
+          Retry.none(p403({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        PerformReservationMaintenance: probeOutcome(Retry.none(p405({} as never))),
-        PreviewRouter: probeOutcome(Retry.none(p406({} as never))),
-        RecreateInstanceGroupManagerInstances: probeOutcome(Retry.none(p407({} as never))),
-        RecreateRegionInstanceGroupManagerInstances: probeOutcome(Retry.none(p408({} as never))),
-        RemoveDiskResourcePolicies: probeOutcome(Retry.none(p409({} as never))),
-        RemoveInstanceGroupInstances: probeOutcome(Retry.none(p410({} as never))),
-        RemoveInstanceResourcePolicies: probeOutcome(Retry.none(p411({} as never))),
+        PerformReservationBlockMaintenance: probeOutcome(
+          Retry.none(
+            p404({
+              reservationBlock: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        PerformReservationMaintenance: probeOutcome(
+          Retry.none(p405({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PreviewRouter: probeOutcome(
+          Retry.none(p406({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RecreateInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p407({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RecreateRegionInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p408({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RemoveDiskResourcePolicies: probeOutcome(
+          Retry.none(p409({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RemoveInstanceGroupInstances: probeOutcome(
+          Retry.none(p410({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RemoveInstanceResourcePolicies: probeOutcome(
+          Retry.none(p411({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RemoveNetworkFirewallPolicyAssociation: probeOutcome(Retry.none(p412({} as never))),
         RemoveNetworkFirewallPolicyPacketMirroringRule: probeOutcome(Retry.none(p413({} as never))),
         RemoveNetworkFirewallPolicyRule: probeOutcome(Retry.none(p414({} as never))),
-        RemoveNetworkPeering: probeOutcome(Retry.none(p415({} as never))),
-        RemoveRegionDiskResourcePolicies: probeOutcome(Retry.none(p416({} as never))),
+        RemoveNetworkPeering: probeOutcome(
+          Retry.none(p415({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RemoveRegionDiskResourcePolicies: probeOutcome(
+          Retry.none(p416({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RemoveRegionNetworkFirewallPolicyAssociation: probeOutcome(Retry.none(p417({} as never))),
         RemoveRegionNetworkFirewallPolicyRule: probeOutcome(Retry.none(p418({} as never))),
         RemoveRegionSecurityPolicyRule: probeOutcome(Retry.none(p419({} as never))),
         RemoveSecurityPolicyRule: probeOutcome(Retry.none(p420({} as never))),
-        RemoveTargetPoolHealthCheck: probeOutcome(Retry.none(p421({} as never))),
-        RemoveTargetPoolInstance: probeOutcome(Retry.none(p422({} as never))),
-        RequestNetworkRemovePeering: probeOutcome(Retry.none(p423({} as never))),
+        RemoveTargetPoolHealthCheck: probeOutcome(
+          Retry.none(p421({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RemoveTargetPoolInstance: probeOutcome(
+          Retry.none(p422({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RequestNetworkRemovePeering: probeOutcome(
+          Retry.none(p423({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ResetInstance: probeOutcome(Retry.none(p424({} as never))),
-        ResizeDisk: probeOutcome(Retry.none(p425({} as never))),
+        ResizeDisk: probeOutcome(
+          Retry.none(p425({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ResizeInstanceGroupManager: probeOutcome(Retry.none(p426({ size: 0 } as never))),
-        ResizeRegionDisk: probeOutcome(Retry.none(p427({} as never))),
+        ResizeRegionDisk: probeOutcome(
+          Retry.none(p427({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ResizeRegionInstanceGroupManager: probeOutcome(Retry.none(p428({ size: 0 } as never))),
-        ResizeReservation: probeOutcome(Retry.none(p429({} as never))),
+        ResizeReservation: probeOutcome(
+          Retry.none(p429({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ResumeInstance: probeOutcome(Retry.none(p430({} as never))),
-        ResumeInstanceGroupManagerInstances: probeOutcome(Retry.none(p431({} as never))),
-        ResumeRegionInstanceGroupManagerInstances: probeOutcome(Retry.none(p432({} as never))),
+        ResumeInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p431({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ResumeRegionInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p432({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SendInstanceDiagnosticInterrupt: probeOutcome(Retry.none(p433({} as never))),
-        SetAddressLabels: probeOutcome(Retry.none(p434({} as never))),
-        SetBackendBucketEdgeSecurityPolicy: probeOutcome(Retry.none(p435({} as never))),
-        SetBackendServiceEdgeSecurityPolicy: probeOutcome(Retry.none(p436({} as never))),
-        SetBackendServiceSecurityPolicy: probeOutcome(Retry.none(p437({} as never))),
-        SetDiskLabels: probeOutcome(Retry.none(p438({} as never))),
-        SetExternalVpnGatewayLabels: probeOutcome(Retry.none(p439({} as never))),
-        SetForwardingRuleLabels: probeOutcome(Retry.none(p440({} as never))),
-        SetForwardingRuleTarget: probeOutcome(Retry.none(p441({} as never))),
-        SetGlobalAddressLabels: probeOutcome(Retry.none(p442({} as never))),
-        SetGlobalForwardingRuleLabels: probeOutcome(Retry.none(p443({} as never))),
-        SetGlobalForwardingRuleTarget: probeOutcome(Retry.none(p444({} as never))),
-        SetImageLabels: probeOutcome(Retry.none(p445({} as never))),
+        SetAddressLabels: probeOutcome(
+          Retry.none(p434({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetBackendBucketEdgeSecurityPolicy: probeOutcome(
+          Retry.none(p435({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetBackendServiceEdgeSecurityPolicy: probeOutcome(
+          Retry.none(p436({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetBackendServiceSecurityPolicy: probeOutcome(
+          Retry.none(p437({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetDiskLabels: probeOutcome(
+          Retry.none(p438({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetExternalVpnGatewayLabels: probeOutcome(
+          Retry.none(p439({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetForwardingRuleLabels: probeOutcome(
+          Retry.none(p440({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetForwardingRuleTarget: probeOutcome(
+          Retry.none(p441({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetGlobalAddressLabels: probeOutcome(
+          Retry.none(p442({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetGlobalForwardingRuleLabels: probeOutcome(
+          Retry.none(p443({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetGlobalForwardingRuleTarget: probeOutcome(
+          Retry.none(p444({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetImageLabels: probeOutcome(
+          Retry.none(p445({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SetInstanceDeletionProtection: probeOutcome(
           Retry.none(p446({ deletionProtection: false } as never)),
         ),
         SetInstanceDiskAutoDelete: probeOutcome(
           Retry.none(p447({ autoDelete: false, deviceName: "alchemy-missing" } as never)),
         ),
-        SetInstanceGroupManagerInstanceTemplate: probeOutcome(Retry.none(p448({} as never))),
-        SetInstanceGroupManagerTargetPools: probeOutcome(Retry.none(p449({} as never))),
-        SetInstanceGroupNamedPorts: probeOutcome(Retry.none(p450({} as never))),
-        SetInstanceLabels: probeOutcome(Retry.none(p451({} as never))),
-        SetInstanceMachineResources: probeOutcome(Retry.none(p452({} as never))),
-        SetInstanceMachineType: probeOutcome(Retry.none(p453({} as never))),
-        SetInstanceMetadata: probeOutcome(Retry.none(p454({} as never))),
-        SetInstanceMinCpuPlatform: probeOutcome(Retry.none(p455({} as never))),
-        SetInstanceName: probeOutcome(Retry.none(p456({} as never))),
-        SetInstanceScheduling: probeOutcome(Retry.none(p457({} as never))),
-        SetInstanceSecurityPolicy: probeOutcome(Retry.none(p458({} as never))),
-        SetInstanceServiceAccount: probeOutcome(Retry.none(p459({} as never))),
-        SetInstanceTags: probeOutcome(Retry.none(p460({} as never))),
-        SetInstantSnapshotLabels: probeOutcome(Retry.none(p461({} as never))),
-        SetMachineImageLabels: probeOutcome(Retry.none(p462({} as never))),
-        SetNodeGroupNodeTemplate: probeOutcome(Retry.none(p463({} as never))),
+        SetInstanceGroupManagerInstanceTemplate: probeOutcome(
+          Retry.none(p448({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceGroupManagerTargetPools: probeOutcome(
+          Retry.none(p449({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceGroupNamedPorts: probeOutcome(
+          Retry.none(p450({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceLabels: probeOutcome(
+          Retry.none(p451({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceMachineResources: probeOutcome(
+          Retry.none(p452({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceMachineType: probeOutcome(
+          Retry.none(p453({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceMetadata: probeOutcome(
+          Retry.none(p454({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceMinCpuPlatform: probeOutcome(
+          Retry.none(p455({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceName: probeOutcome(
+          Retry.none(p456({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceScheduling: probeOutcome(
+          Retry.none(p457({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceSecurityPolicy: probeOutcome(
+          Retry.none(p458({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceServiceAccount: probeOutcome(
+          Retry.none(p459({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstanceTags: probeOutcome(
+          Retry.none(p460({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetInstantSnapshotLabels: probeOutcome(
+          Retry.none(p461({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetMachineImageLabels: probeOutcome(
+          Retry.none(p462({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetNodeGroupNodeTemplate: probeOutcome(
+          Retry.none(p463({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SetProjectCloudArmorTier: probeOutcome(
           Retry.none(p464({ body: { cloudArmorTier: "NOT_A_TIER" } } as never)),
         ),
         SetProjectDefaultNetworkTier: probeOutcome(
           Retry.none(p465({ body: { networkTier: "NOT_A_TIER" } } as never)),
         ),
-        SetRegionBackendServiceSecurityPolicy: probeOutcome(Retry.none(p466({} as never))),
-        SetRegionDiskLabels: probeOutcome(Retry.none(p467({} as never))),
-        SetRegionInstanceGroupManagerInstanceTemplate: probeOutcome(Retry.none(p468({} as never))),
-        SetRegionInstanceGroupManagerTargetPools: probeOutcome(Retry.none(p469({} as never))),
+        SetRegionBackendServiceSecurityPolicy: probeOutcome(
+          Retry.none(p466({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetRegionDiskLabels: probeOutcome(
+          Retry.none(p467({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetRegionInstanceGroupManagerInstanceTemplate: probeOutcome(
+          Retry.none(p468({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetRegionInstanceGroupManagerTargetPools: probeOutcome(
+          Retry.none(p469({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SetRegionInstanceGroupNamedPorts: probeOutcome(
-          Retry.none(p470({ instanceGroup: "alchemy-missing", region: "us-central1" } as never)),
+          Retry.none(
+            p470({
+              instanceGroup: "alchemy-missing",
+              region: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        SetRegionInstantSnapshotLabels: probeOutcome(Retry.none(p471({} as never))),
-        SetRegionSecurityPolicyLabels: probeOutcome(Retry.none(p472({} as never))),
-        SetRegionSnapshotLabels: probeOutcome(Retry.none(p473({} as never))),
-        SetRegionTargetHttpProxyUrlMap: probeOutcome(Retry.none(p474({} as never))),
-        SetRegionTargetHttpsProxySslCertificates: probeOutcome(Retry.none(p475({} as never))),
-        SetRegionTargetHttpsProxyUrlMap: probeOutcome(Retry.none(p476({} as never))),
-        SetSecurityPolicyLabels: probeOutcome(Retry.none(p477({} as never))),
-        SetShieldedInstanceIntegrityPolicy: probeOutcome(Retry.none(p478({} as never))),
-        SetSnapshotLabels: probeOutcome(Retry.none(p479({} as never))),
-        SetSubnetworkPrivateIpGoogleAccess: probeOutcome(Retry.none(p480({} as never))),
+        SetRegionInstantSnapshotLabels: probeOutcome(
+          Retry.none(p471({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetRegionSecurityPolicyLabels: probeOutcome(
+          Retry.none(p472({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetRegionSnapshotLabels: probeOutcome(
+          Retry.none(p473({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetRegionTargetHttpProxyUrlMap: probeOutcome(
+          Retry.none(p474({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetRegionTargetHttpsProxySslCertificates: probeOutcome(
+          Retry.none(p475({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetRegionTargetHttpsProxyUrlMap: probeOutcome(
+          Retry.none(p476({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetSecurityPolicyLabels: probeOutcome(
+          Retry.none(p477({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetShieldedInstanceIntegrityPolicy: probeOutcome(
+          Retry.none(p478({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetSnapshotLabels: probeOutcome(
+          Retry.none(p479({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetSubnetworkPrivateIpGoogleAccess: probeOutcome(
+          Retry.none(p480({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SetTargetHttpProxyUrlMap: probeOutcome(
-          Retry.none(p481({ targetHttpProxy: "alchemy-missing" } as never)),
+          Retry.none(
+            p481({
+              targetHttpProxy: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        SetTargetHttpsProxyCertificateMap: probeOutcome(Retry.none(p482({} as never))),
-        SetTargetHttpsProxyQuicOverride: probeOutcome(Retry.none(p483({} as never))),
+        SetTargetHttpsProxyCertificateMap: probeOutcome(
+          Retry.none(p482({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetHttpsProxyQuicOverride: probeOutcome(
+          Retry.none(p483({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SetTargetHttpsProxySslCertificates: probeOutcome(
-          Retry.none(p484({ targetHttpsProxy: "alchemy-missing" } as never)),
+          Retry.none(
+            p484({
+              targetHttpsProxy: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        SetTargetHttpsProxySslPolicy: probeOutcome(Retry.none(p485({} as never))),
+        SetTargetHttpsProxySslPolicy: probeOutcome(
+          Retry.none(p485({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SetTargetHttpsProxyUrlMap: probeOutcome(
-          Retry.none(p486({ targetHttpsProxy: "alchemy-missing" } as never)),
+          Retry.none(
+            p486({
+              targetHttpsProxy: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        SetTargetInstanceSecurityPolicy: probeOutcome(Retry.none(p487({} as never))),
-        SetTargetPoolBackup: probeOutcome(Retry.none(p488({} as never))),
-        SetTargetPoolSecurityPolicy: probeOutcome(Retry.none(p489({} as never))),
-        SetTargetSslProxyBackendService: probeOutcome(Retry.none(p490({} as never))),
-        SetTargetSslProxyCertificateMap: probeOutcome(Retry.none(p491({} as never))),
-        SetTargetSslProxyProxyHeader: probeOutcome(Retry.none(p492({} as never))),
-        SetTargetSslProxySslCertificates: probeOutcome(Retry.none(p493({} as never))),
-        SetTargetSslProxySslPolicy: probeOutcome(Retry.none(p494({} as never))),
-        SetTargetTcpProxyBackendService: probeOutcome(Retry.none(p495({} as never))),
-        SetTargetTcpProxyProxyHeader: probeOutcome(Retry.none(p496({} as never))),
-        SetTargetVpnGatewayLabels: probeOutcome(Retry.none(p497({} as never))),
-        SetVpnGatewayLabels: probeOutcome(Retry.none(p498({} as never))),
-        SetVpnTunnelLabels: probeOutcome(Retry.none(p499({} as never))),
+        SetTargetInstanceSecurityPolicy: probeOutcome(
+          Retry.none(p487({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetPoolBackup: probeOutcome(
+          Retry.none(p488({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetPoolSecurityPolicy: probeOutcome(
+          Retry.none(p489({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetSslProxyBackendService: probeOutcome(
+          Retry.none(p490({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetSslProxyCertificateMap: probeOutcome(
+          Retry.none(p491({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetSslProxyProxyHeader: probeOutcome(
+          Retry.none(p492({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetSslProxySslCertificates: probeOutcome(
+          Retry.none(p493({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetSslProxySslPolicy: probeOutcome(
+          Retry.none(p494({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetTcpProxyBackendService: probeOutcome(
+          Retry.none(p495({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetTcpProxyProxyHeader: probeOutcome(
+          Retry.none(p496({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetTargetVpnGatewayLabels: probeOutcome(
+          Retry.none(p497({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetVpnGatewayLabels: probeOutcome(
+          Retry.none(p498({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetVpnTunnelLabels: probeOutcome(
+          Retry.none(p499({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SimulateInstanceMaintenanceEvent: probeOutcome(Retry.none(p500({} as never))),
-        SimulateNodeGroupMaintenanceEvent: probeOutcome(Retry.none(p501({} as never))),
-        StartDiskAsyncReplication: probeOutcome(Retry.none(p502({} as never))),
-        StartInstanceGroupManagerInstances: probeOutcome(Retry.none(p503({} as never))),
-        StartInstanceWithEncryptionKey: probeOutcome(Retry.none(p504({} as never))),
-        StartRegionDiskAsyncReplication: probeOutcome(Retry.none(p505({} as never))),
-        StartRegionInstanceGroupManagerInstances: probeOutcome(Retry.none(p506({} as never))),
+        SimulateNodeGroupMaintenanceEvent: probeOutcome(
+          Retry.none(p501({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StartDiskAsyncReplication: probeOutcome(
+          Retry.none(p502({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StartInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p503({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StartInstanceWithEncryptionKey: probeOutcome(
+          Retry.none(p504({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StartRegionDiskAsyncReplication: probeOutcome(
+          Retry.none(p505({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StartRegionInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p506({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         StopDiskAsyncReplication: probeOutcome(Retry.none(p507({} as never))),
         StopDiskGroupAsyncReplication: probeOutcome(
-          Retry.none(p508({ zone: "us-central1-a" } as never)),
+          Retry.none(
+            p508({ zone: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        StopInstanceGroupManagerInstances: probeOutcome(Retry.none(p509({} as never))),
+        StopInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p509({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         StopRegionDiskAsyncReplication: probeOutcome(Retry.none(p510({} as never))),
         StopRegionDiskGroupAsyncReplication: probeOutcome(
-          Retry.none(p511({ region: "us-central1" } as never)),
+          Retry.none(
+            p511({ region: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        StopRegionInstanceGroupManagerInstances: probeOutcome(Retry.none(p512({} as never))),
+        StopRegionInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p512({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SuspendInstance: probeOutcome(Retry.none(p513({} as never))),
-        SuspendInstanceGroupManagerInstances: probeOutcome(Retry.none(p514({} as never))),
-        SuspendRegionInstanceGroupManagerInstances: probeOutcome(Retry.none(p515({} as never))),
+        SuspendInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p514({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SuspendRegionInstanceGroupManagerInstances: probeOutcome(
+          Retry.none(p515({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SwitchNetworkToCustomMode: probeOutcome(Retry.none(p516({} as never))),
-        UpdateAutoscaler: probeOutcome(Retry.none(p517({ zone: "us-central1-a" } as never))),
-        UpdateDiskKmsKey: probeOutcome(Retry.none(p518({} as never))),
+        UpdateAutoscaler: probeOutcome(
+          Retry.none(
+            p517({ zone: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        UpdateDiskKmsKey: probeOutcome(
+          Retry.none(p518({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         UpdateInstanceAccessConfig: probeOutcome(
-          Retry.none(p519({ networkInterface: "alchemy-missing" } as never)),
+          Retry.none(
+            p519({
+              networkInterface: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        UpdateInstanceDisplayDevice: probeOutcome(Retry.none(p520({} as never))),
-        UpdateInstanceGroupManagerPerInstanceConfigs: probeOutcome(Retry.none(p521({} as never))),
+        UpdateInstanceDisplayDevice: probeOutcome(
+          Retry.none(p520({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateInstanceGroupManagerPerInstanceConfigs: probeOutcome(
+          Retry.none(p521({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         UpdateInstanceNetworkInterface: probeOutcome(
-          Retry.none(p522({ networkInterface: "alchemy-missing" } as never)),
+          Retry.none(
+            p522({
+              networkInterface: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        UpdateNetworkPeering: probeOutcome(Retry.none(p523({} as never))),
-        UpdateRegionAutoscaler: probeOutcome(Retry.none(p524({ region: "us-central1" } as never))),
+        UpdateNetworkPeering: probeOutcome(
+          Retry.none(p523({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateRegionAutoscaler: probeOutcome(
+          Retry.none(
+            p524({ region: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         UpdateRegionCommitment: probeOutcome(
-          Retry.none(p525({ commitment: "alchemy-missing", region: "us-central1" } as never)),
+          Retry.none(
+            p525({
+              commitment: "alchemy-missing",
+              region: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        UpdateRegionDiskKmsKey: probeOutcome(Retry.none(p526({} as never))),
+        UpdateRegionDiskKmsKey: probeOutcome(
+          Retry.none(p526({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         UpdateRegionInstanceGroupManagerPerInstanceConfigs: probeOutcome(
-          Retry.none(p527({} as never)),
+          Retry.none(p527({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        UpdateRegionSnapshotKmsKey: probeOutcome(Retry.none(p528({} as never))),
-        UpdateRouterNamedSet: probeOutcome(Retry.none(p529({} as never))),
-        UpdateRouterRoutePolicy: probeOutcome(Retry.none(p530({} as never))),
-        UpdateShieldedInstanceConfig: probeOutcome(Retry.none(p531({} as never))),
-        UpdateSnapshotKmsKey: probeOutcome(Retry.none(p532({} as never))),
-        ValidateRegionUrlMap: probeOutcome(Retry.none(p533({} as never))),
-        ValidateUrlMap: probeOutcome(Retry.none(p534({} as never))),
+        UpdateRegionSnapshotKmsKey: probeOutcome(
+          Retry.none(p528({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateRouterNamedSet: probeOutcome(
+          Retry.none(p529({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateRouterRoutePolicy: probeOutcome(
+          Retry.none(p530({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateShieldedInstanceConfig: probeOutcome(
+          Retry.none(p531({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateSnapshotKmsKey: probeOutcome(
+          Retry.none(p532({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ValidateRegionUrlMap: probeOutcome(
+          Retry.none(p533({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ValidateUrlMap: probeOutcome(
+          Retry.none(p534({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

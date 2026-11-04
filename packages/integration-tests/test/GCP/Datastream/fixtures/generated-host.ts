@@ -39,7 +39,9 @@ export default class DatastreamGeneratedHost extends GCP.Function<DatastreamGene
     return {
       fetch: serveProbes({
         DiscoverConnectionProfile: probeOutcome(
-          Retry.none(p0({ location: "us-central1" } as never)),
+          Retry.none(
+            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         GetConnectionProfile: probeOutcome(Retry.none(p1({} as never))),
         GetPrivateConnection: probeOutcome(Retry.none(p2({} as never))),
@@ -51,13 +53,21 @@ export default class DatastreamGeneratedHost extends GCP.Function<DatastreamGene
         ListPrivateConnections: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
         ListStreamObjects: probeOutcome(Retry.none(p9({} as never))),
         ListStreams: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
-        LookupStreamObject: probeOutcome(Retry.none(p11({} as never))),
-        RunStream: probeOutcome(Retry.none(p12({} as never))),
+        LookupStreamObject: probeOutcome(
+          Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RunStream: probeOutcome(
+          Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         StartObjectBackfillJob: probeOutcome(
-          Retry.none(p13({ object: "alchemy-missing" } as never)),
+          Retry.none(
+            p13({ object: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         StopObjectBackfillJob: probeOutcome(
-          Retry.none(p14({ object: "alchemy-missing" } as never)),
+          Retry.none(
+            p14({ object: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
       }),
     };

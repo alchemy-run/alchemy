@@ -88,7 +88,9 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
         GetNotificationChannelDescriptor: probeOutcome(
           Retry.none(p11({ notificationChannelDescriptor: "alchemy-missing" } as never)),
         ),
-        GetNotificationChannelVerificationCode: probeOutcome(Retry.none(p12({} as never))),
+        GetNotificationChannelVerificationCode: probeOutcome(
+          Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetService: probeOutcome(Retry.none(p13({ service: "alchemy-missing" } as never))),
         GetServiceLevelObjective: probeOutcome(
           Retry.none(
@@ -120,16 +122,34 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
           ),
         ),
         ListUptimeCheckConfigs: probeOutcome(Retry.none(p29({} as never))),
-        PatchService: probeOutcome(Retry.none(p30({ service: "alchemy-missing" } as never))),
-        PatchServiceLevelObjective: probeOutcome(
+        PatchService: probeOutcome(
           Retry.none(
-            p31({ service: "alchemy-missing", serviceLevelObjective: "alchemy-missing" } as never),
+            p30({ service: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        PatchSnooze: probeOutcome(Retry.none(p32({ snooze: "alchemy-missing" } as never))),
-        QueryTimeSeries: probeOutcome(Retry.none(p33({} as never))),
-        SendNotificationChannelVerificationCode: probeOutcome(Retry.none(p34({} as never))),
-        VerifyNotificationChannel: probeOutcome(Retry.none(p35({} as never))),
+        PatchServiceLevelObjective: probeOutcome(
+          Retry.none(
+            p31({
+              service: "alchemy-missing",
+              serviceLevelObjective: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        PatchSnooze: probeOutcome(
+          Retry.none(
+            p32({ snooze: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        QueryTimeSeries: probeOutcome(
+          Retry.none(p33({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SendNotificationChannelVerificationCode: probeOutcome(
+          Retry.none(p34({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        VerifyNotificationChannel: probeOutcome(
+          Retry.none(p35({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

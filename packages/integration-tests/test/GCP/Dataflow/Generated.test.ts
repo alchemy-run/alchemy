@@ -96,13 +96,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "DeleteProjectSnapshots (dataflow.projects.deleteSnapshots)",
-        () => probe("DeleteProjectSnapshots", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteProjectSnapshots (dataflow.projects.deleteSnapshots): a DELETE on the project itself: a probe would change the testing project",
+        () => Effect.void,
       );
       test.provider(
         "GetDebugConfig (dataflow.projects.jobs.debug.getConfig)",

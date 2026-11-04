@@ -27,8 +27,12 @@ export default class ContainerAnalysisGeneratedHost extends GCP.Function<Contain
     const p8 = yield* GCP.ContainerAnalysis.ListOccurrences();
     return {
       fetch: serveProbes({
-        BatchNoteCreate: probeOutcome(Retry.none(p0({} as never))),
-        BatchOccurrenceCreate: probeOutcome(Retry.none(p1({} as never))),
+        BatchNoteCreate: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        BatchOccurrenceCreate: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         "GetOccurrenceNotes@Occurrence": probeOutcome(Retry.none(p2({} as never))),
         "GetOccurrenceNotes@LocationsOccurrence": probeOutcome(Retry.none(p3({} as never))),
         GetOccurrenceVulnerabilitySummary: probeOutcome(Retry.none(p4({} as never))),

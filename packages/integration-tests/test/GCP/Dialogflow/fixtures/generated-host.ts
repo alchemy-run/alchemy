@@ -101,24 +101,46 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
     const p68 = yield* GCP.Dialogflow.ValidateFlow(ProbeFlow);
     return {
       fetch: serveProbes({
-        BatchTestCaseDelete: probeOutcome(Retry.none(p0({} as never))),
-        BatchTestCaseRun: probeOutcome(Retry.none(p1({} as never))),
+        BatchTestCaseDelete: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        BatchTestCaseRun: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CalculateTestCaseCoverage: probeOutcome(Retry.none(p2({} as never))),
-        CompareVersions: probeOutcome(Retry.none(p3({} as never))),
+        CompareVersions: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CreateAgentTestCase: probeOutcome(
           Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "DetectSessionIntent@Agent": probeOutcome(
-          Retry.none(p5({ session: "alchemy-missing" } as never)),
+          Retry.none(
+            p5({ session: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        ExportAgent: probeOutcome(Retry.none(p6({} as never))),
-        ExportAgentEntityType: probeOutcome(Retry.none(p7({} as never))),
-        ExportAgentIntent: probeOutcome(Retry.none(p8({} as never))),
-        ExportAgentTestCase: probeOutcome(Retry.none(p9({} as never))),
-        ExportFlow: probeOutcome(Retry.none(p10({} as never))),
-        ExportPlaybook: probeOutcome(Retry.none(p11({} as never))),
+        ExportAgent: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExportAgentEntityType: probeOutcome(
+          Retry.none(p7({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExportAgentIntent: probeOutcome(
+          Retry.none(p8({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExportAgentTestCase: probeOutcome(
+          Retry.none(p9({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExportFlow: probeOutcome(
+          Retry.none(p10({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExportPlaybook: probeOutcome(
+          Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         "FulfillSessionIntent@Agent": probeOutcome(
-          Retry.none(p12({ session: "alchemy-missing" } as never)),
+          Retry.none(
+            p12({ session: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         GetAgent: probeOutcome(Retry.none(p13({} as never))),
         GetAgentChangelog: probeOutcome(Retry.none(p14({ changelog: "alchemy-missing" } as never))),
@@ -193,27 +215,61 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
         ListPlaybookVersions: probeOutcome(Retry.none(p55({} as never))),
         ListSecuritySettings: probeOutcome(Retry.none(p56({ location: "global" } as never))),
         ListToolVersions: probeOutcome(Retry.none(p57({} as never))),
-        LoadVersion: probeOutcome(Retry.none(p58({} as never))),
-        "MatchSessionIntent@Agent": probeOutcome(
-          Retry.none(p59({ session: "alchemy-missing" } as never)),
+        LoadVersion: probeOutcome(
+          Retry.none(p58({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        PatchAgentTestCase: probeOutcome(Retry.none(p60({ testCase: "alchemy-missing" } as never))),
+        "MatchSessionIntent@Agent": probeOutcome(
+          Retry.none(
+            p59({ session: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        PatchAgentTestCase: probeOutcome(
+          Retry.none(
+            p60({
+              testCase: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
         RestoreAgent: probeOutcome(
           Retry.none(p61({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        RunAgentTestCase: probeOutcome(Retry.none(p62({ testCase: "alchemy-missing" } as never))),
+        RunAgentTestCase: probeOutcome(
+          Retry.none(
+            p62({
+              testCase: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
         "ServerSessionStreamingDetectIntent@Agent": probeOutcome(
-          Retry.none(p63({ session: "alchemy-missing" } as never)),
+          Retry.none(
+            p63({ session: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         SubmitSessionAnswerFeedback: probeOutcome(
-          Retry.none(p64({ session: "alchemy-missing" } as never)),
+          Retry.none(
+            p64({ session: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        TrainFlow: probeOutcome(Retry.none(p65({} as never))),
+        TrainFlow: probeOutcome(
+          Retry.none(p65({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         UpdateAgentGenerativeSettings: probeOutcome(
-          Retry.none(p66({ agent: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p66({
+              agent: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ValidateAgent: probeOutcome(Retry.none(p67({} as never))),
-        ValidateFlow: probeOutcome(Retry.none(p68({} as never))),
+        ValidateAgent: probeOutcome(
+          Retry.none(p67({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ValidateFlow: probeOutcome(
+          Retry.none(p68({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

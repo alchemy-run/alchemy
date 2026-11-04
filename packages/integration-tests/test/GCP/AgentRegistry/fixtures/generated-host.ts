@@ -59,10 +59,24 @@ export default class AgentRegistryGeneratedHost extends GCP.Function<AgentRegist
         ListMcpServers: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
         ListServices: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
         PatchService: probeOutcome(
-          Retry.none(p12({ service: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p12({
+              service: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        SearchAgent: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
-        SearchMcpServer: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+        SearchAgent: probeOutcome(
+          Retry.none(
+            p13({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        SearchMcpServer: probeOutcome(
+          Retry.none(
+            p14({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

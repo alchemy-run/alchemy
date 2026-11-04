@@ -23,10 +23,20 @@ export default class ServiceUsageGeneratedHost extends GCP.Function<ServiceUsage
     const p5 = yield* GCP.ServiceUsage.ListServices();
     return {
       fetch: serveProbes({
-        BatchServiceEnable: probeOutcome(Retry.none(p0({} as never))),
+        BatchServiceEnable: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         BatchServiceGet: probeOutcome(Retry.none(p1({} as never))),
-        DisableService: probeOutcome(Retry.none(p2({ service: "alchemy-missing" } as never))),
-        EnableService: probeOutcome(Retry.none(p3({ service: "alchemy-missing" } as never))),
+        DisableService: probeOutcome(
+          Retry.none(
+            p2({ service: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        EnableService: probeOutcome(
+          Retry.none(
+            p3({ service: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         GetService: probeOutcome(Retry.none(p4({ service: "alchemy-missing" } as never))),
         ListServices: probeOutcome(Retry.none(p5({} as never))),
       }),

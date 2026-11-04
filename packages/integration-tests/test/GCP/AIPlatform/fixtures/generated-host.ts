@@ -348,25 +348,58 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         AddTrialMeasurement: probeOutcome(
           Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AppendSessionEvent: probeOutcome(Retry.none(p4({} as never))),
-        AssignNotebookRuntime: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
-        AsyncReasoningEngineQuery: probeOutcome(Retry.none(p6({} as never))),
+        AppendSessionEvent: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AssignNotebookRuntime: probeOutcome(
+          Retry.none(
+            p5({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        AsyncReasoningEngineQuery: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         "AuthorizeSandboxEnvironmentAccess@ReasoningEnginesSandboxEnvironment": probeOutcome(
-          Retry.none(p7({} as never)),
+          Retry.none(p7({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "AuthorizeSandboxEnvironmentAccess@ReasoningEngine": probeOutcome(
-          Retry.none(p8({ sandboxEnvironment: "alchemy-missing" } as never)),
+          Retry.none(
+            p8({
+              sandboxEnvironment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        BatchExperimentCreate: probeOutcome(Retry.none(p9({} as never))),
-        "BatchFeatureCreate@FeaturestoresEntityType": probeOutcome(Retry.none(p10({} as never))),
-        "BatchFeatureCreate@FeatureGroup": probeOutcome(Retry.none(p11({} as never))),
-        BatchFeaturestoreReadFeatureValues: probeOutcome(Retry.none(p12({} as never))),
+        BatchExperimentCreate: probeOutcome(
+          Retry.none(p9({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "BatchFeatureCreate@FeaturestoresEntityType": probeOutcome(
+          Retry.none(p10({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "BatchFeatureCreate@FeatureGroup": probeOutcome(
+          Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        BatchFeaturestoreReadFeatureValues: probeOutcome(
+          Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         BatchMigratableResourceMigrate: probeOutcome(
-          Retry.none(p13({ location: "us-central1" } as never)),
+          Retry.none(
+            p13({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        BatchPipelineJobCancel: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
-        BatchPipelineJobDelete: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
-        BatchRunCreate: probeOutcome(Retry.none(p16({} as never))),
+        BatchPipelineJobCancel: probeOutcome(
+          Retry.none(
+            p14({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        BatchPipelineJobDelete: probeOutcome(
+          Retry.none(
+            p15({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        BatchRunCreate: probeOutcome(
+          Retry.none(p16({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         BatchSliceImport: probeOutcome(
           Retry.none(
             p17({
@@ -374,28 +407,54 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
               evaluation: "alchemy-missing",
               slice: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         BatchTensorboardRead: probeOutcome(Retry.none(p18({} as never))),
-        CancelBatchPredictionJob: probeOutcome(Retry.none(p19({} as never))),
-        CancelCustomJob: probeOutcome(Retry.none(p20({} as never))),
-        CancelEvaluationRun: probeOutcome(Retry.none(p21({} as never))),
-        CancelHyperparameterTuningJob: probeOutcome(Retry.none(p22({} as never))),
-        CancelNasJob: probeOutcome(Retry.none(p23({} as never))),
-        CancelPipelineJob: probeOutcome(Retry.none(p24({} as never))),
-        CancelReasoningEngineAsyncQuery: probeOutcome(Retry.none(p25({} as never))),
-        CheckTrialEarlyStoppingState: probeOutcome(Retry.none(p26({} as never))),
-        CompactSession: probeOutcome(Retry.none(p27({} as never))),
-        CompleteTrial: probeOutcome(Retry.none(p28({} as never))),
-        CompletionsEndpointChat: probeOutcome(Retry.none(p29({} as never))),
-        ComputeEndpointTokens: probeOutcome(Retry.none(p30({} as never))),
+        CancelBatchPredictionJob: probeOutcome(
+          Retry.none(p19({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CancelCustomJob: probeOutcome(
+          Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CancelEvaluationRun: probeOutcome(
+          Retry.none(p21({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CancelHyperparameterTuningJob: probeOutcome(
+          Retry.none(p22({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CancelNasJob: probeOutcome(
+          Retry.none(p23({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CancelPipelineJob: probeOutcome(
+          Retry.none(p24({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CancelReasoningEngineAsyncQuery: probeOutcome(
+          Retry.none(p25({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CheckTrialEarlyStoppingState: probeOutcome(
+          Retry.none(p26({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CompactSession: probeOutcome(
+          Retry.none(p27({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CompleteTrial: probeOutcome(
+          Retry.none(p28({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CompletionsEndpointChat: probeOutcome(
+          Retry.none(p29({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ComputeEndpointTokens: probeOutcome(
+          Retry.none(p30({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ComputeModelTokens: probeOutcome(
           Retry.none(
             p31({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -404,13 +463,16 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             p32({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CountEndpointTokens: probeOutcome(Retry.none(p33({} as never))),
+        CountEndpointTokens: probeOutcome(
+          Retry.none(p33({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CountModelTokens: probeOutcome(
           Retry.none(
             p34({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -446,7 +508,9 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         DeleteEndpointResponse: probeOutcome(
           Retry.none(p40({ response: "alchemy-missing" } as never)),
         ),
-        DeleteEntityTypeFeatureValues: probeOutcome(Retry.none(p41({} as never))),
+        DeleteEntityTypeFeatureValues: probeOutcome(
+          Retry.none(p41({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         DeleteEvaluationMetric: probeOutcome(
           Retry.none(
             p42({ evaluationMetric: "alchemy-missing", location: "us-central1" } as never),
@@ -479,55 +543,114 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         DeleteReasoningEngineSandboxEnvironmentSnapshot: probeOutcome(
           Retry.none(p49({ sandboxEnvironmentSnapshot: "alchemy-missing" } as never)),
         ),
-        DeployEndpointModel: probeOutcome(Retry.none(p50({} as never))),
-        DeployIndexEndpointIndex: probeOutcome(Retry.none(p51({} as never))),
-        DeprovisionSemanticGovernancePolicyEngine: probeOutcome(
-          Retry.none(p52({ location: "us-central1" } as never)),
+        DeployEndpointModel: probeOutcome(
+          Retry.none(p50({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DirectEndpointPredict: probeOutcome(Retry.none(p53({} as never))),
-        DirectEndpointRawPredict: probeOutcome(Retry.none(p54({} as never))),
-        DirectFeatureViewWrite: probeOutcome(Retry.none(p55({} as never))),
+        DeployIndexEndpointIndex: probeOutcome(
+          Retry.none(p51({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeprovisionSemanticGovernancePolicyEngine: probeOutcome(
+          Retry.none(
+            p52({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        DirectEndpointPredict: probeOutcome(
+          Retry.none(p53({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DirectEndpointRawPredict: probeOutcome(
+          Retry.none(p54({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DirectFeatureViewWrite: probeOutcome(
+          Retry.none(p55({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         EmbedModelContent: probeOutcome(
           Retry.none(
             p56({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        ExecuteReasoningEngineCode: probeOutcome(Retry.none(p57({} as never))),
+        ExecuteReasoningEngineCode: probeOutcome(
+          Retry.none(p57({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ExecuteReasoningEngineSandboxEnvironment: probeOutcome(
-          Retry.none(p58({ sandboxEnvironment: "alchemy-missing" } as never)),
+          Retry.none(
+            p58({
+              sandboxEnvironment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ExecuteSandboxEnvironment: probeOutcome(Retry.none(p59({} as never))),
-        ExplainEndpoint: probeOutcome(Retry.none(p60({} as never))),
+        ExecuteSandboxEnvironment: probeOutcome(
+          Retry.none(p59({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExplainEndpoint: probeOutcome(
+          Retry.none(p60({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ExportDataset: probeOutcome(
-          Retry.none(p61({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p61({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ExportEntityTypeFeatureValues: probeOutcome(Retry.none(p62({} as never))),
+        ExportEntityTypeFeatureValues: probeOutcome(
+          Retry.none(p62({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ExportModel: probeOutcome(
-          Retry.none(p63({ model: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p63({
+              model: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ExportTensorboardTimeSeries: probeOutcome(Retry.none(p64({} as never))),
-        FetchEndpointPredictOperation: probeOutcome(Retry.none(p65({} as never))),
-        FetchFeatureViewFeatureValues: probeOutcome(Retry.none(p66({} as never))),
+        ExportTensorboardTimeSeries: probeOutcome(
+          Retry.none(p64({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        FetchEndpointPredictOperation: probeOutcome(
+          Retry.none(p65({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        FetchFeatureViewFeatureValues: probeOutcome(
+          Retry.none(p66({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         FetchModelPredictOperation: probeOutcome(
           Retry.none(
             p67({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        FindIndexEndpointNeighbors: probeOutcome(Retry.none(p68({} as never))),
-        GenerateEndpointContent: probeOutcome(Retry.none(p69({} as never))),
-        GenerateFeatureViewFetchAccessToken: probeOutcome(Retry.none(p70({} as never))),
-        GenerateMemoryBankMemory: probeOutcome(
-          Retry.none(p71({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
+        FindIndexEndpointNeighbors: probeOutcome(
+          Retry.none(p68({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        GenerateReasoningEngineMemory: probeOutcome(Retry.none(p72({} as never))),
+        GenerateEndpointContent: probeOutcome(
+          Retry.none(p69({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        GenerateFeatureViewFetchAccessToken: probeOutcome(
+          Retry.none(p70({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        GenerateMemoryBankMemory: probeOutcome(
+          Retry.none(
+            p71({
+              memoryBank: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        GenerateReasoningEngineMemory: probeOutcome(
+          Retry.none(p72({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetArtifact: probeOutcome(Retry.none(p73({} as never))),
         GetBatchPredictionJob: probeOutcome(Retry.none(p74({} as never))),
         GetCachedContent: probeOutcome(Retry.none(p75({} as never))),
@@ -689,16 +812,33 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           Retry.none(p132({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         IngestMemoryBankEvents: probeOutcome(
-          Retry.none(p133({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p133({
+              memoryBank: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        IngestMemoryEvents: probeOutcome(Retry.none(p134({} as never))),
+        IngestMemoryEvents: probeOutcome(
+          Retry.none(p134({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         InvokeEndpointDeployedModelInvoke: probeOutcome(
           Retry.none(
-            p135({ deployedModelId: "alchemy-missing", invokeId: "alchemy-missing" } as never),
+            p135({
+              deployedModelId: "alchemy-missing",
+              invokeId: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
         InvokeEndpointInvoke: probeOutcome(
-          Retry.none(p136({ invokeId: "alchemy-missing" } as never)),
+          Retry.none(
+            p136({
+              invokeId: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         InvokePublisherModelInvoke: probeOutcome(
           Retry.none(
@@ -707,6 +847,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
               model: "alchemy-missing",
               invokeId: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -808,7 +949,9 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           Retry.none(p182({ location: "us-central1" } as never)),
         ),
         ListOnlineEvaluators: probeOutcome(Retry.none(p183({ location: "us-central1" } as never))),
-        ListOptimalTrials: probeOutcome(Retry.none(p184({} as never))),
+        ListOptimalTrials: probeOutcome(
+          Retry.none(p184({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListPersistentResources: probeOutcome(
           Retry.none(p185({ location: "us-central1" } as never)),
         ),
@@ -833,14 +976,34 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         ListTensorboards: probeOutcome(Retry.none(p202({ location: "us-central1" } as never))),
         ListTrainingPipelines: probeOutcome(Retry.none(p203({ location: "us-central1" } as never))),
         ListTuningJobs: probeOutcome(Retry.none(p204({ location: "us-central1" } as never))),
-        LookupStudy: probeOutcome(Retry.none(p205({ location: "us-central1" } as never))),
-        MergeModelVersionAliases: probeOutcome(
-          Retry.none(p206({ model: "alchemy-missing", location: "us-central1" } as never)),
+        LookupStudy: probeOutcome(
+          Retry.none(
+            p205({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        MutateEndpointDeployedModel: probeOutcome(Retry.none(p207({} as never))),
-        MutateIndexEndpointDeployedIndex: probeOutcome(Retry.none(p208({} as never))),
+        MergeModelVersionAliases: probeOutcome(
+          Retry.none(
+            p206({
+              model: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        MutateEndpointDeployedModel: probeOutcome(
+          Retry.none(p207({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        MutateIndexEndpointDeployedIndex: probeOutcome(
+          Retry.none(p208({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         PatchDataset: probeOutcome(
-          Retry.none(p209({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p209({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchDatasetVersion: probeOutcome(
           Retry.none(
@@ -848,6 +1011,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
               dataset: "alchemy-missing",
               datasetVersion: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -857,24 +1021,43 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
               memoryBank: "alchemy-missing",
               memory: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         PatchModel: probeOutcome(
-          Retry.none(p212({ model: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p212({
+              model: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PauseReasoningEngineSandboxEnvironment: probeOutcome(
-          Retry.none(p213({ sandboxEnvironment: "alchemy-missing" } as never)),
+          Retry.none(
+            p213({
+              sandboxEnvironment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        PauseSchedule: probeOutcome(Retry.none(p214({} as never))),
-        PredictEndpoint: probeOutcome(Retry.none(p215({} as never))),
-        PredictEndpointLongRunning: probeOutcome(Retry.none(p216({} as never))),
+        PauseSchedule: probeOutcome(
+          Retry.none(p214({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PredictEndpoint: probeOutcome(
+          Retry.none(p215({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PredictEndpointLongRunning: probeOutcome(
+          Retry.none(p216({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         PredictModelLongRunning: probeOutcome(
           Retry.none(
             p217({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -884,44 +1067,77 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         PurgeMemoryBankMemory: probeOutcome(
-          Retry.none(p219({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p219({
+              memoryBank: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        PurgeMetadataStoreArtifact: probeOutcome(Retry.none(p220({} as never))),
-        PurgeMetadataStoreContext: probeOutcome(Retry.none(p221({} as never))),
-        PurgeMetadataStoreExecution: probeOutcome(Retry.none(p222({} as never))),
-        PurgeReasoningEngineMemory: probeOutcome(Retry.none(p223({} as never))),
+        PurgeMetadataStoreArtifact: probeOutcome(
+          Retry.none(p220({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PurgeMetadataStoreContext: probeOutcome(
+          Retry.none(p221({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PurgeMetadataStoreExecution: probeOutcome(
+          Retry.none(p222({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PurgeReasoningEngineMemory: probeOutcome(
+          Retry.none(p223({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         QueryArtifactLineageSubgraph: probeOutcome(Retry.none(p224({} as never))),
         QueryContextLineageSubgraph: probeOutcome(Retry.none(p225({} as never))),
         QueryDeploymentResourcePoolDeployedModels: probeOutcome(Retry.none(p226({} as never))),
         QueryExecutionInputsAndOutputs: probeOutcome(Retry.none(p227({} as never))),
         QueryReasoningEngineRuntimeRevision: probeOutcome(
-          Retry.none(p228({ runtimeRevision: "alchemy-missing" } as never)),
+          Retry.none(
+            p228({
+              runtimeRevision: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        RawEndpointPredict: probeOutcome(Retry.none(p229({} as never))),
+        RawEndpointPredict: probeOutcome(
+          Retry.none(p229({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RawModelPredict: probeOutcome(
           Retry.none(
             p230({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        ReadEntityTypeFeatureValues: probeOutcome(Retry.none(p231({} as never))),
-        ReadIndexEndpointIndexDatapoints: probeOutcome(Retry.none(p232({} as never))),
+        ReadEntityTypeFeatureValues: probeOutcome(
+          Retry.none(p231({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ReadIndexEndpointIndexDatapoints: probeOutcome(
+          Retry.none(p232({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ReadTensorboardSize: probeOutcome(Retry.none(p233({} as never))),
         ReadTensorboardUsage: probeOutcome(Retry.none(p234({} as never))),
         ReadTimeSeries: probeOutcome(Retry.none(p235({} as never))),
         ReadTimeSeriesBlobData: probeOutcome(Retry.none(p236({} as never))),
         RebaseTuningJobTunedModel: probeOutcome(
-          Retry.none(p237({ location: "us-central1" } as never)),
+          Retry.none(
+            p237({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        RemoveContextChildren: probeOutcome(Retry.none(p238({} as never))),
-        RemoveIndexDatapoints: probeOutcome(Retry.none(p239({} as never))),
+        RemoveContextChildren: probeOutcome(
+          Retry.none(p238({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RemoveIndexDatapoints: probeOutcome(
+          Retry.none(p239({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RestoreDatasetVersion: probeOutcome(
           Retry.none(
             p240({
@@ -932,20 +1148,38 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           ),
         ),
         ResumeReasoningEngineSandboxEnvironment: probeOutcome(
-          Retry.none(p241({ sandboxEnvironment: "alchemy-missing" } as never)),
+          Retry.none(
+            p241({
+              sandboxEnvironment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ResumeSchedule: probeOutcome(Retry.none(p242({} as never))),
+        ResumeSchedule: probeOutcome(
+          Retry.none(p242({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RetrieveMemoryBankMemory: probeOutcome(
-          Retry.none(p243({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p243({
+              memoryBank: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        RetrieveReasoningEngineMemory: probeOutcome(Retry.none(p244({} as never))),
-        RollbackMemory: probeOutcome(Retry.none(p245({} as never))),
+        RetrieveReasoningEngineMemory: probeOutcome(
+          Retry.none(p244({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RollbackMemory: probeOutcome(
+          Retry.none(p245({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RollbackMemoryBankMemory: probeOutcome(
           Retry.none(
             p246({
               memoryBank: "alchemy-missing",
               memory: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -955,44 +1189,75 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         SearchFeaturestoreFeatures: probeOutcome(
           Retry.none(p248({ location: "us-central1" } as never)),
         ),
-        SearchFeatureViewNearestEntities: probeOutcome(Retry.none(p249({} as never))),
-        SearchMigratableResource: probeOutcome(
-          Retry.none(p250({ location: "us-central1" } as never)),
+        SearchFeatureViewNearestEntities: probeOutcome(
+          Retry.none(p249({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ServerEndpointStreamingPredict: probeOutcome(Retry.none(p251({} as never))),
+        SearchMigratableResource: probeOutcome(
+          Retry.none(
+            p250({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        ServerEndpointStreamingPredict: probeOutcome(
+          Retry.none(p251({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ServerModelStreamingPredict: probeOutcome(
           Retry.none(
             p252({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         SnapshotReasoningEngineSandboxEnvironment: probeOutcome(
-          Retry.none(p253({ sandboxEnvironment: "alchemy-missing" } as never)),
+          Retry.none(
+            p253({
+              sandboxEnvironment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        SnapshotSandboxEnvironment: probeOutcome(Retry.none(p254({} as never))),
+        SnapshotSandboxEnvironment: probeOutcome(
+          Retry.none(p254({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         StartNotebookRuntime: probeOutcome(
           Retry.none(
-            p255({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
+            p255({
+              notebookRuntime: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
         StopNotebookRuntime: probeOutcome(
           Retry.none(
-            p256({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
+            p256({
+              notebookRuntime: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
-        StopTrial: probeOutcome(Retry.none(p257({} as never))),
-        StreamEndpointGenerateContent: probeOutcome(Retry.none(p258({} as never))),
-        StreamEndpointRawPredict: probeOutcome(Retry.none(p259({} as never))),
-        StreamingEntityTypeReadFeatureValues: probeOutcome(Retry.none(p260({} as never))),
+        StopTrial: probeOutcome(
+          Retry.none(p257({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StreamEndpointGenerateContent: probeOutcome(
+          Retry.none(p258({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StreamEndpointRawPredict: probeOutcome(
+          Retry.none(p259({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StreamingEntityTypeReadFeatureValues: probeOutcome(
+          Retry.none(p260({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         StreamModelGenerateContent: probeOutcome(
           Retry.none(
             p261({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -1002,31 +1267,71 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        StreamReasoningEngineQuery: probeOutcome(Retry.none(p263({} as never))),
+        StreamReasoningEngineQuery: probeOutcome(
+          Retry.none(p263({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         StreamRuntimeRevisionQuery: probeOutcome(
-          Retry.none(p264({ runtimeRevision: "alchemy-missing" } as never)),
-        ),
-        SuggestStudyTrial: probeOutcome(Retry.none(p265({} as never))),
-        SyncFeatureView: probeOutcome(Retry.none(p266({} as never))),
-        UndeployEndpointModel: probeOutcome(Retry.none(p267({} as never))),
-        UndeployIndexEndpointIndex: probeOutcome(Retry.none(p268({} as never))),
-        UpdateModelExplanationDataset: probeOutcome(
-          Retry.none(p269({ model: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        UpdateProjectCacheConfig: probeOutcome(Retry.none(p270({} as never))),
-        UpgradeNotebookRuntime: probeOutcome(
           Retry.none(
-            p271({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
+            p264({
+              runtimeRevision: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
-        UploadModel: probeOutcome(Retry.none(p272({ location: "us-central1" } as never))),
-        UpsertIndexDatapoints: probeOutcome(Retry.none(p273({} as never))),
-        WriteEntityTypeFeatureValues: probeOutcome(Retry.none(p274({} as never))),
-        WriteExperiment: probeOutcome(Retry.none(p275({} as never))),
-        WriteRun: probeOutcome(Retry.none(p276({} as never))),
+        SuggestStudyTrial: probeOutcome(
+          Retry.none(p265({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SyncFeatureView: probeOutcome(
+          Retry.none(p266({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UndeployEndpointModel: probeOutcome(
+          Retry.none(p267({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UndeployIndexEndpointIndex: probeOutcome(
+          Retry.none(p268({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateModelExplanationDataset: probeOutcome(
+          Retry.none(
+            p269({
+              model: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        UpdateProjectCacheConfig: probeOutcome(
+          Retry.none(p270({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpgradeNotebookRuntime: probeOutcome(
+          Retry.none(
+            p271({
+              notebookRuntime: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        UploadModel: probeOutcome(
+          Retry.none(
+            p272({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        UpsertIndexDatapoints: probeOutcome(
+          Retry.none(p273({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        WriteEntityTypeFeatureValues: probeOutcome(
+          Retry.none(p274({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        WriteExperiment: probeOutcome(
+          Retry.none(p275({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        WriteRun: probeOutcome(
+          Retry.none(p276({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

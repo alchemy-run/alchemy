@@ -33,7 +33,12 @@ export default class SpannerGeneratedHost extends GCP.Function<SpannerGeneratedH
         ListInstanceConfigs: probeOutcome(Retry.none(p3({} as never))),
         ListInstances: probeOutcome(Retry.none(p4({} as never))),
         PatchInstanceConfig: probeOutcome(
-          Retry.none(p5({ instanceConfig: "alchemy-missing" } as never)),
+          Retry.none(
+            p5({
+              instanceConfig: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

@@ -19,7 +19,9 @@ export default class ServiceManagementGeneratedHost extends GCP.Function<Service
     const p1 = yield* GCP.ServiceManagement.ListServices();
     return {
       fetch: serveProbes({
-        GenerateServiceConfigReport: probeOutcome(Retry.none(p0({} as never))),
+        GenerateServiceConfigReport: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListServices: probeOutcome(Retry.none(p1({} as never))),
       }),
     };

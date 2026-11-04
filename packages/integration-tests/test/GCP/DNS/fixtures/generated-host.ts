@@ -135,6 +135,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
               managedZone: "alchemy-missing",
               type: "alchemy-missing",
               name: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -143,6 +144,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             p23({
               responsePolicyRule: "alchemy-missing",
               responsePolicy: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -151,6 +153,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             p24({
               responsePolicy: "alchemy-missing",
               responsePolicyRule: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),

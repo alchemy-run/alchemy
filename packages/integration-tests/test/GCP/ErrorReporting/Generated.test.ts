@@ -76,13 +76,9 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "DeleteProjectEvents (clouderrorreporting.projects.deleteEvents)",
-        () => probe("DeleteProjectEvents", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:errorreporting", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteProjectEvents (clouderrorreporting.projects.deleteEvents): a DELETE on the project itself: a probe would change the testing project",
+        () => Effect.void,
       );
       test.provider(
         "GetGroup (clouderrorreporting.projects.groups.get)",

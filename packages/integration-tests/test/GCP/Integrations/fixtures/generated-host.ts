@@ -96,6 +96,7 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
               integration: "alchemy-missing",
               execution: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -130,7 +131,13 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
         "DownloadVersion@IntegrationsVersion": probeOutcome(Retry.none(p8({} as never))),
         DownloadVersionJsonPackage: probeOutcome(Retry.none(p9({} as never))),
         ExecuteIntegration: probeOutcome(
-          Retry.none(p10({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p10({
+              integration: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ExecuteIntegrationEvent: probeOutcome(
           Retry.none(p11({ integration: "alchemy-missing", location: "us-central1" } as never)),
@@ -141,11 +148,16 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
               product: "alchemy-missing",
               integration: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        ExecuteTestCaseTest: probeOutcome(Retry.none(p13({} as never))),
-        ExecuteVersionTestCase: probeOutcome(Retry.none(p14({} as never))),
+        ExecuteTestCaseTest: probeOutcome(
+          Retry.none(p13({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExecuteVersionTestCase: probeOutcome(
+          Retry.none(p14({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         "GetAuthConfig@AuthConfig": probeOutcome(Retry.none(p15({} as never))),
         GetCertificate: probeOutcome(
           Retry.none(p16({ certificate: "alchemy-missing", location: "us-central1" } as never)),
@@ -183,6 +195,7 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
               execution: "alchemy-missing",
               suspension: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -194,6 +207,7 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
               execution: "alchemy-missing",
               suspension: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -259,16 +273,27 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
         ListTemplates: probeOutcome(Retry.none(p40({ location: "us-central1" } as never))),
         ListVersionTestCases: probeOutcome(Retry.none(p41({} as never))),
         PatchCertificate: probeOutcome(
-          Retry.none(p42({ certificate: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p42({
+              certificate: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        "PublishVersion@ProductsIntegrationsVersion": probeOutcome(Retry.none(p43({} as never))),
-        "PublishVersion@IntegrationsVersion": probeOutcome(Retry.none(p44({} as never))),
+        "PublishVersion@ProductsIntegrationsVersion": probeOutcome(
+          Retry.none(p43({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "PublishVersion@IntegrationsVersion": probeOutcome(
+          Retry.none(p44({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ReplayIntegrationExecution: probeOutcome(
           Retry.none(
             p45({
               integration: "alchemy-missing",
               execution: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -279,6 +304,7 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
               execution: "alchemy-missing",
               suspension: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -290,11 +316,18 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
               execution: "alchemy-missing",
               suspension: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         ScheduleIntegration: probeOutcome(
-          Retry.none(p48({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p48({
+              integration: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ScheduleProductIntegration: probeOutcome(
           Retry.none(
@@ -302,16 +335,29 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
               product: "alchemy-missing",
               integration: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         SearchIntegration: probeOutcome(Retry.none(p50({ location: "us-central1" } as never))),
         SearchTemplate: probeOutcome(Retry.none(p51({ location: "us-central1" } as never))),
-        ShareTemplate: probeOutcome(Retry.none(p52({} as never))),
-        TakeoverTestCaseEditLock: probeOutcome(Retry.none(p53({} as never))),
-        TakeoverVersionEditLock: probeOutcome(Retry.none(p54({} as never))),
+        ShareTemplate: probeOutcome(
+          Retry.none(p52({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        TakeoverTestCaseEditLock: probeOutcome(
+          Retry.none(p53({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        TakeoverVersionEditLock: probeOutcome(
+          Retry.none(p54({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         TestIntegration: probeOutcome(
-          Retry.none(p55({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p55({
+              integration: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         TestProductIntegration: probeOutcome(
           Retry.none(
@@ -319,15 +365,30 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
               product: "alchemy-missing",
               integration: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        TestVersion: probeOutcome(Retry.none(p57({} as never))),
-        "UnpublishVersion@ProductsIntegrationsVersion": probeOutcome(Retry.none(p58({} as never))),
-        "UnpublishVersion@IntegrationsVersion": probeOutcome(Retry.none(p59({} as never))),
-        UnshareTemplate: probeOutcome(Retry.none(p60({} as never))),
+        TestVersion: probeOutcome(
+          Retry.none(p57({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "UnpublishVersion@ProductsIntegrationsVersion": probeOutcome(
+          Retry.none(p58({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "UnpublishVersion@IntegrationsVersion": probeOutcome(
+          Retry.none(p59({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UnshareTemplate: probeOutcome(
+          Retry.none(p60({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         UploadIntegrationVersion: probeOutcome(
-          Retry.none(p61({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p61({
+              integration: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         UploadProductIntegrationVersion: probeOutcome(
           Retry.none(
@@ -335,12 +396,21 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
               product: "alchemy-missing",
               integration: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        UploadTemplate: probeOutcome(Retry.none(p63({ location: "us-central1" } as never))),
-        UploadVersionTestCase: probeOutcome(Retry.none(p64({} as never))),
-        UseTemplate: probeOutcome(Retry.none(p65({} as never))),
+        UploadTemplate: probeOutcome(
+          Retry.none(
+            p63({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        UploadVersionTestCase: probeOutcome(
+          Retry.none(p64({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UseTemplate: probeOutcome(
+          Retry.none(p65({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

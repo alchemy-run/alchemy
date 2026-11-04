@@ -167,6 +167,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -176,11 +177,18 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         PatchEntryGroup: probeOutcome(
-          Retry.none(p23({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p23({
+              entryGroup: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchEntryGroupEntry: probeOutcome(
           Retry.none(
@@ -188,6 +196,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -198,6 +207,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
               entry: "alchemy-missing",
               tag: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -207,6 +217,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
               entryGroup: "alchemy-missing",
               tag: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -216,17 +227,23 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        ReplaceTaxonomy: probeOutcome(Retry.none(p28({} as never))),
-        SearchCatalog: probeOutcome(Retry.none(p29({} as never))),
+        ReplaceTaxonomy: probeOutcome(
+          Retry.none(p28({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SearchCatalog: probeOutcome(
+          Retry.none(p29({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         StarEntryGroupEntry: probeOutcome(
           Retry.none(
             p30({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -236,6 +253,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),

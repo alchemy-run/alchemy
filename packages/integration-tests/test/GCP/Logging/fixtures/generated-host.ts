@@ -130,17 +130,45 @@ export default class LoggingGeneratedHost extends GCP.Function<LoggingGeneratedH
         ListSinks: probeOutcome(Retry.none(p36({} as never))),
         "ListViewLogs@BucketsView": probeOutcome(Retry.none(p37({} as never))),
         "ListViewLogs@FolderBucketsView": probeOutcome(Retry.none(p38({} as never))),
-        PatchSink: probeOutcome(Retry.none(p39({ sink: "alchemy-missing" } as never))),
-        TailEntry: probeOutcome(Retry.none(p40({} as never))),
-        "UndeleteBucket@LogBucket": probeOutcome(Retry.none(p41({} as never))),
-        "UndeleteBucket@FolderBucket": probeOutcome(Retry.none(p42({} as never))),
-        "UpdateBucketAsync@LogBucket": probeOutcome(Retry.none(p43({} as never))),
-        "UpdateBucketAsync@FolderBucket": probeOutcome(Retry.none(p44({} as never))),
-        UpdateCmekSettings: probeOutcome(Retry.none(p45({} as never))),
-        UpdateMetric: probeOutcome(Retry.none(p46({ metric: "alchemy-missing" } as never))),
-        UpdateSettings: probeOutcome(Retry.none(p47({} as never))),
-        UpdateSink: probeOutcome(Retry.none(p48({ sink: "alchemy-missing" } as never))),
-        WriteEntry: probeOutcome(Retry.none(p49({} as never))),
+        PatchSink: probeOutcome(
+          Retry.none(
+            p39({ sink: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        TailEntry: probeOutcome(
+          Retry.none(p40({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "UndeleteBucket@LogBucket": probeOutcome(
+          Retry.none(p41({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "UndeleteBucket@FolderBucket": probeOutcome(
+          Retry.none(p42({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "UpdateBucketAsync@LogBucket": probeOutcome(
+          Retry.none(p43({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "UpdateBucketAsync@FolderBucket": probeOutcome(
+          Retry.none(p44({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateCmekSettings: probeOutcome(
+          Retry.none(p45({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateMetric: probeOutcome(
+          Retry.none(
+            p46({ metric: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        UpdateSettings: probeOutcome(
+          Retry.none(p47({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateSink: probeOutcome(
+          Retry.none(
+            p48({ sink: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        WriteEntry: probeOutcome(
+          Retry.none(p49({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

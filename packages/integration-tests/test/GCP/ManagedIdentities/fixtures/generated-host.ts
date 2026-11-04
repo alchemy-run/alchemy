@@ -38,13 +38,27 @@ export default class ManagedIdentitiesGeneratedHost extends GCP.Function<Managed
     const p19 = yield* GCP.ManagedIdentities.ValidateDomainTrust(ProbeDomain);
     return {
       fetch: serveProbes({
-        AttachDomainTrust: probeOutcome(Retry.none(p0({} as never))),
-        CheckDomainMigrationPermission: probeOutcome(Retry.none(p1({} as never))),
-        DetachDomainTrust: probeOutcome(Retry.none(p2({} as never))),
-        DisableDomainMigration: probeOutcome(Retry.none(p3({} as never))),
-        DomainJoinMachine: probeOutcome(Retry.none(p4({} as never))),
-        EnableDomainMigration: probeOutcome(Retry.none(p5({} as never))),
-        ExtendDomainSchema: probeOutcome(Retry.none(p6({} as never))),
+        AttachDomainTrust: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CheckDomainMigrationPermission: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DetachDomainTrust: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DisableDomainMigration: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DomainJoinMachine: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        EnableDomainMigration: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ExtendDomainSchema: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetBackup: probeOutcome(Retry.none(p7({} as never))),
         GetDomain: probeOutcome(Retry.none(p8({} as never))),
         GetDomainLdapssettings: probeOutcome(Retry.none(p9({} as never))),
@@ -55,13 +69,21 @@ export default class ManagedIdentitiesGeneratedHost extends GCP.Function<Managed
         ListDomains: probeOutcome(Retry.none(p12({ location: "global" } as never))),
         ListDomainSqlIntegrations: probeOutcome(Retry.none(p13({} as never))),
         ListPeerings: probeOutcome(Retry.none(p14({ location: "global" } as never))),
-        ReconfigureDomainTrust: probeOutcome(Retry.none(p15({} as never))),
-        ResetDomainAdminPassword: probeOutcome(Retry.none(p16({} as never))),
+        ReconfigureDomainTrust: probeOutcome(
+          Retry.none(p15({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ResetDomainAdminPassword: probeOutcome(
+          Retry.none(p16({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RestoreDomain: probeOutcome(
           Retry.none(p17({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        UpdateDomainLdapssettings: probeOutcome(Retry.none(p18({} as never))),
-        ValidateDomainTrust: probeOutcome(Retry.none(p19({} as never))),
+        UpdateDomainLdapssettings: probeOutcome(
+          Retry.none(p18({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ValidateDomainTrust: probeOutcome(
+          Retry.none(p19({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

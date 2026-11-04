@@ -92,13 +92,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "UpdateProjectBillingInfo (cloudbilling.projects.updateBillingInfo)",
-        () => probe("UpdateProjectBillingInfo", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:cloudbilling", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "UpdateProjectBillingInfo (cloudbilling.projects.updateBillingInfo): links or unlinks the testing project's billing account; a probe with a placeholder body unlinked it on 2026-11-03",
+        () => Effect.void,
       );
     });
 

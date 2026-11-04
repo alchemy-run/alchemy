@@ -23,11 +23,19 @@ export default class MemcacheGeneratedHost extends GCP.Function<MemcacheGenerate
     const p4 = yield* GCP.Memcache.UpgradeInstance(Cache);
     return {
       fetch: serveProbes({
-        ApplyInstanceParameters: probeOutcome(Retry.none(p0({} as never))),
+        ApplyInstanceParameters: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListInstances: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
-        RescheduleInstanceMaintenance: probeOutcome(Retry.none(p2({} as never))),
-        UpdateInstanceParameters: probeOutcome(Retry.none(p3({} as never))),
-        UpgradeInstance: probeOutcome(Retry.none(p4({} as never))),
+        RescheduleInstanceMaintenance: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateInstanceParameters: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpgradeInstance: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

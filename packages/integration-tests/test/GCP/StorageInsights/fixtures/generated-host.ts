@@ -45,16 +45,34 @@ export default class StorageInsightsGeneratedHost extends GCP.Function<StorageIn
           Retry.none(p4({ reportDetail: "alchemy-missing" } as never)),
         ),
         LinkDatasetConfigDataset: probeOutcome(
-          Retry.none(p5({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p5({
+              datasetConfig: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ListDatasetConfigs: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
         ListReportConfigReportDetails: probeOutcome(Retry.none(p7({} as never))),
         ListReportConfigs: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
         PatchDatasetConfig: probeOutcome(
-          Retry.none(p9({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p9({
+              datasetConfig: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         UnlinkDatasetConfigDataset: probeOutcome(
-          Retry.none(p10({ datasetConfig: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p10({
+              datasetConfig: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

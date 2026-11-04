@@ -35,7 +35,13 @@ export default class IDSGeneratedHost extends GCP.Function<IDSGeneratedHost>()(
         ),
         ListEndpoints: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
         PatchEndpoint: probeOutcome(
-          Retry.none(p4({ endpoint: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p4({
+              endpoint: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

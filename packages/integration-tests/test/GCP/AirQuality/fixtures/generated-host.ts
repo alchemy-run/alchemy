@@ -20,9 +20,15 @@ export default class AirQualityGeneratedHost extends GCP.Function<AirQualityGene
     const p2 = yield* GCP.AirQuality.LookupHistory();
     return {
       fetch: serveProbes({
-        LookupCurrentCondition: probeOutcome(Retry.none(p0({} as never))),
-        LookupForecast: probeOutcome(Retry.none(p1({} as never))),
-        LookupHistory: probeOutcome(Retry.none(p2({} as never))),
+        LookupCurrentCondition: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        LookupForecast: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        LookupHistory: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

@@ -25,7 +25,9 @@ export default class EssentialContactsGeneratedHost extends GCP.Function<Essenti
         ComputeContact: probeOutcome(Retry.none(p0({} as never))),
         "GetContact@Contact": probeOutcome(Retry.none(p1({} as never))),
         ListContacts: probeOutcome(Retry.none(p2({} as never))),
-        SendContactTestMessage: probeOutcome(Retry.none(p3({} as never))),
+        SendContactTestMessage: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

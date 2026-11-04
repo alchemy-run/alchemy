@@ -35,7 +35,11 @@ export default class VMwareEngineGeneratedHost extends GCP.Function<VMwareEngine
         GetPrivateCloudDnsForwarding: probeOutcome(
           Retry.none(p1({ privateCloud: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GrantDnsBindPermission: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        GrantDnsBindPermission: probeOutcome(
+          Retry.none(
+            p2({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         ListDatastores: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
         ListNetworkPeerings: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
         ListNetworkPolicies: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
@@ -46,10 +50,18 @@ export default class VMwareEngineGeneratedHost extends GCP.Function<VMwareEngine
           Retry.none(p9({ location: "us-central1" } as never)),
         ),
         RevokeDnsBindPermission: probeOutcome(
-          Retry.none(p10({ location: "us-central1" } as never)),
+          Retry.none(
+            p10({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         UpdatePrivateCloudDnsForwarding: probeOutcome(
-          Retry.none(p11({ privateCloud: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p11({
+              privateCloud: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

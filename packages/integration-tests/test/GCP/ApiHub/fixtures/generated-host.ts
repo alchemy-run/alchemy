@@ -96,10 +96,22 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
         ),
         LookupApiHubInstance: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
         ManageAddonConfig: probeOutcome(
-          Retry.none(p20({ addon: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p20({
+              addon: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         UpdatePluginStyleGuide: probeOutcome(
-          Retry.none(p21({ plugin: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p21({
+              plugin: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

@@ -92,13 +92,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "DeleteProjectDefaultBucket (firebasestorage.projects.deleteDefaultBucket)",
-        () => probe("DeleteProjectDefaultBucket", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebasestorage", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteProjectDefaultBucket (firebasestorage.projects.deleteDefaultBucket): a DELETE on the project itself: a probe would change the testing project",
+        () => Effect.void,
       );
       test.provider(
         "GetBucket (firebasestorage.projects.buckets.get)",

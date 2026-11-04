@@ -39,7 +39,9 @@ export default class CloudAssetGeneratedHost extends GCP.Function<CloudAssetGene
     return {
       fetch: serveProbes({
         AnalyzeIamPolicy: probeOutcome(Retry.none(p0({} as never))),
-        AnalyzeIamPolicyLongrunning: probeOutcome(Retry.none(p1({} as never))),
+        AnalyzeIamPolicyLongrunning: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         AnalyzeMove: probeOutcome(Retry.none(p2({} as never))),
         AnalyzeOrgPolicies: probeOutcome(Retry.none(p3({} as never))),
         AnalyzeOrgPolicyGovernedAssets: probeOutcome(Retry.none(p4({} as never))),
@@ -48,15 +50,30 @@ export default class CloudAssetGeneratedHost extends GCP.Function<CloudAssetGene
         BatchGetAssetsHistory: probeOutcome(Retry.none(p7({} as never))),
         DeleteFeed: probeOutcome(Retry.none(p8({ feed: "alchemy-missing" } as never))),
         DeleteSavedQuery: probeOutcome(Retry.none(p9({ savedQuery: "alchemy-missing" } as never))),
-        ExportAssets: probeOutcome(Retry.none(p10({} as never))),
+        ExportAssets: probeOutcome(
+          Retry.none(p10({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetFeed: probeOutcome(Retry.none(p11({ feed: "alchemy-missing" } as never))),
         GetSavedQuery: probeOutcome(Retry.none(p12({ savedQuery: "alchemy-missing" } as never))),
         ListAssets: probeOutcome(Retry.none(p13({} as never))),
         ListFeeds: probeOutcome(Retry.none(p14({} as never))),
         ListSavedQueries: probeOutcome(Retry.none(p15({} as never))),
-        PatchFeed: probeOutcome(Retry.none(p16({ feed: "alchemy-missing" } as never))),
-        PatchSavedQuery: probeOutcome(Retry.none(p17({ savedQuery: "alchemy-missing" } as never))),
-        QueryAssets: probeOutcome(Retry.none(p18({} as never))),
+        PatchFeed: probeOutcome(
+          Retry.none(
+            p16({ feed: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        PatchSavedQuery: probeOutcome(
+          Retry.none(
+            p17({
+              savedQuery: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        QueryAssets: probeOutcome(
+          Retry.none(p18({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SearchAllIamPolicies: probeOutcome(Retry.none(p19({} as never))),
         SearchAllResources: probeOutcome(Retry.none(p20({} as never))),
       }),

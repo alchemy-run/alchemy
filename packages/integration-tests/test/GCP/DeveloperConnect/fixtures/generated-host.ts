@@ -46,7 +46,9 @@ export default class DeveloperConnectGeneratedHost extends GCP.Function<Develope
         FetchAccountConnectorUserRepositories: probeOutcome(Retry.none(p2({} as never))),
         FetchConnectionGitHubInstallations: probeOutcome(Retry.none(p3({} as never))),
         FetchConnectionLinkableGitRepositories: probeOutcome(Retry.none(p4({} as never))),
-        FetchUserAccessToken: probeOutcome(Retry.none(p5({} as never))),
+        FetchUserAccessToken: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         FetchUserSelf: probeOutcome(Retry.none(p6({} as never))),
         FinishUserOAuthFlow: probeOutcome(Retry.none(p7({} as never))),
         GetAccountConnector: probeOutcome(Retry.none(p8({} as never))),
@@ -62,7 +64,9 @@ export default class DeveloperConnectGeneratedHost extends GCP.Function<Develope
         ListInsightsConfigDeploymentEvents: probeOutcome(Retry.none(p16({} as never))),
         ListInsightsConfigs: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
         ProcessConnectionGitHubEnterpriseWebhook: probeOutcome(
-          Retry.none(p18({ location: "us-central1" } as never)),
+          Retry.none(
+            p18({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         StartUserOAuthFlow: probeOutcome(Retry.none(p19({} as never))),
       }),

@@ -25,7 +25,13 @@ export default class FirebaseAppHostingGeneratedHost extends GCP.Function<Fireba
         ),
         ListBackends: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
         PatchBackendTraffic: probeOutcome(
-          Retry.none(p2({ backend: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p2({
+              backend: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

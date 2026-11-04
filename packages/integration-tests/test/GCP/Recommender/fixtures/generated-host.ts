@@ -46,6 +46,7 @@ export default class RecommenderGeneratedHost extends GCP.Function<RecommenderGe
               recommender: "alchemy-missing",
               recommendation: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -55,6 +56,7 @@ export default class RecommenderGeneratedHost extends GCP.Function<RecommenderGe
               recommender: "alchemy-missing",
               recommendation: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -64,6 +66,7 @@ export default class RecommenderGeneratedHost extends GCP.Function<RecommenderGe
               recommender: "alchemy-missing",
               recommendation: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -73,11 +76,18 @@ export default class RecommenderGeneratedHost extends GCP.Function<RecommenderGe
               recommender: "alchemy-missing",
               recommendation: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         UpdateRecommenderConfig: probeOutcome(
-          Retry.none(p7({ recommender: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p7({
+              recommender: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

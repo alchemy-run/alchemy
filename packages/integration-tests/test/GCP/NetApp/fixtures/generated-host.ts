@@ -64,11 +64,21 @@ export default class NetAppGeneratedHost extends GCP.Function<NetAppGeneratedHos
     const p34 = yield* GCP.NetApp.VerifyKmsConfig(ProbeKmsConfig);
     return {
       fetch: serveProbes({
-        EncryptKmsConfig: probeOutcome(Retry.none(p0({} as never))),
+        EncryptKmsConfig: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ExecuteOntapDelete: probeOutcome(Retry.none(p1({ ontap: "alchemy-missing" } as never))),
         ExecuteOntapGet: probeOutcome(Retry.none(p2({ ontap: "alchemy-missing" } as never))),
-        ExecuteOntapPatch: probeOutcome(Retry.none(p3({ ontap: "alchemy-missing" } as never))),
-        ExecuteOntapPost: probeOutcome(Retry.none(p4({ ontap: "alchemy-missing" } as never))),
+        ExecuteOntapPatch: probeOutcome(
+          Retry.none(
+            p3({ ontap: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        ExecuteOntapPost: probeOutcome(
+          Retry.none(
+            p4({ ontap: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         GetActiveDirectory: probeOutcome(Retry.none(p5({} as never))),
         GetBackup: probeOutcome(Retry.none(p6({} as never))),
         GetBackupPolicy: probeOutcome(Retry.none(p7({} as never))),
@@ -97,12 +107,24 @@ export default class NetAppGeneratedHost extends GCP.Function<NetAppGeneratedHos
         RestoreVolume: probeOutcome(
           Retry.none(p28({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        RevertVolume: probeOutcome(Retry.none(p29({} as never))),
-        StartVolumeSplit: probeOutcome(Retry.none(p30({} as never))),
-        SwitchStoragePool: probeOutcome(Retry.none(p31({} as never))),
-        UpdateStoragePoolBackupConfig: probeOutcome(Retry.none(p32({} as never))),
-        ValidateStoragePoolDirectoryService: probeOutcome(Retry.none(p33({} as never))),
-        VerifyKmsConfig: probeOutcome(Retry.none(p34({} as never))),
+        RevertVolume: probeOutcome(
+          Retry.none(p29({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StartVolumeSplit: probeOutcome(
+          Retry.none(p30({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SwitchStoragePool: probeOutcome(
+          Retry.none(p31({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateStoragePoolBackupConfig: probeOutcome(
+          Retry.none(p32({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ValidateStoragePoolDirectoryService: probeOutcome(
+          Retry.none(p33({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        VerifyKmsConfig: probeOutcome(
+          Retry.none(p34({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

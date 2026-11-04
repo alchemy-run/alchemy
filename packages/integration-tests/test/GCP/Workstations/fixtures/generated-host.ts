@@ -29,7 +29,9 @@ export default class WorkstationsGeneratedHost extends GCP.Function<Workstations
         ListWorkstationConfigUsable: probeOutcome(Retry.none(p2({} as never))),
         ListWorkstationConfigWorkstations: probeOutcome(Retry.none(p3({} as never))),
         ListWorkstationUsable: probeOutcome(Retry.none(p4({} as never))),
-        SuspendWorkstation: probeOutcome(Retry.none(p5({} as never))),
+        SuspendWorkstation: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

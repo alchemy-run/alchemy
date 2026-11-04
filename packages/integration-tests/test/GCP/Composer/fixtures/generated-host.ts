@@ -31,19 +31,33 @@ export default class ComposerGeneratedHost extends GCP.Function<ComposerGenerate
     const p12 = yield* GCP.Composer.StopEnvironmentAirflowCommand(Airflow);
     return {
       fetch: serveProbes({
-        CheckEnvironmentUpgrade: probeOutcome(Retry.none(p0({} as never))),
-        DatabaseEnvironmentFailover: probeOutcome(Retry.none(p1({} as never))),
+        CheckEnvironmentUpgrade: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DatabaseEnvironmentFailover: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         FetchEnvironmentDatabaseProperties: probeOutcome(Retry.none(p2({} as never))),
         ListEnvironments: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
         ListEnvironmentUserWorkloadsConfigMaps: probeOutcome(Retry.none(p4({} as never))),
         ListEnvironmentUserWorkloadsSecrets: probeOutcome(Retry.none(p5({} as never))),
         ListEnvironmentWorkloads: probeOutcome(Retry.none(p6({} as never))),
         ListImageVersions: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
-        LoadEnvironmentSnapshot: probeOutcome(Retry.none(p8({} as never))),
-        PollEnvironmentAirflowCommand: probeOutcome(Retry.none(p9({} as never))),
-        RestartEnvironmentWebServer: probeOutcome(Retry.none(p10({} as never))),
-        SaveEnvironmentSnapshot: probeOutcome(Retry.none(p11({} as never))),
-        StopEnvironmentAirflowCommand: probeOutcome(Retry.none(p12({} as never))),
+        LoadEnvironmentSnapshot: probeOutcome(
+          Retry.none(p8({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PollEnvironmentAirflowCommand: probeOutcome(
+          Retry.none(p9({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RestartEnvironmentWebServer: probeOutcome(
+          Retry.none(p10({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SaveEnvironmentSnapshot: probeOutcome(
+          Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StopEnvironmentAirflowCommand: probeOutcome(
+          Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

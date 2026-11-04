@@ -32,9 +32,15 @@ export default class AuditManagerGeneratedHost extends GCP.Function<AuditManager
             p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        GenerateAuditReport: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        GenerateAuditReport: probeOutcome(
+          Retry.none(
+            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         GenerateAuditScopeReport: probeOutcome(
-          Retry.none(p2({ location: "us-central1" } as never)),
+          Retry.none(
+            p2({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         GetAuditReport: probeOutcome(
           Retry.none(p3({ auditReport: "alchemy-missing", location: "us-central1" } as never)),
@@ -53,7 +59,13 @@ export default class AuditManagerGeneratedHost extends GCP.Function<AuditManager
           Retry.none(p8({ standard: "alchemy-missing", location: "us-central1" } as never)),
         ),
         PatchAuditSchedule: probeOutcome(
-          Retry.none(p9({ auditSchedule: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p9({
+              auditSchedule: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

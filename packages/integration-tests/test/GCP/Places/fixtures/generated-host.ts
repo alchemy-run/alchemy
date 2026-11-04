@@ -20,9 +20,15 @@ export default class PlacesGeneratedHost extends GCP.Function<PlacesGeneratedHos
     const p2 = yield* GCP.Places.SearchPlaceText();
     return {
       fetch: serveProbes({
-        AutocompletePlace: probeOutcome(Retry.none(p0({} as never))),
-        SearchPlaceNearby: probeOutcome(Retry.none(p1({} as never))),
-        SearchPlaceText: probeOutcome(Retry.none(p2({} as never))),
+        AutocompletePlace: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SearchPlaceNearby: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SearchPlaceText: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

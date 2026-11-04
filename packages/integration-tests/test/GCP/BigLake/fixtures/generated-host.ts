@@ -31,7 +31,9 @@ export default class BigLakeGeneratedHost extends GCP.Function<BigLakeGeneratedH
         ListCatalogDatabases: probeOutcome(Retry.none(p3({} as never))),
         ListCatalogs: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
         ListDatabaseTables: probeOutcome(Retry.none(p5({} as never))),
-        RenameTable: probeOutcome(Retry.none(p6({} as never))),
+        RenameTable: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

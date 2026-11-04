@@ -29,9 +29,17 @@ export default class FirebaseAppDistributionGeneratedHost extends GCP.Function<F
     const p11 = yield* GCP.FirebaseAppDistribution.PatchTester();
     return {
       fetch: serveProbes({
-        BatchReleaseDelete: probeOutcome(Retry.none(p0({ app: "alchemy-missing" } as never))),
-        BatchTesterAdd: probeOutcome(Retry.none(p1({} as never))),
-        BatchTesterRemove: probeOutcome(Retry.none(p2({} as never))),
+        BatchReleaseDelete: probeOutcome(
+          Retry.none(
+            p0({ app: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        BatchTesterAdd: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        BatchTesterRemove: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         DeleteAppReleaseFeedbackReport: probeOutcome(
           Retry.none(
             p3({
@@ -42,7 +50,13 @@ export default class FirebaseAppDistributionGeneratedHost extends GCP.Function<F
           ),
         ),
         DistributeAppRelease: probeOutcome(
-          Retry.none(p4({ app: "alchemy-missing", release: "alchemy-missing" } as never)),
+          Retry.none(
+            p4({
+              app: "alchemy-missing",
+              release: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GetAppAabInfo: probeOutcome(Retry.none(p5({ app: "alchemy-missing" } as never))),
         GetAppRelease: probeOutcome(
@@ -62,9 +76,19 @@ export default class FirebaseAppDistributionGeneratedHost extends GCP.Function<F
         ),
         ListAppReleases: probeOutcome(Retry.none(p9({ app: "alchemy-missing" } as never))),
         PatchAppRelease: probeOutcome(
-          Retry.none(p10({ app: "alchemy-missing", release: "alchemy-missing" } as never)),
+          Retry.none(
+            p10({
+              app: "alchemy-missing",
+              release: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        PatchTester: probeOutcome(Retry.none(p11({ tester: "alchemy-missing" } as never))),
+        PatchTester: probeOutcome(
+          Retry.none(
+            p11({ tester: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

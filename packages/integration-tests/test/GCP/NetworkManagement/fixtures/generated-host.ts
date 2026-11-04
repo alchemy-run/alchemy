@@ -31,7 +31,9 @@ export default class NetworkManagementGeneratedHost extends GCP.Function<Network
         QueryOrgVpcFlowLogsConfigs: probeOutcome(
           Retry.none(p4({ location: "us-central1" } as never)),
         ),
-        RerunConnectivityTest: probeOutcome(Retry.none(p5({} as never))),
+        RerunConnectivityTest: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

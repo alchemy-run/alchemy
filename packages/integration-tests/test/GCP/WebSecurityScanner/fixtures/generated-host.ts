@@ -44,9 +44,13 @@ export default class WebSecurityScannerGeneratedHost extends GCP.Function<WebSec
           Retry.none(p6({ scanRun: "alchemy-missing" } as never)),
         ),
         ListScanConfigScanRuns: probeOutcome(Retry.none(p7({} as never))),
-        StartScanConfig: probeOutcome(Retry.none(p8({} as never))),
+        StartScanConfig: probeOutcome(
+          Retry.none(p8({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         StopScanConfigScanRun: probeOutcome(
-          Retry.none(p9({ scanRun: "alchemy-missing" } as never)),
+          Retry.none(
+            p9({ scanRun: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
       }),
     };

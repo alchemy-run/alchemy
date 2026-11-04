@@ -25,7 +25,13 @@ export default class StorageBatchOperationsGeneratedHost extends GCP.Function<St
     return {
       fetch: serveProbes({
         CancelJob: probeOutcome(
-          Retry.none(p0({ job: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p0({
+              job: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         CreateJob: probeOutcome(
           Retry.none(

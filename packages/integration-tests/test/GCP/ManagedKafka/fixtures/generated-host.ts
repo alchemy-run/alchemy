@@ -85,7 +85,12 @@ export default class ManagedKafkaGeneratedHost extends GCP.Function<ManagedKafka
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         CheckCompatibility: probeOutcome(
-          Retry.none(p1({ compatibility: "alchemy-missing" } as never)),
+          Retry.none(
+            p1({
+              compatibility: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         DeleteClusterConsumerGroup: probeOutcome(
           Retry.none(p2({ consumerGroup: "alchemy-missing" } as never)),
@@ -184,27 +189,60 @@ export default class ManagedKafkaGeneratedHost extends GCP.Function<ManagedKafka
           Retry.none(p43({} as never)),
         ),
         LookupSubjectVersion: probeOutcome(
-          Retry.none(p44({ subject: "alchemy-missing" } as never)),
+          Retry.none(
+            p44({ subject: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         PatchClusterConsumerGroup: probeOutcome(
-          Retry.none(p45({ consumerGroup: "alchemy-missing" } as never)),
+          Retry.none(
+            p45({
+              consumerGroup: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        PauseConnector: probeOutcome(Retry.none(p46({} as never))),
-        RemoveAclEntry: probeOutcome(Retry.none(p47({} as never))),
-        RestartConnector: probeOutcome(Retry.none(p48({} as never))),
-        ResumeConnector: probeOutcome(Retry.none(p49({} as never))),
-        StopConnector: probeOutcome(Retry.none(p50({} as never))),
+        PauseConnector: probeOutcome(
+          Retry.none(p46({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RemoveAclEntry: probeOutcome(
+          Retry.none(p47({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RestartConnector: probeOutcome(
+          Retry.none(p48({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ResumeConnector: probeOutcome(
+          Retry.none(p49({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StopConnector: probeOutcome(
+          Retry.none(p50({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         UpdateSchemaRegistryConfig: probeOutcome(
-          Retry.none(p51({ config: "alchemy-missing" } as never)),
+          Retry.none(
+            p51({ config: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         UpdateSchemaRegistryContextConfig: probeOutcome(
-          Retry.none(p52({ context: "alchemy-missing", config: "alchemy-missing" } as never)),
+          Retry.none(
+            p52({
+              context: "alchemy-missing",
+              config: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         UpdateSchemaRegistryContextMode: probeOutcome(
-          Retry.none(p53({ context: "alchemy-missing", mode: "alchemy-missing" } as never)),
+          Retry.none(
+            p53({
+              context: "alchemy-missing",
+              mode: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         UpdateSchemaRegistryMode: probeOutcome(
-          Retry.none(p54({ mode: "alchemy-missing" } as never)),
+          Retry.none(
+            p54({ mode: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
       }),
     };

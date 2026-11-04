@@ -54,7 +54,9 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
         CreateWebApp: probeOutcome(
           Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        FinalizeDefaultLocation: probeOutcome(Retry.none(p4({} as never))),
+        FinalizeDefaultLocation: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetAndroidAppConfig: probeOutcome(
           Retry.none(p5({ androidApp: "alchemy-missing" } as never)),
         ),
@@ -70,13 +72,37 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
         ListIosApps: probeOutcome(Retry.none(p15({} as never))),
         ListProjects: probeOutcome(Retry.none(p16({} as never))),
         ListWebApps: probeOutcome(Retry.none(p17({} as never))),
-        PatchIosApp: probeOutcome(Retry.none(p18({ iosApp: "alchemy-missing" } as never))),
-        PatchWebApp: probeOutcome(Retry.none(p19({ webApp: "alchemy-missing" } as never))),
-        RemoveIosApp: probeOutcome(Retry.none(p20({ iosApp: "alchemy-missing" } as never))),
-        RemoveWebApp: probeOutcome(Retry.none(p21({ webApp: "alchemy-missing" } as never))),
+        PatchIosApp: probeOutcome(
+          Retry.none(
+            p18({ iosApp: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        PatchWebApp: probeOutcome(
+          Retry.none(
+            p19({ webApp: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        RemoveIosApp: probeOutcome(
+          Retry.none(
+            p20({ iosApp: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        RemoveWebApp: probeOutcome(
+          Retry.none(
+            p21({ webApp: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         SearchProjectApps: probeOutcome(Retry.none(p22({} as never))),
-        UndeleteIosApp: probeOutcome(Retry.none(p23({ iosApp: "alchemy-missing" } as never))),
-        UndeleteWebApp: probeOutcome(Retry.none(p24({ webApp: "alchemy-missing" } as never))),
+        UndeleteIosApp: probeOutcome(
+          Retry.none(
+            p23({ iosApp: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        UndeleteWebApp: probeOutcome(
+          Retry.none(
+            p24({ webApp: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

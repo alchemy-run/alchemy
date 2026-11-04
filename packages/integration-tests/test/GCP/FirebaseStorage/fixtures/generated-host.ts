@@ -17,11 +17,10 @@ export default class FirebaseStorageGeneratedHost extends GCP.Function<FirebaseS
   Effect.gen(function* () {
     const p0 = yield* GCP.FirebaseStorage.AddBucketFirebase();
     const p1 = yield* GCP.FirebaseStorage.CreateDefaultBucket();
-    const p2 = yield* GCP.FirebaseStorage.DeleteProjectDefaultBucket();
-    const p3 = yield* GCP.FirebaseStorage.GetBucket();
-    const p4 = yield* GCP.FirebaseStorage.GetProjectDefaultBucket();
-    const p5 = yield* GCP.FirebaseStorage.ListBuckets();
-    const p6 = yield* GCP.FirebaseStorage.RemoveBucketFirebase();
+    const p2 = yield* GCP.FirebaseStorage.GetBucket();
+    const p3 = yield* GCP.FirebaseStorage.GetProjectDefaultBucket();
+    const p4 = yield* GCP.FirebaseStorage.ListBuckets();
+    const p5 = yield* GCP.FirebaseStorage.RemoveBucketFirebase();
     return {
       fetch: serveProbes({
         AddBucketFirebase: probeOutcome(
@@ -32,11 +31,14 @@ export default class FirebaseStorageGeneratedHost extends GCP.Function<FirebaseS
         CreateDefaultBucket: probeOutcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DeleteProjectDefaultBucket: probeOutcome(Retry.none(p2({} as never))),
-        GetBucket: probeOutcome(Retry.none(p3({ bucket: "alchemy-missing" } as never))),
-        GetProjectDefaultBucket: probeOutcome(Retry.none(p4({} as never))),
-        ListBuckets: probeOutcome(Retry.none(p5({} as never))),
-        RemoveBucketFirebase: probeOutcome(Retry.none(p6({ bucket: "alchemy-missing" } as never))),
+        GetBucket: probeOutcome(Retry.none(p2({ bucket: "alchemy-missing" } as never))),
+        GetProjectDefaultBucket: probeOutcome(Retry.none(p3({} as never))),
+        ListBuckets: probeOutcome(Retry.none(p4({} as never))),
+        RemoveBucketFirebase: probeOutcome(
+          Retry.none(
+            p5({ bucket: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(
@@ -45,7 +47,6 @@ export default class FirebaseStorageGeneratedHost extends GCP.Function<FirebaseS
         Layer.mergeAll(
           GCP.FirebaseStorage.AddBucketFirebaseHttp,
           GCP.FirebaseStorage.CreateDefaultBucketHttp,
-          GCP.FirebaseStorage.DeleteProjectDefaultBucketHttp,
           GCP.FirebaseStorage.GetBucketHttp,
           GCP.FirebaseStorage.GetProjectDefaultBucketHttp,
           GCP.FirebaseStorage.ListBucketsHttp,

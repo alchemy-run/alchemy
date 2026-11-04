@@ -51,9 +51,17 @@ export default class TranslateGeneratedHost extends GCP.Function<TranslateGenera
         DeleteDataset: probeOutcome(
           Retry.none(p2({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DetectProjectLanguage: probeOutcome(Retry.none(p3({} as never))),
+        DetectProjectLanguage: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ExportDatasetData: probeOutcome(
-          Retry.none(p4({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p4({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GetAdaptiveMtDatasetAdaptiveMtFile: probeOutcome(
           Retry.none(p5({ adaptiveMtFile: "alchemy-missing" } as never)),
@@ -88,7 +96,9 @@ export default class TranslateGeneratedHost extends GCP.Function<TranslateGenera
         ListGlossaries: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
         ListGlossaryEntries: probeOutcome(Retry.none(p18({} as never))),
         ListModels: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
-        RomanizeProjectText: probeOutcome(Retry.none(p20({} as never))),
+        RomanizeProjectText: probeOutcome(
+          Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

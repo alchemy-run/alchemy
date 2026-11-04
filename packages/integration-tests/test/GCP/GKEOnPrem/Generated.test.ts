@@ -207,29 +207,17 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "QueryBareMetalAdminClusterVersionConfig (gkeonprem.projects.locations.bareMetalAdminClusters.queryVersionConfig)",
-        () => probe("QueryBareMetalAdminClusterVersionConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:gkeonprem", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "QueryBareMetalAdminClusterVersionConfig (gkeonprem.projects.locations.bareMetalAdminClusters.queryVersionConfig): a POST on the project itself: a probe would change the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "QueryBareMetalClusterVersionConfig (gkeonprem.projects.locations.bareMetalClusters.queryVersionConfig)",
-        () => probe("QueryBareMetalClusterVersionConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:gkeonprem", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "QueryBareMetalClusterVersionConfig (gkeonprem.projects.locations.bareMetalClusters.queryVersionConfig): a POST on the project itself: a probe would change the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "QueryVmwareClusterVersionConfig (gkeonprem.projects.locations.vmwareClusters.queryVersionConfig)",
-        () => probe("QueryVmwareClusterVersionConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:gkeonprem", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "QueryVmwareClusterVersionConfig (gkeonprem.projects.locations.vmwareClusters.queryVersionConfig): a POST on the project itself: a probe would change the testing project",
+        () => Effect.void,
       );
       test.provider(
         "UnenrollBareMetalAdminCluster (gkeonprem.projects.locations.bareMetalAdminClusters.unenroll)",

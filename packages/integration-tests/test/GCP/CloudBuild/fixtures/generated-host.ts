@@ -21,7 +21,9 @@ export default class CloudBuildGeneratedHost extends GCP.Function<CloudBuildGene
       fetch: serveProbes({
         ListConnections: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
         ProcessConnectionWebhook: probeOutcome(
-          Retry.none(p1({ location: "us-central1" } as never)),
+          Retry.none(
+            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
       }),
     };

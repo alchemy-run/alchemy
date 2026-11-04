@@ -49,10 +49,22 @@ export default class AnalyticsHubGeneratedHost extends GCP.Function<AnalyticsHub
         ListListingSubscriptions: probeOutcome(Retry.none(p9({} as never))),
         ListSubscriptions: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
         RefreshSubscription: probeOutcome(
-          Retry.none(p11({ subscription: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p11({
+              subscription: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         RevokeSubscription: probeOutcome(
-          Retry.none(p12({ subscription: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p12({
+              subscription: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         SubscribeDataExchange: probeOutcome(
           Retry.none(
@@ -64,7 +76,9 @@ export default class AnalyticsHubGeneratedHost extends GCP.Function<AnalyticsHub
             } as never),
           ),
         ),
-        SubscribeListing: probeOutcome(Retry.none(p14({} as never))),
+        SubscribeListing: probeOutcome(
+          Retry.none(p14({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

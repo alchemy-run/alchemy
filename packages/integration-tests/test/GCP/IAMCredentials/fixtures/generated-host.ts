@@ -22,16 +22,36 @@ export default class IAMCredentialsGeneratedHost extends GCP.Function<IAMCredent
     return {
       fetch: serveProbes({
         GenerateServiceAccountAccessToken: probeOutcome(
-          Retry.none(p0({ serviceAccount: "alchemy-missing" } as never)),
+          Retry.none(
+            p0({
+              serviceAccount: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GenerateServiceAccountIdToken: probeOutcome(
-          Retry.none(p1({ serviceAccount: "alchemy-missing" } as never)),
+          Retry.none(
+            p1({
+              serviceAccount: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         SignServiceAccountBlob: probeOutcome(
-          Retry.none(p2({ serviceAccount: "alchemy-missing" } as never)),
+          Retry.none(
+            p2({
+              serviceAccount: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         SignServiceAccountJwt: probeOutcome(
-          Retry.none(p3({ serviceAccount: "alchemy-missing" } as never)),
+          Retry.none(
+            p3({
+              serviceAccount: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

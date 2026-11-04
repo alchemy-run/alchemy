@@ -25,10 +25,18 @@ export default class VisionGeneratedHost extends GCP.Function<VisionGeneratedHos
     const p7 = yield* GCP.Vision.PurgeProduct();
     return {
       fetch: serveProbes({
-        AnnotateFile: probeOutcome(Retry.none(p0({} as never))),
-        AnnotateImage: probeOutcome(Retry.none(p1({} as never))),
-        AsyncFileBatchAnnotate: probeOutcome(Retry.none(p2({} as never))),
-        AsyncImageBatchAnnotate: probeOutcome(Retry.none(p3({} as never))),
+        AnnotateFile: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AnnotateImage: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AsyncFileBatchAnnotate: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AsyncImageBatchAnnotate: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ImportProductSet: probeOutcome(
           Retry.none(
             p4({ location: "us-west1", body: { alchemyProbe: "alchemy-missing" } } as never),
@@ -36,7 +44,11 @@ export default class VisionGeneratedHost extends GCP.Function<VisionGeneratedHos
         ),
         ListProducts: probeOutcome(Retry.none(p5({ location: "us-west1" } as never))),
         ListProductSets: probeOutcome(Retry.none(p6({ location: "us-west1" } as never))),
-        PurgeProduct: probeOutcome(Retry.none(p7({ location: "us-west1" } as never))),
+        PurgeProduct: probeOutcome(
+          Retry.none(
+            p7({ location: "us-west1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

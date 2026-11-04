@@ -77,23 +77,61 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
     const p50 = yield* GCP.ContactCenterInsights.UploadConversation();
     return {
       fetch: serveProbes({
-        "AppealAssessment@ConversationsAssessment": probeOutcome(Retry.none(p0({} as never))),
-        BulkConversationAnalyze: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        "AppealAssessment@ConversationsAssessment": probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        BulkConversationAnalyze: probeOutcome(
+          Retry.none(
+            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         BulkConversationDelete: probeOutcome(
-          Retry.none(p2({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p2({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         BulkDatasetDeleteFeedbackLabels: probeOutcome(
-          Retry.none(p3({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p3({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         BulkDatasetDownloadFeedbackLabels: probeOutcome(
-          Retry.none(p4({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p4({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         BulkDatasetUploadFeedbackLabels: probeOutcome(
-          Retry.none(p5({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p5({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        BulkSegmentAnalyze: probeOutcome(Retry.none(p6({} as never))),
+        BulkSegmentAnalyze: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CalculateConversationStats: probeOutcome(
-          Retry.none(p7({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p7({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         "CreateAssessmentNote@ConversationsAssessment": probeOutcome(
           Retry.none(p8({ body: { alchemyProbe: "alchemy-missing" } } as never)),
@@ -119,9 +157,17 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
           ),
         ),
         ExportDatasetInsightsdata: probeOutcome(
-          Retry.none(p13({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p13({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        "FinalizeAssessment@ConversationsAssessment": probeOutcome(Retry.none(p14({} as never))),
+        "FinalizeAssessment@ConversationsAssessment": probeOutcome(
+          Retry.none(p14({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GenerateConversationSignedAudio: probeOutcome(
           Retry.none(
             p15({
@@ -155,12 +201,24 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
             p25({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        IngestConversation: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
+        IngestConversation: probeOutcome(
+          Retry.none(
+            p26({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         IngestDatasetConversation: probeOutcome(
-          Retry.none(p27({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p27({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         InitializeEncryptionSpec: probeOutcome(
-          Retry.none(p28({ location: "us-central1" } as never)),
+          Retry.none(
+            p28({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         ListAnalysisRules: probeOutcome(Retry.none(p29({ location: "us-central1" } as never))),
         "ListAssessmentNotes@ConversationsAssessment": probeOutcome(Retry.none(p30({} as never))),
@@ -191,17 +249,41 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
         ListQaScorecards: probeOutcome(Retry.none(p43({ location: "us-central1" } as never))),
         ListViews: probeOutcome(Retry.none(p44({ location: "us-central1" } as never))),
         "PatchAssessmentNote@ConversationsAssessment": probeOutcome(
-          Retry.none(p45({ note: "alchemy-missing" } as never)),
+          Retry.none(
+            p45({ note: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         PatchDataset: probeOutcome(
-          Retry.none(p46({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p46({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        "PublishAssessment@ConversationsAssessment": probeOutcome(Retry.none(p47({} as never))),
-        SampleConversation: probeOutcome(Retry.none(p48({ location: "us-central1" } as never))),
+        "PublishAssessment@ConversationsAssessment": probeOutcome(
+          Retry.none(p47({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SampleConversation: probeOutcome(
+          Retry.none(
+            p48({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         SampleDatasetConversation: probeOutcome(
-          Retry.none(p49({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p49({
+              dataset: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        UploadConversation: probeOutcome(Retry.none(p50({ location: "us-central1" } as never))),
+        UploadConversation: probeOutcome(
+          Retry.none(
+            p50({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

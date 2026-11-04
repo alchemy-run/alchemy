@@ -22,11 +22,21 @@ export default class LanguageGeneratedHost extends GCP.Function<LanguageGenerate
     const p4 = yield* GCP.Language.ModerateDocumentText();
     return {
       fetch: serveProbes({
-        AnalyzeDocumentEntities: probeOutcome(Retry.none(p0({} as never))),
-        AnalyzeDocumentSentiment: probeOutcome(Retry.none(p1({} as never))),
-        AnnotateDocumentText: probeOutcome(Retry.none(p2({} as never))),
-        ClassifyDocumentText: probeOutcome(Retry.none(p3({} as never))),
-        ModerateDocumentText: probeOutcome(Retry.none(p4({} as never))),
+        AnalyzeDocumentEntities: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AnalyzeDocumentSentiment: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AnnotateDocumentText: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ClassifyDocumentText: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ModerateDocumentText: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

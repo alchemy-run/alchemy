@@ -53,9 +53,15 @@ export default class DataMigrationGeneratedHost extends GCP.Function<DataMigrati
       yield* GCP.DataMigration.SetConversionWorkspaceDraftEntityDdl(ProbeConversionWorkspace);
     return {
       fetch: serveProbes({
-        ApplyConversionWorkspace: probeOutcome(Retry.none(p0({} as never))),
-        CommitConversionWorkspace: probeOutcome(Retry.none(p1({} as never))),
-        ConvertConversionWorkspace: probeOutcome(Retry.none(p2({} as never))),
+        ApplyConversionWorkspace: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CommitConversionWorkspace: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ConvertConversionWorkspace: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         DescribeConversionWorkspaceDatabaseEntities: probeOutcome(Retry.none(p3({} as never))),
         DescribeConversionWorkspaceRevisions: probeOutcome(Retry.none(p4({} as never))),
         FetchConversionWorkspaceEntitiesStatusView: probeOutcome(Retry.none(p5({} as never))),
@@ -74,10 +80,16 @@ export default class DataMigrationGeneratedHost extends GCP.Function<DataMigrati
         ),
         ListMigrationJobs: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
         ListPrivateConnections: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
-        RollbackConversionWorkspace: probeOutcome(Retry.none(p17({} as never))),
+        RollbackConversionWorkspace: probeOutcome(
+          Retry.none(p17({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         SearchConversionWorkspaceBackgroundJobs: probeOutcome(Retry.none(p18({} as never))),
-        SeedConversionWorkspace: probeOutcome(Retry.none(p19({} as never))),
-        SetConversionWorkspaceDraftEntityDdl: probeOutcome(Retry.none(p20({} as never))),
+        SeedConversionWorkspace: probeOutcome(
+          Retry.none(p19({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetConversionWorkspaceDraftEntityDdl: probeOutcome(
+          Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

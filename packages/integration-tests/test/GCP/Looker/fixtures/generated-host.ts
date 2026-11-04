@@ -37,7 +37,13 @@ export default class LookerGeneratedHost extends GCP.Function<LookerGeneratedHos
           Retry.none(p1({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ExportInstance: probeOutcome(
-          Retry.none(p2({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p2({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GetInstance: probeOutcome(
           Retry.none(p3({ instance: "alchemy-missing", location: "us-central1" } as never)),
@@ -56,10 +62,22 @@ export default class LookerGeneratedHost extends GCP.Function<LookerGeneratedHos
         ),
         ListInstances: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
         PatchInstance: probeOutcome(
-          Retry.none(p7({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p7({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         RestartInstance: probeOutcome(
-          Retry.none(p8({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p8({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         RestoreInstance: probeOutcome(
           Retry.none(
@@ -71,7 +89,13 @@ export default class LookerGeneratedHost extends GCP.Function<LookerGeneratedHos
           ),
         ),
         UndeleteInstance: probeOutcome(
-          Retry.none(p10({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p10({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

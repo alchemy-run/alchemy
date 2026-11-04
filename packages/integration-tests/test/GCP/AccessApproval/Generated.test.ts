@@ -84,13 +84,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "DeleteProjectAccessApprovalSettings (accessapproval.projects.deleteAccessApprovalSettings)",
-        () => probe("DeleteProjectAccessApprovalSettings", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:accessapproval", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteProjectAccessApprovalSettings (accessapproval.projects.deleteAccessApprovalSettings): a DELETE on the project itself: a probe would change the testing project",
+        () => Effect.void,
       );
       test.provider(
         "DismissApprovalRequest (accessapproval.projects.approvalRequests.dismiss)",

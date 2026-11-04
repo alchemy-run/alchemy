@@ -29,11 +29,8 @@ export default class GKEOnPremGeneratedHost extends GCP.Function<GKEOnPremGenera
     const p11 = yield* GCP.GKEOnPrem.ListVmwareClusters();
     const p12 = yield* GCP.GKEOnPrem.PatchBareMetalAdminCluster();
     const p13 = yield* GCP.GKEOnPrem.PatchVmwareAdminCluster();
-    const p14 = yield* GCP.GKEOnPrem.QueryBareMetalAdminClusterVersionConfig();
-    const p15 = yield* GCP.GKEOnPrem.QueryBareMetalClusterVersionConfig();
-    const p16 = yield* GCP.GKEOnPrem.QueryVmwareClusterVersionConfig();
-    const p17 = yield* GCP.GKEOnPrem.UnenrollBareMetalAdminCluster();
-    const p18 = yield* GCP.GKEOnPrem.UnenrollVmwareAdminCluster();
+    const p14 = yield* GCP.GKEOnPrem.UnenrollBareMetalAdminCluster();
+    const p15 = yield* GCP.GKEOnPrem.UnenrollVmwareAdminCluster();
     return {
       fetch: serveProbes({
         CreateBareMetalAdminCluster: probeOutcome(
@@ -47,13 +44,25 @@ export default class GKEOnPremGeneratedHost extends GCP.Function<GKEOnPremGenera
           ),
         ),
         EnrollBareMetalAdminCluster: probeOutcome(
-          Retry.none(p2({ location: "us-central1" } as never)),
+          Retry.none(
+            p2({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        EnrollBareMetalCluster: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        EnrollBareMetalCluster: probeOutcome(
+          Retry.none(
+            p3({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         EnrollVmwareAdminCluster: probeOutcome(
-          Retry.none(p4({ location: "us-central1" } as never)),
+          Retry.none(
+            p4({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        EnrollVmwareCluster: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        EnrollVmwareCluster: probeOutcome(
+          Retry.none(
+            p5({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         GetBareMetalAdminCluster: probeOutcome(
           Retry.none(
             p6({ bareMetalAdminCluster: "alchemy-missing", location: "us-central1" } as never),
@@ -74,31 +83,30 @@ export default class GKEOnPremGeneratedHost extends GCP.Function<GKEOnPremGenera
         ListVmwareClusters: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
         PatchBareMetalAdminCluster: probeOutcome(
           Retry.none(
-            p12({ bareMetalAdminCluster: "alchemy-missing", location: "us-central1" } as never),
+            p12({
+              bareMetalAdminCluster: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
         PatchVmwareAdminCluster: probeOutcome(
           Retry.none(
-            p13({ vmwareAdminCluster: "alchemy-missing", location: "us-central1" } as never),
+            p13({
+              vmwareAdminCluster: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
-        ),
-        QueryBareMetalAdminClusterVersionConfig: probeOutcome(
-          Retry.none(p14({ location: "us-central1" } as never)),
-        ),
-        QueryBareMetalClusterVersionConfig: probeOutcome(
-          Retry.none(p15({ location: "us-central1" } as never)),
-        ),
-        QueryVmwareClusterVersionConfig: probeOutcome(
-          Retry.none(p16({ location: "us-central1" } as never)),
         ),
         UnenrollBareMetalAdminCluster: probeOutcome(
           Retry.none(
-            p17({ bareMetalAdminCluster: "alchemy-missing", location: "us-central1" } as never),
+            p14({ bareMetalAdminCluster: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
         UnenrollVmwareAdminCluster: probeOutcome(
           Retry.none(
-            p18({ vmwareAdminCluster: "alchemy-missing", location: "us-central1" } as never),
+            p15({ vmwareAdminCluster: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
       }),
@@ -121,9 +129,6 @@ export default class GKEOnPremGeneratedHost extends GCP.Function<GKEOnPremGenera
           GCP.GKEOnPrem.ListVmwareClustersHttp,
           GCP.GKEOnPrem.PatchBareMetalAdminClusterHttp,
           GCP.GKEOnPrem.PatchVmwareAdminClusterHttp,
-          GCP.GKEOnPrem.QueryBareMetalAdminClusterVersionConfigHttp,
-          GCP.GKEOnPrem.QueryBareMetalClusterVersionConfigHttp,
-          GCP.GKEOnPrem.QueryVmwareClusterVersionConfigHttp,
           GCP.GKEOnPrem.UnenrollBareMetalAdminClusterHttp,
           GCP.GKEOnPrem.UnenrollVmwareAdminClusterHttp,
         ),

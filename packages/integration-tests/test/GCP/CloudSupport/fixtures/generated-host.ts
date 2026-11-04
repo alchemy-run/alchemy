@@ -31,7 +31,11 @@ export default class CloudSupportGeneratedHost extends GCP.Function<CloudSupport
     const p13 = yield* GCP.CloudSupport.UploadMedia();
     return {
       fetch: serveProbes({
-        CloseCase: probeOutcome(Retry.none(p0({ case: "alchemy-missing" } as never))),
+        CloseCase: probeOutcome(
+          Retry.none(
+            p0({ case: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         CreateCase: probeOutcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
@@ -43,7 +47,11 @@ export default class CloudSupportGeneratedHost extends GCP.Function<CloudSupport
         DownloadMedia: probeOutcome(
           Retry.none(p3({ case: "alchemy-missing", attachment: "alchemy-missing" } as never)),
         ),
-        EscalateCase: probeOutcome(Retry.none(p4({ case: "alchemy-missing" } as never))),
+        EscalateCase: probeOutcome(
+          Retry.none(
+            p4({ case: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         GetCase: probeOutcome(Retry.none(p5({ case: "alchemy-missing" } as never))),
         GetCaseAttachment: probeOutcome(
           Retry.none(p6({ case: "alchemy-missing", attachment: "alchemy-missing" } as never)),
@@ -54,9 +62,17 @@ export default class CloudSupportGeneratedHost extends GCP.Function<CloudSupport
         ListCaseAttachments: probeOutcome(Retry.none(p8({ case: "alchemy-missing" } as never))),
         ListCaseComments: probeOutcome(Retry.none(p9({ case: "alchemy-missing" } as never))),
         ListCases: probeOutcome(Retry.none(p10({} as never))),
-        PatchCase: probeOutcome(Retry.none(p11({ case: "alchemy-missing" } as never))),
+        PatchCase: probeOutcome(
+          Retry.none(
+            p11({ case: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         SearchCase: probeOutcome(Retry.none(p12({} as never))),
-        UploadMedia: probeOutcome(Retry.none(p13({ case: "alchemy-missing" } as never))),
+        UploadMedia: probeOutcome(
+          Retry.none(
+            p13({ case: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

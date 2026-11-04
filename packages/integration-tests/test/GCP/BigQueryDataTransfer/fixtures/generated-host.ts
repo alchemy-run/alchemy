@@ -32,10 +32,17 @@ export default class BigQueryDataTransferGeneratedHost extends GCP.Function<BigQ
     return {
       fetch: serveProbes({
         CheckDataSourceValidCreds: probeOutcome(
-          Retry.none(p0({ dataSource: "alchemy-missing" } as never)),
+          Retry.none(
+            p0({
+              dataSource: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         DeleteTransferConfigRun: probeOutcome(Retry.none(p1({ run: "alchemy-missing" } as never))),
-        EnrollProjectDataSources: probeOutcome(Retry.none(p2({} as never))),
+        EnrollProjectDataSources: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetDataSource: probeOutcome(Retry.none(p3({ dataSource: "alchemy-missing" } as never))),
         GetTransferConfig: probeOutcome(Retry.none(p4({} as never))),
         GetTransferConfigRun: probeOutcome(Retry.none(p5({ run: "alchemy-missing" } as never))),
@@ -49,7 +56,9 @@ export default class BigQueryDataTransferGeneratedHost extends GCP.Function<BigQ
         ),
         ListTransferConfigs: probeOutcome(Retry.none(p10({} as never))),
         ListTransferConfigTransferResources: probeOutcome(Retry.none(p11({} as never))),
-        ScheduleTransferConfigRuns: probeOutcome(Retry.none(p12({} as never))),
+        ScheduleTransferConfigRuns: probeOutcome(
+          Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

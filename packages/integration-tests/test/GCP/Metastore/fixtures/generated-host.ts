@@ -40,17 +40,27 @@ export default class MetastoreGeneratedHost extends GCP.Function<MetastoreGenera
     const p21 = yield* GCP.Metastore.StartServiceMigration(ProbeService);
     return {
       fetch: serveProbes({
-        AlterServiceLocation: probeOutcome(Retry.none(p0({} as never))),
-        AlterServiceTableProperties: probeOutcome(Retry.none(p1({} as never))),
-        CancelServiceMigration: probeOutcome(Retry.none(p2({} as never))),
-        CompleteServiceMigration: probeOutcome(Retry.none(p3({} as never))),
+        AlterServiceLocation: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AlterServiceTableProperties: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CancelServiceMigration: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CompleteServiceMigration: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CreateServiceMetadataImport: probeOutcome(
           Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         DeleteServiceMigrationExecution: probeOutcome(
           Retry.none(p5({ migrationExecution: "alchemy-missing" } as never)),
         ),
-        ExportServiceMetadata: probeOutcome(Retry.none(p6({} as never))),
+        ExportServiceMetadata: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetBackup: probeOutcome(Retry.none(p7({} as never))),
         GetFederation: probeOutcome(Retry.none(p8({} as never))),
         GetService: probeOutcome(Retry.none(p9({} as never))),
@@ -65,15 +75,26 @@ export default class MetastoreGeneratedHost extends GCP.Function<MetastoreGenera
         ListServiceMetadataImports: probeOutcome(Retry.none(p14({} as never))),
         ListServiceMigrationExecutions: probeOutcome(Retry.none(p15({} as never))),
         ListServices: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
-        MoveServiceTableToDatabase: probeOutcome(Retry.none(p17({} as never))),
-        PatchServiceMetadataImport: probeOutcome(
-          Retry.none(p18({ metadataImport: "alchemy-missing" } as never)),
+        MoveServiceTableToDatabase: probeOutcome(
+          Retry.none(p17({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        QueryServiceMetadata: probeOutcome(Retry.none(p19({} as never))),
+        PatchServiceMetadataImport: probeOutcome(
+          Retry.none(
+            p18({
+              metadataImport: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        QueryServiceMetadata: probeOutcome(
+          Retry.none(p19({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RestoreService: probeOutcome(
           Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        StartServiceMigration: probeOutcome(Retry.none(p21({} as never))),
+        StartServiceMigration: probeOutcome(
+          Retry.none(p21({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

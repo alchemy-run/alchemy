@@ -31,17 +31,16 @@ export default class ToolResultsGeneratedHost extends GCP.Function<ToolResultsGe
     const p13 = yield* GCP.ToolResults.GetStep();
     const p14 = yield* GCP.ToolResults.GetStepPerfMetricsSummary();
     const p15 = yield* GCP.ToolResults.GetTestCase();
-    const p16 = yield* GCP.ToolResults.InitializeProjectSettings();
-    const p17 = yield* GCP.ToolResults.ListExecutionClusters();
-    const p18 = yield* GCP.ToolResults.ListExecutionEnvironments();
-    const p19 = yield* GCP.ToolResults.ListExecutionSteps();
-    const p20 = yield* GCP.ToolResults.ListHistories();
-    const p21 = yield* GCP.ToolResults.ListHistoryExecutions();
-    const p22 = yield* GCP.ToolResults.ListPerfSampleSeriesSamples();
-    const p23 = yield* GCP.ToolResults.ListStepPerfSampleSeries();
-    const p24 = yield* GCP.ToolResults.ListStepTestCases();
-    const p25 = yield* GCP.ToolResults.ListStepThumbnails();
-    const p26 = yield* GCP.ToolResults.PublishStepXunitXmlFiles();
+    const p16 = yield* GCP.ToolResults.ListExecutionClusters();
+    const p17 = yield* GCP.ToolResults.ListExecutionEnvironments();
+    const p18 = yield* GCP.ToolResults.ListExecutionSteps();
+    const p19 = yield* GCP.ToolResults.ListHistories();
+    const p20 = yield* GCP.ToolResults.ListHistoryExecutions();
+    const p21 = yield* GCP.ToolResults.ListPerfSampleSeriesSamples();
+    const p22 = yield* GCP.ToolResults.ListStepPerfSampleSeries();
+    const p23 = yield* GCP.ToolResults.ListStepTestCases();
+    const p24 = yield* GCP.ToolResults.ListStepThumbnails();
+    const p25 = yield* GCP.ToolResults.PublishStepXunitXmlFiles();
     return {
       fetch: serveProbes({
         AccessibilityStepClusters: probeOutcome(
@@ -60,6 +59,7 @@ export default class ToolResultsGeneratedHost extends GCP.Function<ToolResultsGe
               executionId: "alchemy-missing",
               historyId: "alchemy-missing",
               stepId: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -164,29 +164,28 @@ export default class ToolResultsGeneratedHost extends GCP.Function<ToolResultsGe
             } as never),
           ),
         ),
-        InitializeProjectSettings: probeOutcome(Retry.none(p16({} as never))),
         ListExecutionClusters: probeOutcome(
           Retry.none(
-            p17({ historyId: "alchemy-missing", executionId: "alchemy-missing" } as never),
+            p16({ historyId: "alchemy-missing", executionId: "alchemy-missing" } as never),
           ),
         ),
         ListExecutionEnvironments: probeOutcome(
           Retry.none(
-            p18({ historyId: "alchemy-missing", executionId: "alchemy-missing" } as never),
+            p17({ historyId: "alchemy-missing", executionId: "alchemy-missing" } as never),
           ),
         ),
         ListExecutionSteps: probeOutcome(
           Retry.none(
-            p19({ historyId: "alchemy-missing", executionId: "alchemy-missing" } as never),
+            p18({ historyId: "alchemy-missing", executionId: "alchemy-missing" } as never),
           ),
         ),
-        ListHistories: probeOutcome(Retry.none(p20({} as never))),
+        ListHistories: probeOutcome(Retry.none(p19({} as never))),
         ListHistoryExecutions: probeOutcome(
-          Retry.none(p21({ historyId: "alchemy-missing" } as never)),
+          Retry.none(p20({ historyId: "alchemy-missing" } as never)),
         ),
         ListPerfSampleSeriesSamples: probeOutcome(
           Retry.none(
-            p22({
+            p21({
               stepId: "alchemy-missing",
               executionId: "alchemy-missing",
               historyId: "alchemy-missing",
@@ -196,7 +195,7 @@ export default class ToolResultsGeneratedHost extends GCP.Function<ToolResultsGe
         ),
         ListStepPerfSampleSeries: probeOutcome(
           Retry.none(
-            p23({
+            p22({
               executionId: "alchemy-missing",
               stepId: "alchemy-missing",
               historyId: "alchemy-missing",
@@ -205,7 +204,7 @@ export default class ToolResultsGeneratedHost extends GCP.Function<ToolResultsGe
         ),
         ListStepTestCases: probeOutcome(
           Retry.none(
-            p24({
+            p23({
               historyId: "alchemy-missing",
               executionId: "alchemy-missing",
               stepId: "alchemy-missing",
@@ -214,7 +213,7 @@ export default class ToolResultsGeneratedHost extends GCP.Function<ToolResultsGe
         ),
         ListStepThumbnails: probeOutcome(
           Retry.none(
-            p25({
+            p24({
               executionId: "alchemy-missing",
               stepId: "alchemy-missing",
               historyId: "alchemy-missing",
@@ -223,10 +222,11 @@ export default class ToolResultsGeneratedHost extends GCP.Function<ToolResultsGe
         ),
         PublishStepXunitXmlFiles: probeOutcome(
           Retry.none(
-            p26({
+            p25({
               executionId: "alchemy-missing",
               historyId: "alchemy-missing",
               stepId: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -252,7 +252,6 @@ export default class ToolResultsGeneratedHost extends GCP.Function<ToolResultsGe
           GCP.ToolResults.GetStepHttp,
           GCP.ToolResults.GetStepPerfMetricsSummaryHttp,
           GCP.ToolResults.GetTestCaseHttp,
-          GCP.ToolResults.InitializeProjectSettingsHttp,
           GCP.ToolResults.ListExecutionClustersHttp,
           GCP.ToolResults.ListExecutionEnvironmentsHttp,
           GCP.ToolResults.ListExecutionStepsHttp,

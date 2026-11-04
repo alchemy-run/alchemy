@@ -73,8 +73,12 @@ export default class NetworkConnectivityGeneratedHost extends GCP.Function<Netwo
     const p42 = yield* GCP.NetworkConnectivity.RejectHubSpokeUpdate(ProbeHub);
     return {
       fetch: serveProbes({
-        AcceptHubSpoke: probeOutcome(Retry.none(p0({} as never))),
-        AcceptHubSpokeUpdate: probeOutcome(Retry.none(p1({} as never))),
+        AcceptHubSpoke: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        AcceptHubSpokeUpdate: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         CreatePscAuthorizationPolicy: probeOutcome(
           Retry.none(
             p2({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
@@ -154,13 +158,27 @@ export default class NetworkConnectivityGeneratedHost extends GCP.Function<Netwo
         ListSpokeGatewayAdvertisedRoutes: probeOutcome(Retry.none(p35({} as never))),
         ListSpokes: probeOutcome(Retry.none(p36({ location: "us-central1" } as never))),
         ListTransports: probeOutcome(Retry.none(p37({ location: "us-central1" } as never))),
-        PatchHubGroup: probeOutcome(Retry.none(p38({ group: "alchemy-missing" } as never))),
+        PatchHubGroup: probeOutcome(
+          Retry.none(
+            p38({ group: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         PatchServiceClass: probeOutcome(
-          Retry.none(p39({ serviceClass: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p39({
+              serviceClass: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         QueryHubStatus: probeOutcome(Retry.none(p40({} as never))),
-        RejectHubSpoke: probeOutcome(Retry.none(p41({} as never))),
-        RejectHubSpokeUpdate: probeOutcome(Retry.none(p42({} as never))),
+        RejectHubSpoke: probeOutcome(
+          Retry.none(p41({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RejectHubSpokeUpdate: probeOutcome(
+          Retry.none(p42({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

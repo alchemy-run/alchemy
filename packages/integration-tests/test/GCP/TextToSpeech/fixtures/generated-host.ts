@@ -20,7 +20,9 @@ export default class TextToSpeechGeneratedHost extends GCP.Function<TextToSpeech
     return {
       fetch: serveProbes({
         ListVoices: probeOutcome(Retry.none(p0({} as never))),
-        SynthesizeText: probeOutcome(Retry.none(p1({} as never))),
+        SynthesizeText: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

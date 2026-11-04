@@ -27,7 +27,12 @@ export default class TestLabGeneratedHost extends GCP.Function<TestLabGeneratedH
     return {
       fetch: serveProbes({
         CancelDeviceSession: probeOutcome(
-          Retry.none(p0({ deviceSession: "alchemy-missing" } as never)),
+          Retry.none(
+            p0({
+              deviceSession: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         CancelTestMatrice: probeOutcome(
           Retry.none(p1({ testMatrixId: "alchemy-missing" } as never)),
@@ -38,14 +43,21 @@ export default class TestLabGeneratedHost extends GCP.Function<TestLabGeneratedH
         CreateTestMatrice: probeOutcome(
           Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        GetApplicationDetailServiceApkDetails: probeOutcome(Retry.none(p4({} as never))),
+        GetApplicationDetailServiceApkDetails: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetDeviceSession: probeOutcome(
           Retry.none(p5({ deviceSession: "alchemy-missing" } as never)),
         ),
         GetTestMatrice: probeOutcome(Retry.none(p6({ testMatrixId: "alchemy-missing" } as never))),
         ListDeviceSessions: probeOutcome(Retry.none(p7({} as never))),
         PatchDeviceSession: probeOutcome(
-          Retry.none(p8({ deviceSession: "alchemy-missing" } as never)),
+          Retry.none(
+            p8({
+              deviceSession: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

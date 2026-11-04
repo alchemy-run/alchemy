@@ -37,13 +37,31 @@ export default class RunGeneratedHost extends GCP.Function<RunGeneratedHost>()(
         ListServices: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
         ListWorkerPools: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
         PatchInstance: probeOutcome(
-          Retry.none(p6({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p6({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         StartInstance: probeOutcome(
-          Retry.none(p7({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p7({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         StopInstance: probeOutcome(
-          Retry.none(p8({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p8({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

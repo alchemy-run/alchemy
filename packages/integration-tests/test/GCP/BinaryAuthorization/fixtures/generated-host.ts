@@ -27,7 +27,9 @@ export default class BinaryAuthorizationGeneratedHost extends GCP.Function<Binar
         ListPlatformPolicies: probeOutcome(
           Retry.none(p2({ platform: "alchemy-missing" } as never)),
         ),
-        ReplacePlatformPolicy: probeOutcome(Retry.none(p3({} as never))),
+        ReplacePlatformPolicy: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

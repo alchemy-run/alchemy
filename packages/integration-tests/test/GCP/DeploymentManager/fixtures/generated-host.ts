@@ -27,7 +27,12 @@ export default class DeploymentManagerGeneratedHost extends GCP.Function<Deploym
     return {
       fetch: serveProbes({
         CancelDeploymentPreview: probeOutcome(
-          Retry.none(p0({ deployment: "alchemy-missing" } as never)),
+          Retry.none(
+            p0({
+              deployment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GetDeployment: probeOutcome(Retry.none(p1({ deployment: "alchemy-missing" } as never))),
         GetManifest: probeOutcome(
@@ -40,7 +45,14 @@ export default class DeploymentManagerGeneratedHost extends GCP.Function<Deploym
         ListManifests: probeOutcome(Retry.none(p5({ deployment: "alchemy-missing" } as never))),
         ListResources: probeOutcome(Retry.none(p6({ deployment: "alchemy-missing" } as never))),
         ListTypes: probeOutcome(Retry.none(p7({} as never))),
-        StopDeployment: probeOutcome(Retry.none(p8({ deployment: "alchemy-missing" } as never))),
+        StopDeployment: probeOutcome(
+          Retry.none(
+            p8({
+              deployment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

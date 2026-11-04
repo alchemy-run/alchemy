@@ -29,13 +29,21 @@ export default class FilestoreGeneratedHost extends GCP.Function<FilestoreGenera
         ListBackups: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
         ListInstances: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
         ListInstanceSnapshots: probeOutcome(Retry.none(p2({} as never))),
-        PauseInstanceReplica: probeOutcome(Retry.none(p3({} as never))),
-        PromoteInstanceReplica: probeOutcome(Retry.none(p4({} as never))),
+        PauseInstanceReplica: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        PromoteInstanceReplica: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RestoreInstance: probeOutcome(
           Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ResumeInstanceReplica: probeOutcome(Retry.none(p6({} as never))),
-        RevertInstance: probeOutcome(Retry.none(p7({} as never))),
+        ResumeInstanceReplica: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RevertInstance: probeOutcome(
+          Retry.none(p7({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

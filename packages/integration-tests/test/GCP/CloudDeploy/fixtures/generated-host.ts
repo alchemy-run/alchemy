@@ -52,19 +52,44 @@ export default class CloudDeployGeneratedHost extends GCP.Function<CloudDeployGe
     return {
       fetch: serveProbes({
         AbandonDeliveryPipelineRelease: probeOutcome(
-          Retry.none(p0({ release: "alchemy-missing" } as never)),
+          Retry.none(
+            p0({ release: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         AdvanceDeliveryPipelineReleaseRollout: probeOutcome(
-          Retry.none(p1({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+          Retry.none(
+            p1({
+              release: "alchemy-missing",
+              rollout: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ApproveDeliveryPipelineReleaseRollout: probeOutcome(
-          Retry.none(p2({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+          Retry.none(
+            p2({
+              release: "alchemy-missing",
+              rollout: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         CancelDeliveryPipelineAutomationRun: probeOutcome(
-          Retry.none(p3({ automationRun: "alchemy-missing" } as never)),
+          Retry.none(
+            p3({
+              automationRun: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         CancelDeliveryPipelineReleaseRollout: probeOutcome(
-          Retry.none(p4({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+          Retry.none(
+            p4({
+              release: "alchemy-missing",
+              rollout: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         CreateDeliveryPipelineRelease: probeOutcome(
           Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
@@ -97,7 +122,13 @@ export default class CloudDeployGeneratedHost extends GCP.Function<CloudDeployGe
         GetDeployPolicy: probeOutcome(Retry.none(p13({} as never))),
         GetTarget: probeOutcome(Retry.none(p14({} as never))),
         IgnoreRolloutJob: probeOutcome(
-          Retry.none(p15({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+          Retry.none(
+            p15({
+              release: "alchemy-missing",
+              rollout: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ListCustomTargetTypes: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
         ListDeliveryPipelineAutomationRuns: probeOutcome(Retry.none(p17({} as never))),
@@ -113,15 +144,24 @@ export default class CloudDeployGeneratedHost extends GCP.Function<CloudDeployGe
         ListDeployPolicies: probeOutcome(Retry.none(p23({ location: "us-central1" } as never))),
         ListTargets: probeOutcome(Retry.none(p24({ location: "us-central1" } as never))),
         RetryRolloutJob: probeOutcome(
-          Retry.none(p25({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+          Retry.none(
+            p25({
+              release: "alchemy-missing",
+              rollout: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        RollbackDeliveryPipelineTarget: probeOutcome(Retry.none(p26({} as never))),
+        RollbackDeliveryPipelineTarget: probeOutcome(
+          Retry.none(p26({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         TerminateDeliveryPipelineReleaseRolloutJobRun: probeOutcome(
           Retry.none(
             p27({
               release: "alchemy-missing",
               rollout: "alchemy-missing",
               jobRun: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),

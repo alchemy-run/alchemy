@@ -58,22 +58,39 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
           Retry.none(p1({ deployment: "alchemy-missing", location: "us-central1" } as never)),
         ),
         DeleteDeploymentState: probeOutcome(
-          Retry.none(p2({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p2({
+              deployment: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        DeprovisionDeploymentGroup: probeOutcome(Retry.none(p3({} as never))),
+        DeprovisionDeploymentGroup: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ExportDeploymentLock: probeOutcome(
           Retry.none(p4({ deployment: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ExportDeploymentState: probeOutcome(
-          Retry.none(p5({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p5({
+              deployment: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ExportPreview: probeOutcome(Retry.none(p6({} as never))),
+        ExportPreview: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ExportRevisionState: probeOutcome(
           Retry.none(
             p7({
               deployment: "alchemy-missing",
               revision: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -144,14 +161,34 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
         ListPreviews: probeOutcome(Retry.none(p25({ location: "us-central1" } as never))),
         ListTerraformVersions: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
         LockDeployment: probeOutcome(
-          Retry.none(p27({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p27({
+              deployment: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchDeployment: probeOutcome(
-          Retry.none(p28({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p28({
+              deployment: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ProvisionDeploymentGroup: probeOutcome(Retry.none(p29({} as never))),
+        ProvisionDeploymentGroup: probeOutcome(
+          Retry.none(p29({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         UnlockDeployment: probeOutcome(
-          Retry.none(p30({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p30({
+              deployment: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

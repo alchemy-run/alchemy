@@ -33,7 +33,11 @@ export default class DataLineageGeneratedHost extends GCP.Function<DataLineageGe
         ListProcesses: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
         ListProcessRuns: probeOutcome(Retry.none(p5({} as never))),
         ListRunLineageEvents: probeOutcome(Retry.none(p6({} as never))),
-        PatchConfig: probeOutcome(Retry.none(p7({ location: "global" } as never))),
+        PatchConfig: probeOutcome(
+          Retry.none(
+            p7({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

@@ -28,18 +28,34 @@ export default class CloudFunctionsGeneratedHost extends GCP.Function<CloudFunct
     const p9 = yield* GCP.CloudFunctions.SetupFunctionUpgradeConfig(TargetFunction);
     return {
       fetch: serveProbes({
-        AbortFunctionUpgrade: probeOutcome(Retry.none(p0({} as never))),
-        CommitFunctionUpgrade: probeOutcome(Retry.none(p1({} as never))),
-        CommitFunctionUpgradeAsGen2: probeOutcome(Retry.none(p2({} as never))),
-        DetachFunction: probeOutcome(Retry.none(p3({} as never))),
+        AbortFunctionUpgrade: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CommitFunctionUpgrade: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CommitFunctionUpgradeAsGen2: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DetachFunction: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GenerateFunctionUploadUrl: probeOutcome(
-          Retry.none(p4({ location: "us-central1" } as never)),
+          Retry.none(
+            p4({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         ListFunctions: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
         ListRuntimes: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
-        RedirectFunctionUpgradeTraffic: probeOutcome(Retry.none(p7({} as never))),
-        RollbackFunctionUpgradeTraffic: probeOutcome(Retry.none(p8({} as never))),
-        SetupFunctionUpgradeConfig: probeOutcome(Retry.none(p9({} as never))),
+        RedirectFunctionUpgradeTraffic: probeOutcome(
+          Retry.none(p7({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RollbackFunctionUpgradeTraffic: probeOutcome(
+          Retry.none(p8({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SetupFunctionUpgradeConfig: probeOutcome(
+          Retry.none(p9({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

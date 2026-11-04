@@ -18,7 +18,9 @@ export default class ApigeeGeneratedHost extends GCP.Function<ApigeeGeneratedHos
     const p0 = yield* GCP.Apigee.ProvisionProjectOrganization();
     return {
       fetch: serveProbes({
-        ProvisionProjectOrganization: probeOutcome(Retry.none(p0({} as never))),
+        ProvisionProjectOrganization: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

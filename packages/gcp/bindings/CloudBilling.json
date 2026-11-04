@@ -14,7 +14,10 @@
   },
   "probes": {
     "resources": {},
-    "enable": ["cloudbilling.googleapis.com"]
+    "enable": ["cloudbilling.googleapis.com"],
+    "skip": {
+      "UpdateProjectBillingInfo": "links or unlinks the testing project's billing account; a probe with a placeholder body unlinked it on 2026-11-03"
+    }
   },
   "roles": {
     "cloudbilling.projects.updateBillingInfo": "roles/billing.projectManager",

@@ -46,9 +46,13 @@ export default class FirebaseAppCheckGeneratedHost extends GCP.Function<Firebase
         BatchRecaptchaEnterpriseConfigGet: probeOutcome(Retry.none(p3({} as never))),
         BatchRecaptchaV3ConfigGet: probeOutcome(Retry.none(p4({} as never))),
         BatchResourcePolicyUpdate: probeOutcome(
-          Retry.none(p5({ service: "alchemy-missing" } as never)),
+          Retry.none(
+            p5({ service: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        BatchServiceUpdate: probeOutcome(Retry.none(p6({} as never))),
+        BatchServiceUpdate: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetAppAttestConfig: probeOutcome(Retry.none(p7({ app: "alchemy-missing" } as never))),
         GetAppDeviceCheckConfig: probeOutcome(Retry.none(p8({ app: "alchemy-missing" } as never))),
         GetAppPlayIntegrityConfig: probeOutcome(
@@ -64,21 +68,41 @@ export default class FirebaseAppCheckGeneratedHost extends GCP.Function<Firebase
           Retry.none(p14({ service: "alchemy-missing" } as never)),
         ),
         ListServices: probeOutcome(Retry.none(p15({} as never))),
-        MintAppCheckToken: probeOutcome(Retry.none(p16({ app: "alchemy-missing" } as never))),
-        PatchAppAttestConfig: probeOutcome(Retry.none(p17({ app: "alchemy-missing" } as never))),
+        MintAppCheckToken: probeOutcome(
+          Retry.none(
+            p16({ app: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        PatchAppAttestConfig: probeOutcome(
+          Retry.none(
+            p17({ app: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         PatchAppDeviceCheckConfig: probeOutcome(
-          Retry.none(p18({ app: "alchemy-missing" } as never)),
+          Retry.none(
+            p18({ app: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         PatchAppPlayIntegrityConfig: probeOutcome(
-          Retry.none(p19({ app: "alchemy-missing" } as never)),
+          Retry.none(
+            p19({ app: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         PatchAppRecaptchaEnterpriseConfig: probeOutcome(
-          Retry.none(p20({ app: "alchemy-missing" } as never)),
+          Retry.none(
+            p20({ app: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         PatchAppRecaptchaV3Config: probeOutcome(
-          Retry.none(p21({ app: "alchemy-missing" } as never)),
+          Retry.none(
+            p21({ app: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        PatchService: probeOutcome(Retry.none(p22({ service: "alchemy-missing" } as never))),
+        PatchService: probeOutcome(
+          Retry.none(
+            p22({ service: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

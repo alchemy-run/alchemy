@@ -31,7 +31,9 @@ export default class VMMigrationGeneratedHost extends GCP.Function<VMMigrationGe
         ListGroups: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
         ListImageImports: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
         ListSources: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
-        RemoveGroupMigration: probeOutcome(Retry.none(p5({} as never))),
+        RemoveGroupMigration: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

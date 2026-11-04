@@ -79,7 +79,13 @@ export default class LustreGeneratedHost extends GCP.Function<LustreGeneratedHos
           ),
         ),
         ExportInstanceData: probeOutcome(
-          Retry.none(p6({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
+          Retry.none(
+            p6({
+              instance: "alchemy-missing",
+              location: "us-central1-a",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GetInstance: probeOutcome(
           Retry.none(p7({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
@@ -119,7 +125,13 @@ export default class LustreGeneratedHost extends GCP.Function<LustreGeneratedHos
         ),
         ListInstances: probeOutcome(Retry.none(p13({ location: "us-central1-a" } as never))),
         PatchInstance: probeOutcome(
-          Retry.none(p14({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
+          Retry.none(
+            p14({
+              instance: "alchemy-missing",
+              location: "us-central1-a",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchInstanceMirror: probeOutcome(
           Retry.none(
@@ -127,11 +139,18 @@ export default class LustreGeneratedHost extends GCP.Function<LustreGeneratedHos
               instance: "alchemy-missing",
               mirror: "alchemy-missing",
               location: "us-central1-a",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         RescheduleInstanceMaintenance: probeOutcome(
-          Retry.none(p16({ instance: "alchemy-missing", location: "us-central1-a" } as never)),
+          Retry.none(
+            p16({
+              instance: "alchemy-missing",
+              location: "us-central1-a",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

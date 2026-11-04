@@ -36,19 +36,35 @@ export default class BigQueryReservationGeneratedHost extends GCP.Function<BigQu
         DeleteReservationAssignment: probeOutcome(
           Retry.none(p1({ assignment: "alchemy-missing" } as never)),
         ),
-        FailoverReservation: probeOutcome(Retry.none(p2({} as never))),
+        FailoverReservation: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetReservation: probeOutcome(Retry.none(p3({} as never))),
         GetReservationGroup: probeOutcome(Retry.none(p4({} as never))),
         ListCapacityCommitments: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
         ListReservationAssignments: probeOutcome(Retry.none(p6({} as never))),
         ListReservationGroups: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
         ListReservations: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
-        MergeCapacityCommitment: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        MergeCapacityCommitment: probeOutcome(
+          Retry.none(
+            p9({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         MoveReservationAssignment: probeOutcome(
-          Retry.none(p10({ assignment: "alchemy-missing" } as never)),
+          Retry.none(
+            p10({
+              assignment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchReservationAssignment: probeOutcome(
-          Retry.none(p11({ assignment: "alchemy-missing" } as never)),
+          Retry.none(
+            p11({
+              assignment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

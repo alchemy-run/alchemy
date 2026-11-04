@@ -30,18 +30,30 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
     const p11 = yield* GCP.FirebaseDataConnect.MigrateSchema(Main);
     return {
       fetch: serveProbes({
-        GenerateServiceQuery: probeOutcome(Retry.none(p0({} as never))),
-        GenerateServiceSchema: probeOutcome(Retry.none(p1({} as never))),
+        GenerateServiceQuery: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        GenerateServiceSchema: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetConnector: probeOutcome(Retry.none(p2({} as never))),
         GetSchema: probeOutcome(Retry.none(p3({} as never))),
         GetService: probeOutcome(Retry.none(p4({} as never))),
-        ImpersonateConnectorMutation: probeOutcome(Retry.none(p5({} as never))),
-        ImpersonateConnectorQuery: probeOutcome(Retry.none(p6({} as never))),
-        IntrospectServiceGraphql: probeOutcome(Retry.none(p7({} as never))),
+        ImpersonateConnectorMutation: probeOutcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ImpersonateConnectorQuery: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        IntrospectServiceGraphql: probeOutcome(
+          Retry.none(p7({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         ListServiceConnectors: probeOutcome(Retry.none(p8({} as never))),
         ListServices: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
         ListServiceSchemas: probeOutcome(Retry.none(p10({} as never))),
-        MigrateSchema: probeOutcome(Retry.none(p11({} as never))),
+        MigrateSchema: probeOutcome(
+          Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

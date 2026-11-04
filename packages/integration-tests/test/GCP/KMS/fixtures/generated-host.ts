@@ -69,9 +69,17 @@ export default class KMSGeneratedHost extends GCP.Function<KMSGeneratedHost>()(
           Retry.none(p11({ location: "us-central1" } as never)),
         ),
         PatchEkmConnection: probeOutcome(
-          Retry.none(p12({ ekmConnection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p12({
+              ekmConnection: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        UpdateProjectAutokeyConfig: probeOutcome(Retry.none(p13({} as never))),
+        UpdateProjectAutokeyConfig: probeOutcome(
+          Retry.none(p13({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         VerifyEkmConnectionConnectivity: probeOutcome(
           Retry.none(p14({ ekmConnection: "alchemy-missing", location: "us-central1" } as never)),
         ),

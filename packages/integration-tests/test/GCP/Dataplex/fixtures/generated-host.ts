@@ -98,13 +98,33 @@ export default class DataplexGeneratedHost extends GCP.Function<DataplexGenerate
     return {
       fetch: serveProbes({
         ApproveChangeRequest: probeOutcome(
-          Retry.none(p0({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p0({
+              changeRequest: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        CancelDataScanJob: probeOutcome(Retry.none(p1({ job: "alchemy-missing" } as never))),
+        CancelDataScanJob: probeOutcome(
+          Retry.none(
+            p1({ job: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         CancelMetadataJob: probeOutcome(
-          Retry.none(p2({ metadataJob: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p2({
+              metadataJob: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        CancelTaskJob: probeOutcome(Retry.none(p3({ job: "alchemy-missing" } as never))),
+        CancelTaskJob: probeOutcome(
+          Retry.none(
+            p3({ job: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
         CreateMetadataJob: probeOutcome(
           Retry.none(
             p4({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
@@ -113,9 +133,13 @@ export default class DataplexGeneratedHost extends GCP.Function<DataplexGenerate
         DeleteChangeRequest: probeOutcome(
           Retry.none(p5({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GenerateDataScanDataQualityRules: probeOutcome(Retry.none(p6({} as never))),
+        GenerateDataScanDataQualityRules: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GenerateJobDataQualityRules: probeOutcome(
-          Retry.none(p7({ job: "alchemy-missing" } as never)),
+          Retry.none(
+            p7({ job: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         GetAspectType: probeOutcome(Retry.none(p8({} as never))),
         GetAsset: probeOutcome(Retry.none(p9({} as never))),
@@ -169,14 +193,32 @@ export default class DataplexGeneratedHost extends GCP.Function<DataplexGenerate
         ListZoneAssets: probeOutcome(Retry.none(p53({} as never))),
         ListZoneEntities: probeOutcome(Retry.none(p54({} as never))),
         PatchChangeRequest: probeOutcome(
-          Retry.none(p55({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p55({
+              changeRequest: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         RejectChangeRequest: probeOutcome(
-          Retry.none(p56({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p56({
+              changeRequest: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        RequestDataProductAccess: probeOutcome(Retry.none(p57({} as never))),
-        RunDataScan: probeOutcome(Retry.none(p58({} as never))),
-        RunTask: probeOutcome(Retry.none(p59({} as never))),
+        RequestDataProductAccess: probeOutcome(
+          Retry.none(p57({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RunDataScan: probeOutcome(
+          Retry.none(p58({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RunTask: probeOutcome(
+          Retry.none(p59({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

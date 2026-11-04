@@ -55,7 +55,13 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
           ),
         ),
         ExchangeConnectionAuthCode: probeOutcome(
-          Retry.none(p3({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p3({
+              connection: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ExecuteConnectionAction: probeOutcome(
           Retry.none(
@@ -63,14 +69,27 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
               connection: "alchemy-missing",
               action: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         ExecuteConnectionHttpRequest: probeOutcome(
-          Retry.none(p5({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p5({
+              connection: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ExecuteConnectionSqlQuery: probeOutcome(
-          Retry.none(p6({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p6({
+              connection: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ExecuteConnectionTool: probeOutcome(
           Retry.none(
@@ -78,11 +97,18 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
               connection: "alchemy-missing",
               tool: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         GenerateConnectionToolspecOverride: probeOutcome(
-          Retry.none(p8({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p8({
+              connection: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GetConnectionAction: probeOutcome(
           Retry.none(
@@ -117,6 +143,7 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
               connection: "alchemy-missing",
               resource: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -145,10 +172,22 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
           Retry.none(p18({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
         RefreshConnectionAccessToken: probeOutcome(
-          Retry.none(p19({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p19({
+              connection: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ToolsConnection: probeOutcome(
-          Retry.none(p20({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p20({
+              connection: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         UpdateEntityEntitiesWithConditions: probeOutcome(
           Retry.none(
@@ -156,6 +195,7 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
               connection: "alchemy-missing",
               entityType: "alchemy-missing",
               location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),

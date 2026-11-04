@@ -18,7 +18,9 @@ export default class VideoIntelligenceGeneratedHost extends GCP.Function<VideoIn
     const p0 = yield* GCP.VideoIntelligence.AnnotateVideo();
     return {
       fetch: serveProbes({
-        AnnotateVideo: probeOutcome(Retry.none(p0({} as never))),
+        AnnotateVideo: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.VideoIntelligence.AnnotateVideoHttp)))),

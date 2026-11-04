@@ -34,8 +34,12 @@ export default class AgentIdentityGeneratedHost extends GCP.Function<AgentIdenti
         DeleteAuthProviderAuthorization: probeOutcome(
           Retry.none(p0({ authorization: "alchemy-missing" } as never)),
         ),
-        DisableAuthProvider: probeOutcome(Retry.none(p1({} as never))),
-        EnableAuthProvider: probeOutcome(Retry.none(p2({} as never))),
+        DisableAuthProvider: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        EnableAuthProvider: probeOutcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         GetAccessSummary: probeOutcome(
           Retry.none(p3({ accessSummary: "alchemy-missing", location: "us-central1" } as never)),
         ),
@@ -48,8 +52,12 @@ export default class AgentIdentityGeneratedHost extends GCP.Function<AgentIdenti
         ListAuthProviders: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
         QueryAuthProvider: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
         QueryAuthProviderWorkloads: probeOutcome(Retry.none(p10({} as never))),
-        RevokeAuthProviderAuthorization: probeOutcome(Retry.none(p11({} as never))),
-        UndeleteAuthProvider: probeOutcome(Retry.none(p12({} as never))),
+        RevokeAuthProviderAuthorization: probeOutcome(
+          Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UndeleteAuthProvider: probeOutcome(
+          Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

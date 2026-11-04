@@ -37,7 +37,9 @@ export default class TPUGeneratedHost extends GCP.Function<TPUGeneratedHost>()(
         ListNodes: probeOutcome(Retry.none(p3({ location: "us-central1-a" } as never))),
         ListQueuedResources: probeOutcome(Retry.none(p4({ location: "us-central1-a" } as never))),
         ListRuntimeVersions: probeOutcome(Retry.none(p5({ location: "us-central1-a" } as never))),
-        ResetQueuedResource: probeOutcome(Retry.none(p6({} as never))),
+        ResetQueuedResource: probeOutcome(
+          Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

@@ -34,7 +34,12 @@ export default class RecaptchaEnterpriseGeneratedHost extends GCP.Function<Recap
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         AnnotateAssessment: probeOutcome(
-          Retry.none(p1({ assessment: "alchemy-missing" } as never)),
+          Retry.none(
+            p1({
+              assessment: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GetKey: probeOutcome(Retry.none(p2({} as never))),
         GetKeyMetrics: probeOutcome(Retry.none(p3({ key: "alchemy-missing" } as never))),
@@ -42,10 +47,20 @@ export default class RecaptchaEnterpriseGeneratedHost extends GCP.Function<Recap
         ListFirewallpolicies: probeOutcome(Retry.none(p5({} as never))),
         ListKeyIpOverrides: probeOutcome(Retry.none(p6({} as never))),
         ListKeys: probeOutcome(Retry.none(p7({} as never))),
-        RemoveKeyIpOverride: probeOutcome(Retry.none(p8({} as never))),
-        ReorderFirewallpolicy: probeOutcome(Retry.none(p9({} as never))),
-        SearchRelatedaccountgroupmembership: probeOutcome(Retry.none(p10({} as never))),
-        UpdateKeyPolicy: probeOutcome(Retry.none(p11({ key: "alchemy-missing" } as never))),
+        RemoveKeyIpOverride: probeOutcome(
+          Retry.none(p8({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ReorderFirewallpolicy: probeOutcome(
+          Retry.none(p9({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SearchRelatedaccountgroupmembership: probeOutcome(
+          Retry.none(p10({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateKeyPolicy: probeOutcome(
+          Retry.none(
+            p11({ key: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

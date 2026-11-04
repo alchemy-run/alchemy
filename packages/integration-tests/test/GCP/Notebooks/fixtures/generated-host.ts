@@ -37,7 +37,13 @@ export default class NotebooksGeneratedHost extends GCP.Function<NotebooksGenera
     return {
       fetch: serveProbes({
         CheckInstanceAuthorization: probeOutcome(
-          Retry.none(p0({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p0({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         CheckInstanceUpgradability: probeOutcome(
           Retry.none(p1({ instance: "alchemy-missing", location: "us-central1" } as never)),
@@ -51,10 +57,22 @@ export default class NotebooksGeneratedHost extends GCP.Function<NotebooksGenera
           Retry.none(p3({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
         DiagnoseInstance: probeOutcome(
-          Retry.none(p4({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p4({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GenerateInstanceAccessToken: probeOutcome(
-          Retry.none(p5({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p5({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         GetInstance: probeOutcome(
           Retry.none(p6({ instance: "alchemy-missing", location: "us-central1" } as never)),
@@ -62,16 +80,40 @@ export default class NotebooksGeneratedHost extends GCP.Function<NotebooksGenera
         GetInstanceConfig: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
         ListInstances: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
         PatchInstance: probeOutcome(
-          Retry.none(p9({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p9({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ReportInstanceInfoSystem: probeOutcome(
-          Retry.none(p10({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p10({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ResetInstance: probeOutcome(
-          Retry.none(p11({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p11({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         ResizeInstanceDisk: probeOutcome(
-          Retry.none(p12({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p12({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         RestoreInstance: probeOutcome(
           Retry.none(
@@ -83,19 +125,49 @@ export default class NotebooksGeneratedHost extends GCP.Function<NotebooksGenera
           ),
         ),
         RollbackInstance: probeOutcome(
-          Retry.none(p14({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p14({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         StartInstance: probeOutcome(
-          Retry.none(p15({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p15({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         StopInstance: probeOutcome(
-          Retry.none(p16({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p16({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         UpgradeInstance: probeOutcome(
-          Retry.none(p17({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p17({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         UpgradeInstanceSystem: probeOutcome(
-          Retry.none(p18({ instance: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p18({
+              instance: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
       }),
     };

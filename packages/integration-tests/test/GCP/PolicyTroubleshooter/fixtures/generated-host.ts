@@ -18,7 +18,9 @@ export default class PolicyTroubleshooterGeneratedHost extends GCP.Function<Poli
     const p0 = yield* GCP.PolicyTroubleshooter.TroubleshootIam();
     return {
       fetch: serveProbes({
-        TroubleshootIam: probeOutcome(Retry.none(p0({} as never))),
+        TroubleshootIam: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
       }),
     };
   }).pipe(

@@ -165,12 +165,14 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
     const p122 = yield* GCP.DiscoveryEngine.WriteUserEvent();
     return {
       fetch: serveProbes({
-        "AnswerServingConfig@DataStoresServingConfig": probeOutcome(Retry.none(p0({} as never))),
+        "AnswerServingConfig@DataStoresServingConfig": probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         "AnswerServingConfig@CollectionsEnginesServingConfig": probeOutcome(
-          Retry.none(p1({} as never)),
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "AnswerServingConfig@CollectionsDataStoresServingConfig": probeOutcome(
-          Retry.none(p2({} as never)),
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "BatchBranchGetDocumentsMetadata@DataStore": probeOutcome(
           Retry.none(p3({ branch: "alchemy-missing" } as never)),
@@ -184,17 +186,36 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
               collection: "alchemy-missing",
               dataStore: "alchemy-missing",
               location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         BatchTargetSiteCreate: probeOutcome(
-          Retry.none(p6({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p6({
+              dataStore: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         BatchUserStoreUpdateUserLicenses: probeOutcome(
-          Retry.none(p7({ userStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p7({
+              userStore: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         CheckGroundingConfig: probeOutcome(
-          Retry.none(p8({ groundingConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p8({
+              groundingConfig: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         "CollectDataStoreUserEvent@DataStore": probeOutcome(Retry.none(p9({} as never))),
         "CollectDataStoreUserEvent@CollectionsDataStore": probeOutcome(
@@ -202,7 +223,13 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
         ),
         CollectUserEvent: probeOutcome(Retry.none(p11({ location: "global" } as never))),
         CompleteCompletionConfigQuery: probeOutcome(
-          Retry.none(p12({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p12({
+              dataStore: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         "CompleteDataStoreQuery@DataStore": probeOutcome(Retry.none(p13({} as never))),
         "CompleteDataStoreQuery@CollectionsDataStore": probeOutcome(Retry.none(p14({} as never))),
@@ -237,10 +264,22 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
           Retry.none(p19({ collection: "alchemy-missing", location: "global" } as never)),
         ),
         DisableSiteSearchEngineAdvancedSiteSearch: probeOutcome(
-          Retry.none(p20({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p20({
+              dataStore: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         EnableSiteSearchEngineAdvancedSiteSearch: probeOutcome(
-          Retry.none(p21({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p21({
+              dataStore: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         FetchCollectionDataStoreSiteSearchEngineSitemap: probeOutcome(
           Retry.none(
@@ -412,89 +451,164 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
           ),
         ),
         PatchCmekConfig: probeOutcome(
-          Retry.none(p89({ cmekConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p89({
+              cmekConfig: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         "PatchDataStoreWidgetConfig@DataStore": probeOutcome(
-          Retry.none(p90({ widgetConfig: "alchemy-missing" } as never)),
+          Retry.none(
+            p90({
+              widgetConfig: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         "PatchDataStoreWidgetConfig@CollectionsDataStore": probeOutcome(
-          Retry.none(p91({ widgetConfig: "alchemy-missing" } as never)),
+          Retry.none(
+            p91({
+              widgetConfig: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchEngineWidgetConfig: probeOutcome(
-          Retry.none(p92({ widgetConfig: "alchemy-missing" } as never)),
+          Retry.none(
+            p92({
+              widgetConfig: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchLicenseConfig: probeOutcome(
-          Retry.none(p93({ licenseConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p93({
+              licenseConfig: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchUserStore: probeOutcome(
-          Retry.none(p94({ userStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p94({
+              userStore: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ProvisionProject: probeOutcome(Retry.none(p95({} as never))),
+        ProvisionProject: probeOutcome(
+          Retry.none(p95({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         "PurgeDataStoreBranchDocument@DataStore": probeOutcome(
-          Retry.none(p96({ branch: "alchemy-missing" } as never)),
+          Retry.none(
+            p96({ branch: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         "PurgeDataStoreBranchDocument@CollectionsDataStore": probeOutcome(
-          Retry.none(p97({ branch: "alchemy-missing" } as never)),
+          Retry.none(
+            p97({ branch: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        "PurgeDataStoreCompletionSuggestion@DataStore": probeOutcome(Retry.none(p98({} as never))),
+        "PurgeDataStoreCompletionSuggestion@DataStore": probeOutcome(
+          Retry.none(p98({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         "PurgeDataStoreCompletionSuggestion@CollectionsDataStore": probeOutcome(
-          Retry.none(p99({} as never)),
+          Retry.none(p99({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "PurgeDataStoreSuggestionDenyListEntry@DataStore": probeOutcome(
-          Retry.none(p100({} as never)),
+          Retry.none(p100({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "PurgeDataStoreSuggestionDenyListEntry@CollectionsDataStore": probeOutcome(
-          Retry.none(p101({} as never)),
+          Retry.none(p101({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        "PurgeDataStoreUserEvent@DataStore": probeOutcome(Retry.none(p102({} as never))),
-        "PurgeDataStoreUserEvent@CollectionsDataStore": probeOutcome(Retry.none(p103({} as never))),
+        "PurgeDataStoreUserEvent@DataStore": probeOutcome(
+          Retry.none(p102({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "PurgeDataStoreUserEvent@CollectionsDataStore": probeOutcome(
+          Retry.none(p103({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         RankRankingConfig: probeOutcome(
-          Retry.none(p104({ rankingConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p104({
+              rankingConfig: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         "RecommendServingConfig@DataStoresServingConfig": probeOutcome(
-          Retry.none(p105({} as never)),
+          Retry.none(p105({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "RecommendServingConfig@CollectionsEnginesServingConfig": probeOutcome(
-          Retry.none(p106({} as never)),
+          Retry.none(p106({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "RecommendServingConfig@CollectionsDataStoresServingConfig": probeOutcome(
-          Retry.none(p107({} as never)),
+          Retry.none(p107({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         RecrawlSiteSearchEngineUris: probeOutcome(
-          Retry.none(p108({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p108({
+              dataStore: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        "SearchServingConfig@DataStoresServingConfig": probeOutcome(Retry.none(p109({} as never))),
+        "SearchServingConfig@DataStoresServingConfig": probeOutcome(
+          Retry.none(p109({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         "SearchServingConfig@CollectionsEnginesServingConfig": probeOutcome(
-          Retry.none(p110({} as never)),
+          Retry.none(p110({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "SearchServingConfig@CollectionsDataStoresServingConfig": probeOutcome(
-          Retry.none(p111({} as never)),
+          Retry.none(p111({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "SearchServingConfigLite@DataStoresServingConfig": probeOutcome(
-          Retry.none(p112({} as never)),
+          Retry.none(p112({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "SearchServingConfigLite@CollectionsEnginesServingConfig": probeOutcome(
-          Retry.none(p113({} as never)),
+          Retry.none(p113({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "SearchServingConfigLite@CollectionsDataStoresServingConfig": probeOutcome(
-          Retry.none(p114({} as never)),
+          Retry.none(p114({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "StreamServingConfigAnswer@DataStoresServingConfig": probeOutcome(
-          Retry.none(p115({} as never)),
+          Retry.none(p115({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "StreamServingConfigAnswer@CollectionsEnginesServingConfig": probeOutcome(
-          Retry.none(p116({} as never)),
+          Retry.none(p116({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         "StreamServingConfigAnswer@CollectionsDataStoresServingConfig": probeOutcome(
-          Retry.none(p117({} as never)),
+          Retry.none(p117({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        TrainDataStoreCustomModel: probeOutcome(Retry.none(p118({} as never))),
+        TrainDataStoreCustomModel: probeOutcome(
+          Retry.none(p118({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         UpdateCollectionDataConnector: probeOutcome(
-          Retry.none(p119({ collection: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p119({
+              collection: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        "WriteDataStoreUserEvent@DataStore": probeOutcome(Retry.none(p120({} as never))),
-        "WriteDataStoreUserEvent@CollectionsDataStore": probeOutcome(Retry.none(p121({} as never))),
-        WriteUserEvent: probeOutcome(Retry.none(p122({ location: "global" } as never))),
+        "WriteDataStoreUserEvent@DataStore": probeOutcome(
+          Retry.none(p120({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "WriteDataStoreUserEvent@CollectionsDataStore": probeOutcome(
+          Retry.none(p121({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        WriteUserEvent: probeOutcome(
+          Retry.none(
+            p122({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
       }),
     };
   }).pipe(

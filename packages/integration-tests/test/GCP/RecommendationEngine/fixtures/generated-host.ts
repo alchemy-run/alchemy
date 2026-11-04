@@ -95,7 +95,13 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
         ),
         ListCatalogs: probeOutcome(Retry.none(p7({ location: "global" } as never))),
         PatchCatalog: probeOutcome(
-          Retry.none(p8({ catalog: "alchemy-missing", location: "global" } as never)),
+          Retry.none(
+            p8({
+              catalog: "alchemy-missing",
+              location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
         PatchCatalogItem: probeOutcome(
           Retry.none(
@@ -103,6 +109,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
               catalog: "alchemy-missing",
               catalogItem: "alchemy-missing",
               location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -113,6 +120,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
               eventStore: "alchemy-missing",
               placement: "alchemy-missing",
               location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -122,6 +130,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
               location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -131,6 +140,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
               location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
@@ -140,6 +150,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
               location: "global",
+              body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
