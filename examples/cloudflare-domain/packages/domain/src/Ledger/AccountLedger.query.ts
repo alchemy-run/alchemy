@@ -21,8 +21,6 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   from: [Ledger],
   middleware: [Session],
   rejects: [NotOwner],
-  take: { default: 50, max: 200 },
-  attributes: ({ account }) => ({ "bank.account": account }),
   validate: Effect.fn(function* ({ account }) {
     const summaries = yield* AccountSummary;
     const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
@@ -36,4 +34,5 @@ export const AccountLedgerLive = AccountLedger.toLayer(
     const store = yield* LedgerStore;
     return ({ account }, page) => store.forAccount(account, page);
   }),
+  { take: { default: 50, max: 200 }, attributes: ({ account }) => ({ "bank.account": account }) },
 );

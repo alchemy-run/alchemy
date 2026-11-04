@@ -151,7 +151,6 @@ class WalletMovements extends Domain.Query("WalletMovements", {
   from: [Ledger],
   middleware: [ViewerSession],
   rejects: [NotYours],
-  take: { default: 2, max: 3 },
   validate: Effect.fn(function* ({ wallet }) {
     const viewer = yield* Viewer;
     const owners = yield* WalletOwner;
@@ -164,6 +163,7 @@ const WalletMovementsLive = WalletMovements.toLayer(
     const movements = yield* Movements;
     return ({ wallet }, page) => movements.page((row) => row.wallet === wallet, page);
   }),
+  { take: { default: 2, max: 3 } },
 );
 
 /** Large movements across every wallet: each row judged on its own. */
@@ -172,7 +172,6 @@ class LargeMovements extends Domain.Query("LargeMovements", {
   success: Movement,
   paged: true,
   middleware: [ViewerSession],
-  attributes: (input) => ({ "query.min": input.min, "query.note": input.note }),
   visible: Effect.fn(function* (row) {
     return row.owner === (yield* Viewer);
   }),
@@ -183,6 +182,7 @@ const LargeMovementsLive = LargeMovements.toLayer(
     const movements = yield* Movements;
     return ({ min }, page) => movements.page((row) => row.amount >= min, page);
   }),
+  { attributes: (input) => ({ "query.min": input.min, "query.note": input.note }) },
 );
 
 /** A single result, not paged. */

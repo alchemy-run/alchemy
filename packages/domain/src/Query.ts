@@ -33,7 +33,7 @@ export interface Request {
 export interface PageRequest {
   /** The cursor of the previous page, or `undefined` for the first. */
   readonly after: string | undefined;
-  /** How many rows to return at most, already clamped to the query's `take.max`. */
+  /** How many entries to return at most, already clamped to the Layer's `take.max`. */
   readonly take: number;
 }
 
@@ -87,12 +87,25 @@ export type Handler<I, Result, E, Ctx, Page> = (
   page: Page,
 ) => Effect.Effect<Result, E, Ctx | RuntimeContext>;
 
+/** How a query's Layer runs it: tuning that changes no caller's types. */
+export interface LayerOptions<I = unknown> {
+  /** Page size limits of a paged query. @default { default: 50, max: 500 } */
+  readonly take?: Take;
+  /**
+   * Span attributes to record for the query's input. Nothing from the input
+   * is recorded unless you return it here, and a `Redacted` value is
+   * recorded as `<redacted>`.
+   */
+  readonly attributes?: Telemetry.Attributes<I>;
+}
+
 /** A query's implementation, as its Layer provides it. @internal */
 export interface Implementation {
   readonly handle: (
     input: unknown,
     page: PageRequest | undefined,
   ) => Effect.Effect<unknown, unknown>;
+  readonly options: LayerOptions<never>;
 }
 
 /** A query's declaration, widened. @internal */
@@ -103,8 +116,6 @@ export interface AnyDefinition {
   readonly from?: ReadonlyArray<Projection.Any>;
   readonly middleware?: Middleware.List;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
-  readonly take?: Take;
-  readonly attributes?: Telemetry.Attributes<any>;
   readonly validate?: (input: never, request: Request) => Effect.Effect<void, unknown, unknown>;
   readonly visible?: (entry: never, input: never) => Effect.Effect<boolean, unknown, unknown>;
 }
@@ -185,14 +196,6 @@ export interface Definition<
   readonly middleware?: Ms;
   /** The rejections the query may fail with; they reach the client typed. */
   readonly rejects?: Rejects;
-  /** Page size limits of a paged query. */
-  readonly take?: Take;
-  /**
-   * Span attributes to record for the query's input. Nothing from the input
-   * is recorded unless you return it here, and a `Redacted` value is
-   * recorded as `<redacted>`.
-   */
-  readonly attributes?: Telemetry.Attributes<Data<F>>;
   /**
    * Judge the request, before the store is read: may the caller (what
    * `middleware` provides) ask this? It may read the model's views,
@@ -330,11 +333,13 @@ export const make = <
     static readonly definition = definition;
     static readonly middleware = middleware;
     static readonly rpc = Middleware.apply(rpc, middleware);
-    static readonly attributes = definition.attributes;
-    static toLayer<E, R>(build: Effect.Effect<Implementation["handle"], E, R>) {
+    static toLayer<E, R>(
+      build: Effect.Effect<Implementation["handle"], E, R>,
+      options: LayerOptions = {},
+    ) {
       return Layer.effect(
         Tag,
-        Effect.map(build, (handle): Implementation => ({ handle })),
+        Effect.map(build, (handle): Implementation => ({ handle, options })),
       );
     }
   } as unknown as QueryClass<
@@ -369,17 +374,17 @@ export interface QueryClass<
   readonly middleware: Ms;
   /** The query as an Effect RPC, for exposing it in an Api. */
   readonly rpc: Rpc.Any;
-  /** Span attributes the query adds for its input, if it declares any. */
-  readonly attributes: Telemetry.Attributes<I> | undefined;
   readonly "~input": I;
   readonly "~result": Result;
   readonly "~needs": Needs;
   /**
    * Implement the query. The construction Effect runs once, resolving your
-   * store; the handler may only need what the middleware provides.
+   * store; the handler may only need what the middleware provides. The
+   * options tune how it runs: page size limits and span attributes.
    */
   toLayer<E, R>(
     build: Effect.Effect<Handler<I, Result, Rejected, Middleware.Provides<Ms>, Page>, E, R>,
+    options?: LayerOptions<I>,
   ): Layer.Layer<QueryKey<Name>, E, R>;
 }
 
@@ -409,8 +414,9 @@ export const host = (
 ): Host => {
   const def = query.definition;
   const name = query.queryName;
-  const max = Math.max(1, Math.floor(def.take?.max ?? 500));
-  const fallback = Math.min(max, Math.max(1, Math.floor(def.take?.default ?? 50)));
+  const take = implementation.options.take;
+  const max = Math.max(1, Math.floor(take?.max ?? 500));
+  const fallback = Math.min(max, Math.max(1, Math.floor(take?.default ?? 50)));
   const validate = def.validate as
     | ((input: unknown, request: Request) => Effect.Effect<void, unknown>)
     | undefined;
@@ -420,7 +426,7 @@ export const host = (
   return {
     run: (input, { after, take, atLeast }) =>
       Effect.gen(function* () {
-        yield* Effect.annotateCurrentSpan(Telemetry.attributesOf(query, input));
+        yield* Effect.annotateCurrentSpan(Telemetry.attributesOf(implementation.options, input));
         // Judge the request first: a refused caller never waits on a projection.
         if (validate) yield* validate(input, { atLeast });
         if (atLeast) {

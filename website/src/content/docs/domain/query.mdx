@@ -38,8 +38,6 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   from: [Ledger],
   middleware: [Session],
   rejects: [NotOwner],
-  take: { default: 50, max: 200 },
-  attributes: ({ account }) => ({ "bank.account": account }),
   validate: Effect.fn(function* ({ account }) {
     const summaries = yield* AccountSummary;
     const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
@@ -52,7 +50,6 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
 - `success` is the result. With `paged: true` it is one entry of a page, and the result is `{ entries, cursor }`. Leave `paged` out for a query with one result.
 - `from` names the projections whose store it reads, so a read can wait for a write.
 - `middleware`, `rejects` and `validate` work as they do for commands and views.
-- `take` limits page sizes, and `attributes` chooses what of the input reaches a trace.
 
 `LedgerRow` is a schema, so the rows are checked and encoded on the way to the client:
 
@@ -78,7 +75,7 @@ queries: [AccountLedger],
 
 ## Implement it as a Layer
 
-The handler lives in a Layer, built once with everything it needs. It receives the input and, for a paged query, the page asked for: `after`, the cursor of the previous page, and `take`, already capped by the query's `take.max`.
+The handler lives in a Layer, built once with everything it needs. It receives the input and, for a paged query, the page asked for: `after`, the cursor of the previous page, and `take`, already capped by the Layer's `take.max`.
 
 ```typescript title="packages/domain/src/Ledger/AccountLedger.query.ts"
 export const AccountLedgerLive = AccountLedger.toLayer(
@@ -86,8 +83,11 @@ export const AccountLedgerLive = AccountLedger.toLayer(
     const store = yield* LedgerStore;
     return ({ account }, page) => store.forAccount(account, page);
   }),
+  { take: { default: 50, max: 200 }, attributes: ({ account }) => ({ "bank.account": account }) },
 );
 ```
+
+The options tune how it runs, so they sit on the Layer, not the declaration. `take` limits page sizes: 50 rows when the client doesn't ask, and never more than 200, whatever it asks for (50 and 500 by default). `attributes` chooses what of the input reaches a trace; nothing does unless you return it.
 
 It reads through the same `LedgerStore` port the projection writes through, so it sits next to the declaration in the domain package. The server provides the port with D1, and a story with memory. Merge the Layer into the model's handlers, with the projections and policies.
 

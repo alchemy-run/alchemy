@@ -339,7 +339,6 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   from: [Ledger],                  // projections it reads: `atLeast` waits on them
   middleware: [Session],
   rejects: [NotOwner],
-  take: { default: 50, max: 200 },
   // per request, before the store is read; may read middleware context and the model's views
   validate: Effect.fn(function* ({ account }) {
     const summary = yield* (yield* AccountSummary).query(Account.ref(account)).pipe(Effect.orDie);
@@ -354,6 +353,7 @@ export const AccountLedgerLive = AccountLedger.toLayer(
     const store = yield* LedgerStore;                                  // resolved once
     return ({ account }, page) => store.forAccount(account, page);    // page: { after, take }
   }),
+  { take: { default: 50, max: 200 } },   // tuning lives on the Layer: page limits, span `attributes`
 );
 ```
 

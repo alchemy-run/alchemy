@@ -190,6 +190,8 @@ export declare namespace Query {
   export type PageRequest = QueryModule.PageRequest;
   /** What `validate` sees besides the input. */
   export type Request = QueryModule.Request;
+  /** How a query's Layer runs it: page size limits and span attributes. */
+  export type LayerOptions<I = unknown> = QueryModule.LayerOptions<I>;
 }
 /** A question asked across keys, answered from a store a projection writes. See {@link QueryModule.make}. */
 export const Query = QueryModule.make;

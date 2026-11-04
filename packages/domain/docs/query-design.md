@@ -87,8 +87,6 @@ The options:
 | `rejects` | The rejections it may fail with; they reach the client typed. |
 | `validate` | Per request: `(input, { atLeast }) => Effect<void, Rejection>`. |
 | `visible` | Per row, paged queries only: `(row, input) => Effect<boolean>`. Rows it refuses are dropped. |
-| `take` | Page size: `{ default, max }`, by default `{ default: 50, max: 500 }`. |
-| `attributes` | Span attributes for the input, like a command's. Nothing is recorded unless returned here. |
 
 `validate` and `visible` may read what the middleware provides and what the hosted model provides (its views, aggregates, streams, sagas and projection progress), so a rule can look up a relationship ("the caller holds this account") in a view. Both are checked by type: anything else fails at the declaration, and a member the model does not host becomes a requirement of the model's Layer that nothing can satisfy, so it fails to type-check rather than at run time. At run time the model's members are merged under the request's own services, so the request always wins.
 
@@ -116,6 +114,8 @@ export const AccountLedgerLive = AccountLedger.toLayer(
   }),
 );
 ```
+
+`toLayer` takes a second argument for tuning that changes no caller's types: `take` (page size limits, `{ default, max }`, by default `{ default: 50, max: 500 }`) and `attributes` (span attributes for the input; nothing is recorded unless returned here). Like a projection's `batch` and `version`, they are how the query runs, not what it means, so they sit on the Layer.
 
 The handler receives the decoded input and, for a paged query, `{ after, take }` with `take` already clamped. It returns the result, or fails with a declared rejection. It may require what the middleware provides (to scope a store query by the caller) and `RuntimeContext` (a database binding), as a projection's handler may.
 
@@ -203,7 +203,7 @@ Views keep their current behaviour: a view `get` whose `atLeast` times out is st
 
 Paging is cursor-based, and the cursor is opaque to the framework.
 
-- The client sends `take` (clamped to `[1, take.max]`, default `take.default`) and `after`, a cursor from the previous page.
+- The client sends `take` (clamped to `[1, take.max]` from the Layer's options, default `take.default`) and `after`, a cursor from the previous page.
 - The handler receives `{ after, take }` and returns `{ entries, cursor }`, with `cursor: null` on the last page. It chooses the cursor's encoding: keyset paging on the store's sort key (`"<at>:<id>"`) is stable under concurrent writes; an offset is not.
 - `visible` may drop rows, so a page can be shorter than `take` without being the last. Clients page until `cursor` is `null`, as they do for a view's `list`.
 - Sorting and filtering are input fields. A query declares the filters and sort orders it supports, and the store indexes them.

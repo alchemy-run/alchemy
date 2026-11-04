@@ -348,7 +348,7 @@ export type QueryClient<Q extends Query.Any> = (
     readonly atLeast?: { readonly stream: string; readonly version: number };
     /** The cursor of the previous page, for a paged query. */
     readonly after?: string;
-    /** Rows per page, for a paged query; capped by the query's `take.max`. */
+    /** Rows per page, for a paged query; capped by the query Layer's `take.max`. */
     readonly take?: number;
   },
 ) => Effect.Effect<Query.ResultOf<Q>, QueryError<Q>>;
