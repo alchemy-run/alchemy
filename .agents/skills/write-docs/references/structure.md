@@ -74,7 +74,7 @@ mixing them on a page is fine.
 | How is data laid out, and what does a query read? | `Records` | `aws/data/dynamodb`, `aws/data/s3` |
 | How does a value or a line of code travel from deploy to run time? | `Sequence` (a value's journey) or `Timeline` (what runs when) | `aws/security/secrets-env`, `infrastructure-as-effects/phases` |
 | How do copies relate over time? | `BranchGraph` | `neon/data/branching` |
-| What nests inside what, to any depth, and what applies to each branch? | `Tree` (with `scopes` for inherited policies) | `aws/accounts-and-regions` |
+| What nests inside what, to any depth, and what applies to each branch? | `Tree`: nested borders, each parent drawn around its children (with `scopes` tagging the container a policy is attached to) | `aws/accounts-and-regions` |
 
 Each component's JSDoc has its props and a usage example. Read it before using
 one.

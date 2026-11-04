@@ -1,9 +1,10 @@
 ---
 /**
- * `<Tree />` — a hierarchy, top down, and what applies to each branch of it.
- * Use it when things nest to any depth and rules flow down: an AWS
- * organization's root, OUs and accounts with service control policies, a
- * folder tree with inherited IAM roles.
+ * `<Tree />` — a hierarchy drawn as nested borders, and what applies to each
+ * part of it. A node with children is a container around them; a node without
+ * is a box inside its container. Use it when things nest to any depth and rules
+ * flow down: an AWS organization's root, OUs and accounts with service control
+ * policies, a folder tree with inherited IAM roles.
  *
  *   <Tree
  *     nodes={[
@@ -14,8 +15,8 @@
  *     scopes={[{ on: "workloads", label: "SCP DenyOtherRegions" }]}
  *   />
  *
- * A scope shades the subtree under `on` and labels it, so a policy attached
- * to an OU visibly covers everything below it.
+ * A scope tags a container and tints its border, so a policy attached to an
+ * OU visibly covers everything inside it.
  */
 import "./diagram.css";
 
@@ -30,89 +31,108 @@ interface Props {
   nodes: TreeNode[];
   scopes?: { on: string; label: string }[];
   caption?: string;
+  /** Internal: the node this (recursive) instance renders. */
+  at?: string;
 }
 
-const { nodes, scopes = [], caption } = Astro.props as Props;
-
-const NW = Math.max(108, ...nodes.map((n) => Math.max(n.label.length * 8, (n.type ?? "").length * 6.6) + 24));
-const NH = 46;
-const GAP = 22;
-const ROW = NH + 48;
-const PAD = 16;
-const SCOPE_TOP = 22;
-
-const children = new Map<string, TreeNode[]>();
-for (const n of nodes) if (n.parent) children.set(n.parent, [...(children.get(n.parent) ?? []), n]);
+const { nodes, scopes = [], caption, at } = Astro.props as Props;
+const kids = (id: string) => nodes.filter((n) => n.parent === id);
+const scopeOf = (id: string) => scopes.filter((s) => s.on === id);
 const roots = nodes.filter((n) => !n.parent);
-
-const pos = new Map<string, { x: number; y: number }>();
-let next = 0;
-const place = (n: TreeNode, depth: number): number => {
-  const kids = children.get(n.id) ?? [];
-  const x = kids.length === 0 ? next++ * (NW + GAP) : kids.map((k) => place(k, depth + 1)).reduce((a, b) => a + b) / kids.length;
-  pos.set(n.id, { x: PAD + x, y: PAD + SCOPE_TOP + depth * ROW });
-  return x;
-};
-roots.forEach((r) => place(r, 0));
-
-const subtree = (id: string): string[] => [id, ...(children.get(id) ?? []).flatMap((k) => subtree(k.id))];
-const scopeBoxes = scopes.map((s) => {
-  const ps = subtree(s.on).map((id) => pos.get(id)!);
-  const x0 = Math.min(...ps.map((p) => p.x)) - 10;
-  const x1 = Math.max(...ps.map((p) => p.x)) + NW + 10;
-  const y0 = Math.min(...ps.map((p) => p.y)) - SCOPE_TOP;
-  const y1 = Math.max(...ps.map((p) => p.y)) + NH + 10;
-  return { ...s, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-});
-
-const W = PAD * 2 + Math.max(...[...pos.values()].map((p) => p.x)) + NW - PAD;
-const H = PAD * 2 + Math.max(...[...pos.values()].map((p) => p.y)) + NH + 10 - PAD;
-
-// Org-chart connectors: down from the parent, across, and down into each child.
-const links = nodes
-  .filter((n) => n.parent)
-  .map((n) => {
-    const a = pos.get(n.parent!)!;
-    const b = pos.get(n.id)!;
-    const ax = a.x + NW / 2;
-    const bx = b.x + NW / 2;
-    const midY = a.y + NH + (b.y - a.y - NH) / 2;
-    return `M ${ax} ${a.y + NH} V ${midY} H ${bx} V ${b.y}`;
-  });
+const node = at ? nodes.find((n) => n.id === at)! : undefined;
 ---
 
-<figure class="alc-fig not-content" data-nosnippet>
-  <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Tree"}>
-    {
-      scopeBoxes.map((s) => (
-        <g>
-          <rect x={s.x} y={s.y} width={s.w} height={s.h} rx="10" class="alc-tree__scope" />
-          <text x={s.x + 10} y={s.y + 15} class="alc-fig__strong">{s.label}</text>
-        </g>
-      ))
-    }
-    {links.map((d) => <path d={d} class="alc-fig__line alc-fig__line--muted" />)}
-    {
-      nodes.map((n) => {
-        const p = pos.get(n.id)!;
-        return (
-          <g>
-            <rect x={p.x} y={p.y} width={NW} height={NH} rx="8" class:list={["alc-fig__box", n.tone === "accent" && "alc-fig__box--accent"]} />
-            <text x={p.x + NW / 2} y={p.y + (n.type ? 20 : 28)} text-anchor="middle" class="alc-fig__label">{n.label}</text>
-            {n.type && <text x={p.x + NW / 2} y={p.y + 36} text-anchor="middle" class="alc-fig__type">{n.type}</text>}
-          </g>
-        );
-      })
-    }
-  </svg>
-  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
-</figure>
+{
+  node ? (
+    kids(node.id).length === 0 ? (
+      <div class:list={["alc-tree__leaf", node.tone === "accent" && "alc-tree__leaf--accent"]}>
+        <span class="alc-tree__label">{node.label}</span>
+        {node.type && <span class="alc-tree__type">{node.type}</span>}
+      </div>
+    ) : (
+      <div class:list={["alc-tree__box", scopeOf(node.id).length > 0 && "alc-tree__box--scoped"]}>
+        <div class="alc-tree__head">
+          <span class="alc-tree__label">{node.label}</span>
+          {node.type && <span class="alc-tree__type">{node.type}</span>}
+          {scopeOf(node.id).map((s) => <span class="alc-tree__scope">{s.label}</span>)}
+        </div>
+        <div class="alc-tree__kids">
+          {kids(node.id).map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+        </div>
+      </div>
+    )
+  ) : (
+    <figure class="alc-fig not-content" data-nosnippet role="img" aria-label={caption ?? "Tree"}>
+      <div class="alc-tree">
+        {roots.map((r) => <Astro.self nodes={nodes} scopes={scopes} at={r.id} />)}
+      </div>
+      {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+    </figure>
+  )
+}
 
 <style>
+  .alc-tree {
+    max-width: 44rem;
+    margin-inline: auto;
+    font-family: var(--alc-font-mono);
+  }
+  .alc-tree__box {
+    flex: 1 1 auto;
+    border: 1.5px solid var(--alc-accent-40);
+    border-radius: 10px;
+    padding: 0.5rem 0.625rem 0.625rem;
+  }
+  .alc-tree__box--scoped {
+    border: 1.5px dashed color-mix(in srgb, var(--alc-warn) 70%, transparent);
+    background: color-mix(in srgb, var(--alc-warn) 8%, transparent);
+  }
+  .alc-tree__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .alc-tree__kids {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.625rem;
+  }
+  .alc-tree__leaf {
+    flex: 0 1 auto;
+    align-self: flex-start;
+    min-width: 6.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0.875rem;
+    border: 1.5px solid var(--alc-accent-40);
+    border-radius: 8px;
+    background: var(--alc-bg-elev-2);
+  }
+  .alc-tree__leaf--accent {
+    border-color: var(--alc-accent);
+    background: color-mix(in srgb, var(--alc-accent-soft) 60%, var(--alc-bg-elev-2));
+  }
+  .alc-tree__label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--alc-fg-1);
+  }
+  .alc-tree__type {
+    font-size: 10.5px;
+    color: var(--alc-fg-3);
+  }
   .alc-tree__scope {
-    fill: color-mix(in srgb, var(--alc-warn) 9%, transparent);
-    stroke: color-mix(in srgb, var(--alc-warn) 60%, transparent);
-    stroke-width: 1.25;
-    stroke-dasharray: 5 4;
+    margin-left: auto;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 0.0625rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--alc-warn) 70%, transparent);
+    color: var(--alc-fg-2);
   }
 </style>

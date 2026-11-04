@@ -154,7 +154,9 @@ Each of these was a correction. Don't relearn them.
   a, b, c, d, e…" (now "Start with [What is X?]").
 - **Draw the platform's real model, in full.** An AWS organization drawn as four
   accounts in a box "left a lot to be desired": the real model is a tree of
-  OUs, with policies flowing down. Before drawing, check what the platform
+  OUs, with policies flowing down. Then an org chart of connector lines was
+  rejected too: draw it as nested borders, accounts inside their OU, OUs inside
+  their parent, and the policy tag on the OU it's attached to. Before drawing, check what the platform
   actually supports (nesting, inheritance, scopes) and what the package can
   declare (`AWS.Organizations.OrganizationalUnit`, `Policy`), and show both.
 - **Provider pages are about the provider.** Core Alchemy behaviour, like how

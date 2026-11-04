@@ -27,7 +27,7 @@ So accounts are how you keep environments apart. Put production in an account of
     { id: "sam", label: "sam", type: "account", parent: "sandbox" },
   ]}
   scopes={[{ on: "workloads", label: "SCP DenyOtherRegions" }]}
-  caption="An organization is a tree: OUs hold accounts and other OUs. A policy attached to an OU applies to every account below it, so the Workloads accounts can only use the regions it allows."
+  caption="An organization is a tree: OUs hold accounts and other OUs. A policy attached to an OU applies to every account inside it, so the Workloads accounts can only use the regions it allows."
 />
 
 An **organization** groups those accounts under one payer, the **management account**. Under its **root** sit **organizational units** (OUs), which hold accounts and other OUs, so you can shape it like your teams and environments. Declare the tree from a Stack deployed to the management account:
