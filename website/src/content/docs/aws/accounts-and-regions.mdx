@@ -51,7 +51,7 @@ alchemy profile edit --profile prod --add AWS
 
 ## Choose the stage and the account separately
 
-A [stage](/environments/stages) decides **what** you deploy: its own state and its own resource names. A profile decides **where**: which account and region. The two are independent.
+A [stage](/environments/stages) decides **what** you deploy: its own state and its own resource names. A profile decides **where**: which account, and the default region. The two are independent.
 
 ```sh
 alchemy deploy --stage prod --profile prod
@@ -64,7 +64,7 @@ Many stages can share one account. Each pull request gets its own stage, with it
 
 A region is a separate deployment of AWS in one part of the world. A Queue in `us-east-1` and a Queue in `eu-west-1` are two different Queues, with different ARNs, and messages never flow between them unless you send them.
 
-Your profile sets the region, and every regional resource in the Stack is created there. Pick the one closest to your users, or the one your data must stay in. To deploy the same Stack to another region, use a profile that points at it.
+Your profile sets the default region, and every regional resource in the Stack is created there. Pick the one closest to your users, or the one your data must stay in. To deploy the same Stack to another region, use a profile that points at it.
 
 In CI, the region comes from the environment instead:
 

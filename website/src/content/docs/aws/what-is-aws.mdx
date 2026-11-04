@@ -9,7 +9,7 @@ Amazon Web Services (AWS) is a cloud of a few hundred services: databases, queue
 
 This page introduces the concepts you meet on AWS, once each, and how Alchemy models them. The examples follow one small app: a Lambda Function that stores files in an S3 Bucket and queues jobs for a second Function.
 
-Here is the whole picture, which the rest of this page explains piece by piece. Your profile signs you in to an account and a region. Inside it, a Function runs as a role, and the role's policy lets it reach the Bucket and the Queue. The Queue in turn invokes the worker.
+Here is the whole picture, which the rest of this page explains piece by piece. Your profile signs you in to an account and sets a default region. Inside it, a Function runs as a role, and the role's policy lets it reach the Bucket and the Queue. The Queue in turn invokes the worker.
 
 <DAG
   nodes={[
@@ -54,7 +54,7 @@ A **region** is a geographic location with its own copy of each service: `us-eas
 
 Each region is built from several **Availability Zones**: separate data centers with independent power and networking. Services like Lambda, DynamoDB and SQS spread across zones for you. Networks and virtual machines make you choose.
 
-A few services are **global**: IAM, CloudFront and Route 53 have one copy for the whole account. Your profile sets the region every regional resource in your Stack is created in.
+A few services are **global**: IAM, CloudFront and Route 53 have one copy for the whole account. Your profile sets the default region, where every regional resource in your Stack is created.
 
 See [Accounts and regions](/aws/accounts-and-regions).
 
@@ -242,7 +242,7 @@ export default Alchemy.Stack(
 
 Each concept on this page is something your Stack declares or something Alchemy does for you.
 
-Your profile picks the account and region, and `AWS.providers()` deploys into them. Every resource is a declaration like `AWS.SQS.Queue("Jobs")`, named and tagged per stage. Every runtime is a class that holds its own code, and its execution role is generated from the bindings it uses. Event sources are bindings too. Networks, edge and monitoring are resources like any other, declared next to the code that needs them.
+Your profile signs in to the account and sets the default region, and `AWS.providers()` deploys there. Every resource is a declaration like `AWS.SQS.Queue("Jobs")`, named and tagged per stage. Every runtime is a class that holds its own code, and its execution role is generated from the bindings it uses. Event sources are bindings too. Networks, edge and monitoring are resources like any other, declared next to the code that needs them.
 
 The same Stack runs on your machine under `alchemy dev`, against a local emulator, with no account at all. See [Local development](/aws/local-development).
 
