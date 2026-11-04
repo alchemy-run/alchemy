@@ -1,10 +1,18 @@
 {
   "discovery": "ids-v1",
   "module": "ids_v1",
-  "resources": {},
+  "resources": {
+    "Endpoint": {
+      "pattern": "projects/*/locations/*/endpoints/*"
+    }
+  },
   "probes": {
-    "resources": {},
-    "enable": ["ids.googleapis.com"],
-    "location": "us-central1-a"
+    "resources": {
+      "Endpoint": "ProbeEndpoint"
+    },
+    "enable": ["ids.googleapis.com", "servicenetworking.googleapis.com", "compute.googleapis.com"],
+    "location": "us-central1-a",
+    "networks": 1,
+    "deployMinutes": 60
   }
 }

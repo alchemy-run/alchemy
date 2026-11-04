@@ -3,31 +3,32 @@ import type * as ids from "@distilled.cloud/gcp/ids_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Endpoint } from "./Endpoint.ts";
 
-export interface GetEndpointRequest extends Omit<ids.GetProjectsLocationsEndpointsRequest, "name"> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the endpoint (`endpoints/{endpoint}`). */
-  endpoint: string;
-}
+export interface GetEndpointRequest extends Omit<
+  ids.GetProjectsLocationsEndpointsRequest,
+  "name"
+> {}
 
-export type GetEndpointShape = () => Effect.Effect<
+export type GetEndpointShape = (
+  resource: Endpoint,
+) => Effect.Effect<
   (
-    request: GetEndpointRequest,
+    request?: GetEndpointRequest,
   ) => Effect.Effect<ids.Endpoint, ids.GetProjectsLocationsEndpointsError, RuntimeContext>
 >;
 
 /**
  * Gets details of a single Endpoint.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetEndpointHttp}. The host gets `roles/ids.viewer` on the project.
+ * Bind it to a {@link Endpoint} and provide {@link GetEndpointHttp}. The
+ * host gets `roles/ids.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `endpoints.get`
  * ```typescript
- * const getEndpoint = yield* GCP.IDS.GetEndpoint();
- * const response = yield* getEndpoint({ location: "us-central1", endpoint: "..." });
+ * const getEndpoint = yield* GCP.IDS.GetEndpoint(endpoint);
+ * const response = yield* getEndpoint();
  * ```
  *
  * @binding

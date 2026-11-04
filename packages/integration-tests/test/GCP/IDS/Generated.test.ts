@@ -6,6 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { callProbe, outcomeTag } from "../bindingHost.ts";
+import { releaseNetworkSlots, takeNetworkSlots } from "../networkQuota.ts";
 import IDSGeneratedHost from "./fixtures/generated-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -50,63 +51,57 @@ describe.skipIf(!!process.env.FAST)(
   () => {
     beforeAll(
       Effect.gen(function* () {
+        yield* takeNetworkSlots(1);
         yield* sharedStack.destroy();
         // The APIs first: the probe resources need them enabled to deploy.
         yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", { service: "ids.googleapis.com" });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi1", {
+              service: "servicenetworking.googleapis.com",
+            });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi2", {
+              service: "compute.googleapis.com",
+            });
           }),
         );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", { service: "ids.googleapis.com" });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi1", {
+              service: "servicenetworking.googleapis.com",
+            });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi2", {
+              service: "compute.googleapis.com",
+            });
             const host = yield* IDSGeneratedHost;
             return { uri: host.uri };
           }),
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 1_800_000 },
+      { timeout: 3_600_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+    afterAll(sharedStack.destroy().pipe(Effect.ensuring(releaseNetworkSlots(1))), {
+      timeout: 3_600_000,
+    });
+
+    describe("Endpoint", { concurrent: true }, () => {
+      test.provider(
+        "GetEndpoint (ids.projects.locations.endpoints.get)",
+        () => probe("GetEndpoint", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ids", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
 
     describe("project", { concurrent: true }, () => {
       test.provider(
-        "CreateEndpoint (ids.projects.locations.endpoints.create)",
-        () => probe("CreateEndpoint", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:ids", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteEndpoint (ids.projects.locations.endpoints.delete)",
-        () => probe("DeleteEndpoint", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:ids", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetEndpoint (ids.projects.locations.endpoints.get)",
-        () => probe("GetEndpoint", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:ids", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "ListEndpoints (ids.projects.locations.endpoints.list)",
         () => probe("ListEndpoints", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:ids", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchEndpoint (ids.projects.locations.endpoints.patch)",
-        () => probe("PatchEndpoint", false),
         {
           tags: ["provider:gcp", "provider:gcp:ids", "live"],
           timeout: 600_000,

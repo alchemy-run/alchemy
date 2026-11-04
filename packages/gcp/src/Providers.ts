@@ -1558,6 +1558,10 @@ import {
   BrandsIdentityAwareProxyClientProvider,
 } from "./IAP/BrandsIdentityAwareProxyClient.ts";
 import { IapDestGroup, IapDestGroupProvider } from "./IAP/IapDestGroup.ts";
+import {
+  Endpoint as IDSEndpoint,
+  EndpointProvider as IDSEndpointProvider,
+} from "./IDS/Endpoint.ts";
 import { AuthConfig, AuthConfigProvider } from "./Integrations/AuthConfig.ts";
 import {
   IntegrationsVersion,
@@ -3538,6 +3542,7 @@ const makeProviders = () =>
           StorageInsightsReportConfig,
           StorageBatchOperationsJob,
           NotebooksInstance,
+          IDSEndpoint,
           TranslateModel,
           WorkstationCluster,
           WorkstationClustersWorkstationConfig,
@@ -4659,6 +4664,7 @@ const makeProviders = () =>
                 StorageInsightsReportConfigProvider(),
                 StorageBatchOperationsJobProvider(),
                 NotebooksInstanceProvider(),
+                IDSEndpointProvider(),
                 TranslateModelProvider(),
               ),
               Layer.mergeAll(

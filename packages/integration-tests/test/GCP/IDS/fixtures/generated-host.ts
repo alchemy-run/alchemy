@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeEndpoint } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated IDS binding as its own
@@ -15,47 +16,17 @@ export default class IDSGeneratedHost extends GCP.Function<IDSGeneratedHost>()(
   "IDSGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.IDS.CreateEndpoint();
-    const p1 = yield* GCP.IDS.DeleteEndpoint();
-    const p2 = yield* GCP.IDS.GetEndpoint();
-    const p3 = yield* GCP.IDS.ListEndpoints();
-    const p4 = yield* GCP.IDS.PatchEndpoint();
+    const p0 = yield* GCP.IDS.GetEndpoint(ProbeEndpoint);
+    const p1 = yield* GCP.IDS.ListEndpoints();
     return {
       fetch: serveProbes({
-        CreateEndpoint: probeOutcome(
-          Retry.none(
-            p0({ location: "us-central1-a", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        DeleteEndpoint: probeOutcome(
-          Retry.none(p1({ endpoint: "alchemy-missing", location: "us-central1-a" } as never)),
-        ),
-        GetEndpoint: probeOutcome(
-          Retry.none(p2({ endpoint: "alchemy-missing", location: "us-central1-a" } as never)),
-        ),
-        ListEndpoints: probeOutcome(Retry.none(p3({ location: "us-central1-a" } as never))),
-        PatchEndpoint: probeOutcome(
-          Retry.none(
-            p4({
-              endpoint: "alchemy-missing",
-              location: "us-central1-a",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
-        ),
+        GetEndpoint: probeOutcome(Retry.none(p0({} as never))),
+        ListEndpoints: probeOutcome(Retry.none(p1({ location: "us-central1-a" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.IDS.CreateEndpointHttp,
-          GCP.IDS.DeleteEndpointHttp,
-          GCP.IDS.GetEndpointHttp,
-          GCP.IDS.ListEndpointsHttp,
-          GCP.IDS.PatchEndpointHttp,
-        ),
-      ),
+      Layer.mergeAll(Layer.mergeAll(GCP.IDS.GetEndpointHttp, GCP.IDS.ListEndpointsHttp)),
     ),
   ),
 ) {}
