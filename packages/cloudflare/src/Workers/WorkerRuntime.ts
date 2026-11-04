@@ -3,8 +3,6 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as EffectHttp from "effect/http/HttpEffect";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
@@ -212,12 +210,6 @@ export class EventLifetime extends Context.Service<
   {
     /** Keep the event's scope open until `promise` settles. */
     readonly extend: (promise: Promise<unknown>) => void;
-    /**
-     * Close `scope` with the event's scope instead of when its owner
-     * returns: Effect's HTTP server closes a request's scope once the
-     * response is written, before the event's `waitUntil` work has run.
-     */
-    readonly adopt: (scope: Scope.Closeable) => void;
   }
 >()("Cloudflare.Workers.EventLifetime") {}
 
@@ -267,10 +259,6 @@ export const makeEventLifetime = (scope: Scope.Scope) => {
   });
   const lifetime: EventLifetime["Service"] = {
     extend: (promise) => void work.push(promise),
-    adopt: (inner) => {
-      EffectHttp.scopeDisableClose(inner);
-      Effect.runSync(Scope.addFinalizer(scope, Scope.close(inner, Exit.void)));
-    },
   };
   return {
     lifetime,

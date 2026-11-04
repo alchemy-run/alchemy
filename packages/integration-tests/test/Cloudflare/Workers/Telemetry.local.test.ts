@@ -57,18 +57,6 @@ const ownBatches = (batches: OtlpCollector["requests"], traceId: string) =>
     ),
   ).pipe(Effect.map((decoded) => decoded.filter(({ spans }) => spans.length > 0)));
 
-/** Every batch's span names, whatever trace they belong to. */
-const allBatches = (batches: OtlpCollector["requests"]) =>
-  Effect.forEach(batches, (batch) =>
-    Schema.decodeUnknownEffect(TraceExport)(batch.body).pipe(
-      Effect.map(({ resourceSpans }) => ({
-        spans: resourceSpans.flatMap((resource) =>
-          resource.scopeSpans.flatMap((scope) => scope.spans.map((span) => span.name)),
-        ),
-      })),
-    ),
-  );
-
 test.provider(
   "delivers Worker and Durable Object OTLP batches without delaying the Worker response",
   (stack) =>
@@ -175,6 +163,87 @@ test.provider(
 );
 
 test.provider(
+  "flushes a streamed body's spans after the body settles without delaying its end",
+  (stack) =>
+    Effect.gen(function* () {
+      // Hold the export that carries the body's span: the body must still end.
+      const collector = yield* startOtlpCollector({
+        holdResponse: (body) => body.includes('"name":"otel-event-flush.stream-tail"'),
+      });
+      const currentConfig = yield* ConfigProvider.ConfigProvider;
+      yield* stack.destroy();
+      const deployment = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const worker = yield* OtelEventFlushWorker;
+            return { url: worker.url };
+          }),
+        )
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.orElse(
+              ConfigProvider.fromUnknown({
+                OTLP_EVENT_FLUSH_URL: `${collector.url}/v1/traces`,
+              }),
+              currentConfig,
+            ),
+          ),
+        );
+      if (deployment.url === undefined) {
+        return yield* Effect.die("OTLP event flush test Worker URL unavailable");
+      }
+
+      const trace = yield* Effect.makeSpanScoped("telemetry-local.client", { root: true });
+      const own = Effect.suspend(() => ownBatches(collector.requests, trace.traceId));
+      const client = yield* HttpClient.HttpClient;
+      const response = yield* client
+        .get(`${deployment.url}/stream`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(response.status).toBe(200);
+      expect(yield* response.text).toBe("head\ntail\n");
+
+      // One flush, after the body settled: the tail span ends after the
+      // handler returned, yet it ships in the same batch as the request's
+      // root span and the handler's span. The stream runs outside the
+      // request's span, so the tail span carries its own trace.
+      const batches = yield* own.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("100 millis"),
+          until: (batches) => batches.length > 0,
+          times: 50,
+        }),
+      );
+      expect(batches).toHaveLength(1);
+      const [{ batch, spans }] = batches;
+      // The handler's finalizer ran on the event scope, after the body ended.
+      expect([...spans].sort()).toEqual([
+        "GET",
+        "otel-event-flush.finalizer-after-body",
+        "otel-event-flush.worker",
+      ]);
+      expect(batch.body).toContain('"name":"otel-event-flush.stream-tail"');
+      // The body ended while its export was still held.
+      expect(batch.completed).toBe(false);
+      yield* Effect.sync(collector.releaseResponses);
+      yield* Effect.sync(() => batch.completed).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("100 millis"),
+          until: (completed) => completed,
+          times: 30,
+        }),
+      );
+      expect(yield* own).toHaveLength(1);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
   "exports spans recorded in waitUntil work",
   (stack) =>
     Effect.gen(function* () {
@@ -206,15 +275,6 @@ test.provider(
       const own = Effect.suspend(() => ownBatches(collector.requests, trace.traceId));
       const exported = (name: string) =>
         own.pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("500 millis"),
-            until: (batches) => batches.some(({ spans }) => spans.includes(name)),
-            times: 10,
-          }),
-        );
-      // A streamed body runs outside the handler's span, so look in every trace.
-      const exportedAnywhere = (name: string) =>
-        Effect.suspend(() => allBatches(collector.requests)).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("500 millis"),
             until: (batches) => batches.some(({ spans }) => spans.includes(name)),
@@ -254,16 +314,6 @@ test.provider(
           "otel-event-flush.worker",
         );
       }
-
-      // A span that ends while the response body is still streaming.
-      const streamed = yield* client
-        .get(`${deployment.url}/stream-span`)
-        .pipe(Effect.withParentSpan(trace));
-      expect(yield* streamed.text).toBe("streamed");
-      const chunkBatches = yield* exportedAnywhere("otel-event-flush.stream.chunk");
-      expect(
-        chunkBatches.some(({ spans }) => spans.includes("otel-event-flush.stream.chunk")),
-      ).toBe(true);
 
       // Durable Object: `DurableObjectState.waitUntil` in an RPC call.
       const rpcResponse = yield* client

@@ -95,26 +95,31 @@ const toHandledWebResponse = <Req>(
     // return value. Keep the assignment isolated here so callers get Response.
     const context = yield* Effect.context();
     const webResponse = yield* Deferred.make<Response>();
-
+    // Under a Worker or Durable Object bridge the event's scope closes once
+    // the handler, its streamed body and its `waitUntil` work have all
+    // settled. `toHandled` opens a request scope of its own and closes it as
+    // soon as the response is written, so the handler runs on the event's
+    // scope instead and Effect's request scope stays empty.
     const lifetime = Context.getOption(context, EventLifetime);
+    const eventScope = Context.getOption(context, Scope.Scope);
 
-    yield* EffectHttp.toHandled(handler, (request, response) =>
-      Effect.gen(function* () {
-        const withoutBody = request.method === "HEAD";
-        const hasBody = !HttpServerResponse.omitsBody(response, withoutBody);
-        if (Option.isSome(lifetime)) {
-          // The event closes this request's scope with its own, once its
-          // `waitUntil` work and the streamed body have settled.
-          lifetime.value.adopt((yield* Effect.scope) as Scope.Closeable);
-          if (hasBody) response = yield* extendWithBody(response, lifetime.value);
-        } else if (hasBody) {
-          response = EffectHttp.scopeTransferToStream(response);
-        }
-        return yield* Deferred.succeed(
-          webResponse,
-          HttpServerResponse.toWeb(response, { withoutBody, context }),
-        );
-      }),
+    yield* EffectHttp.toHandled(
+      Option.isSome(lifetime) && Option.isSome(eventScope)
+        ? Effect.provideService(handler, Scope.Scope, eventScope.value)
+        : handler,
+      (request, response) =>
+        Effect.gen(function* () {
+          const withoutBody = request.method === "HEAD";
+          if (!HttpServerResponse.omitsBody(response, withoutBody)) {
+            response = Option.isSome(lifetime)
+              ? yield* extendWithBody(response, lifetime.value)
+              : EffectHttp.scopeTransferToStream(response);
+          }
+          return yield* Deferred.succeed(
+            webResponse,
+            HttpServerResponse.toWeb(response, { withoutBody, context }),
+          );
+        }),
     );
     return yield* Deferred.await(webResponse);
   });
