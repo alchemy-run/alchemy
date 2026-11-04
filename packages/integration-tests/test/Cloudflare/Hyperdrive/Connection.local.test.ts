@@ -209,7 +209,7 @@ test.provider(
         Effect.gen(function* () {
           const created = yield* outOfBandConfig(
             accountId,
-            lookupConfigName("local"),
+            lookupConfigName("local", stack.stage),
             project.origin,
           );
 
@@ -275,7 +275,7 @@ test.provider(
         Effect.gen(function* () {
           const created = yield* outOfBandConfig(
             accountId,
-            `${lookupConfigName("local")}-nodev`,
+            `${lookupConfigName("local", stack.stage)}-nodev`,
             project.origin,
           );
           const defect = yield* stack

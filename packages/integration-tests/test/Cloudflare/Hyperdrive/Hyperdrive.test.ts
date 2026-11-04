@@ -400,7 +400,11 @@ test.provider(
 
       const deployed = yield* Effect.scoped(
         Effect.gen(function* () {
-          const created = yield* outOfBandConfig(accountId, lookupConfigName("live"), origin);
+          const created = yield* outOfBandConfig(
+            accountId,
+            lookupConfigName("live", stack.stage),
+            origin,
+          );
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {

@@ -244,11 +244,21 @@ export type Connection = Resource<
  * `Connection.lookup` binds a configuration Alchemy doesn't manage (created
  * in the dashboard or by another system), found by `hyperdriveId` or `name`.
  * It is read during plan/deploy and never created, updated or deleted. The
- * Worker binding is named after the id or name you look it up by.
+ * Worker binding is named after the id or name you look it up by, so inside
+ * an Effect Worker the props must evaluate the same at runtime as at deploy:
+ * derive a per-stage name from `yield* Stage`, never from `process.env`.
  *
  * **Example:** By name
  * ```typescript
  * const db = Cloudflare.Hyperdrive.Connection.lookup({ name: "shared-postgres" });
+ * const hd = yield* Cloudflare.Hyperdrive.Connect(db);
+ * ```
+ *
+ * **Example:** A per-stage name
+ * ```typescript
+ * const db = Cloudflare.Hyperdrive.Connection.lookup({
+ *   name: `postgres-${yield* Stage}`,
+ * });
  * const hd = yield* Cloudflare.Hyperdrive.Connect(db);
  * ```
  *
