@@ -3,31 +3,29 @@ import type * as batch from "@distilled.cloud/gcp/batch_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Job } from "./Job.ts";
 
-export interface CancelJobRequest extends Omit<batch.CancelProjectsLocationsJobsRequest, "name"> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the job (`jobs/{job}`). */
-  job: string;
-}
+export interface CancelJobRequest extends Omit<batch.CancelProjectsLocationsJobsRequest, "name"> {}
 
-export type CancelJobShape = () => Effect.Effect<
+export type CancelJobShape = (
+  resource: Job,
+) => Effect.Effect<
   (
-    request: CancelJobRequest,
+    request?: CancelJobRequest,
   ) => Effect.Effect<batch.Operation, batch.CancelProjectsLocationsJobsError, RuntimeContext>
 >;
 
 /**
  * Cancel a Job.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link CancelJobHttp}. The host gets `roles/batch.jobsEditor` on the project.
+ * Bind it to a {@link Job} and provide {@link CancelJobHttp}. The
+ * host gets `roles/batch.jobsEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `jobs.cancel`
  * ```typescript
- * const cancelJob = yield* GCP.Batch.CancelJob();
- * const response = yield* cancelJob({ location: "us-central1", job: "..." });
+ * const cancelJob = yield* GCP.Batch.CancelJob(job);
+ * const response = yield* cancelJob();
  * ```
  *
  * @binding

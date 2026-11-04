@@ -1,12 +1,18 @@
 {
   "discovery": "batch-v1",
   "module": "batch_v1",
-  "resources": {},
+  "resources": {
+    "Job": {
+      "pattern": "projects/*/locations/*/jobs/*"
+    }
+  },
   "permissions": {
     "batch.projects.locations.jobs.cancel": "batch.jobs.delete"
   },
   "probes": {
-    "resources": {},
-    "enable": ["batch.googleapis.com"]
+    "resources": {
+      "Job": "ProbeJob"
+    },
+    "enable": ["batch.googleapis.com", "compute.googleapis.com"]
   }
 }

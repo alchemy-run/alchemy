@@ -3,20 +3,19 @@ import type * as batch from "@distilled.cloud/gcp/batch_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Job } from "./Job.ts";
 
 export interface ListJobTaskGroupTasksRequest extends Omit<
   batch.ListProjectsLocationsJobsTaskGroupsTasksRequest,
   "parent"
 > {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the job (`jobs/{job}`). */
-  job: string;
-  /** Id of the taskGroup (`taskGroups/{taskGroup}`). */
+  /** Id of the taskGroup under the bound resource (`taskGroups/{taskGroup}`). */
   taskGroup: string;
 }
 
-export type ListJobTaskGroupTasksShape = () => Effect.Effect<
+export type ListJobTaskGroupTasksShape = (
+  resource: Job,
+) => Effect.Effect<
   (
     request: ListJobTaskGroupTasksRequest,
   ) => Effect.Effect<
@@ -29,14 +28,14 @@ export type ListJobTaskGroupTasksShape = () => Effect.Effect<
 /**
  * List Tasks associated with a job.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ListJobTaskGroupTasksHttp}. The host gets `roles/batch.jobsViewer` on the project.
+ * Bind it to a {@link Job} and provide {@link ListJobTaskGroupTasksHttp}. The
+ * host gets `roles/batch.jobsViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `tasks.list`
  * ```typescript
- * const listJobTaskGroupTasks = yield* GCP.Batch.ListJobTaskGroupTasks();
- * const response = yield* listJobTaskGroupTasks({ location: "us-central1", job: "...", taskGroup: "..." });
+ * const listJobTaskGroupTasks = yield* GCP.Batch.ListJobTaskGroupTasks(job);
+ * const response = yield* listJobTaskGroupTasks({ taskGroup: "..." });
  * ```
  *
  * @binding

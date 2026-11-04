@@ -428,6 +428,7 @@ import {
   VolumesSnapshot as BaremetalsolutionVolumesSnapshot,
   VolumesSnapshotProvider as BaremetalsolutionVolumesSnapshotProvider,
 } from "./BareMetalSolution/VolumesSnapshot.ts";
+import { Job as BatchJob, JobProvider as BatchJobProvider } from "./Batch/Job.ts";
 import { AppConnection, AppConnectionProvider } from "./BeyondCorp/AppConnection.ts";
 import { AppConnector, AppConnectorProvider } from "./BeyondCorp/AppConnector.ts";
 import { AppGateway, AppGatewayProvider } from "./BeyondCorp/AppGateway.ts";
@@ -3521,6 +3522,7 @@ const makeProviders = () =>
           AdaptiveMtDataset,
           GlossariesGlossaryEntry,
           TranslateGlossary,
+          BatchJob,
           TranslateModel,
           WorkstationCluster,
           WorkstationClustersWorkstationConfig,
@@ -4638,6 +4640,7 @@ const makeProviders = () =>
                 AdaptiveMtDatasetProvider(),
                 GlossariesGlossaryEntryProvider(),
                 TranslateGlossaryProvider(),
+                BatchJobProvider(),
                 TranslateModelProvider(),
               ),
               Layer.mergeAll(

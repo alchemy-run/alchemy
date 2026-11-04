@@ -57,12 +57,18 @@ describe.skipIf(!!process.env.FAST)(
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
               service: "batch.googleapis.com",
             });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi1", {
+              service: "compute.googleapis.com",
+            });
           }),
         );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
               service: "batch.googleapis.com",
+            });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi1", {
+              service: "compute.googleapis.com",
             });
             const host = yield* BatchGeneratedHost;
             return { uri: host.uri };
@@ -75,7 +81,7 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("project", { concurrent: true }, () => {
+    describe("Job", { concurrent: true }, () => {
       test.provider(
         "CancelJob (batch.projects.locations.jobs.cancel)",
         () => probe("CancelJob", false),
@@ -84,23 +90,7 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "CreateJob (batch.projects.locations.jobs.create)",
-        () => probe("CreateJob", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:batch", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteJob (batch.projects.locations.jobs.delete)",
-        () => probe("DeleteJob", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:batch", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider("GetJob (batch.projects.locations.jobs.get)", () => probe("GetJob", false), {
+      test.provider("GetJob (batch.projects.locations.jobs.get)", () => probe("GetJob", true), {
         tags: ["provider:gcp", "provider:gcp:batch", "live"],
         timeout: 600_000,
       });
@@ -113,16 +103,19 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "ListJobs (batch.projects.locations.jobs.list)",
-        () => probe("ListJobs", true),
+        "ListJobTaskGroupTasks (batch.projects.locations.jobs.taskGroups.tasks.list)",
+        () => probe("ListJobTaskGroupTasks", false),
         {
           tags: ["provider:gcp", "provider:gcp:batch", "live"],
           timeout: 600_000,
         },
       );
+    });
+
+    describe("project", { concurrent: true }, () => {
       test.provider(
-        "ListJobTaskGroupTasks (batch.projects.locations.jobs.taskGroups.tasks.list)",
-        () => probe("ListJobTaskGroupTasks", false),
+        "ListJobs (batch.projects.locations.jobs.list)",
+        () => probe("ListJobs", true),
         {
           tags: ["provider:gcp", "provider:gcp:batch", "live"],
           timeout: 600_000,

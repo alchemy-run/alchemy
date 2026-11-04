@@ -3,31 +3,29 @@ import type * as batch from "@distilled.cloud/gcp/batch_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Job } from "./Job.ts";
 
-export interface GetJobRequest extends Omit<batch.GetProjectsLocationsJobsRequest, "name"> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the job (`jobs/{job}`). */
-  job: string;
-}
+export interface GetJobRequest extends Omit<batch.GetProjectsLocationsJobsRequest, "name"> {}
 
-export type GetJobShape = () => Effect.Effect<
+export type GetJobShape = (
+  resource: Job,
+) => Effect.Effect<
   (
-    request: GetJobRequest,
+    request?: GetJobRequest,
   ) => Effect.Effect<batch.Job, batch.GetProjectsLocationsJobsError, RuntimeContext>
 >;
 
 /**
  * Get a Job specified by its resource name.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetJobHttp}. The host gets `roles/batch.jobsViewer` on the project.
+ * Bind it to a {@link Job} and provide {@link GetJobHttp}. The
+ * host gets `roles/batch.jobsViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `jobs.get`
  * ```typescript
- * const getJob = yield* GCP.Batch.GetJob();
- * const response = yield* getJob({ location: "us-central1", job: "..." });
+ * const getJob = yield* GCP.Batch.GetJob(job);
+ * const response = yield* getJob();
  * ```
  *
  * @binding

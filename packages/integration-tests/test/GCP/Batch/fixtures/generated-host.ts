@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeJob } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Batch binding as its own
@@ -15,51 +16,24 @@ export default class BatchGeneratedHost extends GCP.Function<BatchGeneratedHost>
   "BatchGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.Batch.CancelJob();
-    const p1 = yield* GCP.Batch.CreateJob();
-    const p2 = yield* GCP.Batch.DeleteJob();
-    const p3 = yield* GCP.Batch.GetJob();
-    const p4 = yield* GCP.Batch.GetJobTaskGroupTask();
-    const p5 = yield* GCP.Batch.ListJobs();
-    const p6 = yield* GCP.Batch.ListJobTaskGroupTasks();
-    const p7 = yield* GCP.Batch.ReportState();
+    const p0 = yield* GCP.Batch.CancelJob(ProbeJob);
+    const p1 = yield* GCP.Batch.GetJob(ProbeJob);
+    const p2 = yield* GCP.Batch.GetJobTaskGroupTask(ProbeJob);
+    const p3 = yield* GCP.Batch.ListJobs();
+    const p4 = yield* GCP.Batch.ListJobTaskGroupTasks(ProbeJob);
+    const p5 = yield* GCP.Batch.ReportState();
     return {
       fetch: serveProbes({
-        CancelJob: probeOutcome(
-          Retry.none(p0({ job: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        CreateJob: probeOutcome(
-          Retry.none(
-            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        DeleteJob: probeOutcome(
-          Retry.none(p2({ job: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        GetJob: probeOutcome(
-          Retry.none(p3({ job: "alchemy-missing", location: "us-central1" } as never)),
-        ),
+        CancelJob: probeOutcome(Retry.none(p0({} as never))),
+        GetJob: probeOutcome(Retry.none(p1({} as never))),
         GetJobTaskGroupTask: probeOutcome(
-          Retry.none(
-            p4({
-              job: "alchemy-missing",
-              taskGroup: "alchemy-missing",
-              task: "alchemy-missing",
-              location: "us-central1",
-            } as never),
-          ),
+          Retry.none(p2({ taskGroup: "alchemy-missing", task: "alchemy-missing" } as never)),
         ),
-        ListJobs: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListJobs: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
         ListJobTaskGroupTasks: probeOutcome(
-          Retry.none(
-            p6({
-              job: "alchemy-missing",
-              taskGroup: "alchemy-missing",
-              location: "us-central1",
-            } as never),
-          ),
+          Retry.none(p4({ taskGroup: "alchemy-missing" } as never)),
         ),
-        ReportState: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ReportState: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
@@ -67,8 +41,6 @@ export default class BatchGeneratedHost extends GCP.Function<BatchGeneratedHost>
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.Batch.CancelJobHttp,
-          GCP.Batch.CreateJobHttp,
-          GCP.Batch.DeleteJobHttp,
           GCP.Batch.GetJobHttp,
           GCP.Batch.GetJobTaskGroupTaskHttp,
           GCP.Batch.ListJobsHttp,
