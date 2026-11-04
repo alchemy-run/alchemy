@@ -29,7 +29,7 @@ Deploy and destroy are a `plan` and an `apply`. Drift and nuke don't plan change
 | `alchemy deploy`         | `Alchemist.plan({ stack, operation: "deploy", ... })`    | `Alchemist.apply`         |
 | `alchemy plan`           | `Alchemist.plan({ stack, operation: "deploy", ... })`    | —                         |
 | `alchemy destroy`        | `Alchemist.plan({ stack, operation: "destroy", ... })`   | `Alchemist.apply`         |
-| `alchemy drift`          | `Alchemist.Drift.scan({ stack, ... })`                   | `Alchemist.Drift.execute` (run by `deploy --detect-drift`) |
+| `alchemy drift --repair` | `Alchemist.Drift.scan({ stack, ... })`                   | `Alchemist.Drift.execute` |
 | `alchemy unsafe nuke`    | `Alchemist.Nuke.scan({ stack, ... })`                    | `Alchemist.Nuke.execute`  |
 
 Alongside the operations, `Alchemist` holds what they share: `layer`, `importStack`, `hasChanges`, and `onEvent`.
@@ -86,7 +86,7 @@ A `destroy` plan and `Alchemist.Drift.scan` never run the stack program, so they
 
 `Alchemist.Drift.scan` reads every resource the stage owns and compares it with state. Each row's `status` is `in-sync`, `drifted`, `missing`, or `skipped` when it could not be checked (its provider can't read it, or a deploy was interrupted); `reason` says which. `Alchemist.Drift.hasDrift(scan)` is true when any row is `drifted` or `missing`.
 
-`Alchemist.Drift.execute(scan)` repairs only the rows the scan reported as drifted or missing, back to their last-deployed state. It reads each one again first, so a resource that is back in sync is left alone, and drift that appeared after the scan waits for the next scan. It doesn't run the stack program, so it leaves the stack's outputs as they were; deploy afterwards to refresh them, as `alchemy deploy --detect-drift` does.
+`Alchemist.Drift.execute(scan)` repairs only the rows the scan reported as drifted or missing, back to their last-deployed state. It reads each one again first, so a resource that is back in sync is left alone, and drift that appeared after the scan waits for the next scan.
 
 ## Nuke
 

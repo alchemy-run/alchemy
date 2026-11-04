@@ -84,7 +84,7 @@ alchemy deploy --force
 [`alchemy drift`](/cli/drift) detects objects deleted out of band,
 such as a Manifest's object or the ServiceAccount of a Deployment or
 Job. It reports the resource as missing, and
-`alchemy deploy --detect-drift` recreates it. It doesn't compare object
+`alchemy drift --repair` recreates it. It doesn't compare object
 fields, and a HelmChart is only checked for a reachable cluster.
 
 ## Replacement

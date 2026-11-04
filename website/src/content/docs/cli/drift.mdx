@@ -1,6 +1,6 @@
 ---
 title: drift
-description: Detect infrastructure drift by re-observing the cloud, and repair it with deploy --detect-drift.
+description: Detect infrastructure drift by re-observing the cloud, and optionally repair it back to the last deployed state.
 ---
 
 ```sh
@@ -13,33 +13,34 @@ deploy plan: unchanged resources are no-ops, out-of-band edits show as
 **drifted**, and resources deleted behind alchemy's back show as
 **missing**.
 
-`drift` only reports. It never changes the cloud or state, and it doesn't
-run your stack program.
+By default, `drift` only reports changes. In a terminal it asks whether to
+repair them. Pass `--repair` (or `--yes`) to restore drifted and missing
+resources to the last deployed state without asking. Alchemy reads the cloud
+state again before applying the repair.
 
-To repair drift, run [`alchemy deploy --detect-drift`](/cli/deploy). It runs
-the same check and, once you approve (or pass `--yes`), restores drifted and
-missing resources to the last deployed state, then deploys. The deploy
-refreshes the stack's outputs, so they point at any resource the repair
-recreated.
+A repair doesn't recompute the stack's outputs, because `drift` never runs
+the stack program. Run `alchemy deploy` afterwards to refresh them.
 
 ## Exit codes
 
-| Code | Meaning                                            |
-| ---- | -------------------------------------------------- |
-| `0`  | No drift                                           |
-| `1`  | The check failed, e.g. a resource couldn't be read |
-| `2`  | Drift was found                                    |
+| Code | Meaning                                                    |
+| ---- | ---------------------------------------------------------- |
+| `0`  | No drift, or the drift was repaired                        |
+| `1`  | The check failed, e.g. a resource couldn't be read         |
+| `2`  | Drift was found and not repaired                           |
 
 A scheduled job can alert on `2` without parsing the plan.
 
 ## Flags
 
-| Option                | Description                                                        |
-| --------------------- | ------------------------------------------------------------------ |
-| `--stage <name>`      | Stage to check (defaults to `$ALCHEMY_STAGE` or `live_$USER`)       |
-| `--profile <name>`    | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
-| `--env-file <path>`   | Load environment variables from a file                             |
-| `--config, -c <file>` | Stack file to check (defaults to `alchemy.run.ts`)                 |
+| Option              | Description                                                        |
+| ------------------- | ------------------------------------------------------------------ |
+| `--repair`          | Repair detected drift without prompting                            |
+| `--stage <name>`    | Stage to check (defaults to `$ALCHEMY_STAGE` or `live_$USER`)       |
+| `--yes`             | Answer the repair prompt with yes (same as `--repair`)             |
+| `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
+| `--env-file <path>` | Load environment variables from a file                             |
+| `--config, -c <file>` | Stack file to check (defaults to `alchemy.run.ts`)               |
 
 ## Examples
 
@@ -47,11 +48,14 @@ A scheduled job can alert on `2` without parsing the plan.
 # Report drift for the default stage
 alchemy drift
 
-# Check production; exits 2 when it has drifted
+# Check production
 alchemy drift --stage prod
 
-# Repair drift and deploy, without a prompt
-alchemy deploy --stage prod --detect-drift --yes
+# Check prod from a scheduled job; exits 2 when it has drifted
+alchemy drift --stage prod
+
+# Repair drift without an interactive prompt
+alchemy drift --stage prod --repair
 ```
 
 ## Where next
