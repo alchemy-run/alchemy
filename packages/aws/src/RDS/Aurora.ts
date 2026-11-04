@@ -418,6 +418,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
           }),
         );
       }
+      const dataApi = props.cluster?.enableHttpEndpoint ?? props.dataApi ?? true;
       const engineVersion = props.engineVersion;
       const databaseName = props.databaseName ?? "app";
       const username = props.secret?.username ?? "app";
@@ -507,7 +508,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
         dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
         dbClusterParameterGroupName: clusterParameterGroup?.dbClusterParameterGroupName,
         vpcSecurityGroupIds: securityGroupIds,
-        enableHttpEndpoint: props.dataApi ?? true,
+        enableHttpEndpoint: dataApi,
         copyTagsToSnapshot: props.cluster?.copyTagsToSnapshot ?? true,
         deletionProtection: props.cluster?.deletionProtection ?? props.deletionProtection ?? false,
         backupRetentionPeriod: props.cluster?.backupRetentionPeriod ?? props.backupRetentionPeriod,
@@ -569,7 +570,8 @@ export const Aurora = (id: string, props: AuroraProps) =>
         tags: mergeTags(commonTags, props.instance?.tags),
         ...props.instance,
         migrations: props.migrations,
-        migrationsTransport: props.migrationsTransport,
+        migrationsTransport:
+          props.migrationsTransport ?? (props.migrations && dataApi ? "data-api" : undefined),
         migrationsSecretArn: props.migrations ? secret.secretArn : undefined,
       });
 
