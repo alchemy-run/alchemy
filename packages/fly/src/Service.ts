@@ -289,6 +289,11 @@ export type Service = Resource<
     network?: string;
     /** Token bound callers send with RPC calls. */
     rpcToken?: Redacted.Redacted<string>;
+    /**
+     * Slug of the organization the App is in. Its Machines' OIDC tokens are
+     * issued by `https://oidc.fly.io/{orgSlug}`.
+     */
+    orgSlug?: string;
     /** Fly Machine id of replica 0. */
     machineId: string;
     /** Fly Machine ids of every replica. */
@@ -1311,6 +1316,7 @@ interface Access {
   network: string | undefined;
   bindingPort: number;
   rpcToken: Redacted.Redacted<string> | undefined;
+  orgSlug: string | undefined;
 }
 
 /** Drop the port Alchemy added for bindings from a services list. */
@@ -1494,6 +1500,7 @@ const toAttrs = (set: ReplicaSet, codeHash: string, access: Access): Service["At
   ownsApp: access.ownsApp,
   network: normalizeNetwork(access.network),
   rpcToken: access.rpcToken,
+  orgSlug: access.orgSlug,
   ...endpointsOf(set, access),
   rolloutPending: set.rolloutPending,
   machineId: set.machineId,
@@ -1748,6 +1755,7 @@ export const ServiceProvider = () =>
               network: output?.network ?? olds?.network,
               bindingPort: olds?.bindingPort ?? DEFAULT_BINDING_PORT,
               rpcToken: output?.rpcToken,
+              orgSlug: output?.orgSlug ?? (yield* resolveOrgSlug()),
             });
           }
           return toAttrs(found, output?.code.hash ?? "", {
@@ -1756,6 +1764,7 @@ export const ServiceProvider = () =>
             network: output?.network ?? (ownsApp ? olds?.network : undefined),
             bindingPort: olds?.bindingPort ?? DEFAULT_BINDING_PORT,
             rpcToken: output?.rpcToken,
+            orgSlug: output?.orgSlug ?? (yield* resolveOrgSlug()),
           });
         }),
 
@@ -1769,6 +1778,7 @@ export const ServiceProvider = () =>
               network: undefined,
               bindingPort: DEFAULT_BINDING_PORT,
               rpcToken: undefined,
+              orgSlug: undefined,
             }),
           );
         }),
@@ -1884,6 +1894,7 @@ export const ServiceProvider = () =>
             network,
             bindingPort,
             rpcToken: props.rpcToken,
+            orgSlug: yield* resolveOrgSlug(),
           });
         }),
 
@@ -1944,6 +1955,7 @@ export const ServiceProvider = () =>
             network,
             bindingPort,
             rpcToken: isResolved(props.rpcToken) ? props.rpcToken : undefined,
+            orgSlug: yield* resolveOrgSlug(),
           });
         }),
 
