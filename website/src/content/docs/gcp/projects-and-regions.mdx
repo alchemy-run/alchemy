@@ -13,7 +13,7 @@ Use projects to keep environments apart: one for production, others for staging 
 
 ## Connect a project with a profile
 
-Alchemy reaches a project through a [profile](/environments/profiles), which names a **gcloud configuration**: a Google account, a project and a region. Add GCP to your `default` profile:
+Alchemy reaches a project through a [profile](/environments/profiles), which names a **gcloud configuration**: a Google account, a project and a default region. Add GCP to your `default` profile:
 
 ```sh
 alchemy profile edit --add GCP
@@ -30,7 +30,7 @@ alchemy profile edit --profile prod --add GCP
 
 ## Choose the stage and the project separately
 
-A [stage](/environments/stages) decides **what** you deploy: its own state and its own resource names. A profile decides **where**: which project and region.
+A [stage](/environments/stages) decides **what** you deploy: its own state and its own resource names. A profile decides **where**: which project, and the default region.
 
 ```sh
 alchemy deploy --stage prod --profile prod
@@ -53,7 +53,7 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com
 
 A **region**, like `us-central1` or `europe-west1`, is a geographic location with several **zones**, separate data centers inside it. A Cloud Run service, a Cloud SQL instance or a subnet runs in one region. Some resources are **multi-regional**, like a Cloud Storage bucket in `US`, and some are **global**, like a VPC network and IAM itself.
 
-The configuration's `compute/region` is where Alchemy creates regional resources. A `region` in the profile overrides it.
+The configuration's `compute/region` is the default region: where Alchemy creates regional resources that don't set their own `region` or `location`. A `region` in the profile overrides it.
 
 ## In CI
 

@@ -15,7 +15,7 @@ alchemy profile edit --add Railway
 
 **OAuth** pairs Alchemy with your Railway account in the browser, with no token to create. Or paste an **account** or **workspace token**, made under **Account Settings → Tokens**. A **project token** won't work: it reaches one project, and Alchemy creates projects.
 
-A Project is created in your token's workspace. To pin it to another workspace your token can reach, set `workspaceId`:
+A Project is created in your token's workspace, or, for an account token or OAuth, in your first workspace. To pin it to another workspace your token can reach, set `workspaceId`:
 
 ```typescript title="src/project.ts"
 export const Site = Railway.Project("Site", { workspaceId: "ws_123" });

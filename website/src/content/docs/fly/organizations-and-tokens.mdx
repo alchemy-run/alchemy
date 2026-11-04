@@ -9,7 +9,7 @@ An organization is also a boundary. Its Apps share one private network, and noth
 
 ## A token decides the organization
 
-Alchemy deploys with an **API token**, and Fly tokens are scoped to one organization. So the token is how you choose where things go: a Service creates its App in the token's organization, and `Fly.App` uses it when you leave out `orgSlug`.
+Alchemy deploys with an **API token**. An organization token is scoped to one organization, so the token is how you choose where things go: a Service creates its App in the token's organization, and `Fly.App` uses it when you leave out `orgSlug`.
 
 Create an organization token in the dashboard under **Account → Access Tokens**, or with the Fly CLI:
 

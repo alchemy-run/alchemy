@@ -167,6 +167,6 @@ export default Alchemy.Stack(
 
 Each concept on this page is something your Stack declares or something Alchemy does for you.
 
-Your profile's gcloud configuration picks the project and region, and `GCP.providers()` deploys into them. Every resource is a declaration, named and labelled per stage. Every runtime is a class that holds its own code, and runs as a service account of its own. Bindings grant that account the roles its code uses, on the resources it uses. Events, networks and monitoring are declarations like any other, next to the code that needs them.
+Your profile's gcloud configuration picks the project and the default region, and `GCP.providers()` deploys into them. Every resource is a declaration, named and labelled per stage. Every runtime is a class that holds its own code, and runs as a service account of its own. Bindings grant that account the roles its code uses, on the resources it uses. Events, networks and monitoring are declarations like any other, next to the code that needs them.
 
 Next, build one: the [tutorial](/gcp/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [IAM & bindings](/gcp/security/iam).
