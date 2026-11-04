@@ -1054,6 +1054,24 @@ describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  // `kind` is also the tag every Output expression carries; reading it off
+  // a lookup must still reach the resource's attribute.
+  test.provider("a lookup's kind attribute resolves to the resource's value", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-kind";
+      lookupTargets.set(name, { name, value: "v", kind: "ip" });
+      const program = TestResource("KindConsumer", {
+        string: Output.map(LookupTarget.lookup({ name }).kind, (kind) => kind ?? "none"),
+      });
+
+      const consumer = yield* stack.deploy(program);
+      expect(consumer.string).toEqual("ip");
+
+      yield* stack.destroy();
+      lookupTargets.delete(name);
+    }),
+  );
+
   // Always a user mistake: the lookup would bind the resource with no
   // dependency, so this stack could delete or replace it under its consumer.
   test.provider("a lookup of a resource this stack manages fails the deploy", (stack) =>

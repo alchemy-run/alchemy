@@ -1400,7 +1400,8 @@ export const capturedConfigHost = (mode: string) =>
 export interface LookupTarget extends Resource<
   "Test.LookupTarget",
   { value?: string },
-  { name: string; value: string },
+  // `kind` shares its name with an Output expression's own tag.
+  { name: string; value: string; kind?: string },
   never,
   undefined,
   { name: string }
