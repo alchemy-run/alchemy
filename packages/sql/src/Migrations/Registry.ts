@@ -25,6 +25,13 @@ import { readMigrationRecords } from "./Records.ts";
  * is copied into Alchemy's table once and the foreign table is left frozen
  * (never written, never dropped). From then on Alchemy's table is the only
  * bookkeeping.
+ *
+ * History is forward-only and linear. An edited or deleted applied file
+ * fails with `RewrittenMigrationHistoryError`, and a pending file that
+ * sorts before an applied one fails with `NonLinearMigrationHistoryError`.
+ * An applied file renamed with unchanged contents keeps its row under the
+ * new name, so renaming a late file to sort last fixes the order without
+ * rerunning it anywhere.
  */
 export type MigrationsInput =
   | string
@@ -204,7 +211,8 @@ export type MigrationHistoryChange =
  * Classify the migration half of a provider `diff`:
  * - `none` — hashes and bookkeeping table are unchanged
  * - `pending` — new files and/or a table rename; apply in place
- * - `rewritten` — an already-applied file was edited or removed
+ * - `rewritten` — an already-applied file was edited or removed (a rename
+ *   with unchanged contents is neither)
  */
 export const classifyMigrationHistory = (options: {
   news: { migrations?: MigrationsInput };

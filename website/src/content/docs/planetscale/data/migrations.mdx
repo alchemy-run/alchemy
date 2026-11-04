@@ -68,6 +68,12 @@ in place:
   new forward migration instead of rewriting files that have already
   run.
 
+Renaming an applied file without changing its contents is neither: its
+row moves to the new name and nothing is replaced. A new file must sort
+after every applied one, or the deploy fails with
+`NonLinearMigrationHistoryError`; rename it so it sorts last. See
+[Change migration history safely](/sql/effect-sql/migrations#change-migration-history-safely).
+
 ## The tracking table
 
 Applied migrations are recorded in Alchemy's `__alchemy_migrations`
@@ -86,7 +92,8 @@ CREATE TABLE IF NOT EXISTS "__alchemy_migrations" (
 (The MySQL flavor is the same shape with MySQL types.) On each
 deploy, files whose names already appear in the table are skipped
 **and** their content hashes must still match. A hash mismatch or a
-recorded name with no local file is a hard error.
+recorded name with no local file is a hard error, unless another file
+has the same contents, which is treated as a rename.
 
 A database previously migrated with drizzle-kit or Prisma is
 [adopted automatically](/sql/effect-sql/migrations#adopting-an-existing-database):

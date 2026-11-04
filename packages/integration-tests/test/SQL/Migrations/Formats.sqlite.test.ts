@@ -405,6 +405,58 @@ describe("alchemy format", (it) => {
   );
 
   it.effect(
+    "pairs each applied row with at most one renamed file",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records: [users] });
+        // Both files carry 0001's hash; only the first takes its row, the
+        // other is new and runs.
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [
+            { ...users, name: "0003_users.sql" },
+            { ...posts, name: "0004_posts.sql", hash: users.hash },
+          ],
+        });
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0003_users.sql", "0004_posts.sql"]);
+        expect(tableNames(db)).toContain("posts");
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  // A database that ran the file under its old name, but not a file that
+  // now sorts before its new name, ran them out of order.
+  it.effect(
+    "fails when a renamed migration now sorts after one this database never ran",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records: [users] });
+        const result = yield* Effect.result(
+          applyAlchemyFormat({
+            executor,
+            table: "__alchemy_migrations",
+            records: [posts, { ...users, name: "0003_users.sql" }],
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("NonLinearMigrationHistoryError");
+        }
+        expect(tableNames(db)).not.toContain("posts");
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
     "fails when a renamed migration's contents also changed",
     () =>
       Effect.gen(function* () {

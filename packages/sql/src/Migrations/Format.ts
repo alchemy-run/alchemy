@@ -112,9 +112,10 @@ export class MigrationHistoryConflictError extends Data.TaggedError(
 /**
  * Already-applied migration files were edited or removed. History is
  * forward-only: add a new migration instead of rewriting files that have
- * already run. PlanetScale development branches replace rather than
- * raising this; production branches (and in-place apply on any target)
- * fail with it.
+ * already run. Renaming an applied file is not a rewrite when its
+ * contents are unchanged: its row moves to the new name. PlanetScale
+ * development branches replace rather than raising this; production
+ * branches (and in-place apply on any target) fail with it.
  */
 export class RewrittenMigrationHistoryError extends Data.TaggedError(
   "RewrittenMigrationHistoryError",
