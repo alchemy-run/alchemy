@@ -108,6 +108,13 @@ Each of these was a correction. Don't relearn them.
   Center). Call out who each option is for.
 - **Node.js first, linked, then Bun.** Write "[Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)",
   using the minimum from `packages/alchemy/bin/cli.js`.
+- **Commands are package-manager neutral.** An install or an `alchemy` command
+  is a `<PackageManagers add="…" />` or `<PackageManagers run="alchemy deploy" />`
+  (tabs, pnpm first), never a raw ```sh block of `bun alchemy …`. Prose writes
+  the CLI bare: `alchemy deploy`. A shell block that mixes in `curl` or `git`
+  uses `npx alchemy …`. Keep Bun-only commands (`bun test`, `bun build`) where
+  the page deliberately uses Bun, and GitHub Actions workflows that set up Bun
+  themselves. About 190 bun-first blocks had to be swept once already.
 - **Accounts & access comes first**, right after the tutorial, on every provider.
   More: [Accounts & access](references/page-shapes.md#accounts--access).
 - **Every secrets page mentions secret providers** (Doppler, Infisical, per-stage
