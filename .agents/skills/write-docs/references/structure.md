@@ -77,17 +77,22 @@ with `groups` on the grid.
   Pick whichever keeps lines off other nodes and from sharing a segment. An edge
   to a group from above or below runs vertically into its border.
 - **Group borders size themselves** to their label, and a label moves clear of
-  an edge running through it. Keep node labels and types short (about 20
-  characters), or they overflow the node.
+  an edge running through it. Keep node labels to about 16 characters and types
+  to about 20 (`postgres:18`, not `postgres:18-alpine`), or they overflow the
+  node. A one-node group needs a short label (`weur`, not `Western Europe`) when
+  an edge crosses its top.
+- **An edge crossing two borders has no room for a label.** Drop the label and
+  let the caption say it, or move the target a column further out.
 - **Edge labels are platform terms** (`s3:PutObject`, `runs as`, `flycast`).
   Labels on vertical edges sit beside the line.
 - **`tone: "accent"`** marks the one node the diagram is about.
 - **The caption says what the picture means**, in a sentence or two ("IAM roles
   belong to the account and work in every region. The rest lives in one
   region.").
-- **Look at it.** Run `scripts/screenshot.sh <path>` against the dev server and
-  read the PNG. Overlapping labels, labels on borders and cramped short edges
-  don't show up any other way.
+- **Look at it.** Run `scripts/diagram-sheet.py /tmp/sheet.png <path>…` against
+  the dev server and read the sheet. Overlapping labels, labels on borders,
+  overflowing text, missing edges and cramped short edges don't show up any
+  other way.
 
 ## Build
 

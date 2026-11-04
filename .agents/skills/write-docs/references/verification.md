@@ -37,6 +37,12 @@ For each snippet, open the resource or binding it uses in
 - **Lifecycle behavior** comes from the provider's `delete`/`reconcile`. Destroying
   an `Axiom.ApiToken` revokes it; destroying a `GitHub.PersonalAccessToken`
   only forgets it. Read the code before writing either sentence.
+- **Where a deploy lands** comes from the provider's `AuthProvider.ts`,
+  `Credentials.ts` and environment code. Say what actually picks it: the
+  profile's stored account ID (Cloudflare), the organization chosen at OAuth
+  sign-in (PlanetScale), the token's workspace or else the first one
+  (Railway), the token's organization unless a resource sets `orgSlug` (Fly).
+  A region from a profile is a default that resources can override.
 - **Runtime requirements** come from code: the Node minimum is in
   `packages/alchemy/bin/cli.js`.
 - **Don't promise what Alchemy doesn't do.** Examples that were wrong:
@@ -56,9 +62,35 @@ For each snippet, open the resource or binding it uses in
 cd website && pnpm run build
 .agents/skills/write-docs/scripts/check-links.sh website/src/content/docs/<provider>/<page>.mdx …
 .agents/skills/write-docs/scripts/screenshot.sh /<provider>/<page>/ /tmp/<page>.png
+.agents/skills/write-docs/scripts/diagram-sheet.py /tmp/sheet.png <provider>/<page> …
 ```
 
-Read every screenshot of a page with a diagram. Before calling a page done,
-search the provider's pages for stale phrasings you've replaced elsewhere:
-package-centric openings, "SSO (recommended)", "Bun or Node", "Node.js 22+",
-"default runtime".
+Read every diagram on the sheet from `scripts/diagram-sheet.py`.
+
+## Bulk edits
+
+Scripted sweeps across dozens of pages are the norm here, and three things
+went wrong in this repo's docs:
+
+- **Prose is hard-wrapped on some pages.** Deleting "to the end of the line"
+  leaves half a sentence on the next one. Match the whole sentence across
+  newlines, or edit those pages by hand.
+- **Collapsing blank lines touches code blocks.** Python needs two blank lines
+  between classes. Never normalize whitespace file-wide.
+- **Imports sit between the frontmatter and the first paragraph.** A regex that
+  cuts "everything before the first sentence" also cuts `import DAG …`.
+
+After any sweep, read `git diff` for every line that isn't the change you meant,
+and revert and hand-fix those files.
+
+## Sweep for rejected phrasing
+
+Before calling a change done, search all of `website/src/content/docs` (not just
+the provider you touched) for phrasings already rejected:
+
+```sh
+grep -rnE "This page (introduces|covers|starts)|This chapter|rest of this page|set of services|A taste|default runtime|Bun or Node|Node\.js 22\+|SSO \(recommended\)" website/src/content/docs --include=*.mdx | grep -v /blog/
+```
+
+Fix each hit in pages you own. List the rest for the user rather than editing
+unrelated pages unasked.

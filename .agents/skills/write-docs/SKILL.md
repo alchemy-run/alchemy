@@ -21,8 +21,10 @@ from JSDoc (see AGENTS.md "Documentation Generation").
 
 **Exemplars.** Read these before writing. They are the bar:
 
-- `domain/what-is-ddd.mdx`: the original mental-model page.
+- `domain/what-is-ddd.mdx`: the original mental-model page. Copy its build-up
+  of ideas, not its "This page introduces…" opening, which predates the rule.
 - `aws/index.mdx`, `aws/what-is-aws.mdx`, `aws/accounts-and-regions.mdx`, `aws/iam.mdx`: hub, What is, and access chapters.
+- `aws/networking/index.mdx`, `cloudflare/compute/durable-objects.mdx`: chapter diagrams that draw containment as borders.
 - `cloudflare/accounts-and-tokens.mdx`, `fly/organizations-and-tokens.mdx`: short access pages.
 - `aws/security/secrets-env.mdx`: a concept chapter that builds one idea at a time.
 
@@ -40,6 +42,9 @@ from JSDoc (see AGENTS.md "Documentation Generation").
    sidebar shape are judgment calls the user cares about. Post a short list of
    proposed intro statements, one per provider, plus the sidebar outline. Wait
    for feedback. Then apply it exactly, including the user's own phrasings.
+   For a new convention (a page shape, a diagram style), draft it on one page
+   on the dev server, show a screenshot, and roll it out to every provider only
+   once the user likes it.
 4. **Write the pages.** Write the hub, then What is, then the Accounts & access
    pages, then the concept chapters. Follow [page shapes](references/page-shapes.md)
    and [voice](references/voice.md).
@@ -49,13 +54,17 @@ from JSDoc (see AGENTS.md "Documentation Generation").
 6. **Wire up structure.** Register sidebar entries, icons and llms coverage. See
    [structure](references/structure.md).
 7. **Build, look, push.** Run `pnpm run build` in `website/` (it regenerates
-   llms and the reference). Screenshot any page with a new diagram
-   (`scripts/screenshot.sh`) and check links (`scripts/check-links.sh`). Commit
+   llms and the reference). Put every new or changed diagram on one sheet with
+   `scripts/diagram-sheet.py` and read it, screenshot whole pages with
+   `scripts/screenshot.sh`, and check links with `scripts/check-links.sh`. Commit
    and push after each coherent change; don't batch a day's work. Docs-only PRs
    get a `docs(<scope>):` title. Add the `deploy-website` label for a preview at
    `pr-<N>-alchemy-website-preview.testing-2b2.workers.dev`.
 8. **Iterate on feedback in the same PR.** Apply feedback everywhere it applies,
    not just on the page the user pointed at. When they flag one hub, fix every hub.
+   Then grep the whole docs tree for the rejected phrasing (see
+   [verification](references/verification.md#sweep-for-rejected-phrasing)), and
+   add the rule below so it isn't relearned.
 
 ## Rules that came from review
 
@@ -109,6 +118,19 @@ Each of these was a correction. Don't relearn them.
   rejected as ugly and uninformative. Design each chapter's diagram for the one
   idea its section explains.
   More: [Diagrams](references/structure.md#diagrams).
+- **Never write about the page itself.** No "This page introduces…", "This
+  chapter starts with…, then…", "the rest of this page explains…". Open on the
+  subject, and introduce an example as "Take one small app: …". A short repeat
+  of the hub's introduction is better than a sentence about the page.
+- **Say precisely where a deploy goes.** A profile signs in to an account and
+  sets a *default* region; it doesn't sign in to a region. Whether the account,
+  organization or workspace comes from the profile, the token, or a resource
+  prop (`orgSlug`, `workspaceId`) differs per provider, so read its
+  `AuthProvider.ts` and environment code before writing the sentence.
+  More: [Verification](references/verification.md#check-claims-against-the-platform-and-the-provider).
+- **Words the user rejected**: "A taste" (now "A quick example"), "a set of
+  services", "the largest" when it isn't the point, "New to X? … walks through
+  a, b, c, d, e…" (now "Start with [What is X?]").
 - **Show the snippet the section talks about.** A section that names a resource,
   like a CloudWatch dashboard, shows a small snippet declaring it.
 
