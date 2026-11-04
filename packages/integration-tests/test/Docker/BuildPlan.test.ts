@@ -1,11 +1,16 @@
 import * as BuildPlan from "@alchemy.run/docker/BuildPlan";
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as DockerfileParser from "@alchemy.run/docker/DockerfileParser";
-import { expect, layer } from "@alchemy.run/test";
+import { describe, expect, it, layer } from "@alchemy.run/test";
 import { BunServices } from "@effect/platform-bun";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import { authenticatedRegistry } from "./Runtime.ts";
 
 const tags = ["unit", "provider:docker", "local"];
 
@@ -373,5 +378,180 @@ RUN apt-get update && apt-get install -y git`,
         expect(BuildPlan.render(plan)).toContain(`COPY ${BuildPlan.BUNDLE_DIR}/ /app/`);
       }),
     { tags },
+  );
+
+  test.effect(
+    "install lines go after the environment and before the bundled main",
+    () =>
+      Effect.gen(function* () {
+        const { root, path } = yield* makeContext({
+          "package.json": JSON.stringify({ name: "fixture", type: "module" }),
+          "main.ts": "export default {};\n",
+        });
+        const plan = yield* BuildPlan.plan(
+          {
+            main: path.join(root, "main.ts"),
+            dockerfile: Dockerfile.inline`FROM oven/bun:1
+RUN echo env`,
+          },
+          {
+            capabilities: e2b,
+            install: ["RUN apt-get install -y fuse3", "ENV ARCHIL=1"],
+          },
+        );
+        expect(plan.instructions.map((instruction) => instruction._tag)).toEqual([
+          "RUN",
+          "RUN",
+          "ENV",
+          "WORKDIR",
+          "COPY",
+          "ENTRYPOINT",
+        ]);
+        expect(plan.instructions[1]!.line).toBe(0);
+
+        const without = yield* BuildPlan.plan(
+          {
+            main: path.join(root, "main.ts"),
+            dockerfile: Dockerfile.inline`FROM oven/bun:1
+RUN echo env`,
+          },
+          { capabilities: e2b },
+        );
+        expect(without.hash).not.toBe(plan.hash);
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "install lines alone derive an image from a base",
+    () =>
+      Effect.gen(function* () {
+        const plan = yield* BuildPlan.plan(
+          { image: "daytonaio/sandbox:0.4" },
+          { capabilities: docker, install: ["RUN apt-get install -y fuse3"] },
+        );
+        expect(BuildPlan.render(plan)).toBe(
+          "FROM daytonaio/sandbox:0.4\nRUN apt-get install -y fuse3\n",
+        );
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "a builder without build arguments gets them as quoted ARG defaults",
+    () =>
+      Effect.gen(function* () {
+        const source = {
+          dockerfile: {
+            content: "ARG BASE=alpine\nFROM ${BASE}\nARG GREETING OTHER=x\nRUN echo $GREETING\n",
+          },
+          build: { args: { BASE: "debian", GREETING: 'say "hi" $HOME' } },
+        };
+        const baked = yield* BuildPlan.plan(source, {
+          capabilities: { target: "Daytona.Snapshot", buildArgs: false },
+        });
+        expect(baked.args).toEqual({});
+        expect(BuildPlan.renderLines(baked)).toEqual([
+          'ARG BASE="debian"',
+          "FROM ${BASE}",
+          'ARG GREETING="say \\"hi\\" \\$HOME" OTHER="x"',
+          "RUN echo $GREETING",
+        ]);
+        const reparsed = yield* DockerfileParser.parse(BuildPlan.render(baked));
+        expect(reparsed.stages[0]!.instructions[0]).toMatchObject({
+          vars: [
+            ["GREETING", 'say "hi" $HOME'],
+            ["OTHER", "x"],
+          ],
+        });
+
+        const passed = yield* BuildPlan.plan(source, { capabilities: docker });
+        expect(passed.args).toEqual(source.build.args);
+        expect(BuildPlan.renderLines(passed)[0]).toBe("ARG BASE=alpine");
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "a builder without secrets rejects build secrets and secret mounts",
+    () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          BuildPlan.plan(
+            {
+              dockerfile: Dockerfile.inline`FROM alpine
+RUN --mount=type=secret,id=npm cat /run/secrets/npm
+RUN --mount=type=cache,target=/root/.cache echo ok`,
+              build: { secrets: { npm: Redacted.make("token") } },
+            },
+            { capabilities: { target: "Daytona.Snapshot", secrets: false } },
+          ),
+        );
+        expect(error).toMatchObject({
+          _tag: "UnsupportedDockerfile",
+          violations: [
+            { line: 2, instruction: "RUN --mount=type=secret" },
+            { line: 0, instruction: "build.secrets" },
+          ],
+        });
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "FROM --platform must be a platform the builder targets",
+    () =>
+      Effect.gen(function* () {
+        const amd64Only: BuildPlan.Capabilities = {
+          target: "Daytona.Snapshot",
+          platforms: ["linux/amd64"],
+        };
+        const error = yield* Effect.flip(
+          BuildPlan.checkContent("FROM --platform=linux/arm64 alpine\n", {
+            capabilities: amd64Only,
+          }),
+        );
+        expect(error).toMatchObject({
+          _tag: "UnsupportedDockerfile",
+          violations: [{ line: 1, instruction: "FROM --platform" }],
+        });
+        const warnings = yield* BuildPlan.checkContent(
+          "FROM --platform=$BUILDPLATFORM alpine\nEXPOSE 80\n",
+          { capabilities: { ...amd64Only, instructions: { EXPOSE: "ignored" } } },
+        );
+        expect(warnings).toEqual(["Daytona.Snapshot ignores EXPOSE (line 2)"]);
+      }),
+    { tags },
+  );
+});
+
+const dockerServices = Layer.provideMerge(
+  DockerLive,
+  Layer.merge(BunServices.layer, FetchHttpClient.layer),
+);
+
+describe("BuildPlan.push", () => {
+  it.live(
+    "builds a plan locally and pushes it under its hash",
+    () =>
+      Effect.gen(function* () {
+        const registry = yield* authenticatedRegistry();
+        const plan = yield* BuildPlan.plan(
+          { image: "alpine:3.20" },
+          {
+            capabilities: { target: "Archil.Image", buildArgs: false, secrets: false },
+            install: ["RUN echo mounted > /etc/alchemy-install"],
+          },
+        );
+        const { imageRef } = yield* BuildPlan.push(plan, {
+          repository: `${registry.host}/alchemy/build-plan`,
+          push: registry.credentials,
+        });
+        expect(imageRef).toMatch(
+          new RegExp(`^${registry.host}/alchemy/build-plan(@sha256:[a-f0-9]{64}|:${plan.hash})$`),
+        );
+        expect(yield* registry.hasManifest("alchemy/build-plan", plan.hash)).toBe(true);
+      }).pipe(Effect.provide(dockerServices)),
+    { tags: ["provider:docker", "local"], timeout: 120_000 },
   );
 });

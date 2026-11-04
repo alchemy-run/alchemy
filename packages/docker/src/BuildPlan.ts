@@ -9,6 +9,7 @@ import type * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { selectDockerBuildContext } from "./BuildHash.ts";
+import { Docker } from "./Docker.ts";
 import { isInlineDockerfile } from "./Dockerfile.ts";
 import * as DockerfileParser from "./DockerfileParser.ts";
 import type {
@@ -23,7 +24,7 @@ import {
   type DockerfileImageSource,
   type ImageSourceProps,
 } from "./ImageSource.ts";
-import type { ImageRegistry } from "./Registry.ts";
+import { publishedRepoDigest, type ImageRegistry } from "./Registry.ts";
 
 /**
  * A build plan: an image source (`image`, `context` + `dockerfile`, inline
@@ -46,7 +47,7 @@ export interface BuildPlan {
   /** The final stage's base: an image reference, an earlier stage's name, or `scratch`. */
   readonly base: string;
   /** Credentials for pulling a private base image. */
-  readonly registry: ImageRegistry | undefined;
+  readonly pull: ImageRegistry | undefined;
   /** The final stage's instructions. */
   readonly instructions: ReadonlyArray<Instruction>;
   /**
@@ -55,7 +56,11 @@ export interface BuildPlan {
    * {@link BUNDLE_DIR}. Paths are relative to the context, `/`-separated.
    */
   readonly files: ReadonlyArray<ContextFile>;
-  /** Build arguments (`ARG` values). */
+  /**
+   * Build arguments (`ARG` values) the builder must pass. Empty when the
+   * builder takes none ({@link Capabilities.buildArgs}): the values are then
+   * written into the `ARG` defaults of {@link dockerfile}.
+   */
   readonly args: Readonly<Record<string, string>>;
   /** BuildKit secrets, by id (`RUN --mount=type=secret,id=…`). */
   readonly secrets: Readonly<Record<string, Redacted.Redacted<string>>>;
@@ -91,7 +96,14 @@ export interface Capabilities {
   readonly runMounts?: boolean;
   /** `ADD <url>`. @default true */
   readonly remoteAdd?: boolean;
-  /** Platforms the builder targets. @default any */
+  /**
+   * Build arguments passed to the builder. When `false`, the plan writes
+   * the values into the Dockerfile's `ARG` defaults instead. @default true
+   */
+  readonly buildArgs?: boolean;
+  /** BuildKit secrets (`build.secrets`, `RUN --mount=type=secret`). @default true */
+  readonly secrets?: boolean;
+  /** Platforms the builder targets, also checked against `FROM --platform=`. @default any */
   readonly platforms?: ReadonlyArray<string>;
   /** Instructions the builder ignores (a warning) or rejects (an error). */
   readonly instructions?: Partial<Record<InstructionName, "ignored" | "unsupported">>;
@@ -135,8 +147,15 @@ export interface PlanOptions {
    * entry). Omit it to bundle `main` as-is.
    */
   readonly bootstrap?: (importPath: string) => string;
-  /** Credentials for a private base image. */
-  readonly registry?: ImageRegistry;
+  /** Credentials for pulling a private base image. */
+  readonly pull?: ImageRegistry;
+  /**
+   * Dockerfile lines a host's bindings contribute, e.g. the clients of
+   * `alchemy/Mount` capabilities (`mountInstallLines`). They go after the
+   * final stage's own instructions and before the bundled `main`, so a
+   * program change doesn't reinstall them.
+   */
+  readonly install?: ReadonlyArray<string>;
 }
 
 const isRemoteSource = (source: string) => /^(https?:\/\/|git@)/.test(source);
@@ -330,6 +349,20 @@ export const check = (
       reason: `${platform} is not supported (supported: ${capabilities.platforms.join(", ")})`,
     });
   }
+  if (capabilities.platforms !== undefined) {
+    for (const stage of dockerfile.stages) {
+      const pinned = stage.flags.find((flag) => flag.name === "platform")?.value;
+      // `$BUILDPLATFORM`-style values resolve at build time, to the builder's own platform.
+      if (pinned === undefined || pinned.includes("$")) continue;
+      if (!capabilities.platforms.includes(pinned)) {
+        violations.push({
+          line: stage.line,
+          instruction: "FROM --platform",
+          reason: `${pinned} is not supported (supported: ${capabilities.platforms.join(", ")})`,
+        });
+      }
+    }
+  }
   if (capabilities.multiStage === false && dockerfile.stages.length > 1) {
     for (const stage of dockerfile.stages.slice(1)) {
       violations.push({
@@ -393,6 +426,18 @@ export const check = (
           instruction: "RUN --mount",
           reason: "build mounts are not supported",
         });
+      } else if (
+        instruction._tag === "RUN" &&
+        capabilities.secrets === false &&
+        instruction.flags.some(
+          (flag) => flag.name === "mount" && /(^|,)type=secret(,|$)/.test(flag.value ?? ""),
+        )
+      ) {
+        violations.push({
+          line: instruction.line,
+          instruction: "RUN --mount=type=secret",
+          reason: "build secrets are not supported",
+        });
       }
     }
   }
@@ -410,6 +455,60 @@ const mainLayer = (port: number | undefined) =>
 
 /** Synthesized instructions carry line 0: they are not in the user's Dockerfile. */
 const synthesized = (instruction: Instruction): Instruction => ({ ...instruction, line: 0 });
+
+/** Append generated instructions to the final stage. */
+const appendToFinalStage = Effect.fn(function* (dockerfile: ParsedDockerfile, lines: string) {
+  const layer = yield* DockerfileParser.parse(`FROM scratch\n${lines}\n`);
+  const stages = [...dockerfile.stages];
+  const final = stages.at(-1)!;
+  stages[stages.length - 1] = {
+    ...final,
+    instructions: [...final.instructions, ...layer.stages[0]!.instructions.map(synthesized)],
+  };
+  return { ...dockerfile, stages } satisfies ParsedDockerfile;
+});
+
+/**
+ * Write build argument values into the `ARG` defaults that declare them, for
+ * builders that take no build arguments. Values are quoted so they are used
+ * as given, the way `--build-arg` passes them (no `$` expansion).
+ */
+const bakeArgs = (
+  dockerfile: ParsedDockerfile,
+  args: Readonly<Record<string, string>>,
+): ParsedDockerfile => {
+  const escape = dockerfile.directives.escape ?? "\\";
+  // A baked value is literal, so `$` is escaped too; a default that was
+  // already there keeps its `$` references.
+  const quote = (value: string, literal: boolean) =>
+    `"${[...value]
+      .map((char) =>
+        char === escape || char === '"' || (literal && char === "$") ? `${escape}${char}` : char,
+      )
+      .join("")}"`;
+  const bake = <I extends Instruction>(instruction: I): I => {
+    if (instruction._tag !== "ARG" || !instruction.vars.some(([name]) => name in args)) {
+      return instruction;
+    }
+    const vars = instruction.vars.map(([name, value]) =>
+      name in args ? ([name, args[name]] as const) : ([name, value] as const),
+    );
+    const raw = `ARG ${vars
+      .map(([name, value]) =>
+        value === undefined ? name : `${name}=${quote(value, name in args)}`,
+      )
+      .join(" ")}`;
+    return { ...instruction, vars, raw };
+  };
+  return {
+    ...dockerfile,
+    globalArgs: dockerfile.globalArgs.map(bake),
+    stages: dockerfile.stages.map((stage) => ({
+      ...stage,
+      instructions: stage.instructions.map(bake),
+    })),
+  };
+};
 
 /**
  * Resolve an image source into a {@link BuildPlan} for one builder.
@@ -460,7 +559,11 @@ export const plan = Effect.fn(function* (source: ImageSourceProps, options: Plan
 
   let dockerfile = yield* DockerfileParser.parse(text);
 
-  // 2. A bundled `main` becomes a generated layer on the final stage.
+  // 2. Install lines from the host's bindings, then a bundled `main`, become
+  //    generated layers on the final stage.
+  if (options.install !== undefined && options.install.length > 0) {
+    dockerfile = yield* appendToFinalStage(dockerfile, options.install.join("\n"));
+  }
   const files: ContextFile[] = [];
   if (main !== undefined) {
     const bundled = yield* bundleMainProgram({
@@ -477,14 +580,7 @@ export const plan = Effect.fn(function* (source: ImageSourceProps, options: Plan
         source: { _tag: "Bytes", bytes: file.content },
       });
     }
-    const layer = yield* DockerfileParser.parse(`FROM scratch\n${mainLayer(options.port)}\n`);
-    const stages = [...dockerfile.stages];
-    const final = stages.at(-1)!;
-    stages[stages.length - 1] = {
-      ...final,
-      instructions: [...final.instructions, ...layer.stages[0]!.instructions.map(synthesized)],
-    };
-    dockerfile = { ...dockerfile, stages };
+    dockerfile = yield* appendToFinalStage(dockerfile, mainLayer(options.port));
   }
 
   // 3. Context files every COPY/ADD reaches.
@@ -506,21 +602,34 @@ export const plan = Effect.fn(function* (source: ImageSourceProps, options: Plan
   files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 
   // 4. What the builder can do.
+  const secrets = build?.secrets ?? {};
   const { violations, warnings } = check(dockerfile, options.capabilities, platform);
+  if (options.capabilities.secrets === false && Object.keys(secrets).length > 0) {
+    violations.push({
+      line: 0,
+      instruction: "build.secrets",
+      reason: "build secrets are not supported",
+    });
+  }
   if (violations.length > 0) {
     return yield* unsupported(options.capabilities.target, violations);
   }
 
+  // 5. A builder that takes no build arguments gets them as `ARG` defaults.
+  let args = build?.args ?? {};
+  if (options.capabilities.buildArgs === false && Object.keys(args).length > 0) {
+    dockerfile = bakeArgs(dockerfile, args);
+    args = {};
+  }
+
   const final = dockerfile.stages.at(-1)!;
-  const args = build?.args ?? {};
-  const secrets = build?.secrets ?? {};
   const hash = (yield* sha256Object({
     platform,
     dockerfile: DockerfileParser.render(dockerfile),
     files: files.map((file) => [file.path, file.mode, file.sha256]),
     args,
     secrets: Object.keys(secrets).sort(),
-    registry: options.registry?.server,
+    pull: options.pull?.server,
   })).slice(0, 32);
 
   return {
@@ -528,7 +637,7 @@ export const plan = Effect.fn(function* (source: ImageSourceProps, options: Plan
     platform,
     dockerfile,
     base: final.image,
-    registry: options.registry,
+    pull: options.pull,
     instructions: final.instructions,
     files,
     args,
@@ -572,3 +681,80 @@ export const startCommand = (plan: BuildPlan): ReadonlyArray<string> | undefined
   }
   return argv(cmd);
 };
+
+/**
+ * Check Dockerfile text against a builder's capabilities, without reading a
+ * build context or bundling anything: usable where there is no filesystem
+ * (a Worker creating images at run time). Returns the warnings.
+ */
+export const checkContent = Effect.fn(function* (
+  text: string,
+  options: Pick<PlanOptions, "capabilities" | "platform">,
+) {
+  const dockerfile = yield* DockerfileParser.parse(text);
+  const { violations, warnings } = check(
+    dockerfile,
+    options.capabilities,
+    options.platform ?? "linux/amd64",
+  );
+  if (violations.length > 0) {
+    return yield* unsupported(options.capabilities.target, violations);
+  }
+  return warnings;
+});
+
+/** Where {@link push} publishes a plan. */
+export interface PushTarget {
+  /** Repository to push to, without a tag, e.g. `ghcr.io/acme/agent`. The plan's hash is the tag. */
+  readonly repository: string;
+  /** Credentials for the registry the repository lives in. */
+  readonly push: ImageRegistry;
+}
+
+/**
+ * Build a plan with the local Docker engine and push it, for platforms that
+ * only pull images (Archil). Tagged with the plan's hash, so an unchanged
+ * plan pushes the same tag. Returns the pushed reference, `repository@digest`
+ * when the registry reports a digest, else `repository:hash`.
+ */
+export const push = Effect.fn(function* (plan: BuildPlan, target: PushTarget) {
+  const docker = yield* Docker;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const context = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-build-plan-" });
+  yield* Effect.forEach(
+    plan.files,
+    Effect.fn(function* (file) {
+      const fullPath = path.join(context, file.path);
+      yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
+      yield* fs.writeFile(fullPath, yield* readContextFile(file));
+      yield* fs.chmod(fullPath, file.mode);
+    }),
+    { concurrency: 16 },
+  );
+  const dockerfile = path.join(context, "Dockerfile.alchemy");
+  yield* fs.writeFileString(dockerfile, render(plan));
+  const ref = `${target.repository}:${plan.hash}`;
+  const output = yield* docker.image.build(
+    {
+      context,
+      file: dockerfile,
+      tag: ref,
+      platform: plan.platform,
+      "build-arg": { ...plan.args },
+      secrets: { ...plan.secrets },
+      credentials: plan.pull,
+    },
+    undefined,
+    target.push,
+  );
+  // buildx `--push` exports straight from BuildKit, so the image may not be
+  // in the local store to inspect.
+  const inspected = yield* Effect.result(docker.image.inspect(ref));
+  const pinned = publishedRepoDigest(
+    ref,
+    output,
+    Result.isSuccess(inspected) ? inspected.success.RepoDigests : undefined,
+  );
+  return { imageRef: pinned ?? ref };
+});

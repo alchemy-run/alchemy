@@ -49,6 +49,13 @@ export interface BundledImageSource {
    */
   main: string;
   /**
+   * @internal Dockerfile lines contributed by mount bindings (see
+   * `alchemy/Mount`), inserted after the environment preamble so a
+   * program change doesn't reinstall them. Hosts fold these in from their
+   * bindings; users don't set them.
+   */
+  install?: ReadonlyArray<string>;
+  /**
    * Environment image: used as the generated Dockerfile's `FROM`. Any
    * registry ref works (private non-ECR registries require docker
    * credentials on the build machine); the image must be able to run the
@@ -160,6 +167,8 @@ export interface ImageSourceLike {
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;
+  /** @internal Mount-binding install lines (see {@link BundledImageSource.install}). */
+  install?: ReadonlyArray<string>;
 }
 
 export type ImageSourceKind = "main" | "context" | "image";
@@ -530,6 +539,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
           : `FROM ${source.image ?? "oven/bun:1"}`;
     const lines = [
       preamble,
+      ...(source.install ?? []),
       `WORKDIR /app`,
       `COPY index.mjs /app/index.mjs`,
       // Copy any additional rolldown chunks (`chunk-XXX.js`,
