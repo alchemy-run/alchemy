@@ -158,10 +158,13 @@ Stores that set the same option with the same flag, parsed the same way,
 share it on the command line, and its help lists each store's description. A
 flag is left out, with a warning, when it:
 
-- has a default or an alias,
+- is optional, or has a default or an alias,
 - conflicts with another store's: its name sets a different option there, the
   same option uses a different flag, or the shared flag parses differently,
 - or clashes with one of `alchemy state`'s own, such as `--profile`.
+
+The CLI then refuses that option for the store, rather than handing it a
+value another store's flag parsed.
 
 ## Add a store lifecycle
 

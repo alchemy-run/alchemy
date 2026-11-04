@@ -20,7 +20,7 @@ const provider = (
 describe("state store flags", { tags: ["unit"] }, () => {
   it("keeps a store's own flags", () => {
     const flags = storeOptionFlags([provider("fake", { fake: { region: Flag.String("region") } })]);
-    expect(Object.keys(flags)).toEqual(["region"]);
+    expect(Object.keys(flags.flags)).toEqual(["region"]);
   });
 
   it("leaves out a flag that clashes with alchemy state's own", () => {
@@ -36,7 +36,7 @@ describe("state store flags", { tags: ["unit"] }, () => {
         },
       }),
     ];
-    expect(Object.keys(storeOptionFlags(contributions))).toEqual(["region"]);
+    expect(Object.keys(storeOptionFlags(contributions).flags)).toEqual(["region"]);
     expect(() => stateCommand(contributions)).not.toThrow();
   });
 
@@ -44,7 +44,7 @@ describe("state store flags", { tags: ["unit"] }, () => {
     const flags = storeOptionFlags([
       provider("fake", { fake: { region: Flag.String("region").pipe(Flag.withAlias("c")) } }),
     ]);
-    expect(Object.keys(flags)).toEqual([]);
+    expect(Object.keys(flags.flags)).toEqual([]);
   });
 
   it("shares a flag stores take for the same option", () => {
@@ -52,7 +52,7 @@ describe("state store flags", { tags: ["unit"] }, () => {
       provider("one", { one: { name: Flag.String("name") } }),
       provider("two", { two: { name: Flag.String("name") } }),
     ]);
-    expect(Object.keys(flags)).toEqual(["name"]);
+    expect(Object.keys(flags.flags)).toEqual(["name"]);
   });
 
   it("leaves out a flag another store uses for a different option", () => {
@@ -60,14 +60,14 @@ describe("state store flags", { tags: ["unit"] }, () => {
       provider("one", { one: { name: Flag.String("name") } }),
       provider("two", { two: { workerName: Flag.String("name"), url: Flag.String("url") } }),
     ]);
-    expect(Object.keys(flags)).toEqual(["name", "url"]);
+    expect(Object.keys(flags.flags)).toEqual(["name", "url"]);
   });
 
   it("leaves out a flag with a default, which would always be set", () => {
     const flags = storeOptionFlags([
       provider("fake", { fake: { region: Flag.String("region").pipe(Flag.withDefault("eu")) } }),
     ]);
-    expect(Object.keys(flags)).toEqual([]);
+    expect(Object.keys(flags.flags)).toEqual([]);
   });
 
   it("leaves out a shared flag another store parses differently", () => {
@@ -75,7 +75,9 @@ describe("state store flags", { tags: ["unit"] }, () => {
       provider("one", { one: { port: Flag.String("port") } }),
       provider("two", { two: { port: Flag.Int("port") } }),
     ]);
-    expect(Object.keys(flags)).toEqual(["port"]);
+    expect(Object.keys(flags.flags)).toEqual(["port"]);
+    // So `--backend two --port` is refused rather than handed one's string.
+    expect(flags.ignored).toEqual({ two: ["port"] });
   });
 
   it("leaves out a different flag for an option another store already sets", () => {
@@ -83,6 +85,6 @@ describe("state store flags", { tags: ["unit"] }, () => {
       provider("one", { one: { name: Flag.String("name") } }),
       provider("two", { two: { name: Flag.String("store-name") } }),
     ]);
-    expect(Object.keys(flags)).toEqual(["name"]);
+    expect(Object.keys(flags.flags)).toEqual(["name"]);
   });
 });

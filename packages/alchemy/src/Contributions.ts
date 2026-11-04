@@ -133,8 +133,8 @@ export interface StateStore {
    *
    * Stores that set the same option with the same flag, parsed the same way,
    * share it on the command line, and its help lists each store's
-   * description. A flag is left out, with a warning, when it has a default or
-   * an alias, when it conflicts with another store's flags, or when it
+   * description. A flag is left out, with a warning, when it is optional, has
+   * a default or an alias, when it conflicts with another store's flags, or when it
    * clashes with one of `alchemy state`'s own.
    *
    * {@link make} checks the store's options interface against these: each

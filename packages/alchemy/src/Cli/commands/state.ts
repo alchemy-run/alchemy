@@ -28,9 +28,15 @@ const backend = Flag.String("backend").pipe(
   Flag.withDefault("configured"),
 );
 /** The store options `alchemy state` was given, shared with its subcommands. */
-class StoreOptions extends Context.Service<StoreOptions, Contributions.StateStoreOptions>()(
-  "alchemy/Cli/state/StoreOptions",
-) {}
+class StoreOptions extends Context.Service<
+  StoreOptions,
+  {
+    /** The store options given, by option key. */
+    readonly given: Contributions.StateStoreOptions;
+    /** Options each backend can't take from the CLI, its flag left out. */
+    readonly ignored: Readonly<Record<string, ReadonlyArray<string>>>;
+  }
+>()("alchemy/Cli/state/StoreOptions") {}
 
 const config = Flag.File("config").pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
@@ -61,8 +67,8 @@ const source = Effect.fn(function* (args: StateArgs) {
   if (args.backend !== "local" && args.backend !== "configured") {
     return yield* lifecycleSource(args);
   }
-  const options = yield* StoreOptions;
-  if (Record.some(options, Predicate.isNotUndefined)) {
+  const { given } = yield* StoreOptions;
+  if (Record.some(given, Predicate.isNotUndefined)) {
     return yield* new UserInputError({
       message: "State store options need --backend with a provider's state store.",
     });
@@ -87,9 +93,15 @@ const lifecycleBackend = Flag.String("backend").pipe(
 const lifecycleSource = Effect.fn(function* (
   args: Pick<StateArgs, "envFile" | "profile" | "backend">,
 ) {
-  const options = yield* StoreOptions;
+  const { given, ignored } = yield* StoreOptions;
+  const unusable = (ignored[args.backend] ?? []).find((option) => given[option] !== undefined);
+  if (unusable !== undefined) {
+    return yield* new UserInputError({
+      message: `The '${args.backend}' state store's flag for '${unusable}' was left out, as warned above, so the CLI can't set it.`,
+    });
+  }
   const source: Alchemist.State.ProviderSource = {
-    ...options,
+    ...given,
     type: "provider",
     backend: args.backend,
     profile: args.profile,
@@ -293,8 +305,8 @@ const bootstrapCommand = Command.make(
   instrumentCommand("state.bootstrap")(
     Effect.fn(function* ({ force, main, backend, ...args }) {
       if (backend === undefined) {
-        const options = yield* StoreOptions;
-        if (force || Record.some(options, Predicate.isNotUndefined)) {
+        const { given } = yield* StoreOptions;
+        if (force || Record.some(given, Predicate.isNotUndefined)) {
           return yield* new UserInputError({
             message: "--force and state store options need --backend.",
           });
@@ -516,6 +528,8 @@ export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Cont
   >();
   // flag name -> the option it sets
   const names = new Map<string, string>();
+  // backend -> the options whose flag was left out
+  const ignored: Record<string, Array<string>> = {};
   for (const provider of contributions) {
     for (const [backend, store] of Object.entries(provider.stateStores ?? {})) {
       for (const [option, flag] of Object.entries(store.flags ?? {})) {
@@ -524,7 +538,7 @@ export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Cont
         const type = single?.primitiveType._tag;
         const shared = declared.get(option);
         const problem = optional
-          ? "state store flags can't have a default, alchemy state makes them optional"
+          ? "state store flags can't be optional or have a default, alchemy state makes them optional"
           : (single?.aliases.length ?? 0) > 0
             ? "state store flags can't have aliases"
             : shared !== undefined && shared.name !== name
@@ -540,6 +554,7 @@ export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Cont
           Effect.runSync(
             Effect.logWarning(`Ignoring --${name} from the '${backend}' state store: ${problem}.`),
           );
+          ignored[backend] = [...(ignored[backend] ?? []), option];
           continue;
         }
         const entry = shared ?? { flag, name, type, descriptions: new Map() };
@@ -550,14 +565,14 @@ export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Cont
       }
     }
   }
-  return Record.map(Object.fromEntries(declared), ({ flag, descriptions }) =>
+  const flags = Record.map(Object.fromEntries(declared), ({ flag, descriptions }) =>
     flag.pipe(
       Flag.withDescription(
         [...descriptions]
           .map(([text, backends]) =>
             descriptions.size === 1
               ? `${text} (--backend ${backends.join(", ")})`.trim()
-              : `--backend ${backends.join(", ")}: ${text}`.trim(),
+              : `--backend ${backends.join(", ")}${text === "" ? "" : `: ${text}`}`,
           )
           .join("; "),
       ),
@@ -565,14 +580,16 @@ export const storeOptionFlags = (contributions: ReadonlyArray<Contributions.Cont
       Flag.map(Option.getOrUndefined),
     ),
   );
+  return { flags, ignored };
 };
 
 /**
  * `alchemy state`, sharing a flag with every subcommand for each one the
  * loaded providers' state stores contribute.
  */
-export const stateCommand = (contributions: ReadonlyArray<Contributions.Contributions>) =>
-  Command.make(
+export const stateCommand = (contributions: ReadonlyArray<Contributions.Contributions>) => {
+  const { flags, ignored } = storeOptionFlags(contributions);
+  return Command.make(
     "state",
     stateFlags,
     instrumentCommand("state")(
@@ -585,8 +602,9 @@ export const stateCommand = (contributions: ReadonlyArray<Contributions.Contribu
     ),
   ).pipe(
     Command.withDescription("Inspect and manage deployment state"),
-    Command.withSharedFlags({ storeOptions: storeOptionFlags(contributions) }),
+    Command.withSharedFlags({ storeOptions: flags }),
     Command.withSubcommands(stateSubcommands),
     // After the subcommands, so their handlers get the shared store options too.
-    Command.provideSync(StoreOptions, ({ storeOptions }) => storeOptions),
+    Command.provideSync(StoreOptions, ({ storeOptions }) => ({ given: storeOptions, ignored })),
   );
+};
