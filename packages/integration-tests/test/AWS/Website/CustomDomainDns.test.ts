@@ -37,6 +37,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers(), Hetzner.providers()),
@@ -49,18 +50,18 @@ const fixtureDir = fileURLToPath(
 
 const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
-const CF_SITE = `aws-site-cf.${ZONE}`;
-const CF_SITE_ALIAS = `aws-site-cf-alias.${ZONE}`;
-const ROUTER_HOST = `aws-site-router.${ZONE}`;
-const ROUTER_DOCS_HOST = `aws-site-router-docs.${ZONE}`;
-const R53_ZONE = `aws-site-r53.${ZONE}`;
+const CF_SITE = `${testName("aws-site-cf")}.${ZONE}`;
+const CF_SITE_ALIAS = `${testName("aws-site-cf-alias")}.${ZONE}`;
+const ROUTER_HOST = `${testName("aws-site-router")}.${ZONE}`;
+const ROUTER_DOCS_HOST = `${testName("aws-site-router-docs")}.${ZONE}`;
+const R53_ZONE = `${testName("aws-site-r53")}.${ZONE}`;
 const R53_SITE = `www.${R53_ZONE}`;
 // Hetzner DNS only hosts registrable apex zones ("unsupported tld" for a
 // subdomain zone), so the Hetzner zone is the apex itself and Cloudflare
 // delegates just this subdomain to Hetzner's nameservers. Zone names are
 // unique per Hetzner account: a concurrent suite owning the same apex zone
 // makes this test's zone read as unowned.
-const HZ_DELEGATED = `aws-site-hz.${ZONE}`;
+const HZ_DELEGATED = `${testName("aws-site-hz")}.${ZONE}`;
 const HZ_SITE = `www.${HZ_DELEGATED}`;
 
 class NotYet extends Data.TaggedError("NotYet")<{ readonly what: string }> {}

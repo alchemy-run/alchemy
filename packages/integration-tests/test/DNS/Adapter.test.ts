@@ -29,6 +29,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../names.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers(), Hetzner.providers()),
@@ -220,13 +221,13 @@ const failureOf = <A, E, R, T>(
 // ---------------------------------------------------------------------------
 
 const CF = {
-  cname: `dns-adapter-cname.${CF_ZONE}`,
-  addresses: `dns-adapter-addr.${CF_ZONE}`,
-  proxied: `dns-adapter-proxied.${CF_ZONE}`,
-  setA: `dns-adapter-set-a.${CF_ZONE}`,
-  setB: `dns-adapter-set-b.${CF_ZONE}`,
-  txt: `dns-adapter-txt.${CF_ZONE}`,
-  recordCname: `dns-adapter-rec-cname.${CF_ZONE}`,
+  cname: `${testName("dns-adapter-cname")}.${CF_ZONE}`,
+  addresses: `${testName("dns-adapter-addr")}.${CF_ZONE}`,
+  proxied: `${testName("dns-adapter-proxied")}.${CF_ZONE}`,
+  setA: `${testName("dns-adapter-set-a")}.${CF_ZONE}`,
+  setB: `${testName("dns-adapter-set-b")}.${CF_ZONE}`,
+  txt: `${testName("dns-adapter-txt")}.${CF_ZONE}`,
+  recordCname: `${testName("dns-adapter-rec-cname")}.${CF_ZONE}`,
 };
 
 const cloudflareProgram = (version: 1 | 2) =>
@@ -320,7 +321,7 @@ describe("Cloudflare.DNS adapter", () => {
 // Route 53 — a hosted zone delegated from the Cloudflare test zone
 // ---------------------------------------------------------------------------
 
-const R53_ZONE = `dns-adapter-r53.${CF_ZONE}`;
+const R53_ZONE = `${testName("dns-adapter-r53")}.${CF_ZONE}`;
 const R53 = {
   origin: `origin.${R53_ZONE}`,
   www: `www.${R53_ZONE}`,
@@ -525,8 +526,8 @@ describe("AWS.Route53 adapter", () => {
 // delegated or not, so the records are verified against them directly.
 // ---------------------------------------------------------------------------
 
-const HZ_SUBZONE = `dns-adapter-hz.${CF_ZONE}`;
-const HZ_ZONE = "dns-adapter-hz-alchemy-test.us";
+const HZ_SUBZONE = `${testName("dns-adapter-hz")}.${CF_ZONE}`;
+const HZ_ZONE = `${testName("dns-adapter-hz")}.us`;
 const HZ = {
   cname: `cname.${HZ_ZONE}`,
   addresses: `addr.${HZ_ZONE}`,
