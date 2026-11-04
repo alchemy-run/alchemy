@@ -1683,6 +1683,41 @@ describe.concurrent(
           const afterRollout = yield* Drift.detect(scratch);
           expect(afterRollout.resources.DigestReuse?.action).toBe("unchanged");
 
+          // An out-of-band image update leaves the saved input and
+          // configuration hashes current. Neither may hide the live drift.
+          const driftedConfiguration = {
+            ...third.app.configuration,
+            image: first.app.configuration.image!,
+          };
+          yield* Containers.updateContainerApplication({
+            accountId,
+            applicationId: third.app.applicationId,
+            configuration: driftedConfiguration,
+          });
+          yield* Containers.createContainerApplicationRollout({
+            accountId,
+            applicationId: third.app.applicationId,
+            description: "out-of-band image drift",
+            strategy: "rolling",
+            kind: "full_auto",
+            stepPercentage: 100,
+            targetConfiguration: driftedConfiguration,
+          });
+          yield* waitForImage(accountId, third.app.applicationId, driftedConfiguration.image);
+          const drift = yield* Drift.detect(scratch);
+          expect(drift.resources.DigestReuse?.action).toBe("update");
+
+          const repaired = yield* deployImage(scratch, "mendhak/http-https-echo:40");
+          expect(repaired.app.hash?.image).toBe(third.app.hash?.image);
+          expect(repaired.app.hash?.digest).toBe(third.app.hash?.digest);
+          expect(repaired.app.configuration.image).toBe(third.app.configuration.image);
+          expect((yield* live(accountId, repaired.app.applicationId)).image).toBe(
+            third.app.configuration.image,
+          );
+          const settled = yield* deployImage(scratch, "mendhak/http-https-echo:40");
+          expect(settled.app.version).toBe(repaired.app.version);
+          expect((yield* Drift.detect(scratch)).resources.DigestReuse?.action).toBe("unchanged");
+
           yield* scratch.destroy();
         }).pipe(logLevel),
       { timeout: 900_000 },

@@ -828,26 +828,23 @@ export const LiveContainerProvider = () =>
             message: `Container application '${existing.applicationName}' has no deployment image.`,
           });
         }
-        let deploymentImageRef = existingImage;
-        let imageDigest = existing.hash?.digest;
-        if (imageHash !== existing.hash?.image) {
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            existing.hash?.digest === undefined ? existingImage : undefined,
-            session,
-          );
-          const existingDigest = existing.hash?.digest ?? published.previousDigest;
-          deploymentImageRef =
-            published.digest === existingDigest && news.publish?.repository === undefined
+        const published =
+          imageHash === existing.hash?.image &&
+          existing.hash?.digest !== undefined &&
+          isRegistryDigest(existing.hash.digest)
+            ? {
+                imageRef: `${repositoryFromImageRef(imageRef)}@${existing.hash.digest}`,
+                digest: existing.hash.digest,
+              }
+            : yield* buildAndPushImage(id, news, build, imageRef, imageHash, undefined, session);
+        const observed = yield* resolvePublishedImageRef(news, existingImage);
+        return {
+          deploymentImageRef:
+            observed.digest === published.digest && news.publish?.repository === undefined
               ? existingImage
-              : published.imageRef;
-          imageDigest = published.digest;
-        }
-        return { deploymentImageRef, imageDigest };
+              : published.imageRef,
+          imageDigest: published.digest,
+        };
       });
 
       // ---------------------------------------------------------------
@@ -1177,7 +1174,10 @@ export const LiveContainerProvider = () =>
           news.affinities,
           configuration,
         );
-        if (existing.hash?.configuration === configurationHash) {
+        if (
+          existing.hash?.configuration === configurationHash &&
+          existing.configuration.image === deploymentImageRef
+        ) {
           yield* Effect.logInfo(
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
           );
@@ -1394,6 +1394,13 @@ export const LiveContainerProvider = () =>
             news,
             makeContainerEnv(news, accountId, newBindings),
           );
+          if (!application || !output.hash?.digest || !isRegistryDigest(output.hash.digest)) {
+            return { action: "update" } as const;
+          }
+          const observed = yield* resolvePublishedImageRef(news, application.configuration.image);
+          if (observed.digest !== output.hash.digest) {
+            return { action: "update" } as const;
+          }
           if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
             return { action: "update" } as const;
           }
