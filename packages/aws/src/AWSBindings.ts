@@ -305,18 +305,26 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
         return;
       }
 
-      // The user may assume any role that trusts it; the role's trust policy
-      // restricts assumption to this user, which avoids a User↔Role ARN cycle.
+      // The user may assume only this host's Role. The Role's name is
+      // derived from the host, so the user's policy names its ARN without an
+      // edge back to the Role (whose trust policy reads the user's ARN).
+      const roleName = yield* federatedRoleName(host);
+      const roleArn = Output.fromEffect(
+        AWSEnvironment.use((env) =>
+          Effect.map(env, ({ accountId }) => `arn:aws:iam::${accountId}:role/${roleName}`),
+        ).pipe(Effect.orDie),
+      ) as Output.Output<string>;
       const user = yield* IamUser(`${id}User`, {
         inlinePolicies: {
           AssumeRole: {
             Version: "2012-10-17",
-            Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] }],
+            Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: [roleArn] }],
           },
         },
       });
       const accessKey = yield* IamAccessKey(`${id}AccessKey`, { userName: user.userName });
       const role = yield* IamRole(`${id}Role`, {
+        roleName,
         assumeRolePolicyDocument: {
           Version: "2012-10-17",
           Statement: [

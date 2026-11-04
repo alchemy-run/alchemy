@@ -16,10 +16,11 @@ import { encodeSessionEnvironment, SESSION_ENV_PARAM } from "@/Local/RpcServerEn
 import {
   layerServer,
   RpcSpawner,
-  LOGS_PATH,
+  spawnerLogsUrl,
   parseSidecarLogLine,
   type RpcSpawnPayload,
 } from "@/Local/RpcSpawner.ts";
+import { rpcSubpath } from "@/Local/RpcToken.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import {
   assertPidExited,
@@ -66,6 +67,26 @@ describe(
           expect(wsUrl).toMatch(/^ws:\/\//);
           const result = yield* echoWebSocket(wsUrl, "hello");
           expect(result).toBe("echo:hello");
+        }).pipe(Effect.provide(services)),
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "refuses requests that do not carry the spawner's token",
+      () =>
+        Effect.gen(function* () {
+          const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+          const origin = new URL(url).origin;
+          const spawn = yield* postRaw(origin, samplePayload(FIXTURE_TS_URL));
+          expect(spawn.status).toBe(401);
+          const forged = yield* postRaw(
+            `${origin}/${"0".repeat(64)}`,
+            samplePayload(FIXTURE_TS_URL),
+          );
+          expect(forged.status).toBe(401);
+          const client = yield* HttpClient.HttpClient;
+          const logs = yield* client.get(`${origin}/logs`).pipe(Effect.orDie);
+          expect(logs.status).toBe(401);
         }).pipe(Effect.provide(services)),
       { timeout: 60_000 },
     );
@@ -141,7 +162,7 @@ describe(
         Effect.gen(function* () {
           const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
           const client = yield* HttpClient.HttpClient;
-          const response = yield* client.get(new URL(LOGS_PATH, url).toString());
+          const response = yield* client.get(spawnerLogsUrl(url));
           const frames = yield* response.stream.pipe(
             Stream.decodeText,
             Stream.splitLines,
@@ -242,7 +263,7 @@ describe(
             if (r.status !== 200) {
               return { unusable: true } as const;
             }
-            const usable = yield* canOpenWebSocket(new URL("/parent", r.body));
+            const usable = yield* canOpenWebSocket(new URL(rpcSubpath(r.body, "/parent")));
             return { unusable: !usable } as const;
           }).pipe(
             Effect.flatMap((r) =>
@@ -266,7 +287,7 @@ describe(
           // Subscribe BEFORE spawning (headers received = subscription
           // registered server-side) — with a subscriber connected, the
           // spawner must route sidecar output here instead of its console.
-          const response = yield* client.get(new URL(LOGS_PATH, url).toString());
+          const response = yield* client.get(spawnerLogsUrl(url));
           const collector = yield* response.stream.pipe(
             Stream.decodeText,
             Stream.splitLines,
@@ -340,7 +361,7 @@ const withEchoHandlers = <A>(
   use: (handlers: Pick<EchoClient, "echo" | "env">) => Effect.Effect<A>,
 ): Effect.Effect<A, Error> =>
   Effect.gen(function* () {
-    yield* openWebSocket(new URL("/parent", rpcUrl));
+    yield* openWebSocket(new URL(rpcSubpath(rpcUrl, "/parent")));
     // Sessions carry their stack environment (real clients — the
     // RpcProviderProxy — always send one; a session without it is an error).
     const sessionUrl = new URL(rpcUrl);
