@@ -15,9 +15,6 @@ import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
 import {
   DefinitionError,
-  DuplicateDefinition,
-  DuplicateName,
-  UnknownSource,
   ForeignAppend,
   LazyViewNeedsOneSource,
   MissingWorkflowEngine,
@@ -282,6 +279,7 @@ export const make = <
     policies: members.policies ?? [],
     projections: members.projections ?? [],
     streams: members.streams ?? [],
+    queries: members.queries ?? [],
   };
   return class {
     static readonly kind = "Model" as const;
@@ -622,31 +620,8 @@ const build = <A, E, R>(
 
     // Queries run where the Api runs, reading your store and the model's members.
     const queryHosts = new Map<string, Query.Host>();
+    // The kernel has refused duplicate names and unknown projections.
     for (const query of queries) {
-      if (commands.has(query.queryName)) {
-        return yield* Effect.die(
-          new DefinitionError({ reason: new DuplicateName({ entity: query.queryName }) }),
-        );
-      }
-      if (queryHosts.has(query.queryName)) {
-        return yield* Effect.die(
-          new DefinitionError({
-            reason: new DuplicateDefinition({ kind: "query", entity: query.queryName }),
-          }),
-        );
-      }
-      for (const projection of query.definition.from ?? []) {
-        if (!definitions.projections.includes(projection)) {
-          return yield* Effect.die(
-            new DefinitionError({
-              reason: new UnknownSource({
-                consumer: query.queryName,
-                source: projection.projectionName,
-              }),
-            }),
-          );
-        }
-      }
       const implementation = Context.getUnsafe(
         implementations as Context.Context<unknown>,
         query as Context.Key<unknown, Query.Implementation>,

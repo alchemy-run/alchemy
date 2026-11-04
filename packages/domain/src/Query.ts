@@ -287,14 +287,6 @@ export const make = <
   Ms,
   Exclude<RV | RS, Middleware.Provides<Ms>>
 > => {
-  if (definition.row && definition.success) {
-    throw new Error(
-      `Query '${name}' declares both \`row\` and \`success\`; it is paged or it isn't`,
-    );
-  }
-  if (definition.visible && !definition.row) {
-    throw new Error(`Query '${name}' declares \`visible\` without \`row\`: only rows are judged`);
-  }
   const rejects = definition.rejects ?? [];
   const errors: ReadonlyArray<Schema.Top> = [
     ...rejects,

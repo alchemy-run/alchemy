@@ -242,7 +242,7 @@ const recording = () => {
   return { spans, tracer, named: (name: string) => spans.filter((span) => span.name === name) };
 };
 
-describe("Domain Query", () => {
+describe("Domain Query", { tags: ["unit", "local"] }, () => {
   it.effect("reads rows a projection wrote, and refuses who validate refuses", () =>
     story(
       Story.given(sam, new Opened({ owner: "sam" })),
@@ -473,11 +473,32 @@ describe("Domain Query", () => {
     );
     expect(String(exit)).toContain("Two entities are named 'Deposit'");
   });
+
+  it("verify reports every query problem without hosting the model", () => {
+    class Both extends Domain.Query("Both", { row: Movement, success: Schema.Number }) {}
+    class Judged extends Domain.Query("Judged", {
+      success: Schema.Number,
+      visible: () => Effect.succeed(true),
+    }) {}
+    class Named extends Domain.Query("WalletOwner", { success: Schema.Number }) {}
+    class Broken extends Domain.Model("QueryBroken", {
+      aggregates: [Wallet],
+      views: [WalletOwner],
+      queries: [Both, Judged, Named, Total, Total],
+    }) {}
+    expect(Domain.verify(Broken).map((problem) => problem.message)).toEqual([
+      "Query 'Both' declares both `row` and `success`; it is paged or it isn't",
+      "Query 'Judged' declares `visible` without `row`: only rows are judged",
+      "Two entities are named 'WalletOwner'",
+      "Total consumes Ledger, which is not in the Domain",
+      "Duplicate query 'Total'",
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------- Foldkit Commands for queries
 
-describe("Domain Query through Foldkit", () => {
+describe("Domain Query through Foldkit", { tags: ["unit", "local"] }, () => {
   const Wallets$ = Foldkit.make(WalletApi);
   const as = (viewer: string | undefined) =>
     Effect.provideService(Foldkit.CommandHeaders, {

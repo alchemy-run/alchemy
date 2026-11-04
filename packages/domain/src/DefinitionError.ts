@@ -21,7 +21,7 @@ export class DuplicateName extends Data.TaggedError("DuplicateName")<{
   }
 }
 
-/** The Domain lists the same aggregate, policy or projection twice. */
+/** The Domain lists the same aggregate, policy, projection or query twice. */
 export class DuplicateDefinition extends Data.TaggedError("DuplicateDefinition")<{
   readonly kind: "aggregate" | "policy" | "projection" | "query";
   readonly entity: string;
@@ -353,6 +353,24 @@ export class LazyViewNeedsOneSource extends Data.TaggedError("LazyViewNeedsOneSo
   }
 }
 
+/** A query declares both `row` and `success`: it is paged or it isn't. */
+export class PagedAndSingle extends Data.TaggedError("PagedAndSingle")<{
+  readonly query: string;
+}> {
+  override get message() {
+    return `Query '${this.query}' declares both \`row\` and \`success\`; it is paged or it isn't`;
+  }
+}
+
+/** A query declares `visible` but no `row`: only the rows of a page are judged. */
+export class VisibleWithoutRow extends Data.TaggedError("VisibleWithoutRow")<{
+  readonly query: string;
+}> {
+  override get message() {
+    return `Query '${this.query}' declares \`visible\` without \`row\`: only rows are judged`;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -388,7 +406,9 @@ export type Reason =
   | MissingGroup
   | NewerGeneration
   | ModelHostedTwice
-  | LazyViewNeedsOneSource;
+  | LazyViewNeedsOneSource
+  | PagedAndSingle
+  | VisibleWithoutRow;
 
 /**
  * A domain definition error, found while the kernel is built or when a
