@@ -69,13 +69,19 @@ test.provider(
 );
 
 test.provider.skipIf(intelligence)(
-  "create is rejected with Forbidden without Storage Intelligence",
+  "create is rejected without Storage Intelligence",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      // Without Storage Intelligence the API rejects the job: on a bucket it
+      // can't act on yet with FAILED_PRECONDITION "User does not have required
+      // permissions {storage.objects.update}", otherwise with "Storage
+      // Intelligence must be enabled".
       const error = yield* Effect.flip(stack.deploy(job("no-store")));
-      expect(JSON.stringify(error)).toContain("Storage Intelligence");
+      expect(JSON.stringify(error)).toMatch(
+        /Storage Intelligence|does not have required permissions \{storage\.objects\.update\}/,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
