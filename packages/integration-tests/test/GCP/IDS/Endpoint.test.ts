@@ -16,7 +16,7 @@ const location = "us-central1-a";
 
 const IdsApi = GCP.ServiceUsage.ProjectService("IdsApi", { service: "ids.googleapis.com" });
 
-const endpoint = (props: { trafficLogs: boolean; labels: Record<string, string> }) =>
+const endpoint = (props: { threatExceptions: string[]; labels?: Record<string, string> }) =>
   Effect.gen(function* () {
     yield* IdsApi;
     const vpc = yield* GCP.Compute.Network("Vpc", { autoCreateSubnetworks: false });
@@ -35,6 +35,7 @@ const endpoint = (props: { trafficLogs: boolean; labels: Record<string, string> 
       location,
       network: psa.network,
       severity: "MEDIUM",
+      labels: { env: "test" },
       ...props,
     });
   });
@@ -78,26 +79,25 @@ test.provider.skipIf(!!process.env.FAST)(
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const created = yield* stack.deploy(
-          endpoint({ trafficLogs: false, labels: { env: "test" } }),
-        );
+        const created = yield* stack.deploy(endpoint({ threatExceptions: [] }));
         expect(created.name).toContain(`/locations/${location}/endpoints/`);
         expect(created.state).toEqual("READY");
         expect(created.endpointForwardingRule).toEqual(expect.any(String));
 
-        const unchanged = yield* stack.plan(
-          endpoint({ trafficLogs: false, labels: { env: "test" } }),
-        );
+        const unchanged = yield* stack.plan(endpoint({ threatExceptions: [] }));
         expect(unchanged.resources.Ids?.action).toEqual("noop");
 
-        // Traffic logs and labels update in place.
-        const updated = yield* stack.deploy(
-          endpoint({ trafficLogs: true, labels: { env: "prod" } }),
-        );
+        // Threat exceptions update in place.
+        const updated = yield* stack.deploy(endpoint({ threatExceptions: ["10003"] }));
         expect(updated.name).toEqual(created.name);
         const fetched = yield* ids.getProjectsLocationsEndpoints({ name: created.name });
-        expect(fetched.trafficLogs).toEqual(true);
-        expect(fetched.labels?.env).toEqual("prod");
+        expect(fetched.threatExceptions).toEqual(["10003"]);
+
+        // Every other field is fixed at create: new labels are a new endpoint.
+        const relabeled = yield* stack.plan(
+          endpoint({ threatExceptions: ["10003"], labels: { env: "prod" } }),
+        );
+        expect(relabeled.resources.Ids?.action).toEqual("replace");
 
         yield* stack.destroy();
         expect(yield* waitUntilGone(created.name)).toEqual("gone");

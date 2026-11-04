@@ -12,7 +12,6 @@ import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   createInternalLabels,
-  diffLabels,
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
@@ -51,13 +50,17 @@ export type EndpointProps = {
   /** Description. Immutable — changing it replaces the endpoint. */
   description?: string;
   /**
-   * Log every connection the endpoint sees, not just threats.
+   * Log every connection the endpoint sees, not just threats. Immutable —
+   * changing it replaces the endpoint.
    * @default false
    */
   trafficLogs?: boolean;
   /** Threat ids the endpoint ignores. Updates in place. */
   threatExceptions?: string[];
-  /** User labels. Alchemy ownership labels are merged in automatically. */
+  /**
+   * User labels. Alchemy ownership labels are merged in automatically.
+   * Immutable — changing them replaces the endpoint.
+   */
   labels?: Record<string, string>;
 };
 
@@ -91,8 +94,7 @@ export type Endpoint = Resource<
  * traffic a packet mirroring policy sends to `endpointForwardingRule`.
  *
  * The endpoint's network needs a Private Service Access connection.
- * Threat exceptions, traffic logs and labels update in place; everything
- * else is fixed at create. An endpoint takes 15–20 minutes to provision.
+ * Threat exceptions update in place; everything else is fixed at create. An endpoint takes 15–20 minutes to provision.
  *
  * ### Inspecting a Network
  * **Example:** An endpoint on a network with Private Service Access
@@ -199,7 +201,10 @@ export const EndpointProvider = () =>
         (news.endpointId !== undefined && news.endpointId !== olds.endpointId) ||
         news.network !== olds.network ||
         news.severity !== olds.severity ||
-        (news.description ?? "") !== (olds.description ?? "");
+        (news.description ?? "") !== (olds.description ?? "") ||
+        // The API updates threat exceptions only ("Invalid field mask" for anything else).
+        (news.trafficLogs ?? false) !== (olds.trafficLogs ?? false) ||
+        JSON.stringify(news.labels ?? {}) !== JSON.stringify(olds.labels ?? {});
       return fixedChanged ? { action: "replace" as const } : undefined;
     }),
 
@@ -264,22 +269,12 @@ export const EndpointProvider = () =>
         return yield* new EndpointNotResolved({ resourceName: name });
       }
 
-      // Sync the fields Cloud IDS updates in place against the live endpoint.
-      const { upsert, removed } = diffLabels(tagRecord(current.labels), desiredLabels);
-      const mask = [
-        (upsert.length > 0 || removed.length > 0) && "labels",
-        (current.trafficLogs ?? false) !== (news.trafficLogs ?? false) && "traffic_logs",
-        !sameList(current.threatExceptions, news.threatExceptions) && "threat_exceptions",
-      ].filter((field): field is string => typeof field === "string");
-      if (mask.length > 0) {
+      // Sync threat exceptions, the one field Cloud IDS updates in place.
+      if (!sameList(current.threatExceptions, news.threatExceptions)) {
         const operation = yield* ids.patchProjectsLocationsEndpoints({
           name: current.name ?? name,
-          updateMask: mask.join(","),
-          body: {
-            labels: desiredLabels,
-            trafficLogs: news.trafficLogs ?? false,
-            threatExceptions: news.threatExceptions ?? [],
-          },
+          updateMask: "threatExceptions",
+          body: { threatExceptions: news.threatExceptions ?? [] },
         });
         yield* waitFor(operation);
         current = (yield* getByName(current.name ?? name)) ?? current;
