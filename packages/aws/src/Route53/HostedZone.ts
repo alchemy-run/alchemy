@@ -353,6 +353,14 @@ export const HostedZoneProvider = () =>
         delete: Effect.fn(function* ({ olds, output }) {
           if (olds.forceDestroy) {
             yield* purgeRecords(output.id).pipe(
+              // Records looked up by zone NAME delete concurrently with the
+              // purge (see below), so a listed record set can be gone by the
+              // time the batch runs, which fails the whole batch. Re-list
+              // and purge what is left.
+              Effect.retry({
+                while: (e) => e._tag === "InvalidChangeBatch",
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
+              }),
               Effect.catchTag("NoSuchHostedZone", () => Effect.void),
             );
           }
