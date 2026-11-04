@@ -23,6 +23,7 @@ import type { WebSocket } from "../Workers/WebSocket.ts";
 import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
 import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
 import { task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
+import { MIGRATION_WORKFLOW } from "./Version.ts";
 
 /**
  * Domain version 1 hosts every object of every model on a Worker in one
@@ -36,9 +37,6 @@ import { task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
  * over. See `Version.ts` for when the old classes are deleted.
  */
 export const SHARED_CLASS = "AlchemyDomain";
-
-/** The Workflow a deploy runs to move every object of the old classes. */
-export const MIGRATION_WORKFLOW = "AlchemyDomainMigration";
 
 /** The key an object listed itself under in the backfill directory. */
 export const ID_KEY = "bf:id";

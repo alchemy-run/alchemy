@@ -3,6 +3,7 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
+import * as workflowsApi from "@distilled.cloud/cloudflare/workflows";
 import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
@@ -5838,30 +5839,31 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
     deployedClasses,
   }))
     deployedClasses.add(to);
-  const namespaces = new Map<string, string>();
-  const kept = yield* DomainVersion.keptMovers({
-    deployed,
-    movers,
-    deployedClasses,
-    since: DomainVersion.movingSince(tags),
-    now: Math.floor((yield* Clock.currentTimeMillis) / 1000),
-    holdsData: (className) =>
-      Effect.gen(function* () {
-        if (namespaces.size === 0)
-          for (const namespace of yield* durableObjectsApi.listNamespaces
-            .items({ accountId })
-            .pipe(Stream.runCollect))
-            if (namespace.script === scriptName && namespace.class && namespace.id)
-              namespaces.set(namespace.class, namespace.id);
-        const id = namespaces.get(className);
-        if (id === undefined) return false;
-        const holding = yield* durableObjectsApi.listNamespaceObjects.items({ accountId, id }).pipe(
-          Stream.filter((object) => object.hasStoredData === true),
-          Stream.runHead,
+  // The migration Workflow's complete passes: see `DomainVersion.passMarker`.
+  const since = DomainVersion.movingSince(tags);
+  const workflowName = bindings
+    .flatMap((b) => b.data.bindings ?? [])
+    .find(
+      (item: WorkerBinding) =>
+        item.type === "workflow" && item.className === DomainVersion.MIGRATION_WORKFLOW,
+    );
+  const passes =
+    since === undefined || workflowName === undefined || !("workflowName" in workflowName)
+      ? []
+      : Array.from(
+          yield* workflowsApi.listInstances
+            .items({
+              accountId,
+              workflowName: workflowName.workflowName as string,
+              status: "complete",
+            })
+            .pipe(
+              Stream.map((instance) => instance.id),
+              Stream.runCollect,
+              Effect.catchTag("WorkflowNotFound", () => Effect.succeed([] as Array<string>)),
+            ),
         );
-        return holding._tag === "Some";
-      }),
-  });
+  const kept = DomainVersion.keptMovers({ movers, deployedClasses, since, passes });
   const dropped = new Set(
     movers.map((mover) => mover.className).filter((className) => !kept.has(className)),
   );

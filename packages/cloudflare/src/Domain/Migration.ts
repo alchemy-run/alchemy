@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { passMarker } from "./Version.ts";
 
 export interface MigrationProps {
   /** The Domain's Worker, which hosts the old classes and the migration Workflow. */
@@ -117,6 +118,8 @@ const MigrationLive = () =>
     reconcile: Effect.fn(function* ({ instanceId: resource, news, session }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const started = yield* Clock.currentTimeMillis;
+      // Every object listed from here on is moved by this pass.
+      const listedAt = Math.floor(started / 1000);
       const timeout = (news.timeoutSeconds ?? 1800) * 1000;
 
       // The old classes the upload kept, and their objects that still hold data.
@@ -136,18 +139,11 @@ const MigrationLive = () =>
       }
       const total = batches.reduce((sum, batch) => sum + batch.ids.length, 0);
       const attrs = { accountId, workflowName: news.workflowName };
-      if (total === 0) return { ...attrs, instanceIds: [], moved: 0 };
 
-      const instanceIds: Array<string> = [];
-      for (const batch of batches) {
-        const instanceId = `migrate-${resource.slice(0, 12)}-${started.toString(36)}-${hash(`${batch.className}|${batch.ids.join(",")}`)}`;
-        yield* workflows
-          .createInstance({
-            accountId,
-            workflowName: news.workflowName,
-            instanceId,
-            params: batch,
-          })
+      /** Start an instance, or find it started. */
+      const create = (instanceId: string, params: object) =>
+        workflows
+          .createInstance({ accountId, workflowName: news.workflowName, instanceId, params })
           .pipe(
             Effect.asVoid,
             Effect.catchTag("InstanceAlreadyExists", () => Effect.void),
@@ -159,6 +155,26 @@ const MigrationLive = () =>
               times: 30,
             }),
           );
+      /**
+       * Record each class's complete pass as an instance of the Workflow that
+       * moves nothing: the Worker's next upload reads them, and deletes a
+       * class once a pass has seen every object written before the move.
+       */
+      const markPasses = Effect.forEach(
+        news.classes.filter(({ className }) => news.namespaces[className] !== undefined),
+        ({ className, route }) =>
+          create(passMarker(className, listedAt), { className, route, ids: [] }),
+        { discard: true },
+      );
+      if (total === 0) {
+        yield* markPasses;
+        return { ...attrs, instanceIds: [], moved: 0 };
+      }
+
+      const instanceIds: Array<string> = [];
+      for (const batch of batches) {
+        const instanceId = `migrate-${resource.slice(0, 12)}-${started.toString(36)}-${hash(`${batch.className}|${batch.ids.join(",")}`)}`;
+        yield* create(instanceId, batch);
         instanceIds.push(instanceId);
       }
 
@@ -194,6 +210,7 @@ const MigrationLive = () =>
         );
         yield* Effect.sleep(POLL);
       }
+      yield* markPasses;
       yield* session.note(`Moved ${total} Domain objects to the shared class`, { kind: "status" });
       return { ...attrs, instanceIds, moved: total };
     }),

@@ -4,6 +4,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -112,6 +113,38 @@ const untilListed = (namespaceIds: ReadonlyArray<string>, until: (count: number)
       Effect.repeat({ schedule: Schedule.spaced("10 seconds"), until, times: 48 }),
     ),
   );
+
+/**
+ * How many objects the Worker's migration Workflow moved, from its complete
+ * instances (the passes' markers move none).
+ */
+const movedBy = Effect.fn(function* (scriptName: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const settings = yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName });
+  const binding = (settings.bindings ?? []).find(
+    (binding) =>
+      binding.type === "workflow" &&
+      "className" in binding &&
+      binding.className === "AlchemyDomainMigration",
+  );
+  if (binding === undefined || !("workflowName" in binding)) return 0;
+  const workflowName = binding.workflowName as string;
+  const instances = yield* workflows.listInstances
+    .items({ accountId, workflowName, status: "complete" })
+    .pipe(Stream.runCollect);
+  let moved = 0;
+  for (const instance of instances) {
+    if (!instance.id.startsWith("migrate-")) continue;
+    const { output } = yield* workflows.getInstance({
+      accountId,
+      workflowName,
+      instanceId: instance.id,
+    });
+    const parsed = typeof output === "string" ? JSON.parse(output) : output;
+    moved += (parsed as { moved?: number } | null)?.moved ?? 0;
+  }
+  return moved;
+});
 
 const tagsOf = Effect.fn(function* (scriptName: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -395,9 +428,9 @@ test.provider(
       const movingTag = tags.find((tag) => tag.startsWith("alchemy:domain:moving:"));
       expect(movingTag).toBeDefined();
 
-      // The deploy waited for the move: nothing has read them since, and the
-      // old objects are empty.
-      yield* untilListed(written, (count) => count === 0);
+      // The deploy waited for the move, before anything read them: the
+      // account, the view row, the saga run and the directory and run nodes.
+      expect(yield* movedBy(scriptName)).toBeGreaterThanOrEqual(written.length);
 
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });

@@ -105,6 +105,9 @@ export const deployedVersion = (tags: ReadonlyArray<string>): number | undefined
   return undefined;
 };
 
+/** The Workflow, on a Domain's Worker, that moves version 0 objects to the shared class. */
+export const MIGRATION_WORKFLOW = "AlchemyDomainMigration";
+
 /** The tag that records when a Worker started moving its objects to the shared class (version 1). */
 export const movingTag = (sinceSeconds: number) => `alchemy:domain:moving:${sinceSeconds}`;
 
@@ -120,45 +123,71 @@ export const movingSince = (tags: ReadonlyArray<string>): number | undefined => 
 /**
  * How long after the move starts an old class may be deleted. Cloudflare
  * lists a Durable Object a few minutes after it is first written: until then,
- * an old class that lists no objects may still have some.
+ * a pass over an old class's listed objects may miss some.
  */
 export const LISTING_LAG_SECONDS = 15 * 60;
 
+const fnv = (text: string) => {
+  let hash = 0x811c9dc5;
+  for (const char of text) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+};
+
+/**
+ * The migration Workflow instance that records a complete pass over an old
+ * class: every object Cloudflare listed at `listedAt` (seconds) has moved.
+ * Cloudflare keeps the instance, so the next upload can read it.
+ */
+export const passMarker = (className: string, listedAt: number) =>
+  `moved-${fnv(className)}-${listedAt}`;
+
+/** When the latest complete pass over `className` listed its objects, from the Workflow's instance ids. */
+export const lastPass = (className: string, instanceIds: Iterable<string>): number | undefined => {
+  const prefix = `moved-${fnv(className)}-`;
+  let last: number | undefined;
+  for (const id of instanceIds) {
+    if (!id.startsWith(prefix)) continue;
+    const at = Number(id.slice(prefix.length));
+    if (Number.isInteger(at) && (last === undefined || at > last)) last = at;
+  }
+  return last;
+};
+
 /**
  * The version 0 classes an upload keeps live, to move their objects to the
- * shared class. A class is kept while the Worker has it and, once the move
- * has been running past {@link LISTING_LAG_SECONDS}, while any of its objects
- * still holds data. The others are left out, and the upload deletes them.
+ * shared class. A class is kept while the Worker has it, until a pass over
+ * its objects that listed them at least {@link LISTING_LAG_SECONDS} after the
+ * move started has completed: every object written before the move is
+ * listed by then, and none is written to the old class after it. The others
+ * are left out, and the upload deletes them.
  */
-export const keptMovers = Effect.fn(function* <E, R>({
-  deployed,
+export const keptMovers = ({
   movers,
   deployedClasses,
   since,
-  now,
-  holdsData,
+  passes,
 }: {
-  readonly deployed: number | undefined;
   readonly movers: ReadonlyArray<DomainClass>;
   /** The classes the Worker has now, and the classes this upload renames to. */
   readonly deployedClasses: ReadonlySet<string>;
   /** When the move started, in seconds: see {@link movingSince}. */
   readonly since: number | undefined;
-  readonly now: number;
-  readonly holdsData: (className: string) => Effect.Effect<boolean, E, R>;
-}) {
+  /** The migration Workflow's complete instances: see {@link passMarker}. */
+  readonly passes: ReadonlyArray<string>;
+}) => {
   const kept = new Set<string>();
   for (const mover of movers) {
     if (!deployedClasses.has(mover.className)) continue;
+    const pass = lastPass(mover.className, passes);
     const settled =
-      deployed !== undefined &&
-      deployed >= 1 &&
-      since !== undefined &&
-      now - since >= LISTING_LAG_SECONDS;
-    if (!settled || (yield* holdsData(mover.className))) kept.add(mover.className);
+      since !== undefined && pass !== undefined && pass >= since + LISTING_LAG_SECONDS;
+    if (!settled) kept.add(mover.className);
   }
   return kept;
-});
+};
 
 /**
  * The Durable Object class renames that bring a Worker deployed at `deployed`
