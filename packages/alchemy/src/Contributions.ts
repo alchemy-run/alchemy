@@ -122,6 +122,7 @@ export interface StateStore {
    * it is served. Each parses into the store's options under its key. Flags
    * are built without loading the store, and the CLI makes each optional: one
    * that isn't given is `undefined`, so the store applies its own default.
+   * Don't give a flag a default: it would always be set, for every backend.
    *
    * ```ts
    * flags: {

@@ -144,8 +144,8 @@ export interface StripeStateStoreOptions {
 export const stateStore: StateStoreImpl<StripeStateStoreOptions> = { layer: state };
 ```
 
-A flag that isn't given is `undefined`, so the store falls back to its
-default: a missing `name` is the account's default store, and any other
+Don't give a flag a default: the CLI makes it optional, and a flag that
+isn't given is `undefined`, so the store falls back to its own default: a missing `name` is the account's default store, and any other
 name is a separate store. With the store contributed,
 `alchemy state list --backend stripe --name team-a` opens it from the
 profile alone, and an option the store has no flag for is an error. Stores
