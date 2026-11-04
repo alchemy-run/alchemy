@@ -144,7 +144,7 @@ More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#k
 
 ## Conveniences for internal tools
 
-`toHttpApi`, `toMcp` and `toCli` publish the calls their `expose` option lists, and nothing else: a command by its name (`"DepositMoney"`), a read as `<Name>.<operation>` (`"AccountSummary.get"`). A name the Api does not serve is a type error. They use the domain's own payloads, replies and state as the wire format. That is quick for internal tooling (scripts, admin consoles, an agent working on your own data), but what each call returns is decided elsewhere (the aggregate, view or command), so a reply or view that later gains a private field is published without anyone touching `expose`. Don't reach for them by default, and don't use them for a public or partner surface: write that API yourself (see [Public and partner APIs](#public-and-partner-apis)).
+`toHttpApi`, `toMcp` and `toCli` publish the calls their `expose` option lists, and nothing else: a command or a query by its name (`"DepositMoney"`, `"AccountLedger"`), a read as `<Name>.<operation>` (`"AccountSummary.get"`). A name the Api does not serve is a type error. They use the domain's own payloads, replies and state as the wire format. That is quick for internal tooling (scripts, admin consoles, an agent working on your own data), but what each call returns is decided elsewhere (the aggregate, view or command), so a reply or view that later gains a private field is published without anyone touching `expose`. Don't reach for them by default, and don't use them for a public or partner surface: write that API yourself (see [Public and partner APIs](#public-and-partner-apis)).
 
 ### Plain HTTP and OpenAPI
 

@@ -164,6 +164,14 @@ const call = (client: Client, operation: Operation, request: DecodedRequest) => 
     };
     return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
+  if (operation.operation === "ask") {
+    const ask = client[operation.name] as (
+      input: unknown,
+      options: object,
+    ) => Effect.Effect<unknown, unknown>;
+    const { input, ...options } = request.payload as { readonly input: unknown };
+    return ask(input, { headers, ...options });
+  }
   const reads = client[operation.name] as Record<
     string,
     (
@@ -236,7 +244,8 @@ const endpointOf = (
   const fields = (rpc.payloadSchema as unknown as Schema.Struct<Schema.Struct.Fields>).fields;
   const error = errors.length === 0 ? undefined : errors;
   const endpoint =
-    operation.operation === "send"
+    // A query's input is any schema, so it goes in a JSON body, as a command's does.
+    operation.operation === "send" || operation.operation === "ask"
       ? HttpApiEndpoint.post(operation.rpc._tag, `/${operation.name}`, {
           payload: rpc.payloadSchema,
           success: rpc.successSchema,
@@ -285,17 +294,19 @@ const endpointOf = (
  * Publish an Api's calls as a plain HTTP JSON API, with an OpenAPI document,
  * from the same Api. Each published call is one endpoint:
  *
- * | Call                    | Method and path              | Input                                   |
- * | ----------------------- | ---------------------------- | --------------------------------------- |
- * | a command               | `POST /<Command>`            | JSON body: `target`, `commandId`, input |
- * | `get`, `peek`           | `GET /<Name>/{key}`         | `?stream=&version=` waits for a write   |
- * | `snapshot`              | `GET /<Name>/{key}/snapshot`| `?stream=&version=` waits for a write   |
- * | `list`                  | `GET /<Name>/{key}/list`    | `?order=&take=&after=`                  |
- * | `watch`                 | `GET /<Name>/{key}/watch`   | Server-Sent Events                      |
- * | `events`                | `GET /<Name>/{key}/events`  | Server-Sent Events, `?after=` a cursor  |
+ * | Call          | Method and path              | Input                                          |
+ * | ------------- | ---------------------------- | ---------------------------------------------- |
+ * | a command     | `POST /<Command>`            | JSON body: `target`, `commandId`, input        |
+ * | a query       | `POST /<Query>`              | JSON body: `input`, `atLeast`, `after`, `take` |
+ * | `get`, `peek` | `GET /<Name>/{key}`          | `?stream=&version=` waits for a write          |
+ * | `snapshot`    | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for a write          |
+ * | `list`        | `GET /<Name>/{key}/list`     | `?order=&take=&after=`                         |
+ * | `watch`       | `GET /<Name>/{key}/watch`    | Server-Sent Events                             |
+ * | `events`      | `GET /<Name>/{key}/events`   | Server-Sent Events, `?after=` a cursor         |
  *
- * A command answers with its receipt; a read with what the Api's own client
- * gets (`null` for an empty key). A typed failure answers with its `_tag`
+ * A command answers with its receipt; a query with its result (a paged one
+ * with `{ entries, cursor }`); a read with what the Api's own client gets
+ * (`null` for an empty key). A typed failure answers with its `_tag`
  * and data, at the status its schema's `httpApiStatus` annotation gives it
  * (`Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 })`), and 422 if it
  * has none: a rejection is a refused request, not a server fault. Input its

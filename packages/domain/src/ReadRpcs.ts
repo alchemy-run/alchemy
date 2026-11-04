@@ -248,13 +248,16 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
   return rpcs;
 };
 
-/** One call an Api serves, as the HTTP and AI surfaces publish it. */
+/** One call an Api serves, as the HTTP, CLI and AI surfaces publish it. */
 export interface Operation {
-  /** The command, view, stream or aggregate it belongs to. */
+  /** The command, query, view, stream or aggregate it belongs to. */
   readonly served: Servable;
-  /** A command's tag, or a view's, stream's or aggregate's name. */
+  /** A command's tag, a query's name, or a view's, stream's or aggregate's name. */
   readonly name: string;
-  /** `send` for a command; the read's client method otherwise (`get`, `peek`, `watch`, ...). */
+  /**
+   * `send` for a command, `ask` for a query; the read's client method
+   * otherwise (`get`, `peek`, `watch`, ...).
+   */
   readonly operation: string;
   readonly rpc: Rpc.AnyWithProps;
   /** Whether the call answers with a stream of values (`watch`, `events`). */
@@ -268,8 +271,10 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
       const rpc = served.rpc as Rpc.AnyWithProps;
       return [{ served, name: served.tag, operation: "send", rpc, stream: false }];
     }
-    // A query is one RPC the Api's own client calls; the derived surfaces do not serve it yet.
-    if (served.kind === "Query") return [];
+    if (served.kind === "Query") {
+      const rpc = served.rpc as Rpc.AnyWithProps;
+      return [{ served, name: served.queryName, operation: "ask", rpc, stream: false }];
+    }
     const name = nameOf(served);
     return Object.entries(readRpcs(served)).flatMap(([call, read]) => {
       if (read === undefined) return [];
@@ -285,7 +290,7 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
 
 /**
  * The name of one call of an Api's client: a command's tag (`DepositMoney`),
- * or a read as `<Name>.<operation>` (`AccountSummary.get`).
+ * a query's name (`AccountLedger`), or a read as `<Name>.<operation>` (`AccountSummary.get`).
  */
 export type CallName<Client> = {
   readonly [K in keyof Client & string]: Client[K] extends (...args: never) => unknown
@@ -313,9 +318,13 @@ export type ClientOf<A> = A extends {
   ? Client
   : never;
 
+/** Whether the client calls it as a method of its own: a command's `send` or a query's `ask`. */
+export const isMethod = (op: Operation): boolean =>
+  op.operation === "send" || op.operation === "ask";
+
 /** The {@link CallName} of an operation. */
 export const callName = (op: Operation): string =>
-  op.operation === "send" ? op.name : `${op.name}.${op.operation}`;
+  isMethod(op) ? op.name : `${op.name}.${op.operation}`;
 
 /**
  * The operations a caller listed: nothing is exposed unless it is named.

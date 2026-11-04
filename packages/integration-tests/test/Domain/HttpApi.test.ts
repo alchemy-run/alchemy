@@ -138,9 +138,37 @@ class Ledger extends Domain.Aggregate("Ledger", {
   evolve: { Signed: (_, e) => ({ owner: e.owner }) },
   reply: { Sign: (s) => ({ owner: s.owner }) },
 }) {}
+class UnknownBase extends Domain.Rejection("UnknownBase", { base: Schema.String }) {}
+
+/** Exchange rates: a paged query over rows outside the model. */
+class Rates extends Domain.Query("Rates", {
+  input: { base: Schema.String },
+  success: Schema.Struct({ currency: Schema.String, rate: Schema.Number }),
+  paged: true,
+  middleware: [Session],
+  rejects: [UnknownBase],
+}) {}
+const rates = [
+  { currency: "EUR", rate: 0.9 },
+  { currency: "GBP", rate: 0.8 },
+  { currency: "JPY", rate: 150 },
+];
+const RatesLive = Rates.toLayer(
+  Effect.succeed(({ base }, { after, take }) => {
+    if (base !== "USD") return Effect.fail(new UnknownBase({ base }));
+    const rest = rates.filter((row) => after === undefined || row.currency > after);
+    const entries = rest.slice(0, take);
+    return Effect.succeed({
+      entries,
+      cursor: rest.length > take ? entries.at(-1)!.currency : null,
+    });
+  }),
+);
+
 class Wallets extends Domain.Model("HttpWallets", {
   aggregates: [Wallet, Ledger],
   views: [Balance],
+  queries: [Rates],
 }) {}
 class WalletApi extends Domain.Api("WalletApi", {
   model: Wallets,
@@ -164,6 +192,7 @@ const WalletHttp = DomainHttp.toHttpApi(WalletApi, {
     "Balance.events",
     "Balance.watch",
     "Balance.get",
+    "Rates",
     "Deposit",
   ],
 });
@@ -173,7 +202,7 @@ const Hosted = Layer.mergeAll(
   SessionLive,
   SignedSessionLive,
   ServerCredential,
-  Wallets.layer(Layer.empty),
+  Wallets.layer(RatesLive),
 ).pipe(Layer.provide(InMemory), Layer.provideMerge(BunHttpServer.layerTest));
 
 const serve = <Id extends string, Groups extends HttpApiGroup.Constraint>(
@@ -275,6 +304,38 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
         body: { target: "w-1", input: { amount: "lots", at } },
       });
       expect(malformed.status).toBe(400);
+    }).pipe(Effect.provide(Served)),
+  );
+
+  it.live("a query endpoint takes its input and page in the body, and answers with a page", () =>
+    Effect.gen(function* () {
+      const first = yield* send("POST", "/Rates", {
+        owner: "sam",
+        body: { input: { base: "USD" }, take: 2 },
+      });
+      expect(first).toEqual({
+        status: 200,
+        body: {
+          entries: [
+            { currency: "EUR", rate: 0.9 },
+            { currency: "GBP", rate: 0.8 },
+          ],
+          cursor: "GBP",
+        },
+      });
+      const next = yield* send("POST", "/Rates", {
+        owner: "sam",
+        body: { input: { base: "USD" }, after: "GBP" },
+      });
+      expect(next.body).toEqual({ entries: [{ currency: "JPY", rate: 150 }], cursor: null });
+      // Its rejection and its middleware's error answer with their statuses.
+      const unknown = yield* send("POST", "/Rates", {
+        owner: "sam",
+        body: { input: { base: "XYZ" } },
+      });
+      expect(unknown).toEqual({ status: 422, body: { _tag: "UnknownBase", base: "XYZ" } });
+      const anonymous = yield* send("POST", "/Rates", { body: { input: { base: "USD" } } });
+      expect(anonymous.status).toBe(401);
     }).pipe(Effect.provide(Served)),
   );
 
@@ -491,6 +552,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       "/Balance/{key}/snapshot",
       "/Balance/{key}/watch",
       "/Deposit",
+      "/Rates",
       "/Wallet/{key}",
       "/Wallet/{key}/events",
       "/Wallet/{key}/watch",
@@ -502,6 +564,14 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     for (const field of ["target", "amount", "at", "commandId"]) expect(body).toContain(field);
     expect(Object.keys(deposit.responses).sort()).toEqual(["200", "401", "422"]);
     expect(JSON.stringify(deposit.responses["422"])).toContain("OverLimit");
+
+    const ratesOp = spec.paths["/Rates"]!.post!;
+    expect(ratesOp.operationId).toBe("WalletApi.Rates");
+    for (const field of ["input", "base", "after", "take", "atLeast"]) {
+      expect(JSON.stringify(ratesOp.requestBody)).toContain(field);
+    }
+    expect(Object.keys(ratesOp.responses).sort()).toEqual(["200", "401", "422"]);
+    expect(JSON.stringify(ratesOp.responses["422"])).toContain("UnknownBase");
 
     const balance = spec.paths["/Balance/{key}"]!.get!;
     expect(balance.parameters.map((p) => [p.name, p.in]).sort()).toEqual([
@@ -546,7 +616,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     );
   });
 
-  it("publishes exposed calls in the order the Api serves them: commands, views, streams, then aggregates", () => {
+  it("publishes exposed calls in the order the Api serves them: commands, views, streams, queries, then aggregates", () => {
     expect(
       Object.values(WalletHttp.group.endpoints).map((e) => [e.identifier, e.method, e.path]),
     ).toEqual([
@@ -556,6 +626,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       ["Balance.events", "GET", "/Balance/:key/events"],
       ["Balance.list", "GET", "/Balance/:key/list"],
       ["Balance.snapshot", "GET", "/Balance/:key/snapshot"],
+      ["Rates", "POST", "/Rates"],
       ["Wallet.get", "GET", "/Wallet/:key"],
       ["Wallet.watch", "GET", "/Wallet/:key/watch"],
       ["Wallet.events", "GET", "/Wallet/:key/events"],

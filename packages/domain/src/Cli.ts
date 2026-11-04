@@ -19,7 +19,13 @@ import {
   DuplicateFlag,
   ReservedFlag,
 } from "./DefinitionError.ts";
-import { exposedOf, type OnceCallName, type Operation, operationsOf } from "./ReadRpcs.ts";
+import {
+  exposedOf,
+  isMethod,
+  type OnceCallName,
+  type Operation,
+  operationsOf,
+} from "./ReadRpcs.ts";
 
 /**
  * A command line for an Api: one subcommand per thing it serves, run as a client of the
@@ -155,14 +161,15 @@ const descriptionOfField = (ast: SchemaAST.AST): string | undefined =>
 
 /**
  * The fields of a call's payload, as the wire carries them (the encoded
- * side). A command's `input` is flattened into flags of its own fields
- * (`--amount`), next to `--target` and `--command-id`. A field whose flag
+ * side). A command's or a query's `input` is flattened into flags of its
+ * own fields (`--amount`), next to `--target` and `--command-id`, or
+ * `--after` and `--take`. A field whose flag
  * the CLI reserves, or that another field takes, is a definition problem.
  */
 const fieldsOf = (
   where: string,
   payload: Schema.Top,
-  command: boolean,
+  flattenInput: boolean,
   problems: Array<DefinitionError>,
 ): ReadonlyArray<Field> => {
   const ast = SchemaAST.toEncoded(payload.ast);
@@ -195,7 +202,7 @@ const fieldsOf = (
   };
   const outer = new Set(ast.propertySignatures.map((property) => kebab(String(property.name))));
   return ast.propertySignatures.flatMap((property) => {
-    const input = command && property.name === "input" ? property.type : undefined;
+    const input = flattenInput && property.name === "input" ? property.type : undefined;
     // An input field named like `target` keeps the whole input as `--input`'s JSON.
     const flat =
       input !== undefined &&
@@ -294,6 +301,11 @@ const invoke = (
     ) => Effect.Effect<unknown, unknown>;
     return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
+  if (op.operation === "ask") {
+    const { input, ...options } = payload;
+    const ask = served as (input: unknown, options: unknown) => Effect.Effect<unknown, unknown>;
+    return ask(input, { ...options, headers });
+  }
   const { key, ...options } = payload;
   const read = (served as Record<string, (key: unknown, options: unknown) => unknown>)[
     op.operation
@@ -315,7 +327,9 @@ const descriptionOf = (op: Operation): string =>
   (op.served.kind === "Command" ? SchemaAST.resolveDescription(op.served.ast) : undefined) ??
   (op.served.kind === "Command"
     ? `Send the ${op.name} command.`
-    : `Read the ${op.name} ${op.served.kind.toLowerCase()}.`);
+    : op.served.kind === "Query"
+      ? `Ask the ${op.name} query.`
+      : `Read the ${op.name} ${op.served.kind.toLowerCase()}.`);
 
 /** What each read prints, for its help. */
 const READS: Record<string, string> = {
@@ -333,8 +347,8 @@ const commandOf = <E, R>(
   problems: Array<DefinitionError>,
 ): Command.Command<string, unknown, {}, Failure<E>, R> => {
   const { rpc } = op;
-  const command = op.operation === "send";
-  const fields = fieldsOf(`${api.apiName} ${rpc._tag}`, rpc.payloadSchema, command, problems);
+  // A command's and a query's `input` fields are flags of their own.
+  const fields = fieldsOf(`${api.apiName} ${rpc._tag}`, rpc.payloadSchema, isMethod(op), problems);
   const decodePayload = Schema.decodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema));
   const encodeSuccess = Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.successSchema));
   // Errors decode with no services, so they encode with none.
@@ -419,13 +433,13 @@ const commandOf = <E, R>(
  * request/response calls `options.expose` lists. Nothing is exposed by
  * default. The tree is read from those calls:
  *
- * - each command, view, stream and aggregate is a subcommand named in kebab-case (`AccountSummary` →
- *   `account-summary`). A command runs as that subcommand; a view, an
+ * - each command, query, view, stream and aggregate is a subcommand named in kebab-case (`AccountSummary` →
+ *   `account-summary`). A command or a query runs as that subcommand; a view, an
  *   aggregate or a stream has one subcommand per call (`get`, `list`,
  *   `snapshot`, `peek`). Live reads (`watch`, `events`) are left out.
  * - each payload field is a flag in kebab-case (`--target`, `--command-id`,
- *   `--key`), and a command's input fields are flags of their own
- *   (`--amount`). A string, a number, a boolean or a set of string literals
+ *   `--key`), and a command's or a query's input fields are flags of their
+ *   own (`--amount`, `--account`). A string, a number, a boolean or a set of string literals
  *   takes a typed flag; any other field takes its JSON (`--at-least
  *   '{"stream":"Account/a-1","version":3}'`). `--json` takes the flags as
  *   one object (`{"target":"a-1","amount":1000}`), and flags override it.
@@ -455,7 +469,7 @@ const commandOf = <E, R>(
  *
  * const bank = toCli(CustomerApi, {
  *   name: "bank",
- *   expose: ["DepositMoney", "AccountSummary.get"],
+ *   expose: ["DepositMoney", "AccountLedger", "AccountSummary.get"],
  *   headers: Config.redacted("BANK_TOKEN").pipe(
  *     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
  *   ),
@@ -468,6 +482,7 @@ const commandOf = <E, R>(
  *   BunRuntime.runMain,
  * );
  * // $ bank deposit-money --target a-1 --amount 1000
+ * // $ bank account-ledger --account a-1 --take 20
  * // $ bank account-summary get --key a-1
  * ```
  */
@@ -505,7 +520,7 @@ export const toCli = <A extends Cliable, E = never, R = never>(
     const ops = all.filter(published);
     if (ops.length === 0) continue;
     let command: Command.Command<string, unknown, {}, Failure<E>, R>;
-    if (all[0]!.operation === "send") {
+    if (isMethod(all[0]!)) {
       command = commandOf(api, ops[0]!, name, options, problems);
     } else {
       command = Command.make(name).pipe(

@@ -108,13 +108,17 @@ const toolDescription = (op: Operation): string =>
   (op.served.kind === "Command" ? SchemaAST.resolveDescription(op.served.ast) : undefined) ??
   (op.operation === "send"
     ? `Send the ${op.name} command.`
-    : op.operation === "peek"
-      ? `Get the latest entry of the ${op.name} stream for a key.`
-      : op.operation === "list"
-        ? `List a page of the ${op.name} entries of a key.`
-        : op.operation === "snapshot"
-          ? `Get the current ${op.name} of a key, with the cursor it is valid at.`
-          : `Get the current ${op.name} of a key.`);
+    : op.operation === "ask"
+      ? op.served.kind === "Query" && op.served.definition.paged
+        ? `Ask the ${op.name} query for a page of entries.`
+        : `Ask the ${op.name} query.`
+      : op.operation === "peek"
+        ? `Get the latest entry of the ${op.name} stream for a key.`
+        : op.operation === "list"
+          ? `List a page of the ${op.name} entries of a key.`
+          : op.operation === "snapshot"
+            ? `Get the current ${op.name} of a key, with the cursor it is valid at.`
+            : `Get the current ${op.name} of a key.`);
 
 /**
  * A call that returns once. A stream (`watch`, `events`) is not one tool
@@ -163,7 +167,7 @@ type Client = Record<string, unknown>;
 
 /**
  * Send one call through the Api's client: a command takes its target, input
- * and command id; a read its key and options.
+ * and command id; a query its input and options; a read its key and options.
  */
 const invoke = (client: Client, op: Operation, payload: unknown, headers?: Headers.Input) => {
   if (op.operation === "send") {
@@ -179,6 +183,11 @@ const invoke = (client: Client, op: Operation, payload: unknown, headers?: Heade
     };
     return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
+  if (op.operation === "ask") {
+    const ask = client[op.name] as (input: unknown, o: object) => Effect.Effect<unknown, unknown>;
+    const { input, ...options } = payload as { readonly input: unknown };
+    return ask(input, { ...options, headers });
+  }
   const { key, ...options } = payload as { readonly key: unknown };
   const read = (
     client[op.name] as Record<string, (k: unknown, o: object) => Effect.Effect<unknown, unknown>>
@@ -193,7 +202,7 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
 
 /**
  * An Effect AI `Toolkit` with one tool per call `options.expose` lists: a
- * command (a write), or a `get`, `peek`, `list` or `snapshot` (reads). No
+ * command (a write), a query, or a `get`, `peek`, `list` or `snapshot` (reads). No
  * tool is given unless it is listed. `watch` and `events` are streams, not
  * one tool result, so they stay on the Api's own clients. Convenient for
  * internal tools and agents working on your own data.
@@ -201,8 +210,8 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
  * A tool is named `<api>_<name>_<operation>` (`BankApi_DepositMoney_send`),
  * with every character other than a letter, digit, `_` or `-` replaced by
  * `_`. Its parameters, success and failure are the call's own schemas, as the
- * Api's RPC server decodes them. A read is marked
- * read-only and a command destructive. A success that is not a JSON object
+ * Api's RPC server decodes them. A query or a read is marked read-only and
+ * a command destructive. A query's tool is `<api>_<Query>_ask`. A success that is not a JSON object
  * (a view's `state | null`) comes back as `{ value }`, since MCP requires an
  * object.
  *
@@ -220,7 +229,7 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
  * import { LanguageModel } from "effect/ai";
  *
  * const { toolkit, layer } = DomainAi.toToolkit(CustomerApi, {
- *   expose: ["TransferMoney", "AccountSummary.get"],
+ *   expose: ["TransferMoney", "AccountLedger", "AccountSummary.get"],
  *   // The signed-in customer's session, for the Api's session middleware.
  *   headers: Effect.map(CurrentSession, (s) => ({ authorization: `Bearer ${s.token}` })),
  * });
