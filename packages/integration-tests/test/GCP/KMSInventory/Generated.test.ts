@@ -15,8 +15,8 @@ const sharedStack = Core.scratchStack(testOptions, "KMSInventoryGenerated");
 let baseUrl: string;
 
 const ALLOWED: string[] = [];
-
-const AMBIGUOUS: string[] = [];
+// TooManyRequests is retried while a grant propagates: KMS Inventory's read quota is a few requests per minute per project, so concurrent probes wait their turn.
+const AMBIGUOUS: string[] = ["TooManyRequests"];
 
 /**
  * Call one binding on the deployed host. `callProbe` retries while the

@@ -9,6 +9,9 @@
   },
   "probes": {
     "resources": {},
-    "enable": ["kmsinventory.googleapis.com"]
+    "enable": ["kmsinventory.googleapis.com"],
+    "ambiguousTags": {
+      "TooManyRequests": "KMS Inventory's read quota is a few requests per minute per project, so concurrent probes wait their turn"
+    }
   }
 }
