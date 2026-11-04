@@ -404,7 +404,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         yield* Provisioning.deployMissing(
           {
             backend: DYNAMODB_STATE_BACKEND,
-            name: options.name,
+            flags: { name: options.name },
             configured,
             label: `DynamoDB state table '${table}'`,
           },
@@ -417,7 +417,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
           yield* Provisioning.deployMissing(
             {
               backend: DYNAMODB_STATE_BACKEND,
-              name: options.name,
+              flags: { name: options.name },
               configured,
               label: `DynamoDB state overflow bucket '${bucket}'`,
             },

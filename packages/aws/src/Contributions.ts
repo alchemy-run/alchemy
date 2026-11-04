@@ -1,4 +1,9 @@
 import * as Contributions from "alchemy/Contributions";
+import * as Flag from "effect/cli/Flag";
+
+const name = Flag.String("name").pipe(
+  Flag.withDescription("A store other than the account's default, by name"),
+);
 
 export default Contributions.make({
   name: "aws",
@@ -9,6 +14,7 @@ export default Contributions.make({
   stateStores: {
     aws: {
       description: "DynamoDB state store in the profile's AWS account",
+      flags: { name },
       load: Contributions.lazy(
         () => import("./Alchemist/DynamoDBStateStore.ts"),
         (module) => module.stateStore,
@@ -16,6 +22,7 @@ export default Contributions.make({
     },
     "aws-s3": {
       description: "S3 state store in the profile's AWS account",
+      flags: { name },
       load: Contributions.lazy(
         () => import("./Alchemist/StateStore.ts"),
         (module) => module.s3StateStore,

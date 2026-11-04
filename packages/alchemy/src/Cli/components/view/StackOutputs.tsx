@@ -17,7 +17,7 @@ export function StackOutputs({
   limit = Number.POSITIVE_INFINITY,
 }: StackOutputsProps) {
   const { colors } = useCliEnvironment();
-  const output = inspect(value, { colors });
+  const output = inspect(value, { colors, depth: null });
   const lines = output.split("\n").slice(offset, offset + limit);
 
   return (
@@ -32,6 +32,6 @@ export function StackOutputs({
 }
 
 export const stackOutputLineCount = (value: unknown): number =>
-  inspect(value, { colors: false }).split("\n").length;
+  inspect(value, { colors: false, depth: null }).split("\n").length;
 
 export const stackOutputsView = (value: unknown): ReactNode => <StackOutputs value={value} />;

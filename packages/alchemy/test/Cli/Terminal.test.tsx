@@ -323,6 +323,20 @@ it(
 );
 
 it(
+  "prints deeply nested stack outputs in full",
+  () => {
+    const output = formatStatic(
+      stackOutputsView({ api: { worker: { bindings: { kv: { id: "ns-1" } } } } }),
+      { columns: 120 },
+    );
+
+    expect(output).not.toContain("[Object]");
+    expect(output).toContain("kv: { id: 'ns-1' }");
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
   "renders detailed plans as nested YAML",
   () => {
     const { service } = makeStatic();

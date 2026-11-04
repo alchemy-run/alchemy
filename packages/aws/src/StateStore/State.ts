@@ -249,7 +249,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         : Provisioning.deployMissing(
             {
               backend: "aws-s3",
-              name: options.name,
+              flags: { name: options.name },
               label: `S3 state bucket '${bucketName}'`,
               configured: options.bucketName !== undefined,
             },
