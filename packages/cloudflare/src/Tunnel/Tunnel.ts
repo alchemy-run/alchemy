@@ -235,7 +235,7 @@ export const TunnelProvider = () =>
       );
       return rows.filter((row): row is Tunnel["Attributes"] => row !== undefined);
     }),
-    diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
+    diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
