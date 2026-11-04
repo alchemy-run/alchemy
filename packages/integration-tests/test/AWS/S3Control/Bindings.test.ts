@@ -248,17 +248,21 @@ describe.skipIf(!!process.env.FAST).sequential(
     );
 
     afterAll(
-      mrapStack
-        .destroy()
-        .pipe(
-          Effect.andThen(
-            inSecondRegion(
-              s3
-                .deleteBucket({ Bucket: secondBucket })
-                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void)),
+      mrapStack.destroy().pipe(
+        Effect.andThen(
+          inSecondRegion(
+            // S3 still reports the deleted MRAP as attached for a while.
+            s3.deleteBucket({ Bucket: secondBucket }).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "BucketHasAccessPointsAttached",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 24,
+              }),
+              Effect.catchTag("NoSuchBucket", () => Effect.void),
             ),
           ),
         ),
+      ),
       { timeout: 1_200_000 },
     );
 

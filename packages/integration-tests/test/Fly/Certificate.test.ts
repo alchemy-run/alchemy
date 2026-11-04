@@ -1,5 +1,5 @@
 import * as Fly from "@alchemy.run/fly";
-import { expect } from "@alchemy.run/test";
+import { expect, describe } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Provider from "alchemy/Provider";
@@ -7,8 +7,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { flyApi } from "./limit.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -208,240 +209,244 @@ const deleteIfPresent = (appName: string, hostname: string) =>
     .deleteAppCertificate({ app_name: appName, hostname })
     .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
-test.provider(
-  "create, update, and delete a custom certificate",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+// Every case deploys its own stack, so they run concurrently; the flyApi limit
+// caps the load on Fly.
+describe.concurrent("Certificate", () => {
+  test.provider(
+    "create, update, and delete a custom certificate",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("CertApp");
-          const cert = yield* Fly.Certificate("Www", {
-            app,
-            hostname: CUSTOM_HOSTNAME,
-            kind: "custom",
-            fullchain: CERT_1A,
-            privateKey: KEY_1A,
-          });
-          return { app, cert };
-        }),
-      );
+        const created = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("CertApp");
+            const cert = yield* Fly.Certificate("Www", {
+              app,
+              hostname: CUSTOM_HOSTNAME,
+              kind: "custom",
+              fullchain: CERT_1A,
+              privateKey: KEY_1A,
+            });
+            return { app, cert };
+          }),
+        );
 
-      expect(created.cert.appName).toEqual(created.app.appName);
-      expect(created.cert.hostname).toEqual(CUSTOM_HOSTNAME);
-      expect(created.cert.source).toEqual("custom");
-      expect(created.cert.status).toEqual(expect.any(String));
+        expect(created.cert.appName).toEqual(created.app.appName);
+        expect(created.cert.hostname).toEqual(CUSTOM_HOSTNAME);
+        expect(created.cert.source).toEqual("custom");
+        expect(created.cert.status).toEqual(expect.any(String));
 
-      const fetched = yield* machines.getAppCertificate({
-        app_name: created.app.appName,
-        hostname: CUSTOM_HOSTNAME,
-      });
-      expect(fetched.hostname).toEqual(CUSTOM_HOSTNAME);
-      expect(fetched.certificates?.some((entry) => entry.source === "custom")).toBe(true);
+        const fetched = yield* machines.getAppCertificate({
+          app_name: created.app.appName,
+          hostname: CUSTOM_HOSTNAME,
+        });
+        expect(fetched.hostname).toEqual(CUSTOM_HOSTNAME);
+        expect(fetched.certificates?.some((entry) => entry.source === "custom")).toBe(true);
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("CertApp");
-          const cert = yield* Fly.Certificate("Www", {
-            app,
-            hostname: CUSTOM_HOSTNAME,
-            kind: "custom",
-            fullchain: CERT_1B,
-            privateKey: KEY_1B,
-          });
-          return { app, cert };
-        }),
-      );
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("CertApp");
+            const cert = yield* Fly.Certificate("Www", {
+              app,
+              hostname: CUSTOM_HOSTNAME,
+              kind: "custom",
+              fullchain: CERT_1B,
+              privateKey: KEY_1B,
+            });
+            return { app, cert };
+          }),
+        );
 
-      expect(updated.cert.hostname).toEqual(CUSTOM_HOSTNAME);
-      expect(updated.cert.source).toEqual("custom");
-      expect(updated.cert.appName).toEqual(created.app.appName);
-      expect(updated.app.appId).toEqual(created.app.appId);
+        expect(updated.cert.hostname).toEqual(CUSTOM_HOSTNAME);
+        expect(updated.cert.source).toEqual("custom");
+        expect(updated.cert.appName).toEqual(created.app.appName);
+        expect(updated.app.appId).toEqual(created.app.appId);
 
-      const refetched = yield* machines.getAppCertificate({
-        app_name: updated.app.appName,
-        hostname: CUSTOM_HOSTNAME,
-      });
-      expect(refetched.hostname).toEqual(CUSTOM_HOSTNAME);
-      expect(refetched.certificates?.some((entry) => entry.source === "custom")).toBe(true);
+        const refetched = yield* machines.getAppCertificate({
+          app_name: updated.app.appName,
+          hostname: CUSTOM_HOSTNAME,
+        });
+        expect(refetched.hostname).toEqual(CUSTOM_HOSTNAME);
+        expect(refetched.certificates?.some((entry) => entry.source === "custom")).toBe(true);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const certGone = yield* waitUntilCertGone(created.app.appName, CUSTOM_HOSTNAME);
-      expect(certGone).toEqual("gone");
-      const appGone = yield* waitUntilAppGone(created.app.appName);
-      expect(appGone).toEqual("gone");
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:fly",
-      "provider:fly:app",
-      "provider:fly:certificate",
-      "provider:fly:machine",
-      "live",
-    ],
-    timeout: 120_000,
-  },
-);
+        const certGone = yield* waitUntilCertGone(created.app.appName, CUSTOM_HOSTNAME);
+        expect(certGone).toEqual("gone");
+        const appGone = yield* waitUntilAppGone(created.app.appName);
+        expect(appGone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:certificate",
+        "provider:fly:machine",
+        "live",
+      ],
+      timeout: 120_000,
+    },
+  );
 
-test.provider(
-  "replace when hostname changes",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+  test.provider(
+    "replace when hostname changes",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("CertReplaceApp");
-          const cert = yield* Fly.Certificate("Www", {
-            app,
-            hostname: CUSTOM_HOSTNAME,
-            kind: "custom",
-            fullchain: CERT_1A,
-            privateKey: KEY_1A,
-          });
-          return { app, cert };
-        }),
-      );
+        const created = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("CertReplaceApp");
+            const cert = yield* Fly.Certificate("Www", {
+              app,
+              hostname: CUSTOM_HOSTNAME,
+              kind: "custom",
+              fullchain: CERT_1A,
+              privateKey: KEY_1A,
+            });
+            return { app, cert };
+          }),
+        );
 
-      expect(created.cert.hostname).toEqual(CUSTOM_HOSTNAME);
+        expect(created.cert.hostname).toEqual(CUSTOM_HOSTNAME);
 
-      const replaced = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("CertReplaceApp");
-          const cert = yield* Fly.Certificate("Www", {
-            app,
-            hostname: REPLACE_HOSTNAME,
-            kind: "custom",
-            fullchain: CERT_2,
-            privateKey: KEY_2,
-          });
-          return { app, cert };
-        }),
-      );
+        const replaced = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("CertReplaceApp");
+            const cert = yield* Fly.Certificate("Www", {
+              app,
+              hostname: REPLACE_HOSTNAME,
+              kind: "custom",
+              fullchain: CERT_2,
+              privateKey: KEY_2,
+            });
+            return { app, cert };
+          }),
+        );
 
-      expect(replaced.cert.hostname).toEqual(REPLACE_HOSTNAME);
-      expect(replaced.cert.hostname).not.toEqual(created.cert.hostname);
-      expect(replaced.cert.source).toEqual("custom");
-      expect(replaced.cert.appName).toEqual(created.app.appName);
+        expect(replaced.cert.hostname).toEqual(REPLACE_HOSTNAME);
+        expect(replaced.cert.hostname).not.toEqual(created.cert.hostname);
+        expect(replaced.cert.source).toEqual("custom");
+        expect(replaced.cert.appName).toEqual(created.app.appName);
 
-      const fetched = yield* machines.getAppCertificate({
-        app_name: replaced.app.appName,
-        hostname: REPLACE_HOSTNAME,
-      });
-      expect(fetched.hostname).toEqual(REPLACE_HOSTNAME);
+        const fetched = yield* machines.getAppCertificate({
+          app_name: replaced.app.appName,
+          hostname: REPLACE_HOSTNAME,
+        });
+        expect(fetched.hostname).toEqual(REPLACE_HOSTNAME);
 
-      const oldGone = yield* waitUntilCertGone(created.app.appName, CUSTOM_HOSTNAME);
-      expect(oldGone).toEqual("gone");
+        const oldGone = yield* waitUntilCertGone(created.app.appName, CUSTOM_HOSTNAME);
+        expect(oldGone).toEqual("gone");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const certGone = yield* waitUntilCertGone(replaced.app.appName, REPLACE_HOSTNAME);
-      expect(certGone).toEqual("gone");
-      const appGone = yield* waitUntilAppGone(replaced.app.appName);
-      expect(appGone).toEqual("gone");
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:fly",
-      "provider:fly:app",
-      "provider:fly:certificate",
-      "provider:fly:machine",
-      "live",
-    ],
-    timeout: 120_000,
-  },
-);
+        const certGone = yield* waitUntilCertGone(replaced.app.appName, REPLACE_HOSTNAME);
+        expect(certGone).toEqual("gone");
+        const appGone = yield* waitUntilAppGone(replaced.app.appName);
+        expect(appGone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:certificate",
+        "provider:fly:machine",
+        "live",
+      ],
+      timeout: 120_000,
+    },
+  );
 
-test.provider(
-  "list enumerates the deployed certificate",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+  test.provider(
+    "list enumerates the deployed certificate",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("CertListApp");
-          const cert = yield* Fly.Certificate("Www", {
-            app,
-            hostname: CUSTOM_HOSTNAME,
-            kind: "custom",
-            fullchain: CERT_1A,
-            privateKey: KEY_1A,
-          });
-          return { app, cert };
-        }),
-      );
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("CertListApp");
+            const cert = yield* Fly.Certificate("Www", {
+              app,
+              hostname: CUSTOM_HOSTNAME,
+              kind: "custom",
+              fullchain: CERT_1A,
+              privateKey: KEY_1A,
+            });
+            return { app, cert };
+          }),
+        );
 
-      const provider = yield* Provider.findProvider(Fly.Certificate);
-      const all = yield* provider.list();
-      const found = all.find(
-        (row) => row.appName === deployed.app.appName && row.hostname === CUSTOM_HOSTNAME,
-      );
-      expect(found).toBeDefined();
-      expect(found?.source).toEqual("custom");
+        const provider = yield* Provider.findProvider(Fly.Certificate);
+        const all = yield* provider.list();
+        const found = all.find(
+          (row) => row.appName === deployed.app.appName && row.hostname === CUSTOM_HOSTNAME,
+        );
+        expect(found).toBeDefined();
+        expect(found?.source).toEqual("custom");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const certGone = yield* waitUntilCertGone(deployed.app.appName, CUSTOM_HOSTNAME);
-      expect(certGone).toEqual("gone");
-      const appGone = yield* waitUntilAppGone(deployed.app.appName);
-      expect(appGone).toEqual("gone");
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:fly",
-      "provider:fly:app",
-      "provider:fly:certificate",
-      "provider:fly:machine",
-      "live",
-    ],
-    timeout: 120_000,
-  },
-);
+        const certGone = yield* waitUntilCertGone(deployed.app.appName, CUSTOM_HOSTNAME);
+        expect(certGone).toEqual("gone");
+        const appGone = yield* waitUntilAppGone(deployed.app.appName);
+        expect(appGone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:certificate",
+        "provider:fly:machine",
+        "live",
+      ],
+      timeout: 120_000,
+    },
+  );
 
-test.provider(
-  "ACME create is rejected without a hostname",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+  test.provider(
+    "ACME create is rejected without a hostname",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const app = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Fly.App("AcmeProbeApp");
-        }),
-      );
+        const app = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Fly.App("AcmeProbeApp");
+          }),
+        );
 
-      const result = yield* Effect.result(
-        machines.createAppAcmeCertificate({
-          app_name: app.appName,
-        }),
-      );
+        const result = yield* Effect.result(
+          machines.createAppAcmeCertificate({
+            app_name: app.appName,
+          }),
+        );
 
-      if (Result.isFailure(result)) {
-        expect(["BadRequest", "UnprocessableEntity"]).toContain(result.failure._tag);
-      } else {
-        const hostname = result.success.hostname;
-        if (hostname !== undefined && hostname.length > 0) {
-          yield* deleteIfPresent(app.appName, hostname);
+        if (Result.isFailure(result)) {
+          expect(["BadRequest", "UnprocessableEntity"]).toContain(result.failure._tag);
+        } else {
+          const hostname = result.success.hostname;
+          if (hostname !== undefined && hostname.length > 0) {
+            yield* deleteIfPresent(app.appName, hostname);
+          }
+          expect(result.success.hostname).toBeUndefined();
         }
-        expect(result.success.hostname).toBeUndefined();
-      }
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const gone = yield* waitUntilAppGone(app.appName);
-      expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:fly",
-      "provider:fly:app",
-      "provider:fly:certificate",
-      "provider:fly:machine",
-      "live",
-    ],
-    timeout: 120_000,
-  },
-);
+        const gone = yield* waitUntilAppGone(app.appName);
+        expect(gone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:certificate",
+        "provider:fly:machine",
+        "live",
+      ],
+      timeout: 120_000,
+    },
+  );
+});

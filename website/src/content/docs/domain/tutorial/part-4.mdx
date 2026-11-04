@@ -148,9 +148,7 @@ type State = typeof State.Type;
 +  if (actor.customerId !== s.owner) return yield* new NotOwner();
 +  return s;
 +});
-
-// An event can only follow an open account; anything else is a bug.
-    // ...
+// ...
     OpenAccount: (s, cmd) =>
       s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
 -    DepositMoney: (s, cmd) =>

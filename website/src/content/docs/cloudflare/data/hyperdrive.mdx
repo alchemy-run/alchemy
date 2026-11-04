@@ -9,27 +9,30 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 export const pgDeps = `@alchemy.run/sql @effect/sql-pg`;
 export const mysqlDeps = `@alchemy.run/sql @effect/sql-mysql2`;
 
-Hyperdrive is a Cloudflare-managed connection pooler that sits
-between Workers and an external Postgres or MySQL database. The
-Worker sees a familiar connection string, but the connection itself
-is already pooled at the edge — no per-request TCP handshakes, no
-cold-start connection storms.
+import WorldMap from "../../../../components/diagrams/WorldMap.astro";
 
-Reach for Hyperdrive whenever your app needs a real relational
-database: managed Postgres/MySQL providers like Neon and
-PlanetScale, or a database you already run — including one in a
-[private network](/cloudflare/data/hyperdrive-private-database). (For serverless SQLite
-inside Cloudflare, use [D1](/cloudflare/data/d1) instead.) This page
-provisions a serverless database, fronts it with Hyperdrive, and
-binds the connection into your Worker.
+A Worker can talk to Postgres or MySQL, but opening a database connection takes several round trips, and a Worker in Sydney talking to a database in Virginia pays for each one, on every request. Hyperdrive removes that cost. It keeps a pool of open connections next to your database, and gives the Worker a connection string that reaches it over Cloudflare's network.
 
-Three providers are wired up out of the box. Pick whichever you
-prefer; the rest of the page follows your selection:
+## How a query travels
 
-- **Neon** — serverless Postgres with copy-on-write branching.
-- **PlanetScale (Postgres)** — managed Postgres with branch-per-PR
-  workflows.
-- **PlanetScale (MySQL)** — Vitess-backed MySQL, same branching model.
+The Worker connects to Hyperdrive in its own city, which is quick. Hyperdrive sends the query to its pool near the database, which already holds open connections, and the query runs at once.
+
+<WorldMap
+  center={180}
+  places={[
+    { id: "syd", label: "Worker → Hyperdrive", type: "both in Sydney", lat: -33.9, lon: 151.2, place: "below" },
+    { id: "iad", label: "pool → Postgres", type: "warm connections, Virginia", lat: 39, lon: -77.5, tone: "accent", place: "right" },
+  ]}
+  links={[{ from: "syd", to: "iad", label: "Cloudflare's network", bend: 0.2 }]}
+  crop={{ west: 100, east: 320, north: 65, south: -50 }}
+  caption="The Worker connects to Hyperdrive in its own city. The query crosses the ocean once, to a pool that already holds connections next to the database."
+/>
+
+Hyperdrive can also cache the results of read queries, so repeated reads don't reach the database at all. To your code it's an ordinary connection string, so any Postgres or MySQL driver works.
+
+Use Hyperdrive for a database that lives outside Cloudflare: one on [Neon](/neon) or [PlanetScale](/planetscale), or one you run yourself, even in a [private network](/cloudflare/data/hyperdrive-private-database). For a database inside Cloudflare, use [D1](/cloudflare/data/d1).
+
+The steps below work for Neon, PlanetScale Postgres and PlanetScale MySQL. Pick one, and the rest of the page follows your choice.
 
 ## Add the provider
 

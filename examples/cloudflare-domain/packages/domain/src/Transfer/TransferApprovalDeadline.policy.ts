@@ -22,10 +22,7 @@ export const TransferApprovalDeadlineLive = TransferApprovalDeadline.toLayer(
     const transfers = yield* Transfer;
     return Effect.fn(function* ({ source, event }) {
       if (!event.needsApproval) return;
-      yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW }).pipe(
-        // A redelivery after the window closed: the expiry already ran.
-        Effect.catchTag("AlreadyExecuted", () => Effect.void),
-      );
+      yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW });
     });
   }),
 );

@@ -21,9 +21,9 @@ export class DuplicateName extends Data.TaggedError("DuplicateName")<{
   }
 }
 
-/** The Domain lists the same aggregate, policy or projection twice. */
+/** The Domain lists the same aggregate, policy, projection or query twice. */
 export class DuplicateDefinition extends Data.TaggedError("DuplicateDefinition")<{
-  readonly kind: "aggregate" | "policy" | "projection";
+  readonly kind: "aggregate" | "policy" | "projection" | "query";
   readonly entity: string;
 }> {
   override get message() {
@@ -344,6 +344,43 @@ export class ModelHostedTwice extends Data.TaggedError("ModelHostedTwice")<{
   }
 }
 
+/** A view set to fill lazily isn't keyed by its one source, so a key can't find its own history. */
+export class LazyViewNeedsOneSource extends Data.TaggedError("LazyViewNeedsOneSource")<{
+  readonly view: string;
+}> {
+  override get message() {
+    return `${this.view} can't be lazy: a lazy view must read one aggregate and be keyed by it, so each key reads its own instance's history. Leave it out of \`lazy\`, and the deploy fills it.`;
+  }
+}
+
+/** A query is `paged` but declares no `success`: a page needs the schema of its entries. */
+export class PagedWithoutSuccess extends Data.TaggedError("PagedWithoutSuccess")<{
+  readonly query: string;
+}> {
+  override get message() {
+    return `Query '${this.query}' is \`paged\` but declares no \`success\`: name the schema of one entry`;
+  }
+}
+
+/** A query declares `visible` but is not `paged`: only the entries of a page are judged. */
+export class VisibleWithoutPaging extends Data.TaggedError("VisibleWithoutPaging")<{
+  readonly query: string;
+}> {
+  override get message() {
+    return `Query '${this.query}' declares \`visible\` but is not \`paged\`: only the entries of a page are judged`;
+  }
+}
+
+/** A query waits for a projection the Domain does not list. */
+export class UnknownWait extends Data.TaggedError("UnknownWait")<{
+  readonly query: string;
+  readonly projection: string;
+}> {
+  override get message() {
+    return `${this.query} waits for ${this.projection}, which is not in the Domain`;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -378,7 +415,11 @@ export type Reason =
   | DuplicateCommand
   | MissingGroup
   | NewerGeneration
-  | ModelHostedTwice;
+  | ModelHostedTwice
+  | LazyViewNeedsOneSource
+  | PagedWithoutSuccess
+  | VisibleWithoutPaging
+  | UnknownWait;
 
 /**
  * A domain definition error, found while the kernel is built or when a

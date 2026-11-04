@@ -50,6 +50,7 @@ export const runVinextBuild = (options: {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     yield* Effect.sync(() => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for vite/vinext, not config reading
       process.env.NODE_ENV = "production";
     });
     const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
@@ -226,7 +227,9 @@ export const runVinextBuild = (options: {
       (previous) =>
         Effect.sync(() => {
           for (const [key, value] of Object.entries(previous)) {
+            // oxlint-disable-next-line effecttsgo/process-env-in-effect -- restores process.env mutated for the build, not config reading
             if (value === undefined) delete process.env[key];
+            // oxlint-disable-next-line effecttsgo/process-env-in-effect -- restores process.env mutated for the build, not config reading
             else process.env[key] = value;
           }
         }),
@@ -360,19 +363,21 @@ export const spawnVinextDev = (options: {
         catch: failFramework("Failed to spawn the vinext dev CLI (is `node` on PATH?)"),
       }),
     ),
-    ({ child }) =>
-      Effect.callback<void>((resume) => {
-        if (child.exitCode !== null) {
-          resume(Effect.void);
-          return;
-        }
-        const killTimer = setTimeout(() => child.kill("SIGKILL"), 3000);
-        child.once("exit", () => {
-          clearTimeout(killTimer);
-          resume(Effect.void);
+    ({ child }) => {
+      const stop = (signal: NodeJS.Signals) =>
+        Effect.callback<void>((resume) => {
+          if (child.exitCode !== null || child.signalCode !== null) {
+            resume(Effect.void);
+            return;
+          }
+          child.once("exit", () => resume(Effect.void));
+          child.kill(signal);
         });
-        child.kill("SIGTERM");
-      }),
+      return stop("SIGTERM").pipe(
+        Effect.interruptible,
+        Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => stop("SIGKILL") }),
+      );
+    },
   ).pipe(Effect.map(({ handle }) => handle));
 
 /**

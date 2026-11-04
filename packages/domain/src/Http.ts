@@ -18,7 +18,14 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type { Servable } from "./Api.ts";
 import { DefinitionError, MissingGroup } from "./DefinitionError.ts";
-import { type Operation, operationsOf, outsideClient } from "./ReadRpcs.ts";
+import {
+  type CallName,
+  type ClientOf,
+  exposedOf,
+  type Operation,
+  operationsOf,
+  outsideClient,
+} from "./ReadRpcs.ts";
 
 /**
  * What {@link toHttpApi} reads from an Api class: what it serves, its RPCs,
@@ -41,6 +48,23 @@ export type Requirements<A extends Publishable> = Exclude<
   Effect.Services<A["clientInProcess"]>,
   Scope.Scope | RpcMiddleware.ForClient<any>
 >;
+
+/**
+ * A call {@link toHttpApi} can publish: a command's tag (`DepositMoney`), or a
+ * read as `<Name>.<operation>` (`AccountSummary.get`, `AccountSummary.watch`).
+ */
+export type Exposable<A extends Publishable> = CallName<ClientOf<A>>;
+
+/** What {@link toHttpApi} publishes. */
+export interface HttpApiOptions<A extends Publishable> {
+  /**
+   * The calls to publish, by name. Nothing is published unless it is listed,
+   * so a call the Api later adds, or a field a reply later gains, is never
+   * public by accident: list each call on purpose.
+   * @default []
+   */
+  readonly expose?: ReadonlyArray<Exposable<A>>;
+}
 
 /** The group, an HttpApi holding only it, and the Layers that serve it. */
 export interface HttpApiSurface<Name extends string, R> {
@@ -289,8 +313,11 @@ const endpointOf = (
  * for any client, and its input is decoded once. A read's `where` filter is
  * not published.
  *
- * Every call the Api serves is published. To publish less, give HTTP
- * clients their own, smaller Api.
+ * Nothing is published by default: `expose` lists each call to publish, so
+ * what an Api serves its own clients never reaches HTTP by accident. It is
+ * convenient for internal tools. A public or partner API is better written
+ * as its own `HttpApi`, with response schemas of its own, that calls the
+ * Api in process.
  *
  * **Example:** Serve an Api, with its OpenAPI document
  * ```typescript
@@ -298,7 +325,9 @@ const endpointOf = (
  * import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
  * import * as OpenApi from "effect/http-api/OpenApi";
  *
- * const BankHttp = DomainHttp.toHttpApi(CustomerApi);
+ * const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
+ *   expose: ["DepositMoney", "AccountSummary.get", "AccountSummary.watch"],
+ * });
  * const BankHttpLive = HttpApiBuilder.layer(BankHttp.api, { openapiPath: "/openapi.json" }).pipe(
  *   Layer.provide(BankHttp.layer),
  *   Layer.provide(BankLive),
@@ -315,9 +344,10 @@ const endpointOf = (
  */
 export const toHttpApi = <A extends Publishable>(
   api: A,
+  options: HttpApiOptions<A> = {},
 ): HttpApiSurface<A["apiName"], Requirements<A>> => {
   const name = api.apiName;
-  const calls = operationsOf(api.serves);
+  const calls = exposedOf(operationsOf(api.serves), options.expose);
   // A failure without a status of its own is a refused request, not a server fault.
   const withStatus = (failure: Schema.Top): Schema.Top =>
     resolveStatus(failure.ast) === undefined

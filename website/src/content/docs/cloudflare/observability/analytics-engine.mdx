@@ -4,6 +4,7 @@ description: Write time-series data points from a Worker with Workers Analytics 
 sidebar:
   order: 24
 ---
+import Records from "../../../../components/diagrams/Records.astro";
 
 Workers Analytics Engine is Cloudflare's write-heavy time-series
 store: Workers write unlimited-cardinality data points (events,
@@ -73,6 +74,20 @@ export default Cloudflare.Worker(
   }).pipe(Effect.provide(Cloudflare.AnalyticsEngine.WriteDatasetBinding)),
 );
 ```
+
+<Records
+  title="usage · Analytics Engine dataset"
+  columns={["timestamp", "index1", "blob1", "double1"]}
+  keys={2}
+  rows={[
+    ["09:12:04", "account-1", "signup", "1"],
+    ["09:12:09", "account-2", "api_call", "1"],
+    ["09:13:30", "account-1", "signup", "1"],
+    ["09:14:02", "account-1", "api_call", "1"],
+  ]}
+  query={{ label: "SELECT blob1, SUM(double1) … GROUP BY blob1", rows: [0, 2] }}
+  caption="Each writeDataPoint is a row. Indexes pick how rows are sampled, blobs are what you group by, and doubles are what you add up."
+/>
 
 A data point has three optional field groups — `indexes` (the
 sampling key, typically a customer or tenant ID), `blobs` (string

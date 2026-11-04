@@ -22,6 +22,7 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Pre-Create** - an optional operation that creates a stub of a Resource before reconcile runs. Used to resolve circular dependencies — e.g. Function A and B depend on each other, so we create a stub of Function A first and then `reconcile` later wires up the real dependency.
 - **Observe** - an optional, read-only companion to Pre-Create. A cycle pre-creates on unresolved props, before Read can check ownership, so the engine first asks Observe what exists at the identity Pre-Create would claim. It returns the same shape as Read (`undefined`, attributes, or `Unowned(attrs)`), or `Unresolved` when that identity depends on props that haven't resolved yet; the engine refuses an `Unowned` result unless `--adopt` is set, and checks an `Unresolved` identity once it resolves, before Reconcile. Implement it whenever Pre-Create can write to a resource that already exists.
 - **Reconcile** - converges a Resource's actual cloud state to the desired state described by the new Input Properties. Called for both first-time provisioning and subsequent updates. The provider receives `output` (current Attributes) and `olds` (previous Props) which may both be `undefined` on a greenfield create, both defined on an update, or `output !== undefined && olds === undefined` on an adoption. See the **Reconciler doctrine** section below for the required shape.
+- **Lookup** - an optional, read-only operation that finds a resource this stack doesn't manage by the key the Resource type declares as its sixth type parameter (a Worker's `name`, a VPC service's `serviceId` or `name`), returning its Attributes or `undefined`. It backs `Resource.lookup(props)`, which resolves at plan time, binds like a declared resource, and never writes state. Opt-in today; every resource should eventually implement it.
 - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
 - **Capability** - a runtime requirement of a Function (e.g. require read access to an `R2Bucket`, or `SQS.SendMessage` on a `SQS.Queue`). A Capability is modeled as one or more `Binding.Service`s. Where the underlying API distinguishes access levels, split it into `Read` / `Write` / `ReadWrite` services (see the **Read/Write/ReadWrite binding convention** below); otherwise a single service suffices. Each service typically ships two interchangeable implementations: a native **binding** (`*Binding`) and a token-scoped **HTTP** client (`*Http`).
 - **Binding.Service** - an Effect Service that exposes a `.bind(resource)` method returning a typed runtime client. Its outer (init) Effect resolves the host Function/Worker and its environment, then registers the deploy-time binding — environment variables, IAM policy statements (AWS), or a native Cloudflare binding — by calling ``host.bind`${resource}`(data)``, guarded by `!globalThis.__ALCHEMY_RUNTIME__` so it is a no-op once running inside the deployed Function/Worker. Provided as a Layer on the **Function/Worker** Effect so it gets bundled into the Lambda/Worker. See [Binding](./packages/alchemy/src/Binding.ts).
@@ -823,6 +824,7 @@ Choose the deployment-based pattern that fits the behavior under test:
 Keep regression cases in the relevant existing resource or binding suite. A Worker lifecycle feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; binding fixtures belong beside their owning suite in `fixtures/`.
 
 - Assume Docker is installed. Never `skipIf`-gate a test on Docker availability; a missing daemon fails the test.
+- Tag every test with its kind — `unit` (no I/O beyond the machine), `local` (runs on this machine: emulators, `dev: true`, Docker) or `live` (touches a real cloud, including `stack.plan`, which reads) — on the test or an enclosing `describe`, alongside `provider:<cloud>` / `provider:<cloud>:<service>`. `pnpm lint:tests` enforces it.
 - Start and end `test.provider` cases with `stack.destroy()`. Fixture suites deploy in `beforeAll` and destroy in `afterAll`. Use deterministic resource identities and verify deletion through the cloud API.
 - Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
 - Verify the resulting cloud state through distilled and exercise the deployed runtime when relevant. Use real SDK calls on test-owned resources to establish out-of-band state or verify API update semantics. Keep provider behavior assertions driven by `stack.deploy`.
@@ -842,10 +844,11 @@ Read through the established test cases before continuing so that you understand
 - [Subnet Test Cases](./packages/integration-tests/test/AWS/EC2/Subnet.test.ts)
 
 :::warning
-Never use `Date.now()` when constructing the physical name of a resource. You should either:
+Never use `Date.now()`, UUIDs or other random values when constructing the physical name of a resource. Every run must be deterministic and leave no orphaned resources. You should either:
 
-1. Do not proide a name and rely on the resource provider to generate a unique name for you from the app, stage and logical ID.
-2. Construct a deterministic one unique to each test case. But it should be the same on each subsequent run of the test case.
+1. Not provide a name, and rely on the resource provider to generate one from the app, stage and logical ID. This is the default for every test.
+2. Only when the test is about explicitly provided names, construct a deterministic one unique to each test case and to the user running it: derive it from `stack.stage` (`test_$USER` by default). It must be the same on each subsequent run of the test case.
+3. Only for a resource the API can never delete (RealtimeKit apps, Intel indicator feeds), use one shared constant name that every run adopts, so the suite owns a single standing instance instead of leaking one per user.
    :::
 
 3. Consider implementing an aggregate Smoke test that brings together multiple resources that are often used together.
@@ -1198,7 +1201,7 @@ Additional flags beyond vitest:
 | ----------------- | ------- | ------------------------------------------------------------- |
 | `-t <regex>`      | —       | Test-name pattern (regex, like bun/vitest) tested against the full nested title (`file > describes > name`), so any fragment matches regardless of nesting. An invalid regex degrades to a literal substring instead of erroring. Remember to escape regex metacharacters when filtering literally: `-t "create \(default\)"` |
 | `--profile <name>` | —      | Sets `ALCHEMY_PROFILE` before any test module is imported. Use `--profile testing` for live-cloud suites instead of an `ALCHEMY_PROFILE=testing` env prefix |
-| `--stage <name>`  | —       | Sets `ALCHEMY_TEST_STAGE` before any test module is imported, replacing `Test.make`'s default `test_$USER` stage for the run (e.g. one stage per git worktree) |
+| `--stage <name>`  | —       | Sets `ALCHEMY_TEST_STAGE` before any test module is imported, replacing `Test.make`'s default stage for the run. The default is `test_$USER` in a main checkout and `test_$USER_<worktree>` in a linked git worktree, so two worktrees running the same suite never share deployments |
 | `--fast`          | off     | Sets `FAST=1` before imports — suites `skipIf(process.env.FAST)` their slow tests (long-provisioning resources, smoke tests). Replaces the `FAST=1` env prefix |
 | `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
 | `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |

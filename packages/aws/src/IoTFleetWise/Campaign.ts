@@ -470,8 +470,16 @@ export const CampaignProvider = () =>
                 collectionScheme: toWireCollectionScheme(news.collectionScheme),
                 signalsToCollect: toWireSignalsToCollect(news.signalsToCollect),
                 dataDestinationConfigs: news.dataDestinationConfigs,
-                startTime: news.startTime !== undefined ? new Date(news.startTime) : undefined,
-                expiryTime: news.expiryTime !== undefined ? new Date(news.expiryTime) : undefined,
+                startTime:
+                  news.startTime !== undefined
+                    ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                      new Date(news.startTime)
+                    : undefined,
+                expiryTime:
+                  news.expiryTime !== undefined
+                    ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                      new Date(news.expiryTime)
+                    : undefined,
                 postTriggerCollectionDuration: toWireSeconds(news.postTriggerCollectionDuration),
                 diagnosticsMode: news.diagnosticsMode,
                 spoolingMode: news.spoolingMode,

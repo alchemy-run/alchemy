@@ -65,18 +65,42 @@ export interface EdgeIn {
   label?: string;
   /** Render as a dashed line (e.g. for "later" / "deferred" edges). */
   dashed?: boolean;
+  /**
+   * On the grid, where an elbow leaves its source. `"bottom"` (the default)
+   * leaves from the top or bottom and turns into the target's side. `"side"`
+   * leaves from the source's side and turns into the target's top or bottom.
+   */
+  exit?: "bottom" | "side";
+}
+
+/**
+ * A labelled border drawn around nodes, like an account or a region. Nest one
+ * inside another with `parent`. An edge may point at a group's `id`, and ends
+ * at its border. Lay grouped diagrams out on the grid (`col`/`row`), leaving a
+ * free row or column where a border needs the room.
+ */
+export interface GroupIn {
+  id: string;
+  label: string;
+  /** Nodes directly inside this group. */
+  nodes: string[];
+  /** The group this one sits inside. */
+  parent?: string;
+  /** Draw the border dashed. */
+  dashed?: boolean;
 }
 
 interface Props {
   nodes: NodeIn[];
   edges: EdgeIn[];
+  groups?: GroupIn[];
   /** Layout direction. Defaults to "LR" (left-to-right). */
   direction?: "LR" | "TB";
   /** Optional caption rendered below the graph. */
   caption?: string;
 }
 
-const { nodes, edges, direction = "LR", caption } = Astro.props as Props;
+const { nodes, edges, groups = [], direction = "LR", caption } = Astro.props as Props;
 
 const kindsShown = KIND_ORDER.filter((k) => nodes.some((n) => n.kind === k));
 
@@ -86,7 +110,8 @@ const kindsShown = KIND_ORDER.filter((k) => nodes.some((n) => n.kind === k));
 const NODE_W = nodes.some((n) => n.kind) ? 164 : 140;
 const NODE_H = 56;
 const NODE_H_TYPED = 64; // slightly taller when subtitle present
-const COL_GAP = 80;
+// Grouped diagrams need room for borders and the labels on edges crossing them.
+const COL_GAP = (Astro.props as Props).groups?.length ? 116 : 80;
 const ROW_GAP = 28;
 const PAD = 24;
 
@@ -152,7 +177,7 @@ const tallest = Math.max(...colMaxHeight);
 
 const positions = new Map<string, { x: number; y: number; h: number }>();
 
-const GRID_ROW_GAP = 56;
+const GRID_ROW_GAP = groups.length > 0 ? 72 : 56;
 const grid = nodes.every((n) => n.col !== undefined && n.row !== undefined);
 
 if (grid) {
@@ -225,6 +250,58 @@ const H = grid
       60 +
       (hasBackEdge ? BACK_EDGE_GUTTER : 0);
 
+// ---------- Groups ----------
+
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const GROUP_PAD = 16;
+const GROUP_LABEL = 26;
+const groupById = new Map(groups.map((g) => [g.id, g]));
+const depthOf = (g: GroupIn): number =>
+  g.parent && groupById.has(g.parent) ? 1 + depthOf(groupById.get(g.parent)!) : 0;
+const boxes = new Map<string, Box>();
+// Innermost first, so each border wraps the borders inside it.
+for (const g of [...groups].sort((a, b) => depthOf(b) - depthOf(a))) {
+  const inner: Box[] = [
+    ...g.nodes.flatMap((id) => {
+      const p = positions.get(id);
+      return p ? [{ x: p.x, y: p.y, w: NODE_W, h: p.h }] : [];
+    }),
+    ...groups.filter((c) => c.parent === g.id).flatMap((c) => boxes.get(c.id) ?? []),
+  ];
+  if (inner.length === 0) continue;
+  const x0 = Math.min(...inner.map((b) => b.x)) - GROUP_PAD;
+  const y0 = Math.min(...inner.map((b) => b.y)) - GROUP_LABEL;
+  // Wide enough for its label.
+  const x1 = Math.max(...inner.map((b) => b.x + b.w), x0 + g.label.length * 6.8 + 24 - GROUP_PAD) + GROUP_PAD;
+  const y1 = Math.max(...inner.map((b) => b.y + b.h)) + GROUP_PAD;
+  boxes.set(g.id, { x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+}
+
+let width = W;
+let height = H;
+if (boxes.size > 0) {
+  // Borders reach past the nodes, so move everything in by what they need.
+  const all = [...boxes.values()];
+  const dx = Math.max(0, PAD - Math.min(...all.map((b) => b.x)));
+  const dy = Math.max(0, PAD - Math.min(...all.map((b) => b.y)));
+  for (const p of positions.values()) {
+    p.x += dx;
+    p.y += dy;
+  }
+  for (const b of all) {
+    b.x += dx;
+    b.y += dy;
+  }
+  width = Math.max(W + dx, ...all.map((b) => b.x + b.w + PAD));
+  height = Math.max(H + dy, ...all.map((b) => b.y + b.h + PAD));
+}
+
 // ---------- Edge geometry ----------
 
 interface Edge {
@@ -233,6 +310,7 @@ interface Edge {
   midY: number;
   label?: string;
   dashed?: boolean;
+  beside?: boolean;
 }
 
 const TIP = 6;
@@ -258,7 +336,15 @@ const gridEdge = (e: EdgeIn): Edge => {
   if (a.x === b.x) {
     // Along a column, either way.
     const [y1, y2] = b.y > a.y ? [a.y + a.h, b.y - TIP] : [a.y, b.y + b.h + TIP];
-    return done(`M ${ax} ${y1} L ${ax} ${y2}`, ax, (y1 + y2) / 2);
+    // Label beside the line, not across it.
+    return { ...done(`M ${ax} ${y1} L ${ax} ${y2}`, ax + 8, (y1 + y2) / 2 + 2), beside: true };
+  }
+  if (e.exit === "side") {
+    // An elbow: leave from the side, then run up or down into the target.
+    const x1 = b.x > a.x ? a.x + NODE_W : a.x;
+    const bx = b.x + NODE_W / 2;
+    const y2 = b.y > a.y ? b.y - TIP : b.y + b.h + TIP;
+    return done(`M ${x1} ${ay} L ${bx} ${ay} L ${bx} ${y2}`, (x1 + bx) / 2, ay);
   }
   // An elbow: leave from the top or bottom, then run across into the target's side.
   const y1 = b.y > a.y ? a.y + a.h : a.y;
@@ -266,8 +352,25 @@ const gridEdge = (e: EdgeIn): Edge => {
   return done(`M ${ax} ${y1} L ${ax} ${by} L ${x2} ${by}`, (ax + x2) / 2, by);
 };
 
+// An edge into a group runs straight to its border: down or up from a node
+// above or below it, otherwise across.
+const groupEdge = (e: EdgeIn, box: Box): Edge => {
+  const a = positions.get(e.from)!;
+  const x = a.x + NODE_W / 2;
+  if (x > box.x && x < box.x + box.w && (a.y + a.h < box.y || a.y > box.y + box.h)) {
+    const [y1, y2] = box.y > a.y ? [a.y + a.h, box.y - TIP] : [a.y, box.y + box.h + TIP];
+    return { d: `M ${x} ${y1} L ${x} ${y2}`, midX: x + 8, midY: (y1 + y2) / 2 + 2, label: e.label, dashed: e.dashed, beside: true };
+  }
+  const y = a.y + a.h / 2;
+  const [x1, x2] = box.x > a.x ? [a.x + NODE_W, box.x - TIP] : [a.x, box.x + box.w + TIP];
+  return { d: `M ${x1} ${y} L ${x2} ${y}`, midX: (x1 + x2) / 2, midY: y, label: e.label, dashed: e.dashed };
+};
+
 const buildEdges = (): Edge[] =>
   edges.map((e) => {
+    // A node wins over a group with the same id.
+    const box = positions.has(e.to) ? undefined : boxes.get(e.to);
+    if (box) return groupEdge(e, box);
     if (grid) return gridEdge(e);
     const a = positions.get(e.from)!;
     const b = positions.get(e.to)!;
@@ -345,12 +448,34 @@ const buildEdges = (): Edge[] =>
   });
 
 const edgeShapes = buildEdges();
+
+// A group label sits at the start of its border, or after the first edge
+// that would run through it, or at the end.
+const verticals = edgeShapes.flatMap((e) => {
+  const pts = [...e.d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])] as const);
+  return pts.slice(1).flatMap(([x, y], i) => {
+    const [px, py] = pts[i]!;
+    return px === x ? [{ x, y0: Math.min(py, y), y1: Math.max(py, y) }] : [];
+  });
+});
+const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } => {
+  const width = g.label.length * 6.8;
+  const crossing = verticals
+    .filter((v) => v.y0 < b.y + 22 && v.y1 > b.y + 4 && v.x > b.x && v.x < b.x + b.w)
+    .map((v) => v.x);
+  const clear = (x0: number) => !crossing.some((x) => x > x0 - 6 && x < x0 + width + 6);
+  const start = [b.x + 12, ...crossing.map((x) => x + 10).sort((a, c) => a - c)].find(
+    (x) => x + width < b.x + b.w - 12 && clear(x),
+  );
+  return start !== undefined ? { x: start, anchor: "start" } : { x: b.x + b.w - 12, anchor: "end" };
+};
 ---
 
 <figure class="alc-dag not-content" data-nosnippet>
   <svg
     class="alc-dag__svg"
-    viewBox={`0 0 ${W} ${H}`}
+    viewBox={`0 0 ${width} ${height}`}
+    style={`max-width: ${Math.round(width * 1.15)}px`}
     role="img"
     aria-label={caption ?? "Dependency graph"}
   >
@@ -368,7 +493,37 @@ const edgeShapes = buildEdges();
       </marker>
     </defs>
 
-    {/* Edges first so they sit beneath nodes. */}
+    {/* Group borders first, outermost at the back. */}
+    {[...groups]
+      .sort((a, b) => depthOf(a) - depthOf(b))
+      .map((g) => {
+        const b = boxes.get(g.id);
+        if (!b) return null;
+        return (
+          <g class="alc-dag__group">
+            <rect
+              x={b.x}
+              y={b.y}
+              width={b.w}
+              height={b.h}
+              rx="10"
+              ry="10"
+              class="alc-dag__group-bg"
+              stroke-dasharray={g.dashed ? "5 4" : undefined}
+            />
+            <text
+              x={labelPlace(g, b).x}
+              y={b.y + 17}
+              text-anchor={labelPlace(g, b).anchor}
+              class="alc-dag__group-label"
+            >
+              {g.label}
+            </text>
+          </g>
+        );
+      })}
+
+    {/* Edges next so they sit beneath nodes. */}
     {edgeShapes.map((e) => (
       <g class="alc-dag__edge">
         <path
@@ -384,7 +539,7 @@ const edgeShapes = buildEdges();
             x={e.midX}
             y={e.midY - 6}
             class="alc-dag__edge-label"
-            text-anchor="middle"
+            text-anchor={e.beside ? "start" : "middle"}
           >
             {e.label}
           </text>
@@ -472,7 +627,8 @@ const edgeShapes = buildEdges();
     display: block;
     width: 100%;
     height: auto;
-    max-width: 100%;
+    /* A small diagram keeps its natural size instead of filling the column. */
+    margin-inline: auto;
   }
 
   .alc-dag__node-bg {
@@ -528,6 +684,19 @@ const edgeShapes = buildEdges();
     font-family: var(--alc-font-mono);
     font-size: 10.5px;
     fill: var(--alc-fg-3);
+  }
+
+  .alc-dag__group-bg {
+    fill: color-mix(in srgb, var(--alc-accent-soft) 18%, transparent);
+    stroke: var(--alc-accent-40);
+    stroke-width: 1.25;
+  }
+
+  .alc-dag__group-label {
+    font-family: var(--alc-font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    fill: var(--alc-fg-2);
   }
 
   .alc-dag__edge-label {

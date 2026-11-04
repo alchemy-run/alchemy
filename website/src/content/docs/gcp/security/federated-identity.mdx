@@ -2,6 +2,7 @@
 title: Federated identity
 description: How a Lambda reaches GCP, and a Cloud Run service reaches AWS, through workload identity federation instead of long-lived keys.
 ---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 A runtime on one cloud often needs a resource on the other: a Lambda
 publishing to a Pub/Sub topic, or a Cloud Run service sending to an SQS
@@ -53,6 +54,26 @@ the account grants `roles/iam.workloadIdentityUser` to that one role:
 ```
 principalSet://iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/<pool>/attribute.aws_role/arn:aws:sts::111122223333:assumed-role/<role>
 ```
+
+<Sequence
+  actors={[
+    { id: "lambda", label: "Lambda", type: "IAM role" },
+    { id: "gsts", label: "Google STS", type: "workload identity pool" },
+    { id: "aws", label: "AWS STS" },
+    { id: "iam", label: "IAM Credentials", type: "Google" },
+    { id: "topic", label: "Events", type: "Pub/Sub topic", tone: "accent" },
+  ]}
+  steps={[
+    { from: "lambda", to: "gsts", label: "signed GetCallerIdentity" },
+    { from: "gsts", to: "aws", label: "replay the request" },
+    { from: "aws", to: "gsts", label: "caller: the Lambda's role", dashed: true },
+    { from: "gsts", to: "lambda", label: "federated token", dashed: true },
+    { from: "lambda", to: "iam", label: "impersonate the service account" },
+    { from: "iam", to: "lambda", label: "access token · 1 hour", dashed: true },
+    { from: "lambda", to: "topic", label: "publish" },
+  ]}
+  caption="The Lambda proves who it is with its own AWS credentials, and leaves with a short-lived Google token for the service account the binding created. No key is stored anywhere."
+/>
 
 At runtime the Lambda signs an STS `GetCallerIdentity` request with its
 own role credentials and sends it to Google STS. Google replays the

@@ -330,7 +330,7 @@ export const McpServerProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
@@ -347,8 +347,12 @@ export const McpServerProvider = () =>
       if (!observed) return undefined;
       const attrs = toAttributes(observed, acct);
       // MCP servers carry no ownership tags. An ID match alone does not
-      // authorize taking over a server when the stack has no saved output.
-      return output === undefined ? Unowned(attrs) : attrs;
+      // authorize taking over a server when the stack has no saved output,
+      // unless it is the generation a replacement is replacing.
+      return output === undefined &&
+        !(previous?.serverId === observed.id && previous.accountId === acct)
+        ? Unowned(attrs)
+        : attrs;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {

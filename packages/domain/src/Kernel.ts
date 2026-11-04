@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -18,6 +19,7 @@ import {
   MissingInitial,
   MissingKeyOf,
   NoEmitter,
+  PagedWithoutSuccess,
   type Reason,
   TwoWriters,
   NewerGeneration,
@@ -26,8 +28,10 @@ import {
   UnhandledCommand,
   UnknownEvent,
   UnknownSource,
+  UnknownWait,
   UnknownStream,
   UnmatchedRoute,
+  VisibleWithoutPaging,
   WriterKeyMismatch,
 } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
@@ -50,6 +54,7 @@ import type {
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
+import type * as Query from "./Query.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
@@ -64,6 +69,7 @@ export interface Definitions {
   readonly policies: ReadonlyArray<Policy.Any>;
   readonly projections: ReadonlyArray<Projection.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
+  readonly queries?: ReadonlyArray<Query.Any>;
 }
 
 /**
@@ -205,6 +211,12 @@ export interface Kernel {
   readonly setVersion: (consumer: string, version: number) => void;
   /** A consumer's generation: its version plus those of the views it reads. */
   readonly generationOf: (kind: "view" | "projection", name: string) => number;
+  /** The generation of a consumer's storage: a view rebuilt in place keeps it. */
+  readonly classGenerationOf: (kind: "view" | "projection", name: string) => number;
+  /** A consumer's id, by `CatchUp.targetId`. */
+  readonly targetIdOf: (kind: "view" | "projection", name: string) => string;
+  /** Whether a view is rebuilt in place: keyed by the one aggregate it reads. */
+  readonly inPlace: (kind: "view" | "projection", name: string) => boolean;
   /** The projection that writes a stream, if any. */
   readonly writerOf: (stream: DomainStream.Any) => Projection.Any | undefined;
   readonly decodeStreamEntry: (
@@ -656,11 +668,45 @@ const build = (
     }
   }
 
+  // ---------------------------------------------------------------- queries
+  // A query is a method of an Api's client, beside its commands, views,
+  // streams and aggregates, so it shares their names.
+  const callNames = new Set([
+    ...sources.keys(),
+    ...streamNames,
+    ...definitions.aggregates.flatMap((aggregate) =>
+      aggregate.definition.commands.map((command: Command.Any) => command.tag),
+    ),
+  ]);
+  const queryNames = new Set<string>();
+  for (const query of definitions.queries ?? []) {
+    const name = query.queryName;
+    if (queryNames.has(name)) {
+      problem(new DuplicateDefinition({ kind: "query", entity: name }));
+      continue;
+    }
+    queryNames.add(name);
+    if (callNames.has(name)) problem(new DuplicateName({ entity: name }));
+    const def = query.definition;
+    if (def.paged && !def.success) problem(new PagedWithoutSuccess({ query: name }));
+    if (def.visible && !def.paged) problem(new VisibleWithoutPaging({ query: name }));
+    for (const projection of def.waitsFor ?? []) {
+      if (projectionByName.get(projection.projectionName) !== projection) {
+        problem(new UnknownWait({ query: name, projection: projection.projectionName }));
+      }
+    }
+  }
+
   // ------------------------------------------------------------ generations
   const versions = new Map<string, number>();
   const generations = new Map<string, number>();
   const viewSources = (from: ReadonlyArray<View.Source>) =>
     from.flatMap((source) => (source.kind === "Aggregate" ? [] : [(source as View.Any).viewName]));
+  const viewByName = new Map(definitions.views.map((view) => [view.viewName, view]));
+  /** A consumer's own version: a view's from its declaration, a projection's from its Layer. */
+  const versionOf = (kind: "view" | "projection", name: string) =>
+    versions.get(`${kind}:${name}`) ??
+    (kind === "view" ? (viewByName.get(name)?.definition.version ?? 0) : 0);
   /**
    * A consumer's generation: its own version plus the generations of the
    * views it reads, so rebuilding a view rebuilds everything built on it.
@@ -672,23 +718,46 @@ const build = (
     if (known !== undefined) return known;
     const from =
       kind === "view"
-        ? (sources.get(name) as { readonly view?: View.Any } | undefined)?.view?.definition.from
+        ? viewByName.get(name)?.definition.from
         : projectionByName.get(name)?.definition.from;
     const generation =
-      (versions.get(id) ?? 0) +
+      versionOf(kind, name) +
       viewSources(from ?? []).reduce((sum, view) => sum + generationOf("view", view), 0);
     generations.set(id, generation);
     return generation;
   };
+  /**
+   * A view keyed by the one aggregate it reads is rebuilt in place: every key
+   * holds exactly its own instance's events, so it can read them again itself.
+   */
+  const inPlace = (kind: "view" | "projection" | "policy", name: string): boolean => {
+    if (kind !== "view") return false;
+    const from = viewByName.get(name)?.definition.from ?? [];
+    return (
+      from.length === 1 &&
+      from[0]!.kind === "Aggregate" &&
+      singleSource(CatchUp.targetId({ kind, name }))
+    );
+  };
+  /**
+   * The generation of a consumer's storage (its Durable Object class): its
+   * generation, except that a view rebuilt in place keeps its storage.
+   */
+  const classGenerationOf = (kind: "view" | "projection", name: string): number =>
+    inPlace(kind, name) ? 0 : generationOf(kind, name);
   /** Where a subscriber's deliveries go, with its generation when it has one. */
-  const targetOf = (subscriber: Subscriber): Delivery["target"] => {
+  const targetOf = (subscriber: Pick<Subscriber, "kind" | "name">): Delivery["target"] => {
     const generation = generationOf(subscriber.kind, subscriber.name);
     return {
       kind: subscriber.kind,
       name: subscriber.name,
       ...(generation > 0 ? { generation } : {}),
+      ...(generation > 0 && inPlace(subscriber.kind, subscriber.name) ? { inPlace: true } : {}),
     };
   };
+  /** A consumer's id, by `CatchUp.targetId`, in this code. */
+  const targetIdOf = (kind: "view" | "projection", name: string) =>
+    CatchUp.targetId(targetOf({ kind, name }));
 
   /** Every delivery an event produces; only to the consumers in `only`, if given. */
   const fanOut = (
@@ -730,7 +799,7 @@ const build = (
    */
   const singleSource = (target: string): boolean => {
     const [kind, rest] = target.split(":") as [string, string];
-    const name = rest.replace(/#\d+$/, "");
+    const name = rest.replace(/[#@]\d+$/, "");
     const sources = new Set<string>();
     for (const [source, byTag] of subscribers) {
       for (const list of byTag.values()) {
@@ -750,7 +819,7 @@ const build = (
    */
   const sourcesOf = (target: string): ReadonlyArray<string> | undefined => {
     const [kind, rest] = target.split(":") as [string, string];
-    const name = (rest ?? "").replace(/#\d+$/, "");
+    const name = (rest ?? "").replace(/[#@]\d+$/, "");
     const known =
       kind === "view"
         ? definitions.views.some((view) => view.viewName === name)
@@ -773,7 +842,8 @@ const build = (
     const generations: Record<string, number> = {};
     for (const source of sources) {
       if (!definitions.views.some((view) => view.viewName === source)) continue;
-      const generation = generationOf("view", source);
+      // Where the source's keys are stored: a view rebuilt in place keeps its storage.
+      const generation = classGenerationOf("view", source);
       if (generation > 0) generations[source] = generation;
     }
     return {
@@ -1107,7 +1177,7 @@ const build = (
           } as HandleResult;
         });
         return Effect.gen(function* () {
-          const started = yield* Effect.sync(() => Date.now());
+          const started = yield* Clock.currentTimeMillis;
           const result = yield* decideAndCommit.pipe(
             Effect.annotateLogs(base),
             Effect.withSpan(`Domain.decide ${aggregate.aggregateName}.${tag}`, {
@@ -1128,7 +1198,7 @@ const build = (
           yield* Telemetry.record(
             Telemetry.commandDuration,
             tags,
-            (yield* Effect.sync(() => Date.now())) - started,
+            (yield* Clock.currentTimeMillis) - started,
           );
           return result;
         });
@@ -1169,6 +1239,12 @@ const build = (
       },
       get generation() {
         return generationOf("view", view.viewName);
+      },
+      get classGeneration() {
+        return classGenerationOf("view", view.viewName);
+      },
+      get target() {
+        return targetIdOf("view", view.viewName);
       },
       get singleSource() {
         return singleSource(`view:${view.viewName}`);
@@ -1384,7 +1460,7 @@ const build = (
         ).pipe(
           Effect.onExit((exit) =>
             Effect.gen(function* () {
-              const now = yield* Effect.sync(() => Date.now());
+              const now = yield* Clock.currentTimeMillis;
               const tags = { "domain.kind": "policy", "domain.consumer": policy.policyName };
               yield* Telemetry.record(Telemetry.lag, tags, now - delivery.envelope.at);
               yield* Telemetry.record(Telemetry.runs, {
@@ -1480,13 +1556,9 @@ const build = (
     projectionKeys,
     get targets() {
       return [
-        ...definitions.views.map((view) =>
-          CatchUp.targetId(targetOf({ kind: "view", name: view.viewName, route: () => [] })),
-        ),
+        ...definitions.views.map((view) => targetIdOf("view", view.viewName)),
         ...definitions.projections.map((projection) =>
-          CatchUp.targetId(
-            targetOf({ kind: "projection", name: projection.projectionName, route: () => [] }),
-          ),
+          targetIdOf("projection", projection.projectionName),
         ),
       ].sort();
     },
@@ -1499,6 +1571,9 @@ const build = (
       generations.clear();
     },
     generationOf,
+    classGenerationOf,
+    targetIdOf,
+    inPlace,
     writerOf: (stream) => writers.get(stream.streamName),
     decodeStreamEntry: (entry) =>
       Effect.map(decodeEvent(entry.event), (event) => ({

@@ -383,7 +383,7 @@ export const ProviderLive = () =>
         ),
       );
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.queueId && isLiveId(output.queueId)) {
         return yield* queues
@@ -404,7 +404,9 @@ export const ProviderLive = () =>
         // Report it as foreign so the engine refuses it without `--adopt`
         // (and still admits our own previous generation on replacement).
         const attrs = toAttributes(match, accountId);
-        return attrs.jurisdiction !== olds?.jurisdiction ? Unowned(attrs) : attrs;
+        return attrs.jurisdiction !== olds?.jurisdiction && attrs.queueId !== previous?.queueId
+          ? Unowned(attrs)
+          : attrs;
       }
       return undefined;
     }),

@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -69,7 +70,7 @@ describe(
           const token = yield* stack.deploy(
             Effect.gen(function* () {
               return yield* Cloudflare.ApiToken.AccountApiToken("UpdateToken", {
-                name: "alchemy-test-acct-update-initial",
+                name: testName("alchemy-test-acct-update-initial"),
                 policies: [
                   {
                     effect: "allow",
@@ -81,13 +82,13 @@ describe(
             }),
           );
 
-          expect(token.name).toEqual("alchemy-test-acct-update-initial");
+          expect(token.name).toEqual(testName("alchemy-test-acct-update-initial"));
           const initialValue = Redacted.value(token.value);
 
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
               return yield* Cloudflare.ApiToken.AccountApiToken("UpdateToken", {
-                name: "alchemy-test-acct-update-renamed",
+                name: testName("alchemy-test-acct-update-renamed"),
                 policies: [
                   {
                     effect: "allow",
@@ -100,11 +101,11 @@ describe(
           );
 
           expect(updated.tokenId).toEqual(token.tokenId);
-          expect(updated.name).toEqual("alchemy-test-acct-update-renamed");
+          expect(updated.name).toEqual(testName("alchemy-test-acct-update-renamed"));
           expect(Redacted.value(updated.value)).toEqual(initialValue);
 
           const actual = yield* accounts.getToken({ accountId, tokenId: updated.tokenId });
-          expect(actual.name).toEqual("alchemy-test-acct-update-renamed");
+          expect(actual.name).toEqual(testName("alchemy-test-acct-update-renamed"));
           expect(actual.policies?.[0]?.permissionGroups.length).toEqual(2);
 
           yield* stack.destroy();
@@ -246,7 +247,6 @@ describe(
         const token = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Cloudflare.ApiToken.AccountApiToken("ListToken", {
-              name: "alchemy-test-acct-list",
               policies: [
                 {
                   effect: "allow",

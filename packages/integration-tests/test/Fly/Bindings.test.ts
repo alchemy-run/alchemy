@@ -20,8 +20,10 @@ import {
   SignKey,
   Site,
 } from "./fixtures/bindings-shared.ts";
+import { flyApi } from "./limit.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  limit: flyApi,
   providers: Fly.providers(),
 });
 

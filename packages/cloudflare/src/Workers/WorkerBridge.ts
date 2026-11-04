@@ -15,10 +15,10 @@ import type { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as EffectHttp from "effect/http/HttpEffect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
@@ -26,7 +26,6 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironmentService.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
-import { isScopeEjected } from "./HttpServer.ts";
 import {
   ErrorTag,
   type RpcErrorEnvelope,
@@ -36,10 +35,12 @@ import {
 } from "./Rpc.ts";
 import type { Worker } from "./Worker.ts";
 import {
+  EventLifetime,
   ExportedHandlerMethods,
   WorkerEnvironment,
   WorkerExecutionContext,
   fromExecutionContext,
+  makeEventLifetime,
 } from "./WorkerRuntime.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
@@ -73,14 +74,17 @@ export const makeWorkerBridge = (
     ) => readonly [Effect.Effect<any, any, any>, Context.Context<never>],
     ctx: cf.ExecutionContext,
     env: Record<string, unknown> | undefined,
-    onExit: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => T | Promise<T>,
+    onExit: (exit: Exit.Exit<any, any>, lifetime: EventLifetime["Service"]) => T | Promise<T>,
   ): Promise<T> => {
     const scope = Scope.makeUnsafe();
+    // Work the event hands to `waitUntil` runs after it returns, in its
+    // context: the request scope waits for it before closing.
+    const event = makeEventLifetime(scope);
     return build((promise) => ctx.waitUntil(promise as Promise<any>))
       .then(
         (built) => {
           const [eff, services] = makeEffect(built);
-          return eff.pipe(
+          return Effect.andThen(event.holdExporters, eff).pipe(
             // Per-event services take precedence over the captured services
             // and the built isolate context: the real per-event
             // WorkerExecutionContext (init only ever sees the reference's
@@ -91,6 +95,7 @@ export const makeWorkerBridge = (
               Layer.mergeAll(
                 Layer.succeed(WorkerExecutionContext, fromExecutionContext(ctx, env)),
                 Layer.succeed(Scope.Scope, scope),
+                Layer.succeed(EventLifetime, event.lifetime),
                 Layer.succeed(RuntimeContext, built.runtimeContext),
                 // The configured telemetry exporters. Constructed as part
                 // of this per-event layer, but `buildEventTelemetry`
@@ -112,20 +117,21 @@ export const makeWorkerBridge = (
         // path can envelope-encode it like any other handler defect.
         (error) => Exit.die(error),
       )
-      .then((exit) => onExit(exit, scope))
+      .then((exit) => {
+        event.holdScope();
+        return onExit(exit, event.lifetime);
+      })
       .finally(() =>
-        isScopeEjected(scope)
-          ? undefined
-          : ctx.waitUntil(
-              // The HttpMiddleware tracer ends the request's root span in a
-              // dispatcher task scheduled after the handler effect resolves.
-              // Yield one macrotask before closing the scope so that span
-              // reaches the telemetry exporter's buffer before the scope's
-              // flush finalizer runs.
-              new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
-                Effect.runPromise(Scope.close(scope, Exit.void)),
-              ),
-            ),
+        ctx.waitUntil(
+          // The HttpMiddleware tracer ends the request's root span in a
+          // dispatcher task scheduled after the handler effect resolves.
+          // Yield one macrotask before closing the scope so that span
+          // reaches the telemetry exporter's buffer before the scope's
+          // flush finalizer runs.
+          new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
+            Effect.runPromise(Scope.close(scope, Exit.void)),
+          ),
+        ),
       );
   };
   class WorkerBridge extends Base {
@@ -134,23 +140,6 @@ export const makeWorkerBridge = (
       public readonly env: any,
     ) {
       super(ctx, env);
-
-      for (const methodName of ExportedHandlerMethods) {
-        (this as any)[methodName] = async (input: any) =>
-          processEvent(
-            (built) =>
-              built.export[methodName](input, this.env, this.ctx) as [
-                Effect.Effect<any>,
-                Context.Context<never>,
-              ],
-            this.ctx,
-            this.env,
-            (exit) =>
-              exit._tag === "Success"
-                ? Promise.resolve(exit.value)
-                : Promise.reject(Cause.squash(exit.cause)),
-          );
-      }
 
       return new Proxy(this, {
         get: (target, prop) => {
@@ -179,12 +168,14 @@ export const makeWorkerBridge = (
                 // *genuine* `Stream` (not an Effect) is lifted into the
                 // success channel so `handleRpcExit` encodes it directly.
                 return [
-                  Effect.isEffect(result)
-                    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped RPC dispatcher result; failures are encoded by handleRpcExit
-                      (result as Effect.Effect<any>)
-                    : Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : (result as Effect.Effect<any>),
+                  withEventContext(
+                    Effect.isEffect(result)
+                      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped RPC dispatcher result; failures are encoded by handleRpcExit
+                        (result as Effect.Effect<any>)
+                      : Stream.isStream(result)
+                        ? Effect.succeed(result)
+                        : (result as Effect.Effect<any>),
+                  ),
                   Context.empty(),
                 ] as const;
               },
@@ -197,13 +188,25 @@ export const makeWorkerBridge = (
     }
   }
 
-  // Stub prototype methods so Cloudflare's script-validate detects the
-  // standard handler set; per-instance overrides above are what actually
-  // run.
-  for (const method of ExportedHandlerMethods) {
-    Object.defineProperty(WorkerBridge.prototype, method, {
-      value: function () {
-        throw new Error(`Bridge method '${method}' was called before instance setup`);
+  // The handlers live on the prototype: Cloudflare's script validation
+  // detects the handler set there, and a handler called over JS RPC (the
+  // local runtime delivers `email` that way) must be a prototype method.
+  for (const methodName of ExportedHandlerMethods) {
+    Object.defineProperty(WorkerBridge.prototype, methodName, {
+      value: function (this: WorkerBridge, input: any) {
+        return processEvent(
+          (built) =>
+            built.export[methodName](input, this.env, this.ctx) as [
+              Effect.Effect<any>,
+              Context.Context<never>,
+            ],
+          this.ctx,
+          this.env,
+          (exit) =>
+            exit._tag === "Success"
+              ? Promise.resolve(exit.value)
+              : Promise.reject(Cause.squash(exit.cause)),
+        );
       },
       writable: true,
       configurable: true,
@@ -261,6 +264,7 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
   const platform = Layer.mergeAll(
     platformServices,
     FetchHttpClient.layer,
+    SecureRandom.layerWebCrypto,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
   );
@@ -420,60 +424,39 @@ export const getWorkerExport = <Export = any>({
   return { build };
 };
 
-export const makeRpcProxy = (
-  self: any,
-  userShape: Effect.Effect<any>,
-  processEvent: (eff: Effect.Effect<[Effect.Effect<any>, Context.Context<never>]>) => Promise<any>,
-) =>
-  new Proxy(self, {
-    get: (target, prop) => {
-      if (typeof prop !== "string") return (target as any)[prop];
-      if (prop in target) return (target as any)[prop];
-      return (...args: unknown[]) =>
-        userShape
-          .pipe(
-            Effect.map((shape) => shape[prop]),
-            Effect.flatMap((dispatcher) => {
-              if (typeof dispatcher !== "function") {
-                return Effect.die(
-                  new Error(
-                    `Method "${prop}" not found on worker. ` +
-                      `Make sure it's returned from the worker's default export.`,
-                  ),
-                );
-              }
-              const result = dispatcher(...args);
-              // Effects (including nested-RPC values built by
-              // `asEffectOrStream`, which are Effects *branded* as Streams)
-              // must be run as effects — their resolved value may itself be a
-              // `Stream`, which `handleRpcExit` then encodes. Only a *genuine*
-              // `Stream` (not an Effect) is lifted into the success channel so
-              // `handleRpcExit` encodes it directly.
-              return Effect.isEffect(result)
-                ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped RPC dispatcher result; failures are encoded by handleRpcExit
-                  (result as Effect.Effect<any>)
-                : Stream.isStream(result)
-                  ? Effect.succeed(result)
-                  : (result as Effect.Effect<any>);
-            }),
-            processEvent,
+/**
+ * The RPC transport reads a Stream result after the call has returned, outside
+ * the event's fiber. Run it with the call's context, so its spans reach the
+ * event's exporters and the `waitUntil` work it hands off joins the event.
+ */
+export const withEventContext = <E, R>(
+  effect: Effect.Effect<unknown, E, R>,
+): Effect.Effect<unknown, E, R> =>
+  effect.pipe(
+    Effect.flatMap((value) =>
+      Stream.isStream(value)
+        ? Effect.map(Effect.context<never>(), (context) =>
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- an RPC Stream result needs no more than the call's context
+            Stream.provideContext(value as Stream.Stream<unknown, unknown, never>, context),
           )
-          .then((exit) => handleRpcExit(exit));
-    },
-  });
+        : Effect.succeed(value),
+    ),
+  );
 
-export const handleRpcExit = async (exit: Exit.Exit<any, any>, scope?: Scope.Closeable) => {
+export const handleRpcExit = async (
+  exit: Exit.Exit<any, any>,
+  lifetime?: EventLifetime["Service"],
+) => {
   if (exit._tag === "Success") {
     if (Stream.isStream(exit.value)) {
       let stream = exit.value as Stream.Stream<any, any, any>;
-      if (scope !== undefined && !isScopeEjected(scope)) {
+      if (lifetime !== undefined) {
         // The RPC transport drains the encoded ReadableStream *after* this
-        // function returns, so the request scope must outlive the handler:
-        // eject it from the bridge's close-on-return path and close it when
-        // the stream settles instead — mirroring `scopeTransferToStream` on
-        // the fetch path.
-        EffectHttp.scopeDisableClose(scope);
-        stream = stream.pipe(Stream.onExit((streamExit) => Scope.close(scope, streamExit)));
+        // function returns, so the event must outlive the handler until the
+        // stream settles.
+        let done!: () => void;
+        lifetime.extend(new Promise<void>((resolve) => (done = resolve)));
+        stream = stream.pipe(Stream.onExit(() => Effect.sync(done)));
       }
       return await Effect.runPromise(toRpcStream(stream) as Effect.Effect<RpcStreamEnvelope>);
     }

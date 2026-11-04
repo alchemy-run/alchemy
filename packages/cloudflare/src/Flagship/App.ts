@@ -4,6 +4,7 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { isResourceOfType, Resource } from "alchemy/Resource";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -304,7 +305,7 @@ export const AppProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const now = yield* Effect.sync(() => new Date().toISOString());
+      const now = DateTime.formatIso(yield* DateTime.now);
       return {
         appId: output?.appId ?? generateLocalId(),
         accountId: output?.accountId ?? (yield* localAccountId),

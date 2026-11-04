@@ -269,6 +269,80 @@ test.provider(
 );
 
 /**
+ * #2912: a new file that sorts before an applied one would run in a
+ * different order here than on a fresh database, so the deploy fails before
+ * running it. Renaming it to sort last lets it apply.
+ */
+test.provider(
+  "D1 migrations refuse a pending file that sorts before an applied one",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migrationsDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-d1-local-nonlinear-",
+      });
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0002_posts.sql"),
+        "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);",
+      );
+
+      yield* stack.destroy();
+
+      const deploy = Effect.gen(function* () {
+        const db = yield* Cloudflare.D1.Database("LocalNonLinearDB", {
+          migrations: migrationsDir,
+        });
+        const worker = yield* Cloudflare.Worker("d1-nonlinear-worker", {
+          main: pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts"),
+          env: { DB: db },
+        });
+        return { db, worker };
+      });
+
+      const v1 = yield* stack.deploy(deploy);
+      const url = v1.worker.url!;
+
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_users.sql"),
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+      );
+
+      const rejected = yield* stack.deploy(deploy).pipe(Effect.flip);
+      expect(String(rejected)).toContain("NonLinearMigrationHistoryError");
+      expect(String(rejected)).toContain("0001_users.sql");
+
+      // Nothing ran: the ledger and the schema are as v1 left them.
+      const before = (yield* getJsonReady(`${url}/migrations`)) as {
+        migrations: Array<{ name: string }>;
+      };
+      expect(before.migrations.map((m) => m.name)).toEqual(["0002_posts.sql"]);
+      const schema = (yield* getJsonReady(`${url}/tables`)) as { tables: string[] };
+      expect(schema.tables).not.toContain("users");
+
+      yield* fs.rename(
+        path.join(migrationsDir, "0001_users.sql"),
+        path.join(migrationsDir, "0003_users.sql"),
+      );
+      const v3 = yield* stack.deploy(deploy);
+      expect(Object.keys(v3.db.migrationsHashes).sort()).toEqual([
+        "0002_posts.sql",
+        "0003_users.sql",
+      ]);
+      const after = (yield* getJsonReady(`${v3.worker.url}/migrations`)) as {
+        migrations: Array<{ name: string }>;
+      };
+      expect(after.migrations.map((m) => m.name)).toEqual(["0002_posts.sql", "0003_users.sql"]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
+
+/**
  * `importFiles` apply locally too: an import file is multi-statement SQL,
  * executed through the gateway with the same hash-skip semantics as the
  * cloud import flow. Verified through the worker's binding.

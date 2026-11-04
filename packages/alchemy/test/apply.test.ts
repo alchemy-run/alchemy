@@ -23,7 +23,7 @@ import { remote } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
 import { Cli } from "@/Report.ts";
-import { Resource } from "@/Resource";
+import { type LookupOfManagedResourceError, Resource } from "@/Resource";
 import { Stack, make as makeStack } from "@/Stack";
 import { Stage } from "@/Stage";
 import {
@@ -50,6 +50,9 @@ import {
   Function,
   inDev,
   KindStablesResource,
+  LookupTarget,
+  lookupTargetDeletes,
+  lookupTargets,
   ModalResource,
   modalCalls,
   type ModalResourceProps,
@@ -994,6 +997,108 @@ describe("FQN separator in logical ID", { tags: ["unit", "local"] }, () => {
       expect(yield* getState(fqn)).toBeUndefined();
       expect(yield* listState()).toEqual([]);
     }),
+  );
+});
+
+// A lookup binds a resource no stack manages: it re-resolves through the
+// provider on every plan, and is never written to state or deleted.
+describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
+  const program = (name: string) =>
+    Effect.gen(function* () {
+      const found = LookupTarget.lookup({ name });
+      return yield* TestResource("Consumer", { string: found.value });
+    });
+
+  test.provider("deploys a consumer of a lookup without managing the looked-up resource", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-found";
+      lookupTargets.set(name, { name, value: "v1" });
+
+      const consumer = yield* stack.deploy(program(name));
+      expect(consumer.string).toEqual("v1");
+      expect(yield* listState()).toEqual(["Consumer"]);
+
+      // Unchanged, the lookup re-resolves to the same value.
+      expect(actionOfPlan(yield* stack.plan(program(name)), "Consumer")).toBe("noop");
+
+      // A change to the looked-up resource flows into the consumer.
+      lookupTargets.set(name, { name, value: "v2" });
+      expect(actionOfPlan(yield* stack.plan(program(name)), "Consumer")).toBe("update");
+      expect((yield* stack.deploy(program(name))).string).toEqual("v2");
+
+      yield* stack.destroy();
+      expect(yield* listState()).toEqual([]);
+      expect(lookupTargetDeletes).not.toContain(name);
+      expect(lookupTargets.get(name)).toEqual({ name, value: "v2" });
+    }),
+  );
+
+  test.provider("a lookup keyed by another resource's Output waits for it", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-keyed";
+      lookupTargets.set(name, { name, value: "keyed" });
+      const keyed = Effect.gen(function* () {
+        const key = yield* TestResource("Key", { string: name });
+        const found = LookupTarget.lookup({ name: key.string });
+        return yield* TestResource("Consumer", { string: found.value });
+      });
+
+      const consumer = yield* stack.deploy(keyed);
+      expect(consumer.string).toEqual("keyed");
+      expect([...(yield* listState())].sort()).toEqual(["Consumer", "Key"]);
+      expect(actionOfPlan(yield* stack.plan(keyed), "Consumer")).toBe("noop");
+
+      yield* stack.destroy();
+      expect(yield* listState()).toEqual([]);
+      expect(lookupTargets.get(name)).toEqual({ name, value: "keyed" });
+    }),
+  );
+
+  // Always a user mistake: the lookup would bind the resource with no
+  // dependency, so this stack could delete or replace it under its consumer.
+  test.provider("a lookup of a resource this stack manages fails the deploy", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(LookupTarget("apply-managed", { value: "v1" }));
+
+      const expectManaged = (program: Effect.Effect<unknown, any, any>) =>
+        Effect.gen(function* () {
+          const exit = yield* Effect.exit(stack.deploy(program));
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const err = Cause.squash(exit.cause) as LookupOfManagedResourceError;
+            expect(err._tag).toBe("LookupOfManagedResourceError");
+            expect(err.fqn).toBe("apply-managed");
+          }
+        });
+
+      // Declared and looked up in the same program.
+      yield* expectManaged(
+        Effect.gen(function* () {
+          yield* LookupTarget("apply-managed", { value: "v1" });
+          yield* program("apply-managed");
+        }),
+      );
+      // Swapped from a declaration to a lookup, which would delete it.
+      yield* expectManaged(program("apply-managed"));
+
+      expect(yield* listState()).toEqual(["apply-managed"]);
+      yield* stack.destroy();
+      expect(lookupTargets.has("apply-managed")).toBe(false);
+    }),
+  );
+
+  test.provider(
+    "a lookup that finds nothing fails the deploy before anything is created",
+    (stack) =>
+      Effect.gen(function* () {
+        const exit = yield* Effect.exit(stack.deploy(program("apply-missing")));
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          expect(Cause.pretty(exit.cause)).toContain("LookupNotFoundError");
+        }
+        expect(yield* listState()).toEqual([]);
+      }),
   );
 });
 

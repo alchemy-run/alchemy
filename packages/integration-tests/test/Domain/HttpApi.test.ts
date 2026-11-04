@@ -153,16 +153,20 @@ class LedgerApi extends Domain.Api("LedgerApi", {
   views: [],
 }) {}
 
-/** Every call the Api serves. */
-const WalletHttp = DomainHttp.toHttpApi(WalletApi);
-
-/** An Api for HTTP clients that may only deposit: publishing less is a smaller Api. */
-class DepositOnlyApi extends Domain.Api("DepositOnlyApi", {
-  model: Wallets,
-  commands: ["Deposit"],
-  views: [],
-  aggregates: [],
-}) {}
+/** Every call the Api serves, listed in a different order than the Api serves them. */
+const WalletHttp = DomainHttp.toHttpApi(WalletApi, {
+  expose: [
+    "Wallet.events",
+    "Wallet.watch",
+    "Wallet.get",
+    "Balance.snapshot",
+    "Balance.list",
+    "Balance.events",
+    "Balance.watch",
+    "Balance.get",
+    "Deposit",
+  ],
+});
 
 /** The hosted model, its middleware, and an in-process Bun server with a client for it. */
 const Hosted = Layer.mergeAll(
@@ -237,7 +241,7 @@ const at = "2026-10-25T12:00:00.000Z";
 
 // ---------------------------------------------------------------- tests
 
-describe("Domain toHttpApi", () => {
+describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
   it.live("a command endpoint runs the command and answers with its receipt", () =>
     Effect.gen(function* () {
       const { status, body } = yield* send("POST", "/Deposit", {
@@ -441,7 +445,7 @@ describe("Domain toHttpApi", () => {
     }).pipe(
       Effect.provide(
         (() => {
-          const LedgerHttp = DomainHttp.toHttpApi(LedgerApi);
+          const LedgerHttp = DomainHttp.toHttpApi(LedgerApi, { expose: ["Sign"] });
           return serve(LedgerHttp.api, LedgerHttp.layer);
         })(),
       ),
@@ -459,7 +463,7 @@ describe("Domain toHttpApi", () => {
     }).pipe(Effect.provide(serve(AppApi, WalletHttp.layerFor(AppApi)))),
   );
 
-  it.live("a smaller Api publishes only its own calls", () =>
+  it.live("publishes only the calls it exposes", () =>
     Effect.gen(function* () {
       const deposit = yield* send("POST", "/Deposit", {
         owner: "sam",
@@ -471,7 +475,7 @@ describe("Domain toHttpApi", () => {
     }).pipe(
       Effect.provide(
         (() => {
-          const DepositOnlyHttp = DomainHttp.toHttpApi(DepositOnlyApi);
+          const DepositOnlyHttp = DomainHttp.toHttpApi(WalletApi, { expose: ["Deposit"] });
           return serve(DepositOnlyHttp.api, DepositOnlyHttp.layer);
         })(),
       ),
@@ -525,7 +529,24 @@ describe("Domain toHttpApi", () => {
     }
   });
 
-  it("publishes every call the Api serves: commands, views, streams, then aggregates", () => {
+  it("publishes nothing it is not told to expose", () => {
+    // @ts-expect-error a call the Api does not serve
+    DomainHttp.toHttpApi(WalletApi, { expose: ["Withdraw"] });
+    // @ts-expect-error an operation the view does not have
+    DomainHttp.toHttpApi(WalletApi, { expose: ["Balance.nope"] });
+    // @ts-expect-error an aggregate has no `list`
+    DomainHttp.toHttpApi(WalletApi, { expose: ["Wallet.list"] });
+    // every read of a view and an aggregate, live ones included
+    DomainHttp.toHttpApi(WalletApi, {
+      expose: ["Balance.get", "Balance.watch", "Balance.events", "Wallet.get", "Wallet.watch"],
+    });
+    expect(Object.keys(DomainHttp.toHttpApi(WalletApi).group.endpoints)).toEqual([]);
+    expect(Object.keys(DomainHttp.toHttpApi(WalletApi, { expose: [] }).group.endpoints)).toEqual(
+      [],
+    );
+  });
+
+  it("publishes exposed calls in the order the Api serves them: commands, views, streams, then aggregates", () => {
     expect(
       Object.values(WalletHttp.group.endpoints).map((e) => [e.identifier, e.method, e.path]),
     ).toEqual([

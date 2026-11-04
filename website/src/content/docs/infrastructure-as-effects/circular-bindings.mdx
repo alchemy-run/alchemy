@@ -3,7 +3,7 @@ title: Circular Bindings
 description: How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Sequence from "../../../components/diagrams/Sequence.astro";
 
 Real systems have cycles. A web Worker calls an internal Worker for
 auth; the internal Worker calls back into the web Worker for
@@ -175,18 +175,22 @@ the call site.
 
 Under the hood, alchemy plans the cycle in two passes:
 
-<DAG
-  nodes={[
-    { id: "Decl", label: "declare", type: "A & B Tags" },
-    { id: "Pre", label: "precreate", type: "reserve URLs", tone: "accent" },
-    { id: "Create", label: "create", type: "deferred Outputs" },
-    { id: "Wire", label: "update", type: "wire bindings", tone: "accent" },
+<Sequence
+  actors={[
+    { id: "alchemy", label: "alchemy deploy", type: "the plan", tone: "accent" },
+    { id: "a", label: "Worker A", type: "binds B" },
+    { id: "b", label: "Worker B", type: "binds A" },
   ]}
-  edges={[
-    { from: "Decl", to: "Pre" },
-    { from: "Pre", to: "Create" },
-    { from: "Create", to: "Wire" },
+  steps={[
+    { note: "both Tags registered: A and B exist", over: ["alchemy", "b"] },
+    { from: "alchemy", to: "a", label: "precreate: reserve URL" },
+    { from: "alchemy", to: "b", label: "precreate: reserve URL" },
+    { from: "alchemy", to: "a", label: "create, B's URL deferred" },
+    { from: "alchemy", to: "b", label: "create, A's URL deferred" },
+    { from: "alchemy", to: "a", label: "update: wire B's URL" },
+    { from: "alchemy", to: "b", label: "update: wire A's URL" },
   ]}
+  caption="Neither Worker waits for the other: each is reserved and created first, then a second pass wires in the real URLs."
 />
 
 1. The **Tags** are registered up front, so the graph knows that A

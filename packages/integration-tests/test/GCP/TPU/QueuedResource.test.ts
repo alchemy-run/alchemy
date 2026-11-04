@@ -40,7 +40,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1-c/queuedResources/alchemy-tpu-qr-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

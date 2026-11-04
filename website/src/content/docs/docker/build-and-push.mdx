@@ -2,9 +2,21 @@
 title: Build & push images
 description: Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 This page is the canonical home for producing a **registry image
 reference** — the artifact that cloud container platforms consume.
+<Tree
+  nodes={[
+    { id: "stack", label: "your Stack", type: "one deploy" },
+    { id: "repo", label: "ghcr.io/acme/app", type: "repository", parent: "stack" },
+    { id: "old", label: "sha256:4f1a…", type: "image · last deploy", parent: "repo", tone: "muted" },
+    { id: "new", label: "sha256:9c2e…", type: "image · tag latest", parent: "repo", tone: "accent" },
+    { id: "task", label: "ECS task", type: "or Cloudflare Container", side: true, parent: "stack", specs: [["runs", "app@sha256:9c2e…"]] },
+  ]}
+  caption="A tag can move, a digest can't. The platform gets the image by digest, so a new build redeploys exactly the image you pushed."
+/>
+
 `Docker.Image` builds and pushes through your active Docker context;
 what comes out the other end is an `imageRef` (and, after a push, a
 `repoDigest`) that you pass to

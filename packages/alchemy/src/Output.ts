@@ -251,6 +251,15 @@ export class ApplyExpr<A, B, Req = never> extends BaseExpr<B, Req> {
   [inspect](): string {
     return `${this.expr[inspect]()}.map(${this.f.toString()})`;
   }
+
+  // Bind the upstream and apply `f` where it is read. A binding keyed by this
+  // expression would embed `f.toString()`, which differs between the deploy
+  // and a minified runtime bundle, so the runtime would find nothing.
+  override asEffect(): any {
+    return Effect.map(this.expr.asEffect() as Effect.Effect<Accessor<A>>, (accessor) =>
+      Effect.map(accessor, this.f),
+    );
+  }
 }
 
 export const mapEffect =
@@ -314,6 +323,51 @@ export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<B, Req
   }
 }
 
+export const isLookupExpr = <A = any>(node: any): node is LookupExpr<A> =>
+  exprKind(node) === "EffectExpr" && (node?.[ExprSymbol] ?? node)?.lookupType !== undefined;
+
+/**
+ * The expression behind `Resource.lookup(props)`: an {@link EffectExpr} (so
+ * every resolver runs it like any plan-time effect) that also serves the
+ * target's `Type` and `LogicalId` as literals, like {@link RefExpr}, so
+ * duck-typing classifiers (Worker env bindings) treat it as the resource.
+ *
+ * Its upstream is the props themselves, so Outputs among them resolve first
+ * and become dependencies of whatever binds the lookup.
+ */
+export class LookupExpr<A> extends BaseExpr<A, never> {
+  readonly kind = "EffectExpr";
+  readonly expr: any;
+  readonly f: (props: any) => Effect.Effect<A>;
+  readonly lookupType: string;
+  readonly stables: { Type: string; LogicalId: string };
+  constructor(
+    type: string,
+    props: unknown,
+    logicalId: string,
+    lookup: (props: any) => Effect.Effect<A>,
+  ) {
+    super();
+    this.lookupType = type;
+    this.expr = props;
+    this.stables = { Type: type, LogicalId: logicalId };
+    // Every attribute read evaluates this expression; call the provider once.
+    let resolved: { value: A } | undefined;
+    this.f = (props) =>
+      resolved
+        ? Effect.succeed(resolved.value)
+        : Effect.tap(lookup(props), (value) =>
+            Effect.sync(() => {
+              resolved = { value };
+            }),
+          );
+    return proxy(this);
+  }
+  [inspect](): string {
+    return `${this.lookupType}.lookup(${this.stables.LogicalId})`;
+  }
+}
+
 export const isNamedExpr = <A = any, Req = any>(node: any): node is NamedExpr<A, Req> =>
   exprKind(node) === "NamedExpr";
 
@@ -373,6 +427,14 @@ export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   }
   [inspect](): string {
     return `all(${this.outs.map((out) => out[inspect]()).join(", ")})`;
+  }
+
+  // Bind each member on its own (see `ApplyExpr.asEffect`).
+  override asEffect(): any {
+    return Effect.map(
+      Effect.all(this.outs.map((out) => out.asEffect() as Effect.Effect<Accessor<unknown>>)),
+      (accessors) => Effect.all(accessors),
+    );
   }
 }
 
@@ -548,7 +610,7 @@ function proxy(self: any): any {
           // resource/ref exprs) are visible to `in` checks so duck-typing
           // code paths (e.g. `"LogicalId" in arg`) treat them like real
           // properties, matching what `get` serves.
-          ((isResourceExpr(self) || isRefExpr(self)) &&
+          ((isResourceExpr(self) || isRefExpr(self) || isLookupExpr(self)) &&
             self.stables !== undefined &&
             prop in self.stables) ||
           prop in self,
@@ -584,7 +646,9 @@ function proxy(self: any): any {
           ? self
           : prop === inspect
             ? target[inspect]
-            : (isResourceExpr(self) || isRefExpr(self)) && self.stables && prop in self.stables
+            : (isResourceExpr(self) || isRefExpr(self) || isLookupExpr(self)) &&
+                self.stables &&
+                prop in self.stables
               ? self.stables[prop as keyof typeof self.stables]
               : prop in self
                 ? typeof self[prop as keyof typeof self] === "function" && !("kind" in self)
