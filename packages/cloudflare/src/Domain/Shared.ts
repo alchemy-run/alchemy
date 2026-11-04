@@ -233,7 +233,8 @@ const router = (
 ): ObjectImpl =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
-    const parsed = parseName(state.id.name);
+    // At deploy time the class is declared with a placeholder state: no object, no route.
+    const parsed = parseName(state.id?.name);
     const impl = parsed === undefined ? undefined : routes.get(parsed.route);
     // A route the code no longer hosts keeps its data, and does nothing.
     if (parsed === undefined || impl === undefined)
