@@ -14,8 +14,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
   "../../Cloudflare/Website/staticsite-fixture",
@@ -33,7 +31,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "StaticSite: build command + outdir, GET index",
   (stack) =>
     Effect.gen(function* () {

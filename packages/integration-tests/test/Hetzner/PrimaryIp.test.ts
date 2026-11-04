@@ -11,8 +11,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const waitUntilGone = (id: number) =>
   primaryIps.getPrimaryIp({ id }).pipe(
     Effect.as("found" as const),
@@ -24,7 +22,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete an unassigned ipv6 primary ip",
   (stack) =>
     Effect.gen(function* () {
@@ -96,7 +94,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when location changes",
   (stack) =>
     Effect.gen(function* () {
@@ -149,7 +147,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create from datacenter name",
   (stack) =>
     Effect.gen(function* () {
@@ -185,7 +183,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed primary ip",
   (stack) =>
     Effect.gen(function* () {

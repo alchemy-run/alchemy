@@ -12,8 +12,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 // Live proof that the Hetzner bun bootstrap boots when the service's `main`
 // lives in an isolated project (see test/IsolatedProject.ts) — the bundle
 // `cwd` resolves none of alchemy's dependencies, so the bootstrap's
@@ -21,7 +19,7 @@ const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 // virtual-entry plugin rather than found from the project root. With them
 // left external bun dies at module load under systemd and the port never
 // answers.
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "service bundled from an isolated project serves HTTP",
   (stack) =>
     Effect.gen(function* () {

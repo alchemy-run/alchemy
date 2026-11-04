@@ -13,8 +13,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/waku-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [".gitignore", "package.json", "tsconfig.json", "src", "public"];
@@ -30,7 +28,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "Waku: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

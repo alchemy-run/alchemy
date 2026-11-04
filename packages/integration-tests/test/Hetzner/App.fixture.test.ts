@@ -35,8 +35,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)));
 
@@ -73,19 +71,17 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = hasHetznerCreds
-  ? beforeAll(deploy(Stack), { timeout: 180_000, exclusive: "hetzner" })
-  : null;
+const stack = beforeAll(deploy(Stack), { timeout: 180_000, exclusive: "hetzner" });
 
-afterAll.skipIf(!hasHetznerCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 120_000,
   exclusive: "hetzner",
 });
 
-test.skipIf(!hasHetznerCreds)(
+test(
   "deploys an effectful app and serves the mounted volume over HTTP",
   Effect.gen(function* () {
-    const out = yield* stack!;
+    const out = yield* stack;
 
     expect(out.serverId).toEqual(expect.any(Number));
     expect(out.serverIpv4).toEqual(expect.any(String));

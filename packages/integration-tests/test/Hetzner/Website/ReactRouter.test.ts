@@ -13,8 +13,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
   "../../AWS/Website/fixtures/react-router-app",
@@ -40,7 +38,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "ReactRouter: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

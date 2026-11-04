@@ -15,8 +15,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const waitUntilGone = (id: number) =>
   servers.getServer({ id }).pipe(
     Effect.as("found" as const),
@@ -28,7 +26,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "two services on one server share a mounted volume",
   (stack) =>
     Effect.gen(function* () {

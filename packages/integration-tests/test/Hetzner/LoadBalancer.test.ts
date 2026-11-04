@@ -11,8 +11,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const waitUntilGone = (id: number) =>
   loadBalancers.getLoadBalancer({ id }).pipe(
     Effect.as("found" as const),
@@ -37,7 +35,7 @@ const tcpService = (listenPort: number, destinationPort: number) => ({
   },
 });
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a load balancer",
   (stack) =>
     Effect.gen(function* () {
@@ -225,7 +223,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when location changes",
   (stack) =>
     Effect.gen(function* () {

@@ -12,8 +12,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const waitUntilVolumeGone = (id: number) =>
   volumes.getVolume({ id }).pipe(
     Effect.as("found" as const),
@@ -36,7 +34,7 @@ const waitUntilServerGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, list, and delete a volume attachment",
   (stack) =>
     Effect.gen(function* () {

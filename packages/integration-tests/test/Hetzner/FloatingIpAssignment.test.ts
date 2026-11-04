@@ -12,8 +12,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const waitUntilFloatingIpGone = (id: number) =>
   floatingIps.getFloatingIp({ id }).pipe(
     Effect.as("found" as const),
@@ -36,7 +34,7 @@ const waitUntilServerGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create update replace and delete assignment",
   (stack) =>
     Effect.gen(function* () {
