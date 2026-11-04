@@ -6,6 +6,7 @@ import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as workflowsApi from "@distilled.cloud/cloudflare/workflows";
 import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
+import { Artifacts } from "alchemy/Artifacts";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
@@ -5435,6 +5436,11 @@ export const LiveWorkerProvider = () =>
             bindings,
             existingSettings,
           });
+          // The build planned with every class: build again without the dropped ones.
+          if (settled.dropped.size > 0) {
+            const artifacts = yield* Effect.serviceOption(Artifacts);
+            if (Option.isSome(artifacts)) yield* artifacts.value.delete("build");
+          }
           return yield* putWorker(
             id,
             fqn,
