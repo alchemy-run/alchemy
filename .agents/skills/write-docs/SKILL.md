@@ -178,6 +178,14 @@ Each of these was a correction. Don't relearn them.
   variables and caps them at 4 KB; Worker `Config` binds as `secret_text`) and
   links the core page. Move anything worth keeping to the core page rather than
   deleting it.
+- **Every concept chapter gets a diagram, on every provider.** AWS had one per
+  chapter while GCP, Cloudflare and the smaller providers had almost none, and
+  their docs read as "sparse". A chapter whose page jumps straight into code
+  first gets a short section on the platform's model, then the diagram, then
+  the code. Skip only tutorials and framework recipes. Before writing a
+  diagram's labels, check each claim against the page and the source: a
+  multi-node swarm, a resolve notification and a "more info needed" state
+  were all drafted and cut because nothing backed them.
 - **Show the snippet the section talks about.** A section that names a resource,
   like a CloudWatch dashboard, shows a small snippet declaring it.
 

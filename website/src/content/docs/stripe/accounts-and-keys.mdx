@@ -2,8 +2,23 @@
 title: Accounts and API keys
 description: How a Stripe account and its test mode keep data apart, how secret and restricted keys differ, and which key Alchemy deploys with and which your runtimes hold.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 A Stripe **account** holds your catalog, customers and payments. Every account has a **test mode**: a full copy with its own data and its own keys, where test cards succeed and no money moves. Which mode you're in is decided by the key you use.
+
+<Tree
+  nodes={[
+    { id: "acct", label: "Acme", type: "Stripe account" },
+    { id: "test", label: "test mode", type: "test cards · no money moves", parent: "acct", dashed: true },
+    { id: "t1", label: "products, prices", type: "test data", parent: "test" },
+    { id: "t2", label: "webhooks", type: "test endpoints", parent: "test" },
+    { id: "live", label: "live mode", type: "real customers", parent: "acct" },
+    { id: "l1", label: "products, prices", type: "live data", parent: "live", tone: "accent" },
+    { id: "l2", label: "webhooks", type: "live endpoints", parent: "live", tone: "accent" },
+  ]}
+  scopes={[{ on: "test", label: "sk_test_…" }, { on: "live", label: "sk_live_…" }]}
+  caption="One account, two copies. The key you deploy with picks which one, and nothing created in test mode reaches live mode."
+/>
 
 ## Deploy with a key in your profile
 

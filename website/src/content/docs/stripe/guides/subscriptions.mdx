@@ -2,6 +2,7 @@
 title: Sell a subscription
 description: The full SaaS billing loop on one Cloudflare Worker — hosted Checkout, the Billing Portal, and webhooks that keep an entitlement record your app gates on.
 ---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 You have a product with a monthly price and you want people to pay for
 it. The shape every SaaS lands on is:
@@ -21,6 +22,27 @@ This guide walks through `examples/stripe-billing`, which does exactly
 that on one Worker. Every snippet below is a piece of
 [`src/Api.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/stripe-billing/src/Api.ts);
 the whole file is at the end.
+
+<Sequence
+  actors={[
+    { id: "buyer", label: "buyer" },
+    { id: "app", label: "App", type: "Worker", tone: "accent" },
+    { id: "stripe", label: "Stripe", type: "Checkout" },
+    { id: "store", label: "store", type: "subscriptions" },
+  ]}
+  steps={[
+    { from: "buyer", to: "app", label: "Subscribe" },
+    { from: "app", to: "stripe", label: "Customer + Checkout Session" },
+    { from: "app", to: "buyer", label: "redirect to Stripe", dashed: true },
+    { from: "buyer", to: "stripe", label: "pays" },
+    { from: "stripe", to: "app", label: "webhook: subscription active" },
+    { from: "app", to: "store", label: "status = active" },
+    { divider: "every later request" },
+    { from: "buyer", to: "app", label: "GET /pro-feature" },
+    { from: "app", to: "store", label: "is this customer active?" },
+  ]}
+  caption="The payment happens on Stripe's page. Your app learns the result from a webhook, writes it down, and checks its own store from then on, not Stripe."
+/>
 
 ## The catalog lives on the Worker
 

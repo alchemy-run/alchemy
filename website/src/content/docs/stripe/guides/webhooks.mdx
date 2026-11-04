@@ -2,11 +2,31 @@
 title: React to Stripe events
 description: consumeEvents provisions the webhook endpoint and runs one Effect per delivery. When to use it, which events to listen for, and how to manage the endpoint yourself.
 ---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 Stripe tells you what happened asynchronously. A payment succeeded, a
 renewal was declined, a merchant finished onboarding — none of these
 come back on the request that started them. Anything your app needs to
 *know* about billing state, it learns from webhooks.
+
+<Sequence
+  actors={[
+    { id: "stripe", label: "Stripe" },
+    { id: "worker", label: "Billing", type: "Worker", tone: "accent" },
+    { id: "db", label: "your store" },
+  ]}
+  steps={[
+    { note: "invoice.paid", over: "stripe" },
+    { from: "stripe", to: "worker", label: "POST · Stripe-Signature" },
+    { note: "verified with the endpoint's signing secret", over: "worker" },
+    { from: "worker", to: "db", label: "mark the invoice paid" },
+    { from: "worker", to: "stripe", label: "200", dashed: true },
+    { divider: "if the handler fails" },
+    { from: "worker", to: "stripe", label: "500", dashed: true, tone: "warn" },
+    { from: "stripe", to: "worker", label: "retried later, the same event id" },
+  ]}
+  caption="Stripe signs each delivery and retries until it gets a 2xx, so handlers must check the signature and treat a repeated event id as already done."
+/>
 
 There are two levels:
 

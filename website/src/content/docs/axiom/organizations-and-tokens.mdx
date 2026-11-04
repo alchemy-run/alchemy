@@ -2,8 +2,22 @@
 title: Organizations and tokens
 description: How an Axiom organization holds your datasets, how Alchemy deploys with a personal token, and how your Stack mints API tokens that can only ingest or only query.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Everything on Axiom belongs to an **organization**: datasets, monitors, notifiers, dashboards, and your bill. Two kinds of token reach it. A **personal token** acts as you, with everything you can do. An **API token** can do only what it's granted: ingest into one dataset, query another.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization" },
+    { id: "traces", label: "app-traces", type: "dataset", parent: "org", tone: "accent" },
+    { id: "logs", label: "app-logs", type: "dataset", parent: "org", tone: "accent" },
+    { id: "audit", label: "audit", type: "dataset", parent: "org" },
+    { id: "mon", label: "error-rate", type: "Monitor", parent: "org", side: true },
+    { id: "dash", label: "ops", type: "Dashboard", parent: "org", side: true },
+  ]}
+  scopes={[{ on: "org", label: "personal token: everything you can do" }]}
+  caption="Everything lives in the organization. Your personal token deploys it all, while the API token your app ships with can only ingest into app-traces and app-logs."
+/>
 
 ## Deploy with a profile
 

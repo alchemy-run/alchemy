@@ -2,6 +2,7 @@
 title: Container registries
 description: Give a Kubernetes connection a registry so Deployments and Jobs built from Effect programs or Dockerfiles are pushed where the cluster's nodes can pull them, such as GHCR, Docker Hub, Artifact Registry, ACR, or a registry of your own.
 ---
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
 A Kubernetes node can only run an image it can pull from a registry.
 Workloads that use a pre-built `image` need nothing extra, but a
@@ -23,6 +24,23 @@ const worker = yield* Kubernetes.Job(
   }),
 );
 ```
+
+<Sequence
+  actors={[
+    { id: "you", label: "alchemy deploy", type: "your machine" },
+    { id: "reg", label: "ghcr.io/acme", type: "registry" },
+    { id: "api", label: "API server", type: "cluster" },
+    { id: "node", label: "node", type: "kubelet", tone: "accent" },
+  ]}
+  steps={[
+    { note: "bundle + docker build", over: "you" },
+    { from: "you", to: "reg", label: "push api:<hash>" },
+    { from: "you", to: "api", label: "apply Deployment image: api:<hash>" },
+    { from: "api", to: "node", label: "schedule the Pod" },
+    { from: "node", to: "reg", label: "pull api:<hash>" },
+  ]}
+  caption="The image is built where you deploy, but pulled by the node that runs it, so the registry has to be one both can reach."
+/>
 
 On deploy, Alchemy bundles the program, builds the image with your
 local Docker, pushes it to `ghcr.io/acme/<name>:<hash>`, and points

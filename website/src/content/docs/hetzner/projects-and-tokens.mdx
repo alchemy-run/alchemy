@@ -2,8 +2,23 @@
 title: Projects, tokens and SSH keys
 description: How a Hetzner Cloud project isolates your Servers, how its API token decides where Alchemy deploys, and how SSH keys reach your Servers.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Everything in Hetzner Cloud lives inside a **project**: Servers, volumes, networks, firewalls, IP addresses and the tokens that manage them. Nothing in one project can see another.
+
+<Tree
+  nodes={[
+    { id: "prod", label: "my-app-prod", type: "project" },
+    { id: "s1", label: "web-1", type: "Server · fsn1", parent: "prod", tone: "accent" },
+    { id: "v1", label: "data", type: "Volume", parent: "prod" },
+    { id: "f1", label: "web", type: "Firewall", parent: "prod" },
+    { id: "dev", label: "my-app-dev", type: "project" },
+    { id: "s2", label: "web-sam", type: "Server · fsn1", parent: "dev" },
+    { id: "s3", label: "web-pr-42", type: "Server · fsn1", parent: "dev" },
+  ]}
+  scopes={[{ on: "prod", label: "token: my-app-prod" }, { on: "dev", label: "token: my-app-dev" }]}
+  caption="Each project holds its own servers, disks and firewalls, and each token reaches one project. Many stages share the development project."
+/>
 
 ## A token reaches one project
 
