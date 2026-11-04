@@ -1,4 +1,5 @@
 import * as sbo from "@distilled.cloud/gcp/storagebatchoperations_v1";
+import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -6,8 +7,10 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { updateIamMembership } from "../IamPolicy.ts";
 import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
+import { projectNumberOf } from "../ResourceManager/internal.ts";
 
 const LOCATION = "global";
 const MAX_JOB_ID_LENGTH = 63;
@@ -72,6 +75,10 @@ export type Job = Resource<
  * A Storage batch operations job: one operation (delete, set metadata, set
  * holds, rewrite) applied to many objects in a bucket, selected by prefix
  * or listed in a manifest.
+ *
+ * Jobs run as the project's Storage Batch Operations service agent, so the
+ * provider grants it `roles/storage.objectUser` on the bucket. The grant
+ * stays when the job is deleted, since other jobs may share it.
  *
  * A job runs once. Jobs can't be edited, so changing any prop replaces the
  * job, which runs it again on the same objects. Deleting the job cancels it
@@ -175,6 +182,25 @@ export const JobProvider = () =>
 
       // Ensure: a job has nothing to sync after create.
       if (current === undefined) {
+        // The job reads and changes objects as the service agent, created on first use.
+        const identity = yield* serviceusage
+          .generateServiceIdentityServices({
+            parent: `projects/${env.project}/services/storagebatchoperations.googleapis.com`,
+          })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+        if (identity !== undefined) {
+          yield* waitForOperation(identity, (op) => serviceusage.getOperations({ name: op }), {
+            budget: "2 minutes",
+            interval: "2 seconds",
+          });
+        }
+        const number = yield* projectNumberOf(env.project);
+        yield* updateIamMembership({
+          kind: "storage.bucket",
+          name: news.bucket.bucket,
+          member: `service-${number}@gcp-sa-storagebatchoperations.iam.gserviceaccount.com`,
+          add: ["roles/storage.objectUser"],
+        });
         const operation = yield* sbo
           .createProjectsLocationsJobs({
             parent: `projects/${env.project}/locations/${LOCATION}`,
