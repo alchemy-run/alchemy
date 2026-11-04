@@ -24,7 +24,7 @@ from JSDoc (see AGENTS.md "Documentation Generation").
 - `domain/what-is-ddd.mdx`: the original mental-model page. Copy its build-up
   of ideas, not its "This page introduces…" opening, which predates the rule.
 - `aws/index.mdx`, `aws/what-is-aws.mdx`, `aws/accounts-and-regions.mdx`, `aws/iam.mdx`: hub, What is, and access chapters.
-- `aws/networking/index.mdx`: containment as borders. `aws/compute/choosing-a-runtime.mdx`, `aws/messaging/sqs.mdx`, `aws/compute/lambda.mdx`, `cloudflare/compute/durable-objects.mdx`: diagrams built for their question.
+- Diagrams built for their question: `aws/accounts-and-regions.mdx` (OUs as nested borders), `aws/compute/choosing-a-runtime.mdx` (a responsibility staircase), `aws/messaging/sqs.mdx` (a queue's contents, then receive-hide-delete), `aws/compute/lambda.mdx` (environments over time), `cloudflare/networking/tunnel.mdx` (a tunnel through a wall), `cloudflare/compute/durable-objects.mdx` (a map).
 - `cloudflare/accounts-and-tokens.mdx`, `fly/organizations-and-tokens.mdx`: short access pages.
 - `aws/security/secrets-env.mdx`: a concept chapter that builds one idea at a time.
 
@@ -53,10 +53,10 @@ from JSDoc (see AGENTS.md "Documentation Generation").
    overstated capability is worse than a missing paragraph.
 6. **Wire up structure.** Register sidebar entries, icons and llms coverage. See
    [structure](references/structure.md).
-7. **Design each diagram on purpose.** For every diagram, ask what a reader of
-   that section would get wrong, pick the component that shows it (see
-   [Diagrams](references/structure.md#diagrams)), and fill it with the page's
-   own names and values. If no component fits, build one in
+7. **Design each diagram on purpose.** Follow [Diagrams](#diagrams): ask what a
+   reader of that section would get wrong, pick the component that shows it
+   (see [the component table](references/structure.md#diagrams)), and fill it
+   with the page's own names and values. If no component fits, build one in
    `website/src/components/diagrams/` in the shared style, try it on its best
    page, and show the user before using it elsewhere.
 8. **Build, look, push.** Run `pnpm run build` in `website/` (it regenerates
@@ -110,57 +110,6 @@ Each of these was a correction. Don't relearn them.
 - **Every secrets page mentions secret providers** (Doppler, Infisical, per-stage
   `secrets`), not just `.env`.
   More: [Secrets pages](references/page-shapes.md#secrets-pages).
-- **Diagrams show the platform, not a request.** The What is diagram draws how
-  the platform is structured and what contains what, as borders: an AWS account
-  around a region, with IAM roles outside it; a Cloudflare account around a zone
-  and a Durable Object namespace; a Neon project around its branches. A request
-  flowing through boxes was rejected. Each platform has its own model, so draw
-  that one. Use `groups` on `DAG`.
-- **Pick the visual by the question.** A `DAG` was the only tool, and it was
-  "so overused": a box-and-arrow picture of SQS, Lambda or KV showed nothing a
-  reader didn't already know. Now there's a component per question: `Sequence`,
-  `Timeline`, `WorldMap`, `Log`, `StateMachine`, `Records`, `BranchGraph`, `Tree`,
-  `Responsibility`, and `DAG` for containment and real flows. The
-  `Responsibility` chart for choosing a runtime was the one the user called
-  great: it shows the idea itself, a staircase of who manages what.
-  More: [Diagrams](references/structure.md#diagrams).
-- **Don't reach for `Sequence` by default either.** After the DAG, Sequence
-  became the overused one: 25 pages drew a request bouncing between lifelines.
-  Use it only when the order of messages between parties *is* the idea (receive,
-  hide, delete; a token exchange; an ACME challenge). Otherwise draw what the
-  section is about: who can get past a boundary (`Boundaries`: Access,
-  Turnstile, signed webhooks, private services, tunnels), what a log or table
-  ends up holding (`Records`: a gateway's request log, the rows a pipeline
-  keeps), what happens over time (`Timeline`: cache hits after a miss, webhook
-  retries), or the states something moves through (`StateMachine`: a
-  subscription). Count the Sequences across the docs after a batch; a dozen is
-  plenty.
-- **Box-and-arrow is the last resort.** A second review rejected eight more
-  diagrams as "too generic": a bus with two rule boxes, a topic fanning out to
-  three boxes, writer and reader arrows into a volume box, `t3.small → size →
-  instance`, Deployment `creates` Pods, and a Web Function lane of scattered
-  bars. Each became a picture of the thing itself: the event's JSON against each
-  rule's pattern (`Fanout`), one line per subscriber, the queue's contents in no
-  order and FIFO groups in line (`Queue`), zones under one shared volume
-  (`Zones`), properties written inside the instance, objects on the API server
-  above Pods on nodes (`Tree`), and the Lambda page's spike absorbed by one
-  environment. Before drawing nodes and edges, ask what the thing looks like
-  inside.
-- **Draw movement and time, not tables.** Two components were built, rejected
-  and deleted: `Phases` (a grid of sentences, half of them empty dashes) and
-  `Matrix` (an allowed/denied truth table). Both said in boxes what a paragraph
-  already said. Their pages now show a value travelling (`Sequence`), code
-  running at two moments (`Timeline`), and a call passing two checks
-  (`Sequence`). When the user rejects a kind of visual, remove the component
-  and its rows in the skill, not just the one instance.
-- **Containment is a border, never an arrow.** Whenever one thing holds another
-  (an organization its accounts, a Bucket its objects, a cluster its instances,
-  a namespace its objects, a role its policies), draw the holder as a border
-  around what it holds. Arrows are only for things that move or call: requests,
-  messages, writes, events. A tree of arrows fanning out from a parent was
-  rejected as ugly and uninformative. Design each chapter's diagram for the one
-  idea its section explains.
-  More: [Diagrams](references/structure.md#diagrams).
 - **Never write about the page itself.** No "This page introduces…", "This
   chapter starts with…, then…", "the rest of this page explains…". Open on the
   subject, and introduce an example as "Take one small app: …". A short repeat
@@ -174,13 +123,6 @@ Each of these was a correction. Don't relearn them.
 - **Words the user rejected**: "A taste" (now "A quick example"), "a set of
   services", "the largest" when it isn't the point, "New to X? … walks through
   a, b, c, d, e…" (now "Start with [What is X?]").
-- **Draw the platform's real model, in full.** An AWS organization drawn as four
-  accounts in a box "left a lot to be desired": the real model is a tree of
-  OUs, with policies flowing down. Then an org chart of connector lines was
-  rejected too: draw it as nested borders, accounts inside their OU, OUs inside
-  their parent, and the policy tag on the OU it's attached to. Before drawing, check what the platform
-  actually supports (nesting, inheritance, scopes) and what the package can
-  declare (`AWS.Organizations.OrganizationalUnit`, `Policy`), and show both.
 - **Provider pages are about the provider.** Core Alchemy behaviour, like how
   `Config` travels from deploy to run time, `Redacted`, defaults, or reading
   Config in Construction rather than a handler, lives on the core pages
@@ -189,16 +131,54 @@ Each of these was a correction. Don't relearn them.
   variables and caps them at 4 KB; Worker `Config` binds as `secret_text`) and
   links the core page. Move anything worth keeping to the core page rather than
   deleting it.
-- **Every concept chapter gets a diagram, on every provider.** AWS had one per
-  chapter while GCP, Cloudflare and the smaller providers had almost none, and
-  their docs read as "sparse". A chapter whose page jumps straight into code
-  first gets a short section on the platform's model, then the diagram, then
-  the code. Skip only tutorials and framework recipes. Before writing a
-  diagram's labels, check each claim against the page and the source: a
-  multi-node swarm, a resolve notification and a "more info needed" state
-  were all drafted and cut because nothing backed them.
 - **Show the snippet the section talks about.** A section that names a resource,
   like a CloudWatch dashboard, shows a small snippet declaring it.
+
+## Diagrams
+
+Diagrams were reviewed harder than anything else in these docs. Every rule here
+replaced a diagram the user rejected. Details, the component table and layout
+gotchas are in [Diagrams](references/structure.md#diagrams).
+
+- **Every concept chapter gets one, on every provider.** GCP, Cloudflare and the
+  smaller providers once had almost none, and read as "sparse" next to AWS. A
+  chapter that starts straight with code first gets a short section on the
+  platform's model, then the diagram, then the code. Skip tutorials and
+  framework recipes.
+- **Draw the thing, not a request bouncing between boxes.** Ask what the
+  section is about and what a reader would get wrong, then draw that: the
+  queue's contents, the event's JSON against each rule, an environment over
+  time, a tunnel through a wall. Generic pictures were rejected again and
+  again: a request flowing through boxes, `t3.small → size → instance`, a topic
+  fanning out to three boxes, writer and reader arrows into a volume box,
+  Deployment `creates` Pods.
+- **Pick the component by the question**, never by habit. `DAG` and then
+  `Sequence` each became "so overused". Use `Sequence` only when the order of
+  messages between parties is itself the idea (receive, hide, delete; a token
+  exchange; an ACME challenge). About a dozen across the docs is plenty, so
+  count them after a batch. The best-received diagrams showed the idea itself:
+  `Responsibility`'s staircase of who manages what, OUs as nested borders, and
+  the Tunnel as an arrow through a dotted gap in the wall.
+- **Containment is a border, never an arrow.** An organization around its OUs
+  and accounts, a Bucket around its objects, a branch around its database. An
+  arrow is only for something that moves or calls.
+- **A property is not a node.** An instance's type and image, or a Worker's
+  tokens, go inside its box (`specs`), not in boxes of their own with arrows.
+- **Draw the platform's real model, in full.** An AWS organization is a tree of
+  OUs with policies flowing down, not four accounts in a box. GCP's VPC is
+  global and its subnets are regional.
+- **Never a table of text in boxes.** `Phases` (a grid of sentences) and `Matrix`
+  (an allowed/denied truth table) were built, rejected and deleted. When a kind
+  of visual is rejected, delete the component and its rows here, not just the
+  one instance.
+- **Fill it with the page's own names and values**, and check every label against
+  the page and the source. A multi-node swarm, an Axiom "resolved" alert and a
+  Stripe "more info needed" state were drafted and cut, because nothing backed
+  them.
+- **It must read at the column's width.** Lay wide things out top to bottom, keep
+  labels short, put no label on top of a line, and leave no empty rows or
+  right-hand space. Look at every diagram on a contact sheet and on the real
+  page before you push.
 
 ## When you finish
 

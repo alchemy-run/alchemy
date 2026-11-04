@@ -68,15 +68,15 @@ mixing them on a page is fine.
 | Where does one event or message go, and why? Routing by content, broadcast copies, filters | `Fanout` (the item's JSON, each route's condition, match or not). No labels sitting on a line: a "copy" chip on each delivery was rejected | `aws/messaging/eventbridge`, `aws/messaging/sns` |
 | What's in a queue right now, and who holds what? | `Queue` (`messages` for a standard queue in no order, `groups` for FIFO message groups) | `aws/messaging/sqs` |
 | How do compute and shared storage spread over zones? | `Zones` | `aws/data/rds` |
-| What can reach what across a boundary? Tunnels, private networks, refused connections | `Boundaries` (zones as borders, a `tunnel` arrow through a dotted gap in the wall, a `blocked` path ending in a cross; lay it out top to bottom so it fits the column) | `cloudflare/networking/tunnel` |
+| What can reach what across a boundary? Tunnels, login walls, signed webhooks, private services | `Boundaries` (zones as borders, a `tunnel` arrow through a dotted gap in the wall, a `blocked` path ending in a cross) | `cloudflare/networking/tunnel`, `cloudflare/security/access`, `gcp/networking/private-services` |
 | Who manages each layer, you or the platform? | `Responsibility` | `aws/compute/choosing-a-runtime` |
-| What happens, in what order, between whom? Which checks does a call pass? | `Sequence` | `aws/messaging/sqs`, `acme/what-is-acme`, `aws/iam` (across accounts) |
+| In what order do messages pass between parties, when that order *is* the idea? A protocol, a token exchange, receive-hide-delete | `Sequence`, sparingly (about a dozen across the docs) | `aws/messaging/sqs`, `acme/what-is-acme`, `gcp/security/federated-identity` |
 | What runs when? Concurrency, waiting, propagation | `Timeline` | `aws/compute/lambda`, `cloudflare/data/kv` |
 | Where in the world does it run? | `WorldMap` | `cloudflare/compute/durable-objects`, `cloudflare/data/hyperdrive` |
 | What is ordered, and who has read how far? | `Log` | `cloudflare/messaging/k2`, `aws/messaging/kinesis` |
-| What states does it move through? | `StateMachine` | `cloudflare/messaging/queues`, `aws/observability/cloudwatch` |
-| How is data laid out, and what does a query read? | `Records` | `aws/data/dynamodb`, `aws/data/s3` |
-| How does a value or a line of code travel from deploy to run time? | `Sequence` (a value's journey) or `Timeline` (what runs when) | `aws/security/secrets-env`, `infrastructure-as-effects/phases` |
+| What states does it move through? | `StateMachine` | `cloudflare/messaging/queues`, `stripe/guides/subscriptions` |
+| How is data laid out, what does a query read, what does a log hold? | `Records` | `aws/data/dynamodb`, `cloudflare/ai/ai-gateway` (a request log), `cloudflare/data/pipelines` (the rows SQL keeps) |
+| How does a value or a line of code travel from deploy to run time? | `Timeline` (what runs when) or `Sequence` (a value's journey) | `infrastructure-as-effects/phases`, `infrastructure-as-effects/circular-bindings` |
 | How do copies relate over time? | `BranchGraph` | `neon/data/branching` |
 | What nests inside what, to any depth, and what applies to each branch? | `Tree`: nested borders, each parent drawn around its children and shrunk to fit them, so there's no empty space on the right; mark small branches `side` so they stack beside a big one instead of taking a mostly empty row (`scopes` tag the container a policy is attached to; `dashed`, `wide`, `specs` for a box's own properties) | `aws/accounts-and-regions`, `aws/compute/ec2`, `aws/compute/eks` |
 
@@ -118,7 +118,10 @@ Rules for every diagram:
   the caption.
 - **The caption says what the picture means**, in a sentence or two.
 - **Look at it.** Run `scripts/diagram-sheet.py /tmp/sheet.png <path>…` against
-  the dev server and read the sheet. Overlapping labels, overflowing text,
+  the dev server and read the sheet (`SHEET_SCALE=1` for long pages). The sheet
+  shrinks every diagram to one width, so also screenshot the real page
+  (`scripts/screenshot.sh`) to check the text is readable at the column's
+  width. Overlapping labels, overflowing text,
   missing edges and clipped bottoms don't show up any other way.
 
 ### Component gotchas
@@ -127,6 +130,23 @@ Rules for every diagram:
 - `side` works only on a node with a parent. Two top-level nodes always stack, so wrap them in their container (an account, a project) to sit them side by side.
 
 Each of these came up on a sheet and was fixed:
+
+- **Boundaries:** lay it out top to bottom (`row`, `col`) so it fits the
+  column; four columns across render too small to read. Put the caller and the
+  edge across the top and the guarded zone below. A vertical link enters a
+  zone's top-left, so give that zone `labelAt: "right"`. A `blocked` path drops
+  straight down into the zone's side wall when its column is clear, and
+  otherwise runs over the top to the wall. A `tunnel` is a plain arrow, with a
+  dotted gap where it crosses the wall. A rounded pipe around the arrow was
+  rejected.
+- **Fanout:** never put a chip or label on top of a line. A "copy" box on each
+  delivery was rejected. Say "each gets its own copy" in the caption.
+- **Tree:** boxes shrink to fit, and `side` stacks small siblings in a column
+  beside a big one instead of leaving an empty row. `specs` writes a box's own
+  properties inside it. Two top-level nodes always stack, so wrap them in their
+  container.
+- **Sequence:** actor boxes widen to fit their label and type. Keep at most four
+  or five actors, or the labels get small.
 
 - **Timeline:** at `end={10}` one unit is about 56px, and a bar's label needs
   about 6.4px a character plus 12. A label that doesn't fit spills after the bar
