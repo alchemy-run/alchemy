@@ -1,5 +1,6 @@
 import type { Progress } from "@alchemy.run/domain/FanOut";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -20,10 +21,11 @@ export interface MigrationProps {
   /** The Workflow that moves a batch of old objects. */
   workflowName: string;
   /**
-   * Each old (Domain version 0) class the Worker's code can move, and the
-   * route its objects move to in the shared class.
+   * Each old class the Worker's code can move (a route's Domain version 0
+   * class, and its class from before versions), the binding the code reaches
+   * it by, and the route its objects move to in the shared class.
    */
-  classes: { className: string; route: string }[];
+  classes: { className: string; binding: string; route: string }[];
   /** The Worker's Durable Object namespaces by class: the old classes still live among them. */
   namespaces: Record<string, string>;
   /** The Worker's code and settings, so every upload moves what the last one couldn't. */
@@ -125,8 +127,21 @@ const MigrationLive = () =>
       const timeout = (news.timeoutSeconds ?? 1800) * 1000;
       const attrs = { accountId, workflowName };
 
-      // The old classes the upload kept, and their objects that may hold data.
-      const live = news.classes.filter(({ className }) => news.namespaces[className] !== undefined);
+      // The old classes the upload kept, and their objects that may hold data. Models
+      // that shared a class from before versions each bind it, and the upload keeps
+      // only the binding of the model that keeps its data: the others move nothing.
+      const settings = yield* workers.getScriptScriptAndVersionSetting({
+        accountId,
+        scriptName: news.scriptName,
+      });
+      const bound = new Set(
+        (settings.bindings ?? []).flatMap((binding) =>
+          binding.type === "durable_object_namespace" ? [binding.name] : [],
+        ),
+      );
+      const live = news.classes.filter(
+        ({ className, binding }) => news.namespaces[className] !== undefined && bound.has(binding),
+      );
       const pages: Array<{ n: number; className: string; route: string; ids: string[] }> = [];
       for (const { className, route } of live) {
         const objects = yield* durableObjects.listNamespaceObjects

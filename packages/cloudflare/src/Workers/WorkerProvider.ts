@@ -3442,7 +3442,7 @@ export const LiveWorkerProvider = () =>
         const deployedDomainVersion = DomainVersion.deployedVersion(oldTags);
         yield* DomainVersion.refuseDowngrade({ scriptName: name, deployed: deployedDomainVersion });
         if (domainClasses.length > 0) {
-          const renamed = yield* DomainVersion.migrate({
+          const { renamed, kept } = yield* DomainVersion.migrate({
             scriptName: name,
             deployed: deployedDomainVersion,
             classes: domainClasses,
@@ -3464,6 +3464,13 @@ export const LiveWorkerProvider = () =>
             }
             // A Domain class's logical id is its class name.
             oldDoClassNameByLogicalId[to] = from;
+          }
+          // Kept under its own name, now through the binding of the model that keeps it.
+          for (const { className, binding } of kept) {
+            for (const [logicalId, deployedClass] of Object.entries(oldDoClassNameByLogicalId)) {
+              if (deployedClass === className) delete oldDoClassNameByLogicalId[logicalId];
+            }
+            oldDoClassNameByLogicalId[binding] = className;
           }
         }
         const currentDoClassNameByLogicalId = Object.fromEntries(
@@ -5894,6 +5901,33 @@ const withoutClasses = (
             },
       );
 
+/** `bindings` without the Durable Object bindings named in `names`. */
+const withoutBindings = (
+  bindings: ResourceBinding<Worker["Binding"]>[],
+  scriptName: string,
+  names: ReadonlySet<string>,
+) =>
+  names.size === 0
+    ? bindings
+    : bindings.map((binding) =>
+        binding.data.bindings === undefined
+          ? binding
+          : {
+              ...binding,
+              data: {
+                ...binding.data,
+                bindings: binding.data.bindings.filter(
+                  (item: WorkerBinding) =>
+                    !(
+                      item.type === "durable_object_namespace" &&
+                      names.has(item.name) &&
+                      (item.scriptName === undefined || item.scriptName === scriptName)
+                    ),
+                ),
+              },
+            },
+      );
+
 /**
  * Leave out of the upload each version 0 Domain class whose objects have all
  * moved to the shared class, so the upload deletes it (see
@@ -5916,8 +5950,8 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
     | undefined;
 }) {
   const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
-  const movers = domainClasses.filter((domainClass) => domainClass.mover);
-  if (movers.length === 0) return { bindings, dropped: new Set<string>() };
+  const allMovers = domainClasses.filter((domainClass) => domainClass.mover);
+  if (allMovers.length === 0) return { bindings, dropped: new Set<string>() };
   const tags = Array.from(existingSettings?.tags ?? []);
   const deployed = DomainVersion.deployedVersion(tags);
   const deployedClasses = new Set(
@@ -5934,23 +5968,36 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
     ),
   );
   // Classes from before Domain versions are renamed to their version 0 names in this upload.
-  for (const { to } of yield* DomainVersion.migrate({
+  const { renamed } = yield* DomainVersion.migrate({
     scriptName,
     deployed,
     classes: domainClasses,
     deployedClasses,
-  }))
-    deployedClasses.add(to);
+  });
+  for (const { to } of renamed) deployedClasses.add(to);
+  // A class from before Domain versions that models shared is bound by each of
+  // them: only the binding of the model that keeps its data stays.
+  const beforeVersions = allMovers.filter((mover) => mover.binding !== undefined);
+  const keepers = yield* DomainVersion.legacyKeepers({
+    scriptName,
+    classes: beforeVersions,
+    deployedClasses,
+  });
+  const unkept = new Set(
+    beforeVersions
+      .filter((mover) => keepers.get(mover.className)?.binding !== mover.binding)
+      .map((mover) => mover.binding!),
+  );
+  const movers = allMovers.filter(
+    (mover) => mover.binding === undefined || !unkept.has(mover.binding),
+  );
+  const leaveOut = (dropped: ReadonlySet<string>) => ({
+    bindings: withoutBindings(withoutClasses(bindings, scriptName, dropped), scriptName, unkept),
+    dropped,
+  });
   // None of them on the script (a new Worker, or every one deleted): nothing to look up.
   if (!movers.some((mover) => deployedClasses.has(mover.className)))
-    return {
-      bindings: withoutClasses(
-        bindings,
-        scriptName,
-        new Set(movers.map((mover) => mover.className)),
-      ),
-      dropped: new Set(movers.map((mover) => mover.className)),
-    };
+    return leaveOut(new Set(allMovers.map((mover) => mover.className)));
   // The migration Workflow's complete passes: see `DomainVersion.passMarker`.
   const workflowName = bindings
     .flatMap((b) => b.data.bindings ?? [])
@@ -5984,11 +6031,9 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
     if (namespace.script === scriptName && namespace.class && namespace.id)
       namespaces.set(namespace.class, namespace.id);
   const kept = DomainVersion.keptMovers({ movers, deployedClasses, namespaces, passes });
-  const dropped = new Set(
-    movers.map((mover) => mover.className).filter((className) => !kept.has(className)),
+  return leaveOut(
+    new Set(allMovers.map((mover) => mover.className).filter((className) => !kept.has(className))),
   );
-  if (dropped.size === 0) return { bindings, dropped };
-  return { bindings: withoutClasses(bindings, scriptName, dropped), dropped };
 });
 
 /**

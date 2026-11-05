@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import {
@@ -75,6 +76,26 @@ const declare = CloudflareDurableObject as unknown as (
   impl: ObjectImpl,
 ) => Effect.Effect<Namespace, never, Worker>;
 
+/** Declare the class `className` with `impl`, bound as `binding`. */
+const declareAs = (binding: string, className: string, impl: ObjectImpl) => {
+  if (binding === className) return declare(binding, impl);
+  const Class = (
+    CloudflareDurableObject as unknown as () => (
+      name: string,
+      props: { readonly className: string },
+    ) => Effect.Effect<Namespace> & {
+      readonly make: (impl: ObjectImpl) => Layer.Layer<never, never, Worker>;
+    }
+  )()(binding, { className });
+  return Effect.provide(Class, Class.make(impl)) as Effect.Effect<Namespace, never, Worker>;
+};
+
+/** A class an object's data may still be on: its name, and the binding the code reaches it by. */
+export interface LegacyClass {
+  readonly binding: string;
+  readonly className: string;
+}
+
 /** A move of an old object's storage that didn't complete; the move is tried again. */
 export class DomainMoveFailed extends Data.TaggedError("DomainMoveFailed")<{
   readonly message: string;
@@ -104,7 +125,7 @@ const parseName = (name: string | undefined) => {
 interface Classes {
   /** Every route this Worker's code hosts, and its implementation. */
   readonly routes: Map<string, ObjectImpl>;
-  /** Each route's version 0 class, while the code still moves its objects. */
+  /** The binding of each route's old class, while the code still moves its objects. */
   readonly movers: Map<string, string>;
   readonly namespace: Namespace;
   /** The migration Workflow's name, as deployed. */
@@ -149,23 +170,22 @@ export const sharedClasses = Effect.fn(function* () {
     /** Each hosted route's version 0 class. */
     movers: shared.movers,
     /**
-     * Host `route`'s objects in the shared class. `legacy` is the class they
-     * had in version 0: declared too, running the same code, so a Worker
-     * upgraded from it moves their storage over.
+     * Host `route`'s objects in the shared class. `legacy` are the classes
+     * they may still be on: their version 0 class, and their class from
+     * before versions. Each is declared too, running the same code, so a
+     * Worker upgraded from either moves their storage over.
      */
-    object: (route: string, impl: ObjectImpl, legacy?: string) =>
+    object: (route: string, impl: ObjectImpl, legacy: ReadonlyArray<LegacyClass> = []) =>
       Effect.gen(function* () {
         shared.routes.set(route, impl);
-        // At deploy time every version 0 class is declared, and the upload keeps
+        if (shared.movers.has(route)) return routeView(shared.namespace, route);
+        // At deploy time every candidate class is declared, and the upload keeps
         // those still holding objects (see `Version.keptMovers`). At runtime only
         // those the upload kept have a binding: declaring another would fail.
-        if (
-          legacy !== undefined &&
-          !shared.movers.has(route) &&
-          (!globalThis.__ALCHEMY_RUNTIME__ || shared.env?.[legacy] !== undefined)
-        ) {
-          shared.movers.set(route, legacy);
-          yield* declare(legacy, source(shared, route, impl));
+        for (const { binding, className } of legacy) {
+          if (globalThis.__ALCHEMY_RUNTIME__ && shared.env?.[binding] === undefined) continue;
+          if (!shared.movers.has(route)) shared.movers.set(route, binding);
+          yield* declareAs(binding, className, source(shared, route, impl));
         }
         return routeView(shared.namespace, route);
       }),

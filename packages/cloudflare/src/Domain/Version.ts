@@ -39,7 +39,18 @@ export interface DomainClass {
    * to the shared class: live while any of them still holds data.
    */
   readonly mover?: boolean;
+  /**
+   * Set on a class from before Domain version 0 (`className` is then its
+   * `legacyName`) that version 1 code keeps live under its own name while its
+   * objects move: the model's binding to it. Models that shared the class each
+   * bind it; the upload keeps only the binding of the model that keeps its
+   * data (see {@link legacyKeepers}).
+   */
+  readonly binding?: string;
 }
+
+/** The binding through which a model reaches its class from before Domain version 0. */
+export const beforeVersionsBinding = (className: string) => `${className}.BeforeVersions`;
 
 /**
  * Models in one Worker shared a Durable Object class before Domain version 0,
@@ -186,9 +197,54 @@ export const keptMovers = ({
 };
 
 /**
- * The Durable Object class renames that bring a Worker deployed at `deployed`
- * up to {@link DOMAIN_VERSION} without losing data. `deployedClasses` are the
- * classes the Worker hosts now.
+ * The model that keeps each class from before Domain version 0 that the
+ * Worker still has: the only model that hosts it, or the one of those that
+ * shared it with `legacyData` set.
+ */
+export const legacyKeepers = Effect.fn(function* ({
+  scriptName,
+  classes,
+  deployedClasses,
+}: {
+  readonly scriptName: string;
+  readonly classes: ReadonlyArray<DomainClass>;
+  readonly deployedClasses: ReadonlySet<string>;
+}) {
+  const byLegacyName = new Map<string, Array<DomainClass>>();
+  for (const domainClass of classes) {
+    if (!deployedClasses.has(domainClass.legacyName)) continue;
+    const sharing = byLegacyName.get(domainClass.legacyName) ?? [];
+    sharing.push(domainClass);
+    byLegacyName.set(domainClass.legacyName, sharing);
+  }
+  const keepers = new Map<string, DomainClass>();
+  for (const [legacyName, sharing] of byLegacyName) {
+    const keeps =
+      sharing.length === 1 ? sharing : sharing.filter((domainClass) => domainClass.legacyData);
+    if (keeps.length !== 1) {
+      return yield* new AmbiguousDomainLegacyData({
+        scriptName,
+        legacyName,
+        models: sharing.map((domainClass) => domainClass.model),
+      });
+    }
+    keepers.set(legacyName, keeps[0]!);
+  }
+  return keepers;
+});
+
+/**
+ * How a Worker deployed at `deployed` reaches {@link DOMAIN_VERSION} without
+ * losing data. `deployedClasses` are the classes the Worker hosts now.
+ *
+ * - `renamed`: Durable Object class renames in this upload. Version 0 code
+ *   renames the classes from before versions (`AccountAggregate`) after their
+ *   model (`Billing.AccountAggregate`).
+ * - `kept`: classes from before versions that version 1 code keeps under
+ *   their own names, by the binding of the model that keeps each, while their
+ *   objects move to the shared class. Nothing is renamed: a rename lists its
+ *   class twice in the upload's exports, and a large Worker would pass
+ *   Cloudflare's limit of 100.
  */
 export const migrate = Effect.fn(function* ({
   scriptName,
@@ -202,30 +258,21 @@ export const migrate = Effect.fn(function* ({
   readonly deployedClasses: ReadonlySet<string>;
 }) {
   const renamed: Array<{ readonly from: string; readonly to: string }> = [];
-  if (deployed === undefined) {
-    // none -> 0: classes were named after the definition (`AccountAggregate`),
-    // now after the model too (`Billing.AccountAggregate`).
-    const byLegacyName = new Map<string, Array<DomainClass>>();
-    for (const domainClass of classes) {
-      if (!deployedClasses.has(domainClass.legacyName)) continue;
-      const sharing = byLegacyName.get(domainClass.legacyName) ?? [];
-      sharing.push(domainClass);
-      byLegacyName.set(domainClass.legacyName, sharing);
-    }
-    for (const [legacyName, sharing] of byLegacyName) {
-      const keeps =
-        sharing.length === 1 ? sharing : sharing.filter((domainClass) => domainClass.legacyData);
-      if (keeps.length !== 1) {
-        return yield* new AmbiguousDomainLegacyData({
-          scriptName,
-          legacyName,
-          models: sharing.map((domainClass) => domainClass.model),
-        });
-      }
-      renamed.push({ from: legacyName, to: keeps[0]!.className });
-    }
+  const kept: Array<{ readonly className: string; readonly binding: string }> = [];
+  if (deployed !== undefined) return { renamed, kept };
+  // Version 1 code binds each class from before versions itself.
+  const beforeVersions = classes.filter((domainClass) => domainClass.binding !== undefined);
+  if (beforeVersions.length > 0) {
+    const keepers = yield* legacyKeepers({ scriptName, classes: beforeVersions, deployedClasses });
+    for (const [className, keeper] of keepers) kept.push({ className, binding: keeper.binding! });
+    return { renamed, kept };
   }
+  // none -> 0: classes were named after the definition (`AccountAggregate`),
+  // now after the model too (`Billing.AccountAggregate`).
+  const keepers = yield* legacyKeepers({ scriptName, classes, deployedClasses });
+  for (const [legacyName, keeper] of keepers)
+    renamed.push({ from: legacyName, to: keeper.className });
   // 0 -> 1: nothing is renamed. The version 0 classes stay live next to the
   // shared class while their objects move (see `keptMovers`).
-  return renamed;
+  return { renamed, kept };
 });

@@ -65,8 +65,8 @@ import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.
 import { Backfill as BackfillRun } from "./Backfill.ts";
 import { Migration } from "./Migration.ts";
 import { backfillRuntime, exclusively, type Random } from "./Runtime.ts";
-import { ID_KEY, sharedClasses } from "./Shared.ts";
-import { DeployVersion } from "./Version.ts";
+import { ID_KEY, type LegacyClass, sharedClasses } from "./Shared.ts";
+import { beforeVersionsBinding, DeployVersion } from "./Version.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -1395,6 +1395,36 @@ const record = (
     });
   });
 
+/**
+ * Tell the Worker deploy about a class from before Domain version 0 that
+ * version 1 code keeps under its own name while its objects move (`legacyName`,
+ * now `current`), and the binding the model reaches it by. See `Version.ts`.
+ */
+const recordBeforeVersions = (
+  modelName: string,
+  legacyName: string,
+  legacyData: boolean,
+  current: string,
+) =>
+  Effect.gen(function* () {
+    const worker = yield* CloudflareWorker;
+    const binding = beforeVersionsBinding(current);
+    yield* worker.bind`${binding}.DomainVersion`({
+      domainClasses: [
+        { model: modelName, className: legacyName, legacyName, legacyData, mover: true, binding },
+      ],
+    });
+  });
+
+/** The classes a version 1 route's objects may still be on: its version 0 class, and its class from before versions. */
+const legacyClassesOf = (current: string, legacyName: string): ReadonlyArray<LegacyClass> => [
+  { binding: current, className: current },
+  { binding: beforeVersionsBinding(current), className: legacyName },
+];
+
+/** Each saga workflow's version 0 class, and its class from before versions. */
+const sagaLegacyNames = new Map<string, string>();
+
 /** The models each Worker hosts, by name. */
 const claims = new WeakMap<object, ReturnType<typeof hostedModels>>();
 const claimsOf = (host: object) => {
@@ -1441,11 +1471,17 @@ const durableObjectPlatform = (
       // Version 1: every object of every model in one class (see `Shared.ts`).
       const shared =
         version !== undefined && version >= 1 ? yield* inInit(sharedClasses()) : undefined;
-      /** Each model's version 0 classes, which a deploy moves to the shared class. */
-      const moversOf = new Map<string, Array<string>>();
-      const mover = (modelName: string, cls: string) => {
+      /**
+       * Each model's old classes, which a deploy moves to the shared class: a
+       * route's version 0 class, and its class from before versions.
+       */
+      const moversOf = new Map<string, Array<LegacyClass & { readonly route: string }>>();
+      const mover = (modelName: string, route: string, legacyName: string) => {
         const movers = moversOf.get(modelName) ?? [];
-        if (!movers.includes(cls)) movers.push(cls);
+        if (!movers.some((moving) => moving.route === route)) {
+          for (const legacy of legacyClassesOf(route, legacyName))
+            movers.push({ ...legacy, route });
+        }
         moversOf.set(modelName, movers);
       };
 
@@ -1466,13 +1502,17 @@ const durableObjectPlatform = (
               ? declareIn(name, impl)
               : shared === undefined
                 ? Effect.andThen(record(modelName, name, legacyData), declareIn(named(name), impl))
-                : // The version 0 class stays declared, to move its objects over.
+                : // The old classes stay declared, to move their objects over.
                   Effect.andThen(
-                    Effect.andThen(
+                    Effect.all([
                       record(modelName, name, legacyData, name, true),
-                      Effect.sync(() => mover(modelName, named(name))),
+                      recordBeforeVersions(modelName, name, legacyData, named(name)),
+                      Effect.sync(() => mover(modelName, named(name), name)),
+                    ]),
+                    Effect.map(
+                      shared.object(named(name), impl, legacyClassesOf(named(name), name)),
+                      inJurisdiction,
                     ),
-                    Effect.map(shared.object(named(name), impl, named(name)), inJurisdiction),
                   );
           // Every consumer in the model this isolate runs, set once the model is built.
           let model: ReadonlyArray<string> = [];
@@ -2009,7 +2049,7 @@ const durableObjectPlatform = (
                       yield* Migration(named("DomainMigration"), {
                         scriptName: worker.workerName as unknown as string,
                         workflowName: shared.workflowName as string,
-                        classes: movers.map((cls) => ({ className: cls, route: cls })),
+                        classes: movers,
                         namespaces: worker.durableObjectNamespaces as unknown as Record<
                           string,
                           string
@@ -2082,12 +2122,19 @@ const durableObjectPlatform = (
             for (const saga of model.sagas)
               if (version === undefined) legacySagas.set(`${model.modelName}.${saga}`, saga);
               else {
-                if (shared !== undefined)
-                  mover(model.modelName, className(model.modelName, `${saga}Workflow`));
+                const current = className(model.modelName, `${saga}Workflow`);
+                const legacyName = `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`;
+                if (shared !== undefined) {
+                  mover(model.modelName, current, legacyName);
+                  sagaLegacyNames.set(current, legacyName);
+                  yield* inInit(
+                    recordBeforeVersions(model.modelName, legacyName, model.legacyData, current),
+                  );
+                }
                 yield* inInit(
                   record(
                     model.modelName,
-                    `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+                    legacyName,
                     model.legacyData,
                     `${saga}Workflow`,
                     shared !== undefined,
@@ -2227,7 +2274,18 @@ export function layerDurableObjects({
             version !== undefined && version >= 1
               ? // Saga runs in the shared class too, each workflow's on its own route.
                 makeEngine(jurisdiction, (name, impl) =>
-                  Effect.flatMap(sharedClasses(), (shared) => shared.object(name, impl, name)),
+                  Effect.flatMap(sharedClasses(), (shared) =>
+                    shared.object(
+                      name,
+                      impl,
+                      legacyClassesOf(
+                        name,
+                        // Recorded when the model is hosted, before its sagas register.
+                        sagaLegacyNames.get(name) ??
+                          name.slice(name.indexOf(".") + 1).replace(/[^A-Za-z0-9_]/g, "_"),
+                      ),
+                    ),
+                  ),
                 )
               : layerDurableObjectEngine({ jurisdiction });
           const legacySagas = new Map<string, string>();

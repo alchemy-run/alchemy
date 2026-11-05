@@ -208,3 +208,14 @@ export const boundClasses = Effect.fn(function* (scriptName: string) {
         "namespaceId" in binding ? (binding.namespaceId as string | undefined) : undefined;
   return classes;
 });
+
+/** The Worker's Durable Object bindings: each binding's name, and the class it binds. */
+export const doBindings = Effect.fn(function* (scriptName: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const settings = yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName });
+  const bindings: Record<string, string> = {};
+  for (const binding of settings.bindings ?? [])
+    if (binding.type === "durable_object_namespace" && "className" in binding && binding.className)
+      bindings[binding.name] = binding.className;
+  return bindings;
+});

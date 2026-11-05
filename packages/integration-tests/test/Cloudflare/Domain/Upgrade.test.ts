@@ -18,6 +18,8 @@ import * as Stream from "effect/Stream";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import SharedBillingWorker from "./fixtures/shared-billing-worker.ts";
 import SharedNoneWorker from "./fixtures/shared-none-worker.ts";
+import SharedV1BillingWorker from "./fixtures/shared-v1-billing-worker.ts";
+import SharedV1Worker from "./fixtures/shared-v1-worker.ts";
 import SharedWorker from "./fixtures/shared-worker.ts";
 import UpgradeNextWorker from "./fixtures/upgrade-next-worker.ts";
 import UpgradeNoneWorker from "./fixtures/upgrade-none-worker.ts";
@@ -25,7 +27,15 @@ import UpgradePlainWorker from "./fixtures/upgrade-plain-worker.ts";
 import UpgradeSharedNextWorker from "./fixtures/upgrade-shared-next-worker.ts";
 import UpgradeSharedWorker from "./fixtures/upgrade-shared-worker.ts";
 import UpgradeWorker from "./fixtures/upgrade-worker.ts";
-import { backdatePasses, movedBy, namespacesOf, tagsOf, untilListed, watch } from "./move.ts";
+import {
+  backdatePasses,
+  doBindings,
+  movedBy,
+  namespacesOf,
+  tagsOf,
+  untilListed,
+  watch,
+} from "./move.ts";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
@@ -413,8 +423,9 @@ test.provider(
 
 /**
  * A Worker deployed before Domain versions existed goes straight to the
- * shared class: its classes get their version 0 names in the upload, and
- * keys move on their first call, before the migration has listed them.
+ * shared class. Its classes keep their names: nothing is renamed, so the
+ * upload lists each once. Keys move on their first call, before the
+ * migration has listed them, and the move's passes delete the old classes.
  */
 test.provider(
   "upgrading a model deployed before Domain versions straight to the shared class keeps its data",
@@ -434,6 +445,18 @@ test.provider(
       yield* call(url, "/saga/s-1/kim", "POST");
       yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Running");
       const legacy = yield* namespacesOf(scriptName);
+      expect(Object.keys(legacy).sort()).toEqual([
+        "AccountAggregate",
+        "ApproveWorkflow",
+        "DomainDirectory",
+        "OwnersView",
+        "OwnersViewRun",
+      ]);
+      // The deploy's migration moves what Cloudflare lists: wait until it lists these.
+      yield* untilListed(
+        [legacy.AccountAggregate!, legacy.ApproveWorkflow!, legacy.OwnersView!],
+        (count) => count > 0,
+      );
 
       yield* stack.deploy(
         Effect.gen(function* () {
@@ -441,20 +464,109 @@ test.provider(
         }),
       );
       yield* waitForVersion(url, 1);
+      // kept under their own names, next to the shared class
       const upgraded = yield* namespacesOf(scriptName);
-      // renamed in place, kept while their objects move
-      expect(upgraded["Billing.AccountAggregate"]).toBe(legacy.AccountAggregate);
-      expect(upgraded["Billing.ApproveWorkflow"]).toBe(legacy.ApproveWorkflow);
+      expect(upgraded).toEqual({ ...legacy, AlchemyDomain: upgraded.AlchemyDomain });
       expect(upgraded.AlchemyDomain).toBeDefined();
+      // each reached through the model's binding to it
+      const bindings = yield* doBindings(scriptName);
+      for (const cls of Object.keys(legacy))
+        expect(bindings[`Billing.${cls}.BeforeVersions`]).toBe(cls);
       expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
+      expect(yield* movedBy(scriptName)).toBeGreaterThanOrEqual(3);
 
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       yield* call(url, "/approve/s-1/lee", "POST");
       yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Completed");
       expect(yield* call(url, "/Billing/state/s-1")).toEqual({ owner: "kim:lee" });
+      yield* call(url, "/Billing/open/a-2/ann", "POST");
+      yield* poll(url, "/Billing/owners/a-2", (body) => (body as any)?.owner === "ann");
+
+      // Once the move has settled, the next upload deletes the old classes.
+      yield* backdatePasses(scriptName, Object.keys(legacy));
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeSharedNextWorker };
+        }),
+      );
+      expect(yield* doBindings(scriptName)).toEqual({ AlchemyDomain: "AlchemyDomain" });
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/state/a-2")).toEqual({ owner: "ann" });
+      expect(yield* call(url, "/Billing/state/s-1")).toEqual({ owner: "kim:lee" });
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 600_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 1_200_000 },
+);
+
+/**
+ * Two models shared a class before Domain versions existed. Upgraded straight
+ * to the shared class, only the model that keeps the data moves it; the other
+ * starts empty. Neither chosen, the deploy stops before any upload.
+ */
+test.provider(
+  "upgrading models that shared a class straight to the shared class moves it to one",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const before = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* SharedNoneWorker };
+        }),
+      );
+      const url = before.worker.url!;
+      const scriptName = before.worker.workerName;
+      yield* waitForVersion(url, null);
+      yield* call(url, "/Billing/open/a-1/sam", "POST");
+      expect(yield* call(url, "/Audit/state/a-1")).toEqual({ owner: "sam" });
+      yield* poll(url, "/Billing/owners/a-1", (body) => (body as any)?.owner === "sam");
+      const legacy = yield* namespacesOf(scriptName);
+      yield* untilListed([legacy.AccountAggregate!], (count) => count > 0);
+
+      const ambiguous = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return { worker: yield* SharedV1Worker };
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(ambiguous)).toBe(true);
+      expect(String(ambiguous)).toContain("AmbiguousDomainLegacyData");
+      expect(yield* namespacesOf(scriptName)).toEqual(legacy);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* SharedV1BillingWorker };
+        }),
+      );
+      yield* waitForVersion(url, 1);
+      const upgraded = yield* namespacesOf(scriptName);
+      expect(upgraded).toEqual({ ...legacy, AlchemyDomain: upgraded.AlchemyDomain });
+      // Billing's binding stays; Audit's is left out
+      const bindings = yield* doBindings(scriptName);
+      expect(bindings["Billing.AccountAggregate.BeforeVersions"]).toBe("AccountAggregate");
+      expect(bindings["Audit.AccountAggregate.BeforeVersions"]).toBeUndefined();
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Audit/state/a-1")).toEqual({ owner: null });
+      // each model writes its own objects now
+      yield* call(url, "/Audit/open/a-1/ann", "POST");
+      expect(yield* call(url, "/Audit/state/a-1")).toEqual({ owner: "ann" });
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+
+      yield* backdatePasses(scriptName, Object.keys(legacy));
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* SharedV1BillingWorker };
+        }),
+      );
+      expect(yield* doBindings(scriptName)).toEqual({ AlchemyDomain: "AlchemyDomain" });
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Audit/state/a-1")).toEqual({ owner: "ann" });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 1_200_000 },
 );
