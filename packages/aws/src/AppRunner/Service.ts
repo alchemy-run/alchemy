@@ -391,8 +391,23 @@ export interface Service extends Resource<
     /** IAM policy statements attached to the managed instance role. */
     policyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  ServiceLookup
 > {}
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ServiceLookup =
+  | {
+      /** The ARN of the existing service. */
+      serviceArn: string;
+    }
+  | {
+      /** The name of the existing service. */
+      serviceName: string;
+    };
 
 export type ServiceServices = Credentials | Region | ServerHost | AWSEnvironment;
 
@@ -504,6 +519,17 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *     vpcConnectorArn: connector.vpcConnectorArn,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serviceArn` or `serviceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Point a domain at an existing service
+ * ```typescript
+ * const api = AWS.AppRunner.Service.lookup({ serviceName: "api" });
+ * const serviceUrl = api.serviceUrl;
  * ```
  *
  * @resource
@@ -1251,6 +1277,15 @@ await bootstrap(entrypoint);
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const service =
+            "serviceArn" in props
+              ? yield* readService(props.serviceArn)
+              : yield* findByName(props.serviceName);
+          return service === undefined
+            ? undefined
+            : toAttrs(service, platformAttributesOf(undefined));
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const service = output?.serviceArn
             ? yield* readService(output.serviceArn)
