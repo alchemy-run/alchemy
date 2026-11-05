@@ -85,8 +85,20 @@ export interface Memory extends Resource<
      * Current status of the memory (e.g. `ACTIVE`).
      */
     status: string;
-  }
+  },
+  never,
+  undefined,
+  MemoryLookup
 > {}
+
+/**
+ * Props for {@link Memory.lookup}: find a memory this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MemoryLookup {
+  /** The id of the existing memory. */
+  memoryId: string;
+}
 
 /**
  * An Amazon Bedrock AgentCore Memory — managed short- and long-term memory
@@ -154,6 +166,16 @@ export interface Memory extends Resource<
  *     return HttpServerResponse.json({ count: events.events.length });
  *   }),
  * };
+ * ```
+ *
+ * ### Looking up an existing memory
+ * `Memory.lookup` references a memory Alchemy doesn't manage (created in the
+ * console or by another stack), found by `memoryId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing memory
+ * ```typescript
+ * const existing = AWS.BedrockAgentCore.Memory.lookup({ memoryId: "..." });
  * ```
  *
  * @resource
@@ -228,6 +250,18 @@ export const MemoryProvider = () =>
             );
             return hydrated.filter((m) => m !== undefined).map(toAttributes);
           }),
+
+        lookup: Effect.fn(function* ({ memoryId }) {
+          const memory = yield* getMemoryOrUndefined(memoryId);
+
+          if (memory === undefined || memory.status === "DELETING") {
+            return undefined;
+          }
+
+          const attrs = toAttributes(memory);
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const memory = output?.memoryId
