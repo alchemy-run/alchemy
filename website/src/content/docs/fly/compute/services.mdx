@@ -264,8 +264,8 @@ export default class Gateway extends Fly.Service<Gateway>()(
 ```
 
 Binding makes `Gateway` deploy after `Users` and hands it the address
-and caller token of `Users`. Only Services that bind `Users` receive
-its token, so only they can call its methods. The caller must be on
+of `Users`. `Users` answers method calls only from the Apps that bind
+it, named by the `Fly-Src` header Fly's proxy signs. The caller must be on
 the same network as the target; otherwise its deploy fails with
 `Fly.ServiceUnreachable`.
 

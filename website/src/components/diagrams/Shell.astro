@@ -1,0 +1,104 @@
+---
+/**
+ * `<Shell />` — boxes inside boxes. Each shell wraps the ones it holds, laid
+ * out in a row, so the figure reads like a call: Worker(Git.Api(Repository,
+ * Registry, …)). Use it to show what runs inside what.
+ *
+ *   <Shell
+ *     shell={{
+ *       label: "Worker",
+ *       children: [{
+ *         label: "Git.Api",
+ *         tone: "accent",
+ *         children: [{ label: "Repository", type: "Durable Object" }, { label: "Registry" }],
+ *       }],
+ *     }}
+ *   />
+ */
+import "./diagram.css";
+
+interface Node {
+  label: string;
+  type?: string;
+  tone?: "accent" | "muted" | "default";
+  children?: Node[];
+}
+interface Props {
+  shell: Node;
+  caption?: string;
+}
+
+const { shell, caption } = Astro.props as Props;
+
+const PAD = 14;
+const HEAD = 30;
+const GAP = 10;
+const LEAF_H = 50;
+const CHAR = 7.6;
+
+interface Box {
+  node: Node;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  leaf: boolean;
+}
+
+const size = (n: Node): { w: number; h: number } => {
+  if (!n.children?.length) {
+    const text = Math.max(n.label.length * CHAR, (n.type?.length ?? 0) * 6.6);
+    return { w: Math.max(116, text + 28), h: n.type ? LEAF_H : 38 };
+  }
+  const kids = n.children.map(size);
+  const w = kids.reduce((a, k) => a + k.w, 0) + GAP * (kids.length - 1) + PAD * 2;
+  const h = HEAD + Math.max(...kids.map((k) => k.h)) + PAD;
+  return { w: Math.max(w, n.label.length * CHAR + PAD * 2), h };
+};
+
+const boxes: Box[] = [];
+const place = (n: Node, x: number, y: number) => {
+  const s = size(n);
+  const leaf = !n.children?.length;
+  boxes.push({ node: n, x, y, w: s.w, h: s.h, leaf });
+  if (leaf) return;
+  const kids = n.children!.map(size);
+  const total = kids.reduce((a, k) => a + k.w, 0) + GAP * (kids.length - 1);
+  let cx = x + (s.w - total) / 2;
+  n.children!.forEach((c, i) => {
+    place(c, cx, y + HEAD);
+    cx += kids[i].w + GAP;
+  });
+};
+
+const M = 8;
+place(shell, M, M);
+const root = size(shell);
+const W = root.w + M * 2;
+const H = root.h + M * 2;
+const cls = (t?: string) =>
+  t === "accent" ? "alc-fig__box alc-fig__box--accent" : t === "muted" ? "alc-fig__box alc-fig__box--muted" : "alc-fig__box";
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? shell.label}>
+    {boxes.map((b) =>
+      b.leaf ? (
+        <g>
+          <rect x={b.x} y={b.y} width={b.w} height={b.h} rx="8" class={cls(b.node.tone)} />
+          <text x={b.x + b.w / 2} y={b.y + (b.node.type ? b.h / 2 - 3 : b.h / 2 + 4)} text-anchor="middle" class="alc-fig__label">{b.node.label}</text>
+          {b.node.type && <text x={b.x + b.w / 2} y={b.y + b.h / 2 + 13} text-anchor="middle" class="alc-fig__type">{b.node.type}</text>}
+        </g>
+      ) : (
+        <g>
+          <rect x={b.x} y={b.y} width={b.w} height={b.h} rx="10" class={cls(b.node.tone)} />
+          <text x={b.x + PAD} y={b.y + 20} class="alc-fig__label">{b.node.label}</text>
+          {b.node.type && <text x={b.x + PAD + b.node.label.length * CHAR + 8} y={b.y + 20} class="alc-fig__type">{b.node.type}</text>}
+        </g>
+      ),
+    )}
+  </svg>
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>

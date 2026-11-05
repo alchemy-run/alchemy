@@ -8,6 +8,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import type { Annotations } from "./Annotations.ts";
 import type * as Command from "./Command.ts";
 import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
@@ -383,6 +384,7 @@ export interface ClientImpl {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Aggregate";
+  readonly annotations: Annotations;
   readonly aggregateName: string;
   readonly definition: AnyDefinition;
 }
@@ -624,6 +626,30 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * yield* accounts.unschedule(accountId, "statement"); // cancel it while it is pending
  * ```
  *
+ * ### Annotating aggregates
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's read tools, CLI help and OpenAPI document show its `description`
+ * after the sentence for each call.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Account extends Domain.Aggregate(
+ *   "Account",
+ *   {
+ *     id: AccountId,
+ *     state: Schema.Struct({ balance: Schema.Int }),
+ *     initial: { balance: 0 },
+ *     commands: [DepositMoney],
+ *     decide: { DepositMoney: (s, cmd) => [new MoneyDeposited({ balanceAfter: s.balance + cmd.amount })] },
+ *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
+ *   },
+ *   { description: "A bank account, which keeps its own balance." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const makeRef = <A extends Any>(aggregate: A, id: IdOf<A>): Ref<A> => {
@@ -711,6 +737,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C> & { readonly read?: R },
+  annotations: Annotations = {},
 ): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>> => {
   const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>>()(
     `alchemy/Domain/Aggregate/${name}`,
@@ -721,6 +748,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly aggregateName: Name = name;
     static readonly definition: Resolved<Id, S, C, Ms, Rejects, ReadOf<R>> = {
       ...definition,
@@ -796,6 +824,7 @@ export interface AggregateClass<
   Def extends AnyDefinition,
 > extends Context.ServiceClass<Key<Name>, string, Client<Def>> {
   readonly kind: "Aggregate";
+  readonly annotations: Annotations;
   readonly aggregateName: Name;
   readonly definition: Def;
   /** Address one instance of this aggregate. */

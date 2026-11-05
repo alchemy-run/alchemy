@@ -2,8 +2,22 @@
 title: Organizations and tokens
 description: How a PlanetScale organization holds your databases and members, how Alchemy signs in with OAuth or a service token, and how database credentials differ from deploy credentials.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Everything on PlanetScale belongs to an **organization**: its databases and their branches, its members, and its bill. There are two kinds of access to keep apart. A deploy credential lets Alchemy create and change databases. A **database credential** lets your app connect to one branch.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization" },
+    { id: "db", label: "app", type: "database", parent: "org" },
+    { id: "main", label: "main", type: "branch · production", parent: "db" },
+    { id: "r1", label: "app_rw", type: "role · readwriter", parent: "main", tone: "accent" },
+    { id: "pr", label: "pr-42", type: "branch", parent: "db" },
+    { id: "r2", label: "app_rw", type: "role · readwriter", parent: "pr", tone: "accent" },
+  ]}
+  scopes={[{ on: "org", label: "service token: deploys" }]}
+  caption="The service token Alchemy deploys with reaches the organization. Your app gets a role on one branch, which reaches that branch's data and nothing else."
+/>
 
 ## Sign in with a profile
 

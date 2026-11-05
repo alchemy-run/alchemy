@@ -8654,6 +8654,9 @@ importers:
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/s3
       '@types/aws-lambda':
         specifier: 'catalog:'
         version: 8.10.164
@@ -10599,6 +10602,9 @@ importers:
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/s3
       '@neon/functions':
         specifier: 'catalog:'
         version: 0.11.0(hono@4.13.13)
@@ -11087,12 +11093,12 @@ importers:
 
   submodules/distilled/packages/aws:
     dependencies:
-      '@distilled.cloud/aws4signer':
-        specifier: workspace:*
-        version: link:../aws4signer
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../core
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../s3
       effect:
         specifier: 4.1.0
         version: 4.1.0
@@ -11221,6 +11227,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../core
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../s3
       effect:
         specifier: 4.1.0
         version: 4.1.0
@@ -12019,6 +12028,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../core
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../s3
       effect:
         specifier: 4.1.0
         version: 4.1.0
@@ -12122,6 +12134,22 @@ importers:
       '@distilled.cloud/dev':
         specifier: workspace:*
         version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
+  submodules/distilled/packages/s3:
+    dependencies:
+      '@distilled.cloud/aws4signer':
+        specifier: workspace:*
+        version: link:../aws4signer
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
@@ -18955,6 +18983,7 @@ packages:
   '@smithy/core@3.36.0':
     resolution: {integrity: sha512-3hJiwG1F5t1SoXqp/yOCmYXziyx7ZVqF63S5W6YU201e/qwVaHPex+E/3vvyY9a3ORq/b+BydeNZpP2saQ9X2g==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.0':
     resolution: {integrity: sha512-2jsPi+7Zv2hSzD9IXR9D7DTqSn7mv4XalzRm+bESh53jiaUS3NKEUbpQFTJP0HhQy9qzZvluxQ3yS24zdRrqsA==}
@@ -39004,7 +39033,7 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 24.13.3
+      '@types/node': 26.6.5
 
   '@types/unist@2.0.11': {}
 

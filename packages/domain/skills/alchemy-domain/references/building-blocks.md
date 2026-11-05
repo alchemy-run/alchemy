@@ -378,7 +378,9 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
 
 Clients call commands and queries as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself, through its own middleware and `validate`.
 
-More: [Api](https://alchemy.run/domain/api).
+Give every declaration a `{ description }` as its last argument, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
+
+More: [Api](https://alchemy.run/domain/api), [Annotations](https://alchemy.run/domain/annotations).
 
 An Api is the domain's interface for its own clients. For a public or partner API, write a separate `HttpApi` with its own response schemas that calls the Api in process; see [hosting.md](hosting.md#public-and-partner-apis). `toHttpApi`, `toMcp` and `toCli` publish only the calls their `expose` option lists, as the domain shapes them, which is convenient for internal tools only; see [hosting.md](hosting.md#conveniences-for-internal-tools).
 

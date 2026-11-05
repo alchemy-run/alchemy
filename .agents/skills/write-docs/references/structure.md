@@ -61,6 +61,18 @@ that, and each has its own component in `website/src/components/diagrams/`
 `website/src/components/`). They share one look (`diagrams/diagram.css`), so
 mixing them on a page is fine.
 
+The caption sits under the panel, outside its border, as a note, so the
+drawing gets the whole panel. A new component wraps its drawing in
+`<div class="alc-fig__panel">` and puts the `figcaption` after it. A `DAG` grid
+starts at its first used `col` and `row`, so number them from 0.
+
+**Every diagram uses its panel.** The SVG's viewBox wraps what's drawn with an
+even margin, never room kept for something absent (a back-edge gutter on both
+sides, a zone border before a column with no zone, padding for a self-loop no
+state has). Look at the diagrams, not a linter: an audit script that flagged
+margins, fill and scale was cut because everything it flagged looked fine.
+Fix the component, not the page.
+
 | The section answers | Component | Good example |
 | --- | --- | --- |
 | What holds what? What is the platform made of? | `DAG` with `groups` (borders) | `aws/what-is-aws`, `aws/networking` |
@@ -70,7 +82,7 @@ mixing them on a page is fine.
 | How do compute and shared storage spread over zones? | `Zones` | `aws/data/rds` |
 | What can reach what across a boundary? Tunnels, login walls, signed webhooks, private services | `Boundaries` (zones as borders, a `tunnel` arrow through a dotted gap in the wall, a `blocked` path ending in a cross) | `cloudflare/networking/tunnel`, `cloudflare/security/access`, `gcp/networking/private-services` |
 | Who manages each layer, you or the platform? | `Responsibility` | `aws/compute/choosing-a-runtime` |
-| In what order do messages pass between parties, when that order *is* the idea? A protocol, a token exchange, receive-hide-delete | `Sequence`, sparingly (about a dozen across the docs) | `aws/messaging/sqs`, `acme/what-is-acme`, `gcp/security/federated-identity` |
+| In what order do messages pass between parties, when that order *is* the idea? A protocol, a token exchange, receive-hide-delete | `Sequence`, sparingly (about a dozen across the docs) | `aws/messaging/sqs`, `gcp/security/federated-identity`. Never on a What is page |
 | What runs when? Concurrency, waiting, propagation | `Timeline` | `aws/compute/lambda`, `cloudflare/data/kv` |
 | Where in the world does it run? | `WorldMap` | `cloudflare/compute/durable-objects`, `cloudflare/data/hyperdrive` |
 | What is ordered, and who has read how far? | `Log` | `cloudflare/messaging/k2`, `aws/messaging/kinesis` |
@@ -78,7 +90,8 @@ mixing them on a page is fine.
 | How is data laid out, what does a query read, what does a log hold? | `Records` | `aws/data/dynamodb`, `cloudflare/ai/ai-gateway` (a request log), `cloudflare/data/pipelines` (the rows SQL keeps) |
 | How does a value or a line of code travel from deploy to run time? | `Timeline` (what runs when) or `Sequence` (a value's journey) | `infrastructure-as-effects/phases`, `infrastructure-as-effects/circular-bindings` |
 | How do copies relate over time? | `BranchGraph` | `neon/data/branching` |
-| What nests inside what, to any depth, and what applies to each branch? | `Tree`: nested borders, each parent drawn around its children and shrunk to fit them, so there's no empty space on the right; mark small branches `side` so they stack beside a big one instead of taking a mostly empty row (`scopes` tag the container a policy is attached to; `dashed`, `wide`, `specs` for a box's own properties) | `aws/accounts-and-regions`, `aws/compute/ec2`, `aws/compute/eks` |
+| What runs inside what? A library's Layers inside the runtime that hosts them | `Shell`: boxes inside boxes, read like a call, `Worker(Git.Api(Repository, Registry, …))`. Only for real nesting: an authority does not contain an account, and an order does not contain its certificate | `git/what-is-git` |
+| What nests inside what, to any depth, and what applies to each branch? | `Tree`: nested borders, each parent drawn around its children, spanning the panel with every row filled; mark small branches `side` so they stack beside a big one instead of taking a mostly empty row (`scopes` tag the container a policy is attached to; `dashed`, `wide`, `specs` for a box's own properties) | `aws/accounts-and-regions`, `aws/compute/ec2`, `aws/compute/eks` |
 
 Each component's JSDoc has its props and a usage example. Read it before using
 one.
@@ -141,7 +154,7 @@ Each of these came up on a sheet and was fixed:
   rejected.
 - **Fanout:** never put a chip or label on top of a line. A "copy" box on each
   delivery was rejected. Say "each gets its own copy" in the caption.
-- **Tree:** boxes shrink to fit, and `side` stacks small siblings in a column
+- **Tree:** the tree spans the panel and its boxes and leaves grow to fill each row (a tree sized to fit sat in a mostly empty panel), and `side` stacks small siblings in a column
   beside a big one instead of leaving an empty row. `specs` writes a box's own
   properties inside it. Two top-level nodes always stack, so wrap them in their
   container.

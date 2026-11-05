@@ -46,7 +46,26 @@ export type AppAttributes = {
   createdAt: string;
 };
 
-export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
+export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers, AppLookup>;
+
+/**
+ * Props for {@link App.lookup}: find a RealtimeKit app this stack doesn't
+ * manage, by its id or its name.
+ */
+export type AppLookup =
+  | {
+      /**
+       * The id of the existing app.
+       */
+      appId: string;
+    }
+  | {
+      /**
+       * The name of the existing app. Names are not unique; the first app
+       * with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare RealtimeKit app — the organizational container for RealtimeKit
@@ -71,6 +90,22 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * const app = yield* Cloudflare.RealtimeKit.App("Meetings", {});
  *
  * const webhook = yield* Cloudflare.RealtimeKit.Webhook("Events", {
+ *   appId: app.appId,
+ *   url: "https://example.com/webhook",
+ *   events: ["meeting.started", "meeting.ended"],
+ * });
+ * ```
+ *
+ * ### Looking up an existing app
+ * RealtimeKit apps can't be deleted, so an app created once is usually
+ * shared. `App.lookup` references one Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `appId` or `name`. It is read
+ * during plan/deploy and never created or updated.
+ *
+ * **Example:** Add a webhook to an existing app
+ * ```typescript
+ * const app = Cloudflare.RealtimeKit.App.lookup({ name: "meetings" });
+ * yield* Cloudflare.RealtimeKit.Webhook("Events", {
  *   appId: app.appId,
  *   url: "https://example.com/webhook",
  *   events: ["meeting.started", "meeting.ended"],
@@ -107,6 +142,14 @@ export const AppProvider = () =>
       void news;
       return undefined;
     }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "appId" in props
+          ? yield* findById(accountId, props.appId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -123,7 +166,7 @@ export const AppProvider = () =>
       const match = yield* findByName(acct, name);
       return match ? toAttributes(match, acct) : undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createAppName(id, news.name);
 

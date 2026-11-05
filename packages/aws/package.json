@@ -1325,6 +1325,7 @@
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/s3": "workspace:*",
     "@types/aws-lambda": "catalog:",
     "rolldown": "catalog:"
   },

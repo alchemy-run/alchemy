@@ -8,7 +8,7 @@ sidebar:
 Effect HTTP is the trust-boundary modality: schema-validated REST
 endpoints — real URLs, path params, query strings, payloads — that
 any HTTP client can call, no Effect or TypeScript required on the
-consumer's side. This page deploys one to a Cloudflare Worker; the
+consumer's side. Deploy one to a Cloudflare Worker; the
 concept home is [Effect HTTP](/apis/effect-http), and
 [RPC](/apis) covers choosing between the modalities.
 
@@ -109,7 +109,7 @@ export class TaskApi extends HttpApi.make("TaskApi").add(TasksGroup) {}
 
 Nothing executes yet — `TaskApi` is purely a value-level description.
 The same `TaskApi` constant is what we'll hand to the client at the
-end of this guide.
+end.
 
 ## 3. Build the Worker
 

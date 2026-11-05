@@ -77,7 +77,7 @@ const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 });
 ```
 
-The `dev` override matters because `bun alchemy dev` doesn't create
+The `dev` override matters because `alchemy dev` doesn't create
 a Hyperdrive config at all — the local Worker connects to the
 database directly. With Hyperdrive out of the path, nothing pools
 those connections, so `pooledOrigin` sends local dev through Neon's

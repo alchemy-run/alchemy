@@ -86,6 +86,20 @@ $ curl -X POST https://bank.example.com/DepositMoney \
 {"reply":{"balance":1500},"stream":"Account/c-1-main","version":3}
 ```
 
+## Descriptions in the OpenAPI document
+
+Each endpoint's OpenAPI `description` is the `description` in the [annotations](/domain/annotations) of the declaration it serves, and the document's `info.description` is the Api's. A command's description says what it does; a view's, stream's or aggregate's says what it holds.
+
+```typescript title="src/openapi.ts"
+import * as DomainHttp from "@alchemy.run/domain/Http";
+import * as OpenApi from "effect/http-api/OpenApi";
+import { CustomerApi } from "./CustomerApi.api.ts";
+
+const spec = OpenApi.fromApi(DomainHttp.toHttpApi(CustomerApi, { expose: ["DepositMoney"] }).api);
+spec.paths["/DepositMoney"].post.description;
+// "Put money into an account. The amount is in cents."
+```
+
 ## Live reads
 
 `watch` and `events` answer with Server-Sent Events. Each value the typed client would receive is one event, its JSON in `data`: `{ state, cursor }` for `watch`, then one per change, and for `events` each entry, a `CaughtUp` frame, then live entries. A browser reads them with `EventSource`:
