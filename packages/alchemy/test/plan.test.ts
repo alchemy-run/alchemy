@@ -6155,3 +6155,18 @@ describe("resource selection patterns", { tags: ["unit", "local"] }, () => {
     }),
   );
 });
+
+test(
+  "preserves provider-declared binding provenance through native planning",
+  Effect.gen(function* () {
+    const plan = yield* Effect.gen(function* () {
+      const target = yield* BindingTarget("Provenance", { name: "provenance" });
+      yield* target.bind("Direct", { env: { VALUE: "marker" } }, { valueSource: "inherit" });
+      yield* target.bind`Tagged`({ env: { OTHER: "marker" } }, { valueSource: "inherit" });
+    }).pipe(makePlan);
+    const row = Plan.describePlan(plan).resources.find((resource) => resource.fqn === "Provenance");
+    expect(row?.bindings.map((binding) => binding.valueSource)).toEqual(["inherit", "inherit"]);
+    expect(row?.inputHash).toMatch(/^[a-f0-9]{64}$/);
+  }),
+  { tags: ["unit"] },
+);

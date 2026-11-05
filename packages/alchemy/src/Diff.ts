@@ -300,6 +300,7 @@ export const dedupeBindings = <B extends ResourceBinding>(bindings: B[]): B[] =>
 export const diffBindings = (
   oldBindings: ResourceBinding[],
   newBindings: ResourceBinding[],
+  options: { readonly supportsInheritance?: boolean } = {},
 ): BindingNode[] => {
   const oldMap = new Map(oldBindings.map((b) => [b.sid, b]));
   const newMap = new Map(newBindings.map((b) => [b.sid, b]));
@@ -310,6 +311,7 @@ export const diffBindings = (
         sid,
         action: "delete" as const,
         data: old.data,
+        ...(old.valueSource === undefined ? {} : { valueSource: old.valueSource }),
       })),
     ...Array.from(newMap).map(([sid, binding]) => {
       const old = oldMap.get(sid);
@@ -317,10 +319,12 @@ export const diffBindings = (
         sid,
         action: (!old
           ? "create"
-          : havePropsChanged(old.data, binding.data)
+          : !(options.supportsInheritance === true && binding.valueSource === "inherit") &&
+              havePropsChanged(old.data, binding.data)
             ? "update"
             : "noop") as BindingNode["action"],
         data: binding.data,
+        ...(binding.valueSource === undefined ? {} : { valueSource: binding.valueSource }),
       };
     }),
   ]);
