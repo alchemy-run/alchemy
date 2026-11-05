@@ -11,20 +11,16 @@ Take one host: a Worker serving git over HTTP, with each repository in a Durable
 
 <Tree
   nodes={[
-    { id: "graph", label: "GitLive", type: "one Layer graph, provided once" },
-    { id: "worker", label: "your Worker", type: "your application", parent: "graph" },
-    { id: "api", label: "Git.ApiLive", type: "smart HTTP · REST · GitHub API", parent: "worker", tone: "accent" },
-    { id: "auth", label: "your middleware", type: "who may call what", parent: "worker" },
-    { id: "routes", label: "your routes", type: "next to Git's", parent: "worker" },
-    { id: "repo", label: "Repository", type: "a Durable Object per repo", parent: "graph" },
-    { id: "refs", label: "refs & objects", type: "moved one at a time", parent: "repo", tone: "accent" },
-    { id: "prs", label: "pull requests", type: "merges, jobs", parent: "repo" },
-    { id: "blocks", label: "your choices", type: "swap any one", parent: "graph", wide: true, dashed: true },
-    { id: "registry", label: "Registry", type: "owner/name → repository", parent: "blocks", specs: [["in", "Durable Object · D1"]] },
-    { id: "blobs", label: "Blob Store", type: "packs, bundles", parent: "blocks", specs: [["in", "R2 · S3 · your own"]] },
-    { id: "hasher", label: "Hasher", type: "verifies pushes", parent: "blocks", specs: [["on", "inline · Worker Loader · Lambda"]] },
+    { id: "graph", label: "GitLive", type: "one Layer graph" },
+    { id: "worker", label: "your Worker", parent: "graph" },
+    { id: "api", label: "Git.ApiLive", type: "git over HTTP", parent: "worker", tone: "accent" },
+    { id: "app", label: "your app", type: "routes, auth", parent: "worker" },
+    { id: "repo", label: "Repository", type: "Durable Object per repo", parent: "graph", tone: "accent" },
+    { id: "registry", label: "Registry", type: "Durable Object · D1", parent: "graph" },
+    { id: "blobs", label: "Blob Store", type: "R2 · S3", parent: "graph" },
+    { id: "hasher", label: "Hasher", type: "inline · Lambda", parent: "graph" },
   ]}
-  caption="A host is one Layer graph. Git's routes live inside your own Worker, next to your routes and middleware, and each repository's refs move in its own Durable Object. The Registry, Blob Store and Hasher are choices: swap one, and only that decision changes."
+  caption="Git runs inside your own Worker, each repository lives in its own Durable Object, and the rest are Layers you choose."
 />
 
 ## Objects
