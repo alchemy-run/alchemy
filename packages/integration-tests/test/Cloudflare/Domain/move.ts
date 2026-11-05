@@ -10,6 +10,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { getWorkerTags } from "../Utils/Worker.ts";
+import { call } from "./bench.ts";
 
 /** What the Domain upgrade and move suites read from Cloudflare. */
 
@@ -132,3 +133,62 @@ export const backdatePasses = Effect.fn(function* (
     );
   }
 });
+
+/**
+ * Write deposits to `account` one request at a time, from `from` up, and read
+ * it between them, until `log.stop` is set: every answer, and the deposits that
+ * went through. A deposit is idempotent by its amount, so the count is exact.
+ */
+export const writer = (
+  url: string,
+  account: string,
+  from: number,
+  log: { written: Array<number>; failures: Array<string>; stop: boolean },
+) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    // Stopped between requests, never during one: a deposit is either counted or not sent.
+    for (let amount = from; !log.stop; amount++) {
+      const answer = yield* client
+        .execute(
+          HttpClientRequest.post(`${url}/deposit/${account}/${amount}/1`).pipe(
+            HttpClientRequest.setHeader("connection", "close"),
+          ),
+        )
+        .pipe(
+          Effect.flatMap((res) => Effect.map(res.text, (body) => ({ status: res.status, body }))),
+          Effect.catch((error) => Effect.succeed({ status: 0, body: String(error) })),
+        );
+      if (answer.status === 200) log.written.push(amount);
+      else log.failures.push(`deposit ${amount}: ${answer.status} ${answer.body.slice(0, 200)}`);
+      const read = yield* client
+        .execute(
+          HttpClientRequest.get(`${url}/account/${account}`).pipe(
+            HttpClientRequest.setHeader("connection", "close"),
+          ),
+        )
+        .pipe(
+          Effect.flatMap((res) => Effect.map(res.text, (body) => ({ status: res.status, body }))),
+          Effect.catch((error) => Effect.succeed({ status: 0, body: String(error) })),
+        );
+      if (read.status !== 200) log.failures.push(`read: ${read.status} ${read.body.slice(0, 200)}`);
+    }
+  });
+
+/**
+ * An account's deposits as its view applied them: their count and total, and
+ * which of `expected` are missing.
+ */
+export const depositsOf = (url: string, key: string, expected?: ReadonlyArray<number>) =>
+  call(url, "GET", `/view/${key}`).pipe(
+    Effect.map((body) => {
+      const amounts = (JSON.parse(body) as { amounts: Array<number> } | null)?.amounts ?? [];
+      const seen = new Set(amounts);
+      return {
+        count: amounts.length,
+        total: amounts.reduce((total, amount) => total + amount, 0),
+        missing: (expected ?? []).filter((amount) => !seen.has(amount)),
+        repeated: amounts.length - seen.size,
+      };
+    }),
+  );
