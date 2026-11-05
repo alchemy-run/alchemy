@@ -51,8 +51,7 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
-    "build:package": "node scripts/build.ts",
-    "test": "bun test ./test"
+    "build:package": "node scripts/build.ts"
   },
   "dependencies": {
     "@distilled.cloud/infisical": "workspace:*"
