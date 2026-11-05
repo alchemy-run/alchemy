@@ -135,6 +135,7 @@
     {
       "path": "./packages/cloudflare/tsconfig.json"
     },
+    { "path": "./packages/cloudflare/tsconfig.test.json" },
     {
       "path": "./packages/gcp/tsconfig.json"
     },

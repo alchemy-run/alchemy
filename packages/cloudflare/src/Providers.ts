@@ -1,6 +1,7 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
+import type { AuthProviders } from "alchemy/Auth/AuthProvider";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
-import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import { ProfileStoreLive, type ProfileStore } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as Provider from "alchemy/Provider";
@@ -136,12 +137,22 @@ export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("Cloudflare") {}
 
-export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
+export type ProviderRequirements = Layer.Services<ReturnType<typeof providers<never, never>>>;
 
 /**
- * Cloudflare providers, bindings, and credentials for Worker-based stacks.
+ * Optional host-owned credential resolution for Cloudflare providers.
  */
-export const providers = () =>
+export interface CloudflareProviderOptions<E = never, R = never> {
+  /** Host-supplied lazy credentials; omitting this preserves named-profile resolution. */
+  readonly credentials?: Layer.Layer<
+    Credentials.Credentials | CloudflareEnvironment.CloudflareEnvironment,
+    E,
+    R
+  >;
+}
+
+/** Cloudflare providers, bindings, and credentials for Worker-based stacks. */
+export const providers = <E = never, R = never>(options: CloudflareProviderOptions<E, R> = {}) =>
   Layer.effect(
     Providers,
     Provider.collection([
@@ -695,7 +706,7 @@ export const providers = () =>
     // demanded (dev runs, or deleting a local-mode row during deploy).
     // The DNS-01 solver behind `Cloudflare.ACME.ZoneSolver`, over the same API.
     Layer.provideMerge(AcmeZoneSolverLive),
-    Layer.provideMerge(CloudflareApiLive()),
+    Layer.provideMerge(CloudflareApiLive(options)),
     Layer.orDie,
   );
 
@@ -722,12 +733,21 @@ export const providers = () =>
  * unbounded fan-out onto one session, where undici 8's HTTP/2 path has
  * been resetting streams under load. HTTP/1.1 measured no slower here.
  */
-export const CloudflareApiLive = () =>
-  Credentials.fromAuthProvider().pipe(
-    Layer.provideMerge(CloudflareEnvironment.fromProfile()),
+export const CloudflareApiLive = <E = never, R = never>(
+  options: CloudflareProviderOptions<E, R> = {},
+) => {
+  const credentials: Layer.Layer<
+    Credentials.Credentials | CloudflareEnvironment.CloudflareEnvironment,
+    E,
+    R | AuthProviders | ProfileStore
+  > =
+    options.credentials ??
+    Credentials.fromAuthProvider().pipe(Layer.provideMerge(CloudflareEnvironment.fromProfile()));
+  return credentials.pipe(
     Layer.provideMerge(CloudflareAuth),
     Layer.provideMerge(Access.AccessLive),
     Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.provideMerge(Http1FetchHttpClient),
   );
+};
