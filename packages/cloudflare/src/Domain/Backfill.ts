@@ -142,6 +142,18 @@ export const startedTooSoon = (message: string) =>
   );
 
 /**
+ * How long after an upload an instance's failure may come from the code before
+ * it: Cloudflare moves a busy Durable Object to the deployed code only once it
+ * goes idle, so the first calls can reach an object still running the last
+ * upload (one that failed, say).
+ */
+export const ROLLOUT_MILLIS = 60_000;
+
+/** Whether an instance that failed with `message`, `elapsed` ms into a deploy, is worth starting again. */
+export const worthRestarting = (message: string, elapsed: number) =>
+  startedTooSoon(message) || elapsed < ROLLOUT_MILLIS;
+
+/**
  * Workflows answers instance calls for a Workflow uploaded moments before with
  * an internal error (code 10001) for a while: call again.
  */
@@ -315,7 +327,7 @@ const BackfillLive = () =>
           const message = failed.error?.message ?? "";
           // The runs are unaffected: a new instance waits on them, from where they are.
           if (
-            (current.status === "terminated" || startedTooSoon(message)) &&
+            (current.status === "terminated" || worthRestarting(message, elapsed)) &&
             attempt < MAX_RESTARTS
           ) {
             attempt += 1;

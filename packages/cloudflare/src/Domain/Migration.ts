@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { progressOf, startedTooSoon } from "./Backfill.ts";
+import { progressOf, worthRestarting } from "./Backfill.ts";
 import { passMarker } from "./Version.ts";
 
 export interface MigrationProps {
@@ -240,8 +240,10 @@ const MigrationLive = () =>
             }),
           );
           if (done.status === "complete") break;
-          // Started on an edge that doesn't have the uploaded Worker yet: start it again.
-          if (startedTooSoon(done.error?.message ?? "") && attempt < MAX_RESTARTS) {
+          // Started on an edge that doesn't have the uploaded Worker yet, or reached an
+          // object still on the code before it: start it again.
+          const elapsed = (yield* Clock.currentTimeMillis) - started;
+          if (worthRestarting(done.error?.message ?? "", elapsed) && attempt < MAX_RESTARTS) {
             yield* Effect.sleep(RESTART_DELAY);
             id = `${add.id}-${attempt + 1}`;
             yield* create([{ id, params: add.params }]);
@@ -269,9 +271,11 @@ const MigrationLive = () =>
         if (latest !== undefined) progress = latest as typeof progress;
         if (status.status === "complete") break;
         if (status.status === "errored" || status.status === "terminated") {
-          // Started on an edge that doesn't have the uploaded Worker yet: start it again.
-          // The run itself is in Durable Objects: a new instance waits on the same run.
-          if (startedTooSoon(status.error?.message ?? "") && restarts < MAX_RESTARTS) {
+          // Started on an edge that doesn't have the uploaded Worker yet, or reached an
+          // object still on the code before it: start it again. The run itself is in
+          // Durable Objects: a new instance waits on the same run.
+          const elapsed = (yield* Clock.currentTimeMillis) - started;
+          if (worthRestarting(status.error?.message ?? "", elapsed) && restarts < MAX_RESTARTS) {
             restarts += 1;
             yield* Effect.sleep(RESTART_DELAY);
             runId = `mg-run-${target}-${restarts}`;
