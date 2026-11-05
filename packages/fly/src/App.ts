@@ -385,7 +385,7 @@ export const deleteApp = Effect.fn(function* (appName: string) {
   );
   const http = yield* HttpClient.HttpClient;
   const fetchOptions = yield* Effect.serviceOption(FetchHttpClient.RequestInit);
-  yield* machines.deleteApp({ app_name: appName }).pipe(
+  const accepted = yield* machines.deleteApp({ app_name: appName }).pipe(
     Retry.none,
     // Bun can replay DELETE on a reused socket below the SDK retry policy.
     Effect.provideService(
@@ -398,7 +398,10 @@ export const deleteApp = Effect.fn(function* (appName: string) {
       redirect: "error",
     }),
     Effect.timeout("30 seconds"),
-    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.as(true),
+    // Fly's DELETE is authoritative for absence: its GET can keep serving a
+    // deleted App as `pending` long after DELETE answers 404.
+    Effect.catchTag("NotFound", () => Effect.succeed(false)),
     Effect.catchTag(
       [
         "HttpClientError",
@@ -411,6 +414,7 @@ export const deleteApp = Effect.fn(function* (appName: string) {
       (error) => Effect.fail(new AppDeletionAmbiguous({ appName, evidence: error._tag })),
     ),
   );
+  if (!accepted) return;
   const gone = yield* getByName(appName).pipe(
     Effect.map((app) => app === undefined),
     Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (gone) => gone, times: 8 }),

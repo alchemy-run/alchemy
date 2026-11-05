@@ -4797,6 +4797,12 @@ export const LiveWorkerProvider = () =>
               const { env: _env, codeUpdateStrategy: _codeUpdateStrategy, ...rest } = props;
               return {
                 ...rest,
+                // A namespace is identified by its name (compared above);
+                // its other attributes, like `scriptCount`, change as user
+                // Workers are uploaded into it.
+                ...(props.namespace !== undefined
+                  ? { namespace: resolveNamespaceName(props.namespace) }
+                  : undefined),
                 ...(props.main !== undefined ? { main: "<source>" } : undefined),
                 ...(props.assets
                   ? {
@@ -5339,6 +5345,43 @@ export const LiveWorkerProvider = () =>
                 WorkerHasNoVersions: () => Effect.undefined,
                 DispatchNamespaceScriptNotFound: () => Effect.undefined,
                 DispatchNamespaceNotFound: () => Effect.undefined,
+              }),
+            ),
+        ),
+        lookup: Effect.fn(
+          function* ({ name }) {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            const [subdomain, settings] = yield* Effect.all(
+              [
+                workers.getScriptSubdomain({ accountId, scriptName: name }),
+                workers.getScriptScriptAndVersionSetting({ accountId, scriptName: name }),
+              ],
+              { concurrency: 1 },
+            );
+            const urls = subdomain.enabled
+              ? [`https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`]
+              : [];
+            return {
+              accountId,
+              workerId: yield* findWorkerId(accountId, name),
+              workerName: name,
+              namespace: undefined,
+              logpush: settings.logpush ?? undefined,
+              url: urls[0],
+              urls,
+              domain: undefined,
+              tags: settings.tags ?? undefined,
+              durableObjectNamespaces: getDurableObjects(settings.bindings),
+              routes: [],
+              crons: [],
+              tailConsumers: settings.tailConsumers?.map((c) => ({ service: c.service })),
+            } satisfies Worker["Attributes"] as Worker["Attributes"] | undefined;
+          },
+          (effect) =>
+            effect.pipe(
+              Effect.catchTags({
+                WorkerNotFound: () => Effect.undefined,
+                WorkerHasNoVersions: () => Effect.undefined,
               }),
             ),
         ),

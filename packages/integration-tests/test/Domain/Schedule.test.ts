@@ -6,6 +6,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { Activity } from "effect/workflow";
 
 // A hold that expires an hour after it is placed, unless it is released first.
 class HoldPlaced extends Domain.Event("HoldPlaced") {}
@@ -58,10 +59,11 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
     const holds = yield* Hold;
     return Effect.fn(function* ({ source, event }) {
       if (event._tag === "HoldPlaced") {
-        yield* holds
-          .schedule(source, new ExpireHold(), { after: "1 hour", commandId: expiryOf(source.id) })
-          // a redelivery after the expiry ran: nothing to arm
-          .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+        // a redelivery arms the same expiry again, which changes nothing
+        yield* holds.schedule(source, new ExpireHold(), {
+          after: "1 hour",
+          commandId: expiryOf(source.id),
+        });
       } else {
         yield* holds.unschedule(source, expiryOf(source.id)).pipe(
           // the hold expired first, and the release is recorded after it; a
@@ -81,6 +83,120 @@ class Holds extends Domain.Model("Holds", {
   aggregates: [Hold],
   policies: [HoldDeadline],
 }) {}
+
+// A ticket that stalls an hour after it opens or resumes, unless it is paused.
+// The stall timer keeps one id per ticket, so it fires as a stale no-op while
+// the ticket is paused, then is armed again under that id on resume (#2804).
+class TicketOpened extends Domain.Event("TicketOpened") {}
+class TicketPaused extends Domain.Event("TicketPaused") {}
+class TicketResumed extends Domain.Event("TicketResumed") {}
+class TicketStalled extends Domain.Event("TicketStalled") {}
+
+class OpenTicket extends Domain.Command("OpenTicket", {
+  target: Schema.String,
+  events: [TicketOpened],
+}) {}
+class PauseTicket extends Domain.Command("PauseTicket", {
+  target: Schema.String,
+  events: [TicketPaused],
+}) {}
+class ResumeTicket extends Domain.Command("ResumeTicket", {
+  target: Schema.String,
+  events: [TicketResumed],
+}) {}
+/** Records the stall only on an open ticket; on a paused one it records nothing. */
+class MarkStalled extends Domain.Command("MarkStalled", {
+  target: Schema.String,
+  events: [TicketStalled],
+}) {}
+
+class Ticket extends Domain.Aggregate("Ticket", {
+  id: Schema.String,
+  state: Schema.Struct({ status: Schema.Literals(["none", "open", "paused", "stalled"]) }),
+  initial: { status: "none" },
+  commands: [OpenTicket, PauseTicket, ResumeTicket, MarkStalled],
+  decide: {
+    OpenTicket: () => [new TicketOpened()],
+    PauseTicket: () => [new TicketPaused()],
+    ResumeTicket: () => [new TicketResumed()],
+    MarkStalled: (state) => (state.status === "open" ? [new TicketStalled()] : []),
+  },
+  evolve: {
+    TicketOpened: () => ({ status: "open" as const }),
+    TicketPaused: () => ({ status: "paused" as const }),
+    TicketResumed: () => ({ status: "open" as const }),
+    TicketStalled: () => ({ status: "stalled" as const }),
+  },
+}) {}
+
+class StallTimer extends Domain.Policy("StallTimer", {
+  from: Ticket,
+  on: [TicketOpened, TicketResumed],
+}) {}
+/** Arms the stall timer under `stall:<id>`. */
+const StallTimerLive = StallTimer.toLayer(
+  Effect.gen(function* () {
+    const tickets = yield* Ticket;
+    return Effect.fn(function* ({ source }) {
+      yield* tickets.schedule(source, new MarkStalled(), {
+        after: "1 hour",
+        commandId: `stall:${source.id}`,
+      });
+    });
+  }),
+);
+
+class Tickets extends Domain.Model("Tickets", {
+  aggregates: [Ticket],
+  policies: [StallTimer],
+}) {}
+
+// A saga step that schedules a hold's expiry, does something to it, then fails
+// its first attempt: the retry schedules the same arming again.
+class Flaky extends Schema.TaggedError<Flaky>()("Flaky", {}) {}
+
+class ArmExpiry extends Domain.Saga("ArmExpiry", {
+  key: Schema.String,
+  input: { then: Schema.Literals(["wait", "cancel"]) },
+}) {}
+
+const ArmExpiryLive = ArmExpiry.toLayer(
+  Effect.gen(function* () {
+    const holds = yield* Hold;
+    return Effect.fn(function* ({ key, then }) {
+      yield* Activity.make({
+        name: "arm",
+        error: Flaky,
+        execute: Effect.gen(function* () {
+          yield* holds.schedule(key, new ExpireHold(), { after: "20 millis", commandId: "x" });
+          if ((yield* Activity.CurrentAttempt) > 1) return;
+          if (then === "wait") yield* Effect.sleep("100 millis");
+          else yield* holds.unschedule(key, "x").pipe(Effect.orDie);
+          return yield* new Flaky();
+        }),
+      }).pipe(Activity.retry({ times: 2 }), Effect.orDie);
+    });
+  }),
+);
+
+class Arming extends Domain.Model("Arming", {
+  aggregates: [Hold],
+  sagas: [ArmExpiry],
+}) {}
+const ArmingLive = Arming.layer(ArmExpiryLive).pipe(Layer.provide(InMemory));
+
+const t1 = Ticket.ref("t-1");
+/** Open, pause before the hour, let the timer fire as a no-op, resume. */
+const pausedThroughTheDeadline = [
+  Story.clock("2026-01-01T00:00:00Z"),
+  Story.when(t1, new OpenTicket()),
+  Story.clock("2026-01-01T00:30:00Z"),
+  Story.when(t1, new PauseTicket()),
+  Story.clock("2026-01-01T01:00:00Z"),
+  Story.then(t1, new TicketOpened(), new TicketPaused()),
+  Story.when(t1, new ResumeTicket()),
+  Story.then(t1, new TicketResumed()),
+] as const;
 
 const story = Story.make(Holds, { layer: HoldDeadlineLive });
 const HoldsLive = Holds.layer(HoldDeadlineLive).pipe(Layer.provide(InMemory));
@@ -176,14 +292,13 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(HoldsLive)),
   );
 
-  it.live("scheduling a command id that was already sent fails with AlreadyExecuted", () =>
+  it.live("a schedule's id is its own: a command sent under the same id doesn't stop it", () =>
     Effect.gen(function* () {
       const holds = yield* Hold;
       yield* holds.send("h-6", new PlaceHold(), { commandId: "x" });
-      const error = yield* Effect.flip(
-        holds.schedule("h-6", new ExpireHold(), { after: "1 hour", commandId: "x" }),
-      );
-      expect(error._tag).toBe("AlreadyExecuted");
+      yield* holds.schedule("h-6", new ExpireHold(), { after: "20 millis", commandId: "x" });
+      yield* Effect.sleep("100 millis");
+      expect((yield* holds.state("h-6")).status).toBe("expired");
     }).pipe(Effect.provide(HoldsLive)),
   );
 
@@ -206,5 +321,69 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
         new Domain.NotScheduled({ aggregate: "Hold", id: "h-8", commandId: "never" }),
       );
     }).pipe(Effect.provide(HoldsLive)),
+  );
+
+  it.live("scheduling again after the command ran arms it again", () =>
+    Effect.gen(function* () {
+      const holds = yield* Hold;
+      yield* holds.schedule("h-10", new ExpireHold(), { after: "20 millis", commandId: "x" });
+      yield* Effect.sleep("100 millis");
+      expect((yield* Effect.flip(holds.unschedule("h-10", "x")))._tag).toBe("AlreadyExecuted");
+      const receipt = yield* holds.schedule("h-10", new ExpireHold(), {
+        after: "1 hour",
+        commandId: "x",
+      });
+      expect(receipt.commandId).toBe("x");
+      // the new one is pending: it can be cancelled
+      yield* holds.unschedule("h-10", "x");
+    }).pipe(Effect.provide(HoldsLive)),
+  );
+
+  it.live("a step that runs again after its command ran leaves it as it ran", () =>
+    Effect.gen(function* () {
+      const arm = yield* ArmExpiry;
+      const holds = yield* Hold;
+      yield* (yield* arm.start("h-11", { then: "wait" })).result;
+      yield* Effect.sleep("100 millis");
+      expect((yield* holds.state("h-11")).status).toBe("expired");
+      expect((yield* Effect.flip(holds.unschedule("h-11", "x")))._tag).toBe("AlreadyExecuted");
+    }).pipe(Effect.provide(ArmingLive)),
+  );
+
+  it.live("a step that runs again after it cancelled the command doesn't arm it again", () =>
+    Effect.gen(function* () {
+      const arm = yield* ArmExpiry;
+      const holds = yield* Hold;
+      yield* (yield* arm.start("h-12", { then: "cancel" })).result;
+      yield* Effect.sleep("100 millis");
+      expect((yield* holds.state("h-12")).status).toBe("none");
+      expect((yield* Effect.flip(holds.unschedule("h-12", "x")))._tag).toBe("AlreadyCancelled");
+    }).pipe(Effect.provide(ArmingLive)),
+  );
+});
+
+describe("Domain schedule, armed again under the same id", { tags: ["unit", "local"] }, () => {
+  it.effect("a timer that fired as a no-op fires again once armed again", () =>
+    Story.make(Tickets, { layer: StallTimerLive })(
+      ...pausedThroughTheDeadline,
+      Story.clock("2026-01-01T02:00:00Z"),
+      Story.then(t1, new TicketStalled()),
+    ),
+  );
+
+  it.effect("a pending timer is replaced, not doubled", () =>
+    Story.make(Tickets, { layer: StallTimerLive })(
+      Story.clock("2026-01-01T00:00:00Z"),
+      Story.when(t1, new OpenTicket()),
+      Story.clock("2026-01-01T00:30:00Z"),
+      Story.when(t1, new PauseTicket()),
+      Story.when(t1, new ResumeTicket()),
+      Story.then(t1, new TicketOpened(), new TicketPaused(), new TicketResumed()),
+      // the first timer was due at 01:00; resuming replaced it with one due at 01:30
+      Story.clock("2026-01-01T01:00:00Z"),
+      Story.then(t1),
+      Story.clock("2026-01-01T01:30:00Z"),
+      Story.then(t1, new TicketStalled()),
+    ),
   );
 });

@@ -9,7 +9,7 @@ import { toFqn } from "./FQN.ts";
 import type { Input, InputProps, PropsInput } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
-import { Provider } from "./Provider.ts";
+import { findProviderByType, Provider } from "./Provider.ts";
 import {
   ConflictingProviderModeError,
   ProviderModePolicy,
@@ -68,7 +68,7 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
     Provider: Provider<R>;
     Aliases: readonly string[] | undefined;
     ref(id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R>;
-  };
+  } & LookupMethod<R>;
 
 export type ResourceClassWithMethods<
   R extends ResourceLike,
@@ -79,7 +79,25 @@ export type ResourceClassWithMethods<
     Provider: Provider<R>;
     Aliases: readonly string[] | undefined;
     ref(id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R>;
-  } & Methods;
+  } & LookupMethod<R> &
+  Methods;
+
+/**
+ * `lookup` exists only on resources that declare a `Lookup` type, so calling
+ * it on any other resource is a type error.
+ */
+export type LookupMethod<R extends ResourceLike> = [R["Lookup"]] extends [never]
+  ? {}
+  : {
+      /**
+       * Reference a resource this stack does not manage, found by the key
+       * its type declares as `Lookup` (e.g. `Worker.lookup({ name })`).
+       * Resolves through the provider's `lookup` during plan/deploy; nothing
+       * is created, adopted or written to state. Props may be Outputs of
+       * other resources: the lookup waits for them, and depends on them.
+       */
+      lookup(props: PropsInput<R["Lookup"]>): R;
+    };
 
 export type LogicalId = string;
 
@@ -94,6 +112,7 @@ export interface ResourceLike<
   Attributes extends object = object,
   Binding = any,
   Providers = any,
+  Lookup = any,
 > {
   /**
    * Namespace containing this Resource.
@@ -157,6 +176,11 @@ export interface ResourceLike<
   Binding: Binding;
   /** @internal phantom */
   Providers: Providers;
+  /**
+   * @internal phantom — the props {@link ResourceClass.lookup} takes to find
+   * an unmanaged instance. `never` for resources that can't be looked up.
+   */
+  Lookup: Lookup;
 }
 
 // Require the full resource identity (Type AND FQN), not just `Type`:
@@ -197,8 +221,9 @@ export type Resource<
   Attributes extends object = any,
   Binding = never,
   Providers = undefined,
+  Lookup = never,
 > = Pipeable &
-  ResourceLike<Type, Props, Attributes, Binding, Providers> & {
+  ResourceLike<Type, Props, Attributes, Binding, Providers, Lookup> & {
     bind(sid: Input<string>, binding: Input<Binding>): Effect.Effect<void>;
     bind(
       template: TemplateStringsArray,
@@ -310,6 +335,86 @@ export class DuplicateLogicalIdError extends Data.TaggedError("DuplicateLogicalI
   /** Type of the declaration that collided with {@link fqn}. */
   conflictingType: string;
 }> {}
+
+/**
+ * `Resource.lookup(props)` found nothing: the provider's `lookup` returned
+ * `undefined` for these props.
+ */
+export class LookupNotFoundError extends Data.TaggedError("LookupNotFoundError")<{
+  message: string;
+  /** Resource type that was looked up, e.g. `Cloudflare.Worker`. */
+  type: string;
+  /** The props passed to `lookup`. */
+  props: unknown;
+}> {}
+
+/**
+ * `Resource.lookup(props)` was called on a resource whose provider has no
+ * `lookup` lifecycle method.
+ */
+export class LookupNotSupportedError extends Data.TaggedError("LookupNotSupportedError")<{
+  message: string;
+  type: string;
+}> {}
+
+/**
+ * `Resource.lookup(props)` found a resource this stack already manages. A
+ * lookup carries no dependency, so the engine could delete or replace the
+ * resource without updating its consumers; reference the declared resource
+ * (or its `.ref`) instead.
+ */
+export class LookupOfManagedResourceError extends Data.TaggedError("LookupOfManagedResourceError")<{
+  message: string;
+  type: string;
+  props: unknown;
+  /** The FQN of the resource in this stack the lookup found. */
+  fqn: string;
+}> {}
+
+/**
+ * A logical id for a looked-up resource, used where a declared resource's
+ * would be (bind templates, labels): its primitive lookup values joined.
+ */
+const lookupLogicalId = (type: string, props: unknown): string => {
+  const values =
+    props && typeof props === "object"
+      ? Object.values(props).filter(
+          (value) => typeof value === "string" || typeof value === "number",
+        )
+      : [];
+  return values.length > 0 ? values.join("-") : type;
+};
+
+const lookup = <R extends ResourceLike>(type: string, props: PropsInput<R["Lookup"]>): R =>
+  new Output.LookupExpr(
+    type,
+    props,
+    lookupLogicalId(type, props),
+    Effect.fn(function* (resolved: R["Lookup"]) {
+      // The looked-up resource lives in the real cloud, so even an
+      // `alchemy dev` run asks the live provider.
+      const provider = yield* findProviderByType<R>(type, "live");
+      if (provider.lookup === undefined) {
+        return yield* Effect.die(
+          new LookupNotSupportedError({
+            message: `${type} does not support lookup`,
+            type,
+          }),
+        );
+      }
+      const attrs = yield* provider.lookup(resolved).pipe(Effect.orDie);
+      if (attrs === undefined) {
+        return yield* Effect.die(
+          new LookupNotFoundError({
+            message: `${type}.lookup(${JSON.stringify(resolved)}) found no resource`,
+            type,
+            props: resolved,
+          }),
+        );
+      }
+      return attrs;
+    }) as (props: R["Lookup"]) => Effect.Effect<R["Attributes"]>,
+  ) as unknown as R;
 
 export const missingImplementation = (type: string, id: string) =>
   new MissingImplementationError({
@@ -532,6 +637,8 @@ export function Resource<R extends ResourceLike>(
      */
     ref: (id: string, options?: { stage?: string; stack?: string }): Effect.Effect<R> =>
       Effect.succeed(Output.of(makeRef<R>(id, options, type)) as unknown as R),
+
+    lookup: (props: PropsInput<R["Lookup"]>): R => lookup<R>(type, props),
 
     Type: type,
     Provider: ProviderTag,

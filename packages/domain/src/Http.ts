@@ -5,7 +5,10 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
+import * as OpenApi from "effect/http-api/OpenApi";
+import * as HttpEffect from "effect/http/HttpEffect";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
@@ -16,6 +19,7 @@ import * as SchemaAST from "effect/SchemaAST";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import type { Annotations } from "./Annotations.ts";
 import type { Servable } from "./Api.ts";
 import { DefinitionError, MissingGroup } from "./DefinitionError.ts";
 import {
@@ -34,6 +38,7 @@ import {
  */
 export interface Publishable {
   readonly apiName: string;
+  readonly annotations: Annotations;
   readonly serves: ReadonlyArray<Servable>;
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   readonly clientInProcess: Effect.Effect<unknown, never, any>;
@@ -164,6 +169,14 @@ const call = (client: Client, operation: Operation, request: DecodedRequest) => 
     };
     return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
+  if (operation.operation === "ask") {
+    const ask = client[operation.name] as (
+      input: unknown,
+      options: object,
+    ) => Effect.Effect<unknown, unknown>;
+    const { input, ...options } = request.payload as { readonly input: unknown };
+    return ask(input, { headers, ...options });
+  }
   const reads = client[operation.name] as Record<
     string,
     (
@@ -206,6 +219,33 @@ const live = Effect.fn(function* (
   );
 });
 
+/**
+ * An answer is for one caller (middleware reads its session, a query's
+ * `visible` filters its rows) and is stale after the next write, so by
+ * default no cache may keep it, shared or private.
+ */
+const NO_STORE = "private, no-store";
+
+/**
+ * The `cache-control` of a call's responses: its declaration's
+ * `httpApiCacheControl` on a successful answer from a query or a read that
+ * answers once, `private, no-store` on everything else.
+ */
+const cacheControlOf = (operation: Operation): HttpEffect.PreResponseHandler => {
+  const annotated =
+    operation.operation === "send" || operation.stream
+      ? undefined
+      : operation.served.annotations.httpApiCacheControl;
+  return (_request, response) =>
+    Effect.succeed(
+      HttpServerResponse.setHeader(
+        response,
+        "cache-control",
+        annotated !== undefined && response.status < 300 ? annotated : NO_STORE,
+      ),
+    );
+};
+
 /** A call that answers once, through a client that lives for the request. */
 const once = Effect.fn(function* (
   client: Effect.Effect<Client, never, Scope.Scope>,
@@ -242,60 +282,78 @@ const endpointOf = (
           success: rpc.successSchema,
           error,
         })
-      : operation.stream
-        ? HttpApiEndpoint.get(
-            operation.rpc._tag,
-            `/${operation.name}/:key/${operation.operation}`,
-            {
-              params: { key: fields.key! },
-              // `events` resumes after a cursor; `watch` takes nothing but the key.
-              ...(fields.after ? { query: { after: fields.after } } : {}),
-              success: sseOf(rpc, errors),
-              error,
-            },
-          )
-        : operation.operation === "list"
-          ? HttpApiEndpoint.get(operation.rpc._tag, `/${operation.name}/:key/list`, {
-              params: { key: fields.key! },
-              query: {
-                order: fields.order!,
-                take: fields.take!,
-                after: fields.after!,
-              },
-              success: rpc.successSchema,
-              error,
-            })
-          : HttpApiEndpoint.get(
+      : // A query's input is any schema, so it goes in a JSON body. QUERY is
+        // the safe, idempotent method that carries one.
+        operation.operation === "ask"
+        ? HttpApiEndpoint.query(operation.rpc._tag, `/${operation.name}`, {
+            payload: rpc.payloadSchema,
+            success: rpc.successSchema,
+            error,
+          })
+        : operation.stream
+          ? HttpApiEndpoint.get(
               operation.rpc._tag,
-              operation.operation === "snapshot"
-                ? `/${operation.name}/:key/snapshot`
-                : `/${operation.name}/:key`,
+              `/${operation.name}/:key/${operation.operation}`,
               {
                 params: { key: fields.key! },
-                // A view's reads and a stream's `peek` can wait for a write; an aggregate reads its state.
-                ...(fields.atLeast ? { query: AtLeastQuery } : {}),
-                success: rpc.successSchema,
+                // `events` resumes after a cursor; `watch` takes nothing but the key.
+                ...(fields.after ? { query: { after: fields.after } } : {}),
+                success: sseOf(rpc, errors),
                 error,
               },
-            );
-  return endpoint as unknown as HttpApiEndpoint.Top;
+            )
+          : operation.operation === "list"
+            ? HttpApiEndpoint.get(operation.rpc._tag, `/${operation.name}/:key/list`, {
+                params: { key: fields.key! },
+                query: {
+                  order: fields.order!,
+                  take: fields.take!,
+                  after: fields.after!,
+                },
+                success: rpc.successSchema,
+                error,
+              })
+            : HttpApiEndpoint.get(
+                operation.rpc._tag,
+                operation.operation === "snapshot"
+                  ? `/${operation.name}/:key/snapshot`
+                  : `/${operation.name}/:key`,
+                {
+                  params: { key: fields.key! },
+                  // A view's reads and a stream's `peek` can wait for a write; an aggregate reads its state.
+                  ...(fields.atLeast ? { query: AtLeastQuery } : {}),
+                  success: rpc.successSchema,
+                  error,
+                },
+              );
+  // The entry's description, for the OpenAPI document.
+  const described =
+    operation.description === undefined
+      ? endpoint
+      : (endpoint as unknown as HttpApiEndpoint.Top).annotate(
+          OpenApi.Description,
+          operation.description,
+        );
+  return described as unknown as HttpApiEndpoint.Top;
 };
 
 /**
  * Publish an Api's calls as a plain HTTP JSON API, with an OpenAPI document,
  * from the same Api. Each published call is one endpoint:
  *
- * | Call                    | Method and path              | Input                                   |
- * | ----------------------- | ---------------------------- | --------------------------------------- |
- * | a command               | `POST /<Command>`            | JSON body: `target`, `commandId`, input |
- * | `get`, `peek`           | `GET /<Name>/{key}`         | `?stream=&version=` waits for a write   |
- * | `snapshot`              | `GET /<Name>/{key}/snapshot`| `?stream=&version=` waits for a write   |
- * | `list`                  | `GET /<Name>/{key}/list`    | `?order=&take=&after=`                  |
- * | `watch`                 | `GET /<Name>/{key}/watch`   | Server-Sent Events                      |
- * | `events`                | `GET /<Name>/{key}/events`  | Server-Sent Events, `?after=` a cursor  |
+ * | Call          | Method and path              | Input                                          |
+ * | ------------- | ---------------------------- | ---------------------------------------------- |
+ * | a command     | `POST /<Command>`            | JSON body: `target`, `commandId`, input        |
+ * | a query       | `QUERY /<Query>`             | JSON body: `input`, `atLeast`, `after`, `take` |
+ * | `get`, `peek` | `GET /<Name>/{key}`          | `?stream=&version=` waits for a write          |
+ * | `snapshot`    | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for a write          |
+ * | `list`        | `GET /<Name>/{key}/list`     | `?order=&take=&after=`                         |
+ * | `watch`       | `GET /<Name>/{key}/watch`    | Server-Sent Events                             |
+ * | `events`      | `GET /<Name>/{key}/events`   | Server-Sent Events, `?after=` a cursor         |
  *
- * A command answers with its receipt; a read with what the Api's own client
- * gets (`null` for an empty key). A typed failure answers with its `_tag`
+ * A command answers with its receipt; a query with its result (a paged one
+ * with `{ entries, cursor }`); a read with what the Api's own client gets
+ * (`null` for an empty key). A typed failure answers with its `_tag`
  * and data, at the status its schema's `httpApiStatus` annotation gives it
  * (`Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 })`), and 422 if it
  * has none: a rejection is a refused request, not a server fault. Input its
@@ -307,6 +365,11 @@ const endpointOf = (
  * any other call. A failure after it, such as `validate` refusing a change,
  * ends the stream with an `effect/http-api/stream/failure` event whose
  * `data` is the typed failure.
+ *
+ * Every response carries `cache-control: private, no-store`: it is for one
+ * caller, and stale after the next write. A query's or a read's declaration
+ * can loosen that for its successful answers with the `httpApiCacheControl`
+ * annotation (`{ httpApiCacheControl: "public, max-age=60" }`).
  *
  * Every call goes through the Api's own handlers in process, with the HTTP
  * request's headers, so its middleware, its checks and its rejections run as
@@ -383,20 +446,27 @@ export const toHttpApi = <A extends Publishable>(
         // Only the endpoint's declared failures are public; anything else is a defect.
         const declaredOnly = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
           Effect.catchIf(effect, (error) => !isDeclared(error), Effect.die);
+        const cacheControl = cacheControlOf(operation);
         handlers = handlers.handle(operation.rpc._tag, (request: DecodedRequest) =>
-          operation.stream
+          (operation.stream
             ? live(client, operation, request).pipe(
                 declaredOnly,
                 Effect.map(Stream.catchIf((error) => !isDeclared(error), Stream.die)),
               )
-            : once(client, operation, request).pipe(declaredOnly, Effect.scoped),
+            : once(client, operation, request).pipe(declaredOnly, Effect.scoped)
+          ).pipe(HttpEffect.withPreResponseHandler(cacheControl)),
         );
       }
       return handlers;
     });
   };
 
-  const httpApi = HttpApi.make(name).add(group as never);
+  // The Api's description describes its group and the OpenAPI document.
+  const { description } = api.annotations;
+  if (description !== undefined) group = group.annotate(OpenApi.Description, description);
+  const made = HttpApi.make(name).add(group as never);
+  const httpApi =
+    description === undefined ? made : made.annotate(OpenApi.Description, description);
   return {
     group,
     api: httpApi,
