@@ -192,3 +192,19 @@ export const depositsOf = (url: string, key: string, expected?: ReadonlyArray<nu
       };
     }),
   );
+
+/**
+ * The Durable Object classes a Worker binds, by class name, from its own
+ * settings. (The account's namespace listing also keeps classes of earlier,
+ * deleted Workers with the same name.)
+ */
+export const boundClasses = Effect.fn(function* (scriptName: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const settings = yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName });
+  const classes: Record<string, string | undefined> = {};
+  for (const binding of settings.bindings ?? [])
+    if (binding.type === "durable_object_namespace" && "className" in binding && binding.className)
+      classes[binding.className] =
+        "namespaceId" in binding ? (binding.namespaceId as string | undefined) : undefined;
+  return classes;
+});

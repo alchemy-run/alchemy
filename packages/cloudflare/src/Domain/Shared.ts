@@ -279,9 +279,27 @@ const router = (
     // At deploy time the class is declared with a placeholder state: no object, no route.
     const parsed = parseName(state.id?.name);
     const impl = parsed === undefined ? undefined : routes.get(parsed.route);
-    // A route the code no longer hosts keeps its data, and does nothing.
-    if (parsed === undefined || impl === undefined)
-      return Effect.succeed({ alarm: () => Effect.void, domainMove: () => Effect.succeed(true) });
+    // At deploy time: nothing to construct.
+    if (parsed === undefined) return Effect.succeed({});
+    // A route this code doesn't host: the object runs on code from before the
+    // deploy that added it (a new view generation's objects are new routes in
+    // an existing class, and an object moves to new code only once idle), or
+    // after the one that removed it. It keeps its data, and answers every call
+    // so that callers try again later, as they do for any object on older code.
+    if (impl === undefined)
+      return Effect.succeed(
+        dynamic((prop) =>
+          prop === "alarm" || LOCAL.has(prop)
+            ? () => Effect.void
+            : prop === "fetch"
+              ? Effect.succeed(
+                  HttpServerResponse.text(`${parsed.route} isn't in the code this runs yet`, {
+                    status: 503,
+                  }),
+                )
+              : () => Effect.die(new Error(`${parsed.route} isn't in the code this runs yet`)),
+        ),
+      );
     const inner = yield* impl;
     const from = movers.has(parsed.route)
       ? legacyStub(classes(), parsed.route, parsed.key, state.id.jurisdiction)

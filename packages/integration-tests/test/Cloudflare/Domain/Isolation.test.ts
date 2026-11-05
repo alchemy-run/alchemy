@@ -15,6 +15,7 @@ import { requestWorker } from "../Utils/WorkerRequest.ts";
 import DuplicateWorker from "./fixtures/duplicate-worker.ts";
 import Stack from "./fixtures/isolation-stack.ts";
 import TwiceWorker from "./fixtures/twice-worker.ts";
+import { boundClasses } from "./move.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -104,15 +105,7 @@ test(
   "every object of every model on a Worker lives in one Durable Object class",
   Effect.gen(function* () {
     const { workerName } = yield* stack;
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const namespaces = yield* durableObjects.listNamespaces
-      .items({ accountId })
-      .pipe(Stream.runCollect);
-    expect(
-      Array.from(namespaces)
-        .filter((namespace) => namespace.script === workerName)
-        .map((namespace) => namespace.class),
-    ).toEqual(["AlchemyDomain"]);
+    expect(Object.keys(yield* boundClasses(workerName))).toEqual(["AlchemyDomain"]);
   }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped),
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 60_000 },
 );

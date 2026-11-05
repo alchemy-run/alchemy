@@ -4856,9 +4856,9 @@ export const LiveWorkerProvider = () =>
           const observed = { workerName: name };
           return hasAlchemyWorkerTags(id, settings.tags ?? []) ? observed : Unowned(observed);
         }),
-        precreate: Effect.fn(function* ({ id, news, session, bindings }) {
+        precreate: Effect.fn(function* ({ id, news, session, bindings: declared }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, bindings);
+          yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, declared);
           const name = yield* createWorkerName(id, news.name);
           // A version worker uploads to its parent's script during
           // reconcile; pre-creating a placeholder script under this
@@ -4924,7 +4924,30 @@ export const LiveWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
           const dispatchNamespace = resolveNamespaceName(news.namespace);
-          const exportMap = news.exports ?? {};
+          // Old Domain classes the script doesn't already have are left out, as
+          // reconcile leaves them out: a placeholder that declared them would
+          // keep them live (see `withoutSettledDomainMovers`).
+          const hostedSettings = declared.some((binding) =>
+            (binding.data.domainClasses ?? []).some((domainClass) => domainClass.mover),
+          )
+            ? yield* getScriptSettings(accountId, name, dispatchNamespace).pipe(
+                Effect.catchTags({
+                  WorkerNotFound: () => Effect.undefined,
+                  WorkerHasNoVersions: () => Effect.undefined,
+                  DispatchNamespaceScriptNotFound: () => Effect.undefined,
+                  DispatchNamespaceNotFound: () => Effect.undefined,
+                }),
+              )
+            : undefined;
+          const { bindings, dropped } = yield* withoutSettledDomainMovers({
+            accountId,
+            scriptName: name,
+            bindings: declared,
+            existingSettings: hostedSettings,
+          });
+          const exportMap = Object.fromEntries(
+            Object.entries(news.exports ?? {}).filter(([className]) => !dropped.has(className)),
+          );
           // A worker hosts Durable Object classes from two independent sources:
           // Effect-native DO *exports* (classes defined in the worker entry) and
           // DO *bindings* declared in `env` — e.g. a bare `Cloudflare.DurableObject`
