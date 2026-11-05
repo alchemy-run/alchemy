@@ -650,11 +650,17 @@ function proxy(self: any): any {
                 self.stables &&
                 prop in self.stables
               ? self.stables[prop as keyof typeof self.stables]
-              : prop in self
-                ? typeof self[prop as keyof typeof self] === "function" && !("kind" in self)
-                  ? new PropExpr(proxy, prop as never)
-                  : self[prop as keyof typeof self]
-                : new PropExpr(proxy, prop as never),
+              : // A lookup stands in for the resource it found, so an
+                // attribute named `kind` (e.g. a Rules list's) must not
+                // resolve to the expression's own tag. The engine reads that
+                // tag through `ExprSymbol` (`exprKind`).
+                prop === "kind" && isLookupExpr(self)
+                ? new PropExpr(proxy, prop as never)
+                : prop in self
+                  ? typeof self[prop as keyof typeof self] === "function" && !("kind" in self)
+                    ? new PropExpr(proxy, prop as never)
+                    : self[prop as keyof typeof self]
+                  : new PropExpr(proxy, prop as never),
     apply: (_, thisArg, args) => {
       if (isPropExpr(self)) {
         // Method-style combinators on an Output proxy. `map`/`apply` and
