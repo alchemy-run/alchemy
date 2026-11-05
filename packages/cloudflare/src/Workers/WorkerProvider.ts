@@ -16,7 +16,6 @@ import { isRedactedMarker } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { cachedFunction } from "alchemy/Util/cached-function";
 import { sha256Object } from "alchemy/Util/sha256";
-import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";

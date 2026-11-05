@@ -1,5 +1,4 @@
 import * as FanOut from "@alchemy.run/domain/FanOut";
-import type * as cf from "@cloudflare/workers-types";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -131,13 +130,20 @@ interface Classes {
   /** The migration Workflow's name, as deployed. */
   readonly workflowName: unknown;
   readonly env: Record<string, any> | undefined;
+  /** Where the migration run's job tokens come from. */
+  readonly random: Random;
+}
+
+/** What makes job tokens: the platform's secure random source. */
+export interface Random {
+  readonly uuidV4: () => Effect.Effect<string>;
 }
 
 /** One set of classes per Worker. */
 const workers = new WeakMap<object, Classes>();
 
 /** The shared class of the host Worker, declared on first use. */
-export const sharedClasses = Effect.fn(function* () {
+export const sharedClasses = Effect.fn(function* (random: Random) {
   const host = yield* CloudflareWorker;
   let classes = workers.get(host);
   if (classes === undefined) {
@@ -158,6 +164,7 @@ export const sharedClasses = Effect.fn(function* () {
       workflowName: workflow.workflowName,
       // The Worker's bindings, at runtime: the old classes' among them.
       env: Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment)),
+      random,
     };
     workers.set(host, classes);
     // The migration run's root and relays: see `migration`.
@@ -357,10 +364,16 @@ const router = (
        * retries give up after a few).
        */
       const step = (budget: number) =>
-        Effect.suspend(() => {
-          if (driving || owned() || Date.now() < staleUntil) return Effect.void;
-          driving = true;
-          return Effect.gen(function* () {
+        Effect.gen(function* () {
+          const now = yield* Clock.currentTimeMillis;
+          // Checked and claimed at once: an alarm and a call never both start a step.
+          const start = yield* Effect.sync(() => {
+            if (driving || owned() || now < staleUntil) return false;
+            driving = true;
+            return true;
+          });
+          if (!start) return;
+          yield* Effect.gen(function* () {
             yield* Move.begin(raw, calls);
             const ready = yield* Move.copyFor(raw, calls, budget);
             yield* Effect.logDebug(
@@ -372,7 +385,10 @@ const router = (
                 .pipe(Effect.flatten);
             failures = 0;
             // Not done: carry on in the next alarm.
-            if (!owned()) yield* Effect.promise(() => raw.setAlarm(Date.now()));
+            if (!owned()) {
+              const now = yield* Clock.currentTimeMillis;
+              yield* Effect.promise(() => raw.setAlarm(now));
+            }
           }).pipe(
             Effect.catchCause((cause) =>
               Effect.gen(function* () {
@@ -380,13 +396,14 @@ const router = (
                 lastError = Cause.pretty(cause).slice(0, 2000);
                 if (STALE.test(lastError)) {
                   // On older code: leave it idle long enough to move to the deployed code.
-                  staleUntil = Date.now() + STALE_IDLE_MS;
+                  staleUntil = (yield* Clock.currentTimeMillis) + STALE_IDLE_MS;
                   yield* Effect.promise(() => raw.setAlarm(staleUntil + 100));
                   return;
                 }
                 yield* Effect.logWarning(`domain move ${name} failed (${failures})`, cause);
                 const wait = Math.min(30_000, 250 * 2 ** Math.min(failures, 7));
-                yield* Effect.promise(() => raw.setAlarm(Date.now() + wait));
+                const now = yield* Clock.currentTimeMillis;
+                yield* Effect.promise(() => raw.setAlarm(now + wait));
               }),
             ),
             Effect.ensuring(
@@ -403,18 +420,22 @@ const router = (
        * past {@link STALE_HOLD_MS} a call goes to the old object anyway.
        */
       const holdWhileStale = Effect.gen(function* () {
-        const until = Date.now() + STALE_HOLD_MS;
-        while (!owned() && Date.now() < staleUntil && Date.now() < until) {
+        const until = (yield* Clock.currentTimeMillis) + STALE_HOLD_MS;
+        let now = yield* Clock.currentTimeMillis;
+        while (!owned() && now < staleUntil && now < until) {
           yield* Effect.sleep("250 millis");
-          if (Date.now() >= staleUntil) yield* step(0);
+          now = yield* Clock.currentTimeMillis;
+          if (now >= staleUntil) yield* step(0);
         }
       });
 
       /** Make sure something drives the move: a pending alarm, or a step under way. */
       const ensureDriven = Effect.gen(function* () {
         if (driving || owned()) return;
-        if ((yield* Effect.promise(() => raw.getAlarm())) === null)
-          yield* Effect.promise(() => raw.setAlarm(Date.now()));
+        if ((yield* Effect.promise(() => raw.getAlarm())) === null) {
+          const now = yield* Clock.currentTimeMillis;
+          yield* Effect.promise(() => raw.setAlarm(now));
+        }
       });
 
       // Start the move as soon as the object is first used: its alarm drives it.
@@ -653,9 +674,7 @@ const migrationObject = (classes: Classes): ObjectImpl =>
       const relay = FanOut.makeRelay(work);
       let run: MigrationRun | undefined;
       const runtime: { readonly storage: FanOut.Storage; readonly jobs: FanOut.Jobs } =
-        yield* backfillRuntime({ uuidV4: () => Effect.sync(() => crypto.randomUUID()) }, (id) =>
-          run!.run(id),
-        );
+        yield* backfillRuntime(classes.random, (id) => run!.run(id));
       const makeMigrationRun = (): MigrationRun =>
         FanOut.makeRun<MovePlan, MovePass, MoveItem>(
           runtime.storage,

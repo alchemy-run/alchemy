@@ -386,13 +386,11 @@ export const seal = (raw: cf.DurableObjectStorage, sockets: () => ReadonlyArray<
       yield* Effect.promise(() => raw.put({ [SEALED]: true, [`${MOVE_PREFIX}alarm`]: alarm }));
       yield* Effect.promise(() => raw.deleteAlarm());
       source.sealed = true;
-      for (const socket of sockets()) {
-        try {
-          socket.close(1012, "moved");
-        } catch {
-          // already closed
-        }
-      }
+      for (const socket of sockets())
+        yield* Effect.try({
+          try: () => socket.close(1012, "moved"),
+          catch: () => "already closed",
+        }).pipe(Effect.orElseSucceed(() => undefined));
     }
     return {
       alarm: (yield* Effect.promise(() => raw.get<number | null>(`${MOVE_PREFIX}alarm`))) ?? null,

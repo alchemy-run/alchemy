@@ -47,7 +47,6 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import { outsideAlarmPass } from "../Workers/AlarmCallback.ts";
@@ -1470,7 +1469,7 @@ const durableObjectPlatform = (
         jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction);
       // Version 1: every object of every model in one class (see `Shared.ts`).
       const shared =
-        version !== undefined && version >= 1 ? yield* inInit(sharedClasses()) : undefined;
+        version !== undefined && version >= 1 ? yield* inInit(sharedClasses(random)) : undefined;
       /**
        * Each model's old classes, which a deploy moves to the shared class: a
        * route's version 0 class, and its class from before versions.
@@ -2270,11 +2269,12 @@ export function layerDurableObjects({
       (platform = Layer.unwrap(
         Effect.gen(function* () {
           const version = yield* DeployVersion;
+          const random = yield* SecureRandom.SecureRandom;
           const engine =
             version !== undefined && version >= 1
               ? // Saga runs in the shared class too, each workflow's on its own route.
                 makeEngine(jurisdiction, (name, impl) =>
-                  Effect.flatMap(sharedClasses(), (shared) =>
+                  Effect.flatMap(sharedClasses(random), (shared) =>
                     shared.object(
                       name,
                       impl,

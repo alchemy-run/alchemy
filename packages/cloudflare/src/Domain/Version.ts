@@ -126,7 +126,8 @@ export const MIGRATION_WORKFLOW = "AlchemyDomainMigration";
  */
 export const LISTING_LAG_SECONDS = 15 * 60;
 
-const fnv = (text: string) => {
+/** A short, stable hash of `text`, for Workflow instance ids. */
+export const fnv = (text: string) => {
   let hash = 0x811c9dc5;
   for (const char of text) {
     hash ^= char.charCodeAt(0);

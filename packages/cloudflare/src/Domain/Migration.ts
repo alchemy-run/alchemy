@@ -13,7 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { progressOf, worthRestarting } from "./Backfill.ts";
-import { passMarker } from "./Version.ts";
+import { fnv, passMarker } from "./Version.ts";
 
 export interface MigrationProps {
   /** The Domain's Worker, which hosts the old classes and the migration Workflow. */
@@ -117,13 +117,15 @@ const MigrationLive = () =>
     read: Effect.fn(function* ({ output }) {
       return output;
     }),
-    reconcile: Effect.fn(function* ({ news, session }) {
+    reconcile: Effect.fn(function* ({ id, news, session }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const workflowName = news.workflowName;
       const started = yield* Clock.currentTimeMillis;
       // Every object listed from here on is moved by this pass.
       const listedAt = Math.floor(started / 1000);
-      const target = `move-${listedAt}`;
+      // Each model's migration runs its own pass: a Worker's models migrate at once,
+      // in the same second, and must not share a run.
+      const target = `move-${fnv(id)}-${listedAt}`;
       const timeout = (news.timeoutSeconds ?? 1800) * 1000;
       const attrs = { accountId, workflowName };
 
