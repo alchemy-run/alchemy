@@ -250,6 +250,10 @@ export const AddonProvider = () =>
             clusterName,
             addonName,
           });
+          // Let a create or update a crashed deploy left in flight finish before diffing against it.
+          if (state?.status === "CREATING" || state?.status === "UPDATING") {
+            state = yield* waitForAddonActive({ clusterName, addonName });
+          }
 
           // Ensure — create if missing. Tolerate `ResourceInUseException`
           // as a race with a peer reconciler: re-read and continue with

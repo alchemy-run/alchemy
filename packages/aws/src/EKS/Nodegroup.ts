@@ -482,6 +482,10 @@ export const NodegroupProvider = () =>
 
           // Observe — cloud state is authoritative.
           let state = yield* readNodegroup({ clusterName, nodegroupName });
+          // Let a create or update a crashed deploy left in flight finish before diffing against it.
+          if (state?.status === "CREATING" || state?.status === "UPDATING") {
+            state = yield* waitForNodegroupActive(clusterName, nodegroupName);
+          }
 
           // Ensure — create if missing; tolerate a create race, then wait for
           // the node group to reach ACTIVE before syncing.

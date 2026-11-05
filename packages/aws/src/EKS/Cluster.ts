@@ -929,6 +929,14 @@ export const ClusterProvider = () =>
             kubernetesObjects: output?.kubernetesObjects,
             managedRoles,
           });
+          // Let a create or update a crashed deploy left in flight finish before diffing against it.
+          if (state?.status === "CREATING" || state?.status === "UPDATING") {
+            state = yield* waitForClusterActive(
+              clusterName,
+              output?.kubernetesObjects ?? [],
+              managedRoles,
+            );
+          }
 
           // Ensure — create cluster if missing. Tolerate
           // `ResourceInUseException` as a race with a peer reconciler:
