@@ -54,6 +54,7 @@ export type NoteKind = typeof NoteKind.Type;
 /** One binding row on a planned resource. */
 export const PlannedBinding = Schema.Struct({
   sid: Schema.String,
+  valueSource: Schema.optionalKey(Schema.Literals(["value", "inherit"])),
   action: Schema.Literals(["create", "update", "delete", "noop"]),
 });
 export type PlannedBinding = typeof PlannedBinding.Type;
@@ -63,6 +64,8 @@ export const PlannedResource = Schema.Struct({
   fqn: Schema.String,
   logicalId: Schema.String,
   resourceType: Schema.String,
+  /** Hash of planned props and bindings; excludes secrets and provider-built artifacts. */
+  inputHash: Schema.optionalKey(Schema.String),
   /** The action the plan decided for this resource. */
   action: Schema.Literals(["create", "update", "adopted", "replace", "delete", "orphaned", "noop"]),
   /** Binding rows the node carries; empty when the resource has none. */

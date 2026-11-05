@@ -39,6 +39,7 @@ import { emit, type PlannedAction, type PlannedBinding, type PlannedResource } f
 import { parseFqn } from "./FQN.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
+import { planInputHash } from "./PlanInputHash.ts";
 import {
   tryFindProviderRegistrationByType,
   missingProviderError,
@@ -286,6 +287,7 @@ export type Plan<Output = any> = {
 
 const describeBinding = (binding: BindingNode): PlannedBinding => ({
   sid: binding.sid,
+  valueSource: binding.valueSource ?? "value",
   action: binding.action,
 });
 
@@ -294,6 +296,10 @@ export const describeResource = (node: CRUD): PlannedResource => ({
   fqn: node.resource.FQN,
   logicalId: node.resource.LogicalId,
   resourceType: node.resource.Type,
+  inputHash: planInputHash({
+    props: "props" in node ? node.props : node.state.props,
+    bindings: [...node.bindings].sort((a, b) => (a.sid < b.sid ? -1 : a.sid > b.sid ? 1 : 0)),
+  }),
   action: node.action,
   bindings: node.bindings.map(describeBinding),
   providerMode: node.mode,
@@ -862,9 +868,9 @@ const makePlan = <A>(
               if (
                 havePropsChanged(oldProps, props) ||
                 (!combinedCycleMembers.has(resource.FQN) &&
-                  diffBindings(oldBindings, newBindings).some(
-                    (binding) => binding.action !== "noop",
-                  ))
+                  diffBindings(oldBindings, newBindings, {
+                    supportsInheritance: provider.nativeBindingInheritance === true,
+                  }).some((binding) => binding.action !== "noop"))
               ) {
                 // the props have changed but the provider did not provide any hints as to what is stable
                 // so we must assume everything has changed
@@ -1534,7 +1540,9 @@ const makePlan = <A>(
       // deduped `stack.bindings[fqn]` rows, so action and payload can
       // never drift. `delete` rows keep the persisted old data.
       const applyBindingData = new Map(applyBindings.map((b) => [b.sid, b.data]));
-      const bindingDiffs = diffBindings(oldBindings, newBindings).map((b) =>
+      const bindingDiffs = diffBindings(oldBindings, newBindings, {
+        supportsInheritance: provider.nativeBindingInheritance === true,
+      }).map((b) =>
         b.action === "delete" || !applyBindingData.has(b.sid)
           ? b
           : { ...b, data: applyBindingData.get(b.sid) },
@@ -2337,6 +2345,7 @@ const makePlan = <A>(
               sid: binding.sid,
               action: "delete" as const,
               data: binding.data,
+              ...(binding.valueSource === undefined ? {} : { valueSource: binding.valueSource }),
             })),
           } satisfies Delete,
         ] as const;

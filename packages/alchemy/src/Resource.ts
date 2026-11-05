@@ -101,7 +101,11 @@ export type LookupMethod<R extends ResourceLike> = [R["Lookup"]] extends [never]
 
 export type LogicalId = string;
 
-export interface ResourceBinding<Data = any> {
+export interface BindingOptions {
+  readonly valueSource?: "value" | "inherit";
+}
+
+export interface ResourceBinding<Data = any> extends BindingOptions {
   sid: string;
   data: Data;
 }
@@ -224,11 +228,15 @@ export type Resource<
   Lookup = never,
 > = Pipeable &
   ResourceLike<Type, Props, Attributes, Binding, Providers, Lookup> & {
-    bind(sid: Input<string>, binding: Input<Binding>): Effect.Effect<void>;
+    bind(
+      sid: Input<string>,
+      binding: Input<Binding>,
+      options?: BindingOptions,
+    ): Effect.Effect<void>;
     bind(
       template: TemplateStringsArray,
       ...args: any[]
-    ): (binding: Input<Binding>) => Effect.Effect<void>;
+    ): (binding: Input<Binding>, options?: BindingOptions) => Effect.Effect<void>;
   } & {
     [attr in keyof Attributes]-?: AttrOutput<Attributes[attr]>;
   };
@@ -515,19 +523,24 @@ export function Resource<R extends ResourceLike>(
       }
       const bind = (
         ...args:
-          | [sid: string, data: R["Binding"]]
+          | [sid: string, data: R["Binding"], options?: BindingOptions]
           | [template: TemplateStringsArray, ...args: any[]]
       ) =>
         typeof args[0] === "string"
           ? Effect.gen(function* () {
-              const [sid, data] = args as [sid: string, data: R["Binding"]];
+              const [sid, data, options] = args as [
+                sid: string,
+                data: R["Binding"],
+                options?: BindingOptions,
+              ];
               (stack.bindings[fqn] ??= []).push({
                 sid,
                 data,
+                ...(options?.valueSource === undefined ? {} : { valueSource: options.valueSource }),
               });
               return undefined;
             })
-          : (data: R["Binding"]) => {
+          : (data: R["Binding"], options?: BindingOptions) => {
               const stringifyBindArg = (arg: any): string | undefined => {
                 if (arg === undefined) {
                   return undefined;
@@ -563,6 +576,7 @@ export function Resource<R extends ResourceLike>(
                   })
                   .join("")}`,
                 data,
+                options,
               );
             };
 

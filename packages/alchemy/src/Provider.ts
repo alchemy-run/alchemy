@@ -112,6 +112,8 @@ export interface ProviderService<
    * @default 0
    */
   version?: number;
+  /** Opt in only when reconcile interprets valueSource=inherit using native provider semantics. */
+  nativeBindingInheritance?: boolean;
   /**
    * Legacy type names this provider also answers to. Copied from the
    * resource class's `aliases` option by {@link succeed}/{@link effect} so

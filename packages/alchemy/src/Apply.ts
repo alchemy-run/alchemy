@@ -2536,7 +2536,7 @@ const withoutGeneration = (
 const excludeDeletedBindings = (
   bindings: ReadonlyArray<ResourceBinding & { action?: string }>,
 ): ResourceBinding[] =>
-  bindings.flatMap(({ action, sid, data }) => (action === "delete" ? [] : [{ sid, data }]));
+  bindings.flatMap(({ action, ...binding }) => (action === "delete" ? [] : [binding]));
 
 /** Order-insensitive equality of two FQN lists. */
 const sameSet = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) => {
