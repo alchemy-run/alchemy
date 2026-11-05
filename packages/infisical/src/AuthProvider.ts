@@ -32,7 +32,7 @@ export const INFISICAL_OIDC_TOKEN_ENV = "INFISICAL_OIDC_TOKEN";
 /** Optional audience to request in the platform's OIDC token. */
 export const INFISICAL_OIDC_AUDIENCE_ENV = "INFISICAL_OIDC_AUDIENCE";
 
-const PROVIDER_NAME = "Infisical";
+export const INFISICAL_AUTH_PROVIDER_NAME = "Infisical";
 const API_TIMEOUT = Duration.seconds(30);
 
 /**
@@ -251,7 +251,7 @@ const readEnvironment = Effect.gen(function* () {
  * credentials (recommended) or a pasted access token.
  */
 export const InfisicalAuth = AuthProviderLayer<InfisicalAuthConfig, InfisicalResolvedCredentials>()(
-  PROVIDER_NAME,
+  INFISICAL_AUTH_PROVIDER_NAME,
   {
     configSchema: InfisicalAuthConfigSchema,
     configure: () =>
@@ -276,7 +276,11 @@ export const InfisicalAuth = AuthProviderLayer<InfisicalAuthConfig, InfisicalRes
         );
       }
       const method = input.method;
-      return validateFieldValues(PROVIDER_NAME, fieldsFor(method), input.values).pipe(
+      return validateFieldValues(
+        INFISICAL_AUTH_PROVIDER_NAME,
+        fieldsFor(method),
+        input.values,
+      ).pipe(
         Effect.map((values) => toConfig(method, values)),
         Effect.flatMap(verify),
       );
