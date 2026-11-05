@@ -2,15 +2,26 @@
 title: Cloud Run sidecars
 description: Run more containers next to a Cloud Run service — plain images, GCP.Run.Container resources, or your own Effect programs — and control the order they start in.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 A Cloud Run instance can run several containers. The first one takes
 requests. The rest are sidecars, and every container in the instance
 reaches the others on `localhost`.
 
+<Tree
+  nodes={[
+    { id: "inst", label: "instance", type: "one copy of the revision" },
+    { id: "app", label: "app", type: "takes requests · :8080", parent: "inst", tone: "accent" },
+    { id: "cache", label: "cache", type: "redis · localhost:6379", parent: "inst" },
+    { id: "otel", label: "collector", type: "localhost:4317", parent: "inst" },
+  ]}
+  caption="Every container in an instance shares its network. The first one takes the requests and reaches its sidecars on localhost."
+/>
+
 A sidecar can be a plain image you list in the template, a
 `GCP.Run.Container` that runs an image, or a `GCP.Run.Container` that
-runs your own Effect program. This page starts with a service that runs
-an image, then moves to Effect services, which bind their sidecars.
+runs your own Effect program.
 
 ## Add a sidecar
 
@@ -75,6 +86,23 @@ const proxy = yield* GCP.Run.Service("Proxy", {
 
 Give each dependency a startup probe that checks it can serve. A
 sidecar has no `ports`, so its probe names the port.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "cache", label: "cache" },
+    { id: "app", label: "app", type: "dependsOn: cache" },
+  ]}
+  bars={[
+    { lane: "cache", start: 0, end: 2.4, label: "starting", tone: "warn" },
+    { lane: "cache", start: 2.4, end: 10, label: "serving on :6379" },
+    { lane: "app", start: 0, end: 2.4, label: "waiting", tone: "muted" },
+    { lane: "app", start: 2.4, end: 6.2, label: "starting", tone: "warn" },
+    { lane: "app", start: 6.2, end: 10, label: "taking requests" },
+  ]}
+  marks={[{ at: 2.4, label: "cache passes its probe" }, { at: 6.2, label: "instance takes requests" }]}
+  caption="The app doesn't start until the cache passes its startup probe, so the first request can't arrive before the cache listens."
+/>
 
 ## Chain dependencies
 

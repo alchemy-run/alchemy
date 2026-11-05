@@ -197,7 +197,7 @@ export const makeGcsState = (options: GcsStateOptions = {}) =>
         : Provisioning.deployMissing(
             {
               backend: "gcp",
-              name: options.name,
+              flags: { name: options.name },
               label: `Cloud Storage state bucket '${bucketName}'`,
               configured: options.bucketName !== undefined,
             },

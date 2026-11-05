@@ -2,6 +2,7 @@
 title: IPs & certificates
 description: Public and private Fly Services, App addresses, and certificates for your own hostname.
 ---
+import Boundaries from "../../../components/diagrams/Boundaries.astro";
 
 A [Service](/fly/compute/services) owns its App and manages that
 App's addresses. It is public by default and reachable only inside
@@ -11,6 +12,23 @@ your organization with `public: false`. Fly's proxy load-balances
 IPs and certificates you declare yourself attach to a
 [`Fly.App`](/fly/compute/apps): use them for Machines, for Services
 grouped in one App, and for your own domain.
+
+<Boundaries
+  nodes={[
+    { id: "visitor", label: "visitor", col: 0, row: 0 },
+    { id: "proxy", label: "Fly proxy", type: "api.fly.dev · TLS", col: 1, row: 0 },
+    { id: "api", label: "api", type: "Machines", col: 2, row: 0, tone: "accent" },
+    { id: "orders", label: "orders", type: "Flycast only", col: 2, row: 1 },
+  ]}
+  zones={[{ id: "net", label: "organization", type: "private network", nodes: ["api", "orders"], tone: "warn" }]}
+  links={[
+    { from: "visitor", to: "proxy", label: "GET" },
+    { from: "proxy", to: "api", label: "balanced" },
+    { from: "api", to: "orders", label: "orders.flycast" },
+    { from: "visitor", to: "net", kind: "blocked", label: "no public address" },
+  ]}
+  caption="Public traffic enters through Fly's proxy, which balances it across the App's Machines. A private Service has only a Flycast address on the organization's network, so only its neighbours reach it."
+/>
 
 ## Public Services
 

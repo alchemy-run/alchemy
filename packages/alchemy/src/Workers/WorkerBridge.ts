@@ -140,7 +140,8 @@ export const dispatchRpcMethod = (
   method: string,
   args: readonly unknown[],
 ): Effect.Effect<unknown, unknown, any> => {
-  const dispatcher = shape?.[method];
+  // Never `Object.prototype` members (`constructor`, `__proto__`, ...).
+  const dispatcher = method in Object.prototype ? undefined : shape?.[method];
   if (typeof dispatcher !== "function") {
     return Effect.die(
       new Error(

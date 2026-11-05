@@ -1,0 +1,159 @@
+---
+/**
+ * `<StateMachine />` — the states something moves through and what moves it.
+ * States are pills on a grid, transitions are labelled curved arrows, a dot
+ * marks where it starts and a ring where it ends. Use it for a lifecycle: a
+ * message (visible, in flight, deleted, dead-lettered), an alarm (OK, ALARM),
+ * a resource in a deploy (created, updated, replaced, deleted).
+ *
+ *   <StateMachine
+ *     states={[
+ *       { id: "visible", label: "visible", col: 0, row: 0, start: true },
+ *       { id: "flight", label: "in flight", col: 1, row: 0 },
+ *       { id: "deleted", label: "deleted", col: 2, row: 0, end: true },
+ *     ]}
+ *     transitions={[
+ *       { from: "visible", to: "flight", label: "receive" },
+ *       { from: "flight", to: "visible", label: "timeout", bend: 0.4 },
+ *       { from: "flight", to: "deleted", label: "delete" },
+ *     ]}
+ *   />
+ *
+ * `bend` curves a transition (positive bends left of its direction), so a pair
+ * of opposite transitions between two states don't overlap. A transition from a
+ * state to itself loops above it.
+ */
+import "./diagram.css";
+
+interface State {
+  id: string;
+  label: string;
+  type?: string;
+  col: number;
+  row: number;
+  start?: boolean;
+  end?: boolean;
+  tone?: "default" | "accent" | "warn" | "danger";
+}
+interface Transition {
+  from: string;
+  to: string;
+  label?: string;
+  bend?: number;
+  dashed?: boolean;
+}
+interface Props {
+  states: State[];
+  transitions: Transition[];
+  caption?: string;
+}
+
+const { states, transitions, caption } = Astro.props as Props;
+
+const SW = Math.max(120, ...states.map((s) => Math.max(s.label.length * 8, (s.type ?? "").length * 6.6) + 28));
+const SH = 46;
+const COLW = SW + 120;
+const ROWH = SH + 84;
+const PAD = 40;
+const pos = new Map(
+  states.map((s) => [s.id, { x: PAD + s.col * COLW + SW / 2, y: PAD + s.row * ROWH + SH / 2 }]),
+);
+const cols = Math.max(...states.map((s) => s.col)) + 1;
+const rowsN = Math.max(...states.map((s) => s.row)) + 1;
+const W = PAD * 2 + (cols - 1) * COLW + SW;
+const H = PAD * 2 + (rowsN - 1) * ROWH + SH;
+
+// Where the line from a state's centre towards (dx, dy) leaves its pill.
+const exit = (c: { x: number; y: number }, dx: number, dy: number) => {
+  const tx = dx === 0 ? Infinity : SW / 2 / Math.abs(dx);
+  const ty = dy === 0 ? Infinity : SH / 2 / Math.abs(dy);
+  const t = Math.min(tx, ty);
+  return { x: c.x + dx * t, y: c.y + dy * t };
+};
+
+const paths = transitions.map((t) => {
+  const a = pos.get(t.from)!;
+  const b = pos.get(t.to)!;
+  if (t.from === t.to) {
+    const y = a.y - SH / 2;
+    return {
+      d: `M ${a.x - 18} ${y} C ${a.x - 30} ${y - 46}, ${a.x + 30} ${y - 46}, ${a.x + 18} ${y - 6}`,
+      lx: a.x,
+      ly: y - 40,
+      ...t,
+    };
+  }
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  const k = t.bend ?? 0;
+  // Control point off the chord's midpoint, perpendicular to it.
+  const cx = (a.x + b.x) / 2 - (dy / len) * len * k;
+  const cy = (a.y + b.y) / 2 + (dx / len) * len * k;
+  const p1 = exit(a, cx - a.x, cy - a.y);
+  const p2raw = exit(b, cx - b.x, cy - b.y);
+  // Pull the end back a little so the arrowhead clears the pill.
+  const el = Math.hypot(p2raw.x - cx, p2raw.y - cy) || 1;
+  const p2 = { x: p2raw.x + ((cx - p2raw.x) / el) * 4, y: p2raw.y + ((cy - p2raw.y) / el) * 4 };
+  const mx = 0.25 * p1.x + 0.5 * cx + 0.25 * p2.x;
+  const my = 0.25 * p1.y + 0.5 * cy + 0.25 * p2.y;
+  return { d: `M ${p1.x} ${p1.y} Q ${cx} ${cy} ${p2.x} ${p2.y}`, lx: mx, ly: my, ...t };
+});
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "State machine"}>
+    <defs>
+      <marker id="alc-sm-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+    {
+      paths.map((p) => (
+        <path d={p.d} class:list={["alc-fig__line", p.dashed && "alc-fig__line--dashed"]} marker-end="url(#alc-sm-arrow)" />
+      ))
+    }
+    {
+      states.map((s) => {
+        const { x, y } = pos.get(s.id)!;
+        return (
+          <g>
+            {s.start && (
+              <g>
+                <circle cx={x - SW / 2 - 26} cy={y} r="6" class="alc-fig__dot" />
+                <line x1={x - SW / 2 - 20} y1={y} x2={x - SW / 2 - 4} y2={y} class="alc-fig__line" marker-end="url(#alc-sm-arrow)" />
+              </g>
+            )}
+            <rect
+              x={x - SW / 2}
+              y={y - SH / 2}
+              width={SW}
+              height={SH}
+              rx={SH / 2}
+              class:list={[
+                "alc-fig__box",
+                s.tone === "accent" && "alc-fig__box--accent",
+                s.tone === "warn" && "alc-fig__box--warn",
+                s.tone === "danger" && "alc-fig__box--danger",
+              ]}
+            />
+            {s.end && <rect x={x - SW / 2 + 4} y={y - SH / 2 + 4} width={SW - 8} height={SH - 8} rx={(SH - 8) / 2} class="alc-fig__line alc-fig__line--muted" />}
+            <text x={x} y={y + (s.type ? -2 : 4)} text-anchor="middle" class="alc-fig__label">{s.label}</text>
+            {s.type && <text x={x} y={y + 13} text-anchor="middle" class="alc-fig__type">{s.type}</text>}
+          </g>
+        );
+      })
+    }
+    {
+      paths
+        .filter((p) => p.label)
+        .map((p) => (
+          <g>
+            <rect x={p.lx - p.label!.length * 3.3 - 5} y={p.ly - 10} width={p.label!.length * 6.6 + 10} height="17" rx="4" class="alc-fig__label-bg" />
+            <text x={p.lx} y={p.ly + 3} text-anchor="middle" class="alc-fig__small">{p.label}</text>
+          </g>
+        ))
+    }
+  </svg>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>

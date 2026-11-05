@@ -6,12 +6,37 @@ description: Run Postgres on Cloud SQL, connect Cloud Run to it over the Cloud S
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const pkgs = "@alchemy.run/drizzle drizzle-orm";
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 Cloud SQL runs Postgres or MySQL for you. A Cloud Run service reaches
 it through the Cloud SQL socket, with no public IP and no VPC to set
 up. This page builds a Postgres todo API with Drizzle.
 
 <PackageManagers add={pkgs} />
+
+## Instances, databases and users
+
+A Cloud SQL **instance** is one managed Postgres or MySQL server in a region, sized by its **tier**. It holds **databases** and the **users** that sign in to them. Cloud Run reaches it through the Cloud SQL socket, and deploys apply migrations through the Cloud SQL Data API, so neither needs a network route to it.
+
+<Tree
+  nodes={[
+    { id: "region", label: "us-central1", type: "region" },
+    { id: "inst", label: "Postgres", type: "Cloud SQL instance · db-f1-micro", parent: "region" },
+    { id: "db", label: "App", type: "database", parent: "inst", tone: "accent" },
+    { id: "user", label: "AppUser", type: "user", parent: "inst" },
+    {
+      id: "api",
+      label: "Api",
+      type: "Cloud Run service",
+      parent: "region",
+      specs: [
+        ["reaches it", "/cloudsql/… socket"],
+        ["signs in as", "AppUser"],
+      ],
+    },
+  ]}
+  caption="The instance is the server you pay for, and its databases and users are resources of their own. The service in the same region reaches it through the socket Cloud SQL mounts, with no public IP."
+/>
 
 ## Create the instance
 

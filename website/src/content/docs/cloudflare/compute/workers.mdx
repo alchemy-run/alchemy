@@ -3,11 +3,37 @@ title: Workers
 description: Cloudflare Workers are the compute Runtime of every Alchemy app — declare the Worker and its handler in one file, bind resources with full type safety, and call other Workers over schemaless RPC.
 ---
 
-In Alchemy, a Cloudflare Worker is a
-[Runtime](/infrastructure-as-effects/runtime): a
-[Resource](/infrastructure-as-code/resource) that carries the code it
-runs. The name and props describe the Worker to deploy. The Effect is
-what it does:
+import WorldMap from "../../../../components/diagrams/WorldMap.astro";
+
+A Worker is a program Cloudflare runs on every machine in its network. A request goes to the city nearest the person who sent it, and a Worker there handles it. There's no region to choose, no server to size, and nothing running while nobody calls it.
+
+## How a Worker runs
+
+Workers run in **isolates**: lightweight sandboxes inside one V8 process, the JavaScript engine Chrome uses. Starting an isolate takes milliseconds, so a Worker can start for the first request in a city and still answer quickly. Many Workers, from many customers, share one process, each isolated from the others.
+
+<WorldMap
+  places={[
+    { id: "tyo", label: "Worker", type: "isolate in Tokyo", lat: 35.7, lon: 139.7, tone: "accent" },
+    { id: "par", label: "Worker", type: "isolate in Paris", lat: 48.9, lon: 2.4, tone: "accent" },
+    { id: "sao", label: "Worker", type: "isolate in São Paulo", lat: -23.5, lon: -46.6, tone: "accent", place: "below" },
+    { id: "r2", label: "Uploads", type: "R2 Bucket", lat: 39, lon: -77.5, place: "below" },
+  ]}
+  links={[
+    { from: "tyo", to: "r2", bend: 0.15 },
+    { from: "par", to: "r2", bend: -0.2 },
+    { from: "sao", to: "r2", label: "binding", bend: 0.2 },
+  ]}
+  crop={{ west: -130, east: 160, north: 70, south: -40 }}
+  caption="The same Worker runs in an isolate in the city nearest each request. Nothing stays in the isolate, so what must be shared lives in a resource it reaches through a binding."
+/>
+
+So a Worker keeps nothing between requests that it can count on. Two requests may run in two cities, in two isolates. Anything that must be remembered lives in a resource the Worker reaches through a binding: a [KV Namespace](/cloudflare/data/kv), an [R2 Bucket](/cloudflare/data/r2), a [D1 database](/cloudflare/data/d1), or a [Durable Object](/cloudflare/compute/durable-objects) when one place has to see every request.
+
+Each request gets a budget of CPU time, not wall-clock time. Time spent waiting on a fetch or a binding doesn't count, so a Worker can wait on slow APIs without running out.
+
+## Declare a Worker
+
+In Alchemy, a Worker is a [Runtime](/infrastructure-as-effects/runtime): a [Resource](/infrastructure-as-code/resource) that carries the code it runs. The name and props describe the Worker to deploy. The Effect is what it does:
 
 ```typescript
 // src/worker.ts
@@ -739,25 +765,6 @@ object.
 
 ## Where next
 
-Guides that build on Workers:
+Workers have more to them than one chapter covers. [Code updates](/cloudflare/compute/code-updates) explains what a deploy does to running Workers, and [Gradual deployments](/cloudflare/compute/gradual-deployments) rolls versions out a share at a time. [Python Workers](/cloudflare/compute/python-workers), [Workers Cache](/cloudflare/compute/cache), [Rate limiting](/cloudflare/compute/rate-limiting), [Browser rendering](/cloudflare/compute/browser-rendering), [Worker Loader](/cloudflare/compute/worker-loader) and [Workers for Platforms](/cloudflare/compute/workers-for-platforms) each add one capability.
 
-- [Gradual deployments](/cloudflare/compute/gradual-deployments) — previews, canaries, and ramped rollouts across versions.
-- [Code updates](/cloudflare/compute/code-updates) — what a deploy does to running Workers and Durable Objects.
-- [Python Workers](/cloudflare/compute/python-workers) — point `main` at a `.py` file.
-- [Workers Cache](/cloudflare/compute/cache) — serve responses from the edge before the Worker runs.
-- [Rate limiting](/cloudflare/compute/rate-limiting) — throttle requests with a binding.
-- [Browser rendering](/cloudflare/compute/browser-rendering) — a headless browser as a binding.
-- [Worker Loader](/cloudflare/compute/worker-loader) — run untrusted Workers at runtime.
-- [Workers for Platforms](/cloudflare/compute/workers-for-platforms) — run customers' Workers in your account.
-- [Custom domains](/cloudflare/networking/custom-domains) — serve Workers from your own hostnames and routes.
-- [Effect HTTP API](/cloudflare/apis/effect-http-api) and [Effect RPC](/cloudflare/apis/effect-rpc) — schema-validated surfaces.
-- [Frontend frameworks](/cloudflare/frontend/frontends) — ship a frontend from the same Stack.
-
-Related:
-
-- [Durable Objects](/cloudflare/compute/durable-objects), [Workflows](/cloudflare/compute/workflows), and [Containers](/cloudflare/compute/containers) — the other compute Runtimes, all reached through a Worker.
-- [Secrets & env](/cloudflare/security/secrets-env) — bind `.env` values and secrets into the Worker.
-
-Reference:
-
-- [Worker API reference](/providers/cloudflare/workers/worker)
+Every Worker prop is in the [Worker reference](/providers/cloudflare/workers/worker).

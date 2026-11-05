@@ -668,6 +668,24 @@ Why this matters: consumers can build cloud-agnostic services on top of bindings
 
 After implementing, re-export the contract and implementation layers from the service's `index.ts` (but keep the shared `{Cap}Binding.ts`/`{Cap}Http.ts` scaffolding un-exported).
 
+### Federated identity over keys
+
+When a binding, a runtime-to-runtime call, or a CI deploy needs credentials, look for an identity the platform already signs before minting a key. A long-lived key or shared random token is the last resort. In order of preference:
+
+1. **The host runs as the target cloud's own identity** (a Lambda's role, a Cloud Run service account): grant on that identity. No credential moves.
+2. **The host's platform issues signed identity tokens**: federate. Create a trust in the target cloud scoped to that one workload, and exchange the token at runtime.
+   - Google ID tokens from the metadata server (Cloud Run, Cloud Functions) → AWS `AssumeRoleWithWebIdentity`.
+   - An AWS role's signed `GetCallerIdentity` → GCP workload identity federation (Lambda, ECS, EC2, App Runner, Batch, EKS Pod Identity).
+   - Fly Machine OIDC tokens from `/.fly/api` → AWS (an IAM OIDC provider) and GCP (a workload identity pool).
+   - CI tokens (GitHub Actions, GitLab, Vercel) → see `alchemy/Auth/OidcToken`.
+
+   A host exposes its platform's tokens to bindings through `BaseRuntimeContext.oidcToken(audience)`, and its bundler sets `__ALCHEMY_HOST_IDENTITY__` so bindings keep only the exchange path. References: the federated branches of [AWSBindings.ts](./packages/aws/src/AWSBindings.ts) and [GCPBindings.ts](./packages/gcp/src/GCPBindings.ts), and [Fly internal/Oidc.ts](./packages/fly/src/internal/Oidc.ts).
+3. **The platform issues nothing** (Cloudflare Workers, Railway, Fly Sprites today): create a key for an identity that may do only what this one host needs, keep it `Redacted` so it deploys as a secret, and say in the binding's JSDoc why no federated path exists.
+
+The same order applies when one runtime calls another. Authorize the caller by an identity the platform signs: IAM for Lambda invokes, a Google ID token checked by Cloud Run's invoker role, Fly's signed `Fly-Src` header naming the calling App ([Fly rpc.ts](./packages/fly/src/rpc.ts)). Use a shared random token only where the platform signs nothing (Railway's private network).
+
+Scope every trust to the one workload: match the token's subject, App, or role, never just the issuer or the organization. An account-level trust anchor that many stacks share (one IAM OIDC provider per issuer per account) is declared with `RemovalPolicy.retain()`, so destroying one stack never breaks another. Before writing a key path for a new host or provider, check the platform's docs for workload identity, OIDC, or signed-request support, and record the answer in the catalog.
+
 ### Isolate scope vs request scope (runtime bridges)
 
 **Layer construction is isolate-scoped; the effects built services expose are request-scoped.**
