@@ -3,6 +3,8 @@ title: Kubernetes
 description: Run an Effect Cluster's database and runners on any Kubernetes cluster — EKS, GKE, or kind on your machine.
 ---
 
+import Tree from "../../../components/diagrams/Tree.astro";
+
 Host your cluster on any Kubernetes cluster: Postgres runs as a Deployment behind a ClusterIP Service, and the runners run as a Deployment beside it. Callers in the cluster reach the gateway at its Service.
 
 ```typescript title="src/Cluster.ts"
@@ -20,6 +22,18 @@ export const Default = ClusterKubernetes.DeploymentPool("Default", { replicas: 2
 ```
 
 Install `@alchemy.run/kubernetes`. `cluster` takes any cluster Alchemy manages, such as `AWS.EKS.Cluster`, or a `Kubernetes.KubeConfig(...)`.
+
+<Tree
+  nodes={[
+    { id: "cluster", label: "Kind", type: "Kubernetes cluster" },
+    { id: "db", label: "Database", type: "Postgres pod", parent: "cluster" },
+    { id: "deploy", label: "Default", type: "Deployment", parent: "cluster" },
+    { id: "p1", label: "pod", type: "runner", parent: "deploy" },
+    { id: "p2", label: "pod", type: "runner", parent: "deploy" },
+    { id: "svc", label: "Default", type: "Service · :34500", parent: "cluster", side: true },
+  ]}
+  caption="The pods reach each other at their own addresses. The Deployment's Service serves the gateway, inside the cluster unless serviceType says otherwise."
+/>
 
 ## The database
 

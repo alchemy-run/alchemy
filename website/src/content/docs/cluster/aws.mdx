@@ -3,6 +3,8 @@ title: AWS
 description: Run an Effect Cluster's database on RDS and its runners on ECS Fargate, called from Lambda or anywhere through a load balancer.
 ---
 
+import Tree from "../../../components/diagrams/Tree.astro";
+
 Host your cluster in your AWS account: Postgres runs on RDS, in a VPC of its own, and runners run on ECS Fargate in the same VPC. A load balancer serves each pool's gateway, so a Lambda function, a container or a Worker calls the rooms by id.
 
 ```typescript title="src/Cluster.ts"
@@ -17,6 +19,18 @@ export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
 ```
 
 Install `@alchemy.run/aws` and finish [AWS setup](/aws/setup).
+
+<Tree
+  nodes={[
+    { id: "account", label: "AWS account", type: "your profile's account" },
+    { id: "vpc", label: "VPC", type: "two Availability Zones", parent: "account", dashed: true },
+    { id: "db", label: "Database", type: "RDS Postgres", parent: "vpc", specs: [["class", "db.m7g.large"]] },
+    { id: "sg", label: "runners", type: "security group", parent: "vpc", dashed: true },
+    { id: "pool", label: "Default", type: "ECS service · Fargate", parent: "sg", specs: [["replicas", "3"]] },
+    { id: "alb", label: "Load Balancer", type: "internet-facing", parent: "vpc", side: true },
+  ]}
+  caption="The runners' security group is the only way to Postgres and to the other runners. The pool's Application Load Balancer is the only way in from outside."
+/>
 
 ## The database
 

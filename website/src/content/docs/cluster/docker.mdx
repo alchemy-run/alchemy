@@ -3,6 +3,8 @@ title: Docker
 description: Run an Effect Cluster's database and runners on a Docker swarm, on your machine or a server.
 ---
 
+import Tree from "../../../components/diagrams/Tree.astro";
+
 Run the whole cluster on Docker: Postgres and the pool are swarm services on one overlay network. Use it on your machine, or on a server you run.
 
 ```typescript title="src/Cluster.ts"
@@ -17,6 +19,19 @@ export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
 ```
 
 Install `@alchemy.run/docker`, and turn swarm mode on once with `docker swarm init`.
+
+<Tree
+  nodes={[
+    { id: "swarm", label: "Docker swarm", type: "your machine" },
+    { id: "net", label: "overlay network", parent: "swarm", dashed: true },
+    { id: "db", label: "Database", type: "swarm service", parent: "net", specs: [["data", "named volume"]] },
+    { id: "pool", label: "Default", type: "SwarmPool · service", parent: "net" },
+    { id: "t1", label: "task 1", type: "runner", parent: "pool" },
+    { id: "t2", label: "task 2", type: "runner", parent: "pool" },
+    { id: "api", label: "Api", type: "Docker Service", parent: "net" },
+  ]}
+  caption="The database, the pool's tasks and the Api share one overlay network. The Api reaches the gateway by the pool's name."
+/>
 
 ## The database
 

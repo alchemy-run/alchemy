@@ -3,6 +3,8 @@ title: Fly
 description: Run an Effect Cluster's database and runners on Fly.io, on a private network, with the gateway at the pool's fly.dev address.
 ---
 
+import Tree from "../../../components/diagrams/Tree.astro";
+
 Host your cluster on Fly.io: Postgres runs on a Fly Machine with a volume, and the runners run as a Fly Service, all on a private network for your stack. The runners serve their gateway at `https://{name}.fly.dev`.
 
 ```typescript title="src/Cluster.ts"
@@ -17,6 +19,18 @@ export const Default = ClusterFly.MachinePool("Default", { replicas: 2 }).pipe(
 ```
 
 Install `@alchemy.run/fly` and finish [Fly setup](/fly/setup).
+
+<Tree
+  nodes={[
+    { id: "org", label: "Fly organization", type: "your profile's organization" },
+    { id: "net", label: "private network", type: "IPv6", parent: "org", dashed: true },
+    { id: "db", label: "Database", type: "App · one Machine", parent: "net", specs: [["data", "volume"]] },
+    { id: "pool", label: "Default", type: "Fly Service", parent: "net" },
+    { id: "m1", label: "Machine", type: "runner", parent: "pool" },
+    { id: "m2", label: "Machine", type: "runner", parent: "pool" },
+  ]}
+  caption="Runners reach Postgres and each other over the private network. Nothing outside it reaches the database; callers reach the pool at its fly.dev address."
+/>
 
 ## The database
 
