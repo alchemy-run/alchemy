@@ -117,10 +117,34 @@ export type CronTag<Self, Name extends string> = Named<Name> &
     new (_: never): {};
   };
 
+/** A cron declared with its implementation: the class is what deploys it. */
+export type CronInline<Name extends string, Req> = Effect.Effect<ClusterCronResource, never, Req> &
+  Named<Name> &
+  PlatformIdentity<Name> & {
+    new (_: never): {};
+  };
+
 /** The class surface of {@link Cron}. */
 export interface CronClass {
   // `Self` names the class (`extends Cluster.Cron<Nightly>()`).
-  <Self>(): <const Name extends string>(name: Name) => CronTag<Self, Name>;
+  <Self>(): {
+    /**
+     * Declared with its implementation: an Effect that resolves bindings
+     * once per runner and returns the job. Provide a pool Layer to
+     * `impl` to deploy it; `yield*` the class in the Stack.
+     */
+    <const Name extends string, InitReq = never>(
+      name: Name,
+      props: InputProps<CronProps>,
+      impl: Effect.Effect<
+        Effect.Effect<void, unknown, Scope | ClusterCron.CurrentScheduledTime>,
+        ConfigError.ConfigError,
+        InitReq
+      >,
+    ): CronInline<Name, Providers | Exclude<InitReq, CronServices | PlatformServices>>;
+    /** A bare declaration, implemented by `.make(props, impl)`. */
+    <const Name extends string>(name: Name): CronTag<Self, Name>;
+  };
 }
 
 /**
@@ -129,14 +153,31 @@ export interface CronClass {
  * is a persisted message, so a run due while its runner restarts still
  * happens.
  *
- * Declare it by name. `.make(props, impl)` is its implementation, as a
- * Layer: its schedule, as Effect's `ClusterCron.make` takes it, and an
- * Effect that resolves bindings once per runner and returns the job. The job can read
- * the time it was scheduled for with `ClusterCron.CurrentScheduledTime`.
- * Providing a pool Layer to the implementation is what deploys it.
+ * Declare it by name, with its schedule, as Effect's `ClusterCron.make`
+ * takes it, and its implementation: an Effect that resolves bindings once
+ * per runner and returns the job. The job can read the time it was
+ * scheduled for with `ClusterCron.CurrentScheduledTime`. Providing a pool
+ * Layer to the implementation is what deploys it. Or declare it bare and
+ * implement it with `.make(props, impl)`, as a Layer.
  *
  * ### Declaring a cron
  * **Example:** A nightly job
+ * ```typescript
+ * // src/Nightly.ts
+ * export default class Nightly extends Cluster.Cron<Nightly>()(
+ *   "Nightly",
+ *   { main: import.meta.url, cron: "0 3 * * *", skipIfOlderThan: "1 hour" },
+ *   Effect.gen(function* () {
+ *     const counters = yield* Counter;
+ *     return Effect.gen(function* () {
+ *       const counter = yield* counters.getByName("nightly");
+ *       yield* counter.Increment({ amount: 1 });
+ *     }).pipe(Effect.orDie);
+ *   }).pipe(Effect.provide(Default)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Declared bare, and implemented as a Layer
  * ```typescript
  * // src/Nightly.ts
  * export class Nightly extends Cluster.Cron<Nightly>()("Nightly") {}
@@ -156,4 +197,6 @@ export interface CronClass {
  *
  * @resource
  */
-export const Cron: CronClass = (() => (name: string) => declare(name, {})) as unknown as CronClass;
+export const Cron: CronClass = (() =>
+  (name: string, props?: InputProps<CronProps>, impl?: unknown) =>
+    declare(name, {}, props, impl)) as unknown as CronClass;

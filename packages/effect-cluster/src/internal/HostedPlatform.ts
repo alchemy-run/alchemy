@@ -17,7 +17,10 @@ import type { Providers } from "../Providers.ts";
 import { type HostedRuntimeContext, makeHostedRuntimeContext } from "./HostedRuntime.ts";
 
 export interface HostedProps extends PlatformProps {
-  /** The module whose default export is this class's Layer. Usually `import.meta.url`. */
+  /**
+   * The module whose default export is this class, or the Layer its
+   * `.make(...)` returned. Usually `import.meta.url`.
+   */
   main: string;
 }
 
@@ -61,8 +64,13 @@ export const makeHostedPlatform = <
       delete: () => Effect.void,
     });
 
-  /** The class: a declaration with `.make(props, impl)`, its implementation as a Layer. */
-  const declare = (id: string, members: object) => {
+  /**
+   * The class: with `impl`, the class itself is the implementation;
+   * without, a declaration with `.make(props, impl)`, its implementation as
+   * a Layer.
+   */
+  const declare = (id: string, members: object, props?: InputProps<Props>, impl?: unknown) => {
+    if (impl !== undefined) return (platform as any)()(id, props, impl);
     const tag = (platform as any)()(id);
     return Object.assign(class {}, members, {
       LogicalId: id,

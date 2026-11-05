@@ -163,6 +163,26 @@ export type EntityTag<Self, Type extends string, Rpcs extends Rpc.Any> = Effect.
     new (_: never): EntityNamespace<Rpcs>;
   };
 
+/**
+ * An entity declared with its implementation: the class callers `yield*`,
+ * which also deploys it.
+ */
+export type EntityInline<Type extends string, Rpcs extends Rpc.Any, Req> = Effect.Effect<
+  EntityNamespace<Rpcs>,
+  never,
+  Req
+> &
+  Named<Type> &
+  PlatformIdentity<Type> & {
+    /** The Effect Cluster entity behind the class, for Effect Cluster's own APIs. */
+    readonly entity: EffectEntity.Entity<Type, Rpcs>;
+    /** The entity's RPCs, as an `RpcGroup`. */
+    readonly protocol: RpcGroup.RpcGroup<Rpcs>;
+    /** Type an instance's handlers against the entity's RPCs, as Effect Cluster's `Entity.of`. */
+    of<Handlers extends EffectEntity.HandlersFrom<Rpcs>>(handlers: Handlers): Handlers;
+    new (_: never): EntityNamespace<Rpcs>;
+  };
+
 /** Props of an external entity: an existing Effect Cluster program, run as it is. */
 export interface ExternalEntityProps {
   /**
@@ -194,6 +214,16 @@ export interface EntityClass {
   };
   // `Self` names the class (`extends Cluster.Entity<Counter>()`).
   <Self>(): {
+    /**
+     * Declared from an Effect Cluster entity, with its implementation, which
+     * types its handlers with the entity's `.of`. Provide a pool Layer to
+     * `impl` to deploy it, with its RPCs' middleware provided to the pool.
+     */
+    <const Type extends string, Rpcs extends Rpc.Any, InitReq = never>(
+      entity: EffectEntity.Entity<Type, Rpcs>,
+      props: InputProps<EntityProps>,
+      impl: EntityImpl<Rpcs, InitReq>,
+    ): EntityInline<Type, Rpcs, ClassRequirements<InitReq>>;
     /** Declared from its RPCs, as Effect Cluster's `Entity.make`. */
     <const Type extends string, const Rpcs extends ReadonlyArray<Rpc.Any>>(
       type: Type,
@@ -283,13 +313,15 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  * entity id, whose messages are typed by its RPCs. Runners place each
  * instance on one runner and deliver its messages one at a time.
  *
- * Declare it like Effect Cluster's `Entity.make`, from a type and its RPCs,
- * or from an existing Effect Cluster entity. The declaration is the tag
- * callers import; `.make(props, impl)` is its implementation, as a Layer.
+ * Declare it from an Effect Cluster entity with its implementation, and
+ * the class is both what callers `yield*` and what deploys it. Or declare
+ * it bare, like Effect Cluster's `Entity.make`, from a type and its RPCs,
+ * and implement it with `.make(props, impl)`, as a Layer: callers import
+ * the bare declaration without bundling the implementation or its pool.
  *
  * The implementation has two phases. The outer Effect runs once per runner
  * and resolves bindings. The inner Effect runs once per instance, on its
- * first message, and returns its handlers, typed by `.of`. Providing a
+ * first message, and returns its handlers, typed by the entity's `.of`. Providing a
  * pool Layer to the implementation, such as
  * `ClusterDocker.SwarmPool("Default")`, is what deploys it.
  *
@@ -301,7 +333,29 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  * route to the pool.
  *
  * ### Declaring an entity
- * **Example:** A counter's declaration, which callers import
+ * **Example:** A counter, with its implementation
+ * ```typescript
+ * // src/Counter.ts
+ * const Counters = Entity.make("Counter", [
+ *   Rpc.make("Increment", { payload: { amount: Schema.Int }, success: Schema.Int }),
+ * ]);
+ *
+ * export default class Counter extends Cluster.Entity<Counter>()(
+ *   Counters,
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return Effect.gen(function* () {
+ *       const count = yield* Ref.make(0);
+ *       return Counters.of({
+ *         Increment: ({ payload }) => Ref.updateAndGet(count, (n) => n + payload.amount),
+ *       });
+ *     });
+ *   }).pipe(Effect.provide(Default)),
+ * ) {}
+ * ```
+ *
+ * ### Keeping its code out of its callers
+ * **Example:** A bare declaration, which callers import
  * ```typescript
  * // src/Counter.ts
  * export const Increment = Rpc.make("Increment", {
@@ -319,8 +373,7 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
  * export class Counter extends Cluster.Entity<Counter>()(CounterEntity) {}
  * ```
  *
- * ### Implementing an entity
- * **Example:** The counter's implementation, deployed to a pool
+ * **Example:** Its implementation, as a Layer, deployed to a pool
  * ```typescript
  * // src/CounterLive.ts
  * export default Counter.make(
@@ -389,17 +442,21 @@ export const EntityDefinition = Symbol.for("alchemy/Cluster/Entity/Definition");
 export const Entity: EntityClass = ((...outer: ReadonlyArray<unknown>) =>
   outer.length > 0
     ? external(outer[0] as AnyEntity, outer[1] as ExternalEntityProps)
-    : (typeOrEntity: string | AnyEntity, rpcs?: ReadonlyArray<Rpc.Any>) => {
+    : (typeOrEntity: string | AnyEntity, ...rest: ReadonlyArray<unknown>) => {
+        const [rpcs, props, impl] = typeof typeOrEntity === "string" ? rest : [undefined, ...rest];
         const entity = placedInShardGroup(
-          typeof typeOrEntity === "string" ? EffectEntity.make(typeOrEntity, rpcs!) : typeOrEntity,
+          typeof typeOrEntity === "string"
+            ? EffectEntity.make(typeOrEntity, rpcs as ReadonlyArray<Rpc.Any>)
+            : typeOrEntity,
         );
         entities.set(entity.type, entity);
+        const members = { of: (handlers: unknown) => handlers, protocol: entity.protocol };
+        // With an implementation, the class deploys it; without, `.make` does.
+        if (impl !== undefined) {
+          return declare(entity, (platform as any)()(entity.type, props, impl), members);
+        }
         const tag = (platform as any)()(entity.type);
-        return declare(entity, tag, {
-          make: tag.make,
-          of: (handlers: unknown) => handlers,
-          protocol: entity.protocol,
-        });
+        return declare(entity, tag, { ...members, make: tag.make });
       }) as unknown as EntityClass;
 
 type AnyEntity = EffectEntity.Entity<string, Rpc.Any>;

@@ -5,11 +5,11 @@ import CheckoutLive from "./checkout-live.ts";
 import CounterLive from "./counter-live.ts";
 import GreetLive from "./greet-live.ts";
 import GreeterLive from "./greeter-live.ts";
-import HeartbeatLive from "./heartbeat-live.ts";
+import Heartbeat from "./heartbeat.ts";
 import JournalLive from "./journal-live.ts";
 import NapLive from "./nap-live.ts";
 import ParentLive from "./parent-live.ts";
-import TickLive from "./tick-live.ts";
+import Tick from "./tick.ts";
 
 export const Lives = Layer.mergeAll(
   CounterLive,
@@ -20,6 +20,7 @@ export const Lives = Layer.mergeAll(
   ApproveLive,
   CheckoutLive,
   ParentLive,
-  HeartbeatLive,
-  TickLive,
+  // Declared inline, so the classes themselves deploy them.
+  Layer.effectDiscard(Heartbeat),
+  Layer.effectDiscard(Tick),
 );

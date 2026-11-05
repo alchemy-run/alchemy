@@ -43,6 +43,10 @@ Every class provided the same pool is bundled into one Node program, built into 
 
 Effect Cluster needs this: it gives each shard to any runner in a group, whatever classes the runner has, so every runner must have them all.
 
+A class's `main` is how the pool finds it. The pool's program imports the default export of each class's `main`: the class itself when it's declared with its implementation, or the Layer `.make` returned when it's [declared on its own](/cluster/entities#keep-its-code-out-of-its-callers). So `main` is almost always `import.meta.url`, in a file whose default export is the class or the Layer.
+
+Because the pool bundles every class it hosts, a class calling another on the same pool adds nothing to it. Only callers outside the pool, or on another pool, bundle code they never run.
+
 ## Split work across pools
 
 A second pool is its own program, image and service, scaled and deployed on its own:
@@ -66,7 +70,7 @@ Each pool is its own **shard group**, so its classes' instances only run on its 
 
 ## Deploying with Layers
 
-Provide a pool to an implementation's Effect, with whatever its handlers need from them, like RPC middleware:
+Provide a pool to an implementation's Effect, whether the class is declared with its implementation or on its own, with whatever its handlers need from them, like RPC middleware:
 
 ```typescript title="src/RoomLive.ts"
 import * as Effect from "effect/Effect";

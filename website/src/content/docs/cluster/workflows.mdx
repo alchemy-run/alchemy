@@ -5,16 +5,62 @@ description: Durable workflows on Effect Cluster — persisted activities, durab
 
 A workflow is a durable function. Each step, an **activity**, is persisted when it finishes, so a workflow that stops, because its runner restarts or a deploy replaces it, picks up where it left off on another runner without running finished steps again.
 
-## Declare it
+## Declare and implement it
 
-A workflow's declaration takes the same options as Effect's `Workflow.make`: its payload, success and error, and the key that makes two starts of the same work one run:
+A workflow takes the same options as Effect's `Workflow.make`: its payload, success and error, and the key that makes two starts of the same work one run. Its implementation comes after them, an Effect that resolves bindings once per runner and returns the handler:
+
+```typescript title="src/Invite.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Activity, DurableDeferred } from "effect/workflow";
+import { Default } from "./Cluster.ts";
+import Room from "./Room.ts";
+
+/** The guest's answer, which the run waits for. */
+export const Answer = DurableDeferred.make("answer", { success: Schema.Boolean });
+
+export class Declined extends Schema.TaggedError<Declined>()("Declined", {}) {}
+
+export default class Invite extends Cluster.Workflow<Invite>()(
+  "Invite",
+  {
+    payload: { room: Schema.String, guest: Schema.String },
+    success: Schema.String,
+    error: Declined,
+    idempotencyKey: ({ room, guest }) => `${room}/${guest}`,
+  },
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return Effect.fn(function* ({ room, guest }) {
+      const accepted = yield* DurableDeferred.await(Answer);
+      if (!accepted) return yield* new Declined();
+      const members = yield* Activity.make({
+        name: "join",
+        success: Schema.Int,
+        execute: rooms.getByName(room).pipe(
+          Effect.flatMap((target) => target.Join({ name: guest })),
+          Effect.orDie,
+        ),
+      });
+      return `${guest} joined ${room} with ${members} others`;
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+The handler's payload, success and error are typed by the options. On the pool, each workflow runs on Effect Cluster's own workflow engine, as a workflow entity per run.
+
+## Keep its code out of its callers
+
+As with an [entity](/cluster/entities#keep-its-code-out-of-its-callers), a caller outside the workflow's pool would bundle its implementation and its pool. For those callers, declare the workflow on its own:
 
 ```typescript title="src/Invite.ts"
 import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Schema from "effect/Schema";
 import { DurableDeferred } from "effect/workflow";
 
-/** The guest's answer, which the run waits for. */
 export const Answer = DurableDeferred.make("answer", { success: Schema.Boolean });
 
 export class Declined extends Schema.TaggedError<Declined>()("Declined", {}) {}
@@ -27,9 +73,7 @@ export class Invite extends Cluster.Workflow<Invite>()("Invite", {
 }) {}
 ```
 
-## Implement it
-
-`.make` takes an Effect that resolves bindings once per runner and returns the handler, typed by `Invite.of`:
+Then implement it in a file of its own with `.make`, which returns a Layer, typing the handler with `Invite.of`:
 
 ```typescript title="src/InviteLive.ts"
 import * as Effect from "effect/Effect";
@@ -61,8 +105,6 @@ export default Invite.make(
   }).pipe(Effect.provide(Default)),
 );
 ```
-
-On the pool, each workflow runs on Effect Cluster's own workflow engine, as a workflow entity per run.
 
 ## Start and read runs
 

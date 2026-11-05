@@ -6,7 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
-import { conformanceTests, waitForReady } from "./conformance.ts";
+import { conformanceTests, get, waitForReady } from "./conformance.ts";
 import { FRONT_PORT } from "./fixtures/docker/cluster.ts";
 import Front from "./fixtures/docker/front.ts";
 import { Lives } from "./fixtures/docker/index.ts";
@@ -47,5 +47,21 @@ describe.skipIf(!!process.env.FAST)(
     conformanceTests(test as never, { baseUrl: () => baseUrl, kind: "local" });
     workflowConformanceTests(test as never, { baseUrl: () => baseUrl, kind: "local" });
     scheduledConformanceTests(test as never, { baseUrl: () => baseUrl, kind: "local" });
+
+    test(
+      "an entity declared inline answers its callers",
+      Effect.gen(function* () {
+        expect((yield* get(`${baseUrl}/echo/hi`)).value).toBe("echo hi");
+      }),
+      { timeout: 120_000 },
+    );
+
+    test(
+      "a workflow declared inline runs",
+      Effect.gen(function* () {
+        expect((yield* get(`${baseUrl}/shout/hey`)).value).toBe("HEY");
+      }),
+      { timeout: 120_000 },
+    );
   },
 );

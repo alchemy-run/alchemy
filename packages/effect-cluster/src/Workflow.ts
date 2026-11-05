@@ -42,7 +42,10 @@ export const WorkflowTypeId = "Cluster.Workflow";
 export type WorkflowTypeId = typeof WorkflowTypeId;
 
 export interface WorkflowProps extends PlatformProps {
-  /** The module whose default export is this workflow's Layer. Usually `import.meta.url`. */
+  /**
+   * The module whose default export is this workflow: the class, or the
+   * Layer its `.make(...)` returned. Usually `import.meta.url`.
+   */
   main: string;
 }
 
@@ -156,26 +159,79 @@ export type WorkflowTag<Self, W extends AnyWorkflow> = Effect.Effect<
     new (_: never): WorkflowClient<W>;
   };
 
+/**
+ * A workflow declared with its implementation: the class callers `yield*`,
+ * which also deploys it.
+ */
+export type WorkflowInline<W extends AnyWorkflow, Req> = Effect.Effect<
+  WorkflowClient<W>,
+  never,
+  Req
+> &
+  Named<W["_tag"]> &
+  PlatformIdentity<W["_tag"]> & {
+    /** The Effect workflow behind the class, for Effect's own APIs. */
+    readonly workflow: W;
+    /** Run it as a child of the current workflow, as Effect's `Workflow.execute`. */
+    readonly execute: W["execute"];
+    /** Undo a step when the workflow fails later, as Effect's `withCompensation`. */
+    readonly withCompensation: W["withCompensation"];
+    /** Type the workflow's handler against its payload, success and error. */
+    of<Handler extends WorkflowHandler<W>>(handler: Handler): Handler;
+    new (_: never): WorkflowClient<W>;
+  };
+
+type WorkflowOf<
+  Name extends string,
+  Payload extends Schema.Struct.Fields | EffectWorkflow.AnyStructSchema,
+  Success extends Schema.Top,
+  Error extends Schema.Top,
+> = EffectWorkflow.Workflow<
+  Name,
+  Payload extends Schema.Struct.Fields ? Schema.Struct<Payload> : Payload,
+  Success,
+  Error
+>;
+
 /** The class surface of {@link Workflow}. */
 export interface WorkflowClass {
   // `Self` names the class (`extends Cluster.Workflow<PlaceOrder>()`).
-  <Self>(): <
-    const Name extends string,
-    Payload extends Schema.Struct.Fields | EffectWorkflow.AnyStructSchema,
-    Success extends Schema.Top = Schema.Void,
-    Error extends Schema.Top = Schema.Never,
-  >(
-    name: Name,
-    options: Parameters<typeof EffectWorkflow.make<Name, Payload, Success, Error>>[1],
-  ) => WorkflowTag<
-    Self,
-    EffectWorkflow.Workflow<
-      Name,
-      Payload extends Schema.Struct.Fields ? Schema.Struct<Payload> : Payload,
-      Success,
-      Error
-    >
-  >;
+  <Self>(): {
+    /**
+     * Declared like Effect's `Workflow.make`, with its implementation: an
+     * Effect that resolves bindings once per runner and returns the
+     * handler. Provide a pool Layer to `impl` to deploy it.
+     */
+    <
+      const Name extends string,
+      Payload extends Schema.Struct.Fields | EffectWorkflow.AnyStructSchema,
+      Success extends Schema.Top = Schema.Void,
+      Error extends Schema.Top = Schema.Never,
+      InitReq = never,
+    >(
+      name: Name,
+      options: Parameters<typeof EffectWorkflow.make<Name, Payload, Success, Error>>[1],
+      props: InputProps<WorkflowProps>,
+      impl: Effect.Effect<
+        WorkflowHandler<WorkflowOf<Name, Payload, Success, Error>>,
+        ConfigError.ConfigError,
+        InitReq
+      >,
+    ): WorkflowInline<
+      WorkflowOf<Name, Payload, Success, Error>,
+      Providers | Exclude<InitReq, WorkflowServices | PlatformServices>
+    >;
+    /** Declared like Effect's `Workflow.make`, implemented by `.make(props, impl)`. */
+    <
+      const Name extends string,
+      Payload extends Schema.Struct.Fields | EffectWorkflow.AnyStructSchema,
+      Success extends Schema.Top = Schema.Void,
+      Error extends Schema.Top = Schema.Never,
+    >(
+      name: Name,
+      options: Parameters<typeof EffectWorkflow.make<Name, Payload, Success, Error>>[1],
+    ): WorkflowTag<Self, WorkflowOf<Name, Payload, Success, Error>>;
+  };
 }
 
 /**
@@ -184,17 +240,46 @@ export interface WorkflowClass {
  * delayed message, and a run continues on another runner if its runner
  * dies.
  *
- * Declare it like Effect's `Workflow.make`, from a name and its schemas. The
- * declaration is the tag callers import; `.make(props, impl)` is its
- * implementation, as a Layer: an Effect that resolves bindings once per
- * runner and returns the handler, typed by `.of`. Providing a pool Layer
- * to the implementation is what deploys it.
+ * Declare it like Effect's `Workflow.make`, from a name and its schemas,
+ * with its implementation: an Effect that resolves bindings once per runner
+ * and returns the handler. Providing a pool Layer to the implementation is
+ * what deploys it. Or declare it bare and implement it with
+ * `.make(props, impl)`, as a Layer: callers import the bare declaration
+ * without bundling the implementation or its pool.
  *
  * `yield* PlaceOrder` from any runtime returns its client: `start` a run,
  * then read, signal or interrupt it.
  *
  * ### Declaring a workflow
- * **Example:** The declaration callers import
+ * **Example:** A workflow, with its implementation
+ * ```typescript
+ * // src/PlaceOrder.ts
+ * export default class PlaceOrder extends Cluster.Workflow<PlaceOrder>()(
+ *   "PlaceOrder",
+ *   {
+ *     payload: { orderId: Schema.String },
+ *     success: Schema.String,
+ *     idempotencyKey: ({ orderId }) => orderId,
+ *   },
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const counters = yield* Counter;
+ *     return Effect.fn(function* ({ orderId }) {
+ *       const n = yield* Activity.make({
+ *         name: "count",
+ *         success: Schema.Int,
+ *         execute: Effect.flatMap(counters.getByName("orders"), (counter) =>
+ *           counter.Increment({ amount: 1 }),
+ *         ),
+ *       });
+ *       return `order ${orderId} is #${n}`;
+ *     });
+ *   }).pipe(Effect.provide(Default)),
+ * ) {}
+ * ```
+ *
+ * ### Keeping its code out of its callers
+ * **Example:** A bare declaration, which callers import
  * ```typescript
  * // src/PlaceOrder.ts
  * export class PlaceOrder extends Cluster.Workflow<PlaceOrder>()("PlaceOrder", {
@@ -204,8 +289,7 @@ export interface WorkflowClass {
  * }) {}
  * ```
  *
- * ### Implementing a workflow
- * **Example:** Its implementation, deployed to a pool
+ * **Example:** Its implementation, as a Layer, deployed to a pool
  * ```typescript
  * // src/PlaceOrderLive.ts
  * export default PlaceOrder.make(
@@ -244,21 +328,43 @@ export interface WorkflowClass {
  * @resource
  */
 export const Workflow: WorkflowClass = (() =>
-  (name: string, options: Parameters<typeof EffectWorkflow.make>[1]) => {
+  (
+    name: string,
+    options: Parameters<typeof EffectWorkflow.make>[1],
+    props?: InputProps<WorkflowProps>,
+    impl?: unknown,
+  ) => {
     const workflow = EffectWorkflow.make(name, options) as AnyWorkflow;
     const id = resourceId(name);
     placeInShardGroup(workflow, id);
     workflows.set(id, workflow);
+    const members = {
+      LogicalId: name,
+      workflow,
+      execute: workflow.execute.bind(workflow),
+      withCompensation: workflow.withCompensation,
+      of: (handler: unknown) => handler,
+    };
+    // With an implementation, the class deploys it, and a runner builds it.
+    if (impl !== undefined) {
+      const declaration = (platform as any)()(id, props, impl);
+      declarations.set(name, declaration);
+      return Object.assign(
+        class {},
+        members,
+        { [PlatformDeclaration]: declaration },
+        Effectable.Prototype({
+          label: `${WorkflowTypeId}<${name}>`,
+          evaluate: () => clientOf(workflow, declaration),
+        }),
+      );
+    }
     const tag = (platform as any)()(id);
     declarations.set(name, tag);
     return Object.assign(
       class {},
+      members,
       {
-        LogicalId: name,
-        workflow,
-        execute: workflow.execute.bind(workflow),
-        withCompensation: workflow.withCompensation,
-        of: (handler: unknown) => handler,
         make: (props: InputProps<WorkflowProps>, impl: unknown) => {
           const live = tag.make(props, impl) as Layer.Layer<never, never, any>;
           // A runner builds the Platform declaration; the Stack, both.
