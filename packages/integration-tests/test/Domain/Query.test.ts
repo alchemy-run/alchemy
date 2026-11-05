@@ -226,11 +226,27 @@ const CombinedLive = Combined.toLayer(
   }),
 );
 
+/** Who owns a wallet, from a view: the query waits for the view, not a projection. */
+class OwnerOf extends Domain.Query("OwnerOf", {
+  input: { wallet: Schema.String },
+  success: Schema.NullOr(Schema.String),
+  waitsFor: [WalletOwner],
+}) {}
+const OwnerOfLive = OwnerOf.toLayer(
+  Effect.gen(function* () {
+    const owners = yield* WalletOwner;
+    return Effect.fn(function* ({ wallet }) {
+      const owner = yield* owners.get(Wallet.ref(wallet)).pipe(Effect.orDie);
+      return Option.getOrNull(owner)?.owner ?? null;
+    });
+  }),
+);
+
 class Wallets extends Domain.Model("QueryWallets", {
   aggregates: [Wallet],
   views: [WalletOwner],
   projections: [Ledger],
-  queries: [WalletMovements, LargeMovements, Total, Combined],
+  queries: [WalletMovements, LargeMovements, Total, Combined, OwnerOf],
 }) {}
 
 class WalletApi extends Domain.Api("QueryWalletApi", {
@@ -238,7 +254,7 @@ class WalletApi extends Domain.Api("QueryWalletApi", {
   commands: ["Deposit"],
   views: [],
   streams: [],
-  queries: ["WalletMovements", "LargeMovements", "Total", "Combined"],
+  queries: ["WalletMovements", "LargeMovements", "Total", "Combined", "OwnerOf"],
 }) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
@@ -248,6 +264,7 @@ const handlers = (options?: Domain.Projection.Options) =>
     LargeMovementsLive,
     TotalLive,
     CombinedLive,
+    OwnerOfLive,
   );
 
 const story = Story.make(Wallets, { layer: handlers() });
@@ -441,6 +458,28 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
     ),
   );
 
+  it.live("waits for a view in waitsFor, on the key the receipt's command reached", () =>
+    Effect.gen(function* () {
+      const { tracer, named } = recording();
+      const wallets = yield* Wallet;
+      const api = yield* WalletApi.clientInProcess;
+      const receipt = yield* wallets.send(kim, new Open({ owner: "kim" }));
+      const owner = yield* api
+        .OwnerOf({ wallet: "kim-1" }, { atLeast: receipt })
+        .pipe(Effect.withTracer(tracer));
+      expect(owner).toBe("kim");
+      const [waited] = named("Domain.caughtUp WalletOwner");
+      expect(waited!.attributes.get("domain.stream")).toBe("Wallet/kim-1");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Wallets.layer(handlers()).pipe(
+          Layer.provideMerge(Layer.mergeAll(InMemory, Movements.memory, ViewerSessionLive)),
+        ),
+      ),
+    ),
+  );
+
   it.live("a projection catches up to a client's receipt, which carries no events", () =>
     Effect.gen(function* () {
       const wallets = yield* Wallet;
@@ -524,15 +563,25 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
   it("verify reports every query problem without hosting the model", () => {
     class Pages extends Domain.Query("Pages", { paged: true }) {}
     class Named extends Domain.Query("WalletOwner", { success: Schema.Number }) {}
+    // A view the model does not hold: there is nothing to wait for.
+    class Elsewhere extends Domain.View("Elsewhere", {
+      from: [Wallet],
+      key: Wallet,
+      state: Schema.Struct({ owner: Schema.String }),
+      initial: { owner: "" },
+      evolve: { Opened: (_, e) => ({ owner: e.owner }) },
+    }) {}
+    class Unheld extends Domain.Query("Unheld", { waitsFor: [Elsewhere] }) {}
     class Broken extends Domain.Model("QueryBroken", {
       aggregates: [Wallet],
       views: [WalletOwner],
-      queries: [Pages, Named, Total, Total],
+      queries: [Pages, Named, Total, Unheld, Total],
     }) {}
     expect(Domain.verify(Broken).map((problem) => problem.message)).toEqual([
       "Query 'Pages' is `paged` but declares no `success`: name the schema of one entry",
       "Two entities are named 'WalletOwner'",
       "Total waits for Ledger, which is not in the Domain",
+      "Unheld waits for Elsewhere, which is not in the Domain",
       "Duplicate query 'Total'",
     ]);
   });

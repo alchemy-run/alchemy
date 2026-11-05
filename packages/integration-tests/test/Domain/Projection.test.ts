@@ -153,7 +153,6 @@ class WalletCard extends Domain.Stream("WalletCard", {
 }) {}
 
 /** Who may read each key of WalletCard. */
-
 const WalletCardLive = WalletCard.toLayer(
   Effect.succeed(
     Effect.fn(function* (_request, latest) {
@@ -222,21 +221,45 @@ const LargeMovementsLive = LargeMovements.toLayer(
   { retry: Schedule.recurs(2) },
 );
 
+/** A wallet's latest balance, from its card: the query waits for the stream's writer. */
+class LatestBalance extends Domain.Query("LatestBalance", {
+  input: { wallet: Schema.String },
+  success: Schema.NullOr(Schema.Number),
+  waitsFor: [WalletCard],
+}) {}
+const LatestBalanceLive = LatestBalance.toLayer(
+  Effect.gen(function* () {
+    const cards = yield* WalletCard;
+    return Effect.fn(function* ({ wallet }) {
+      const latest = yield* cards.peek(Wallet.ref(wallet)).pipe(Effect.orDie);
+      return Option.getOrNull(latest)?.event.balance ?? null;
+    });
+  }),
+);
+
 class Wallets extends Domain.Model("Wallets", {
   aggregates: [Wallet, Payment, Review],
   policies: [LargeMovements],
   projections: [WalletLedger, WalletCards],
   streams: [WalletCard],
+  queries: [LatestBalance],
 }) {}
 
 class WalletApi extends Domain.Api("WalletApi", {
   model: Wallets,
   commands: ["Deposit"],
   streams: ["WalletCard"],
+  queries: ["LatestBalance"],
 }) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
-  Layer.mergeAll(walletLedgerLayer(options), WalletCardsLive, LargeMovementsLive, WalletCardLive);
+  Layer.mergeAll(
+    walletLedgerLayer(options),
+    WalletCardsLive,
+    LargeMovementsLive,
+    WalletCardLive,
+    LatestBalanceLive,
+  );
 
 const story = Story.make(Wallets, { layer: handlers() });
 const sam = Wallet.ref("sam-1");
@@ -345,6 +368,22 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
       expect([...all].map((entry) => entry.event.balance)).toEqual([40, 42]);
       const page = yield* api.WalletCard.list("sam-1", { ...asSam, order: "desc", take: 1 });
       expect(page.entries.map((entry) => entry.event.balance)).toEqual([42]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Wallets.layer(handlers()).pipe(
+          Layer.provideMerge(Layer.mergeAll(InMemory, Ledger.memory, ViewerSessionLive)),
+        ),
+      ),
+    ),
+  );
+
+  it.live("a query waits for a stream in waitsFor through the projection that writes it", () =>
+    Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      const api = yield* WalletApi.clientInProcess;
+      const receipt = yield* wallets.send(kim, new Deposit({ amount: 70 }));
+      expect(yield* api.LatestBalance({ wallet: "kim-1" }, { atLeast: receipt })).toBe(70);
     }).pipe(
       Effect.scoped,
       Effect.provide(

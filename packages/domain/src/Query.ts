@@ -1,6 +1,7 @@
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -13,6 +14,7 @@ import type { Data, Fields } from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Projection from "./Projection.ts";
 import type * as Rejection from "./Rejection.ts";
+import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
 import * as View from "./View.ts";
 
@@ -98,7 +100,7 @@ export interface AnyDefinition {
   readonly input?: Fields;
   readonly success?: Schema.Top;
   readonly paged?: boolean;
-  readonly waitsFor?: ReadonlyArray<Projection.Any>;
+  readonly waitsFor?: ReadonlyArray<Waitable>;
   readonly middleware?: Middleware.List;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
 }
@@ -152,7 +154,7 @@ export interface Definition<
   F extends Fields,
   P extends boolean,
   S extends Schema.Top | undefined,
-  From extends ReadonlyArray<Projection.Any>,
+  From extends ReadonlyArray<Waitable>,
   Ms extends Middleware.List,
   Rejects extends ReadonlyArray<Rejection.Any>,
 > {
@@ -170,12 +172,14 @@ export interface Definition<
    */
   readonly paged?: P;
   /**
-   * The projections to wait on when a caller passes a command's receipt as
-   * `atLeast`, before the handler reads their store. The caller passes only
-   * the receipt: the keys to wait on come from that command's own events,
-   * routed through each projection's `key`/`keyOf`, so the projections may
-   * be keyed differently. Reads outside these projections' stores are not
-   * covered.
+   * The reads to wait on when a caller passes a command's receipt as
+   * `atLeast`, before the handler runs: projections (whose store it reads),
+   * views and streams. The caller passes only the receipt: the keys to wait
+   * on come from that command's own events, routed through each read's
+   * `key`/`keyOf`, so they may be keyed differently. A view waits for an
+   * aggregate it reads directly; a stream, for the projections that write
+   * it. An aggregate is never listed: the handler reads its latest commit
+   * with `get`. Reads not listed here are not covered.
    */
   readonly waitsFor?: From;
   /**
@@ -256,7 +260,7 @@ export interface Definition<
  *
  * Right after its own command, a client passes the command's receipt as
  * `atLeast`. The query finds the keys to wait on in that command's events,
- * waits until every projection in `waitsFor` has handled them, then reads.
+ * waits until every read in `waitsFor` has handled them, then runs the handler.
  * The caller passes receipts, never projections or keys: one, or one per
  * command when it wrote to several aggregate instances.
  *
@@ -289,7 +293,7 @@ export const make = <
   const F extends Fields = {},
   const P extends boolean = false,
   S extends Schema.Top | undefined = undefined,
-  const From extends ReadonlyArray<Projection.Any> = readonly [],
+  const From extends ReadonlyArray<Waitable> = readonly [],
   const Ms extends Middleware.List = readonly [],
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
@@ -396,6 +400,22 @@ export interface RunOptions {
   readonly atLeast?: AtLeastInput;
 }
 
+/** Wait until a read has handled a command's events. @internal */
+export type CaughtUp = (
+  receipt: AtLeast,
+  options?: { readonly timeout?: Duration.Input },
+) => Effect.Effect<void, View.ConsistencyTimeout>;
+
+/** What a query may wait on: a projection, a view, or a stream. */
+export type Waitable = Projection.Any | View.Any | DomainStream.Any;
+
+const nameOfWaitable = (read: Waitable): string =>
+  read.kind === "Projection"
+    ? read.projectionName
+    : read.kind === "View"
+      ? read.viewName
+      : read.streamName;
+
 /** A hosted query: the `atLeast` wait, then the handler. @internal */
 export interface Host {
   readonly run: (input: unknown, options: RunOptions) => Effect.Effect<unknown, unknown>;
@@ -411,7 +431,7 @@ export const host = (
   query: Any,
   implementation: Implementation,
   model: Context.Context<unknown>,
-  progress: (projection: Projection.Any) => Projection.Progress,
+  caughtUpOf: (read: Waitable) => CaughtUp,
 ): Host => {
   const def = query.definition;
   const name = query.queryName;
@@ -424,17 +444,15 @@ export const host = (
         const receipts = receiptsOf(atLeast);
         // Every receipt, through every projection: each command's events name its own keys.
         for (const receipt of receipts) {
-          for (const projection of def.waitsFor ?? []) {
-            yield* progress(projection)
-              .caughtUp(receipt)
-              .pipe(
-                Effect.withSpan(`Domain.caughtUp ${projection.projectionName}`, {
-                  attributes: {
-                    "domain.stream": receipt.stream,
-                    "domain.version": receipt.version,
-                  },
-                }),
-              );
+          for (const read of def.waitsFor ?? []) {
+            yield* caughtUpOf(read)(receipt).pipe(
+              Effect.withSpan(`Domain.caughtUp ${nameOfWaitable(read)}`, {
+                attributes: {
+                  "domain.stream": receipt.stream,
+                  "domain.version": receipt.version,
+                },
+              }),
+            );
           }
         }
         if (!def.paged) return yield* implementation.handle(input, undefined);

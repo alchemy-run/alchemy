@@ -362,13 +362,13 @@ export class PagedWithoutSuccess extends Data.TaggedError("PagedWithoutSuccess")
   }
 }
 
-/** A query waits for a projection the Domain does not list. */
+/** A query waits for a projection, view or stream the Domain does not list. */
 export class UnknownWait extends Data.TaggedError("UnknownWait")<{
   readonly query: string;
-  readonly projection: string;
+  readonly read: string;
 }> {
   override get message() {
-    return `${this.query} waits for ${this.projection}, which is not in the Domain`;
+    return `${this.query} waits for ${this.read}, which is not in the Domain`;
   }
 }
 

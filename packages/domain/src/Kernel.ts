@@ -176,6 +176,14 @@ export interface Kernel {
     event: { readonly _tag: string },
     seq: number,
   ) => ReadonlyArray<string>;
+  /** The keys of a view that an aggregate instance's event reaches. */
+  readonly viewKeys: (
+    view: View.Any,
+    aggregate: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+  ) => ReadonlyArray<string>;
   /** Every view and projection in the model, by `CatchUp.targetId`: what catches up. */
   readonly targets: ReadonlyArray<string>;
   /**
@@ -685,10 +693,14 @@ const build = (
     if (callNames.has(name)) problem(new DuplicateName({ entity: name }));
     const def = query.definition;
     if (def.paged && !def.success) problem(new PagedWithoutSuccess({ query: name }));
-    for (const projection of def.waitsFor ?? []) {
-      if (projectionByName.get(projection.projectionName) !== projection) {
-        problem(new UnknownWait({ query: name, projection: projection.projectionName }));
-      }
+    for (const read of def.waitsFor ?? []) {
+      const [readName, held] =
+        read.kind === "Projection"
+          ? [read.projectionName, projectionByName.get(read.projectionName) === read]
+          : read.kind === "View"
+            ? [read.viewName, definitions.views.includes(read)]
+            : [read.streamName, definitions.streams.includes(read)];
+      if (!held) problem(new UnknownWait({ query: name, read: readName }));
     }
   }
 
@@ -1500,8 +1512,9 @@ const build = (
       return inputs;
     });
 
-  const projectionKeys = (
-    projection: Projection.Any,
+  const consumerKeys = (
+    kind: "view" | "projection",
+    name: string,
     aggregate: string,
     id: string,
     event: { readonly _tag: string },
@@ -1520,8 +1533,7 @@ const build = (
     };
     const keys: Array<string> = [];
     for (const subscriber of subscribers.get(aggregate)?.get(event._tag) ?? []) {
-      if (subscriber.kind !== "projection" || subscriber.name !== projection.projectionName)
-        continue;
+      if (subscriber.kind !== kind || subscriber.name !== name) continue;
       const input = {
         event,
         source: Aggregate.makeRef(entry.aggregate, id),
@@ -1534,12 +1546,28 @@ const build = (
     return keys;
   };
 
+  const projectionKeys = (
+    projection: Projection.Any,
+    aggregate: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+  ) => consumerKeys("projection", projection.projectionName, aggregate, id, event, seq);
+  const viewKeys = (
+    view: View.Any,
+    aggregate: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+  ) => consumerKeys("view", view.viewName, aggregate, id, event, seq);
+
   return {
     aggregateKit,
     viewKit,
     policyKit,
     projectionInputs,
     projectionKeys,
+    viewKeys,
     get targets() {
       return [
         ...definitions.views.map((view) => targetIdOf("view", view.viewName)),

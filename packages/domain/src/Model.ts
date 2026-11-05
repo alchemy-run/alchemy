@@ -23,7 +23,7 @@ import {
 } from "./DefinitionError.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
-import type * as Key from "./Key.ts";
+import * as Key from "./Key.ts";
 import {
   type Accepted,
   type AggregateStore,
@@ -688,6 +688,8 @@ const build = <A, E, R>(
 
     // Queries run where the Api runs, reading your store and the model's members.
     const queryHosts = new Map<string, Query.Host>();
+    const progressOf = (projection: Projection.Any) =>
+      Context.getUnsafe(hosts, projection.Progress as Context.Key<unknown, Projection.Progress>);
     // The kernel has refused duplicate names and unknown projections.
     for (const query of queries) {
       const implementation = Context.getUnsafe(
@@ -696,12 +698,19 @@ const build = <A, E, R>(
       );
       queryHosts.set(
         query.queryName,
-        Query.host(query, implementation, hosts, (projection) =>
-          Context.getUnsafe(
-            hosts,
-            projection.Progress as Context.Key<unknown, Projection.Progress>,
-          ),
-        ),
+        Query.host(query, implementation, hosts, (read) => {
+          if (read.kind === "Projection") return progressOf(read).caughtUp;
+          if (read.kind === "View")
+            return viewCaughtUp(kernel, read, viewHosts.get(read.viewName)!, aggregateStores);
+          // A stream is caught up once every projection that writes it is.
+          const writers = definitions.projections.filter((projection) =>
+            (projection.definition.writes ?? []).includes(read),
+          );
+          return (receipt, options) =>
+            Effect.forEach(writers, (writer) => progressOf(writer).caughtUp(receipt, options), {
+              discard: true,
+            });
+        }),
       );
     }
 
@@ -1124,6 +1133,45 @@ const commandEvents = (
       if (start > 0 || from === 0) return events.slice(Math.max(0, start));
     }
   });
+
+/**
+ * Wait until a view has applied a command's events on every key they reach,
+ * so a query that reads it sees the caller's write. Only the events of an
+ * aggregate the view reads directly reach it this way.
+ */
+const viewCaughtUp =
+  (
+    kernel: Kernel.Kernel,
+    view: View.Any,
+    host: View.Host<unknown, Key.Any, unknown>,
+    aggregates: ReadonlyMap<string, AggregateStore>,
+  ): Query.CaughtUp =>
+  (receipt, options) =>
+    Effect.gen(function* () {
+      const [aggregate, ...rest] = receipt.stream.split("/");
+      const id = rest.join("/");
+      const source = aggregates.get(aggregate!);
+      const consumes = view.definition.from.some(
+        (from) => from.kind === "Aggregate" && from.aggregateName === aggregate,
+      );
+      if (!consumes || !source) return;
+      const waits = new Map<string, number>();
+      for (const stored of yield* commandEvents(source, id, receipt.version)) {
+        const event = (yield* kernel.decodeEvent(stored.event)) as { readonly _tag: string };
+        for (const key of kernel.viewKeys(view, aggregate!, id, event, stored.envelope.seq)) {
+          waits.set(key, Math.max(waits.get(key) ?? 0, stored.envelope.seq));
+        }
+      }
+      yield* Effect.forEach(
+        waits,
+        ([key, seq]) =>
+          host.get(Key.refOf(view.definition.key, key) as never, {
+            atLeast: { stream: receipt.stream, version: seq },
+            ...(options?.timeout === undefined ? {} : { timeout: options.timeout }),
+          }),
+        { discard: true },
+      );
+    });
 
 const projectionProgress = (
   kernel: Kernel.Kernel,
