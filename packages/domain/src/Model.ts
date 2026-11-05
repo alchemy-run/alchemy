@@ -688,7 +688,6 @@ const aggregateClient = (
       yield* Effect.annotateCurrentSpan({
         "domain.command_id": commandId,
         "domain.correlation_id": correlationId,
-        ...Telemetry.attributesOf(command.constructor, command),
       });
       const trace = yield* Telemetry.currentTrace;
       return {

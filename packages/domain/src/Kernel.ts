@@ -306,9 +306,6 @@ const build = (
     Effect.map(eventCodec(event._tag), (codec) => codec.encode(event));
   const decodeEvent = (json: Json): Effect.Effect<unknown> =>
     Effect.map(eventCodec((json as { _tag: string })._tag), (codec) => codec.decode(json));
-  /** The span attributes an event's declaration adds. */
-  const eventAttributes = (event: { readonly _tag: string }) =>
-    Telemetry.attributesOf(eventCodecs.get(event._tag)?.cls, event);
 
   // ----------------------------------------------------- aggregate codecs
   interface AggregateCodecs {
@@ -1091,7 +1088,6 @@ const build = (
             );
           }
           const decoded = command.codec.decode(input.command) as { readonly _tag: string };
-          yield* Effect.annotateCurrentSpan(Telemetry.attributesOf(command.cls, decoded));
           const state = codecs.state.decode(input.state ?? codecs.initial);
           const id = decodeId(input.id) as string;
           const now = DateTime.makeUnsafe(input.now);
@@ -1125,11 +1121,7 @@ const build = (
           if (judged._tag === "Rejected") {
             const rejection = judged.rejection;
             const codec = codecs.rejections.get(rejection._tag)!;
-            const declared = command.cls.rejects.find((r) => rejectionTag(r) === rejection._tag)!;
-            yield* Effect.annotateCurrentSpan({
-              "domain.outcome": rejection._tag,
-              ...Telemetry.attributesOf(declared, rejection),
-            });
+            yield* Effect.annotateCurrentSpan({ "domain.outcome": rejection._tag });
             return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
           }
           const trace = yield* Telemetry.currentTrace;
@@ -1158,10 +1150,7 @@ const build = (
           const span = yield* Effect.orElseSucceed(Effect.currentSpan, () => undefined);
           const at = BigInt(input.now) * 1_000_000n;
           for (const [index, event] of decided.entries()) {
-            span?.event(event._tag, at, {
-              "domain.seq": input.version + index + 1,
-              ...eventAttributes(event),
-            });
+            span?.event(event._tag, at, { "domain.seq": input.version + index + 1 });
             yield* Telemetry.record(Telemetry.events, {
               "domain.aggregate": aggregate.aggregateName,
               "domain.event": event._tag,
@@ -1452,10 +1441,6 @@ const build = (
               );
             },
             { discard: true },
-          ).pipe(
-            Effect.tap(() =>
-              Effect.annotateCurrentSpan(eventAttributes(event as { readonly _tag: string })),
-            ),
           ),
         ).pipe(
           Effect.onExit((exit) =>

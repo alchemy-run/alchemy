@@ -103,15 +103,9 @@ export type Handler<I, Result, E, Ctx, Page> = (
 ) => Effect.Effect<Result, E, Ctx | RuntimeContext>;
 
 /** How a query's Layer runs it: tuning that changes no caller's types. */
-export interface LayerOptions<I = unknown> {
+export interface LayerOptions {
   /** Page size limits of a paged query. @default { default: 50, max: 500 } */
   readonly take?: Take;
-  /**
-   * Span attributes to record for the query's input. Nothing from the input
-   * is recorded unless you return it here, and a `Redacted` value is
-   * recorded as `<redacted>`.
-   */
-  readonly attributes?: Telemetry.Attributes<I>;
 }
 
 /** A query's implementation, as its Layer provides it. @internal */
@@ -120,7 +114,7 @@ export interface Implementation {
     input: unknown,
     page: PageRequest | undefined,
   ) => Effect.Effect<unknown, unknown>;
-  readonly options: LayerOptions<never>;
+  readonly options: LayerOptions;
 }
 
 /** A query's declaration, widened. @internal */
@@ -438,11 +432,11 @@ export interface QueryClass<
   /**
    * Implement the query. The construction Effect runs once, resolving your
    * store; the handler may only need what the middleware provides. The
-   * options tune how it runs: page size limits and span attributes.
+   * options tune how it runs: page size limits.
    */
   toLayer<E, R>(
     build: Effect.Effect<Handler<I, Result, Rejected, Middleware.Provides<Ms>, Page>, E, R>,
-    options?: LayerOptions<I>,
+    options?: LayerOptions,
   ): Layer.Layer<QueryKey<Name>, E, R>;
 }
 
@@ -484,7 +478,6 @@ export const host = (
   return {
     run: (input, { after, take, atLeast }) =>
       Effect.gen(function* () {
-        yield* Effect.annotateCurrentSpan(Telemetry.attributesOf(implementation.options, input));
         const receipts = receiptsOf(atLeast);
         // Judge the request first: a refused caller never waits on a projection.
         if (validate) yield* validate(input, { atLeast: receipts });

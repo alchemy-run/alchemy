@@ -180,9 +180,12 @@ class LargeMovements extends Domain.Query("LargeMovements", {
 const LargeMovementsLive = LargeMovements.toLayer(
   Effect.gen(function* () {
     const movements = yield* Movements;
-    return ({ min }, page) => movements.page((row) => row.amount >= min, page);
+    return Effect.fn(function* ({ min }, page) {
+      // The handler records what it wants on the query's span.
+      yield* Effect.annotateCurrentSpan("query.min", min);
+      return yield* movements.page((row) => row.amount >= min, page);
+    });
   }),
-  { attributes: (input) => ({ "query.min": input.min, "query.note": input.note }) },
 );
 
 /** A single result, not paged. */
@@ -334,9 +337,9 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
       expect(span!.attributes.get("domain.query.rows")).toBe(1);
       expect(span!.attributes.get("domain.query.hidden")).toBe(1);
       expect(span!.attributes.get("domain.outcome")).toBe("ok");
-      // Only what `attributes` returns is recorded, and a Redacted value never is.
+      // Only what the handler annotates is recorded.
       expect(span!.attributes.get("query.min")).toBe(100);
-      expect(span!.attributes.get("query.note")).toBe("<redacted>");
+      expect(span!.attributes.has("query.note")).toBe(false);
       expect([...span!.attributes.keys()].some((key) => key.includes("wallet"))).toBe(false);
     }),
   );

@@ -113,6 +113,8 @@ export class Account extends Domain.Aggregate("Account", {
     }),
 
     WithdrawMoney: Effect.fn(function* (s, cmd, { now }) {
+      // Recorded on this command's decide span; nothing else from it is.
+      yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
       const o = yield* authorized(s);
       if (o.frozen) return yield* new Frozen({ reason: o.frozen });
       if (cmd.amount > o.balance)

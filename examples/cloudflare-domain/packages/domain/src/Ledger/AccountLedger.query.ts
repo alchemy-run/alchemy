@@ -32,7 +32,10 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
 export const AccountLedgerLive = AccountLedger.toLayer(
   Effect.gen(function* () {
     const store = yield* LedgerStore;
-    return ({ account }, page) => store.forAccount(account, page);
+    return Effect.fn(function* ({ account }, page) {
+      yield* Effect.annotateCurrentSpan("bank.account", account);
+      return yield* store.forAccount(account, page);
+    });
   }),
-  { take: { default: 50, max: 200 }, attributes: ({ account }) => ({ "bank.account": account }) },
+  { take: { default: 50, max: 200 } },
 );
