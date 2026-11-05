@@ -323,6 +323,8 @@ export const RecordProvider = () =>
           ],
         } as const;
       }
+      // `--force` re-runs a noop as an update; keep name and type known.
+      return { action: "noop", stables: ["recordId", "zoneId", "name", "type"] } as const;
     }),
 
     reconcile: Effect.fn(function* ({ fqn, news, output }) {

@@ -263,13 +263,13 @@ yield* Cloudflare.DNS.Record("AdminCname", {
 
 DNS records get the same adoption safety as routes: if a record with
 the same name, type and `content` (and `priority`, for MX and URI)
-already exists in the zone, Alchemy
-reports it as unowned and requires `adopt(true)` to take it over. A
-record with different content is left alone, and a new one is created
-beside it; only a CNAME, which a name holds just one of, is adopted
-whatever it points at. This protects
-hand-edited records — especially apex `A`/`AAAA` and email
-DKIM/SPF records the dashboard often manages — from being clobbered.
+already exists in the zone, Alchemy reports it as unowned and
+requires `adopt(true)` to take it over. A record with different
+content is left alone, and a new one is created beside it; only a
+CNAME, which a name holds just one of, is adopted whatever it points
+at. This protects hand-edited records — especially apex `A`/`AAAA`
+and email DKIM/SPF records the dashboard often manages — from being
+clobbered.
 
 ## Disable Workers on a path
 
