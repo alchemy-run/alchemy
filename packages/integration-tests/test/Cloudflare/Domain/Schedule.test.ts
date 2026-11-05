@@ -38,6 +38,8 @@ const call = (
       (res) => new HoldRequestFailed({ status: res.status }),
     ),
     Effect.flatMap((res) => res.json),
+    // A request the Worker never answers is tried again, not waited on until the test times out.
+    Effect.timeout("15 seconds"),
     Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
   );
 

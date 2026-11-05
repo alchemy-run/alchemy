@@ -12,6 +12,7 @@ import MoveV1 from "./fixtures/move/v1.ts";
 import MoveV1b from "./fixtures/move/v1b.ts";
 import {
   backdatePasses,
+  boundClasses,
   depositsOf,
   movedBy,
   namespacesOf,
@@ -76,6 +77,8 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
         expect(Object.keys(legacy)).toEqual(
           expect.arrayContaining(["Ledger.AccountAggregate", "Ledger.DepositsView"]),
         );
+        // Every class of version 0, from the Worker's bindings: each moves to the shared class.
+        const classes = Object.keys(yield* boundClasses(scriptName));
         // The deploy's run moves what Cloudflare lists: wait until it lists them.
         yield* untilListed([legacy["Ledger.AccountAggregate"]!], (count) => count > WIDTH);
 
@@ -154,14 +157,14 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
 
         // Once the move has settled, an upload deletes every old class, and
         // everything is still there.
-        yield* backdatePasses(scriptName, Object.keys(legacy));
+        yield* backdatePasses(scriptName, classes);
         yield* stack.deploy(
           Effect.gen(function* () {
             return { worker: yield* MoveV1b };
           }),
         );
         yield* serving(url, "v1b");
-        expect(Object.keys(yield* namespacesOf(scriptName))).toEqual(["AlchemyDomain"]);
+        expect(Object.keys(yield* boundClasses(scriptName))).toEqual(["AlchemyDomain"]);
         expect(yield* json(url, "/account/deep")).toEqual({ balance: deepTotal });
         expect(yield* json(url, `/account/b${WIDTH - 1}`)).toEqual({ balance: sum(1, SMALL) });
         // And it takes new writes.
