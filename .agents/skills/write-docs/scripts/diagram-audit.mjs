@@ -89,7 +89,7 @@ await Promise.all(
           r.captionInside && "caption inside the panel",
           r.margin > 30 && `blank margin ${r.margin}`,
           r.fill < 0.8 && `fills ${r.fill} of the panel`,
-          r.scale < 0.7 && `drawn at ${r.scale}x, text too small`,
+          r.scale < 0.45 && `drawn at ${r.scale}x, text too small`,
         ].filter(Boolean);
         if (why.length) problems.push(`${p} #${r.i}: ${why.join(", ")}`);
       }

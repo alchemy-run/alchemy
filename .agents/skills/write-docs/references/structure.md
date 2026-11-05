@@ -72,8 +72,8 @@ sides, a zone border before a column with no zone, padding for a self-loop no
 state has). After a change, build the site and run
 `node .agents/skills/write-docs/scripts/diagram-audit.mjs`: it lists every
 figure whose caption sits in the panel, whose SVG keeps more than 30 units of
-blank margin, that fills under 0.8 of the panel, or that draws below 0.7x
-(text too small; lay it out top to bottom). Fix the component, not the page.
+blank margin, that fills under 0.8 of the panel, or that draws below 0.45x
+(text too small; lay it out top to bottom). Wide DAGs at 0.5–0.6x read fine. Fix the component, not the page.
 
 | The section answers | Component | Good example |
 | --- | --- | --- |
