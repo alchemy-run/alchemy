@@ -11,6 +11,7 @@ const CLI = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
 const DESTROY_FIXTURE = fileURLToPath(
   new URL("./fixtures/destroy-skips-program.ts", import.meta.url),
 );
+const DRIFT_FIXTURE = fileURLToPath(new URL("./fixtures/drift-exit-codes.ts", import.meta.url));
 
 /**
  * Run the CLI with no TTY on any stdio and return its exit code. Each
@@ -133,6 +134,58 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
       expect(stdout + stderr).toContain("STACK_PROGRAM_EVALUATED");
       expect(exitCode).toBe(1);
     }),
+  );
+
+  // #2987: a scheduled `alchemy drift` must tell drift (2) from a clean
+  // stage (0) and a failed check (1) without parsing the printed plan.
+  it.live("drift exits 0 in sync, 2 on unrepaired drift, 1 when it can't check", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-exit-codes-" });
+      const project = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-drift-project-" });
+      const run = (args: ReadonlyArray<string>, cloud?: string) =>
+        Effect.gen(function* () {
+          const handle = yield* ChildProcess.make(
+            "bun",
+            [CLI, ...args, "--config", DRIFT_FIXTURE, "--stage", "cli_drift"],
+            {
+              cwd: project,
+              env: { ALCHEMY_HOME: home, ...(cloud ? { DRIFT_FIXTURE_CLOUD: cloud } : {}) },
+              extendEnv: true,
+              stdin: "ignore",
+              stdout: "pipe",
+              stderr: "pipe",
+              killSignal: "SIGTERM",
+              forceKillAfter: "1 second",
+            },
+          );
+          const [output, exitCode] = yield* Effect.all(
+            [
+              Stream.merge(handle.stdout, handle.stderr).pipe(Stream.decodeText, Stream.mkString),
+              handle.exitCode,
+            ],
+            { concurrency: 2 },
+          );
+          return { exitCode, output };
+        }).pipe(Effect.scoped);
+
+      const exitCodes = {
+        deploy: (yield* run(["deploy", "--yes"])).exitCode,
+        inSync: (yield* run(["drift"])).exitCode,
+        drifted: (yield* run(["drift"], "missing")).exitCode,
+        unreadable: (yield* run(["drift"], "broken")).exitCode,
+        repaired: (yield* run(["drift", "--repair", "--yes"], "missing")).exitCode,
+        destroy: (yield* run(["destroy", "--yes"])).exitCode,
+      };
+      expect(exitCodes).toEqual({
+        deploy: 0,
+        inSync: 0,
+        drifted: 2,
+        unreadable: 1,
+        repaired: 0,
+        destroy: 0,
+      });
+    }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   );
 
   it.live("bare `profile` without a terminal prints help and exits 1", () =>

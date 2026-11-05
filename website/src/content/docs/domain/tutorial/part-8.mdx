@@ -4,6 +4,7 @@ description: Change what a view computes after it has data, add a view over ever
 sidebar:
   order: 8
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 The bank is deployed and its accounts have events. A view's state is derived from those events, so changing a view means computing it again. In this part you change the summary, add a total across every account, and follow what each deploy does with the history.
 
@@ -68,9 +69,7 @@ A view's `version` says it computes something different from what's stored. Bump
 
 ## Deploy the change
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The deploy uploads the Worker and returns without waiting on the summaries. Each summary is keyed by its account and reads only that account's events, so it's rebuilt where it is: it keeps its Durable Object and its storage, and the first time it's touched after the deploy it reads its account's events again, with the new code, before it answers.
 
@@ -169,9 +168,7 @@ The totals declare no `validate`, so any client of the Api can read them.
 
 ## Deploy and wait for the history
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 ```
 · Backfilling view:DailyDeposits, view:Statement (3s) ...
@@ -238,9 +235,7 @@ The totals now count deposits too, so their version goes up, the same as for the
 
 ## Deploy the rebuild
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 ```
 · Backfilling view:DailyDeposits#1, view:Statement (3s) ...

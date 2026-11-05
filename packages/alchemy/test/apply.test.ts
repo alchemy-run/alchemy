@@ -1033,6 +1033,45 @@ describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  test.provider("a lookup keyed by another resource's Output waits for it", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-keyed";
+      lookupTargets.set(name, { name, value: "keyed" });
+      const keyed = Effect.gen(function* () {
+        const key = yield* TestResource("Key", { string: name });
+        const found = LookupTarget.lookup({ name: key.string });
+        return yield* TestResource("Consumer", { string: found.value });
+      });
+
+      const consumer = yield* stack.deploy(keyed);
+      expect(consumer.string).toEqual("keyed");
+      expect([...(yield* listState())].sort()).toEqual(["Consumer", "Key"]);
+      expect(actionOfPlan(yield* stack.plan(keyed), "Consumer")).toBe("noop");
+
+      yield* stack.destroy();
+      expect(yield* listState()).toEqual([]);
+      expect(lookupTargets.get(name)).toEqual({ name, value: "keyed" });
+    }),
+  );
+
+  // `kind` is also the tag every Output expression carries; reading it off
+  // a lookup must still reach the resource's attribute.
+  test.provider("a lookup's kind attribute resolves to the resource's value", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-kind";
+      lookupTargets.set(name, { name, value: "v", kind: "ip" });
+      const program = TestResource("KindConsumer", {
+        string: Output.map(LookupTarget.lookup({ name }).kind, (kind) => kind ?? "none"),
+      });
+
+      const consumer = yield* stack.deploy(program);
+      expect(consumer.string).toEqual("ip");
+
+      yield* stack.destroy();
+      lookupTargets.delete(name);
+    }),
+  );
+
   // Always a user mistake: the lookup would bind the resource with no
   // dependency, so this stack could delete or replace it under its consumer.
   test.provider("a lookup of a resource this stack manages fails the deploy", (stack) =>
@@ -1064,6 +1103,34 @@ describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
       yield* stack.destroy();
       expect(lookupTargets.has("apply-managed")).toBe(false);
     }),
+  );
+
+  // Stables are compared all together, optional ones included: a resource
+  // with the managed one's name but a different `kind` (as an identity
+  // provider of the same name in another zone) is a different resource.
+  test.provider(
+    "a lookup that differs from a managed resource only in an optional stable resolves",
+    (stack) =>
+      Effect.gen(function* () {
+        const name = "apply-optional-stable";
+        const managed = LookupTarget(name, { value: "managed" });
+        yield* stack.deploy(managed);
+        // The managed row has no `kind`; the found resource does.
+        lookupTargets.set(name, { name, value: "foreign", kind: "zone" });
+
+        const consumer = yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* managed;
+            return yield* TestResource("OptionalStableConsumer", {
+              string: LookupTarget.lookup({ name }).value,
+            });
+          }),
+        );
+        expect(consumer.string).toEqual("foreign");
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
   );
 
   test.provider(

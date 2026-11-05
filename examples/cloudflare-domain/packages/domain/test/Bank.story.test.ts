@@ -45,7 +45,8 @@ import { Username } from "../src/Customer/Username.ts";
 import { UsernameClaim } from "../src/Customer/UsernameClaim.aggregate.ts";
 import { DailyOutflow } from "../src/Fraud/DailyOutflow.view.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
-import { MemoryLedgerStore, memoryLedger } from "../src/Ledger/LedgerStore.ts";
+import { AccountLedger } from "../src/Ledger/AccountLedger.query.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { Payments } from "../src/Settlement/Payments.external.ts";
 import { AccountTransfers } from "../src/Transfer/AccountTransfers.view.ts";
 import {
@@ -65,6 +66,7 @@ const {
   emitted,
   given,
   provide,
+  query,
   rejected,
   replied,
   succeed,
@@ -460,27 +462,39 @@ it.effect("an unanswered external system call fails the story", () =>
 
 // ---------------------------------------------------------------- projections
 
-/** A story whose projections write a ledger the test can read. */
-const ledgerStory = Story.make(Bank, {
-  layer: BankHandlers,
-  stub: [FraudCheck, Payments],
-});
-
-it.effect("the Ledger projection records each movement in a store outside the model", () =>
-  Effect.gen(function* () {
-    const ledger = memoryLedger();
-    yield* ledgerStory(
+it.effect(
+  "the Ledger projection records each movement; its owner reads them, a page at a time",
+  () =>
+    story(
       given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
       as(sam),
       when(a1, new WithdrawMoney({ amount: 2_500 })),
       then(a1, new MoneyWithdrawn({ amount: 2_500, balanceAfter: 7_500 })),
-    ).pipe(Effect.provide(ledger.layer));
-    const rows = yield* ledger.forAccount("a-1");
-    expect(rows.map((row) => [row.kind, row.amount, row.balanceAfter])).toEqual([
-      ["MoneyDeposited", 10_000, 10_000],
-      ["MoneyWithdrawn", 2_500, 7_500],
-    ]);
-  }),
+      query(AccountLedger, { account: a1.id }, [
+        { kind: "MoneyDeposited", amount: 10_000, balanceAfter: 10_000 },
+        { kind: "MoneyWithdrawn", amount: 2_500, balanceAfter: 7_500 },
+      ]),
+      query(
+        AccountLedger,
+        { account: a1.id },
+        ({ entries, cursor }) => {
+          expect(entries.map((row) => row.kind)).toEqual(["MoneyDeposited"]);
+          expect(cursor).not.toBeNull();
+        },
+        { take: 1 },
+      ),
+    ),
+);
+
+it.effect("the ledger is as private as the account: agents read it, other customers can't", () =>
+  story(
+    given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
+    as(agent("support-7")),
+    query(AccountLedger, { account: a1.id }, [{ kind: "MoneyDeposited", amount: 10_000 }]),
+    as(alex),
+    query(AccountLedger, { account: a1.id }),
+    rejected(new NotOwner()),
+  ),
 );
 
 it.effect("the AccountCards projection appends a card on every balance change", () =>

@@ -33,7 +33,7 @@ import type * as R2 from "../R2/index.ts";
 import type * as StreamNs from "../Stream/index.ts";
 import type { VpcService } from "../VpcService/VpcService.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
+import type { WorkflowBinding, WorkflowLike, WorkflowLookup } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type * as WorkerOnlyBinding from "./Binding.ts";
@@ -137,9 +137,7 @@ export type GetBindingType<T> =
                                                         // `StreamNs.StreamBinding`).
                                                         T extends StreamNs.StreamBinding
                                                         ? StreamBinding
-                                                        : T extends
-                                                              | HyperdriveNs.Connection
-                                                              | HyperdriveNs.ConnectionLookup
+                                                        : T extends HyperdriveNs.Connection
                                                           ? Hyperdrive
                                                           : T extends VersionMetadataBinding
                                                             ? WorkerVersionMetadata
@@ -148,6 +146,7 @@ export type GetBindingType<T> =
                                                               : T extends
                                                                     | WorkflowLike<infer Params>
                                                                     | WorkflowBinding<infer Params>
+                                                                    | WorkflowLookup<infer Params>
                                                                 ? Workflow<Params>
                                                                 : T extends DurableObjectLike
                                                                   ? DurableObjectNamespace<

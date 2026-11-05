@@ -328,14 +328,20 @@ const isHostPortFree = (port: number): Effect.Effect<boolean> =>
     return Effect.sync(() => server.close());
   });
 
+const LOOPBACK_HOST_IPS = new Set(["127.0.0.1", "::1"]);
+
 /**
  * The host ports the named container publishes, or `undefined` when the
- * container does not exist.
+ * container does not exist. `exposed` is true when any of them listens
+ * beyond loopback (an empty `HostIp` means every interface), as containers
+ * created before ports were published on `127.0.0.1` do.
  */
-const publishedPorts = (containerName: string): Effect.Effect<Set<number> | undefined> =>
+const publishedPorts = (
+  containerName: string,
+): Effect.Effect<(Set<number> & { exposed?: boolean }) | undefined> =>
   docker(["inspect", "--format", "{{json .HostConfig.PortBindings}}", containerName]).pipe(
     Effect.map(({ stdout }) => {
-      let bindings: Record<string, Array<{ HostPort?: string }> | null> | null;
+      let bindings: Record<string, Array<{ HostIp?: string; HostPort?: string }> | null> | null;
       try {
         bindings = JSON.parse(stdout.trim());
       } catch {
@@ -343,11 +349,12 @@ const publishedPorts = (containerName: string): Effect.Effect<Set<number> | unde
         // partial output — treat it as "unknown", not a crash.
         return undefined;
       }
-      const ports = new Set<number>();
+      const ports: Set<number> & { exposed?: boolean } = new Set<number>();
       for (const spec of Object.values(bindings ?? {})) {
         for (const bind of spec ?? []) {
           const hostPort = Number(bind.HostPort);
           if (Number.isFinite(hostPort)) ports.add(hostPort);
+          if (!LOOPBACK_HOST_IPS.has(bind.HostIp ?? "")) ports.exposed = true;
         }
       }
       return ports;
@@ -522,7 +529,9 @@ const ensureFlociUnsynchronized = (
             ...(config?.elbListenerPorts ?? []).filter((p) => elbPorts.includes(p)),
             ...(config?.cloudfrontEdgePorts ?? []).filter((p) => edgePorts.includes(p)),
           ].some((p) => !published.has(p))) ||
-        (runningImage !== undefined && runningImage !== image));
+        (runningImage !== undefined && runningImage !== image) ||
+        // Published on every interface by an older alchemy.
+        published.exposed === true);
 
     if (yield* isServing(endpoint)) {
       if (!needsRecreate) {
@@ -570,8 +579,10 @@ const ensureFlociUnsynchronized = (
         "-d",
         "--name",
         containerName,
+        // Publish on loopback only. Containers floci launches reach it over
+        // the Docker network, not these ports.
         "-p",
-        `${port}:4566`,
+        `127.0.0.1:${port}:4566`,
         // Docker Desktop injects `host.docker.internal` automatically; native
         // Linux Docker does not. The emulator needs it to reach a dev server
         // running on the developer's machine (a CloudFront origin pointed at
@@ -580,7 +591,7 @@ const ensureFlociUnsynchronized = (
         "host.docker.internal:host-gateway",
         "--label",
         `${PORTS_LABEL}=${requestedPorts}`,
-        ...[...elb, ...edge].flatMap((p) => ["-p", `${p}:${p}`]),
+        ...[...elb, ...edge].flatMap((p) => ["-p", `127.0.0.1:${p}:${p}`]),
         // The emulator can only hand a distribution a port the container
         // published, so it gets the resolved list rather than its own default
         // range — and the feature is switched off outright when nothing could

@@ -104,6 +104,19 @@ deploy if nothing matches. Alchemy never creates, updates or deletes
 a looked-up resource, and `lookup` is a type error on resources that
 don't support it.
 
+Lookup props can be another resource's outputs. The lookup waits for
+that resource, the same way a declared resource would. A Hyperdrive
+configuration can take its local dev origin from a database the
+stack creates:
+
+```typescript
+const project = yield* Neon.Project("Db");
+const db = Cloudflare.Hyperdrive.Connection.lookup({
+  name: "shared-postgres",
+  dev: project.origin,
+});
+```
+
 A lookup is not a dependency, so don't use one for a resource your
 own stack declares: reference that resource directly. A lookup that
 finds one of the stack's own resources fails the deploy with

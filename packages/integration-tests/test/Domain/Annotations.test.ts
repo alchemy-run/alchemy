@@ -114,6 +114,12 @@ class Bank extends Domain.ExternalSystem(
   { description: "The bank that pays money out." },
 ) {}
 
+class Balances extends Domain.Query(
+  "Balances",
+  { input: { min: Schema.Int }, success: Schema.Int, paged: true },
+  { description: "Every balance of at least min." },
+) {}
+
 class Wallets extends Domain.Model(
   "Wallets",
   {
@@ -146,6 +152,7 @@ describe("Domain annotations", { tags: ["unit"] }, () => {
     expect(Refund.annotations.description).toBe("Gives a deposit back.");
     expect(NoFunds.annotations.description).toBe("The wallet can't cover it.");
     expect(Bank.annotations.description).toBe("The bank that pays money out.");
+    expect(Balances.annotations.description).toBe("Every balance of at least min.");
     expect(Wallets.annotations.description).toBe("Wallets and their balances.");
     expect(WalletApi.annotations.description).toBe("What a wallet app reaches.");
   });

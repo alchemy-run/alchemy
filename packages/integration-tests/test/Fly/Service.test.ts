@@ -715,7 +715,19 @@ describe.concurrent("Service", () => {
           `${users.appName}.flycast:9000 users-http 9000 /stats`,
         );
 
-        // Same network, no binding, no token: the method is refused.
+        // The Service answers methods only for the Apps that bind it, and
+        // holds no key for them.
+        const usersMachine = yield* machines.getMachine({
+          app_name: users.appName,
+          machine_id: users.machineId,
+        });
+        const usersEnv = usersMachine.config?.env ?? {};
+        expect(usersEnv.ALCHEMY_FLY_RPC_CALLERS?.split(",").sort()).toEqual(
+          [gateway.appName, orders.appName].sort(),
+        );
+        expect(Object.keys(usersEnv).filter((key) => key.includes("TOKEN"))).toEqual([]);
+
+        // Same network, valid Fly-Src, no binding: the method is refused.
         const snooped = yield* postRpc(snoop, users.privateUrl!);
         expect(snooped).toContain("401");
         expect(snooped).not.toContain("Ada");

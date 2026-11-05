@@ -276,6 +276,8 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
         served.annotations.description ?? SchemaAST.resolveDescription(served.ast);
       return [{ served, name: served.tag, operation: "send", rpc, stream: false, description }];
     }
+    // A query is one RPC the Api's own client calls; the derived surfaces do not serve it yet.
+    if (served.kind === "Query") return [];
     const { description } = served.annotations;
     const name = nameOf(served);
     return Object.entries(readRpcs(served)).flatMap(([call, read]) => {

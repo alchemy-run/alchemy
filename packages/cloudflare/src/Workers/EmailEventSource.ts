@@ -9,6 +9,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Scope from "effect/Scope";
 import { CatchAll } from "../Email/CatchAll.ts";
 import { Routing } from "../Email/Routing.ts";
 import { Rule, type Matcher } from "../Email/Rule.ts";
@@ -236,13 +237,14 @@ export interface EmailSubscribeProps {
 export const email = (props: EmailSubscribeProps = {}) => ({
   subscribe: <E = never, Req = never>(
     process: (message: ForwardableEmailMessage) => Effect.Effect<void, E, Req>,
-  ) => EmailEventSource.use((source) => source(props, process)),
+  ): Effect.Effect<void, never, EmailEventSource | Exclude<Req, RuntimeContext | Scope.Scope>> =>
+    EmailEventSource.use((source) => source(props, process)),
 });
 
 export type EmailEventSourceService = <E = never, Req = never>(
   props: EmailSubscribeProps,
   process: (message: ForwardableEmailMessage) => Effect.Effect<void, E, Req>,
-) => Effect.Effect<void, never, never>;
+) => Effect.Effect<void, never, Exclude<Req, RuntimeContext | Scope.Scope>>;
 
 export class EmailEventSource extends Context.Service<EmailEventSource, EmailEventSourceService>()(
   "Cloudflare.Workers.EmailEventSource",
