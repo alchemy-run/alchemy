@@ -226,7 +226,7 @@ interface SendOptions {
   readonly headers?: Record<string, string>;
 }
 
-const execute = (method: "GET" | "POST", path: string, options: SendOptions) =>
+const execute = (method: "GET" | "POST" | "QUERY", path: string, options: SendOptions) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     let request = HttpClientRequest.make(method)(path).pipe(
@@ -238,7 +238,7 @@ const execute = (method: "GET" | "POST", path: string, options: SendOptions) =>
     return yield* client.execute(request);
   });
 
-const send = (method: "GET" | "POST", path: string, options: SendOptions = {}) =>
+const send = (method: "GET" | "POST" | "QUERY", path: string, options: SendOptions = {}) =>
   Effect.gen(function* () {
     const response = yield* execute(method, path, options);
     const text = yield* response.text;
@@ -309,7 +309,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
 
   it.live("a query endpoint takes its input and page in the body, and answers with a page", () =>
     Effect.gen(function* () {
-      const first = yield* send("POST", "/Rates", {
+      const first = yield* send("QUERY", "/Rates", {
         owner: "sam",
         body: { input: { base: "USD" }, take: 2 },
       });
@@ -323,18 +323,18 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
           cursor: "GBP",
         },
       });
-      const next = yield* send("POST", "/Rates", {
+      const next = yield* send("QUERY", "/Rates", {
         owner: "sam",
         body: { input: { base: "USD" }, after: "GBP" },
       });
       expect(next.body).toEqual({ entries: [{ currency: "JPY", rate: 150 }], cursor: null });
       // Its rejection and its middleware's error answer with their statuses.
-      const unknown = yield* send("POST", "/Rates", {
+      const unknown = yield* send("QUERY", "/Rates", {
         owner: "sam",
         body: { input: { base: "XYZ" } },
       });
       expect(unknown).toEqual({ status: 422, body: { _tag: "UnknownBase", base: "XYZ" } });
-      const anonymous = yield* send("POST", "/Rates", { body: { input: { base: "USD" } } });
+      const anonymous = yield* send("QUERY", "/Rates", { body: { input: { base: "USD" } } });
       expect(anonymous.status).toBe(401);
     }).pipe(Effect.provide(Served)),
   );
@@ -565,7 +565,8 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     expect(Object.keys(deposit.responses).sort()).toEqual(["200", "401", "422"]);
     expect(JSON.stringify(deposit.responses["422"])).toContain("OverLimit");
 
-    const ratesOp = spec.paths["/Rates"]!.post!;
+    // OpenAPI 3.1 has no `query` slot, so the QUERY operation sits under the 3.2 extension.
+    const ratesOp = spec.paths["/Rates"]!["x-oai-additionalOperations"]!.QUERY!;
     expect(ratesOp.operationId).toBe("WalletApi.Rates");
     for (const field of ["input", "base", "after", "take", "atLeast"]) {
       expect(JSON.stringify(ratesOp.requestBody)).toContain(field);
@@ -626,7 +627,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       ["Balance.events", "GET", "/Balance/:key/events"],
       ["Balance.list", "GET", "/Balance/:key/list"],
       ["Balance.snapshot", "GET", "/Balance/:key/snapshot"],
-      ["Rates", "POST", "/Rates"],
+      ["Rates", "QUERY", "/Rates"],
       ["Wallet.get", "GET", "/Wallet/:key"],
       ["Wallet.watch", "GET", "/Wallet/:key/watch"],
       ["Wallet.events", "GET", "/Wallet/:key/events"],

@@ -71,7 +71,7 @@ Each published call becomes one endpoint, by one rule:
 | Call                           | Endpoint                    | Input                                                    |
 | ------------------------------ | --------------------------- | -------------------------------------------------------- |
 | A command                      | `POST /<Command>`           | A JSON body: `target`, an optional `commandId`, and the input |
-| A query                        | `POST /<Query>`             | A JSON body: the `input`, and an optional `atLeast`, `after` and `take` |
+| A query                        | `QUERY /<Query>`            | A JSON body: the `input`, and an optional `atLeast`, `after` and `take` |
 | A view's or aggregate's `get`, a stream's `peek` | `GET /<Name>/{key}`        | `?stream=&version=` (from a receipt) waits for that write |
 | A view's `snapshot`            | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for that write               |
 | A view's or stream's `list`    | `GET /<Name>/{key}/list`   | `?order=&take=&after=`                                   |
@@ -87,10 +87,10 @@ $ curl -X POST https://bank.example.com/DepositMoney \
 {"reply":{"balance":1500},"stream":"Account/c-1-main","version":3}
 ```
 
-A query's input can be any schema, so it goes in a body, as a command's does:
+A query's input can be any schema, so it goes in a body too. A query is a read, so it uses the `QUERY` method, which is safe and idempotent like a `GET` but carries a body:
 
 ```shellsession
-$ curl -X POST https://bank.example.com/AccountLedger \
+$ curl -X QUERY https://bank.example.com/AccountLedger \
     -H 'content-type: application/json' -H 'cookie: session=…' \
     -d '{"input":{"account":"c-1-main"},"take":20}'
 {"entries":[{"id":"…","amount":500}],"cursor":null}

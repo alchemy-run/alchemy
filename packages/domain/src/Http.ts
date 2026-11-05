@@ -244,49 +244,56 @@ const endpointOf = (
   const fields = (rpc.payloadSchema as unknown as Schema.Struct<Schema.Struct.Fields>).fields;
   const error = errors.length === 0 ? undefined : errors;
   const endpoint =
-    // A query's input is any schema, so it goes in a JSON body, as a command's does.
-    operation.operation === "send" || operation.operation === "ask"
+    operation.operation === "send"
       ? HttpApiEndpoint.post(operation.rpc._tag, `/${operation.name}`, {
           payload: rpc.payloadSchema,
           success: rpc.successSchema,
           error,
         })
-      : operation.stream
-        ? HttpApiEndpoint.get(
-            operation.rpc._tag,
-            `/${operation.name}/:key/${operation.operation}`,
-            {
-              params: { key: fields.key! },
-              // `events` resumes after a cursor; `watch` takes nothing but the key.
-              ...(fields.after ? { query: { after: fields.after } } : {}),
-              success: sseOf(rpc, errors),
-              error,
-            },
-          )
-        : operation.operation === "list"
-          ? HttpApiEndpoint.get(operation.rpc._tag, `/${operation.name}/:key/list`, {
-              params: { key: fields.key! },
-              query: {
-                order: fields.order!,
-                take: fields.take!,
-                after: fields.after!,
-              },
-              success: rpc.successSchema,
-              error,
-            })
-          : HttpApiEndpoint.get(
+      : // A query's input is any schema, so it goes in a JSON body. QUERY is
+        // the safe, idempotent method that carries one.
+        operation.operation === "ask"
+        ? HttpApiEndpoint.query(operation.rpc._tag, `/${operation.name}`, {
+            payload: rpc.payloadSchema,
+            success: rpc.successSchema,
+            error,
+          })
+        : operation.stream
+          ? HttpApiEndpoint.get(
               operation.rpc._tag,
-              operation.operation === "snapshot"
-                ? `/${operation.name}/:key/snapshot`
-                : `/${operation.name}/:key`,
+              `/${operation.name}/:key/${operation.operation}`,
               {
                 params: { key: fields.key! },
-                // A view's reads and a stream's `peek` can wait for a write; an aggregate reads its state.
-                ...(fields.atLeast ? { query: AtLeastQuery } : {}),
-                success: rpc.successSchema,
+                // `events` resumes after a cursor; `watch` takes nothing but the key.
+                ...(fields.after ? { query: { after: fields.after } } : {}),
+                success: sseOf(rpc, errors),
                 error,
               },
-            );
+            )
+          : operation.operation === "list"
+            ? HttpApiEndpoint.get(operation.rpc._tag, `/${operation.name}/:key/list`, {
+                params: { key: fields.key! },
+                query: {
+                  order: fields.order!,
+                  take: fields.take!,
+                  after: fields.after!,
+                },
+                success: rpc.successSchema,
+                error,
+              })
+            : HttpApiEndpoint.get(
+                operation.rpc._tag,
+                operation.operation === "snapshot"
+                  ? `/${operation.name}/:key/snapshot`
+                  : `/${operation.name}/:key`,
+                {
+                  params: { key: fields.key! },
+                  // A view's reads and a stream's `peek` can wait for a write; an aggregate reads its state.
+                  ...(fields.atLeast ? { query: AtLeastQuery } : {}),
+                  success: rpc.successSchema,
+                  error,
+                },
+              );
   return endpoint as unknown as HttpApiEndpoint.Top;
 };
 
@@ -297,7 +304,7 @@ const endpointOf = (
  * | Call          | Method and path              | Input                                          |
  * | ------------- | ---------------------------- | ---------------------------------------------- |
  * | a command     | `POST /<Command>`            | JSON body: `target`, `commandId`, input        |
- * | a query       | `POST /<Query>`              | JSON body: `input`, `atLeast`, `after`, `take` |
+ * | a query       | `QUERY /<Query>`             | JSON body: `input`, `atLeast`, `after`, `take` |
  * | `get`, `peek` | `GET /<Name>/{key}`          | `?stream=&version=` waits for a write          |
  * | `snapshot`    | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for a write          |
  * | `list`        | `GET /<Name>/{key}/list`     | `?order=&take=&after=`                         |

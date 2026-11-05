@@ -116,7 +116,7 @@ The result is decoded from the `success` schema. The error type lists the query'
 
 A Foldkit app asks a query through a Command from `@alchemy.run/domain/Foldkit`. See [Integrate with Foldkit: Ask a query](/domain/foldkit#ask-a-query).
 
-List the query's name in `expose` to publish it beyond the typed client: as `POST /AccountLedger` with [`toHttpApi`](/domain/http-api#paths-and-methods), as `bank account-ledger --account a-1` with [`toCli`](/domain/cli#ask-a-query), or as a read-only tool with [`toToolkit`](/domain/mcp#tools-from-an-api).
+List the query's name in `expose` to publish it beyond the typed client: as `QUERY /AccountLedger` with [`toHttpApi`](/domain/http-api#paths-and-methods), as `bank account-ledger --account a-1` with [`toCli`](/domain/cli#ask-a-query), or as a read-only tool with [`toToolkit`](/domain/mcp#tools-from-an-api).
 
 ## Page through it
 
