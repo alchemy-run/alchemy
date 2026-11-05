@@ -21,13 +21,21 @@ export type ServiceTokenDatabaseAccess =
   | "read_branch"
   | "delete_branch"
   | "delete_production_branch"
+  | "promote_branches"
+  | "demote_branches"
   | "connect_branch"
   | "connect_production_branch"
+  | "connect_production_read_only_branch"
+  | "create_branch_password"
+  | "create_production_branch_password"
+  | "create_production_read_only_branch_password"
   | "delete_branch_password"
   | "delete_production_branch_password"
+  | "delete_production_read_only_branch_password"
   | "create_deploy_request"
   | "read_deploy_request"
   | "approve_deploy_request"
+  | "review_deploy_request"
   | "create_comment"
   | "read_comment"
   | "read_backups"
@@ -37,7 +45,12 @@ export type ServiceTokenDatabaseAccess =
   | "restore_backup"
   | "restore_production_branch_backup"
   | "write_branch_vschema"
-  | "write_production_branch_vschema";
+  | "write_production_branch_vschema"
+  | "write_branch_topology"
+  | "write_production_branch_topology"
+  | "read_workflow"
+  | "write_workflow"
+  | "delete_workflow";
 
 /** Properties for a service token scoped to one PlanetScale database. */
 export interface ServiceTokenProps {
