@@ -1105,6 +1105,34 @@ describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  // Stables are compared all together, optional ones included: a resource
+  // with the managed one's name but a different `kind` (as an identity
+  // provider of the same name in another zone) is a different resource.
+  test.provider(
+    "a lookup that differs from a managed resource only in an optional stable resolves",
+    (stack) =>
+      Effect.gen(function* () {
+        const name = "apply-optional-stable";
+        const managed = LookupTarget(name, { value: "managed" });
+        yield* stack.deploy(managed);
+        // The managed row has no `kind`; the found resource does.
+        lookupTargets.set(name, { name, value: "foreign", kind: "zone" });
+
+        const consumer = yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* managed;
+            return yield* TestResource("OptionalStableConsumer", {
+              string: LookupTarget.lookup({ name }).value,
+            });
+          }),
+        );
+        expect(consumer.string).toEqual("foreign");
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
   test.provider(
     "a lookup that finds nothing fails the deploy before anything is created",
     (stack) =>
