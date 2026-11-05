@@ -169,8 +169,15 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
 - **Pick the component by the question**, never by habit. `DAG` and then
   `Sequence` each became "so overused". Use `Sequence` only when the order of
   messages between parties is itself the idea (receive, hide, delete; a token
-  exchange; an ACME challenge). About a dozen across the docs is plenty, so
-  count them after a batch. The best-received diagrams showed the idea itself:
+  exchange). About a dozen across the docs is plenty, so count them after a
+  batch. **Never put a `Sequence` on a What is page**: it draws the platform's
+  pieces and where they live, not a run through them. ACME's challenge flow
+  became a `Boundaries` figure: your deploy, the authority and your zone, with
+  the authority checking the TXT record in a zone only you can write to.
+- **Don't make everything a `Shell`.** Nested boxes say "runs inside". A git
+  host's Layers inside a Worker are nested. An ACME account inside its
+  authority, and a certificate inside its order, were rejected: "this makes
+  no sense". The best-received diagrams showed the idea itself:
   `Responsibility`'s staircase of who manages what, OUs as nested borders, and
   the Tunnel as an arrow through a dotted gap in the wall.
 - **Containment is a border, never an arrow.** An organization around its OUs

@@ -3,24 +3,27 @@ title: What is a git host?
 description: The concepts behind hosting git — objects, refs, packs, the smart HTTP protocol, pushes and their verification, repositories, names and pull requests — and how @alchemy.run/git builds a host from them.
 ---
 
-import Tree from "../../../components/diagrams/Tree.astro";
+import Shell from "../../../components/diagrams/Shell.astro";
 
 A git host is the server your `git clone` and `git push` talk to. It stores repositories, sends a client the objects it's missing, accepts new ones, and moves branches only when the push is valid. Around that, most hosts add names like `acme/api`, an API, and pull requests.
 
 Take one host: a Worker serving git over HTTP, with each repository in a Durable Object and its bulk bytes in R2. A client speaks git's HTTP protocol to the Worker. The Worker checks who's calling, resolves the name to a repository, and the repository stores objects and moves refs, keeping large packs in a blob store.
 
-<Tree
-  nodes={[
-    { id: "graph", label: "GitLive", type: "one Layer graph" },
-    { id: "worker", label: "your Worker", parent: "graph" },
-    { id: "api", label: "Git.ApiLive", type: "git over HTTP", parent: "worker", tone: "accent" },
-    { id: "app", label: "your app", type: "routes, auth", parent: "worker" },
-    { id: "repo", label: "Repository", type: "Durable Object per repo", parent: "graph", tone: "accent" },
-    { id: "registry", label: "Registry", type: "Durable Object · D1", parent: "graph" },
-    { id: "blobs", label: "Blob Store", type: "R2 · S3", parent: "graph" },
-    { id: "hasher", label: "Hasher", type: "inline · Lambda", parent: "graph" },
-  ]}
-  caption="Git runs inside your own Worker, each repository lives in its own Durable Object, and the rest are Layers you choose."
+<Shell
+  shell={{
+    label: "Worker",
+    children: [{
+      label: "Git.Api",
+      tone: "accent",
+      children: [
+        { label: "Repository", type: "Durable Object" },
+        { label: "Registry", type: "Durable Object · D1" },
+        { label: "Blob Store", type: "R2 · S3" },
+        { label: "Hasher", type: "inline · Lambda" },
+      ],
+    }],
+  }}
+  caption="Git's API runs inside your Worker, over a Repository, Registry, Blob Store and Hasher."
 />
 
 ## Objects
