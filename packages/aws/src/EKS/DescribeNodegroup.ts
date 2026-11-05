@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -35,3 +37,14 @@ export interface DescribeNodegroup extends Binding.Service<
   >
 > {}
 export const DescribeNodegroup = Binding.Service<DescribeNodegroup>("AWS.EKS.DescribeNodegroup");
+
+export const DescribeNodegroupHttp = Layer.effect(
+  DescribeNodegroup,
+  makeEKSClusterHttpBinding({
+    tag: "AWS.EKS.DescribeNodegroup",
+    operation: eks.describeNodegroup,
+    actions: ["eks:DescribeNodegroup"],
+    key: "clusterName",
+    scope: "subresources",
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as ds from "@distilled.cloud/aws/directory-service";
+import * as ds from "@distilled.cloud/aws/directory-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDirectoryHttpBinding } from "./BindingHttp.ts";
 import type { Directory } from "./Directory.ts";
 
 /**
@@ -41,4 +43,13 @@ export interface ResetUserPassword extends Binding.Service<
 > {}
 export const ResetUserPassword = Binding.Service<ResetUserPassword>(
   "AWS.DirectoryService.ResetUserPassword",
+);
+
+export const ResetUserPasswordHttp = Layer.effect(
+  ResetUserPassword,
+  makeDirectoryHttpBinding({
+    tag: "AWS.DirectoryService.ResetUserPassword",
+    operation: ds.resetUserPassword,
+    actions: ["ds:ResetUserPassword"],
+  }),
 );

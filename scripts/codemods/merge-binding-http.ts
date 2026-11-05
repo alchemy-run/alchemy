@@ -15,8 +15,9 @@
  *   `X.ts`, dropping re-exports that become duplicates.
  *
  * Shared scaffolding (`BindingHttp.ts`, `AccessHttp.ts`, `BucketHttp.ts`
- * beside the `Bucket` provider: any `*Http.ts` without an `@provides`
- * layer) is left alone. A pair whose files declare the same
+ * beside the `Bucket` provider: any `*Http.ts` that neither has an
+ * `@provides` layer nor exports an `XHttp` built over `./X.ts`) is left
+ * alone. A pair whose files declare the same
  * top-level name is reported and skipped.
  */
 import { execFileSync } from "node:child_process";
@@ -53,7 +54,9 @@ const SIDE_EFFECT = /^import\s+["']([^"']+)["'];?\s*$/;
 /** Split a file into its leading import statements and the rest. */
 const splitImports = (source: string) => {
   const statements: string[] = [];
-  let rest = source;
+  // Line comments above the imports (`// @ts-nocheck`) stay at the top.
+  const header = /^(?:\/\/[^\n]*\n)*/.exec(source)![0];
+  let rest = source.slice(header.length);
   let leading = "";
   for (;;) {
     const trimmed = rest.replace(/^\s+/, "");
@@ -65,7 +68,7 @@ const splitImports = (source: string) => {
     rest = trimmed.slice(end + 1);
     leading += skipped;
   }
-  return { statements, body: rest.replace(/^\s*\n/, "") };
+  return { header, statements, body: rest.replace(/^\s*\n/, "") };
 };
 
 const parseImport = (statement: string): ImportGroup | undefined => {
@@ -156,14 +159,36 @@ const skipped: string[] = [];
 for (const dir of services) {
   for (const file of fs.readdirSync(dir).filter((f) => f.endsWith("Http.ts"))) {
     const httpPath = path.join(dir, file);
-    const contractPath = path.join(dir, file.replace(/Http\.ts$/, ".ts"));
-    if (!fs.existsSync(contractPath)) continue; // shared scaffolding
-    const contract = fs.readFileSync(contractPath, "utf8");
     const http = fs.readFileSync(httpPath, "utf8");
-    // Only a layer implementing the contract moves; scaffolding named after a
-    // resource (`BucketHttp.ts` beside the `Bucket` provider) stays.
-    if (!/@provides /.test(http)) continue;
+    // The layers' contract module: `X.ts` beside `XHttp.ts`, or else the one
+    // sibling the layers import a `Binding.Service` contract from
+    // (`ConnectReadHttp.ts` → `Connect.ts`, which declares `ConnectRead`).
+    const sameName = path.join(dir, file.replace(/Http\.ts$/, ".ts"));
+    const imported = [...http.matchAll(/^import\s+(?!type\b)[^;]*?from\s+"\.\/(\w+)\.ts";/gm)]
+      .map((m) => path.join(dir, `${m[1]}.ts`))
+      .filter(
+        (p) =>
+          fs.existsSync(p) &&
+          !/Http\.ts$/.test(p) &&
+          /Binding\.Service</.test(fs.readFileSync(p, "utf8")),
+      );
+    const contractPath = fs.existsSync(sameName)
+      ? sameName
+      : new Set(imported).size === 1
+        ? imported[0]!
+        : undefined;
+    if (contractPath === undefined) continue; // shared scaffolding
+    const contract = fs.readFileSync(contractPath, "utf8");
+    // Only layers implementing the contract move (an `@provides` tag, or an
+    // exported `…Http` built over the contract module it imports);
+    // scaffolding named after a resource (`BucketHttp.ts` beside the `Bucket`
+    // provider) stays.
     const base = path.basename(contractPath);
+    const contractName = base.replace(/\.ts$/, "");
+    const implementsContract =
+      /^export const \w+Http\b/m.test(http) &&
+      new RegExp(`^import\\s+(?!type\\b)[^;]*?from\\s+"\\./${contractName}\\.ts";`, "m").test(http);
+    if (!/@provides /.test(http) && !implementsContract) continue;
 
     const c = splitImports(contract);
     const h = splitImports(http);
@@ -177,7 +202,8 @@ for (const dir of services) {
     }
     const kept = groups.filter((g): g is ImportGroup => g !== undefined && g.spec !== `./${base}`);
     const imports = mergeGroups(kept);
-    const out = `${imports.join("\n")}\n\n${c.body.trimEnd()}\n\n${h.body.trim()}\n`;
+    const header = [...new Set([c.header, h.header])].join("");
+    const out = `${header}${imports.join("\n")}\n\n${c.body.trimEnd()}\n\n${h.body.trim()}\n`;
     if (!dryRun) {
       fs.writeFileSync(contractPath, out);
       fs.unlinkSync(httpPath);
@@ -242,11 +268,11 @@ for (const file of tracked) {
     .join("\n");
   // Two imports of one module (the contract's and the old layer's) become one.
   if (/\.(ts|tsx|mts)$/.test(file)) {
-    const { statements, body } = splitImports(next);
+    const { header, statements, body } = splitImports(next);
     const groups = statements.map(parseImport);
     const specs = groups.map((g) => g?.spec);
     if (groups.every((g) => g !== undefined) && new Set(specs).size !== specs.length) {
-      next = `${mergeGroups(groups as ImportGroup[]).join("\n")}\n\n${body}`;
+      next = `${header}${mergeGroups(groups as ImportGroup[]).join("\n")}\n\n${body}`;
     }
   }
   if (!dryRun) fs.writeFileSync(file, next);

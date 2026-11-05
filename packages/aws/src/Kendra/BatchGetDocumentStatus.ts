@@ -1,6 +1,8 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface BatchGetDocumentStatus extends Binding.Service<
 > {}
 export const BatchGetDocumentStatus = Binding.Service<BatchGetDocumentStatus>(
   "AWS.Kendra.BatchGetDocumentStatus",
+);
+
+export const BatchGetDocumentStatusHttp = Layer.effect(
+  BatchGetDocumentStatus,
+  makeKendraIndexHttpBinding({
+    tag: "AWS.Kendra.BatchGetDocumentStatus",
+    operation: kendra.batchGetDocumentStatus,
+    actions: ["kendra:BatchGetDocumentStatus"],
+  }),
 );

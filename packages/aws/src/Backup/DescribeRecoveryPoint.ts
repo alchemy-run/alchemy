@@ -1,7 +1,9 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { BackupVault } from "./BackupVault.ts";
+import { makeBackupVaultHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `DescribeRecoveryPoint` request with `BackupVaultName` injected from the
@@ -46,4 +48,16 @@ export interface DescribeRecoveryPoint extends Binding.Service<
 > {}
 export const DescribeRecoveryPoint = Binding.Service<DescribeRecoveryPoint>(
   "AWS.Backup.DescribeRecoveryPoint",
+);
+
+export const DescribeRecoveryPointHttp = Layer.effect(
+  DescribeRecoveryPoint,
+  makeBackupVaultHttpBinding({
+    tag: "AWS.Backup.DescribeRecoveryPoint",
+    operation: backup.describeRecoveryPoint,
+    actions: ["backup:DescribeRecoveryPoint"],
+    // Recovery-point actions authorize on the recovery point ARN (the
+    // underlying resource's snapshot ARN), not the vault ARN.
+    wildcardIam: true,
+  }),
 );

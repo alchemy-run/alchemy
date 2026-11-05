@@ -1,6 +1,8 @@
-import type * as neptune from "@distilled.cloud/aws/neptune";
+import * as neptune from "@distilled.cloud/aws/neptune";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeEvents` operation (IAM action
@@ -34,3 +36,12 @@ export interface DescribeEvents extends Binding.Service<
   >
 > {}
 export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.Neptune.DescribeEvents");
+
+export const DescribeEventsHttp = Layer.effect(
+  DescribeEvents,
+  makeNeptuneAccountHttpBinding({
+    tag: "AWS.Neptune.DescribeEvents",
+    operation: neptune.describeEvents,
+    actions: ["rds:DescribeEvents"],
+  }),
+);

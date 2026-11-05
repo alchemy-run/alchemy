@@ -1,6 +1,8 @@
-import type * as mq from "@distilled.cloud/aws/mq";
+import * as mq from "@distilled.cloud/aws/mq";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMqBrokerHttpBinding } from "./BindingHttp.ts";
 import type { Broker } from "./Broker.ts";
 
 /**
@@ -35,3 +37,14 @@ export interface Promote extends Binding.Service<
   >
 > {}
 export const Promote = Binding.Service<Promote>("AWS.MQ.Promote");
+
+export const PromoteHttp = Layer.effect(
+  Promote,
+  makeMqBrokerHttpBinding<Omit<mq.PromoteRequest, "BrokerId">, mq.PromoteResponse, mq.PromoteError>(
+    {
+      capability: "Promote",
+      operation: mq.promote,
+      iamActions: ["mq:Promote"],
+    },
+  ),
+);

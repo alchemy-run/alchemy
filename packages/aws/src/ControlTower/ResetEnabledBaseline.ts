@@ -1,6 +1,8 @@
-import type * as controltower from "@distilled.cloud/aws/controltower";
+import * as controltower from "@distilled.cloud/aws/controltower";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeControlTowerHttpBinding } from "./BindingHttp.ts";
 import type { EnabledBaseline } from "./EnabledBaseline.ts";
 
 /**
@@ -39,4 +41,15 @@ export interface ResetEnabledBaseline extends Binding.Service<
 
 export const ResetEnabledBaseline = Binding.Service<ResetEnabledBaseline>(
   "AWS.ControlTower.ResetEnabledBaseline",
+);
+
+export const ResetEnabledBaselineHttp = Layer.effect(
+  ResetEnabledBaseline,
+  makeControlTowerHttpBinding({
+    capability: "ResetEnabledBaseline",
+    iamActions: ["controltower:ResetEnabledBaseline"],
+    requestKey: "enabledBaselineIdentifier",
+    identifier: (enabledBaseline: EnabledBaseline) => enabledBaseline.enabledBaselineArn,
+    operation: controltower.resetEnabledBaseline,
+  }),
 );

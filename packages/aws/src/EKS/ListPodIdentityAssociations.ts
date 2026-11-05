@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -41,4 +43,15 @@ export interface ListPodIdentityAssociations extends Binding.Service<
 > {}
 export const ListPodIdentityAssociations = Binding.Service<ListPodIdentityAssociations>(
   "AWS.EKS.ListPodIdentityAssociations",
+);
+
+export const ListPodIdentityAssociationsHttp = Layer.effect(
+  ListPodIdentityAssociations,
+  makeEKSClusterHttpBinding({
+    tag: "AWS.EKS.ListPodIdentityAssociations",
+    operation: eks.listPodIdentityAssociations,
+    actions: ["eks:ListPodIdentityAssociations"],
+    key: "clusterName",
+    scope: "cluster",
+  }),
 );

@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 import type { ReferenceStore } from "./ReferenceStore.ts";
 
 export interface ListReferencesRequest extends Omit<
@@ -39,3 +41,15 @@ export interface ListReferences extends Binding.Service<
 > {}
 
 export const ListReferences = Binding.Service<ListReferences>("AWS.Omics.ListReferences");
+
+export const ListReferencesHttp = Layer.effect(
+  ListReferences,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.ListReferences",
+    operation: omics.listReferences,
+    actions: ["omics:ListReferences"],
+    key: "referenceStoreId",
+    id: (store: ReferenceStore) => store.referenceStoreId,
+    arn: (store: ReferenceStore) => store.referenceStoreArn,
+  }),
+);

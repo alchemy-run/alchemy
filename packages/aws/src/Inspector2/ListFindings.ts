@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:ListFindings`.
@@ -33,3 +35,12 @@ export interface ListFindings extends Binding.Service<
   >
 > {}
 export const ListFindings = Binding.Service<ListFindings>("AWS.Inspector2.ListFindings");
+
+export const ListFindingsHttp = Layer.effect(
+  ListFindings,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.ListFindings",
+    operation: inspector2.listFindings,
+    actions: ["inspector2:ListFindings"],
+  }),
+);

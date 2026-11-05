@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:StopEntitiesDetectionV2Job` — stop an in-progress asynchronous medical entity detection job.
@@ -35,4 +37,13 @@ export interface StopEntitiesDetectionV2Job extends Binding.Service<
 > {}
 export const StopEntitiesDetectionV2Job = Binding.Service<StopEntitiesDetectionV2Job>(
   "AWS.ComprehendMedical.StopEntitiesDetectionV2Job",
+);
+
+export const StopEntitiesDetectionV2JobHttp = Layer.effect(
+  StopEntitiesDetectionV2Job,
+  makeComprehendMedicalHttpBinding({
+    capability: "StopEntitiesDetectionV2Job",
+    iamActions: ["comprehendmedical:StopEntitiesDetectionV2Job"],
+    operation: comprehendmedical.stopEntitiesDetectionV2Job,
+  }),
 );

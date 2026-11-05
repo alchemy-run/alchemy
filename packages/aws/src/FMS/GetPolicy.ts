@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetPolicy}.
@@ -34,3 +36,12 @@ export interface GetPolicy extends Binding.Service<
 > {}
 
 export const GetPolicy = Binding.Service<GetPolicy>("AWS.FMS.GetPolicy");
+
+export const GetPolicyHttp = Layer.effect(
+  GetPolicy,
+  makeFmsHttpBinding({
+    capability: "GetPolicy",
+    iamActions: ["fms:GetPolicy"],
+    operation: fms.getPolicy,
+  }),
+);

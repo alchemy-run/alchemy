@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:DeleteResourceTree` — delete an entire tree
@@ -35,4 +37,13 @@ export interface DeleteResourceTree extends Binding.Service<
 > {}
 export const DeleteResourceTree = Binding.Service<DeleteResourceTree>(
   "AWS.Forecast.DeleteResourceTree",
+);
+
+export const DeleteResourceTreeHttp = Layer.effect(
+  DeleteResourceTree,
+  makeForecastHttpBinding({
+    capability: "DeleteResourceTree",
+    iamActions: ["forecast:DeleteResourceTree"],
+    operation: forecast.deleteResourceTree,
+  }),
 );

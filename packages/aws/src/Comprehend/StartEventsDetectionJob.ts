@@ -1,7 +1,9 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Role } from "../IAM/Role.ts";
+import { makeComprehendStartJobHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `StartEventsDetectionJob` request with `DataAccessRoleArn` defaulting to the role the
@@ -66,4 +68,13 @@ export interface StartEventsDetectionJob extends Binding.Service<
 > {}
 export const StartEventsDetectionJob = Binding.Service<StartEventsDetectionJob>(
   "AWS.Comprehend.StartEventsDetectionJob",
+);
+
+export const StartEventsDetectionJobHttp = Layer.effect(
+  StartEventsDetectionJob,
+  makeComprehendStartJobHttpBinding({
+    tag: "AWS.Comprehend.StartEventsDetectionJob",
+    operation: comprehend.startEventsDetectionJob,
+    actions: ["comprehend:StartEventsDetectionJob"],
+  }),
 );

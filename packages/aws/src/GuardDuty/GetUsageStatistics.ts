@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface GetUsageStatistics extends Binding.Service<
 > {}
 export const GetUsageStatistics = Binding.Service<GetUsageStatistics>(
   "AWS.GuardDuty.GetUsageStatistics",
+);
+
+export const GetUsageStatisticsHttp = Layer.effect(
+  GetUsageStatistics,
+  makeGuardDutyDetectorHttpBinding({
+    tag: "AWS.GuardDuty.GetUsageStatistics",
+    operation: guardduty.getUsageStatistics,
+    actions: ["guardduty:GetUsageStatistics"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
+import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudTrailEventDataStoreHttpBinding } from "./BindingHttp.ts";
 import type { EventDataStore } from "./EventDataStore.ts";
 
 /**
@@ -35,3 +37,13 @@ export interface ListQueries extends Binding.Service<
   >
 > {}
 export const ListQueries = Binding.Service<ListQueries>("AWS.CloudTrail.ListQueries");
+
+export const ListQueriesHttp = Layer.effect(
+  ListQueries,
+  makeCloudTrailEventDataStoreHttpBinding({
+    tag: "AWS.CloudTrail.ListQueries",
+    operation: cloudtrail.listQueries,
+    actions: ["cloudtrail:ListQueries"],
+    injectEventDataStore: true,
+  }),
+);

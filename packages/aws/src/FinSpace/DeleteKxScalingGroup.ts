@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/finspace";
+import * as finspace from "@distilled.cloud/aws/finspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFinSpaceKxHttpBinding } from "./BindingHttp.ts";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
@@ -33,4 +36,13 @@ export interface DeleteKxScalingGroup extends Binding.Service<
 > {}
 export const DeleteKxScalingGroup = Binding.Service<DeleteKxScalingGroup>(
   "AWS.FinSpace.DeleteKxScalingGroup",
+);
+
+export const DeleteKxScalingGroupHttp = Layer.effect(
+  DeleteKxScalingGroup,
+  makeFinSpaceKxHttpBinding({
+    tag: "AWS.FinSpace.DeleteKxScalingGroup",
+    operation: finspace.deleteKxScalingGroup,
+    actions: ["finspace:DeleteKxScalingGroup"],
+  }),
 );

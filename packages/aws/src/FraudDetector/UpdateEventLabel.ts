@@ -1,6 +1,8 @@
-import type * as frauddetector from "@distilled.cloud/aws/frauddetector";
+import * as frauddetector from "@distilled.cloud/aws/frauddetector";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFraudDetectorEventTypeHttpBinding } from "./BindingHttp.ts";
 import type { EventType } from "./EventType.ts";
 
 /**
@@ -59,4 +61,13 @@ export interface UpdateEventLabel extends Binding.Service<
 > {}
 export const UpdateEventLabel = Binding.Service<UpdateEventLabel>(
   "AWS.FraudDetector.UpdateEventLabel",
+);
+
+export const UpdateEventLabelHttp = Layer.effect(
+  UpdateEventLabel,
+  makeFraudDetectorEventTypeHttpBinding({
+    tag: "AWS.FraudDetector.UpdateEventLabel",
+    operation: frauddetector.updateEventLabel,
+    actions: ["frauddetector:UpdateEventLabel"],
+  }),
 );

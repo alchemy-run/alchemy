@@ -1,6 +1,8 @@
-import type * as mediatailor from "@distilled.cloud/aws/mediatailor";
+import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaTailorHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediatailor:DescribeProgram` — read a scheduled
@@ -33,3 +35,12 @@ export interface DescribeProgram extends Binding.Service<
   >
 > {}
 export const DescribeProgram = Binding.Service<DescribeProgram>("AWS.MediaTailor.DescribeProgram");
+
+export const DescribeProgramHttp = Layer.effect(
+  DescribeProgram,
+  makeMediaTailorHttpBinding({
+    capability: "DescribeProgram",
+    iamActions: ["mediatailor:DescribeProgram"],
+    operation: mediatailor.describeProgram,
+  }),
+);

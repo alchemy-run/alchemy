@@ -1,6 +1,8 @@
-import type * as rolesanywhere from "@distilled.cloud/aws/rolesanywhere";
+import * as rolesanywhere from "@distilled.cloud/aws/rolesanywhere";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRolesAnywhereHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rolesanywhere:GetSubject`.
@@ -34,3 +36,12 @@ export interface GetSubject extends Binding.Service<
   >
 > {}
 export const GetSubject = Binding.Service<GetSubject>("AWS.RolesAnywhere.GetSubject");
+
+export const GetSubjectHttp = Layer.effect(
+  GetSubject,
+  makeRolesAnywhereHttpBinding({
+    capability: "GetSubject",
+    iamActions: ["rolesanywhere:GetSubject"],
+    operation: rolesanywhere.getSubject,
+  }),
+);

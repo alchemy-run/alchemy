@@ -1,6 +1,8 @@
-import type * as mwaa from "@distilled.cloud/aws/mwaa";
+import * as mwaa from "@distilled.cloud/aws/mwaa";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMWAAEnvironmentHttpBinding } from "./BindingHttp.ts";
 import type { Environment } from "./Environment.ts";
 
 /**
@@ -33,3 +35,12 @@ export interface GetEnvironment extends Binding.Service<
 > {}
 
 export const GetEnvironment = Binding.Service<GetEnvironment>("AWS.MWAA.GetEnvironment");
+
+export const GetEnvironmentHttp = Layer.effect(
+  GetEnvironment,
+  makeMWAAEnvironmentHttpBinding({
+    tag: "AWS.MWAA.GetEnvironment",
+    operation: mwaa.getEnvironment,
+    actions: ["airflow:GetEnvironment"],
+  }),
+);

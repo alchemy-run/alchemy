@@ -1,6 +1,8 @@
-import type * as neptune from "@distilled.cloud/aws/neptune";
+import * as neptune from "@distilled.cloud/aws/neptune";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteDBClusterSnapshot` operation (IAM action
@@ -32,4 +34,13 @@ export interface DeleteDBClusterSnapshot extends Binding.Service<
 > {}
 export const DeleteDBClusterSnapshot = Binding.Service<DeleteDBClusterSnapshot>(
   "AWS.Neptune.DeleteDBClusterSnapshot",
+);
+
+export const DeleteDBClusterSnapshotHttp = Layer.effect(
+  DeleteDBClusterSnapshot,
+  makeNeptuneAccountHttpBinding({
+    tag: "AWS.Neptune.DeleteDBClusterSnapshot",
+    operation: neptune.deleteDBClusterSnapshot,
+    actions: ["rds:DeleteDBClusterSnapshot"],
+  }),
 );

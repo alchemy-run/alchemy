@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:TestCustomDataIdentifier`.
@@ -38,4 +40,13 @@ export interface TestCustomDataIdentifier extends Binding.Service<
 > {}
 export const TestCustomDataIdentifier = Binding.Service<TestCustomDataIdentifier>(
   "AWS.Macie2.TestCustomDataIdentifier",
+);
+
+export const TestCustomDataIdentifierHttp = Layer.effect(
+  TestCustomDataIdentifier,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.TestCustomDataIdentifier",
+    operation: macie2.testCustomDataIdentifier,
+    actions: ["macie2:TestCustomDataIdentifier"],
+  }),
 );

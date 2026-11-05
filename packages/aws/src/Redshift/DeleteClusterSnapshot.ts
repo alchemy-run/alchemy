@@ -1,6 +1,8 @@
-import type * as redshift from "@distilled.cloud/aws/redshift";
+import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRedshiftAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteClusterSnapshot` operation (IAM action
@@ -33,4 +35,13 @@ export interface DeleteClusterSnapshot extends Binding.Service<
 > {}
 export const DeleteClusterSnapshot = Binding.Service<DeleteClusterSnapshot>(
   "AWS.Redshift.DeleteClusterSnapshot",
+);
+
+export const DeleteClusterSnapshotHttp = Layer.effect(
+  DeleteClusterSnapshot,
+  makeRedshiftAccountHttpBinding({
+    tag: "AWS.Redshift.DeleteClusterSnapshot",
+    operation: redshift.deleteClusterSnapshot,
+    actions: ["redshift:DeleteClusterSnapshot"],
+  }),
 );

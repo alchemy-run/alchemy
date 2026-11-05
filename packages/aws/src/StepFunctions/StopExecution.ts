@@ -1,6 +1,8 @@
-import type * as sfn from "@distilled.cloud/aws/sfn";
+import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeExecutionScopedHttpBinding } from "./BindingHttp.ts";
 import type { StateMachine } from "./StateMachine.ts";
 
 export interface StopExecutionRequest extends sfn.StopExecutionInput {}
@@ -37,3 +39,12 @@ export interface StopExecution extends Binding.Service<
   >
 > {}
 export const StopExecution = Binding.Service<StopExecution>("AWS.StepFunctions.StopExecution");
+
+export const StopExecutionHttp = Layer.effect(
+  StopExecution,
+  makeExecutionScopedHttpBinding({
+    tag: "AWS.StepFunctions.StopExecution",
+    operation: sfn.stopExecution,
+    actions: ["states:StopExecution"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface SearchListingsRequest extends Omit<
@@ -39,3 +41,12 @@ export interface SearchListings extends Binding.Service<
   >
 > {}
 export const SearchListings = Binding.Service<SearchListings>("AWS.DataZone.SearchListings");
+
+export const SearchListingsHttp = Layer.effect(
+  SearchListings,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.SearchListings",
+    operation: datazone.searchListings,
+    actions: ["datazone:SearchListings"],
+  }),
+);

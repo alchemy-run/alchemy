@@ -1,6 +1,7 @@
-import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeImageBinding } from "./MicrovmBinding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 export interface CreateShellAuthTokenRequest extends microvms.CreateMicrovmShellAuthTokenRequest {}
@@ -40,3 +41,11 @@ export interface CreateShellAuthToken extends Binding.Service<
 export const CreateShellAuthToken = Binding.Service<CreateShellAuthToken>(
   "AWS.Lambda.CreateShellAuthToken",
 );
+
+export const CreateShellAuthTokenHttp = makeImageBinding({
+  binding: CreateShellAuthToken,
+  name: "CreateShellAuthToken",
+  actions: ["lambda:CreateMicrovmShellAuthToken"],
+  operation: microvms.createMicrovmShellAuthToken,
+  scope: "microvm",
+});

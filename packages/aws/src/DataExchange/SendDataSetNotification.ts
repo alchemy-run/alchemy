@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataSetHttpBinding } from "./BindingHttp.ts";
 import type { DataSet } from "./DataSet.ts";
 
 /**
@@ -39,4 +41,13 @@ export interface SendDataSetNotification extends Binding.Service<
 > {}
 export const SendDataSetNotification = Binding.Service<SendDataSetNotification>(
   "AWS.DataExchange.SendDataSetNotification",
+);
+
+export const SendDataSetNotificationHttp = Layer.effect(
+  SendDataSetNotification,
+  makeDataSetHttpBinding({
+    tag: "AWS.DataExchange.SendDataSetNotification",
+    operation: dataexchange.sendDataSetNotification,
+    actions: ["dataexchange:SendDataSetNotification"],
+  }),
 );

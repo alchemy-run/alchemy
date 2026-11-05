@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsTopicHttpBinding } from "./BindingHttp.ts";
 import type { Topic } from "./Topic.ts";
 
 export interface GetDataProtectionPolicyRequest extends Omit<
@@ -43,4 +45,14 @@ export interface GetDataProtectionPolicy extends Binding.Service<
 > {}
 export const GetDataProtectionPolicy = Binding.Service<GetDataProtectionPolicy>(
   "AWS.SNS.GetDataProtectionPolicy",
+);
+
+export const GetDataProtectionPolicyHttp = Layer.effect(
+  GetDataProtectionPolicy,
+  makeSnsTopicHttpBinding({
+    tag: "AWS.SNS.GetDataProtectionPolicy",
+    operation: sns.getDataProtectionPolicy,
+    actions: ["sns:GetDataProtectionPolicy"],
+    key: "ResourceArn",
+  }),
 );

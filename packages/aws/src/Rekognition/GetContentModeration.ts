@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:GetContentModeration` — get the results of an asynchronous inappropriate or offensive content detection job started by StartContentModeration.
@@ -40,4 +42,13 @@ export interface GetContentModeration extends Binding.Service<
 > {}
 export const GetContentModeration = Binding.Service<GetContentModeration>(
   "AWS.Rekognition.GetContentModeration",
+);
+
+export const GetContentModerationHttp = Layer.effect(
+  GetContentModeration,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.GetContentModeration",
+    operation: rekognition.getContentModeration,
+    actions: ["rekognition:GetContentModeration"],
+  }),
 );

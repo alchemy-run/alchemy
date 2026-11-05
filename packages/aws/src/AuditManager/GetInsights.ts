@@ -1,6 +1,8 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAuditManagerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `auditmanager:GetInsights`.
@@ -28,3 +30,12 @@ export interface GetInsights extends Binding.Service<
 > {}
 
 export const GetInsights = Binding.Service<GetInsights>("AWS.AuditManager.GetInsights");
+
+export const GetInsightsHttp = Layer.effect(
+  GetInsights,
+  makeAuditManagerAccountHttpBinding({
+    tag: "AWS.AuditManager.GetInsights",
+    operation: auditmanager.getInsights,
+    actions: ["auditmanager:GetInsights"],
+  }),
+);

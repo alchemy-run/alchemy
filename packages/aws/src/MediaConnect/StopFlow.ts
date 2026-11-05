@@ -1,6 +1,8 @@
-import type * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
+import * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConnectFlowHttpBinding } from "./BindingHttp.ts";
 import type { Flow } from "./Flow.ts";
 
 /**
@@ -35,3 +37,12 @@ export interface StopFlow extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<mediaconnect.StopFlowResponse, mediaconnect.StopFlowError>>
 > {}
 export const StopFlow = Binding.Service<StopFlow>("AWS.MediaConnect.StopFlow");
+
+export const StopFlowHttp = Layer.effect(
+  StopFlow,
+  makeMediaConnectFlowHttpBinding({
+    tag: "AWS.MediaConnect.StopFlow",
+    operation: mediaconnect.stopFlow,
+    actions: ["mediaconnect:StopFlow"],
+  }),
+);

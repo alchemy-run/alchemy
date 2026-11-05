@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:GetCelebrityRecognition` — get the results of an asynchronous celebrities detection job started by StartCelebrityRecognition.
@@ -40,4 +42,13 @@ export interface GetCelebrityRecognition extends Binding.Service<
 > {}
 export const GetCelebrityRecognition = Binding.Service<GetCelebrityRecognition>(
   "AWS.Rekognition.GetCelebrityRecognition",
+);
+
+export const GetCelebrityRecognitionHttp = Layer.effect(
+  GetCelebrityRecognition,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.GetCelebrityRecognition",
+    operation: rekognition.getCelebrityRecognition,
+    actions: ["rekognition:GetCelebrityRecognition"],
+  }),
 );

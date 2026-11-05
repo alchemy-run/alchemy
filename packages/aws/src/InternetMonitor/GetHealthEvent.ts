@@ -1,6 +1,8 @@
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInternetMonitorMonitorHttpBinding } from "./BindingHttp.ts";
 import type { Monitor } from "./Monitor.ts";
 
 export interface GetHealthEventRequest extends Omit<im.GetHealthEventInput, "MonitorName"> {}
@@ -39,3 +41,12 @@ export interface GetHealthEvent extends Binding.Service<
 > {}
 
 export const GetHealthEvent = Binding.Service<GetHealthEvent>("AWS.InternetMonitor.GetHealthEvent");
+
+export const GetHealthEventHttp = Layer.effect(
+  GetHealthEvent,
+  makeInternetMonitorMonitorHttpBinding({
+    tag: "AWS.InternetMonitor.GetHealthEvent",
+    operation: im.getHealthEvent,
+    actions: ["internetmonitor:GetHealthEvent"],
+  }),
+);

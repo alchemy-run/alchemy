@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:GetProvisionedProductOutputs`.
@@ -39,4 +41,13 @@ export interface GetProvisionedProductOutputs extends Binding.Service<
 > {}
 export const GetProvisionedProductOutputs = Binding.Service<GetProvisionedProductOutputs>(
   "AWS.ServiceCatalog.GetProvisionedProductOutputs",
+);
+
+export const GetProvisionedProductOutputsHttp = Layer.effect(
+  GetProvisionedProductOutputs,
+  makeServiceCatalogHttpBinding({
+    capability: "GetProvisionedProductOutputs",
+    iamActions: ["servicecatalog:GetProvisionedProductOutputs"],
+    operation: servicecatalog.getProvisionedProductOutputs,
+  }),
 );

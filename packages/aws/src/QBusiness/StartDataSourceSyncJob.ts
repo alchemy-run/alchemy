@@ -1,6 +1,8 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQBusinessDataSourceHttpBinding } from "./BindingHttp.ts";
 import type { DataSource } from "./DataSource.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface StartDataSourceSyncJob extends Binding.Service<
 > {}
 export const StartDataSourceSyncJob = Binding.Service<StartDataSourceSyncJob>(
   "AWS.QBusiness.StartDataSourceSyncJob",
+);
+
+export const StartDataSourceSyncJobHttp = Layer.effect(
+  StartDataSourceSyncJob,
+  makeQBusinessDataSourceHttpBinding({
+    tag: "AWS.QBusiness.StartDataSourceSyncJob",
+    operation: qbusiness.startDataSourceSyncJob,
+    actions: ["qbusiness:StartDataSourceSyncJob"],
+  }),
 );

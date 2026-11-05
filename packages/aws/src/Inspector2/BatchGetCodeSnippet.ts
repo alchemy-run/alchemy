@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:BatchGetCodeSnippet`.
@@ -33,4 +35,13 @@ export interface BatchGetCodeSnippet extends Binding.Service<
 > {}
 export const BatchGetCodeSnippet = Binding.Service<BatchGetCodeSnippet>(
   "AWS.Inspector2.BatchGetCodeSnippet",
+);
+
+export const BatchGetCodeSnippetHttp = Layer.effect(
+  BatchGetCodeSnippet,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.BatchGetCodeSnippet",
+    operation: inspector2.batchGetCodeSnippet,
+    actions: ["inspector2:BatchGetCodeSnippet"],
+  }),
 );

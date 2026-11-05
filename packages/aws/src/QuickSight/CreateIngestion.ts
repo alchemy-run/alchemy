@@ -1,6 +1,8 @@
-import type * as quicksight from "@distilled.cloud/aws/quicksight";
+import * as quicksight from "@distilled.cloud/aws/quicksight";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQuickSightDataSetHttpBinding } from "./BindingHttp.ts";
 import type { DataSet } from "./DataSet.ts";
 
 /**
@@ -39,3 +41,12 @@ export interface CreateIngestion extends Binding.Service<
   >
 > {}
 export const CreateIngestion = Binding.Service<CreateIngestion>("AWS.QuickSight.CreateIngestion");
+
+export const CreateIngestionHttp = Layer.effect(
+  CreateIngestion,
+  makeQuickSightDataSetHttpBinding({
+    tag: "AWS.QuickSight.CreateIngestion",
+    operation: quicksight.createIngestion,
+    actions: ["quicksight:CreateIngestion"],
+  }),
+);

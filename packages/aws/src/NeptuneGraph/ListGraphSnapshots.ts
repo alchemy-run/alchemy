@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneGraphGraphHttpBinding, SNAPSHOT_ARN_WILDCARD } from "./BindingHttp.ts";
 import type { Graph } from "./Graph.ts";
 
 /**
@@ -32,4 +34,14 @@ export interface ListGraphSnapshots extends Binding.Service<
 > {}
 export const ListGraphSnapshots = Binding.Service<ListGraphSnapshots>(
   "AWS.NeptuneGraph.ListGraphSnapshots",
+);
+
+export const ListGraphSnapshotsHttp = Layer.effect(
+  ListGraphSnapshots,
+  makeNeptuneGraphGraphHttpBinding({
+    tag: "AWS.NeptuneGraph.ListGraphSnapshots",
+    operation: neptunegraph.listGraphSnapshots,
+    actions: ["neptune-graph:ListGraphSnapshots"],
+    extraResources: [SNAPSHOT_ARN_WILDCARD],
+  }),
 );

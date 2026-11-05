@@ -1,6 +1,8 @@
-import type * as memorydb from "@distilled.cloud/aws/memorydb";
+import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMemoryDBAccountHttpBinding, SNAPSHOT_ARN_WILDCARD } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteSnapshot` operation (IAM action
@@ -32,3 +34,13 @@ export interface DeleteSnapshot extends Binding.Service<
   >
 > {}
 export const DeleteSnapshot = Binding.Service<DeleteSnapshot>("AWS.MemoryDB.DeleteSnapshot");
+
+export const DeleteSnapshotHttp = Layer.effect(
+  DeleteSnapshot,
+  makeMemoryDBAccountHttpBinding({
+    tag: "AWS.MemoryDB.DeleteSnapshot",
+    operation: memorydb.deleteSnapshot,
+    actions: ["memorydb:DeleteSnapshot"],
+    resources: [SNAPSHOT_ARN_WILDCARD],
+  }),
+);

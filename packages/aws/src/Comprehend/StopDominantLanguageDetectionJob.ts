@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:StopDominantLanguageDetectionJob` — request termination
@@ -38,4 +40,13 @@ export interface StopDominantLanguageDetectionJob extends Binding.Service<
 > {}
 export const StopDominantLanguageDetectionJob = Binding.Service<StopDominantLanguageDetectionJob>(
   "AWS.Comprehend.StopDominantLanguageDetectionJob",
+);
+
+export const StopDominantLanguageDetectionJobHttp = Layer.effect(
+  StopDominantLanguageDetectionJob,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.StopDominantLanguageDetectionJob",
+    operation: comprehend.stopDominantLanguageDetectionJob,
+    actions: ["comprehend:StopDominantLanguageDetectionJob"],
+  }),
 );

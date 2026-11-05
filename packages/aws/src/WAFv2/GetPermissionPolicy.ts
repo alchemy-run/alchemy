@@ -1,6 +1,9 @@
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
+import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWafv2RuleGroupHttpBinding } from "./BindingHttp.ts";
 import type { RuleGroup } from "./RuleGroup.ts";
 
 /**
@@ -39,4 +42,13 @@ export interface GetPermissionPolicy extends Binding.Service<
 
 export const GetPermissionPolicy = Binding.Service<GetPermissionPolicy>(
   "AWS.WAFv2.GetPermissionPolicy",
+);
+
+export const GetPermissionPolicyHttp = Layer.effect(
+  GetPermissionPolicy,
+  makeWafv2RuleGroupHttpBinding({
+    tag: "AWS.WAFv2.GetPermissionPolicy",
+    operation: wafv2.getPermissionPolicy,
+    actions: ["wafv2:GetPermissionPolicy"],
+  }),
 );

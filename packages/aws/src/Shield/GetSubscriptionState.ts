@@ -1,6 +1,8 @@
-import type * as shield from "@distilled.cloud/aws/shield";
+import * as shield from "@distilled.cloud/aws/shield";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeShieldHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `shield:GetSubscriptionState`.
@@ -36,4 +38,13 @@ export interface GetSubscriptionState extends Binding.Service<
 > {}
 export const GetSubscriptionState = Binding.Service<GetSubscriptionState>(
   "AWS.Shield.GetSubscriptionState",
+);
+
+export const GetSubscriptionStateHttp = Layer.effect(
+  GetSubscriptionState,
+  makeShieldHttpBinding({
+    tag: "AWS.Shield.GetSubscriptionState",
+    operation: shield.getSubscriptionState,
+    actions: ["shield:GetSubscriptionState"],
+  }),
 );

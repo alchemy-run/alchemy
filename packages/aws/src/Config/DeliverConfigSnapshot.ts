@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigResourceHttpBinding } from "./BindingHttp.ts";
 import type { DeliveryChannel } from "./DeliveryChannel.ts";
 
 /**
@@ -36,4 +38,15 @@ export interface DeliverConfigSnapshot extends Binding.Service<
 
 export const DeliverConfigSnapshot = Binding.Service<DeliverConfigSnapshot>(
   "AWS.Config.DeliverConfigSnapshot",
+);
+
+export const DeliverConfigSnapshotHttp = Layer.effect(
+  DeliverConfigSnapshot,
+  makeConfigResourceHttpBinding({
+    tag: "AWS.Config.DeliverConfigSnapshot",
+    operation: config.deliverConfigSnapshot,
+    actions: ["config:DeliverConfigSnapshot"],
+    requestKey: "deliveryChannelName",
+    identifier: (channel: DeliveryChannel) => channel.deliveryChannelName,
+  }),
 );

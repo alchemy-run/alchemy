@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DeleteUser` — delete a user from a face collection.
@@ -35,3 +37,12 @@ export interface DeleteUser extends Binding.Service<
   >
 > {}
 export const DeleteUser = Binding.Service<DeleteUser>("AWS.Rekognition.DeleteUser");
+
+export const DeleteUserHttp = Layer.effect(
+  DeleteUser,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DeleteUser",
+    operation: rekognition.deleteUser,
+    actions: ["rekognition:DeleteUser"],
+  }),
+);

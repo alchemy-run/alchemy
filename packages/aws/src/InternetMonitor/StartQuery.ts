@@ -1,6 +1,8 @@
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInternetMonitorMonitorHttpBinding } from "./BindingHttp.ts";
 import type { Monitor } from "./Monitor.ts";
 
 export interface StartQueryRequest extends Omit<im.StartQueryInput, "MonitorName"> {}
@@ -39,3 +41,12 @@ export interface StartQuery extends Binding.Service<
 > {}
 
 export const StartQuery = Binding.Service<StartQuery>("AWS.InternetMonitor.StartQuery");
+
+export const StartQueryHttp = Layer.effect(
+  StartQuery,
+  makeInternetMonitorMonitorHttpBinding({
+    tag: "AWS.InternetMonitor.StartQuery",
+    operation: im.startQuery,
+    actions: ["internetmonitor:StartQuery"],
+  }),
+);

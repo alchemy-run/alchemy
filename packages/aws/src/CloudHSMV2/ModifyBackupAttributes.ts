@@ -1,6 +1,8 @@
-import type * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudHsmHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ModifyBackupAttributes` operation (IAM action
@@ -35,4 +37,13 @@ export interface ModifyBackupAttributes extends Binding.Service<
 > {}
 export const ModifyBackupAttributes = Binding.Service<ModifyBackupAttributes>(
   "AWS.CloudHSMV2.ModifyBackupAttributes",
+);
+
+export const ModifyBackupAttributesHttp = Layer.effect(
+  ModifyBackupAttributes,
+  makeCloudHsmHttpBinding({
+    tag: "AWS.CloudHSMV2.ModifyBackupAttributes",
+    operation: cloudhsm.modifyBackupAttributes,
+    actions: ["cloudhsm:ModifyBackupAttributes"],
+  }),
 );

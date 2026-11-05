@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 import type { Workflow } from "./Workflow.ts";
 
 export interface StartRunRequest extends Omit<omics.StartRunRequest, "workflowId"> {}
@@ -34,3 +36,16 @@ export interface StartRun extends Binding.Service<
 > {}
 
 export const StartRun = Binding.Service<StartRun>("AWS.Omics.StartRun");
+
+export const StartRunHttp = Layer.effect(
+  StartRun,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.StartRun",
+    operation: omics.startRun,
+    actions: ["omics:StartRun"],
+    key: "workflowId",
+    id: (workflow: Workflow) => workflow.workflowId,
+    arn: (workflow: Workflow) => workflow.workflowArn,
+    passRole: true,
+  }),
+);

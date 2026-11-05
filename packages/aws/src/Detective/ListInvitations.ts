@@ -1,6 +1,8 @@
-import type * as detective from "@distilled.cloud/aws/detective";
+import * as detective from "@distilled.cloud/aws/detective";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDetectiveAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `detective:ListInvitations`.
@@ -32,3 +34,12 @@ export interface ListInvitations extends Binding.Service<
   >
 > {}
 export const ListInvitations = Binding.Service<ListInvitations>("AWS.Detective.ListInvitations");
+
+export const ListInvitationsHttp = Layer.effect(
+  ListInvitations,
+  makeDetectiveAccountHttpBinding({
+    tag: "AWS.Detective.ListInvitations",
+    operation: detective.listInvitations,
+    actions: ["detective:ListInvitations"],
+  }),
+);

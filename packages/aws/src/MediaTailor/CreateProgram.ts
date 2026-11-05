@@ -1,6 +1,8 @@
-import type * as mediatailor from "@distilled.cloud/aws/mediatailor";
+import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaTailorHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediatailor:CreateProgram` — schedule a VOD or live
@@ -39,3 +41,12 @@ export interface CreateProgram extends Binding.Service<
   >
 > {}
 export const CreateProgram = Binding.Service<CreateProgram>("AWS.MediaTailor.CreateProgram");
+
+export const CreateProgramHttp = Layer.effect(
+  CreateProgram,
+  makeMediaTailorHttpBinding({
+    capability: "CreateProgram",
+    iamActions: ["mediatailor:CreateProgram"],
+    operation: mediatailor.createProgram,
+  }),
+);

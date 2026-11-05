@@ -1,6 +1,8 @@
-import type * as rbin from "@distilled.cloud/aws/rbin";
+import * as rbin from "@distilled.cloud/aws/rbin";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRbinAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rbin:ListRules`.
@@ -34,3 +36,12 @@ export interface ListRules extends Binding.Service<
   >
 > {}
 export const ListRules = Binding.Service<ListRules>("AWS.Rbin.ListRules");
+
+export const ListRulesHttp = Layer.effect(
+  ListRules,
+  makeRbinAccountHttpBinding({
+    tag: "AWS.Rbin.ListRules",
+    operation: rbin.listRules,
+    actions: ["rbin:ListRules"],
+  }),
+);

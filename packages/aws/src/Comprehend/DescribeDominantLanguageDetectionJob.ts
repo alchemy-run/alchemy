@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:DescribeDominantLanguageDetectionJob` — get the
@@ -39,3 +41,12 @@ export const DescribeDominantLanguageDetectionJob =
   Binding.Service<DescribeDominantLanguageDetectionJob>(
     "AWS.Comprehend.DescribeDominantLanguageDetectionJob",
   );
+
+export const DescribeDominantLanguageDetectionJobHttp = Layer.effect(
+  DescribeDominantLanguageDetectionJob,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.DescribeDominantLanguageDetectionJob",
+    operation: comprehend.describeDominantLanguageDetectionJob,
+    actions: ["comprehend:DescribeDominantLanguageDetectionJob"],
+  }),
+);

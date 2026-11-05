@@ -1,6 +1,8 @@
-import type * as lf from "@distilled.cloud/aws/lakeformation";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLakeFormationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetResourceLFTags}.
@@ -40,4 +42,13 @@ export interface GetResourceLFTags extends Binding.Service<
 
 export const GetResourceLFTags = Binding.Service<GetResourceLFTags>(
   "AWS.LakeFormation.GetResourceLFTags",
+);
+
+export const GetResourceLFTagsHttp = Layer.effect(
+  GetResourceLFTags,
+  makeLakeFormationHttpBinding({
+    capability: "GetResourceLFTags",
+    iamActions: ["lakeformation:GetResourceLFTags"],
+    operation: lf.getResourceLFTags,
+  }),
 );

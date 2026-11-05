@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsSubscriptionHttpBinding } from "./BindingHttp.ts";
 import type { Subscription } from "./Subscription.ts";
 
 export interface ConfirmSubscriptionRequest extends Omit<
@@ -43,4 +45,14 @@ export interface ConfirmSubscription extends Binding.Service<
 > {}
 export const ConfirmSubscription = Binding.Service<ConfirmSubscription>(
   "AWS.SNS.ConfirmSubscription",
+);
+
+export const ConfirmSubscriptionHttp = Layer.effect(
+  ConfirmSubscription,
+  makeSnsSubscriptionHttpBinding({
+    tag: "AWS.SNS.ConfirmSubscription",
+    operation: sns.confirmSubscription,
+    actions: ["sns:ConfirmSubscription"],
+    key: "TopicArn",
+  }),
 );

@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface DescribeAlarmHistoryRequest extends cloudwatch.DescribeAlarmHistoryInput {}
 
@@ -39,4 +41,13 @@ export interface DescribeAlarmHistory extends Binding.Service<
 
 export const DescribeAlarmHistory = Binding.Service<DescribeAlarmHistory>(
   "AWS.CloudWatch.DescribeAlarmHistory",
+);
+
+export const DescribeAlarmHistoryHttp = Layer.effect(
+  DescribeAlarmHistory,
+  makeCloudWatchAccountHttpBinding({
+    tag: "AWS.CloudWatch.DescribeAlarmHistory",
+    operation: cloudwatch.describeAlarmHistory,
+    actions: ["cloudwatch:DescribeAlarmHistory"],
+  }),
 );

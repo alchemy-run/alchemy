@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:ListFindingAggregators`.
@@ -35,4 +37,13 @@ export interface ListFindingAggregators extends Binding.Service<
 > {}
 export const ListFindingAggregators = Binding.Service<ListFindingAggregators>(
   "AWS.SecurityHub.ListFindingAggregators",
+);
+
+export const ListFindingAggregatorsHttp = Layer.effect(
+  ListFindingAggregators,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.ListFindingAggregators",
+    operation: securityhub.listFindingAggregators,
+    actions: ["securityhub:ListFindingAggregators"],
+  }),
 );

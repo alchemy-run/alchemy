@@ -1,6 +1,8 @@
-import type * as location from "@distilled.cloud/aws/location";
+import * as location from "@distilled.cloud/aws/location";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLocationCollectionHttpBinding } from "./BindingHttp.ts";
 import type { GeofenceCollection } from "./GeofenceCollection.ts";
 
 /**
@@ -49,4 +51,13 @@ export interface ForecastGeofenceEvents extends Binding.Service<
 > {}
 export const ForecastGeofenceEvents = Binding.Service<ForecastGeofenceEvents>(
   "AWS.Location.ForecastGeofenceEvents",
+);
+
+export const ForecastGeofenceEventsHttp = Layer.effect(
+  ForecastGeofenceEvents,
+  makeLocationCollectionHttpBinding({
+    tag: "AWS.Location.ForecastGeofenceEvents",
+    operation: location.forecastGeofenceEvents,
+    actions: ["geo:ForecastGeofenceEvents"],
+  }),
 );

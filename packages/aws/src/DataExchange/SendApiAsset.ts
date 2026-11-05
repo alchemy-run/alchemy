@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataSetHttpBinding, dataSetAssetArns } from "./BindingHttp.ts";
 import type { DataSet } from "./DataSet.ts";
 
 /**
@@ -40,3 +42,13 @@ export interface SendApiAsset extends Binding.Service<
   >
 > {}
 export const SendApiAsset = Binding.Service<SendApiAsset>("AWS.DataExchange.SendApiAsset");
+
+export const SendApiAssetHttp = Layer.effect(
+  SendApiAsset,
+  makeDataSetHttpBinding({
+    tag: "AWS.DataExchange.SendApiAsset",
+    operation: dataexchange.sendApiAsset,
+    actions: ["dataexchange:SendApiAsset"],
+    resources: dataSetAssetArns,
+  }),
+);

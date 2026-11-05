@@ -1,6 +1,8 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQueueUrlHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface SendMessageRequest extends Omit<sqs.SendMessageRequest, "QueueUrl"> {}
@@ -58,3 +60,12 @@ export interface SendMessage extends Binding.Service<
 > {}
 
 export const SendMessage = Binding.Service<SendMessage>("AWS.SQS.SendMessage");
+
+export const SendMessageHttp = Layer.effect(
+  SendMessage,
+  makeQueueUrlHttpBinding({
+    tag: "AWS.SQS.SendMessage",
+    operation: sqs.sendMessage,
+    actions: ["sqs:SendMessage"],
+  }),
+);

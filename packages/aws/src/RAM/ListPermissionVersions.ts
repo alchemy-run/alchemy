@@ -1,6 +1,8 @@
-import type * as ram from "@distilled.cloud/aws/ram";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRAMHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ram:ListPermissionVersions`.
@@ -35,4 +37,13 @@ export interface ListPermissionVersions extends Binding.Service<
 > {}
 export const ListPermissionVersions = Binding.Service<ListPermissionVersions>(
   "AWS.RAM.ListPermissionVersions",
+);
+
+export const ListPermissionVersionsHttp = Layer.effect(
+  ListPermissionVersions,
+  makeRAMHttpBinding({
+    capability: "ListPermissionVersions",
+    iamActions: ["ram:ListPermissionVersions"],
+    operation: ram.listPermissionVersions,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseManagerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link CreateGrantVersion}.
@@ -45,4 +47,13 @@ export interface CreateGrantVersion extends Binding.Service<
 > {}
 export const CreateGrantVersion = Binding.Service<CreateGrantVersion>(
   "AWS.LicenseManager.CreateGrantVersion",
+);
+
+export const CreateGrantVersionHttp = Layer.effect(
+  CreateGrantVersion,
+  makeLicenseManagerHttpBinding({
+    capability: "CreateGrantVersion",
+    iamActions: ["license-manager:CreateGrantVersion"],
+    operation: licensemanager.createGrantVersion,
+  }),
 );

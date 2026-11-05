@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribePendingMaintenanceActions` operation (IAM action
@@ -34,4 +36,13 @@ export interface DescribePendingMaintenanceActions extends Binding.Service<
 > {}
 export const DescribePendingMaintenanceActions = Binding.Service<DescribePendingMaintenanceActions>(
   "AWS.RDS.DescribePendingMaintenanceActions",
+);
+
+export const DescribePendingMaintenanceActionsHttp = Layer.effect(
+  DescribePendingMaintenanceActions,
+  makeRdsAccountHttpBinding({
+    tag: "AWS.RDS.DescribePendingMaintenanceActions",
+    operation: rds.describePendingMaintenanceActions,
+    actions: ["rds:DescribePendingMaintenanceActions"],
+  }),
 );

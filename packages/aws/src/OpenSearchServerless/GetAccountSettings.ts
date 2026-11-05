@@ -1,6 +1,8 @@
-import type * as aoss from "@distilled.cloud/aws/opensearchserverless";
+import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAossAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetAccountSettings` operation (IAM action
@@ -33,4 +35,13 @@ export interface GetAccountSettings extends Binding.Service<
 > {}
 export const GetAccountSettings = Binding.Service<GetAccountSettings>(
   "AWS.OpenSearchServerless.GetAccountSettings",
+);
+
+export const GetAccountSettingsHttp = Layer.effect(
+  GetAccountSettings,
+  makeAossAccountHttpBinding({
+    tag: "AWS.OpenSearchServerless.GetAccountSettings",
+    operation: aoss.getAccountSettings,
+    actions: ["aoss:GetAccountSettings"],
+  }),
 );

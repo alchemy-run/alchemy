@@ -1,6 +1,8 @@
-import type * as memorydb from "@distilled.cloud/aws/memorydb";
+import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMemoryDBClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -37,4 +39,13 @@ export interface ListAllowedNodeTypeUpdates extends Binding.Service<
 > {}
 export const ListAllowedNodeTypeUpdates = Binding.Service<ListAllowedNodeTypeUpdates>(
   "AWS.MemoryDB.ListAllowedNodeTypeUpdates",
+);
+
+export const ListAllowedNodeTypeUpdatesHttp = Layer.effect(
+  ListAllowedNodeTypeUpdates,
+  makeMemoryDBClusterHttpBinding({
+    tag: "AWS.MemoryDB.ListAllowedNodeTypeUpdates",
+    operation: memorydb.listAllowedNodeTypeUpdates,
+    actions: ["memorydb:ListAllowedNodeTypeUpdates"],
+  }),
 );

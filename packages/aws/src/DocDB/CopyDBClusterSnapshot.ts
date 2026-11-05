@@ -1,6 +1,8 @@
-import type * as docdb from "@distilled.cloud/aws/docdb";
+import * as docdb from "@distilled.cloud/aws/docdb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CopyDBClusterSnapshot` operation (IAM action
@@ -35,4 +37,13 @@ export interface CopyDBClusterSnapshot extends Binding.Service<
 > {}
 export const CopyDBClusterSnapshot = Binding.Service<CopyDBClusterSnapshot>(
   "AWS.DocDB.CopyDBClusterSnapshot",
+);
+
+export const CopyDBClusterSnapshotHttp = Layer.effect(
+  CopyDBClusterSnapshot,
+  makeDocDBAccountHttpBinding({
+    tag: "AWS.DocDB.CopyDBClusterSnapshot",
+    operation: docdb.copyDBClusterSnapshot,
+    actions: ["rds:CopyDBClusterSnapshot"],
+  }),
 );

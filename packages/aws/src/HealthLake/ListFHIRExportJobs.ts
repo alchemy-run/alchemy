@@ -1,6 +1,8 @@
-import type * as healthlake from "@distilled.cloud/aws/healthlake";
+import * as healthlake from "@distilled.cloud/aws/healthlake";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeHealthLakeDatastoreHttpBinding } from "./BindingHttp.ts";
 import type { FHIRDatastore } from "./FHIRDatastore.ts";
 
 /**
@@ -44,4 +46,13 @@ export interface ListFHIRExportJobs extends Binding.Service<
 > {}
 export const ListFHIRExportJobs = Binding.Service<ListFHIRExportJobs>(
   "AWS.HealthLake.ListFHIRExportJobs",
+);
+
+export const ListFHIRExportJobsHttp = Layer.effect(
+  ListFHIRExportJobs,
+  makeHealthLakeDatastoreHttpBinding({
+    tag: "AWS.HealthLake.ListFHIRExportJobs",
+    operation: healthlake.listFHIRExportJobs,
+    actions: ["healthlake:ListFHIRExportJobs"],
+  }),
 );

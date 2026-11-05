@@ -1,6 +1,8 @@
-import type * as personalizeruntime from "@distilled.cloud/aws/personalize-runtime";
+import * as personalizeruntime from "@distilled.cloud/aws/personalize-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `personalize:GetPersonalizedRanking` — Re-ranks a caller-supplied list of items for a user using a campaign
@@ -39,4 +41,13 @@ export interface GetPersonalizedRanking extends Binding.Service<
 > {}
 export const GetPersonalizedRanking = Binding.Service<GetPersonalizedRanking>(
   "AWS.Personalize.GetPersonalizedRanking",
+);
+
+export const GetPersonalizedRankingHttp = Layer.effect(
+  GetPersonalizedRanking,
+  makePersonalizeAccountHttpBinding({
+    tag: "AWS.Personalize.GetPersonalizedRanking",
+    operation: personalizeruntime.getPersonalizedRanking,
+    actions: ["personalize:GetPersonalizedRanking"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as geoMaps from "@distilled.cloud/aws/geo-maps";
+import * as geoMaps from "@distilled.cloud/aws/geo-maps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoMapsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-maps:GetSprites` — fetch a map style's sprite
@@ -43,3 +45,12 @@ export interface GetSprites extends Binding.Service<
   >
 > {}
 export const GetSprites = Binding.Service<GetSprites>("AWS.GeoMaps.GetSprites");
+
+export const GetSpritesHttp = Layer.effect(
+  GetSprites,
+  makeGeoMapsHttpBinding({
+    capability: "GetSprites",
+    iamActions: ["geo-maps:GetSprites"],
+    operation: geoMaps.getSprites,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSESHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `sesv2:BatchGetMetricData`.
@@ -43,3 +45,12 @@ export interface BatchGetMetricData extends Binding.Service<
   >
 > {}
 export const BatchGetMetricData = Binding.Service<BatchGetMetricData>("AWS.SES.BatchGetMetricData");
+
+export const BatchGetMetricDataHttp = Layer.effect(
+  BatchGetMetricData,
+  makeSESHttpBinding({
+    tag: "AWS.SES.BatchGetMetricData",
+    operation: sesv2.batchGetMetricData,
+    actions: ["ses:BatchGetMetricData"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as lf from "@distilled.cloud/aws/lakeformation";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLakeFormationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetEffectivePermissionsForPath}.
@@ -45,4 +47,13 @@ export interface GetEffectivePermissionsForPath extends Binding.Service<
 
 export const GetEffectivePermissionsForPath = Binding.Service<GetEffectivePermissionsForPath>(
   "AWS.LakeFormation.GetEffectivePermissionsForPath",
+);
+
+export const GetEffectivePermissionsForPathHttp = Layer.effect(
+  GetEffectivePermissionsForPath,
+  makeLakeFormationHttpBinding({
+    capability: "GetEffectivePermissionsForPath",
+    iamActions: ["lakeformation:GetEffectivePermissionsForPath"],
+    operation: lf.getEffectivePermissionsForPath,
+  }),
 );

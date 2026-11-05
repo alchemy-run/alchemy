@@ -1,6 +1,8 @@
-import type * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFleetWiseAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `BatchUpdateVehicle` operation (IAM action
@@ -44,4 +46,16 @@ export interface BatchUpdateVehicle extends Binding.Service<
 > {}
 export const BatchUpdateVehicle = Binding.Service<BatchUpdateVehicle>(
   "AWS.IoTFleetWise.BatchUpdateVehicle",
+);
+
+export const BatchUpdateVehicleHttp = Layer.effect(
+  BatchUpdateVehicle,
+  makeFleetWiseAccountHttpBinding({
+    tag: "AWS.IoTFleetWise.BatchUpdateVehicle",
+    operation: iotfleetwise.batchUpdateVehicle,
+    // The vehicle names are runtime arguments, so the grant is the
+    // account-wide vehicle pattern.
+    actions: ["iotfleetwise:BatchUpdateVehicle", "iotfleetwise:UpdateVehicle"],
+    resources: ["arn:aws:iotfleetwise:*:*:vehicle/*"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsClusterHttpBinding } from "./BindingHttp.ts";
 import type { DBCluster } from "./DBCluster.ts";
 
 /**
@@ -35,3 +37,12 @@ export interface FailoverDBCluster extends Binding.Service<
   >
 > {}
 export const FailoverDBCluster = Binding.Service<FailoverDBCluster>("AWS.RDS.FailoverDBCluster");
+
+export const FailoverDBClusterHttp = Layer.effect(
+  FailoverDBCluster,
+  makeRdsClusterHttpBinding({
+    tag: "AWS.RDS.FailoverDBCluster",
+    operation: rds.failoverDBCluster,
+    actions: ["rds:FailoverDBCluster"],
+  }),
+);

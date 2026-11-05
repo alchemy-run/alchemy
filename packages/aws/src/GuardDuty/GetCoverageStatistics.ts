@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -40,4 +42,16 @@ export interface GetCoverageStatistics extends Binding.Service<
 > {}
 export const GetCoverageStatistics = Binding.Service<GetCoverageStatistics>(
   "AWS.GuardDuty.GetCoverageStatistics",
+);
+
+export const GetCoverageStatisticsHttp = Layer.effect(
+  GetCoverageStatistics,
+  makeGuardDutyDetectorHttpBinding({
+    tag: "AWS.GuardDuty.GetCoverageStatistics",
+    operation: guardduty.getCoverageStatistics,
+    actions: ["guardduty:GetCoverageStatistics"],
+    // One of the two GuardDuty actions that supports resource-level
+    // permissions on the detector ARN.
+    resourceLevel: true,
+  }),
 );

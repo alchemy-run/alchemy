@@ -1,6 +1,8 @@
-import type * as repostspace from "@distilled.cloud/aws/repostspace";
+import * as repostspace from "@distilled.cloud/aws/repostspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRePostSpaceHttpBinding } from "./BindingHttp.ts";
 import type { Space } from "./Space.ts";
 
 export interface SendInvitesRequest extends Omit<repostspace.SendInvitesInput, "spaceId"> {}
@@ -40,3 +42,12 @@ export interface SendInvites extends Binding.Service<
   >
 > {}
 export const SendInvites = Binding.Service<SendInvites>("AWS.RePostSpace.SendInvites");
+
+export const SendInvitesHttp = Layer.effect(
+  SendInvites,
+  makeRePostSpaceHttpBinding({
+    tag: "AWS.RePostSpace.SendInvites",
+    operation: repostspace.sendInvites,
+    actions: ["repostspace:SendInvites"],
+  }),
+);

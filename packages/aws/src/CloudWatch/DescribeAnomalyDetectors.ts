@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface DescribeAnomalyDetectorsRequest extends cloudwatch.DescribeAnomalyDetectorsInput {}
 
@@ -41,4 +43,13 @@ export interface DescribeAnomalyDetectors extends Binding.Service<
 
 export const DescribeAnomalyDetectors = Binding.Service<DescribeAnomalyDetectors>(
   "AWS.CloudWatch.DescribeAnomalyDetectors",
+);
+
+export const DescribeAnomalyDetectorsHttp = Layer.effect(
+  DescribeAnomalyDetectors,
+  makeCloudWatchAccountHttpBinding({
+    tag: "AWS.CloudWatch.DescribeAnomalyDetectors",
+    operation: cloudwatch.describeAnomalyDetectors,
+    actions: ["cloudwatch:DescribeAnomalyDetectors"],
+  }),
 );

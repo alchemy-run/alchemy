@@ -1,7 +1,9 @@
 import type * as kv from "@distilled.cloud/aws/kinesis-video";
-import type * as kvam from "@distilled.cloud/aws/kinesis-video-archived-media";
+import * as kvam from "@distilled.cloud/aws/kinesis-video-archived-media";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamMediaHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface GetDASHStreamingSessionURLRequest extends Omit<
@@ -47,4 +49,14 @@ export interface GetDASHStreamingSessionURL extends Binding.Service<
 
 export const GetDASHStreamingSessionURL = Binding.Service<GetDASHStreamingSessionURL>(
   "AWS.KinesisVideo.GetDASHStreamingSessionURL",
+);
+
+export const GetDASHStreamingSessionURLHttp = Layer.effect(
+  GetDASHStreamingSessionURL,
+  makeStreamMediaHttpBinding({
+    tag: "AWS.KinesisVideo.GetDASHStreamingSessionURL",
+    apiName: "GET_DASH_STREAMING_SESSION_URL",
+    actions: ["kinesisvideo:GetDASHStreamingSessionURL"],
+    operation: kvam.getDASHStreamingSessionURL,
+  }),
 );

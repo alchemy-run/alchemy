@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:GetPersonTracking` — get the results of an asynchronous the path of persons detection job started by StartPersonTracking.
@@ -37,4 +39,13 @@ export interface GetPersonTracking extends Binding.Service<
 > {}
 export const GetPersonTracking = Binding.Service<GetPersonTracking>(
   "AWS.Rekognition.GetPersonTracking",
+);
+
+export const GetPersonTrackingHttp = Layer.effect(
+  GetPersonTracking,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.GetPersonTracking",
+    operation: rekognition.getPersonTracking,
+    actions: ["rekognition:GetPersonTracking"],
+  }),
 );

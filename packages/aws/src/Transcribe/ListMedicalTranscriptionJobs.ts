@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:ListMedicalTranscriptionJobs` — list the medical transcription jobs in the account.
@@ -34,4 +36,13 @@ export interface ListMedicalTranscriptionJobs extends Binding.Service<
 > {}
 export const ListMedicalTranscriptionJobs = Binding.Service<ListMedicalTranscriptionJobs>(
   "AWS.Transcribe.ListMedicalTranscriptionJobs",
+);
+
+export const ListMedicalTranscriptionJobsHttp = Layer.effect(
+  ListMedicalTranscriptionJobs,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.ListMedicalTranscriptionJobs",
+    operation: transcribe.listMedicalTranscriptionJobs,
+    actions: ["transcribe:ListMedicalTranscriptionJobs"],
+  }),
 );

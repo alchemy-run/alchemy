@@ -1,6 +1,8 @@
-import type * as fis from "@distilled.cloud/aws/fis";
+import * as fis from "@distilled.cloud/aws/fis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFisTemplateHttpBinding } from "./BindingHttp.ts";
 import type { ExperimentTemplate } from "./ExperimentTemplate.ts";
 
 /**
@@ -37,3 +39,18 @@ export interface StartExperiment extends Binding.Service<
   >
 > {}
 export const StartExperiment = Binding.Service<StartExperiment>("AWS.FIS.StartExperiment");
+
+export const StartExperimentHttp = Layer.effect(
+  StartExperiment,
+  makeFisTemplateHttpBinding({
+    tag: "AWS.FIS.StartExperiment",
+    operation: fis.startExperiment,
+    // Starting also tags the created experiment (internal or caller-supplied
+    // tags), which FIS authorizes as fis:TagResource on the experiment ARN.
+    actions: ["fis:StartExperiment", "fis:TagResource"],
+    requestKey: "experimentTemplateId",
+    grantExperimentWildcard: true,
+    // The first StartExperiment in an account creates AWSServiceRoleForFIS.
+    grantServiceLinkedRole: true,
+  }),
+);

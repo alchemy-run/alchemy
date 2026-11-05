@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:BatchImportFindings`.
@@ -37,4 +39,13 @@ export interface BatchImportFindings extends Binding.Service<
 > {}
 export const BatchImportFindings = Binding.Service<BatchImportFindings>(
   "AWS.SecurityHub.BatchImportFindings",
+);
+
+export const BatchImportFindingsHttp = Layer.effect(
+  BatchImportFindings,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.BatchImportFindings",
+    operation: securityhub.batchImportFindings,
+    actions: ["securityhub:BatchImportFindings"],
+  }),
 );

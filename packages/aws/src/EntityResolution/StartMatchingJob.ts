@@ -1,6 +1,8 @@
-import type * as entityresolution from "@distilled.cloud/aws/entityresolution";
+import * as entityresolution from "@distilled.cloud/aws/entityresolution";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWorkflowHttpBinding } from "./BindingHttp.ts";
 import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface StartMatchingJob extends Binding.Service<
 
 export const StartMatchingJob = Binding.Service<StartMatchingJob>(
   "AWS.EntityResolution.StartMatchingJob",
+);
+
+export const StartMatchingJobHttp = Layer.effect(
+  StartMatchingJob,
+  makeWorkflowHttpBinding({
+    tag: "AWS.EntityResolution.StartMatchingJob",
+    operation: entityresolution.startMatchingJob,
+    actions: ["entityresolution:StartMatchingJob"],
+  }),
 );

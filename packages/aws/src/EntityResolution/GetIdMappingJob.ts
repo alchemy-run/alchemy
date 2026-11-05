@@ -1,6 +1,8 @@
-import type * as entityresolution from "@distilled.cloud/aws/entityresolution";
+import * as entityresolution from "@distilled.cloud/aws/entityresolution";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWorkflowHttpBinding } from "./BindingHttp.ts";
 import type { IdMappingWorkflow } from "./IdMappingWorkflow.ts";
 
 /**
@@ -39,4 +41,13 @@ export interface GetIdMappingJob extends Binding.Service<
 
 export const GetIdMappingJob = Binding.Service<GetIdMappingJob>(
   "AWS.EntityResolution.GetIdMappingJob",
+);
+
+export const GetIdMappingJobHttp = Layer.effect(
+  GetIdMappingJob,
+  makeWorkflowHttpBinding({
+    tag: "AWS.EntityResolution.GetIdMappingJob",
+    operation: entityresolution.getIdMappingJob,
+    actions: ["entityresolution:GetIdMappingJob"],
+  }),
 );

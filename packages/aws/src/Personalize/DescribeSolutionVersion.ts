@@ -1,6 +1,8 @@
-import type * as personalize from "@distilled.cloud/aws/personalize";
+import * as personalize from "@distilled.cloud/aws/personalize";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `personalize:DescribeSolutionVersion` — Polls a solution version for training completion — pairs with
@@ -36,4 +38,13 @@ export interface DescribeSolutionVersion extends Binding.Service<
 > {}
 export const DescribeSolutionVersion = Binding.Service<DescribeSolutionVersion>(
   "AWS.Personalize.DescribeSolutionVersion",
+);
+
+export const DescribeSolutionVersionHttp = Layer.effect(
+  DescribeSolutionVersion,
+  makePersonalizeAccountHttpBinding({
+    tag: "AWS.Personalize.DescribeSolutionVersion",
+    operation: personalize.describeSolutionVersion,
+    actions: ["personalize:DescribeSolutionVersion"],
+  }),
 );

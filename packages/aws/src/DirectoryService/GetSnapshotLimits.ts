@@ -1,6 +1,8 @@
-import type * as ds from "@distilled.cloud/aws/directory-service";
+import * as ds from "@distilled.cloud/aws/directory-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDirectoryHttpBinding } from "./BindingHttp.ts";
 import type { Directory } from "./Directory.ts";
 
 /**
@@ -36,4 +38,13 @@ export interface GetSnapshotLimits extends Binding.Service<
 > {}
 export const GetSnapshotLimits = Binding.Service<GetSnapshotLimits>(
   "AWS.DirectoryService.GetSnapshotLimits",
+);
+
+export const GetSnapshotLimitsHttp = Layer.effect(
+  GetSnapshotLimits,
+  makeDirectoryHttpBinding({
+    tag: "AWS.DirectoryService.GetSnapshotLimits",
+    operation: ds.getSnapshotLimits,
+    actions: ["ds:GetSnapshotLimits"],
+  }),
 );

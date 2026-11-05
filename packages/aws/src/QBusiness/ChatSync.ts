@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `ChatSync` request with `applicationId` injected from the bound application.
@@ -39,3 +41,12 @@ export interface ChatSync extends Binding.Service<
   >
 > {}
 export const ChatSync = Binding.Service<ChatSync>("AWS.QBusiness.ChatSync");
+
+export const ChatSyncHttp = Layer.effect(
+  ChatSync,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.ChatSync",
+    operation: qbusiness.chatSync,
+    actions: ["qbusiness:ChatSync"],
+  }),
+);

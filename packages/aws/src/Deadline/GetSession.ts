@@ -1,6 +1,8 @@
-import type * as deadline from "@distilled.cloud/aws/deadline";
+import * as deadline from "@distilled.cloud/aws/deadline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDeadlineQueueHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface GetSession extends Binding.Service<
   >
 > {}
 export const GetSession = Binding.Service<GetSession>("AWS.Deadline.GetSession");
+
+export const GetSessionHttp = Layer.effect(
+  GetSession,
+  makeDeadlineQueueHttpBinding({
+    tag: "AWS.Deadline.GetSession",
+    operation: deadline.getSession,
+    actions: ["deadline:GetSession"],
+  }),
+);

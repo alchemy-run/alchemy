@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseManagerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListReceivedLicenses}.
@@ -40,4 +42,13 @@ export interface ListReceivedLicenses extends Binding.Service<
 > {}
 export const ListReceivedLicenses = Binding.Service<ListReceivedLicenses>(
   "AWS.LicenseManager.ListReceivedLicenses",
+);
+
+export const ListReceivedLicensesHttp = Layer.effect(
+  ListReceivedLicenses,
+  makeLicenseManagerHttpBinding({
+    capability: "ListReceivedLicenses",
+    iamActions: ["license-manager:ListReceivedLicenses"],
+    operation: licensemanager.listReceivedLicenses,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:BatchEnableStandards`.
@@ -37,4 +39,13 @@ export interface BatchEnableStandards extends Binding.Service<
 > {}
 export const BatchEnableStandards = Binding.Service<BatchEnableStandards>(
   "AWS.SecurityHub.BatchEnableStandards",
+);
+
+export const BatchEnableStandardsHttp = Layer.effect(
+  BatchEnableStandards,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.BatchEnableStandards",
+    operation: securityhub.batchEnableStandards,
+    actions: ["securityhub:BatchEnableStandards"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as b2bi from "@distilled.cloud/aws/b2bi";
+import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeB2biAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `b2bi:TestConversion`.
@@ -40,3 +42,14 @@ export interface TestConversion extends Binding.Service<
   >
 > {}
 export const TestConversion = Binding.Service<TestConversion>("AWS.B2BI.TestConversion");
+
+export const TestConversionHttp = Layer.effect(
+  TestConversion,
+  makeB2biAccountHttpBinding({
+    tag: "AWS.B2BI.TestConversion",
+    operation: b2bi.testConversion,
+    // `target.outputSampleFile` is read through the caller's session
+    // (forward-access), so the S3 read grants ride along.
+    actions: ["b2bi:TestConversion", "s3:GetObject", "s3:GetObjectAttributes"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as b2bi from "@distilled.cloud/aws/b2bi";
+import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTransformerScopedHttpBinding } from "./BindingHttp.ts";
 import type { Transformer } from "./Transformer.ts";
 
 export interface GetTransformerJobRequest extends Omit<
@@ -45,3 +47,12 @@ export interface GetTransformerJob extends Binding.Service<
   >
 > {}
 export const GetTransformerJob = Binding.Service<GetTransformerJob>("AWS.B2BI.GetTransformerJob");
+
+export const GetTransformerJobHttp = Layer.effect(
+  GetTransformerJob,
+  makeTransformerScopedHttpBinding({
+    tag: "AWS.B2BI.GetTransformerJob",
+    operation: b2bi.getTransformerJob,
+    actions: ["b2bi:GetTransformerJob"],
+  }),
+);

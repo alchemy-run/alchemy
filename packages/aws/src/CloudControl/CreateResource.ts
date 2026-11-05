@@ -1,6 +1,8 @@
-import type * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
+import * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudControlHttpBinding } from "./BindingHttp.ts";
 import type { CloudControlBindingOptions } from "./BindingOptions.ts";
 
 /**
@@ -54,3 +56,12 @@ export interface CreateResource extends Binding.Service<
 > {}
 
 export const CreateResource = Binding.Service<CreateResource>("AWS.CloudControl.CreateResource");
+
+export const CreateResourceHttp = Layer.effect(
+  CreateResource,
+  makeCloudControlHttpBinding({
+    tag: "AWS.CloudControl.CreateResource",
+    operation: cloudcontrol.createResource,
+    actions: ["cloudformation:CreateResource"],
+  }),
+);

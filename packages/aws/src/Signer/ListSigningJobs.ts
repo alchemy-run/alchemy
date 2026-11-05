@@ -1,6 +1,8 @@
-import type * as signer from "@distilled.cloud/aws/signer";
+import * as signer from "@distilled.cloud/aws/signer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSignerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `signer:ListSigningJobs`.
@@ -31,3 +33,12 @@ export interface ListSigningJobs extends Binding.Service<
   >
 > {}
 export const ListSigningJobs = Binding.Service<ListSigningJobs>("AWS.Signer.ListSigningJobs");
+
+export const ListSigningJobsHttp = Layer.effect(
+  ListSigningJobs,
+  makeSignerHttpBinding({
+    tag: "AWS.Signer.ListSigningJobs",
+    operation: signer.listSigningJobs,
+    actions: ["signer:ListSigningJobs"],
+  }),
+);

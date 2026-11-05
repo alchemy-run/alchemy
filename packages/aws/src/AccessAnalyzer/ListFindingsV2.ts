@@ -1,7 +1,9 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Analyzer } from "./Analyzer.ts";
+import { makeAnalyzerScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `ListFindingsV2` request with `analyzerArn` injected from the bound {@link Analyzer}. */
 export interface ListFindingsV2Request extends Omit<aa.ListFindingsV2Request, "analyzerArn"> {}
@@ -41,3 +43,13 @@ export interface ListFindingsV2 extends Binding.Service<
 > {}
 
 export const ListFindingsV2 = Binding.Service<ListFindingsV2>("AWS.AccessAnalyzer.ListFindingsV2");
+
+export const ListFindingsV2Http = Layer.effect(
+  ListFindingsV2,
+  makeAnalyzerScopedHttpBinding({
+    tag: "AWS.AccessAnalyzer.ListFindingsV2",
+    operation: aa.listFindingsV2,
+    // ListFindings and ListFindingsV2 both use `access-analyzer:ListFindings`.
+    actions: ["access-analyzer:ListFindings"],
+  }),
+);

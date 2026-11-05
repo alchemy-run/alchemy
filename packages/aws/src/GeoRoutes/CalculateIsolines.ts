@@ -1,6 +1,8 @@
-import type * as geoRoutes from "@distilled.cloud/aws/geo-routes";
+import * as geoRoutes from "@distilled.cloud/aws/geo-routes";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoRoutesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-routes:CalculateIsolines` — compute areas
@@ -44,4 +46,13 @@ export interface CalculateIsolines extends Binding.Service<
 > {}
 export const CalculateIsolines = Binding.Service<CalculateIsolines>(
   "AWS.GeoRoutes.CalculateIsolines",
+);
+
+export const CalculateIsolinesHttp = Layer.effect(
+  CalculateIsolines,
+  makeGeoRoutesHttpBinding({
+    capability: "CalculateIsolines",
+    iamActions: ["geo-routes:CalculateIsolines"],
+    operation: geoRoutes.calculateIsolines,
+  }),
 );

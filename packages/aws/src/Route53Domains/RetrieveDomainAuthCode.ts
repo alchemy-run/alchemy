@@ -1,6 +1,8 @@
-import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
+import * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53DomainsHttpBinding } from "./BindingHttp.ts";
 
 export interface RetrieveDomainAuthCodeRequest
   extends route53domains.RetrieveDomainAuthCodeRequest {}
@@ -58,4 +60,13 @@ export interface RetrieveDomainAuthCode extends Binding.Service<
 > {}
 export const RetrieveDomainAuthCode = Binding.Service<RetrieveDomainAuthCode>(
   "AWS.Route53Domains.RetrieveDomainAuthCode",
+);
+
+export const RetrieveDomainAuthCodeHttp = Layer.effect(
+  RetrieveDomainAuthCode,
+  makeRoute53DomainsHttpBinding({
+    capability: "RetrieveDomainAuthCode",
+    iamActions: ["route53domains:RetrieveDomainAuthCode"],
+    operation: route53domains.retrieveDomainAuthCode,
+  }),
 );

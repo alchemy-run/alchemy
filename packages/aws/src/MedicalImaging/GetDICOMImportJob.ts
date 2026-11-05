@@ -1,6 +1,8 @@
-import type * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
+import * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMedicalImagingDatastoreHttpBinding } from "./BindingHttp.ts";
 import type { Datastore } from "./Datastore.ts";
 
 /**
@@ -55,4 +57,13 @@ export interface GetDICOMImportJob extends Binding.Service<
 > {}
 export const GetDICOMImportJob = Binding.Service<GetDICOMImportJob>(
   "AWS.MedicalImaging.GetDICOMImportJob",
+);
+
+export const GetDICOMImportJobHttp = Layer.effect(
+  GetDICOMImportJob,
+  makeMedicalImagingDatastoreHttpBinding({
+    tag: "AWS.MedicalImaging.GetDICOMImportJob",
+    operation: medicalimaging.getDICOMImportJob,
+    actions: ["medical-imaging:GetDICOMImportJob"],
+  }),
 );

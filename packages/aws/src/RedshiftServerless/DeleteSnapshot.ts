@@ -1,6 +1,8 @@
-import type * as serverless from "@distilled.cloud/aws/redshift-serverless";
+import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServerlessAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteSnapshot` operation (IAM actions
@@ -31,4 +33,13 @@ export interface DeleteSnapshot extends Binding.Service<
 > {}
 export const DeleteSnapshot = Binding.Service<DeleteSnapshot>(
   "AWS.RedshiftServerless.DeleteSnapshot",
+);
+
+export const DeleteSnapshotHttp = Layer.effect(
+  DeleteSnapshot,
+  makeServerlessAccountHttpBinding({
+    tag: "AWS.RedshiftServerless.DeleteSnapshot",
+    operation: serverless.deleteSnapshot,
+    actions: ["redshift-serverless:DeleteSnapshot"],
+  }),
 );

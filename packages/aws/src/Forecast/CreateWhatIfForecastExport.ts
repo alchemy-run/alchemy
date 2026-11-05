@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:CreateWhatIfForecastExport` — export one or
@@ -46,4 +48,15 @@ export interface CreateWhatIfForecastExport extends Binding.Service<
 > {}
 export const CreateWhatIfForecastExport = Binding.Service<CreateWhatIfForecastExport>(
   "AWS.Forecast.CreateWhatIfForecastExport",
+);
+
+export const CreateWhatIfForecastExportHttp = Layer.effect(
+  CreateWhatIfForecastExport,
+  makeForecastHttpBinding({
+    capability: "CreateWhatIfForecastExport",
+    iamActions: ["forecast:CreateWhatIfForecastExport"],
+    operation: forecast.createWhatIfForecastExport,
+    // Destination hands Forecast a role to write the export to S3.
+    passRole: true,
+  }),
 );

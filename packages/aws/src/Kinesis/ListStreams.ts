@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKinesisAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListStreamsRequest extends Kinesis.ListStreamsInput {}
 
@@ -33,3 +35,12 @@ export interface ListStreams extends Binding.Service<
   >
 > {}
 export const ListStreams = Binding.Service<ListStreams>("AWS.Kinesis.ListStreams");
+
+export const ListStreamsHttp = Layer.effect(
+  ListStreams,
+  makeKinesisAccountHttpBinding({
+    tag: "AWS.Kinesis.ListStreams",
+    operation: Kinesis.listStreams,
+    actions: ["kinesis:ListStreams"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:CreateVocabularyFilter` — create a vocabulary filter that masks, removes, or flags unwanted words in transcription output.
@@ -38,4 +40,13 @@ export interface CreateVocabularyFilter extends Binding.Service<
 > {}
 export const CreateVocabularyFilter = Binding.Service<CreateVocabularyFilter>(
   "AWS.Transcribe.CreateVocabularyFilter",
+);
+
+export const CreateVocabularyFilterHttp = Layer.effect(
+  CreateVocabularyFilter,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.CreateVocabularyFilter",
+    operation: transcribe.createVocabularyFilter,
+    actions: ["transcribe:CreateVocabularyFilter"],
+  }),
 );

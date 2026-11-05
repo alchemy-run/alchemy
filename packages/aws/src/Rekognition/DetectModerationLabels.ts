@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DetectModerationLabels` — detect unsafe or inappropriate content (explicit nudity, violence, etc.) in an image for content moderation.
@@ -41,4 +43,13 @@ export interface DetectModerationLabels extends Binding.Service<
 > {}
 export const DetectModerationLabels = Binding.Service<DetectModerationLabels>(
   "AWS.Rekognition.DetectModerationLabels",
+);
+
+export const DetectModerationLabelsHttp = Layer.effect(
+  DetectModerationLabels,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DetectModerationLabels",
+    operation: rekognition.detectModerationLabels,
+    actions: ["rekognition:DetectModerationLabels"],
+  }),
 );

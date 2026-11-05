@@ -1,6 +1,8 @@
-import type * as paymentcryptographydata from "@distilled.cloud/aws/payment-cryptography-data";
+import * as paymentcryptographydata from "@distilled.cloud/aws/payment-cryptography-data";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePaymentCryptographyKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface GenerateCardValidationDataRequest extends Omit<
@@ -47,4 +49,18 @@ export interface GenerateCardValidationData extends Binding.Service<
 
 export const GenerateCardValidationData = Binding.Service<GenerateCardValidationData>(
   "AWS.PaymentCryptography.GenerateCardValidationData",
+);
+
+/**
+ * HTTP implementation of {@link GenerateCardValidationData} — grants the
+ * host Function `payment-cryptography:GenerateCardValidationData` on the CVK
+ * and calls the Payment Cryptography Data API at runtime.
+ */
+export const GenerateCardValidationDataHttp = Layer.effect(
+  GenerateCardValidationData,
+  makePaymentCryptographyKeyHttpBinding({
+    tag: "AWS.PaymentCryptography.GenerateCardValidationData",
+    operation: paymentcryptographydata.generateCardValidationData,
+    actions: ["payment-cryptography:GenerateCardValidationData"],
+  }),
 );

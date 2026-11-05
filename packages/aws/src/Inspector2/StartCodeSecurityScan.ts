@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:StartCodeSecurityScan`.
@@ -37,4 +39,13 @@ export interface StartCodeSecurityScan extends Binding.Service<
 > {}
 export const StartCodeSecurityScan = Binding.Service<StartCodeSecurityScan>(
   "AWS.Inspector2.StartCodeSecurityScan",
+);
+
+export const StartCodeSecurityScanHttp = Layer.effect(
+  StartCodeSecurityScan,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.StartCodeSecurityScan",
+    operation: inspector2.startCodeSecurityScan,
+    actions: ["inspector2:StartCodeSecurityScan"],
+  }),
 );

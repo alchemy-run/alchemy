@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:DescribeProvisionedProduct`.
@@ -38,4 +40,13 @@ export interface DescribeProvisionedProduct extends Binding.Service<
 > {}
 export const DescribeProvisionedProduct = Binding.Service<DescribeProvisionedProduct>(
   "AWS.ServiceCatalog.DescribeProvisionedProduct",
+);
+
+export const DescribeProvisionedProductHttp = Layer.effect(
+  DescribeProvisionedProduct,
+  makeServiceCatalogHttpBinding({
+    capability: "DescribeProvisionedProduct",
+    iamActions: ["servicecatalog:DescribeProvisionedProduct"],
+    operation: servicecatalog.describeProvisionedProduct,
+  }),
 );

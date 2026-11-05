@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `DeleteConversation` request with `applicationId` injected from the bound application.
@@ -42,4 +44,13 @@ export interface DeleteConversation extends Binding.Service<
 > {}
 export const DeleteConversation = Binding.Service<DeleteConversation>(
   "AWS.QBusiness.DeleteConversation",
+);
+
+export const DeleteConversationHttp = Layer.effect(
+  DeleteConversation,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.DeleteConversation",
+    operation: qbusiness.deleteConversation,
+    actions: ["qbusiness:DeleteConversation"],
+  }),
 );

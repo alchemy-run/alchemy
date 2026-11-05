@@ -1,6 +1,11 @@
-import type * as elasticache from "@distilled.cloud/aws/elasticache";
+import * as elasticache from "@distilled.cloud/aws/elasticache";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import {
+  makeElastiCacheAccountHttpBinding,
+  SERVERLESS_SNAPSHOT_ARN_WILDCARD,
+} from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteServerlessCacheSnapshot` operation (IAM
@@ -36,4 +41,15 @@ export interface DeleteServerlessCacheSnapshot extends Binding.Service<
 > {}
 export const DeleteServerlessCacheSnapshot = Binding.Service<DeleteServerlessCacheSnapshot>(
   "AWS.ElastiCache.DeleteServerlessCacheSnapshot",
+);
+
+export const DeleteServerlessCacheSnapshotHttp = Layer.effect(
+  DeleteServerlessCacheSnapshot,
+  makeElastiCacheAccountHttpBinding({
+    tag: "AWS.ElastiCache.DeleteServerlessCacheSnapshot",
+    operation: elasticache.deleteServerlessCacheSnapshot,
+    actions: ["elasticache:DeleteServerlessCacheSnapshot"],
+    // Snapshot names are runtime data.
+    resources: [SERVERLESS_SNAPSHOT_ARN_WILDCARD],
+  }),
 );

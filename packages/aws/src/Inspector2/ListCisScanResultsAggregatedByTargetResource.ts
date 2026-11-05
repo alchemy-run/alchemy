@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:ListCisScanResultsAggregatedByTargetResource`.
@@ -37,3 +39,12 @@ export const ListCisScanResultsAggregatedByTargetResource =
   Binding.Service<ListCisScanResultsAggregatedByTargetResource>(
     "AWS.Inspector2.ListCisScanResultsAggregatedByTargetResource",
   );
+
+export const ListCisScanResultsAggregatedByTargetResourceHttp = Layer.effect(
+  ListCisScanResultsAggregatedByTargetResource,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.ListCisScanResultsAggregatedByTargetResource",
+    operation: inspector2.listCisScanResultsAggregatedByTargetResource,
+    actions: ["inspector2:ListCisScanResultsAggregatedByTargetResource"],
+  }),
+);

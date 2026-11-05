@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `guardduty:GetInvitationsCount`.
@@ -33,4 +35,13 @@ export interface GetInvitationsCount extends Binding.Service<
 > {}
 export const GetInvitationsCount = Binding.Service<GetInvitationsCount>(
   "AWS.GuardDuty.GetInvitationsCount",
+);
+
+export const GetInvitationsCountHttp = Layer.effect(
+  GetInvitationsCount,
+  makeGuardDutyAccountHttpBinding({
+    tag: "AWS.GuardDuty.GetInvitationsCount",
+    operation: guardduty.getInvitationsCount,
+    actions: ["guardduty:GetInvitationsCount"],
+  }),
 );

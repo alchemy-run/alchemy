@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsClusterHttpBinding } from "./BindingHttp.ts";
 import type { DBCluster } from "./DBCluster.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface StartDBCluster extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<rds.StartDBClusterResult, rds.StartDBClusterError>>
 > {}
 export const StartDBCluster = Binding.Service<StartDBCluster>("AWS.RDS.StartDBCluster");
+
+export const StartDBClusterHttp = Layer.effect(
+  StartDBCluster,
+  makeRdsClusterHttpBinding({
+    tag: "AWS.RDS.StartDBCluster",
+    operation: rds.startDBCluster,
+    actions: ["rds:StartDBCluster"],
+  }),
+);

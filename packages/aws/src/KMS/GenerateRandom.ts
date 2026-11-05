@@ -1,6 +1,8 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKmsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface GenerateRandomRequest extends kms.GenerateRandomRequest {}
 
@@ -41,3 +43,12 @@ export interface GenerateRandom extends Binding.Service<
 > {}
 
 export const GenerateRandom = Binding.Service<GenerateRandom>("AWS.KMS.GenerateRandom");
+
+export const GenerateRandomHttp = Layer.effect(
+  GenerateRandom,
+  makeKmsAccountHttpBinding({
+    tag: "AWS.KMS.GenerateRandom",
+    operation: kms.generateRandom,
+    actions: ["kms:GenerateRandom"],
+  }),
+);

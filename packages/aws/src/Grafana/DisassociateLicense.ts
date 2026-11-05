@@ -1,6 +1,8 @@
-import type * as grafana from "@distilled.cloud/aws/grafana";
+import * as grafana from "@distilled.cloud/aws/grafana";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGrafanaWorkspaceHttpBinding } from "./BindingHttp.ts";
 import type { Workspace } from "./Workspace.ts";
 
 /**
@@ -33,4 +35,13 @@ export interface DisassociateLicense extends Binding.Service<
 > {}
 export const DisassociateLicense = Binding.Service<DisassociateLicense>(
   "AWS.Grafana.DisassociateLicense",
+);
+
+export const DisassociateLicenseHttp = Layer.effect(
+  DisassociateLicense,
+  makeGrafanaWorkspaceHttpBinding({
+    tag: "AWS.Grafana.DisassociateLicense",
+    operation: grafana.disassociateLicense,
+    actions: ["grafana:DisassociateLicense"],
+  }),
 );

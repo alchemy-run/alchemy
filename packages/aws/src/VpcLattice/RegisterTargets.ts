@@ -1,6 +1,8 @@
-import type * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
+import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeVpcLatticeTargetGroupHttpBinding } from "./BindingHttp.ts";
 import type { TargetGroup } from "./TargetGroup.ts";
 
 /**
@@ -44,3 +46,12 @@ export interface RegisterTargets extends Binding.Service<
   >
 > {}
 export const RegisterTargets = Binding.Service<RegisterTargets>("AWS.VpcLattice.RegisterTargets");
+
+export const RegisterTargetsHttp = Layer.effect(
+  RegisterTargets,
+  makeVpcLatticeTargetGroupHttpBinding({
+    tag: "AWS.VpcLattice.RegisterTargets",
+    operation: vpclattice.registerTargets,
+    actions: ["vpc-lattice:RegisterTargets"],
+  }),
+);

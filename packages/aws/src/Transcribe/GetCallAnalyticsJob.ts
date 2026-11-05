@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:GetCallAnalyticsJob` — read a Call Analytics job's status and, once complete, the transcript location.
@@ -33,4 +35,13 @@ export interface GetCallAnalyticsJob extends Binding.Service<
 > {}
 export const GetCallAnalyticsJob = Binding.Service<GetCallAnalyticsJob>(
   "AWS.Transcribe.GetCallAnalyticsJob",
+);
+
+export const GetCallAnalyticsJobHttp = Layer.effect(
+  GetCallAnalyticsJob,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.GetCallAnalyticsJob",
+    operation: transcribe.getCallAnalyticsJob,
+    actions: ["transcribe:GetCallAnalyticsJob"],
+  }),
 );

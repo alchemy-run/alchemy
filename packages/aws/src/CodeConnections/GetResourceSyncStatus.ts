@@ -1,6 +1,8 @@
-import type * as codeconnections from "@distilled.cloud/aws/codeconnections";
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSyncConfigurationScopedHttpBinding } from "./BindingHttp.ts";
 import type { SyncConfiguration } from "./SyncConfiguration.ts";
 
 /**
@@ -39,4 +41,13 @@ export interface GetResourceSyncStatus extends Binding.Service<
 
 export const GetResourceSyncStatus = Binding.Service<GetResourceSyncStatus>(
   "AWS.CodeConnections.GetResourceSyncStatus",
+);
+
+export const GetResourceSyncStatusHttp = Layer.effect(
+  GetResourceSyncStatus,
+  makeSyncConfigurationScopedHttpBinding({
+    tag: "AWS.CodeConnections.GetResourceSyncStatus",
+    actions: ["codeconnections:GetResourceSyncStatus"],
+    operation: codeconnections.getResourceSyncStatus,
+  }),
 );

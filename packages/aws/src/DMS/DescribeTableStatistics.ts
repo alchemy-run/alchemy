@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dms:DescribeTableStatistics`.
@@ -39,4 +41,13 @@ export interface DescribeTableStatistics extends Binding.Service<
 
 export const DescribeTableStatistics = Binding.Service<DescribeTableStatistics>(
   "AWS.DMS.DescribeTableStatistics",
+);
+
+export const DescribeTableStatisticsHttp = Layer.effect(
+  DescribeTableStatistics,
+  makeDmsAccountHttpBinding({
+    tag: "AWS.DMS.DescribeTableStatistics",
+    actions: ["dms:DescribeTableStatistics"],
+    operation: dms.describeTableStatistics,
+  }),
 );

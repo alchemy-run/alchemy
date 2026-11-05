@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:DisableOrganizationAdminAccount`.
@@ -35,4 +37,13 @@ export interface DisableOrganizationAdminAccount extends Binding.Service<
 > {}
 export const DisableOrganizationAdminAccount = Binding.Service<DisableOrganizationAdminAccount>(
   "AWS.Macie2.DisableOrganizationAdminAccount",
+);
+
+export const DisableOrganizationAdminAccountHttp = Layer.effect(
+  DisableOrganizationAdminAccount,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.DisableOrganizationAdminAccount",
+    operation: macie2.disableOrganizationAdminAccount,
+    actions: ["macie2:DisableOrganizationAdminAccount"],
+  }),
 );

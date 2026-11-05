@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListVariantImportJobsRequest extends omics.ListVariantImportJobsRequest {}
 
@@ -33,4 +35,13 @@ export interface ListVariantImportJobs extends Binding.Service<
 
 export const ListVariantImportJobs = Binding.Service<ListVariantImportJobs>(
   "AWS.Omics.ListVariantImportJobs",
+);
+
+export const ListVariantImportJobsHttp = Layer.effect(
+  ListVariantImportJobs,
+  makeOmicsAccountHttpBinding({
+    tag: "AWS.Omics.ListVariantImportJobs",
+    operation: omics.listVariantImportJobs,
+    actions: ["omics:ListVariantImportJobs"],
+  }),
 );

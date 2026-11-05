@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:GetLabelDetection` — get the results of an asynchronous labels detection job started by StartLabelDetection.
@@ -37,4 +39,13 @@ export interface GetLabelDetection extends Binding.Service<
 > {}
 export const GetLabelDetection = Binding.Service<GetLabelDetection>(
   "AWS.Rekognition.GetLabelDetection",
+);
+
+export const GetLabelDetectionHttp = Layer.effect(
+  GetLabelDetection,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.GetLabelDetection",
+    operation: rekognition.getLabelDetection,
+    actions: ["rekognition:GetLabelDetection"],
+  }),
 );

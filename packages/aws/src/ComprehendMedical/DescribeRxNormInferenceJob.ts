@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:DescribeRxNormInferenceJob` — get the properties and status of an asynchronous RxNorm ontology linking job.
@@ -36,4 +38,13 @@ export interface DescribeRxNormInferenceJob extends Binding.Service<
 > {}
 export const DescribeRxNormInferenceJob = Binding.Service<DescribeRxNormInferenceJob>(
   "AWS.ComprehendMedical.DescribeRxNormInferenceJob",
+);
+
+export const DescribeRxNormInferenceJobHttp = Layer.effect(
+  DescribeRxNormInferenceJob,
+  makeComprehendMedicalHttpBinding({
+    capability: "DescribeRxNormInferenceJob",
+    iamActions: ["comprehendmedical:DescribeRxNormInferenceJob"],
+    operation: comprehendmedical.describeRxNormInferenceJob,
+  }),
 );

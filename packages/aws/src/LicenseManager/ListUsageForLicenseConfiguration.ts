@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseConfigurationHttpBinding } from "./BindingHttp.ts";
 import type { LicenseConfiguration } from "./LicenseConfiguration.ts";
 
 /**
@@ -48,4 +50,13 @@ export interface ListUsageForLicenseConfiguration extends Binding.Service<
 > {}
 export const ListUsageForLicenseConfiguration = Binding.Service<ListUsageForLicenseConfiguration>(
   "AWS.LicenseManager.ListUsageForLicenseConfiguration",
+);
+
+export const ListUsageForLicenseConfigurationHttp = Layer.effect(
+  ListUsageForLicenseConfiguration,
+  makeLicenseConfigurationHttpBinding({
+    capability: "ListUsageForLicenseConfiguration",
+    iamActions: ["license-manager:ListUsageForLicenseConfiguration"],
+    operation: licensemanager.listUsageForLicenseConfiguration,
+  }),
 );

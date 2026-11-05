@@ -1,6 +1,8 @@
-import type * as SD from "@distilled.cloud/aws/servicediscovery";
+import * as SD from "@distilled.cloud/aws/servicediscovery";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudMapAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicediscovery:GetOperation` — reads the status of
@@ -35,3 +37,13 @@ export interface GetOperation extends Binding.Service<
   >
 > {}
 export const GetOperation = Binding.Service<GetOperation>("AWS.CloudMap.GetOperation");
+
+export const GetOperationHttp = Layer.effect(
+  GetOperation,
+  makeCloudMapAccountHttpBinding({
+    tag: "AWS.CloudMap.GetOperation",
+    operation: SD.getOperation,
+    // GetOperation does not support resource-level IAM permissions.
+    actions: ["servicediscovery:GetOperation"],
+  }),
+);

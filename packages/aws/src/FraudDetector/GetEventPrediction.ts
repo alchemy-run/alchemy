@@ -1,6 +1,8 @@
-import type * as frauddetector from "@distilled.cloud/aws/frauddetector";
+import * as frauddetector from "@distilled.cloud/aws/frauddetector";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFraudDetectorDetectorHttpBinding } from "./BindingHttp.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -66,4 +68,13 @@ export interface GetEventPrediction extends Binding.Service<
 > {}
 export const GetEventPrediction = Binding.Service<GetEventPrediction>(
   "AWS.FraudDetector.GetEventPrediction",
+);
+
+export const GetEventPredictionHttp = Layer.effect(
+  GetEventPrediction,
+  makeFraudDetectorDetectorHttpBinding({
+    tag: "AWS.FraudDetector.GetEventPrediction",
+    operation: frauddetector.getEventPrediction,
+    actions: ["frauddetector:GetEventPrediction"],
+  }),
 );

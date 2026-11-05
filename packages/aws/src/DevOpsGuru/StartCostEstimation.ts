@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:StartCostEstimation`.
@@ -33,4 +35,13 @@ export interface StartCostEstimation extends Binding.Service<
 > {}
 export const StartCostEstimation = Binding.Service<StartCostEstimation>(
   "AWS.DevOpsGuru.StartCostEstimation",
+);
+
+export const StartCostEstimationHttp = Layer.effect(
+  StartCostEstimation,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.StartCostEstimation",
+    operation: devopsguru.startCostEstimation,
+    actions: ["devops-guru:StartCostEstimation"],
+  }),
 );

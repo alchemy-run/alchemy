@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { IMPORT_TASK_ARN_WILDCARD, makeNeptuneGraphAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CancelImportTask` operation (IAM action `neptune-graph:CancelImportTask`).
@@ -28,4 +30,14 @@ export interface CancelImportTask extends Binding.Service<
 > {}
 export const CancelImportTask = Binding.Service<CancelImportTask>(
   "AWS.NeptuneGraph.CancelImportTask",
+);
+
+export const CancelImportTaskHttp = Layer.effect(
+  CancelImportTask,
+  makeNeptuneGraphAccountHttpBinding({
+    tag: "AWS.NeptuneGraph.CancelImportTask",
+    operation: neptunegraph.cancelImportTask,
+    actions: ["neptune-graph:CancelImportTask"],
+    resources: [IMPORT_TASK_ARN_WILDCARD],
+  }),
 );

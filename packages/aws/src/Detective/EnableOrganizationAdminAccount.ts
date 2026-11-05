@@ -1,6 +1,8 @@
-import type * as detective from "@distilled.cloud/aws/detective";
+import * as detective from "@distilled.cloud/aws/detective";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDetectiveAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `detective:EnableOrganizationAdminAccount`.
@@ -37,4 +39,13 @@ export interface EnableOrganizationAdminAccount extends Binding.Service<
 > {}
 export const EnableOrganizationAdminAccount = Binding.Service<EnableOrganizationAdminAccount>(
   "AWS.Detective.EnableOrganizationAdminAccount",
+);
+
+export const EnableOrganizationAdminAccountHttp = Layer.effect(
+  EnableOrganizationAdminAccount,
+  makeDetectiveAccountHttpBinding({
+    tag: "AWS.Detective.EnableOrganizationAdminAccount",
+    operation: detective.enableOrganizationAdminAccount,
+    actions: ["detective:EnableOrganizationAdminAccount"],
+  }),
 );

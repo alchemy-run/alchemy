@@ -1,6 +1,8 @@
-import type * as detective from "@distilled.cloud/aws/detective";
+import * as detective from "@distilled.cloud/aws/detective";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDetectiveAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `detective:BatchGetMembershipDatasources`.
@@ -39,4 +41,13 @@ export interface BatchGetMembershipDatasources extends Binding.Service<
 > {}
 export const BatchGetMembershipDatasources = Binding.Service<BatchGetMembershipDatasources>(
   "AWS.Detective.BatchGetMembershipDatasources",
+);
+
+export const BatchGetMembershipDatasourcesHttp = Layer.effect(
+  BatchGetMembershipDatasources,
+  makeDetectiveAccountHttpBinding({
+    tag: "AWS.Detective.BatchGetMembershipDatasources",
+    operation: detective.batchGetMembershipDatasources,
+    actions: ["detective:BatchGetMembershipDatasources"],
+  }),
 );

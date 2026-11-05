@@ -1,6 +1,8 @@
-import type * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudHsmHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CopyBackupToRegion` operation (IAM action
@@ -36,4 +38,15 @@ export interface CopyBackupToRegion extends Binding.Service<
 > {}
 export const CopyBackupToRegion = Binding.Service<CopyBackupToRegion>(
   "AWS.CloudHSMV2.CopyBackupToRegion",
+);
+
+export const CopyBackupToRegionHttp = Layer.effect(
+  CopyBackupToRegion,
+  makeCloudHsmHttpBinding({
+    tag: "AWS.CloudHSMV2.CopyBackupToRegion",
+    operation: cloudhsm.copyBackupToRegion,
+    // TagResource lets the copy carry the source backup's user tags into
+    // the destination region.
+    actions: ["cloudhsm:CopyBackupToRegion", "cloudhsm:TagResource"],
+  }),
 );

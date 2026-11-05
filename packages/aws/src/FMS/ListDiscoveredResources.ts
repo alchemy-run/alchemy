@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListDiscoveredResources}.
@@ -40,4 +42,13 @@ export interface ListDiscoveredResources extends Binding.Service<
 
 export const ListDiscoveredResources = Binding.Service<ListDiscoveredResources>(
   "AWS.FMS.ListDiscoveredResources",
+);
+
+export const ListDiscoveredResourcesHttp = Layer.effect(
+  ListDiscoveredResources,
+  makeFmsHttpBinding({
+    capability: "ListDiscoveredResources",
+    iamActions: ["fms:ListDiscoveredResources"],
+    operation: fms.listDiscoveredResources,
+  }),
 );

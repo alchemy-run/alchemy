@@ -1,6 +1,8 @@
-import type * as incidents from "@distilled.cloud/aws/ssm-incidents";
+import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIncidentsResponsePlanHttpBinding } from "./BindingHttp.ts";
 import type { ResponsePlan } from "./ResponsePlan.ts";
 
 /**
@@ -44,3 +46,12 @@ export interface StartIncident extends Binding.Service<
   >
 > {}
 export const StartIncident = Binding.Service<StartIncident>("AWS.SSMIncidents.StartIncident");
+
+export const StartIncidentHttp = Layer.effect(
+  StartIncident,
+  makeIncidentsResponsePlanHttpBinding({
+    tag: "AWS.SSMIncidents.StartIncident",
+    operation: incidents.startIncident,
+    actions: ["ssm-incidents:StartIncident"],
+  }),
+);

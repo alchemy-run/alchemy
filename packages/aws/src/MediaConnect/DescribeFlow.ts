@@ -1,6 +1,8 @@
-import type * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
+import * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConnectFlowHttpBinding } from "./BindingHttp.ts";
 import type { Flow } from "./Flow.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface DescribeFlow extends Binding.Service<
   >
 > {}
 export const DescribeFlow = Binding.Service<DescribeFlow>("AWS.MediaConnect.DescribeFlow");
+
+export const DescribeFlowHttp = Layer.effect(
+  DescribeFlow,
+  makeMediaConnectFlowHttpBinding({
+    tag: "AWS.MediaConnect.DescribeFlow",
+    operation: mediaconnect.describeFlow,
+    actions: ["mediaconnect:DescribeFlow"],
+  }),
+);

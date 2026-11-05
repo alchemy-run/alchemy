@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRotationHttpBinding } from "./BindingHttp.ts";
 import type { Rotation } from "./Rotation.ts";
 
 /**
@@ -34,4 +36,13 @@ export interface DeleteRotationOverride extends Binding.Service<
 > {}
 export const DeleteRotationOverride = Binding.Service<DeleteRotationOverride>(
   "AWS.SSMContacts.DeleteRotationOverride",
+);
+
+export const DeleteRotationOverrideHttp = Layer.effect(
+  DeleteRotationOverride,
+  makeRotationHttpBinding({
+    tag: "AWS.SSMContacts.DeleteRotationOverride",
+    operation: ssm.deleteRotationOverride,
+    actions: ["ssm-contacts:DeleteRotationOverride"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
+import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGreengrassAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `greengrass:DeleteCoreDevice`.
@@ -33,4 +35,15 @@ export interface DeleteCoreDevice extends Binding.Service<
 > {}
 export const DeleteCoreDevice = Binding.Service<DeleteCoreDevice>(
   "AWS.GreengrassV2.DeleteCoreDevice",
+);
+
+export const DeleteCoreDeviceHttp = Layer.effect(
+  DeleteCoreDevice,
+  makeGreengrassAccountHttpBinding({
+    tag: "AWS.GreengrassV2.DeleteCoreDevice",
+    operation: greengrassv2.deleteCoreDevice,
+    // Deleting a core device resolves the device's deployment job executions
+    // with the caller's credentials (documented dependent action).
+    actions: ["greengrass:DeleteCoreDevice", "iot:DescribeJobExecution"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataExchangeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dataexchange:CancelJob`.
@@ -29,3 +31,12 @@ export interface CancelJob extends Binding.Service<
   >
 > {}
 export const CancelJob = Binding.Service<CancelJob>("AWS.DataExchange.CancelJob");
+
+export const CancelJobHttp = Layer.effect(
+  CancelJob,
+  makeDataExchangeAccountHttpBinding({
+    tag: "AWS.DataExchange.CancelJob",
+    operation: dataexchange.cancelJob,
+    actions: ["dataexchange:CancelJob"],
+  }),
+);

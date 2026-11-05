@@ -1,6 +1,8 @@
-import type * as pricing from "@distilled.cloud/aws/pricing";
+import * as pricing from "@distilled.cloud/aws/pricing";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePricingHttpBinding } from "./BindingHttp.ts";
 
 export interface GetPriceListFileUrlRequest extends pricing.GetPriceListFileUrlRequest {}
 
@@ -52,4 +54,13 @@ export interface GetPriceListFileUrl extends Binding.Service<
 > {}
 export const GetPriceListFileUrl = Binding.Service<GetPriceListFileUrl>(
   "AWS.Pricing.GetPriceListFileUrl",
+);
+
+export const GetPriceListFileUrlHttp = Layer.effect(
+  GetPriceListFileUrl,
+  makePricingHttpBinding({
+    capability: "GetPriceListFileUrl",
+    iamActions: ["pricing:GetPriceListFileUrl"],
+    operation: pricing.getPriceListFileUrl,
+  }),
 );

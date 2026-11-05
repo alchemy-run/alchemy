@@ -1,6 +1,8 @@
-import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import * as chatbot from "@distilled.cloud/aws/chatbot";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeChatbotAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `chatbot:DescribeSlackUserIdentities`.
@@ -35,4 +37,13 @@ export interface DescribeSlackUserIdentities extends Binding.Service<
 
 export const DescribeSlackUserIdentities = Binding.Service<DescribeSlackUserIdentities>(
   "AWS.Chatbot.DescribeSlackUserIdentities",
+);
+
+export const DescribeSlackUserIdentitiesHttp = Layer.effect(
+  DescribeSlackUserIdentities,
+  makeChatbotAccountHttpBinding({
+    tag: "AWS.Chatbot.DescribeSlackUserIdentities",
+    operation: chatbot.describeSlackUserIdentities,
+    actions: ["chatbot:DescribeSlackUserIdentities"],
+  }),
 );

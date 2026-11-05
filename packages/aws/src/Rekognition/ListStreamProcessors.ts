@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:ListStreamProcessors` — list the stream processors in the account.
@@ -38,4 +40,13 @@ export interface ListStreamProcessors extends Binding.Service<
 > {}
 export const ListStreamProcessors = Binding.Service<ListStreamProcessors>(
   "AWS.Rekognition.ListStreamProcessors",
+);
+
+export const ListStreamProcessorsHttp = Layer.effect(
+  ListStreamProcessors,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.ListStreamProcessors",
+    operation: rekognition.listStreamProcessors,
+    actions: ["rekognition:ListStreamProcessors"],
+  }),
 );

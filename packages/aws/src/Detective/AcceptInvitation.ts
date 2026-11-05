@@ -1,6 +1,8 @@
-import type * as detective from "@distilled.cloud/aws/detective";
+import * as detective from "@distilled.cloud/aws/detective";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDetectiveAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `detective:AcceptInvitation`.
@@ -32,3 +34,12 @@ export interface AcceptInvitation extends Binding.Service<
   >
 > {}
 export const AcceptInvitation = Binding.Service<AcceptInvitation>("AWS.Detective.AcceptInvitation");
+
+export const AcceptInvitationHttp = Layer.effect(
+  AcceptInvitation,
+  makeDetectiveAccountHttpBinding({
+    tag: "AWS.Detective.AcceptInvitation",
+    operation: detective.acceptInvitation,
+    actions: ["detective:AcceptInvitation"],
+  }),
+);

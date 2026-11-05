@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:DeleteLanguageModel` — delete a custom language model.
@@ -31,4 +33,13 @@ export interface DeleteLanguageModel extends Binding.Service<
 > {}
 export const DeleteLanguageModel = Binding.Service<DeleteLanguageModel>(
   "AWS.Transcribe.DeleteLanguageModel",
+);
+
+export const DeleteLanguageModelHttp = Layer.effect(
+  DeleteLanguageModel,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.DeleteLanguageModel",
+    operation: transcribe.deleteLanguageModel,
+    actions: ["transcribe:DeleteLanguageModel"],
+  }),
 );

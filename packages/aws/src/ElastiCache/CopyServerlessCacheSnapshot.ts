@@ -1,6 +1,11 @@
-import type * as elasticache from "@distilled.cloud/aws/elasticache";
+import * as elasticache from "@distilled.cloud/aws/elasticache";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import {
+  makeElastiCacheAccountHttpBinding,
+  SERVERLESS_SNAPSHOT_ARN_WILDCARD,
+} from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CopyServerlessCacheSnapshot` operation (IAM
@@ -39,4 +44,17 @@ export interface CopyServerlessCacheSnapshot extends Binding.Service<
 > {}
 export const CopyServerlessCacheSnapshot = Binding.Service<CopyServerlessCacheSnapshot>(
   "AWS.ElastiCache.CopyServerlessCacheSnapshot",
+);
+
+export const CopyServerlessCacheSnapshotHttp = Layer.effect(
+  CopyServerlessCacheSnapshot,
+  makeElastiCacheAccountHttpBinding({
+    tag: "AWS.ElastiCache.CopyServerlessCacheSnapshot",
+    operation: elasticache.copyServerlessCacheSnapshot,
+    // AddTagsToResource authorizes tag-on-create for the target snapshot.
+    actions: ["elasticache:CopyServerlessCacheSnapshot", "elasticache:AddTagsToResource"],
+    // The action authorizes against both the source and target snapshots,
+    // whose names are runtime data.
+    resources: [SERVERLESS_SNAPSHOT_ARN_WILDCARD],
+  }),
 );

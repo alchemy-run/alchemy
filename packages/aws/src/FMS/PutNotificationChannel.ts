@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link PutNotificationChannel}.
@@ -39,4 +41,13 @@ export interface PutNotificationChannel extends Binding.Service<
 
 export const PutNotificationChannel = Binding.Service<PutNotificationChannel>(
   "AWS.FMS.PutNotificationChannel",
+);
+
+export const PutNotificationChannelHttp = Layer.effect(
+  PutNotificationChannel,
+  makeFmsHttpBinding({
+    capability: "PutNotificationChannel",
+    iamActions: ["fms:PutNotificationChannel"],
+    operation: fms.putNotificationChannel,
+  }),
 );

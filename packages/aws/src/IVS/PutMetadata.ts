@@ -1,6 +1,8 @@
-import type * as ivs from "@distilled.cloud/aws/ivs";
+import * as ivs from "@distilled.cloud/aws/ivs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsChannelHttpBinding } from "./BindingHttp.ts";
 import type { Channel } from "./Channel.ts";
 
 export interface PutMetadataRequest extends Omit<ivs.PutMetadataRequest, "channelArn"> {}
@@ -39,3 +41,12 @@ export interface PutMetadata extends Binding.Service<
   >
 > {}
 export const PutMetadata = Binding.Service<PutMetadata>("AWS.IVS.PutMetadata");
+
+export const PutMetadataHttp = Layer.effect(
+  PutMetadata,
+  makeIvsChannelHttpBinding({
+    tag: "AWS.IVS.PutMetadata",
+    operation: ivs.putMetadata,
+    actions: ["ivs:PutMetadata"],
+  }),
+);

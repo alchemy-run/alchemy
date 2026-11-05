@@ -1,6 +1,8 @@
-import type * as ecrpublic from "@distilled.cloud/aws/ecr-public";
+import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePublicRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { PublicRepository } from "./Repository.ts";
 
 /**
@@ -50,4 +52,13 @@ export interface BatchCheckLayerAvailability extends Binding.Service<
 
 export const BatchCheckLayerAvailability = Binding.Service<BatchCheckLayerAvailability>(
   "AWS.ECRPublic.BatchCheckLayerAvailability",
+);
+
+export const BatchCheckLayerAvailabilityHttp = Layer.effect(
+  BatchCheckLayerAvailability,
+  makePublicRepositoryHttpBinding({
+    capability: "BatchCheckLayerAvailability",
+    iamActions: ["ecr-public:BatchCheckLayerAvailability"],
+    operation: ecrpublic.batchCheckLayerAvailability,
+  }),
 );

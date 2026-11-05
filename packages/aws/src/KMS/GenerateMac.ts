@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AliasName } from "./Alias.ts";
+import { makeKmsKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface GenerateMacRequest extends Omit<kms.GenerateMacRequest, "KeyId"> {}
@@ -39,3 +41,12 @@ export interface GenerateMac extends Binding.Service<
 > {}
 
 export const GenerateMac = Binding.Service<GenerateMac>("AWS.KMS.GenerateMac");
+
+export const GenerateMacHttp = Layer.effect(
+  GenerateMac,
+  makeKmsKeyHttpBinding({
+    tag: "AWS.KMS.GenerateMac",
+    operation: kms.generateMac,
+    actions: ["kms:GenerateMac"],
+  }),
+);

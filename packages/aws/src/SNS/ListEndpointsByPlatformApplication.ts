@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsPlatformHttpBinding } from "./BindingHttp.ts";
 import type { PlatformApplication } from "./PlatformApplication.ts";
 
 export interface ListEndpointsByPlatformApplicationRequest extends Omit<
@@ -40,3 +42,12 @@ export interface ListEndpointsByPlatformApplication extends Binding.Service<
 
 export const ListEndpointsByPlatformApplication =
   Binding.Service<ListEndpointsByPlatformApplication>("AWS.SNS.ListEndpointsByPlatformApplication");
+
+export const ListEndpointsByPlatformApplicationHttp = Layer.effect(
+  ListEndpointsByPlatformApplication,
+  makeSnsPlatformHttpBinding({
+    tag: "AWS.SNS.ListEndpointsByPlatformApplication",
+    operation: sns.listEndpointsByPlatformApplication,
+    actions: ["sns:ListEndpointsByPlatformApplication"],
+  }),
+);

@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `UpdateChatControlsConfiguration` request with `applicationId` injected from the bound application.
@@ -47,4 +49,13 @@ export interface UpdateChatControlsConfiguration extends Binding.Service<
 > {}
 export const UpdateChatControlsConfiguration = Binding.Service<UpdateChatControlsConfiguration>(
   "AWS.QBusiness.UpdateChatControlsConfiguration",
+);
+
+export const UpdateChatControlsConfigurationHttp = Layer.effect(
+  UpdateChatControlsConfiguration,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.UpdateChatControlsConfiguration",
+    operation: qbusiness.updateChatControlsConfiguration,
+    actions: ["qbusiness:UpdateChatControlsConfiguration"],
+  }),
 );

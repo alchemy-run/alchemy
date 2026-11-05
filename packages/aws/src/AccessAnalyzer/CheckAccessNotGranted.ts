@@ -1,6 +1,8 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccessAnalyzerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `access-analyzer:CheckAccessNotGranted`.
@@ -35,4 +37,13 @@ export interface CheckAccessNotGranted extends Binding.Service<
 
 export const CheckAccessNotGranted = Binding.Service<CheckAccessNotGranted>(
   "AWS.AccessAnalyzer.CheckAccessNotGranted",
+);
+
+export const CheckAccessNotGrantedHttp = Layer.effect(
+  CheckAccessNotGranted,
+  makeAccessAnalyzerAccountHttpBinding({
+    tag: "AWS.AccessAnalyzer.CheckAccessNotGranted",
+    operation: aa.checkAccessNotGranted,
+    actions: ["access-analyzer:CheckAccessNotGranted"],
+  }),
 );

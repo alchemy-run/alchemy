@@ -1,6 +1,8 @@
-import type * as detective from "@distilled.cloud/aws/detective";
+import * as detective from "@distilled.cloud/aws/detective";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDetectiveAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `detective:DisassociateMembership`.
@@ -36,4 +38,13 @@ export interface DisassociateMembership extends Binding.Service<
 > {}
 export const DisassociateMembership = Binding.Service<DisassociateMembership>(
   "AWS.Detective.DisassociateMembership",
+);
+
+export const DisassociateMembershipHttp = Layer.effect(
+  DisassociateMembership,
+  makeDetectiveAccountHttpBinding({
+    tag: "AWS.Detective.DisassociateMembership",
+    operation: detective.disassociateMembership,
+    actions: ["detective:DisassociateMembership"],
+  }),
 );

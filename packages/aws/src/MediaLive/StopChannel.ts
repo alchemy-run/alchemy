@@ -1,6 +1,8 @@
-import type * as medialive from "@distilled.cloud/aws/medialive";
+import * as medialive from "@distilled.cloud/aws/medialive";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaLiveChannelHttpBinding } from "./BindingHttp.ts";
 import type { Channel } from "./Channel.ts";
 
 /**
@@ -32,3 +34,12 @@ export interface StopChannel extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<medialive.StopChannelResponse, medialive.StopChannelError>>
 > {}
 export const StopChannel = Binding.Service<StopChannel>("AWS.MediaLive.StopChannel");
+
+export const StopChannelHttp = Layer.effect(
+  StopChannel,
+  makeMediaLiveChannelHttpBinding({
+    tag: "AWS.MediaLive.StopChannel",
+    operation: medialive.stopChannel,
+    actions: ["medialive:StopChannel"],
+  }),
+);

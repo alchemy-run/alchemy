@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface CreateSMSSandboxPhoneNumberRequest extends sns.CreateSMSSandboxPhoneNumberInput {}
 
@@ -31,4 +33,20 @@ export interface CreateSMSSandboxPhoneNumber extends Binding.Service<
 
 export const CreateSMSSandboxPhoneNumber = Binding.Service<CreateSMSSandboxPhoneNumber>(
   "AWS.SNS.CreateSMSSandboxPhoneNumber",
+);
+
+export const CreateSMSSandboxPhoneNumberHttp = Layer.effect(
+  CreateSMSSandboxPhoneNumber,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.CreateSMSSandboxPhoneNumber",
+    operation: sns.createSMSSandboxPhoneNumber,
+    // Registering a sandbox number creates a verified destination number
+    // and sends the OTP text via End User Messaging (probe-verified).
+    actions: [
+      "sns:CreateSMSSandboxPhoneNumber",
+      "sms-voice:CreateVerifiedDestinationNumber",
+      "sms-voice:SendDestinationNumberVerificationCode",
+      "sms-voice:SendTextMessage",
+    ],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { EXPORT_TASK_ARN_WILDCARD, makeNeptuneGraphAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetExportTask` operation (IAM action `neptune-graph:GetExportTask`).
@@ -28,3 +30,13 @@ export interface GetExportTask extends Binding.Service<
   >
 > {}
 export const GetExportTask = Binding.Service<GetExportTask>("AWS.NeptuneGraph.GetExportTask");
+
+export const GetExportTaskHttp = Layer.effect(
+  GetExportTask,
+  makeNeptuneGraphAccountHttpBinding({
+    tag: "AWS.NeptuneGraph.GetExportTask",
+    operation: neptunegraph.getExportTask,
+    actions: ["neptune-graph:GetExportTask"],
+    resources: [EXPORT_TASK_ARN_WILDCARD],
+  }),
+);

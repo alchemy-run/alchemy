@@ -1,6 +1,8 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecretHttpBinding } from "./BindingHttp.ts";
 import type { Secret } from "./Secret.ts";
 
 export interface PutSecretValueRequest extends Omit<
@@ -49,3 +51,12 @@ export interface PutSecretValue extends Binding.Service<
 > {}
 
 export const PutSecretValue = Binding.Service<PutSecretValue>("AWS.SecretsManager.PutSecretValue");
+
+export const PutSecretValueHttp = Layer.effect(
+  PutSecretValue,
+  makeSecretHttpBinding({
+    tag: "AWS.SecretsManager.PutSecretValue",
+    operation: secretsmanager.putSecretValue,
+    actions: ["secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret"],
+  }),
+);

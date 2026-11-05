@@ -1,6 +1,8 @@
-import type * as entityresolution from "@distilled.cloud/aws/entityresolution";
+import * as entityresolution from "@distilled.cloud/aws/entityresolution";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWorkflowHttpBinding } from "./BindingHttp.ts";
 import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
 
 /**
@@ -37,3 +39,12 @@ export interface GetMatchId extends Binding.Service<
 > {}
 
 export const GetMatchId = Binding.Service<GetMatchId>("AWS.EntityResolution.GetMatchId");
+
+export const GetMatchIdHttp = Layer.effect(
+  GetMatchId,
+  makeWorkflowHttpBinding({
+    tag: "AWS.EntityResolution.GetMatchId",
+    operation: entityresolution.getMatchId,
+    actions: ["entityresolution:GetMatchId"],
+  }),
+);

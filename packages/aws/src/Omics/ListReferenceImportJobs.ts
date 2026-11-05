@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 import type { ReferenceStore } from "./ReferenceStore.ts";
 
 export interface ListReferenceImportJobsRequest extends Omit<
@@ -40,4 +42,16 @@ export interface ListReferenceImportJobs extends Binding.Service<
 
 export const ListReferenceImportJobs = Binding.Service<ListReferenceImportJobs>(
   "AWS.Omics.ListReferenceImportJobs",
+);
+
+export const ListReferenceImportJobsHttp = Layer.effect(
+  ListReferenceImportJobs,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.ListReferenceImportJobs",
+    operation: omics.listReferenceImportJobs,
+    actions: ["omics:ListReferenceImportJobs"],
+    key: "referenceStoreId",
+    id: (store: ReferenceStore) => store.referenceStoreId,
+    arn: (store: ReferenceStore) => store.referenceStoreArn,
+  }),
 );

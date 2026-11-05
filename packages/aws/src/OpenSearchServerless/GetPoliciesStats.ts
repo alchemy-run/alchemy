@@ -1,6 +1,8 @@
-import type * as aoss from "@distilled.cloud/aws/opensearchserverless";
+import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAossAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetPoliciesStats` operation (IAM action
@@ -34,4 +36,13 @@ export interface GetPoliciesStats extends Binding.Service<
 > {}
 export const GetPoliciesStats = Binding.Service<GetPoliciesStats>(
   "AWS.OpenSearchServerless.GetPoliciesStats",
+);
+
+export const GetPoliciesStatsHttp = Layer.effect(
+  GetPoliciesStats,
+  makeAossAccountHttpBinding({
+    tag: "AWS.OpenSearchServerless.GetPoliciesStats",
+    operation: aoss.getPoliciesStats,
+    actions: ["aoss:GetPoliciesStats"],
+  }),
 );

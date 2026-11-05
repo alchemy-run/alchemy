@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:CreateCollection` — create a face collection — e.g. one collection per application tenant, created at runtime.
@@ -35,4 +37,13 @@ export interface CreateCollection extends Binding.Service<
 > {}
 export const CreateCollection = Binding.Service<CreateCollection>(
   "AWS.Rekognition.CreateCollection",
+);
+
+export const CreateCollectionHttp = Layer.effect(
+  CreateCollection,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.CreateCollection",
+    operation: rekognition.createCollection,
+    actions: ["rekognition:CreateCollection"],
+  }),
 );

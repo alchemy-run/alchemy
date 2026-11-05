@@ -1,6 +1,8 @@
-import type * as incidents from "@distilled.cloud/aws/ssm-incidents";
+import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIncidentsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-incidents:BatchGetIncidentFindings`.
@@ -40,4 +42,13 @@ export interface BatchGetIncidentFindings extends Binding.Service<
 > {}
 export const BatchGetIncidentFindings = Binding.Service<BatchGetIncidentFindings>(
   "AWS.SSMIncidents.BatchGetIncidentFindings",
+);
+
+export const BatchGetIncidentFindingsHttp = Layer.effect(
+  BatchGetIncidentFindings,
+  makeIncidentsAccountHttpBinding({
+    tag: "AWS.SSMIncidents.BatchGetIncidentFindings",
+    operation: incidents.batchGetIncidentFindings,
+    actions: ["ssm-incidents:BatchGetIncidentFindings"],
+  }),
 );

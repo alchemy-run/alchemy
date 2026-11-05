@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface SetSMSAttributesRequest extends sns.SetSMSAttributesInput {}
 
@@ -33,3 +35,17 @@ export interface SetSMSAttributes extends Binding.Service<
 > {}
 
 export const SetSMSAttributes = Binding.Service<SetSMSAttributes>("AWS.SNS.SetSMSAttributes");
+
+export const SetSMSAttributesHttp = Layer.effect(
+  SetSMSAttributes,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.SetSMSAttributes",
+    operation: sns.setSMSAttributes,
+    // Spend-limit updates fan out to AWS End User Messaging.
+    actions: [
+      "sns:SetSMSAttributes",
+      "sms-voice:DescribeSpendLimits",
+      "sms-voice:SetTextMessageSpendLimitOverride",
+    ],
+  }),
+);

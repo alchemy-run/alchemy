@@ -1,7 +1,10 @@
-import type * as amplify from "@distilled.cloud/aws/amplify";
+import * as amplify from "@distilled.cloud/aws/amplify";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { App } from "./App.ts";
+import { makeAmplifyHttpBinding } from "./BindingHttp.ts";
 
 export interface StartJobRequest extends Omit<amplify.StartJobRequest, "appId"> {}
 
@@ -42,3 +45,13 @@ export interface StartJob extends Binding.Service<
 > {}
 
 export const StartJob = Binding.Service<StartJob>("AWS.Amplify.StartJob");
+
+export const StartJobHttp = Layer.effect(
+  StartJob,
+  makeAmplifyHttpBinding({
+    name: "StartJob",
+    operation: amplify.startJob,
+    actions: ["amplify:StartJob"],
+    resources: (app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`],
+  }),
+);

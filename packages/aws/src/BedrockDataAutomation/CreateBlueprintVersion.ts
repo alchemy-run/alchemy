@@ -1,6 +1,8 @@
-import type * as bda from "@distilled.cloud/aws/bedrock-data-automation";
+import * as bda from "@distilled.cloud/aws/bedrock-data-automation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBdaBlueprintHttpBinding } from "./BindingHttp.ts";
 import type { Blueprint } from "./Blueprint.ts";
 
 /**
@@ -47,4 +49,13 @@ export interface CreateBlueprintVersion extends Binding.Service<
 > {}
 export const CreateBlueprintVersion = Binding.Service<CreateBlueprintVersion>(
   "AWS.BedrockDataAutomation.CreateBlueprintVersion",
+);
+
+export const CreateBlueprintVersionHttp = Layer.effect(
+  CreateBlueprintVersion,
+  makeBdaBlueprintHttpBinding({
+    tag: "AWS.BedrockDataAutomation.CreateBlueprintVersion",
+    operation: bda.createBlueprintVersion,
+    actions: ["bedrock:CreateBlueprintVersion"],
+  }),
 );

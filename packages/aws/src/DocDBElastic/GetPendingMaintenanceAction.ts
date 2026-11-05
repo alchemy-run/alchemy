@@ -1,6 +1,8 @@
-import type * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
+import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBElasticAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetPendingMaintenanceAction` operation (IAM
@@ -35,4 +37,13 @@ export interface GetPendingMaintenanceAction extends Binding.Service<
 > {}
 export const GetPendingMaintenanceAction = Binding.Service<GetPendingMaintenanceAction>(
   "AWS.DocDBElastic.GetPendingMaintenanceAction",
+);
+
+export const GetPendingMaintenanceActionHttp = Layer.effect(
+  GetPendingMaintenanceAction,
+  makeDocDBElasticAccountHttpBinding({
+    tag: "AWS.DocDBElastic.GetPendingMaintenanceAction",
+    operation: docdbelastic.getPendingMaintenanceAction,
+    actions: ["docdb-elastic:GetPendingMaintenanceAction"],
+  }),
 );

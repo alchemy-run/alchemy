@@ -1,6 +1,8 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAuditManagerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `auditmanager:ValidateAssessmentReportIntegrity`.
@@ -32,4 +34,13 @@ export interface ValidateAssessmentReportIntegrity extends Binding.Service<
 
 export const ValidateAssessmentReportIntegrity = Binding.Service<ValidateAssessmentReportIntegrity>(
   "AWS.AuditManager.ValidateAssessmentReportIntegrity",
+);
+
+export const ValidateAssessmentReportIntegrityHttp = Layer.effect(
+  ValidateAssessmentReportIntegrity,
+  makeAuditManagerAccountHttpBinding({
+    tag: "AWS.AuditManager.ValidateAssessmentReportIntegrity",
+    operation: auditmanager.validateAssessmentReportIntegrity,
+    actions: ["auditmanager:ValidateAssessmentReportIntegrity"],
+  }),
 );

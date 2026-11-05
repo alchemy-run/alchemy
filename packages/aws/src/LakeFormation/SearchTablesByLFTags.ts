@@ -1,6 +1,8 @@
-import type * as lf from "@distilled.cloud/aws/lakeformation";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLakeFormationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link SearchTablesByLFTags}.
@@ -39,4 +41,13 @@ export interface SearchTablesByLFTags extends Binding.Service<
 
 export const SearchTablesByLFTags = Binding.Service<SearchTablesByLFTags>(
   "AWS.LakeFormation.SearchTablesByLFTags",
+);
+
+export const SearchTablesByLFTagsHttp = Layer.effect(
+  SearchTablesByLFTags,
+  makeLakeFormationHttpBinding({
+    capability: "SearchTablesByLFTags",
+    iamActions: ["lakeformation:SearchTablesByLFTags"],
+    operation: lf.searchTablesByLFTags,
+  }),
 );

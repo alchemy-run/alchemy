@@ -1,6 +1,8 @@
-import type * as emrc from "@distilled.cloud/aws/emr-containers";
+import * as emrc from "@distilled.cloud/aws/emr-containers";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEMRContainersVirtualClusterHttpBinding } from "./BindingHttp.ts";
 import type { VirtualCluster } from "./VirtualCluster.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface CancelJobRun extends Binding.Service<
   >
 > {}
 export const CancelJobRun = Binding.Service<CancelJobRun>("AWS.EMRContainers.CancelJobRun");
+
+export const CancelJobRunHttp = Layer.effect(
+  CancelJobRun,
+  makeEMRContainersVirtualClusterHttpBinding({
+    tag: "AWS.EMRContainers.CancelJobRun",
+    operation: emrc.cancelJobRun,
+    actions: ["emr-containers:CancelJobRun"],
+  }),
+);

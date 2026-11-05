@@ -1,6 +1,8 @@
-import type * as ecrpublic from "@distilled.cloud/aws/ecr-public";
+import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePublicRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { PublicRepository } from "./Repository.ts";
 
 /** Request for {@link CompleteLayerUpload} — `repositoryName` is injected. */
@@ -46,4 +48,13 @@ export interface CompleteLayerUpload extends Binding.Service<
 
 export const CompleteLayerUpload = Binding.Service<CompleteLayerUpload>(
   "AWS.ECRPublic.CompleteLayerUpload",
+);
+
+export const CompleteLayerUploadHttp = Layer.effect(
+  CompleteLayerUpload,
+  makePublicRepositoryHttpBinding({
+    capability: "CompleteLayerUpload",
+    iamActions: ["ecr-public:CompleteLayerUpload"],
+    operation: ecrpublic.completeLayerUpload,
+  }),
 );

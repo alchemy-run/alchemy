@@ -1,6 +1,8 @@
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInternetMonitorAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface GetInternetEventRequest extends im.GetInternetEventInput {}
 
@@ -37,4 +39,13 @@ export interface GetInternetEvent extends Binding.Service<
 
 export const GetInternetEvent = Binding.Service<GetInternetEvent>(
   "AWS.InternetMonitor.GetInternetEvent",
+);
+
+export const GetInternetEventHttp = Layer.effect(
+  GetInternetEvent,
+  makeInternetMonitorAccountHttpBinding({
+    tag: "AWS.InternetMonitor.GetInternetEvent",
+    operation: im.getInternetEvent,
+    actions: ["internetmonitor:GetInternetEvent"],
+  }),
 );

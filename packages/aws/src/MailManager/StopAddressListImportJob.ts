@@ -1,7 +1,9 @@
-import type * as mm from "@distilled.cloud/aws/mailmanager";
+import * as mm from "@distilled.cloud/aws/mailmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AddressList } from "./AddressList.ts";
+import { makeAddressListJobHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ses:StopAddressListImportJob`.
@@ -33,4 +35,13 @@ export interface StopAddressListImportJob extends Binding.Service<
 > {}
 export const StopAddressListImportJob = Binding.Service<StopAddressListImportJob>(
   "AWS.MailManager.StopAddressListImportJob",
+);
+
+export const StopAddressListImportJobHttp = Layer.effect(
+  StopAddressListImportJob,
+  makeAddressListJobHttpBinding({
+    tag: "AWS.MailManager.StopAddressListImportJob",
+    operation: mm.stopAddressListImportJob,
+    actions: ["ses:StopAddressListImportJob"],
+  }),
 );

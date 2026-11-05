@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface UpdateOrganizationConfiguration extends Binding.Service<
 > {}
 export const UpdateOrganizationConfiguration = Binding.Service<UpdateOrganizationConfiguration>(
   "AWS.GuardDuty.UpdateOrganizationConfiguration",
+);
+
+export const UpdateOrganizationConfigurationHttp = Layer.effect(
+  UpdateOrganizationConfiguration,
+  makeGuardDutyDetectorHttpBinding({
+    tag: "AWS.GuardDuty.UpdateOrganizationConfiguration",
+    operation: guardduty.updateOrganizationConfiguration,
+    actions: ["guardduty:UpdateOrganizationConfiguration"],
+  }),
 );

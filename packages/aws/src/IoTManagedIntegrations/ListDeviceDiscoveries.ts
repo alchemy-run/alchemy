@@ -1,6 +1,8 @@
-import type * as mi from "@distilled.cloud/aws/iot-managed-integrations";
+import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeManagedIntegrationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListDeviceDiscoveries}.
@@ -37,4 +39,13 @@ export interface ListDeviceDiscoveries extends Binding.Service<
 > {}
 export const ListDeviceDiscoveries = Binding.Service<ListDeviceDiscoveries>(
   "AWS.IoTManagedIntegrations.ListDeviceDiscoveries",
+);
+
+export const ListDeviceDiscoveriesHttp = Layer.effect(
+  ListDeviceDiscoveries,
+  makeManagedIntegrationsHttpBinding({
+    capability: "ListDeviceDiscoveries",
+    iamActions: ["iotmanagedintegrations:ListDeviceDiscoveries"],
+    operation: mi.listDeviceDiscoveries,
+  }),
 );

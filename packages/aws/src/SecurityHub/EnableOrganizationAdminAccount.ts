@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:EnableOrganizationAdminAccount`.
@@ -35,4 +37,13 @@ export interface EnableOrganizationAdminAccount extends Binding.Service<
 > {}
 export const EnableOrganizationAdminAccount = Binding.Service<EnableOrganizationAdminAccount>(
   "AWS.SecurityHub.EnableOrganizationAdminAccount",
+);
+
+export const EnableOrganizationAdminAccountHttp = Layer.effect(
+  EnableOrganizationAdminAccount,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.EnableOrganizationAdminAccount",
+    operation: securityhub.enableOrganizationAdminAccount,
+    actions: ["securityhub:EnableOrganizationAdminAccount"],
+  }),
 );

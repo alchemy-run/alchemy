@@ -1,6 +1,8 @@
-import type * as s3control from "@distilled.cloud/aws/s3-control";
+import * as s3control from "@distilled.cloud/aws/s3-control";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeS3ControlAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `s3:ListAccessPoints`.
@@ -33,3 +35,12 @@ export interface ListAccessPoints extends Binding.Service<
   >
 > {}
 export const ListAccessPoints = Binding.Service<ListAccessPoints>("AWS.S3Control.ListAccessPoints");
+
+export const ListAccessPointsHttp = Layer.effect(
+  ListAccessPoints,
+  makeS3ControlAccountHttpBinding({
+    tag: "AWS.S3Control.ListAccessPoints",
+    operation: s3control.listAccessPoints,
+    actions: ["s3:ListAccessPoints"],
+  }),
+);

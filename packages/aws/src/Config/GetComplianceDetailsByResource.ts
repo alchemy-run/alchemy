@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `config:GetComplianceDetailsByResource` — read the
@@ -40,4 +42,13 @@ export interface GetComplianceDetailsByResource extends Binding.Service<
 
 export const GetComplianceDetailsByResource = Binding.Service<GetComplianceDetailsByResource>(
   "AWS.Config.GetComplianceDetailsByResource",
+);
+
+export const GetComplianceDetailsByResourceHttp = Layer.effect(
+  GetComplianceDetailsByResource,
+  makeConfigAccountHttpBinding({
+    tag: "AWS.Config.GetComplianceDetailsByResource",
+    operation: config.getComplianceDetailsByResource,
+    actions: ["config:GetComplianceDetailsByResource"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:TerminateProvisionedProduct`.
@@ -42,4 +44,18 @@ export interface TerminateProvisionedProduct extends Binding.Service<
 > {}
 export const TerminateProvisionedProduct = Binding.Service<TerminateProvisionedProduct>(
   "AWS.ServiceCatalog.TerminateProvisionedProduct",
+);
+
+export const TerminateProvisionedProductHttp = Layer.effect(
+  TerminateProvisionedProduct,
+  makeServiceCatalogHttpBinding({
+    capability: "TerminateProvisionedProduct",
+    iamActions: [
+      "servicecatalog:TerminateProvisionedProduct",
+      "cloudformation:DeleteStack",
+      "cloudformation:DescribeStacks",
+      "cloudformation:DescribeStackEvents",
+    ],
+    operation: servicecatalog.terminateProvisionedProduct,
+  }),
 );

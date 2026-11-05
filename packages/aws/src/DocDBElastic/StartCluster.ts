@@ -1,6 +1,8 @@
-import type * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
+import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBElasticClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -32,3 +34,12 @@ export interface StartCluster extends Binding.Service<
   >
 > {}
 export const StartCluster = Binding.Service<StartCluster>("AWS.DocDBElastic.StartCluster");
+
+export const StartClusterHttp = Layer.effect(
+  StartCluster,
+  makeDocDBElasticClusterHttpBinding({
+    tag: "AWS.DocDBElastic.StartCluster",
+    operation: docdbelastic.startCluster,
+    actions: ["docdb-elastic:StartCluster"],
+  }),
+);

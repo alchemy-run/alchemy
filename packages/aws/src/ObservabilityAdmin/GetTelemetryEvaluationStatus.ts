@@ -1,6 +1,8 @@
-import type * as obs from "@distilled.cloud/aws/observabilityadmin";
+import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeObservabilityAdminHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `observabilityadmin:GetTelemetryEvaluationStatus` —
@@ -40,4 +42,13 @@ export interface GetTelemetryEvaluationStatus extends Binding.Service<
 
 export const GetTelemetryEvaluationStatus = Binding.Service<GetTelemetryEvaluationStatus>(
   "AWS.ObservabilityAdmin.GetTelemetryEvaluationStatus",
+);
+
+export const GetTelemetryEvaluationStatusHttp = Layer.effect(
+  GetTelemetryEvaluationStatus,
+  makeObservabilityAdminHttpBinding({
+    capability: "GetTelemetryEvaluationStatus",
+    iamActions: ["observabilityadmin:GetTelemetryEvaluationStatus"],
+    operation: obs.getTelemetryEvaluationStatus,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface StopMonitoringMembers extends Binding.Service<
 > {}
 export const StopMonitoringMembers = Binding.Service<StopMonitoringMembers>(
   "AWS.GuardDuty.StopMonitoringMembers",
+);
+
+export const StopMonitoringMembersHttp = Layer.effect(
+  StopMonitoringMembers,
+  makeGuardDutyDetectorHttpBinding({
+    tag: "AWS.GuardDuty.StopMonitoringMembers",
+    operation: guardduty.stopMonitoringMembers,
+    actions: ["guardduty:StopMonitoringMembers"],
+  }),
 );

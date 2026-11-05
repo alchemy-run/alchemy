@@ -1,6 +1,8 @@
-import type * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
+import * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMedicalImagingDatastoreHttpBinding } from "./BindingHttp.ts";
 import type { Datastore } from "./Datastore.ts";
 
 /**
@@ -49,3 +51,12 @@ export interface CopyImageSet extends Binding.Service<
   >
 > {}
 export const CopyImageSet = Binding.Service<CopyImageSet>("AWS.MedicalImaging.CopyImageSet");
+
+export const CopyImageSetHttp = Layer.effect(
+  CopyImageSet,
+  makeMedicalImagingDatastoreHttpBinding({
+    tag: "AWS.MedicalImaging.CopyImageSet",
+    operation: medicalimaging.copyImageSet,
+    actions: ["medical-imaging:CopyImageSet"],
+  }),
+);

@@ -1,7 +1,9 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Assessment } from "./Assessment.ts";
+import { makeAssessmentScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `GetInsightsByAssessment` request with `assessmentId` injected from the bound {@link Assessment}. */
 export interface GetInsightsByAssessmentRequest extends Omit<
@@ -40,4 +42,13 @@ export interface GetInsightsByAssessment extends Binding.Service<
 
 export const GetInsightsByAssessment = Binding.Service<GetInsightsByAssessment>(
   "AWS.AuditManager.GetInsightsByAssessment",
+);
+
+export const GetInsightsByAssessmentHttp = Layer.effect(
+  GetInsightsByAssessment,
+  makeAssessmentScopedHttpBinding({
+    tag: "AWS.AuditManager.GetInsightsByAssessment",
+    operation: auditmanager.getInsightsByAssessment,
+    actions: ["auditmanager:GetInsightsByAssessment"],
+  }),
 );

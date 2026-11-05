@@ -1,6 +1,8 @@
-import type * as memorydb from "@distilled.cloud/aws/memorydb";
+import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMemoryDBClusterHttpBinding, SNAPSHOT_ARN_WILDCARD } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -34,3 +36,16 @@ export interface CreateSnapshot extends Binding.Service<
   >
 > {}
 export const CreateSnapshot = Binding.Service<CreateSnapshot>("AWS.MemoryDB.CreateSnapshot");
+
+export const CreateSnapshotHttp = Layer.effect(
+  CreateSnapshot,
+  makeMemoryDBClusterHttpBinding({
+    tag: "AWS.MemoryDB.CreateSnapshot",
+    operation: memorydb.createSnapshot,
+    // TagResource authorizes tag-on-create for the snapshot.
+    actions: ["memorydb:CreateSnapshot", "memorydb:TagResource"],
+    // The action authorizes against both the source cluster and the
+    // to-be-created snapshot (whose name-based ARN is runtime data).
+    extraResources: [SNAPSHOT_ARN_WILDCARD],
+  }),
+);

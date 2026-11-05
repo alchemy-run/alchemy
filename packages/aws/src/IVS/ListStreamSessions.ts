@@ -1,6 +1,8 @@
-import type * as ivs from "@distilled.cloud/aws/ivs";
+import * as ivs from "@distilled.cloud/aws/ivs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsChannelHttpBinding } from "./BindingHttp.ts";
 import type { Channel } from "./Channel.ts";
 
 export interface ListStreamSessionsRequest extends Omit<
@@ -40,3 +42,12 @@ export interface ListStreamSessions extends Binding.Service<
   >
 > {}
 export const ListStreamSessions = Binding.Service<ListStreamSessions>("AWS.IVS.ListStreamSessions");
+
+export const ListStreamSessionsHttp = Layer.effect(
+  ListStreamSessions,
+  makeIvsChannelHttpBinding({
+    tag: "AWS.IVS.ListStreamSessions",
+    operation: ivs.listStreamSessions,
+    actions: ["ivs:ListStreamSessions"],
+  }),
+);

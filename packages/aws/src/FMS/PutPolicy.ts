@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link PutPolicy}.
@@ -42,3 +44,12 @@ export interface PutPolicy extends Binding.Service<
 > {}
 
 export const PutPolicy = Binding.Service<PutPolicy>("AWS.FMS.PutPolicy");
+
+export const PutPolicyHttp = Layer.effect(
+  PutPolicy,
+  makeFmsHttpBinding({
+    capability: "PutPolicy",
+    iamActions: ["fms:PutPolicy"],
+    operation: fms.putPolicy,
+  }),
+);

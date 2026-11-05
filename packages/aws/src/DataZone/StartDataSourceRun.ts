@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface StartDataSourceRunRequest extends Omit<
@@ -39,4 +41,13 @@ export interface StartDataSourceRun extends Binding.Service<
 > {}
 export const StartDataSourceRun = Binding.Service<StartDataSourceRun>(
   "AWS.DataZone.StartDataSourceRun",
+);
+
+export const StartDataSourceRunHttp = Layer.effect(
+  StartDataSourceRun,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.StartDataSourceRun",
+    operation: datazone.startDataSourceRun,
+    actions: ["datazone:StartDataSourceRun"],
+  }),
 );

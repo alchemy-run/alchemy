@@ -1,6 +1,8 @@
-import type * as geoPlaces from "@distilled.cloud/aws/geo-places";
+import * as geoPlaces from "@distilled.cloud/aws/geo-places";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoPlacesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-places:SearchText` — free-form place search that
@@ -41,3 +43,12 @@ export interface SearchText extends Binding.Service<
   >
 > {}
 export const SearchText = Binding.Service<SearchText>("AWS.GeoPlaces.SearchText");
+
+export const SearchTextHttp = Layer.effect(
+  SearchText,
+  makeGeoPlacesHttpBinding({
+    capability: "SearchText",
+    iamActions: ["geo-places:SearchText"],
+    operation: geoPlaces.searchText,
+  }),
+);

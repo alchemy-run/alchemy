@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetReservationUtilization}.
@@ -40,4 +42,13 @@ export interface GetReservationUtilization extends Binding.Service<
 
 export const GetReservationUtilization = Binding.Service<GetReservationUtilization>(
   "AWS.CostExplorer.GetReservationUtilization",
+);
+
+export const GetReservationUtilizationHttp = Layer.effect(
+  GetReservationUtilization,
+  makeCostExplorerHttpBinding({
+    capability: "GetReservationUtilization",
+    iamActions: ["ce:GetReservationUtilization"],
+    operation: ce.getReservationUtilization,
+  }),
 );

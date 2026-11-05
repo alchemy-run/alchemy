@@ -1,6 +1,8 @@
-import type * as iam from "@distilled.cloud/aws/iam";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIamHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iam:SimulatePrincipalPolicy` — evaluate how the
@@ -42,4 +44,13 @@ export interface SimulatePrincipalPolicy extends Binding.Service<
 > {}
 export const SimulatePrincipalPolicy = Binding.Service<SimulatePrincipalPolicy>(
   "AWS.IAM.SimulatePrincipalPolicy",
+);
+
+export const SimulatePrincipalPolicyHttp = Layer.effect(
+  SimulatePrincipalPolicy,
+  makeIamHttpBinding({
+    capability: "SimulatePrincipalPolicy",
+    iamActions: ["iam:SimulatePrincipalPolicy"],
+    operation: iam.simulatePrincipalPolicy,
+  }),
 );

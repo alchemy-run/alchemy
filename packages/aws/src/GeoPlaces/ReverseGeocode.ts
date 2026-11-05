@@ -1,6 +1,8 @@
-import type * as geoPlaces from "@distilled.cloud/aws/geo-places";
+import * as geoPlaces from "@distilled.cloud/aws/geo-places";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoPlacesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-places:ReverseGeocode` — convert geographic
@@ -42,3 +44,12 @@ export interface ReverseGeocode extends Binding.Service<
   >
 > {}
 export const ReverseGeocode = Binding.Service<ReverseGeocode>("AWS.GeoPlaces.ReverseGeocode");
+
+export const ReverseGeocodeHttp = Layer.effect(
+  ReverseGeocode,
+  makeGeoPlacesHttpBinding({
+    capability: "ReverseGeocode",
+    iamActions: ["geo-places:ReverseGeocode"],
+    operation: geoPlaces.reverseGeocode,
+  }),
+);

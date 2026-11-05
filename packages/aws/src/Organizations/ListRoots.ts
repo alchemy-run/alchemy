@@ -1,6 +1,8 @@
-import type * as organizations from "@distilled.cloud/aws/organizations";
+import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOrganizationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `organizations:ListRoots`.
@@ -32,3 +34,12 @@ export interface ListRoots extends Binding.Service<
   >
 > {}
 export const ListRoots = Binding.Service<ListRoots>("AWS.Organizations.ListRoots");
+
+export const ListRootsHttp = Layer.effect(
+  ListRoots,
+  makeOrganizationsHttpBinding({
+    capability: "ListRoots",
+    iamActions: ["organizations:ListRoots"],
+    operation: organizations.listRoots,
+  }),
+);

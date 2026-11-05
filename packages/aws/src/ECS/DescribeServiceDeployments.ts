@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsServiceHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 export interface DescribeServiceDeploymentsRequest extends ECS.DescribeServiceDeploymentsRequest {}
@@ -40,4 +42,16 @@ export interface DescribeServiceDeployments extends Binding.Service<
 > {}
 export const DescribeServiceDeployments = Binding.Service<DescribeServiceDeployments>(
   "AWS.ECS.DescribeServiceDeployments",
+);
+
+export const DescribeServiceDeploymentsHttp = Layer.effect(
+  DescribeServiceDeployments,
+  makeEcsServiceHttpBinding({
+    tag: "AWS.ECS.DescribeServiceDeployments",
+    operation: ECS.describeServiceDeployments,
+    actions: ["ecs:DescribeServiceDeployments"],
+    // Authorizes against the service-deployment resource:
+    // arn:aws:ecs:{region}:{account}:service-deployment/{cluster}/{service}/*
+    resources: ["service-deployment"],
+  }),
 );

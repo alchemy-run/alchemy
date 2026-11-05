@@ -1,6 +1,8 @@
-import type * as docdb from "@distilled.cloud/aws/docdb";
+import * as docdb from "@distilled.cloud/aws/docdb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribePendingMaintenanceActions` operation
@@ -41,4 +43,13 @@ export interface DescribePendingMaintenanceActions extends Binding.Service<
 > {}
 export const DescribePendingMaintenanceActions = Binding.Service<DescribePendingMaintenanceActions>(
   "AWS.DocDB.DescribePendingMaintenanceActions",
+);
+
+export const DescribePendingMaintenanceActionsHttp = Layer.effect(
+  DescribePendingMaintenanceActions,
+  makeDocDBAccountHttpBinding({
+    tag: "AWS.DocDB.DescribePendingMaintenanceActions",
+    operation: docdb.describePendingMaintenanceActions,
+    actions: ["rds:DescribePendingMaintenanceActions"],
+  }),
 );

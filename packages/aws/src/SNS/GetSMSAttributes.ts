@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface GetSMSAttributesRequest extends sns.GetSMSAttributesInput {}
 
@@ -30,3 +32,14 @@ export interface GetSMSAttributes extends Binding.Service<
 > {}
 
 export const GetSMSAttributes = Binding.Service<GetSMSAttributes>("AWS.SNS.GetSMSAttributes");
+
+export const GetSMSAttributesHttp = Layer.effect(
+  GetSMSAttributes,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.GetSMSAttributes",
+    operation: sns.getSMSAttributes,
+    // SNS SMS preferences are backed by AWS End User Messaging — the read
+    // fans out to `sms-voice:DescribeSpendLimits` (probe-verified).
+    actions: ["sns:GetSMSAttributes", "sms-voice:DescribeSpendLimits"],
+  }),
+);

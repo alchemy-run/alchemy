@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `config:ListResourceEvaluations` — enumerate the
@@ -36,4 +38,13 @@ export interface ListResourceEvaluations extends Binding.Service<
 
 export const ListResourceEvaluations = Binding.Service<ListResourceEvaluations>(
   "AWS.Config.ListResourceEvaluations",
+);
+
+export const ListResourceEvaluationsHttp = Layer.effect(
+  ListResourceEvaluations,
+  makeConfigAccountHttpBinding({
+    tag: "AWS.Config.ListResourceEvaluations",
+    operation: config.listResourceEvaluations,
+    actions: ["config:ListResourceEvaluations"],
+  }),
 );

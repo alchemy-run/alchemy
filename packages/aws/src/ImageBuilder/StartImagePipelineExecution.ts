@@ -1,6 +1,8 @@
-import type * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeImageBuilderPipelineHttpBinding } from "./BindingHttp.ts";
 import type { ImagePipeline } from "./ImagePipeline.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface StartImagePipelineExecution extends Binding.Service<
 > {}
 export const StartImagePipelineExecution = Binding.Service<StartImagePipelineExecution>(
   "AWS.ImageBuilder.StartImagePipelineExecution",
+);
+
+export const StartImagePipelineExecutionHttp = Layer.effect(
+  StartImagePipelineExecution,
+  makeImageBuilderPipelineHttpBinding({
+    tag: "AWS.ImageBuilder.StartImagePipelineExecution",
+    operation: imagebuilder.startImagePipelineExecution,
+    actions: ["imagebuilder:StartImagePipelineExecution"],
+  }),
 );

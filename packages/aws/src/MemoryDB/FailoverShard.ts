@@ -1,6 +1,8 @@
-import type * as memorydb from "@distilled.cloud/aws/memorydb";
+import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMemoryDBClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface FailoverShard extends Binding.Service<
   >
 > {}
 export const FailoverShard = Binding.Service<FailoverShard>("AWS.MemoryDB.FailoverShard");
+
+export const FailoverShardHttp = Layer.effect(
+  FailoverShard,
+  makeMemoryDBClusterHttpBinding({
+    tag: "AWS.MemoryDB.FailoverShard",
+    operation: memorydb.failoverShard,
+    actions: ["memorydb:FailoverShard"],
+  }),
+);

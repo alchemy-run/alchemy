@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StartTextDetection` — start asynchronous detection of text in a stored video.
@@ -42,4 +44,13 @@ export interface StartTextDetection extends Binding.Service<
 > {}
 export const StartTextDetection = Binding.Service<StartTextDetection>(
   "AWS.Rekognition.StartTextDetection",
+);
+
+export const StartTextDetectionHttp = Layer.effect(
+  StartTextDetection,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StartTextDetection",
+    operation: rekognition.startTextDetection,
+    actions: ["rekognition:StartTextDetection"],
+  }),
 );

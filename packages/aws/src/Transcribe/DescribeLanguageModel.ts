@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:DescribeLanguageModel` — read a custom language model's training status and metadata.
@@ -36,4 +38,13 @@ export interface DescribeLanguageModel extends Binding.Service<
 > {}
 export const DescribeLanguageModel = Binding.Service<DescribeLanguageModel>(
   "AWS.Transcribe.DescribeLanguageModel",
+);
+
+export const DescribeLanguageModelHttp = Layer.effect(
+  DescribeLanguageModel,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.DescribeLanguageModel",
+    operation: transcribe.describeLanguageModel,
+    actions: ["transcribe:DescribeLanguageModel"],
+  }),
 );

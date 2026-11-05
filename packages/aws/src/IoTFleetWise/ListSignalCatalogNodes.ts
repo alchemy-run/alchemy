@@ -1,6 +1,8 @@
-import type * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFleetWiseResourceHttpBinding } from "./BindingHttp.ts";
 import type { SignalCatalog } from "./SignalCatalog.ts";
 
 /**
@@ -50,4 +52,16 @@ export interface ListSignalCatalogNodes extends Binding.Service<
 > {}
 export const ListSignalCatalogNodes = Binding.Service<ListSignalCatalogNodes>(
   "AWS.IoTFleetWise.ListSignalCatalogNodes",
+);
+
+export const ListSignalCatalogNodesHttp = Layer.effect(
+  ListSignalCatalogNodes,
+  makeFleetWiseResourceHttpBinding({
+    tag: "AWS.IoTFleetWise.ListSignalCatalogNodes",
+    operation: iotfleetwise.listSignalCatalogNodes,
+    actions: ["iotfleetwise:ListSignalCatalogNodes"],
+    requestKey: "name",
+    identifier: (catalog: SignalCatalog) => catalog.signalCatalogName,
+    resources: (catalog: SignalCatalog) => [catalog.signalCatalogArn],
+  }),
 );

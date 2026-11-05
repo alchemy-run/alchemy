@@ -1,6 +1,8 @@
-import type * as medialive from "@distilled.cloud/aws/medialive";
+import * as medialive from "@distilled.cloud/aws/medialive";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaLiveInputHttpBinding } from "./BindingHttp.ts";
 import type { Input } from "./Input.ts";
 
 /**
@@ -35,3 +37,12 @@ export interface DescribeInput extends Binding.Service<
   >
 > {}
 export const DescribeInput = Binding.Service<DescribeInput>("AWS.MediaLive.DescribeInput");
+
+export const DescribeInputHttp = Layer.effect(
+  DescribeInput,
+  makeMediaLiveInputHttpBinding({
+    tag: "AWS.MediaLive.DescribeInput",
+    operation: medialive.describeInput,
+    actions: ["medialive:DescribeInput"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link PutProtocolsList}.
@@ -38,3 +40,12 @@ export interface PutProtocolsList extends Binding.Service<
 > {}
 
 export const PutProtocolsList = Binding.Service<PutProtocolsList>("AWS.FMS.PutProtocolsList");
+
+export const PutProtocolsListHttp = Layer.effect(
+  PutProtocolsList,
+  makeFmsHttpBinding({
+    capability: "PutProtocolsList",
+    iamActions: ["fms:PutProtocolsList"],
+    operation: fms.putProtocolsList,
+  }),
+);

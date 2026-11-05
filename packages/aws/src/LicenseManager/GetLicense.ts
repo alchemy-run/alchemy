@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseManagerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetLicense}.
@@ -36,3 +38,12 @@ export interface GetLicense extends Binding.Service<
   >
 > {}
 export const GetLicense = Binding.Service<GetLicense>("AWS.LicenseManager.GetLicense");
+
+export const GetLicenseHttp = Layer.effect(
+  GetLicense,
+  makeLicenseManagerHttpBinding({
+    capability: "GetLicense",
+    iamActions: ["license-manager:GetLicense"],
+    operation: licensemanager.getLicense,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as elasticache from "@distilled.cloud/aws/elasticache";
+import * as elasticache from "@distilled.cloud/aws/elasticache";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeElastiCacheAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeServerlessCacheSnapshots` operation (IAM
@@ -37,4 +39,13 @@ export interface DescribeServerlessCacheSnapshots extends Binding.Service<
 > {}
 export const DescribeServerlessCacheSnapshots = Binding.Service<DescribeServerlessCacheSnapshots>(
   "AWS.ElastiCache.DescribeServerlessCacheSnapshots",
+);
+
+export const DescribeServerlessCacheSnapshotsHttp = Layer.effect(
+  DescribeServerlessCacheSnapshots,
+  makeElastiCacheAccountHttpBinding({
+    tag: "AWS.ElastiCache.DescribeServerlessCacheSnapshots",
+    operation: elasticache.describeServerlessCacheSnapshots,
+    actions: ["elasticache:DescribeServerlessCacheSnapshots"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as ivschat from "@distilled.cloud/aws/ivschat";
+import * as ivschat from "@distilled.cloud/aws/ivschat";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsChatRoomHttpBinding } from "./BindingHttp.ts";
 import type { Room } from "./Room.ts";
 
 /**
@@ -54,3 +56,12 @@ export interface SendEvent extends Binding.Service<
   >
 > {}
 export const SendEvent = Binding.Service<SendEvent>("AWS.IVSChat.SendEvent");
+
+export const SendEventHttp = Layer.effect(
+  SendEvent,
+  makeIvsChatRoomHttpBinding({
+    tag: "AWS.IVSChat.SendEvent",
+    operation: ivschat.sendEvent,
+    actions: ["ivschat:SendEvent"],
+  }),
+);

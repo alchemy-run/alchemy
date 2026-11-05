@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneEnvironmentHttpBinding } from "./BindingHttp.ts";
 import type { Environment } from "./Environment.ts";
 
 /**
@@ -36,4 +38,13 @@ export interface GetEnvironmentCredentials extends Binding.Service<
 > {}
 export const GetEnvironmentCredentials = Binding.Service<GetEnvironmentCredentials>(
   "AWS.DataZone.GetEnvironmentCredentials",
+);
+
+export const GetEnvironmentCredentialsHttp = Layer.effect(
+  GetEnvironmentCredentials,
+  makeDataZoneEnvironmentHttpBinding({
+    tag: "AWS.DataZone.GetEnvironmentCredentials",
+    operation: datazone.getEnvironmentCredentials,
+    actions: ["datazone:GetEnvironmentCredentials"],
+  }),
 );

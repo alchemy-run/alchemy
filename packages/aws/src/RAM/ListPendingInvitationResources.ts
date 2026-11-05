@@ -1,6 +1,8 @@
-import type * as ram from "@distilled.cloud/aws/ram";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRAMHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ram:ListPendingInvitationResources`.
@@ -38,4 +40,13 @@ export interface ListPendingInvitationResources extends Binding.Service<
 > {}
 export const ListPendingInvitationResources = Binding.Service<ListPendingInvitationResources>(
   "AWS.RAM.ListPendingInvitationResources",
+);
+
+export const ListPendingInvitationResourcesHttp = Layer.effect(
+  ListPendingInvitationResources,
+  makeRAMHttpBinding({
+    capability: "ListPendingInvitationResources",
+    iamActions: ["ram:ListPendingInvitationResources"],
+    operation: ram.listPendingInvitationResources,
+  }),
 );

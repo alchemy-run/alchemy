@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 /**
@@ -32,4 +34,13 @@ export interface GetIamPortalLoginUrl extends Binding.Service<
 > {}
 export const GetIamPortalLoginUrl = Binding.Service<GetIamPortalLoginUrl>(
   "AWS.DataZone.GetIamPortalLoginUrl",
+);
+
+export const GetIamPortalLoginUrlHttp = Layer.effect(
+  GetIamPortalLoginUrl,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.GetIamPortalLoginUrl",
+    operation: datazone.getIamPortalLoginUrl,
+    actions: ["datazone:GetIamPortalLoginUrl"],
+  }),
 );

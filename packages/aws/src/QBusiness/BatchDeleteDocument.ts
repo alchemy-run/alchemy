@@ -1,6 +1,8 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQBusinessIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -42,4 +44,13 @@ export interface BatchDeleteDocument extends Binding.Service<
 > {}
 export const BatchDeleteDocument = Binding.Service<BatchDeleteDocument>(
   "AWS.QBusiness.BatchDeleteDocument",
+);
+
+export const BatchDeleteDocumentHttp = Layer.effect(
+  BatchDeleteDocument,
+  makeQBusinessIndexHttpBinding({
+    tag: "AWS.QBusiness.BatchDeleteDocument",
+    operation: qbusiness.batchDeleteDocument,
+    actions: ["qbusiness:BatchDeleteDocument"],
+  }),
 );

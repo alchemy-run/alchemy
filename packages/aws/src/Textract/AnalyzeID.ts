@@ -1,6 +1,8 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTextractHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:AnalyzeID` — synchronous extraction of
@@ -32,3 +34,13 @@ export interface AnalyzeID extends Binding.Service<
   >
 > {}
 export const AnalyzeID = Binding.Service<AnalyzeID>("AWS.Textract.AnalyzeID");
+
+export const AnalyzeIDHttp = Layer.effect(
+  AnalyzeID,
+  makeTextractHttpBinding({
+    capability: "AnalyzeID",
+    // No resource-level IAM for this action.
+    iamActions: ["textract:AnalyzeID"],
+    operation: textract.analyzeID,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFleetWiseResourceHttpBinding } from "./BindingHttp.ts";
 import type { Fleet } from "./Fleet.ts";
 
 /**
@@ -47,4 +49,16 @@ export interface DisassociateVehicleFleet extends Binding.Service<
 > {}
 export const DisassociateVehicleFleet = Binding.Service<DisassociateVehicleFleet>(
   "AWS.IoTFleetWise.DisassociateVehicleFleet",
+);
+
+export const DisassociateVehicleFleetHttp = Layer.effect(
+  DisassociateVehicleFleet,
+  makeFleetWiseResourceHttpBinding({
+    tag: "AWS.IoTFleetWise.DisassociateVehicleFleet",
+    operation: iotfleetwise.disassociateVehicleFleet,
+    actions: ["iotfleetwise:DisassociateVehicleFleet"],
+    requestKey: "fleetId",
+    identifier: (fleet: Fleet) => fleet.fleetId,
+    resources: (fleet: Fleet) => [fleet.fleetArn, "arn:aws:iotfleetwise:*:*:vehicle/*"],
+  }),
 );

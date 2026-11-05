@@ -1,6 +1,8 @@
-import type * as controltower from "@distilled.cloud/aws/controltower";
+import * as controltower from "@distilled.cloud/aws/controltower";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeControlTowerHttpBinding } from "./BindingHttp.ts";
 import type { EnabledControl } from "./EnabledControl.ts";
 
 /**
@@ -36,4 +38,15 @@ export interface GetEnabledControl extends Binding.Service<
 
 export const GetEnabledControl = Binding.Service<GetEnabledControl>(
   "AWS.ControlTower.GetEnabledControl",
+);
+
+export const GetEnabledControlHttp = Layer.effect(
+  GetEnabledControl,
+  makeControlTowerHttpBinding({
+    capability: "GetEnabledControl",
+    iamActions: ["controltower:GetEnabledControl"],
+    requestKey: "enabledControlIdentifier",
+    identifier: (enabledControl: EnabledControl) => enabledControl.enabledControlArn,
+    operation: controltower.getEnabledControl,
+  }),
 );

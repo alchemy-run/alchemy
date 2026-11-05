@@ -1,6 +1,8 @@
-import type * as incidents from "@distilled.cloud/aws/ssm-incidents";
+import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIncidentsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-incidents:ListRelatedItems`.
@@ -34,4 +36,13 @@ export interface ListRelatedItems extends Binding.Service<
 > {}
 export const ListRelatedItems = Binding.Service<ListRelatedItems>(
   "AWS.SSMIncidents.ListRelatedItems",
+);
+
+export const ListRelatedItemsHttp = Layer.effect(
+  ListRelatedItems,
+  makeIncidentsAccountHttpBinding({
+    tag: "AWS.SSMIncidents.ListRelatedItems",
+    operation: incidents.listRelatedItems,
+    actions: ["ssm-incidents:ListRelatedItems"],
+  }),
 );

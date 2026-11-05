@@ -1,7 +1,9 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Assessment } from "./Assessment.ts";
+import { makeAssessmentScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `GetEvidenceFoldersByAssessment` request with `assessmentId` injected from the bound {@link Assessment}. */
 export interface GetEvidenceFoldersByAssessmentRequest extends Omit<
@@ -40,4 +42,13 @@ export interface GetEvidenceFoldersByAssessment extends Binding.Service<
 
 export const GetEvidenceFoldersByAssessment = Binding.Service<GetEvidenceFoldersByAssessment>(
   "AWS.AuditManager.GetEvidenceFoldersByAssessment",
+);
+
+export const GetEvidenceFoldersByAssessmentHttp = Layer.effect(
+  GetEvidenceFoldersByAssessment,
+  makeAssessmentScopedHttpBinding({
+    tag: "AWS.AuditManager.GetEvidenceFoldersByAssessment",
+    operation: auditmanager.getEvidenceFoldersByAssessment,
+    actions: ["auditmanager:GetEvidenceFoldersByAssessment"],
+  }),
 );

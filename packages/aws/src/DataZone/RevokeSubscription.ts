@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface RevokeSubscriptionRequest extends Omit<
@@ -39,4 +41,13 @@ export interface RevokeSubscription extends Binding.Service<
 > {}
 export const RevokeSubscription = Binding.Service<RevokeSubscription>(
   "AWS.DataZone.RevokeSubscription",
+);
+
+export const RevokeSubscriptionHttp = Layer.effect(
+  RevokeSubscription,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.RevokeSubscription",
+    operation: datazone.revokeSubscription,
+    actions: ["datazone:RevokeSubscription"],
+  }),
 );

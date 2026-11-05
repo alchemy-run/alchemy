@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:DeleteTranscriptionJob` — delete a batch transcription job and its transcript from the service-managed output location.
@@ -34,4 +36,13 @@ export interface DeleteTranscriptionJob extends Binding.Service<
 > {}
 export const DeleteTranscriptionJob = Binding.Service<DeleteTranscriptionJob>(
   "AWS.Transcribe.DeleteTranscriptionJob",
+);
+
+export const DeleteTranscriptionJobHttp = Layer.effect(
+  DeleteTranscriptionJob,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.DeleteTranscriptionJob",
+    operation: transcribe.deleteTranscriptionJob,
+    actions: ["transcribe:DeleteTranscriptionJob"],
+  }),
 );

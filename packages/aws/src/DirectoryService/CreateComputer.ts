@@ -1,6 +1,8 @@
-import type * as ds from "@distilled.cloud/aws/directory-service";
+import * as ds from "@distilled.cloud/aws/directory-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDirectoryHttpBinding } from "./BindingHttp.ts";
 import type { Directory } from "./Directory.ts";
 
 /**
@@ -41,4 +43,13 @@ export interface CreateComputer extends Binding.Service<
 > {}
 export const CreateComputer = Binding.Service<CreateComputer>(
   "AWS.DirectoryService.CreateComputer",
+);
+
+export const CreateComputerHttp = Layer.effect(
+  CreateComputer,
+  makeDirectoryHttpBinding({
+    tag: "AWS.DirectoryService.CreateComputer",
+    operation: ds.createComputer,
+    actions: ["ds:CreateComputer"],
+  }),
 );

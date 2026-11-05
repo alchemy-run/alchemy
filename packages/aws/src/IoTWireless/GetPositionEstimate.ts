@@ -1,6 +1,8 @@
-import type * as iotw from "@distilled.cloud/aws/iot-wireless";
+import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotWirelessAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iotwireless:GetPositionEstimate` — resolve an
@@ -44,4 +46,14 @@ export interface GetPositionEstimate extends Binding.Service<
 > {}
 export const GetPositionEstimate = Binding.Service<GetPositionEstimate>(
   "AWS.IoTWireless.GetPositionEstimate",
+);
+
+export const GetPositionEstimateHttp = Layer.effect(
+  GetPositionEstimate,
+  makeIotWirelessAccountHttpBinding({
+    capability: "GetPositionEstimate",
+    iamActions: ["iotwireless:GetPositionEstimate"],
+    operation: iotw.getPositionEstimate,
+    prepare: (request: iotw.GetPositionEstimateRequest) => request,
+  }),
 );

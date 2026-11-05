@@ -1,6 +1,8 @@
-import type * as docdb from "@distilled.cloud/aws/docdb";
+import * as docdb from "@distilled.cloud/aws/docdb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBClusterHttpBinding } from "./BindingHttp.ts";
 import type { DBCluster } from "./DBCluster.ts";
 
 /**
@@ -32,3 +34,12 @@ export interface StopDBCluster extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<docdb.StopDBClusterResult, docdb.StopDBClusterError>>
 > {}
 export const StopDBCluster = Binding.Service<StopDBCluster>("AWS.DocDB.StopDBCluster");
+
+export const StopDBClusterHttp = Layer.effect(
+  StopDBCluster,
+  makeDocDBClusterHttpBinding({
+    tag: "AWS.DocDB.StopDBCluster",
+    operation: docdb.stopDBCluster,
+    actions: ["rds:StopDBCluster"],
+  }),
+);

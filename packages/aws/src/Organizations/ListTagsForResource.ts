@@ -1,6 +1,8 @@
-import type * as organizations from "@distilled.cloud/aws/organizations";
+import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOrganizationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `organizations:ListTagsForResource`.
@@ -35,4 +37,13 @@ export interface ListTagsForResource extends Binding.Service<
 > {}
 export const ListTagsForResource = Binding.Service<ListTagsForResource>(
   "AWS.Organizations.ListTagsForResource",
+);
+
+export const ListTagsForResourceHttp = Layer.effect(
+  ListTagsForResource,
+  makeOrganizationsHttpBinding({
+    capability: "ListTagsForResource",
+    iamActions: ["organizations:ListTagsForResource"],
+    operation: organizations.listTagsForResource,
+  }),
 );

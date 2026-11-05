@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:DisableImportFindingsForProduct`.
@@ -37,4 +39,13 @@ export interface DisableImportFindingsForProduct extends Binding.Service<
 > {}
 export const DisableImportFindingsForProduct = Binding.Service<DisableImportFindingsForProduct>(
   "AWS.SecurityHub.DisableImportFindingsForProduct",
+);
+
+export const DisableImportFindingsForProductHttp = Layer.effect(
+  DisableImportFindingsForProduct,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.DisableImportFindingsForProduct",
+    operation: securityhub.disableImportFindingsForProduct,
+    actions: ["securityhub:DisableImportFindingsForProduct"],
+  }),
 );

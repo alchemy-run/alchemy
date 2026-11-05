@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface GetMetricWidgetImageRequest extends cloudwatch.GetMetricWidgetImageInput {}
 
@@ -42,4 +44,13 @@ export interface GetMetricWidgetImage extends Binding.Service<
 
 export const GetMetricWidgetImage = Binding.Service<GetMetricWidgetImage>(
   "AWS.CloudWatch.GetMetricWidgetImage",
+);
+
+export const GetMetricWidgetImageHttp = Layer.effect(
+  GetMetricWidgetImage,
+  makeCloudWatchAccountHttpBinding({
+    tag: "AWS.CloudWatch.GetMetricWidgetImage",
+    operation: cloudwatch.getMetricWidgetImage,
+    actions: ["cloudwatch:GetMetricWidgetImage"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:DescribeStandards`.
@@ -32,4 +34,13 @@ export interface DescribeStandards extends Binding.Service<
 > {}
 export const DescribeStandards = Binding.Service<DescribeStandards>(
   "AWS.SecurityHub.DescribeStandards",
+);
+
+export const DescribeStandardsHttp = Layer.effect(
+  DescribeStandards,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.DescribeStandards",
+    operation: securityhub.describeStandards,
+    actions: ["securityhub:DescribeStandards"],
+  }),
 );

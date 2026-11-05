@@ -1,7 +1,9 @@
-import type * as s3control from "@distilled.cloud/aws/s3-control";
+import * as s3control from "@distilled.cloud/aws/s3-control";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AccessPoint } from "./AccessPoint.ts";
+import { makeS3ControlAccessPointHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `s3:GetAccessPointPolicy`.
@@ -37,4 +39,13 @@ export interface GetAccessPointPolicy extends Binding.Service<
 > {}
 export const GetAccessPointPolicy = Binding.Service<GetAccessPointPolicy>(
   "AWS.S3Control.GetAccessPointPolicy",
+);
+
+export const GetAccessPointPolicyHttp = Layer.effect(
+  GetAccessPointPolicy,
+  makeS3ControlAccessPointHttpBinding({
+    tag: "AWS.S3Control.GetAccessPointPolicy",
+    operation: s3control.getAccessPointPolicy,
+    actions: ["s3:GetAccessPointPolicy"],
+  }),
 );

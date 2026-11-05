@@ -1,6 +1,8 @@
-import type * as datasync from "@distilled.cloud/aws/datasync";
+import * as datasync from "@distilled.cloud/aws/datasync";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataSyncTaskExecutionHttpBinding } from "./BindingHttp.ts";
 import type { Task } from "./Task.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface DescribeTaskExecution extends Binding.Service<
 > {}
 export const DescribeTaskExecution = Binding.Service<DescribeTaskExecution>(
   "AWS.DataSync.DescribeTaskExecution",
+);
+
+export const DescribeTaskExecutionHttp = Layer.effect(
+  DescribeTaskExecution,
+  makeDataSyncTaskExecutionHttpBinding({
+    tag: "AWS.DataSync.DescribeTaskExecution",
+    operation: datasync.describeTaskExecution,
+    actions: ["datasync:DescribeTaskExecution"],
+  }),
 );

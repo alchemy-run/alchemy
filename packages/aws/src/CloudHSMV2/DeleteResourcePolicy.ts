@@ -1,6 +1,8 @@
-import type * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudHsmHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteResourcePolicy` operation (IAM action
@@ -31,4 +33,13 @@ export interface DeleteResourcePolicy extends Binding.Service<
 > {}
 export const DeleteResourcePolicy = Binding.Service<DeleteResourcePolicy>(
   "AWS.CloudHSMV2.DeleteResourcePolicy",
+);
+
+export const DeleteResourcePolicyHttp = Layer.effect(
+  DeleteResourcePolicy,
+  makeCloudHsmHttpBinding({
+    tag: "AWS.CloudHSMV2.DeleteResourcePolicy",
+    operation: cloudhsm.deleteResourcePolicy,
+    actions: ["cloudhsm:DeleteResourcePolicy"],
+  }),
 );

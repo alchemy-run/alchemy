@@ -1,6 +1,8 @@
-import type * as qapps from "@distilled.cloud/aws/qapps";
+import * as qapps from "@distilled.cloud/aws/qapps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQAppHttpBinding } from "./BindingHttp.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -41,3 +43,12 @@ export interface StopQAppSession extends Binding.Service<
 > {}
 
 export const StopQAppSession = Binding.Service<StopQAppSession>("AWS.QApps.StopQAppSession");
+
+export const StopQAppSessionHttp = Layer.effect(
+  StopQAppSession,
+  makeQAppHttpBinding({
+    capability: "StopQAppSession",
+    iamActions: ["qapps:StopQAppSession"],
+    operation: qapps.stopQAppSession,
+  }),
+);

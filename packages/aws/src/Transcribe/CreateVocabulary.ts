@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:CreateVocabulary` — create a custom vocabulary that improves transcription accuracy for domain-specific terms (e.g. per-tenant vocabularies created at runtime).
@@ -37,4 +39,13 @@ export interface CreateVocabulary extends Binding.Service<
 > {}
 export const CreateVocabulary = Binding.Service<CreateVocabulary>(
   "AWS.Transcribe.CreateVocabulary",
+);
+
+export const CreateVocabularyHttp = Layer.effect(
+  CreateVocabulary,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.CreateVocabulary",
+    operation: transcribe.createVocabulary,
+    actions: ["transcribe:CreateVocabulary"],
+  }),
 );

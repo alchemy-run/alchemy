@@ -1,7 +1,9 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AlarmMuteRule } from "./AlarmMuteRule.ts";
+import { makeCloudWatchResourceHttpBinding } from "./BindingHttp.ts";
 
 export interface GetAlarmMuteRuleRequest extends Omit<
   cloudwatch.GetAlarmMuteRuleInput,
@@ -42,4 +44,16 @@ export interface GetAlarmMuteRule extends Binding.Service<
 
 export const GetAlarmMuteRule = Binding.Service<GetAlarmMuteRule>(
   "AWS.CloudWatch.GetAlarmMuteRule",
+);
+
+export const GetAlarmMuteRuleHttp = Layer.effect(
+  GetAlarmMuteRule,
+  makeCloudWatchResourceHttpBinding({
+    tag: "AWS.CloudWatch.GetAlarmMuteRule",
+    operation: cloudwatch.getAlarmMuteRule,
+    actions: ["cloudwatch:GetAlarmMuteRule"],
+    requestKey: "AlarmMuteRuleName",
+    identifier: (rule: AlarmMuteRule) => rule.alarmMuteRuleName,
+    resourceArn: (rule: AlarmMuteRule) => rule.alarmMuteRuleArn,
+  }),
 );

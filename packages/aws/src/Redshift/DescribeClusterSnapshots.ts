@@ -1,6 +1,8 @@
-import type * as redshift from "@distilled.cloud/aws/redshift";
+import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRedshiftAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeClusterSnapshots` operation (IAM action
@@ -36,4 +38,13 @@ export interface DescribeClusterSnapshots extends Binding.Service<
 > {}
 export const DescribeClusterSnapshots = Binding.Service<DescribeClusterSnapshots>(
   "AWS.Redshift.DescribeClusterSnapshots",
+);
+
+export const DescribeClusterSnapshotsHttp = Layer.effect(
+  DescribeClusterSnapshots,
+  makeRedshiftAccountHttpBinding({
+    tag: "AWS.Redshift.DescribeClusterSnapshots",
+    operation: redshift.describeClusterSnapshots,
+    actions: ["redshift:DescribeClusterSnapshots"],
+  }),
 );

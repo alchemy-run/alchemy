@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetDomainMaintenanceStatus` operation (IAM action
@@ -36,4 +38,13 @@ export interface GetDomainMaintenanceStatus extends Binding.Service<
 > {}
 export const GetDomainMaintenanceStatus = Binding.Service<GetDomainMaintenanceStatus>(
   "AWS.OpenSearch.GetDomainMaintenanceStatus",
+);
+
+export const GetDomainMaintenanceStatusHttp = Layer.effect(
+  GetDomainMaintenanceStatus,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.GetDomainMaintenanceStatus",
+    operation: opensearch.getDomainMaintenanceStatus,
+    actions: ["es:GetDomainMaintenanceStatus"],
+  }),
 );

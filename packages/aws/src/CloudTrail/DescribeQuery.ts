@@ -1,6 +1,8 @@
-import type * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
+import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudTrailEventDataStoreHttpBinding } from "./BindingHttp.ts";
 import type { EventDataStore } from "./EventDataStore.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface DescribeQuery extends Binding.Service<
   >
 > {}
 export const DescribeQuery = Binding.Service<DescribeQuery>("AWS.CloudTrail.DescribeQuery");
+
+export const DescribeQueryHttp = Layer.effect(
+  DescribeQuery,
+  makeCloudTrailEventDataStoreHttpBinding({
+    tag: "AWS.CloudTrail.DescribeQuery",
+    operation: cloudtrail.describeQuery,
+    actions: ["cloudtrail:DescribeQuery"],
+  }),
+);

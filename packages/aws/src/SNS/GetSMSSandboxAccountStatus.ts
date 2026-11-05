@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface GetSMSSandboxAccountStatusRequest extends sns.GetSMSSandboxAccountStatusInput {}
 
@@ -31,4 +33,13 @@ export interface GetSMSSandboxAccountStatus extends Binding.Service<
 
 export const GetSMSSandboxAccountStatus = Binding.Service<GetSMSSandboxAccountStatus>(
   "AWS.SNS.GetSMSSandboxAccountStatus",
+);
+
+export const GetSMSSandboxAccountStatusHttp = Layer.effect(
+  GetSMSSandboxAccountStatus,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.GetSMSSandboxAccountStatus",
+    operation: sns.getSMSSandboxAccountStatus,
+    actions: ["sns:GetSMSSandboxAccountStatus", "sms-voice:DescribeAccountAttributes"],
+  }),
 );

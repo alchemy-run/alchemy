@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:SearchInsights`.
@@ -39,3 +41,12 @@ export interface SearchInsights extends Binding.Service<
   >
 > {}
 export const SearchInsights = Binding.Service<SearchInsights>("AWS.DevOpsGuru.SearchInsights");
+
+export const SearchInsightsHttp = Layer.effect(
+  SearchInsights,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.SearchInsights",
+    operation: devopsguru.searchInsights,
+    actions: ["devops-guru:SearchInsights"],
+  }),
+);

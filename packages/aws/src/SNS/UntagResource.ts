@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsTopicHttpBinding } from "./BindingHttp.ts";
 import type { Topic } from "./Topic.ts";
 
 export interface UntagResourceRequest extends Omit<sns.UntagResourceRequest, "ResourceArn"> {}
@@ -37,3 +39,13 @@ export interface UntagResource extends Binding.Service<
   >
 > {}
 export const UntagResource = Binding.Service<UntagResource>("AWS.SNS.UntagResource");
+
+export const UntagResourceHttp = Layer.effect(
+  UntagResource,
+  makeSnsTopicHttpBinding({
+    tag: "AWS.SNS.UntagResource",
+    operation: sns.untagResource,
+    actions: ["sns:UntagResource"],
+    key: "ResourceArn",
+  }),
+);

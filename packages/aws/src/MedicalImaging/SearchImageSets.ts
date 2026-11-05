@@ -1,6 +1,8 @@
-import type * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
+import * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMedicalImagingDatastoreHttpBinding } from "./BindingHttp.ts";
 import type { Datastore } from "./Datastore.ts";
 
 /**
@@ -55,4 +57,13 @@ export interface SearchImageSets extends Binding.Service<
 > {}
 export const SearchImageSets = Binding.Service<SearchImageSets>(
   "AWS.MedicalImaging.SearchImageSets",
+);
+
+export const SearchImageSetsHttp = Layer.effect(
+  SearchImageSets,
+  makeMedicalImagingDatastoreHttpBinding({
+    tag: "AWS.MedicalImaging.SearchImageSets",
+    operation: medicalimaging.searchImageSets,
+    actions: ["medical-imaging:SearchImageSets"],
+  }),
 );

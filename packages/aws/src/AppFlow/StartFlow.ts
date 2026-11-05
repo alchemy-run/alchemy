@@ -1,6 +1,8 @@
-import type * as appflow from "@distilled.cloud/aws/appflow";
+import * as appflow from "@distilled.cloud/aws/appflow";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAppFlowHttpBinding } from "./BindingHttp.ts";
 import type { Flow } from "./Flow.ts";
 
 export interface StartFlowRequest extends Omit<appflow.StartFlowRequest, "flowName"> {}
@@ -48,3 +50,14 @@ export interface StartFlow extends Binding.Service<
 > {}
 
 export const StartFlow = Binding.Service<StartFlow>("AWS.AppFlow.StartFlow");
+
+export const StartFlowHttp = Layer.effect(
+  StartFlow,
+  makeAppFlowHttpBinding({
+    action: "StartFlow",
+    operation: appflow.startFlow,
+    identifier: (flow: Flow) => flow.flowName,
+    requestKey: "flowName",
+    resources: (flow: Flow) => [flow.flowArn],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as mediaconvert from "@distilled.cloud/aws/mediaconvert";
+import * as mediaconvert from "@distilled.cloud/aws/mediaconvert";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConvertHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediaconvert:StartJobsQuery` — start an asynchronous,
@@ -36,3 +38,14 @@ export interface StartJobsQuery extends Binding.Service<
   >
 > {}
 export const StartJobsQuery = Binding.Service<StartJobsQuery>("AWS.MediaConvert.StartJobsQuery");
+
+export const StartJobsQueryHttp = Layer.effect(
+  StartJobsQuery,
+  makeMediaConvertHttpBinding({
+    capability: "StartJobsQuery",
+    // The wire operation is StartJobsQuery but IAM authorizes the creation of
+    // the query object as CreateJobsQuery — grant both spellings.
+    iamActions: ["mediaconvert:StartJobsQuery", "mediaconvert:CreateJobsQuery"],
+    operation: mediaconvert.startJobsQuery,
+  }),
+);

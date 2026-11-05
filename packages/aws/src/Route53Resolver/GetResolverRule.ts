@@ -1,6 +1,8 @@
-import type * as r53r from "@distilled.cloud/aws/route53resolver";
+import * as r53r from "@distilled.cloud/aws/route53resolver";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53ResolverRuleHttpBinding } from "./BindingHttp.ts";
 import type { ResolverRule } from "./ResolverRule.ts";
 
 /**
@@ -33,4 +35,13 @@ export interface GetResolverRule extends Binding.Service<
 
 export const GetResolverRule = Binding.Service<GetResolverRule>(
   "AWS.Route53Resolver.GetResolverRule",
+);
+
+export const GetResolverRuleHttp = Layer.effect(
+  GetResolverRule,
+  makeRoute53ResolverRuleHttpBinding({
+    tag: "AWS.Route53Resolver.GetResolverRule",
+    operation: r53r.getResolverRule,
+    actions: ["route53resolver:GetResolverRule"],
+  }),
 );

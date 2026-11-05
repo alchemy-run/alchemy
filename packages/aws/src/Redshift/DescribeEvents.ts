@@ -1,6 +1,8 @@
-import type * as redshift from "@distilled.cloud/aws/redshift";
+import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRedshiftAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeEvents` operation (IAM action
@@ -35,3 +37,12 @@ export interface DescribeEvents extends Binding.Service<
   >
 > {}
 export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.Redshift.DescribeEvents");
+
+export const DescribeEventsHttp = Layer.effect(
+  DescribeEvents,
+  makeRedshiftAccountHttpBinding({
+    tag: "AWS.Redshift.DescribeEvents",
+    operation: redshift.describeEvents,
+    actions: ["redshift:DescribeEvents"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-contacts:ListPageResolutions`.
@@ -30,4 +32,13 @@ export interface ListPageResolutions extends Binding.Service<
 > {}
 export const ListPageResolutions = Binding.Service<ListPageResolutions>(
   "AWS.SSMContacts.ListPageResolutions",
+);
+
+export const ListPageResolutionsHttp = Layer.effect(
+  ListPageResolutions,
+  makeAccountHttpBinding({
+    tag: "AWS.SSMContacts.ListPageResolutions",
+    operation: ssm.listPageResolutions,
+    actions: ["ssm-contacts:ListPageResolutions"],
+  }),
 );

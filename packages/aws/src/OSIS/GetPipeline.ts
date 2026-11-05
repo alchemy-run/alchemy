@@ -1,6 +1,8 @@
-import type * as osis from "@distilled.cloud/aws/osis";
+import * as osis from "@distilled.cloud/aws/osis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOsisPipelineHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 /**
@@ -34,3 +36,14 @@ export interface GetPipeline extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<osis.GetPipelineResponse, osis.GetPipelineError>>
 > {}
 export const GetPipeline = Binding.Service<GetPipeline>("AWS.OSIS.GetPipeline");
+
+export const GetPipelineHttp = Layer.effect(
+  GetPipeline,
+  makeOsisPipelineHttpBinding({
+    tag: "AWS.OSIS.GetPipeline",
+    operation: osis.getPipeline,
+    actions: ["osis:GetPipeline"],
+    requestKey: "PipelineName",
+    identifier: (pipeline) => pipeline.pipelineName,
+  }),
+);

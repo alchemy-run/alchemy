@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface ListShardsRequest extends Omit<
@@ -40,3 +42,13 @@ export interface ListShards extends Binding.Service<
 > {}
 
 export const ListShards = Binding.Service<ListShards>("AWS.Kinesis.ListShards");
+
+export const ListShardsHttp = Layer.effect(
+  ListShards,
+  makeStreamHttpBinding({
+    tag: "AWS.Kinesis.ListShards",
+    operation: Kinesis.listShards,
+    actions: ["kinesis:ListShards"],
+    key: "StreamARN",
+  }),
+);

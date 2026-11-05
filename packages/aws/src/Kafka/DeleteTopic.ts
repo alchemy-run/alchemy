@@ -1,6 +1,8 @@
-import type * as kafka from "@distilled.cloud/aws/kafka";
+import * as kafka from "@distilled.cloud/aws/kafka";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKafkaClusterHttpBinding } from "./BindingHttp.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
 
 /**
@@ -31,3 +33,13 @@ export interface DeleteTopic extends Binding.Service<
   >
 > {}
 export const DeleteTopic = Binding.Service<DeleteTopic>("AWS.Kafka.DeleteTopic");
+
+export const DeleteTopicHttp = Layer.effect(
+  DeleteTopic,
+  makeKafkaClusterHttpBinding({
+    tag: "AWS.Kafka.DeleteTopic",
+    operation: kafka.deleteTopic,
+    actions: ["kafka:DeleteTopic", "kafka-cluster:Connect", "kafka-cluster:DeleteTopic"],
+    topicScoped: true,
+  }),
+);

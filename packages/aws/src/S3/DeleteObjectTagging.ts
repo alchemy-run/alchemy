@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface DeleteObjectTaggingRequest extends Omit<S3.DeleteObjectTaggingRequest, "Bucket"> {}
@@ -36,4 +38,13 @@ export interface DeleteObjectTagging extends Binding.Service<
 > {}
 export const DeleteObjectTagging = Binding.Service<DeleteObjectTagging>(
   "AWS.S3.DeleteObjectTagging",
+);
+
+export const DeleteObjectTaggingHttp = Layer.effect(
+  DeleteObjectTagging,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.DeleteObjectTagging",
+    operation: S3.deleteObjectTagging,
+    actions: ["s3:DeleteObjectTagging", "s3:DeleteObjectVersionTagging"],
+  }),
 );

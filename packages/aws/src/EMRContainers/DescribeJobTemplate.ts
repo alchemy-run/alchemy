@@ -1,6 +1,8 @@
-import type * as emrc from "@distilled.cloud/aws/emr-containers";
+import * as emrc from "@distilled.cloud/aws/emr-containers";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEMRContainersJobTemplateHttpBinding } from "./BindingHttp.ts";
 import type { JobTemplate } from "./JobTemplate.ts";
 
 /**
@@ -37,4 +39,13 @@ export interface DescribeJobTemplate extends Binding.Service<
 > {}
 export const DescribeJobTemplate = Binding.Service<DescribeJobTemplate>(
   "AWS.EMRContainers.DescribeJobTemplate",
+);
+
+export const DescribeJobTemplateHttp = Layer.effect(
+  DescribeJobTemplate,
+  makeEMRContainersJobTemplateHttpBinding({
+    tag: "AWS.EMRContainers.DescribeJobTemplate",
+    operation: emrc.describeJobTemplate,
+    actions: ["emr-containers:DescribeJobTemplate"],
+  }),
 );

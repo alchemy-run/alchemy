@@ -1,7 +1,9 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Analyzer } from "./Analyzer.ts";
+import { makeAnalyzerScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `ListAccessPreviews` request with `analyzerArn` injected from the bound {@link Analyzer}. */
 export interface ListAccessPreviewsRequest extends Omit<
@@ -38,4 +40,13 @@ export interface ListAccessPreviews extends Binding.Service<
 
 export const ListAccessPreviews = Binding.Service<ListAccessPreviews>(
   "AWS.AccessAnalyzer.ListAccessPreviews",
+);
+
+export const ListAccessPreviewsHttp = Layer.effect(
+  ListAccessPreviews,
+  makeAnalyzerScopedHttpBinding({
+    tag: "AWS.AccessAnalyzer.ListAccessPreviews",
+    operation: aa.listAccessPreviews,
+    actions: ["access-analyzer:ListAccessPreviews"],
+  }),
 );

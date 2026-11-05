@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:ListStackInstancesForProvisionedProduct`.
@@ -42,3 +44,12 @@ export const ListStackInstancesForProvisionedProduct =
   Binding.Service<ListStackInstancesForProvisionedProduct>(
     "AWS.ServiceCatalog.ListStackInstancesForProvisionedProduct",
   );
+
+export const ListStackInstancesForProvisionedProductHttp = Layer.effect(
+  ListStackInstancesForProvisionedProduct,
+  makeServiceCatalogHttpBinding({
+    capability: "ListStackInstancesForProvisionedProduct",
+    iamActions: ["servicecatalog:ListStackInstancesForProvisionedProduct"],
+    operation: servicecatalog.listStackInstancesForProvisionedProduct,
+  }),
+);

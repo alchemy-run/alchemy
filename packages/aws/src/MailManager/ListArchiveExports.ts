@@ -1,7 +1,9 @@
-import type * as mm from "@distilled.cloud/aws/mailmanager";
+import * as mm from "@distilled.cloud/aws/mailmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Archive } from "./Archive.ts";
+import { makeArchiveHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ses:ListArchiveExports`.
@@ -33,4 +35,13 @@ export interface ListArchiveExports extends Binding.Service<
 > {}
 export const ListArchiveExports = Binding.Service<ListArchiveExports>(
   "AWS.MailManager.ListArchiveExports",
+);
+
+export const ListArchiveExportsHttp = Layer.effect(
+  ListArchiveExports,
+  makeArchiveHttpBinding({
+    tag: "AWS.MailManager.ListArchiveExports",
+    operation: mm.listArchiveExports,
+    actions: ["ses:ListArchiveExports"],
+  }),
 );

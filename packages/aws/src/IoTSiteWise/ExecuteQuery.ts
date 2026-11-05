@@ -1,6 +1,8 @@
-import type * as sitewise from "@distilled.cloud/aws/iotsitewise";
+import * as sitewise from "@distilled.cloud/aws/iotsitewise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSiteWiseAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ExecuteQuery}.
@@ -46,3 +48,12 @@ export interface ExecuteQuery extends Binding.Service<
   >
 > {}
 export const ExecuteQuery = Binding.Service<ExecuteQuery>("AWS.IoTSiteWise.ExecuteQuery");
+
+export const ExecuteQueryHttp = Layer.effect(
+  ExecuteQuery,
+  makeSiteWiseAccountHttpBinding({
+    capability: "ExecuteQuery",
+    iamActions: ["iotsitewise:ExecuteQuery"],
+    operation: sitewise.executeQuery,
+  }),
+);

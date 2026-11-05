@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:CreateWhatIfForecast` — create a scenario
@@ -49,4 +51,15 @@ export interface CreateWhatIfForecast extends Binding.Service<
 > {}
 export const CreateWhatIfForecast = Binding.Service<CreateWhatIfForecast>(
   "AWS.Forecast.CreateWhatIfForecast",
+);
+
+export const CreateWhatIfForecastHttp = Layer.effect(
+  CreateWhatIfForecast,
+  makeForecastHttpBinding({
+    capability: "CreateWhatIfForecast",
+    iamActions: ["forecast:CreateWhatIfForecast"],
+    operation: forecast.createWhatIfForecast,
+    // TimeSeriesReplacementsDataSource hands Forecast a role to read S3.
+    passRole: true,
+  }),
 );

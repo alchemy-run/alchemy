@@ -1,6 +1,8 @@
-import type * as translate from "@distilled.cloud/aws/translate";
+import * as translate from "@distilled.cloud/aws/translate";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranslateHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `translate:GetParallelData` — retrieve a parallel
@@ -30,3 +32,12 @@ export interface GetParallelData extends Binding.Service<
   >
 > {}
 export const GetParallelData = Binding.Service<GetParallelData>("AWS.Translate.GetParallelData");
+
+export const GetParallelDataHttp = Layer.effect(
+  GetParallelData,
+  makeTranslateHttpBinding({
+    tag: "AWS.Translate.GetParallelData",
+    operation: translate.getParallelData,
+    actions: ["translate:GetParallelData"],
+  }),
+);

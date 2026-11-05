@@ -1,6 +1,8 @@
-import type * as mediatailor from "@distilled.cloud/aws/mediatailor";
+import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaTailorHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediatailor:DeleteProgram` — remove a scheduled
@@ -33,3 +35,12 @@ export interface DeleteProgram extends Binding.Service<
   >
 > {}
 export const DeleteProgram = Binding.Service<DeleteProgram>("AWS.MediaTailor.DeleteProgram");
+
+export const DeleteProgramHttp = Layer.effect(
+  DeleteProgram,
+  makeMediaTailorHttpBinding({
+    capability: "DeleteProgram",
+    iamActions: ["mediatailor:DeleteProgram"],
+    operation: mediatailor.deleteProgram,
+  }),
+);

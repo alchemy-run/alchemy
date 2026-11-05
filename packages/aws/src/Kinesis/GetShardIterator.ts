@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface GetShardIteratorRequest extends Omit<
@@ -44,3 +46,13 @@ export interface GetShardIterator extends Binding.Service<
 > {}
 
 export const GetShardIterator = Binding.Service<GetShardIterator>("AWS.Kinesis.GetShardIterator");
+
+export const GetShardIteratorHttp = Layer.effect(
+  GetShardIterator,
+  makeStreamHttpBinding({
+    tag: "AWS.Kinesis.GetShardIterator",
+    operation: Kinesis.getShardIterator,
+    actions: ["kinesis:GetShardIterator"],
+    key: "StreamARN",
+  }),
+);

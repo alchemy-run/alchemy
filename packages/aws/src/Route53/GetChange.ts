@@ -1,6 +1,8 @@
-import type * as route53 from "@distilled.cloud/aws/route-53";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetChange` operation (IAM action
@@ -41,3 +43,15 @@ export interface GetChange extends Binding.Service<
   >
 > {}
 export const GetChange = Binding.Service<GetChange>("AWS.Route53.GetChange");
+
+export const GetChangeHttp = Layer.effect(
+  GetChange,
+  makeRoute53AccountHttpBinding({
+    tag: "AWS.Route53.GetChange",
+    operation: route53.getChange,
+    actions: ["route53:GetChange"],
+    // Change ids are minted at runtime by ChangeResourceRecordSets and
+    // unknowable at deploy time.
+    resources: ["arn:aws:route53:::change/*"],
+  }),
+);

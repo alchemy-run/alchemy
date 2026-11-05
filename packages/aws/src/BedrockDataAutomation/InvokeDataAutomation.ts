@@ -1,6 +1,8 @@
-import type * as bdar from "@distilled.cloud/aws/bedrock-data-automation-runtime";
+import * as bdar from "@distilled.cloud/aws/bedrock-data-automation-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBdaProjectHttpBinding } from "./BindingHttp.ts";
 import type { DataAutomationProject } from "./DataAutomationProject.ts";
 
 /**
@@ -55,4 +57,13 @@ export interface InvokeDataAutomation extends Binding.Service<
 > {}
 export const InvokeDataAutomation = Binding.Service<InvokeDataAutomation>(
   "AWS.BedrockDataAutomation.InvokeDataAutomation",
+);
+
+export const InvokeDataAutomationHttp = Layer.effect(
+  InvokeDataAutomation,
+  makeBdaProjectHttpBinding({
+    tag: "AWS.BedrockDataAutomation.InvokeDataAutomation",
+    operation: bdar.invokeDataAutomation,
+    actions: ["bedrock:InvokeDataAutomation"],
+  }),
 );

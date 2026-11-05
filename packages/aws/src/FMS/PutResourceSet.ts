@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link PutResourceSet}.
@@ -41,3 +43,12 @@ export interface PutResourceSet extends Binding.Service<
 > {}
 
 export const PutResourceSet = Binding.Service<PutResourceSet>("AWS.FMS.PutResourceSet");
+
+export const PutResourceSetHttp = Layer.effect(
+  PutResourceSet,
+  makeFmsHttpBinding({
+    capability: "PutResourceSet",
+    iamActions: ["fms:PutResourceSet"],
+    operation: fms.putResourceSet,
+  }),
+);

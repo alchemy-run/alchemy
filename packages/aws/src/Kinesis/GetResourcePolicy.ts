@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface GetResourcePolicyRequest extends Omit<
@@ -42,4 +44,14 @@ export interface GetResourcePolicy extends Binding.Service<
 
 export const GetResourcePolicy = Binding.Service<GetResourcePolicy>(
   "AWS.Kinesis.GetResourcePolicy",
+);
+
+export const GetResourcePolicyHttp = Layer.effect(
+  GetResourcePolicy,
+  makeStreamHttpBinding({
+    tag: "AWS.Kinesis.GetResourcePolicy",
+    operation: Kinesis.getResourcePolicy,
+    actions: ["kinesis:GetResourcePolicy"],
+    key: "ResourceARN",
+  }),
 );

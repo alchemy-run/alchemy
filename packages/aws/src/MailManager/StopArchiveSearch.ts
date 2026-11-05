@@ -1,7 +1,9 @@
-import type * as mm from "@distilled.cloud/aws/mailmanager";
+import * as mm from "@distilled.cloud/aws/mailmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Archive } from "./Archive.ts";
+import { makeArchiveTaskHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ses:StopArchiveSearch`.
@@ -33,4 +35,13 @@ export interface StopArchiveSearch extends Binding.Service<
 > {}
 export const StopArchiveSearch = Binding.Service<StopArchiveSearch>(
   "AWS.MailManager.StopArchiveSearch",
+);
+
+export const StopArchiveSearchHttp = Layer.effect(
+  StopArchiveSearch,
+  makeArchiveTaskHttpBinding({
+    tag: "AWS.MailManager.StopArchiveSearch",
+    operation: mm.stopArchiveSearch,
+    actions: ["ses:StopArchiveSearch"],
+  }),
 );

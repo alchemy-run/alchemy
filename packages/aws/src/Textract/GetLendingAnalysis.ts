@@ -1,6 +1,8 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTextractHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:GetLendingAnalysis` — read the status and
@@ -31,4 +33,14 @@ export interface GetLendingAnalysis extends Binding.Service<
 > {}
 export const GetLendingAnalysis = Binding.Service<GetLendingAnalysis>(
   "AWS.Textract.GetLendingAnalysis",
+);
+
+export const GetLendingAnalysisHttp = Layer.effect(
+  GetLendingAnalysis,
+  makeTextractHttpBinding({
+    capability: "GetLendingAnalysis",
+    // No resource-level IAM for this action.
+    iamActions: ["textract:GetLendingAnalysis"],
+    operation: textract.getLendingAnalysis,
+  }),
 );

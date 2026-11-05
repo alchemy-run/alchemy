@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface DescribeStreamRequest extends Omit<
@@ -43,3 +45,13 @@ export interface DescribeStream extends Binding.Service<
 > {}
 
 export const DescribeStream = Binding.Service<DescribeStream>("AWS.Kinesis.DescribeStream");
+
+export const DescribeStreamHttp = Layer.effect(
+  DescribeStream,
+  makeStreamHttpBinding({
+    tag: "AWS.Kinesis.DescribeStream",
+    operation: Kinesis.describeStream,
+    actions: ["kinesis:DescribeStream"],
+    key: "StreamARN",
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StartMediaAnalysisJob` — start an asynchronous media analysis job (e.g. bulk content moderation) over an S3 manifest of images.
@@ -42,4 +44,13 @@ export interface StartMediaAnalysisJob extends Binding.Service<
 > {}
 export const StartMediaAnalysisJob = Binding.Service<StartMediaAnalysisJob>(
   "AWS.Rekognition.StartMediaAnalysisJob",
+);
+
+export const StartMediaAnalysisJobHttp = Layer.effect(
+  StartMediaAnalysisJob,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StartMediaAnalysisJob",
+    operation: rekognition.startMediaAnalysisJob,
+    actions: ["rekognition:StartMediaAnalysisJob"],
+  }),
 );

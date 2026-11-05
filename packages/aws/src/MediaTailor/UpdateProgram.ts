@@ -1,6 +1,8 @@
-import type * as mediatailor from "@distilled.cloud/aws/mediatailor";
+import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaTailorHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediatailor:UpdateProgram` — move or re-configure a
@@ -35,3 +37,12 @@ export interface UpdateProgram extends Binding.Service<
   >
 > {}
 export const UpdateProgram = Binding.Service<UpdateProgram>("AWS.MediaTailor.UpdateProgram");
+
+export const UpdateProgramHttp = Layer.effect(
+  UpdateProgram,
+  makeMediaTailorHttpBinding({
+    capability: "UpdateProgram",
+    iamActions: ["mediatailor:UpdateProgram"],
+    operation: mediatailor.updateProgram,
+  }),
+);

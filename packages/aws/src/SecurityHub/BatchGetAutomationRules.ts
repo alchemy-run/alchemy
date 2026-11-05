@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:BatchGetAutomationRules`.
@@ -37,4 +39,13 @@ export interface BatchGetAutomationRules extends Binding.Service<
 > {}
 export const BatchGetAutomationRules = Binding.Service<BatchGetAutomationRules>(
   "AWS.SecurityHub.BatchGetAutomationRules",
+);
+
+export const BatchGetAutomationRulesHttp = Layer.effect(
+  BatchGetAutomationRules,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.BatchGetAutomationRules",
+    operation: securityhub.batchGetAutomationRules,
+    actions: ["securityhub:BatchGetAutomationRules"],
+  }),
 );

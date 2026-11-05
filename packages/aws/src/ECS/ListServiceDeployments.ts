@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsServiceHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 export interface ListServiceDeploymentsRequest extends Omit<
@@ -41,4 +43,16 @@ export interface ListServiceDeployments extends Binding.Service<
 > {}
 export const ListServiceDeployments = Binding.Service<ListServiceDeployments>(
   "AWS.ECS.ListServiceDeployments",
+);
+
+export const ListServiceDeploymentsHttp = Layer.effect(
+  ListServiceDeployments,
+  makeEcsServiceHttpBinding({
+    tag: "AWS.ECS.ListServiceDeployments",
+    operation: ECS.listServiceDeployments,
+    actions: ["ecs:ListServiceDeployments"],
+    // `ecs:ListServiceDeployments` authorizes against the service itself.
+    resources: ["service"],
+    inject: true,
+  }),
 );

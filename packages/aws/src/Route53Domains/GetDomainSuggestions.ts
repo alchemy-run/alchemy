@@ -1,6 +1,8 @@
-import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
+import * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53DomainsHttpBinding } from "./BindingHttp.ts";
 
 export interface GetDomainSuggestionsRequest extends route53domains.GetDomainSuggestionsRequest {}
 
@@ -50,4 +52,13 @@ export interface GetDomainSuggestions extends Binding.Service<
 > {}
 export const GetDomainSuggestions = Binding.Service<GetDomainSuggestions>(
   "AWS.Route53Domains.GetDomainSuggestions",
+);
+
+export const GetDomainSuggestionsHttp = Layer.effect(
+  GetDomainSuggestions,
+  makeRoute53DomainsHttpBinding({
+    capability: "GetDomainSuggestions",
+    iamActions: ["route53domains:GetDomainSuggestions"],
+    operation: route53domains.getDomainSuggestions,
+  }),
 );

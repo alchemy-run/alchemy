@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneGraphGraphHttpBinding } from "./BindingHttp.ts";
 import type { Graph } from "./Graph.ts";
 
 /**
@@ -28,3 +30,12 @@ export interface StopGraph extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<neptunegraph.StopGraphOutput, neptunegraph.StopGraphError>>
 > {}
 export const StopGraph = Binding.Service<StopGraph>("AWS.NeptuneGraph.StopGraph");
+
+export const StopGraphHttp = Layer.effect(
+  StopGraph,
+  makeNeptuneGraphGraphHttpBinding({
+    tag: "AWS.NeptuneGraph.StopGraph",
+    operation: neptunegraph.stopGraph,
+    actions: ["neptune-graph:StopGraph"],
+  }),
+);

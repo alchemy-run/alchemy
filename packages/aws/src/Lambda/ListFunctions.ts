@@ -1,6 +1,8 @@
-import type * as Lambda from "@distilled.cloud/aws/lambda";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLambdaAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListFunctionsRequest extends Lambda.ListFunctionsRequest {}
 
@@ -31,3 +33,12 @@ export interface ListFunctions extends Binding.Service<
   >
 > {}
 export const ListFunctions = Binding.Service<ListFunctions>("AWS.Lambda.ListFunctions");
+
+export const ListFunctionsHttp = Layer.effect(
+  ListFunctions,
+  makeLambdaAccountHttpBinding({
+    tag: "AWS.Lambda.ListFunctions",
+    operation: Lambda.listFunctions,
+    actions: ["lambda:ListFunctions"],
+  }),
+);

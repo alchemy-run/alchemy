@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:ResumeResource` — resume a stopped Forecast
@@ -32,3 +34,12 @@ export interface ResumeResource extends Binding.Service<
   >
 > {}
 export const ResumeResource = Binding.Service<ResumeResource>("AWS.Forecast.ResumeResource");
+
+export const ResumeResourceHttp = Layer.effect(
+  ResumeResource,
+  makeForecastHttpBinding({
+    capability: "ResumeResource",
+    iamActions: ["forecast:ResumeResource"],
+    operation: forecast.resumeResource,
+  }),
+);

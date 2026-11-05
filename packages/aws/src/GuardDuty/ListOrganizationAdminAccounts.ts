@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `guardduty:ListOrganizationAdminAccounts`.
@@ -36,4 +38,13 @@ export interface ListOrganizationAdminAccounts extends Binding.Service<
 > {}
 export const ListOrganizationAdminAccounts = Binding.Service<ListOrganizationAdminAccounts>(
   "AWS.GuardDuty.ListOrganizationAdminAccounts",
+);
+
+export const ListOrganizationAdminAccountsHttp = Layer.effect(
+  ListOrganizationAdminAccounts,
+  makeGuardDutyAccountHttpBinding({
+    tag: "AWS.GuardDuty.ListOrganizationAdminAccounts",
+    operation: guardduty.listOrganizationAdminAccounts,
+    actions: ["guardduty:ListOrganizationAdminAccounts"],
+  }),
 );

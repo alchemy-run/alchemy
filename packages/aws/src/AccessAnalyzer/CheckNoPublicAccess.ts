@@ -1,6 +1,8 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccessAnalyzerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `access-analyzer:CheckNoPublicAccess`.
@@ -33,4 +35,13 @@ export interface CheckNoPublicAccess extends Binding.Service<
 
 export const CheckNoPublicAccess = Binding.Service<CheckNoPublicAccess>(
   "AWS.AccessAnalyzer.CheckNoPublicAccess",
+);
+
+export const CheckNoPublicAccessHttp = Layer.effect(
+  CheckNoPublicAccess,
+  makeAccessAnalyzerAccountHttpBinding({
+    tag: "AWS.AccessAnalyzer.CheckNoPublicAccess",
+    operation: aa.checkNoPublicAccess,
+    actions: ["access-analyzer:CheckNoPublicAccess"],
+  }),
 );

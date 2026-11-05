@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-contacts:ListPreviewRotationShifts`.
@@ -41,4 +43,13 @@ export interface ListPreviewRotationShifts extends Binding.Service<
 > {}
 export const ListPreviewRotationShifts = Binding.Service<ListPreviewRotationShifts>(
   "AWS.SSMContacts.ListPreviewRotationShifts",
+);
+
+export const ListPreviewRotationShiftsHttp = Layer.effect(
+  ListPreviewRotationShifts,
+  makeAccountHttpBinding({
+    tag: "AWS.SSMContacts.ListPreviewRotationShifts",
+    operation: ssm.listPreviewRotationShifts,
+    actions: ["ssm-contacts:ListPreviewRotationShifts"],
+  }),
 );

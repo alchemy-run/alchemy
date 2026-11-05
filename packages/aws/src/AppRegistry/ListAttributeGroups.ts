@@ -1,6 +1,8 @@
-import type * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
+import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAppRegistryAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:ListAttributeGroups`.
@@ -39,4 +41,13 @@ export interface ListAttributeGroups extends Binding.Service<
 
 export const ListAttributeGroups = Binding.Service<ListAttributeGroups>(
   "AWS.AppRegistry.ListAttributeGroups",
+);
+
+export const ListAttributeGroupsHttp = Layer.effect(
+  ListAttributeGroups,
+  makeAppRegistryAccountHttpBinding({
+    tag: "AWS.AppRegistry.ListAttributeGroups",
+    operation: appregistry.listAttributeGroups,
+    actions: ["servicecatalog:ListAttributeGroups"],
+  }),
 );

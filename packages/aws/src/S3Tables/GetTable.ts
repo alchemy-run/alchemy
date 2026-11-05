@@ -1,6 +1,8 @@
-import type * as s3tables from "@distilled.cloud/aws/s3tables";
+import * as s3tables from "@distilled.cloud/aws/s3tables";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeS3TablesTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface GetTable extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<s3tables.GetTableResponse, s3tables.GetTableError>>
 > {}
 export const GetTable = Binding.Service<GetTable>("AWS.S3Tables.GetTable");
+
+export const GetTableHttp = Layer.effect(
+  GetTable,
+  makeS3TablesTableHttpBinding({
+    tag: "AWS.S3Tables.GetTable",
+    operation: s3tables.getTable,
+    actions: ["s3tables:GetTable"],
+  }),
+);

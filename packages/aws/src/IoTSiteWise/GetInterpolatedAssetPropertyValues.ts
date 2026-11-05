@@ -1,7 +1,9 @@
-import type * as sitewise from "@distilled.cloud/aws/iotsitewise";
+import * as sitewise from "@distilled.cloud/aws/iotsitewise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Asset } from "./Asset.ts";
+import { makeSiteWiseAssetHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetInterpolatedAssetPropertyValues}. The bound asset's
@@ -67,3 +69,16 @@ export const GetInterpolatedAssetPropertyValues =
   Binding.Service<GetInterpolatedAssetPropertyValues>(
     "AWS.IoTSiteWise.GetInterpolatedAssetPropertyValues",
   );
+
+export const GetInterpolatedAssetPropertyValuesHttp = Layer.effect(
+  GetInterpolatedAssetPropertyValues,
+  makeSiteWiseAssetHttpBinding({
+    capability: "GetInterpolatedAssetPropertyValues",
+    iamActions: ["iotsitewise:GetInterpolatedAssetPropertyValues"],
+    operation: sitewise.getInterpolatedAssetPropertyValues,
+    prepare: (request: GetInterpolatedAssetPropertyValuesRequest, assetId) => ({
+      ...request,
+      assetId,
+    }),
+  }),
+);

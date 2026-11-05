@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:AcceptAdministratorInvitation`.
@@ -38,4 +40,13 @@ export interface AcceptAdministratorInvitation extends Binding.Service<
 > {}
 export const AcceptAdministratorInvitation = Binding.Service<AcceptAdministratorInvitation>(
   "AWS.SecurityHub.AcceptAdministratorInvitation",
+);
+
+export const AcceptAdministratorInvitationHttp = Layer.effect(
+  AcceptAdministratorInvitation,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.AcceptAdministratorInvitation",
+    operation: securityhub.acceptAdministratorInvitation,
+    actions: ["securityhub:AcceptAdministratorInvitation"],
+  }),
 );

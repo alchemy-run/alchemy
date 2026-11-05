@@ -1,6 +1,8 @@
-import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDistributionScopedHttpBinding } from "./BindingHttp.ts";
 import type { Distribution } from "./Distribution.ts";
 
 export interface GetInvalidationRequest extends Omit<
@@ -41,3 +43,12 @@ export interface GetInvalidation extends Binding.Service<
 > {}
 
 export const GetInvalidation = Binding.Service<GetInvalidation>("AWS.CloudFront.GetInvalidation");
+
+export const GetInvalidationHttp = Layer.effect(
+  GetInvalidation,
+  makeDistributionScopedHttpBinding({
+    tag: "AWS.CloudFront.GetInvalidation",
+    operation: cloudfront.getInvalidation,
+    actions: ["cloudfront:GetInvalidation"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
+import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKeyValueStoreScopedHttpBinding } from "./BindingHttp.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
 
 export interface ListKeysRequest extends Omit<kvs.ListKeysRequest, "KvsARN"> {}
@@ -35,3 +37,12 @@ export interface ListKeys extends Binding.Service<
 > {}
 
 export const ListKeys = Binding.Service<ListKeys>("AWS.CloudFront.ListKeys");
+
+export const ListKeysHttp = Layer.effect(
+  ListKeys,
+  makeKeyValueStoreScopedHttpBinding({
+    tag: "AWS.CloudFront.ListKeys",
+    operation: kvs.listKeys,
+    actions: ["cloudfront-keyvaluestore:ListKeys"],
+  }),
+);

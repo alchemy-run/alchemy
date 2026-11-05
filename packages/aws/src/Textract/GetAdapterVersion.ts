@@ -1,7 +1,9 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Adapter } from "./Adapter.ts";
+import { makeTextractAdapterHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:GetAdapterVersion` — read the training
@@ -36,4 +38,13 @@ export interface GetAdapterVersion extends Binding.Service<
 > {}
 export const GetAdapterVersion = Binding.Service<GetAdapterVersion>(
   "AWS.Textract.GetAdapterVersion",
+);
+
+export const GetAdapterVersionHttp = Layer.effect(
+  GetAdapterVersion,
+  makeTextractAdapterHttpBinding({
+    capability: "GetAdapterVersion",
+    iamActions: ["textract:GetAdapterVersion"],
+    operation: textract.getAdapterVersion,
+  }),
 );

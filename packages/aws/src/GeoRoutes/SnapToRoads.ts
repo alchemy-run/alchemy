@@ -1,6 +1,8 @@
-import type * as geoRoutes from "@distilled.cloud/aws/geo-routes";
+import * as geoRoutes from "@distilled.cloud/aws/geo-routes";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoRoutesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-routes:SnapToRoads` — match a GPS trace (a list of
@@ -45,3 +47,12 @@ export interface SnapToRoads extends Binding.Service<
   >
 > {}
 export const SnapToRoads = Binding.Service<SnapToRoads>("AWS.GeoRoutes.SnapToRoads");
+
+export const SnapToRoadsHttp = Layer.effect(
+  SnapToRoads,
+  makeGeoRoutesHttpBinding({
+    capability: "SnapToRoads",
+    iamActions: ["geo-routes:SnapToRoads"],
+    operation: geoRoutes.snapToRoads,
+  }),
+);

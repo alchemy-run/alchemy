@@ -1,6 +1,8 @@
-import type * as glue from "@distilled.cloud/aws/glue";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlueTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface BatchUpdatePartitionRequest extends Omit<
@@ -52,4 +54,14 @@ export interface BatchUpdatePartition extends Binding.Service<
 
 export const BatchUpdatePartition = Binding.Service<BatchUpdatePartition>(
   "AWS.Glue.BatchUpdatePartition",
+);
+
+export const BatchUpdatePartitionHttp = Layer.effect(
+  BatchUpdatePartition,
+  makeGlueTableHttpBinding({
+    tag: "AWS.Glue.BatchUpdatePartition",
+    operation: glue.batchUpdatePartition,
+    actions: ["glue:BatchUpdatePartition", "glue:UpdatePartition"],
+    tableNameKey: "TableName",
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as ivs from "@distilled.cloud/aws/ivs";
+import * as ivs from "@distilled.cloud/aws/ivs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ivs:BatchStartViewerSessionRevocation`.
@@ -45,4 +47,13 @@ export interface BatchStartViewerSessionRevocation extends Binding.Service<
 > {}
 export const BatchStartViewerSessionRevocation = Binding.Service<BatchStartViewerSessionRevocation>(
   "AWS.IVS.BatchStartViewerSessionRevocation",
+);
+
+export const BatchStartViewerSessionRevocationHttp = Layer.effect(
+  BatchStartViewerSessionRevocation,
+  makeIvsAccountHttpBinding({
+    tag: "AWS.IVS.BatchStartViewerSessionRevocation",
+    operation: ivs.batchStartViewerSessionRevocation,
+    actions: ["ivs:BatchStartViewerSessionRevocation"],
+  }),
 );

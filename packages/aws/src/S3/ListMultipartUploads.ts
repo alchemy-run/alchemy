@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface ListMultipartUploadsRequest extends Omit<
@@ -39,4 +41,14 @@ export interface ListMultipartUploads extends Binding.Service<
 > {}
 export const ListMultipartUploads = Binding.Service<ListMultipartUploads>(
   "AWS.S3.ListMultipartUploads",
+);
+
+export const ListMultipartUploadsHttp = Layer.effect(
+  ListMultipartUploads,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.ListMultipartUploads",
+    operation: S3.listMultipartUploads,
+    actions: ["s3:ListBucketMultipartUploads"],
+    iamResources: "bucket",
+  }),
 );

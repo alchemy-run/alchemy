@@ -1,6 +1,8 @@
-import type * as geoPlaces from "@distilled.cloud/aws/geo-places";
+import * as geoPlaces from "@distilled.cloud/aws/geo-places";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoPlacesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-places:SearchNearby` — find places around a
@@ -43,3 +45,12 @@ export interface SearchNearby extends Binding.Service<
   >
 > {}
 export const SearchNearby = Binding.Service<SearchNearby>("AWS.GeoPlaces.SearchNearby");
+
+export const SearchNearbyHttp = Layer.effect(
+  SearchNearby,
+  makeGeoPlacesHttpBinding({
+    capability: "SearchNearby",
+    iamActions: ["geo-places:SearchNearby"],
+    operation: geoPlaces.searchNearby,
+  }),
+);

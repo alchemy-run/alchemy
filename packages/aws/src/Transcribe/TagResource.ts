@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:TagResource` — add tags to a Transcribe resource (jobs, vocabularies, filters, categories, or models) by ARN.
@@ -33,3 +35,12 @@ export interface TagResource extends Binding.Service<
   >
 > {}
 export const TagResource = Binding.Service<TagResource>("AWS.Transcribe.TagResource");
+
+export const TagResourceHttp = Layer.effect(
+  TagResource,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.TagResource",
+    operation: transcribe.tagResource,
+    actions: ["transcribe:TagResource"],
+  }),
+);

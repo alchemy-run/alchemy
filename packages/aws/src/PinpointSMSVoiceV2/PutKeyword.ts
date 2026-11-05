@@ -1,6 +1,8 @@
-import type * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
+import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSmsVoicePhoneNumberHttpBinding } from "./BindingHttp.ts";
 import type { PhoneNumber } from "./PhoneNumber.ts";
 
 /**
@@ -48,3 +50,12 @@ export interface PutKeyword extends Binding.Service<
   >
 > {}
 export const PutKeyword = Binding.Service<PutKeyword>("AWS.PinpointSMSVoiceV2.PutKeyword");
+
+export const PutKeywordHttp = Layer.effect(
+  PutKeyword,
+  makeSmsVoicePhoneNumberHttpBinding({
+    tag: "AWS.PinpointSMSVoiceV2.PutKeyword",
+    operation: smsvoice.putKeyword,
+    actions: ["sms-voice:PutKeyword"],
+  }),
+);

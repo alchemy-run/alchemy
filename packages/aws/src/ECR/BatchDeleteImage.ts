@@ -1,6 +1,8 @@
-import type * as ecr from "@distilled.cloud/aws/ecr";
+import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcrRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -41,3 +43,13 @@ export interface BatchDeleteImage extends Binding.Service<
 > {}
 
 export const BatchDeleteImage = Binding.Service<BatchDeleteImage>("AWS.ECR.BatchDeleteImage");
+
+/** HTTP implementation of {@link BatchDeleteImage} over the ECR API. */
+export const BatchDeleteImageHttp = Layer.effect(
+  BatchDeleteImage,
+  makeEcrRepositoryHttpBinding({
+    capability: "BatchDeleteImage",
+    operation: ecr.batchDeleteImage,
+    iamActions: ["ecr:BatchDeleteImage"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsInstanceScopedHttpBinding } from "./BindingHttp.ts";
 import type { ReplicationInstance } from "./ReplicationInstance.ts";
 
 /**
@@ -41,3 +43,13 @@ export const DescribeReplicationInstanceTaskLogs =
   Binding.Service<DescribeReplicationInstanceTaskLogs>(
     "AWS.DMS.DescribeReplicationInstanceTaskLogs",
   );
+
+export const DescribeReplicationInstanceTaskLogsHttp = Layer.effect(
+  DescribeReplicationInstanceTaskLogs,
+  makeDmsInstanceScopedHttpBinding({
+    tag: "AWS.DMS.DescribeReplicationInstanceTaskLogs",
+    actions: ["dms:DescribeReplicationInstanceTaskLogs"],
+    operation: dms.describeReplicationInstanceTaskLogs,
+    iam: "wildcard",
+  }),
+);

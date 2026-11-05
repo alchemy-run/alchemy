@@ -1,7 +1,9 @@
-import type * as sfn from "@distilled.cloud/aws/sfn";
+import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Activity } from "./Activity.ts";
+import { makeActivityArnHttpBinding } from "./BindingHttp.ts";
 
 export interface GetActivityTaskRequest extends Omit<sfn.GetActivityTaskInput, "activityArn"> {}
 
@@ -45,4 +47,13 @@ export interface GetActivityTask extends Binding.Service<
 > {}
 export const GetActivityTask = Binding.Service<GetActivityTask>(
   "AWS.StepFunctions.GetActivityTask",
+);
+
+export const GetActivityTaskHttp = Layer.effect(
+  GetActivityTask,
+  makeActivityArnHttpBinding({
+    tag: "AWS.StepFunctions.GetActivityTask",
+    operation: sfn.getActivityTask,
+    actions: ["states:GetActivityTask"],
+  }),
 );

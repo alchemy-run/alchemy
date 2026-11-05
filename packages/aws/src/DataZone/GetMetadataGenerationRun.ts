@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface GetMetadataGenerationRunRequest extends Omit<
@@ -42,4 +44,13 @@ export interface GetMetadataGenerationRun extends Binding.Service<
 > {}
 export const GetMetadataGenerationRun = Binding.Service<GetMetadataGenerationRun>(
   "AWS.DataZone.GetMetadataGenerationRun",
+);
+
+export const GetMetadataGenerationRunHttp = Layer.effect(
+  GetMetadataGenerationRun,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.GetMetadataGenerationRun",
+    operation: datazone.getMetadataGenerationRun,
+    actions: ["datazone:GetMetadataGenerationRun"],
+  }),
 );

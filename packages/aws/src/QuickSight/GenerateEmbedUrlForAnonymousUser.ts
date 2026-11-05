@@ -1,6 +1,8 @@
-import type * as quicksight from "@distilled.cloud/aws/quicksight";
+import * as quicksight from "@distilled.cloud/aws/quicksight";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQuickSightEmbedHttpBinding } from "./BindingHttp.ts";
 import type { Dashboard } from "./Dashboard.ts";
 
 /**
@@ -71,4 +73,21 @@ export interface GenerateEmbedUrlForAnonymousUser extends Binding.Service<
 > {}
 export const GenerateEmbedUrlForAnonymousUser = Binding.Service<GenerateEmbedUrlForAnonymousUser>(
   "AWS.QuickSight.GenerateEmbedUrlForAnonymousUser",
+);
+
+export const GenerateEmbedUrlForAnonymousUserHttp = Layer.effect(
+  GenerateEmbedUrlForAnonymousUser,
+  makeQuickSightEmbedHttpBinding({
+    tag: "AWS.QuickSight.GenerateEmbedUrlForAnonymousUser",
+    operation: quicksight.generateEmbedUrlForAnonymousUser,
+    actions: ["quicksight:GenerateEmbedUrlForAnonymousUser"],
+    applyDefaults: (request: GenerateEmbedUrlForAnonymousUserRequest | undefined, dashboard) => ({
+      ...request,
+      Namespace: request?.Namespace ?? "default",
+      AuthorizedResourceArns: request?.AuthorizedResourceArns ?? [dashboard.arn],
+      ExperienceConfiguration: request?.ExperienceConfiguration ?? {
+        Dashboard: { InitialDashboardId: dashboard.dashboardId },
+      },
+    }),
+  }),
 );

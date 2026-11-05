@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DescribeCollection` — describe a face collection — face count, face model version, ARN, and creation time.
@@ -35,4 +37,13 @@ export interface DescribeCollection extends Binding.Service<
 > {}
 export const DescribeCollection = Binding.Service<DescribeCollection>(
   "AWS.Rekognition.DescribeCollection",
+);
+
+export const DescribeCollectionHttp = Layer.effect(
+  DescribeCollection,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DescribeCollection",
+    operation: rekognition.describeCollection,
+    actions: ["rekognition:DescribeCollection"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as efs from "@distilled.cloud/aws/efs";
+import * as efs from "@distilled.cloud/aws/efs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEfsFileSystemHttpBinding } from "./BindingHttp.ts";
 import type { FileSystem } from "./FileSystem.ts";
 
 /**
@@ -37,3 +39,12 @@ export interface DescribeFileSystem extends Binding.Service<
   >
 > {}
 export const DescribeFileSystem = Binding.Service<DescribeFileSystem>("AWS.EFS.DescribeFileSystem");
+
+export const DescribeFileSystemHttp = Layer.effect(
+  DescribeFileSystem,
+  makeEfsFileSystemHttpBinding({
+    tag: "AWS.EFS.DescribeFileSystem",
+    operation: efs.describeFileSystems,
+    actions: ["elasticfilesystem:DescribeFileSystems"],
+  }),
+);

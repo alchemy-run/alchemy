@@ -1,6 +1,8 @@
-import type * as aiops from "@distilled.cloud/aws/aiops";
+import * as aiops from "@distilled.cloud/aws/aiops";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAIOpsGroupHttpBinding } from "./BindingHttp.ts";
 import type { InvestigationGroup } from "./InvestigationGroup.ts";
 
 /**
@@ -38,4 +40,14 @@ export interface GetInvestigationGroup extends Binding.Service<
 > {}
 export const GetInvestigationGroup = Binding.Service<GetInvestigationGroup>(
   "AWS.AIOps.GetInvestigationGroup",
+);
+
+export const GetInvestigationGroupHttp = Layer.effect(
+  GetInvestigationGroup,
+  makeAIOpsGroupHttpBinding({
+    tag: "AWS.AIOps.GetInvestigationGroup",
+    operation: aiops.getInvestigationGroup,
+    actions: ["aiops:GetInvestigationGroup"],
+    input: (identifier) => ({ identifier }),
+  }),
 );

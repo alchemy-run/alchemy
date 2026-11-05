@@ -1,6 +1,8 @@
-import type * as glue from "@distilled.cloud/aws/glue";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlueTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface DeletePartitionRequest extends Omit<
@@ -44,3 +46,13 @@ export interface DeletePartition extends Binding.Service<
 > {}
 
 export const DeletePartition = Binding.Service<DeletePartition>("AWS.Glue.DeletePartition");
+
+export const DeletePartitionHttp = Layer.effect(
+  DeletePartition,
+  makeGlueTableHttpBinding({
+    tag: "AWS.Glue.DeletePartition",
+    operation: glue.deletePartition,
+    actions: ["glue:DeletePartition"],
+    tableNameKey: "TableName",
+  }),
+);

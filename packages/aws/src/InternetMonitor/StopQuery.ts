@@ -1,6 +1,8 @@
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInternetMonitorMonitorHttpBinding } from "./BindingHttp.ts";
 import type { Monitor } from "./Monitor.ts";
 
 export interface StopQueryRequest extends Omit<im.StopQueryInput, "MonitorName"> {}
@@ -35,3 +37,12 @@ export interface StopQuery extends Binding.Service<
 > {}
 
 export const StopQuery = Binding.Service<StopQuery>("AWS.InternetMonitor.StopQuery");
+
+export const StopQueryHttp = Layer.effect(
+  StopQuery,
+  makeInternetMonitorMonitorHttpBinding({
+    tag: "AWS.InternetMonitor.StopQuery",
+    operation: im.stopQuery,
+    actions: ["internetmonitor:StopQuery"],
+  }),
+);

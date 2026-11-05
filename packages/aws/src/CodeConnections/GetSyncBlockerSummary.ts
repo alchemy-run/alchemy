@@ -1,6 +1,8 @@
-import type * as codeconnections from "@distilled.cloud/aws/codeconnections";
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSyncConfigurationScopedHttpBinding } from "./BindingHttp.ts";
 import type { SyncConfiguration } from "./SyncConfiguration.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface GetSyncBlockerSummary extends Binding.Service<
 
 export const GetSyncBlockerSummary = Binding.Service<GetSyncBlockerSummary>(
   "AWS.CodeConnections.GetSyncBlockerSummary",
+);
+
+export const GetSyncBlockerSummaryHttp = Layer.effect(
+  GetSyncBlockerSummary,
+  makeSyncConfigurationScopedHttpBinding({
+    tag: "AWS.CodeConnections.GetSyncBlockerSummary",
+    actions: ["codeconnections:GetSyncBlockerSummary"],
+    operation: codeconnections.getSyncBlockerSummary,
+  }),
 );

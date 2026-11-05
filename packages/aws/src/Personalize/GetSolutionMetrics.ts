@@ -1,6 +1,8 @@
-import type * as personalize from "@distilled.cloud/aws/personalize";
+import * as personalize from "@distilled.cloud/aws/personalize";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `personalize:GetSolutionMetrics` — Reads the offline evaluation metrics (precision, coverage, NDCG, …)
@@ -32,4 +34,13 @@ export interface GetSolutionMetrics extends Binding.Service<
 > {}
 export const GetSolutionMetrics = Binding.Service<GetSolutionMetrics>(
   "AWS.Personalize.GetSolutionMetrics",
+);
+
+export const GetSolutionMetricsHttp = Layer.effect(
+  GetSolutionMetrics,
+  makePersonalizeAccountHttpBinding({
+    tag: "AWS.Personalize.GetSolutionMetrics",
+    operation: personalize.getSolutionMetrics,
+    actions: ["personalize:GetSolutionMetrics"],
+  }),
 );

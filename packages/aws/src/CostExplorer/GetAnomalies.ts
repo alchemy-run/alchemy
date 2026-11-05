@@ -1,7 +1,9 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AnomalyMonitor } from "./AnomalyMonitor.ts";
+import { makeAnomalyMonitorHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetAnomalies} — the bound monitor's ARN is
@@ -41,3 +43,12 @@ export interface GetAnomalies extends Binding.Service<
 > {}
 
 export const GetAnomalies = Binding.Service<GetAnomalies>("AWS.CostExplorer.GetAnomalies");
+
+export const GetAnomaliesHttp = Layer.effect(
+  GetAnomalies,
+  makeAnomalyMonitorHttpBinding({
+    capability: "GetAnomalies",
+    iamActions: ["ce:GetAnomalies"],
+    operation: ce.getAnomalies,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneGraphGraphHttpBinding } from "./BindingHttp.ts";
 import type { Graph } from "./Graph.ts";
 
 /**
@@ -30,3 +32,12 @@ export interface StartGraph extends Binding.Service<
   >
 > {}
 export const StartGraph = Binding.Service<StartGraph>("AWS.NeptuneGraph.StartGraph");
+
+export const StartGraphHttp = Layer.effect(
+  StartGraph,
+  makeNeptuneGraphGraphHttpBinding({
+    tag: "AWS.NeptuneGraph.StartGraph",
+    operation: neptunegraph.startGraph,
+    actions: ["neptune-graph:StartGraph"],
+  }),
+);

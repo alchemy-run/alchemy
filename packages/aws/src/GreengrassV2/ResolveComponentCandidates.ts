@@ -1,6 +1,8 @@
-import type * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
+import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGreengrassAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `greengrass:ResolveComponentCandidates`.
@@ -49,4 +51,13 @@ export interface ResolveComponentCandidates extends Binding.Service<
 > {}
 export const ResolveComponentCandidates = Binding.Service<ResolveComponentCandidates>(
   "AWS.GreengrassV2.ResolveComponentCandidates",
+);
+
+export const ResolveComponentCandidatesHttp = Layer.effect(
+  ResolveComponentCandidates,
+  makeGreengrassAccountHttpBinding({
+    tag: "AWS.GreengrassV2.ResolveComponentCandidates",
+    operation: greengrassv2.resolveComponentCandidates,
+    actions: ["greengrass:ResolveComponentCandidates"],
+  }),
 );

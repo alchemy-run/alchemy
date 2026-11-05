@@ -1,6 +1,8 @@
-import type * as iam from "@distilled.cloud/aws/iam";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIamHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iam:ListPoliciesGrantingServiceAccess` — list which
@@ -44,4 +46,13 @@ export interface ListPoliciesGrantingServiceAccess extends Binding.Service<
 > {}
 export const ListPoliciesGrantingServiceAccess = Binding.Service<ListPoliciesGrantingServiceAccess>(
   "AWS.IAM.ListPoliciesGrantingServiceAccess",
+);
+
+export const ListPoliciesGrantingServiceAccessHttp = Layer.effect(
+  ListPoliciesGrantingServiceAccess,
+  makeIamHttpBinding({
+    capability: "ListPoliciesGrantingServiceAccess",
+    iamActions: ["iam:ListPoliciesGrantingServiceAccess"],
+    operation: iam.listPoliciesGrantingServiceAccess,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as securitylake from "@distilled.cloud/aws/securitylake";
+import * as securitylake from "@distilled.cloud/aws/securitylake";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityLakeDataLakeHttpBinding } from "./BindingHttp.ts";
 import type { DataLake } from "./DataLake.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface GetDataLakeSources extends Binding.Service<
 > {}
 export const GetDataLakeSources = Binding.Service<GetDataLakeSources>(
   "AWS.SecurityLake.GetDataLakeSources",
+);
+
+export const GetDataLakeSourcesHttp = Layer.effect(
+  GetDataLakeSources,
+  makeSecurityLakeDataLakeHttpBinding({
+    tag: "AWS.SecurityLake.GetDataLakeSources",
+    operation: securitylake.getDataLakeSources,
+    actions: ["securitylake:GetDataLakeSources"],
+  }),
 );

@@ -1,6 +1,8 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQueueUrlHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface DeleteMessageRequest extends Omit<sqs.DeleteMessageRequest, "QueueUrl"> {}
@@ -41,3 +43,12 @@ export interface DeleteMessage extends Binding.Service<
 > {}
 
 export const DeleteMessage = Binding.Service<DeleteMessage>("AWS.SQS.DeleteMessage");
+
+export const DeleteMessageHttp = Layer.effect(
+  DeleteMessage,
+  makeQueueUrlHttpBinding({
+    tag: "AWS.SQS.DeleteMessage",
+    operation: sqs.deleteMessage,
+    actions: ["sqs:DeleteMessage"],
+  }),
+);

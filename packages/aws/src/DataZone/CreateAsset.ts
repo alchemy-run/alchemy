@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface CreateAssetRequest extends Omit<datazone.CreateAssetInput, "domainIdentifier"> {}
@@ -39,3 +41,12 @@ export interface CreateAsset extends Binding.Service<
   >
 > {}
 export const CreateAsset = Binding.Service<CreateAsset>("AWS.DataZone.CreateAsset");
+
+export const CreateAssetHttp = Layer.effect(
+  CreateAsset,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.CreateAsset",
+    operation: datazone.createAsset,
+    actions: ["datazone:CreateAsset"],
+  }),
+);

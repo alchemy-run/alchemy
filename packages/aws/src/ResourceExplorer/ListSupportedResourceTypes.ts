@@ -1,6 +1,8 @@
-import type * as RE2 from "@distilled.cloud/aws/resource-explorer-2";
+import * as RE2 from "@distilled.cloud/aws/resource-explorer-2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeResourceExplorerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `resource-explorer-2:ListSupportedResourceTypes`.
@@ -36,4 +38,13 @@ export interface ListSupportedResourceTypes extends Binding.Service<
 > {}
 export const ListSupportedResourceTypes = Binding.Service<ListSupportedResourceTypes>(
   "AWS.ResourceExplorer.ListSupportedResourceTypes",
+);
+
+export const ListSupportedResourceTypesHttp = Layer.effect(
+  ListSupportedResourceTypes,
+  makeResourceExplorerAccountHttpBinding({
+    tag: "AWS.ResourceExplorer.ListSupportedResourceTypes",
+    operation: RE2.listSupportedResourceTypes,
+    actions: ["resource-explorer-2:ListSupportedResourceTypes"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBackupAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetSupportedResourceTypes` operation (IAM action
@@ -34,4 +36,13 @@ export interface GetSupportedResourceTypes extends Binding.Service<
 > {}
 export const GetSupportedResourceTypes = Binding.Service<GetSupportedResourceTypes>(
   "AWS.Backup.GetSupportedResourceTypes",
+);
+
+export const GetSupportedResourceTypesHttp = Layer.effect(
+  GetSupportedResourceTypes,
+  makeBackupAccountHttpBinding({
+    tag: "AWS.Backup.GetSupportedResourceTypes",
+    operation: backup.getSupportedResourceTypes,
+    actions: ["backup:GetSupportedResourceTypes"],
+  }),
 );

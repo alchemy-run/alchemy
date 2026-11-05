@@ -1,6 +1,8 @@
-import type * as personalizeevents from "@distilled.cloud/aws/personalize-events";
+import * as personalizeevents from "@distilled.cloud/aws/personalize-events";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeDatasetHttpBinding } from "./BindingHttp.ts";
 import type { Dataset } from "./Dataset.ts";
 
 /**
@@ -44,3 +46,12 @@ export interface PutUsers extends Binding.Service<
   >
 > {}
 export const PutUsers = Binding.Service<PutUsers>("AWS.Personalize.PutUsers");
+
+export const PutUsersHttp = Layer.effect(
+  PutUsers,
+  makePersonalizeDatasetHttpBinding({
+    tag: "AWS.Personalize.PutUsers",
+    operation: personalizeevents.putUsers,
+    actions: ["personalize:PutUsers"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as serverless from "@distilled.cloud/aws/redshift-serverless";
+import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServerlessAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ConvertRecoveryPointToSnapshot` operation (IAM actions
@@ -35,4 +37,16 @@ export interface ConvertRecoveryPointToSnapshot extends Binding.Service<
 > {}
 export const ConvertRecoveryPointToSnapshot = Binding.Service<ConvertRecoveryPointToSnapshot>(
   "AWS.RedshiftServerless.ConvertRecoveryPointToSnapshot",
+);
+
+export const ConvertRecoveryPointToSnapshotHttp = Layer.effect(
+  ConvertRecoveryPointToSnapshot,
+  makeServerlessAccountHttpBinding({
+    tag: "AWS.RedshiftServerless.ConvertRecoveryPointToSnapshot",
+    operation: serverless.convertRecoveryPointToSnapshot,
+    actions: [
+      "redshift-serverless:ConvertRecoveryPointToSnapshot",
+      "redshift-serverless:TagResource",
+    ],
+  }),
 );

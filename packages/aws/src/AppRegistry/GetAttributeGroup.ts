@@ -1,7 +1,9 @@
-import type * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
+import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AttributeGroup } from "./AttributeGroup.ts";
+import { makeAttributeGroupScopedHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:GetAttributeGroup`.
@@ -35,4 +37,13 @@ export interface GetAttributeGroup extends Binding.Service<
 
 export const GetAttributeGroup = Binding.Service<GetAttributeGroup>(
   "AWS.AppRegistry.GetAttributeGroup",
+);
+
+export const GetAttributeGroupHttp = Layer.effect(
+  GetAttributeGroup,
+  makeAttributeGroupScopedHttpBinding({
+    tag: "AWS.AppRegistry.GetAttributeGroup",
+    operation: appregistry.getAttributeGroup,
+    actions: ["servicecatalog:GetAttributeGroup"],
+  }),
 );

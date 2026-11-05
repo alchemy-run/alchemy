@@ -1,7 +1,9 @@
-import type * as s3control from "@distilled.cloud/aws/s3-control";
+import * as s3control from "@distilled.cloud/aws/s3-control";
 import type * as sts from "@distilled.cloud/aws/sts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeS3ControlAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `s3:UpdateJobPriority` (S3 Batch Operations).
@@ -37,4 +39,13 @@ export interface UpdateJobPriority extends Binding.Service<
 > {}
 export const UpdateJobPriority = Binding.Service<UpdateJobPriority>(
   "AWS.S3Control.UpdateJobPriority",
+);
+
+export const UpdateJobPriorityHttp = Layer.effect(
+  UpdateJobPriority,
+  makeS3ControlAccountHttpBinding({
+    tag: "AWS.S3Control.UpdateJobPriority",
+    operation: s3control.updateJobPriority,
+    actions: ["s3:UpdateJobPriority"],
+  }),
 );

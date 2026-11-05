@@ -1,6 +1,8 @@
-import type * as cloudformation from "@distilled.cloud/aws/cloudformation";
+import * as cloudformation from "@distilled.cloud/aws/cloudformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudFormationStackHttpBinding } from "./BindingHttp.ts";
 import type { Stack } from "./Stack.ts";
 
 /**
@@ -33,3 +35,12 @@ export interface GetTemplate extends Binding.Service<
   >
 > {}
 export const GetTemplate = Binding.Service<GetTemplate>("AWS.CloudFormation.GetTemplate");
+
+export const GetTemplateHttp = Layer.effect(
+  GetTemplate,
+  makeCloudFormationStackHttpBinding({
+    tag: "AWS.CloudFormation.GetTemplate",
+    operation: cloudformation.getTemplate,
+    actions: ["cloudformation:GetTemplate"],
+  }),
+);

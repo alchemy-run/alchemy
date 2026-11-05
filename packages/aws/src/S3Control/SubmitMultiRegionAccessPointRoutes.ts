@@ -1,6 +1,8 @@
-import type * as s3control from "@distilled.cloud/aws/s3-control";
+import * as s3control from "@distilled.cloud/aws/s3-control";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeS3ControlMrapHttpBinding } from "./BindingHttp.ts";
 import type { MultiRegionAccessPoint } from "./MultiRegionAccessPoint.ts";
 
 /**
@@ -48,3 +50,12 @@ export const SubmitMultiRegionAccessPointRoutes =
   Binding.Service<SubmitMultiRegionAccessPointRoutes>(
     "AWS.S3Control.SubmitMultiRegionAccessPointRoutes",
   );
+
+export const SubmitMultiRegionAccessPointRoutesHttp = Layer.effect(
+  SubmitMultiRegionAccessPointRoutes,
+  makeS3ControlMrapHttpBinding({
+    tag: "AWS.S3Control.SubmitMultiRegionAccessPointRoutes",
+    operation: s3control.submitMultiRegionAccessPointRoutes,
+    actions: ["s3:SubmitMultiRegionAccessPointRoutes"],
+  }),
+);

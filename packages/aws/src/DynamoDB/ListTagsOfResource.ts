@@ -1,6 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableArnHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface ListTagsOfResourceRequest extends Omit<
@@ -39,4 +41,14 @@ export interface ListTagsOfResource extends Binding.Service<
 
 export const ListTagsOfResource = Binding.Service<ListTagsOfResource>(
   "AWS.DynamoDB.ListTagsOfResource",
+);
+
+export const ListTagsOfResourceHttp = Layer.effect(
+  ListTagsOfResource,
+  makeTableArnHttpBinding({
+    tag: "AWS.DynamoDB.ListTagsOfResource",
+    key: "ResourceArn",
+    operation: DynamoDB.listTagsOfResource,
+    actions: ["dynamodb:ListTagsOfResource"],
+  }),
 );

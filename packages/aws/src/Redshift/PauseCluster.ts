@@ -1,6 +1,8 @@
-import type * as redshift from "@distilled.cloud/aws/redshift";
+import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRedshiftClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -32,3 +34,12 @@ export interface PauseCluster extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<redshift.PauseClusterResult, redshift.PauseClusterError>>
 > {}
 export const PauseCluster = Binding.Service<PauseCluster>("AWS.Redshift.PauseCluster");
+
+export const PauseClusterHttp = Layer.effect(
+  PauseCluster,
+  makeRedshiftClusterHttpBinding({
+    tag: "AWS.Redshift.PauseCluster",
+    operation: redshift.pauseCluster,
+    actions: ["redshift:PauseCluster"],
+  }),
+);

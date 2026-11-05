@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:InferSNOMEDCT` — detect medical concepts in clinical text and link them to codes in the Systematized Nomenclature of Medicine, Clinical Terms (SNOMED CT) ontology.
@@ -37,3 +39,12 @@ export interface InferSNOMEDCT extends Binding.Service<
   >
 > {}
 export const InferSNOMEDCT = Binding.Service<InferSNOMEDCT>("AWS.ComprehendMedical.InferSNOMEDCT");
+
+export const InferSNOMEDCTHttp = Layer.effect(
+  InferSNOMEDCT,
+  makeComprehendMedicalHttpBinding({
+    capability: "InferSNOMEDCT",
+    iamActions: ["comprehendmedical:InferSNOMEDCT"],
+    operation: comprehendmedical.inferSNOMEDCT,
+  }),
+);

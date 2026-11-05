@@ -1,6 +1,8 @@
-import type * as osis from "@distilled.cloud/aws/osis";
+import * as osis from "@distilled.cloud/aws/osis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOsisAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `osis:ListPipelineEndpointConnections`.
@@ -42,4 +44,13 @@ export interface ListPipelineEndpointConnections extends Binding.Service<
 > {}
 export const ListPipelineEndpointConnections = Binding.Service<ListPipelineEndpointConnections>(
   "AWS.OSIS.ListPipelineEndpointConnections",
+);
+
+export const ListPipelineEndpointConnectionsHttp = Layer.effect(
+  ListPipelineEndpointConnections,
+  makeOsisAccountHttpBinding({
+    tag: "AWS.OSIS.ListPipelineEndpointConnections",
+    operation: osis.listPipelineEndpointConnections,
+    actions: ["osis:ListPipelineEndpointConnections"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -46,4 +48,14 @@ export interface DeleteAccessControlConfiguration extends Binding.Service<
 > {}
 export const DeleteAccessControlConfiguration = Binding.Service<DeleteAccessControlConfiguration>(
   "AWS.Kendra.DeleteAccessControlConfiguration",
+);
+
+export const DeleteAccessControlConfigurationHttp = Layer.effect(
+  DeleteAccessControlConfiguration,
+  makeKendraIndexHttpBinding({
+    tag: "AWS.Kendra.DeleteAccessControlConfiguration",
+    operation: kendra.deleteAccessControlConfiguration,
+    actions: ["kendra:DeleteAccessControlConfiguration"],
+    subResources: ["access-control-configuration/*"],
+  }),
 );

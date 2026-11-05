@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:DeleteInvitations`.
@@ -32,4 +34,13 @@ export interface DeleteInvitations extends Binding.Service<
 > {}
 export const DeleteInvitations = Binding.Service<DeleteInvitations>(
   "AWS.SecurityHub.DeleteInvitations",
+);
+
+export const DeleteInvitationsHttp = Layer.effect(
+  DeleteInvitations,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.DeleteInvitations",
+    operation: securityhub.deleteInvitations,
+    actions: ["securityhub:DeleteInvitations"],
+  }),
 );

@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchResourceHttpBinding } from "./BindingHttp.ts";
 import type { InsightRule } from "./InsightRule.ts";
 
 export interface GetInsightRuleReportRequest extends Omit<
@@ -47,4 +49,16 @@ export interface GetInsightRuleReport extends Binding.Service<
 
 export const GetInsightRuleReport = Binding.Service<GetInsightRuleReport>(
   "AWS.CloudWatch.GetInsightRuleReport",
+);
+
+export const GetInsightRuleReportHttp = Layer.effect(
+  GetInsightRuleReport,
+  makeCloudWatchResourceHttpBinding({
+    tag: "AWS.CloudWatch.GetInsightRuleReport",
+    operation: cloudwatch.getInsightRuleReport,
+    actions: ["cloudwatch:GetInsightRuleReport"],
+    requestKey: "RuleName",
+    identifier: (rule: InsightRule) => rule.ruleName,
+    resourceArn: (rule: InsightRule) => rule.ruleArn,
+  }),
 );

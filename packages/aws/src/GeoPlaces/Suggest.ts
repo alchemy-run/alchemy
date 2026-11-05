@@ -1,6 +1,8 @@
-import type * as geoPlaces from "@distilled.cloud/aws/geo-places";
+import * as geoPlaces from "@distilled.cloud/aws/geo-places";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoPlacesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-places:Suggest` — suggest places and query
@@ -45,3 +47,12 @@ export interface Suggest extends Binding.Service<
   >
 > {}
 export const Suggest = Binding.Service<Suggest>("AWS.GeoPlaces.Suggest");
+
+export const SuggestHttp = Layer.effect(
+  Suggest,
+  makeGeoPlacesHttpBinding({
+    capability: "Suggest",
+    iamActions: ["geo-places:Suggest"],
+    operation: geoPlaces.suggest,
+  }),
+);

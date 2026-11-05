@@ -1,6 +1,8 @@
-import type * as account from "@distilled.cloud/aws/account";
+import * as account from "@distilled.cloud/aws/account";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `account:GetRegionOptStatus`.
@@ -34,4 +36,13 @@ export interface GetRegionOptStatus extends Binding.Service<
 > {}
 export const GetRegionOptStatus = Binding.Service<GetRegionOptStatus>(
   "AWS.Account.GetRegionOptStatus",
+);
+
+export const GetRegionOptStatusHttp = Layer.effect(
+  GetRegionOptStatus,
+  makeAccountHttpBinding({
+    capability: "GetRegionOptStatus",
+    iamActions: ["account:GetRegionOptStatus"],
+    operation: account.getRegionOptStatus,
+  }),
 );

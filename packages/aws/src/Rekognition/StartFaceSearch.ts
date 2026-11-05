@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StartFaceSearch` — start an asynchronous search of a stored video for faces matching a face collection.
@@ -42,3 +44,12 @@ export interface StartFaceSearch extends Binding.Service<
   >
 > {}
 export const StartFaceSearch = Binding.Service<StartFaceSearch>("AWS.Rekognition.StartFaceSearch");
+
+export const StartFaceSearchHttp = Layer.effect(
+  StartFaceSearch,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StartFaceSearch",
+    operation: rekognition.startFaceSearch,
+    actions: ["rekognition:StartFaceSearch"],
+  }),
+);

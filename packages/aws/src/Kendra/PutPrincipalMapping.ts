@@ -1,6 +1,8 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -49,4 +51,14 @@ export interface PutPrincipalMapping extends Binding.Service<
 > {}
 export const PutPrincipalMapping = Binding.Service<PutPrincipalMapping>(
   "AWS.Kendra.PutPrincipalMapping",
+);
+
+export const PutPrincipalMappingHttp = Layer.effect(
+  PutPrincipalMapping,
+  makeKendraIndexHttpBinding({
+    tag: "AWS.Kendra.PutPrincipalMapping",
+    operation: kendra.putPrincipalMapping,
+    actions: ["kendra:PutPrincipalMapping"],
+    subResources: ["data-source/*"],
+  }),
 );

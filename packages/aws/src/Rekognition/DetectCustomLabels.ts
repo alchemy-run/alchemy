@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DetectCustomLabels` — detect custom labels in an image using a trained and running Rekognition Custom Labels model version.
@@ -39,4 +41,13 @@ export interface DetectCustomLabels extends Binding.Service<
 > {}
 export const DetectCustomLabels = Binding.Service<DetectCustomLabels>(
   "AWS.Rekognition.DetectCustomLabels",
+);
+
+export const DetectCustomLabelsHttp = Layer.effect(
+  DetectCustomLabels,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DetectCustomLabels",
+    operation: rekognition.detectCustomLabels,
+    actions: ["rekognition:DetectCustomLabels"],
+  }),
 );

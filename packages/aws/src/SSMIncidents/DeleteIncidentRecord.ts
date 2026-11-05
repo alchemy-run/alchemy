@@ -1,6 +1,8 @@
-import type * as incidents from "@distilled.cloud/aws/ssm-incidents";
+import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIncidentsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-incidents:DeleteIncidentRecord`.
@@ -33,4 +35,13 @@ export interface DeleteIncidentRecord extends Binding.Service<
 > {}
 export const DeleteIncidentRecord = Binding.Service<DeleteIncidentRecord>(
   "AWS.SSMIncidents.DeleteIncidentRecord",
+);
+
+export const DeleteIncidentRecordHttp = Layer.effect(
+  DeleteIncidentRecord,
+  makeIncidentsAccountHttpBinding({
+    tag: "AWS.SSMIncidents.DeleteIncidentRecord",
+    operation: incidents.deleteIncidentRecord,
+    actions: ["ssm-incidents:DeleteIncidentRecord"],
+  }),
 );

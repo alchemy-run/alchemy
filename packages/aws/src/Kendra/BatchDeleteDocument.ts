@@ -1,6 +1,8 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -43,4 +45,13 @@ export interface BatchDeleteDocument extends Binding.Service<
 > {}
 export const BatchDeleteDocument = Binding.Service<BatchDeleteDocument>(
   "AWS.Kendra.BatchDeleteDocument",
+);
+
+export const BatchDeleteDocumentHttp = Layer.effect(
+  BatchDeleteDocument,
+  makeKendraIndexHttpBinding({
+    tag: "AWS.Kendra.BatchDeleteDocument",
+    operation: kendra.batchDeleteDocument,
+    actions: ["kendra:BatchDeleteDocument"],
+  }),
 );

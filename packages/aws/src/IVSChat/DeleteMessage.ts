@@ -1,6 +1,8 @@
-import type * as ivschat from "@distilled.cloud/aws/ivschat";
+import * as ivschat from "@distilled.cloud/aws/ivschat";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsChatRoomHttpBinding } from "./BindingHttp.ts";
 import type { Room } from "./Room.ts";
 
 /**
@@ -59,3 +61,12 @@ export interface DeleteMessage extends Binding.Service<
   >
 > {}
 export const DeleteMessage = Binding.Service<DeleteMessage>("AWS.IVSChat.DeleteMessage");
+
+export const DeleteMessageHttp = Layer.effect(
+  DeleteMessage,
+  makeIvsChatRoomHttpBinding({
+    tag: "AWS.IVSChat.DeleteMessage",
+    operation: ivschat.deleteMessage,
+    actions: ["ivschat:DeleteMessage"],
+  }),
+);

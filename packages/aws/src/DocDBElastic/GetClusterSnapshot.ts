@@ -1,6 +1,8 @@
-import type * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
+import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBElasticAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetClusterSnapshot` operation (IAM action
@@ -33,4 +35,13 @@ export interface GetClusterSnapshot extends Binding.Service<
 > {}
 export const GetClusterSnapshot = Binding.Service<GetClusterSnapshot>(
   "AWS.DocDBElastic.GetClusterSnapshot",
+);
+
+export const GetClusterSnapshotHttp = Layer.effect(
+  GetClusterSnapshot,
+  makeDocDBElasticAccountHttpBinding({
+    tag: "AWS.DocDBElastic.GetClusterSnapshot",
+    operation: docdbelastic.getClusterSnapshot,
+    actions: ["docdb-elastic:GetClusterSnapshot"],
+  }),
 );

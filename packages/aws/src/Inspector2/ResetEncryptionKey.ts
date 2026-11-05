@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:ResetEncryptionKey`.
@@ -36,4 +38,13 @@ export interface ResetEncryptionKey extends Binding.Service<
 > {}
 export const ResetEncryptionKey = Binding.Service<ResetEncryptionKey>(
   "AWS.Inspector2.ResetEncryptionKey",
+);
+
+export const ResetEncryptionKeyHttp = Layer.effect(
+  ResetEncryptionKey,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.ResetEncryptionKey",
+    operation: inspector2.resetEncryptionKey,
+    actions: ["inspector2:ResetEncryptionKey"],
+  }),
 );

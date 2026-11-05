@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 import type { SequenceStore } from "./SequenceStore.ts";
 
 export interface ListReadSetsRequest extends Omit<omics.ListReadSetsRequest, "sequenceStoreId"> {}
@@ -36,3 +38,15 @@ export interface ListReadSets extends Binding.Service<
 > {}
 
 export const ListReadSets = Binding.Service<ListReadSets>("AWS.Omics.ListReadSets");
+
+export const ListReadSetsHttp = Layer.effect(
+  ListReadSets,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.ListReadSets",
+    operation: omics.listReadSets,
+    actions: ["omics:ListReadSets"],
+    key: "sequenceStoreId",
+    id: (store: SequenceStore) => store.sequenceStoreId,
+    arn: (store: SequenceStore) => store.sequenceStoreArn,
+  }),
+);

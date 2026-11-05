@@ -1,6 +1,8 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecretHttpBinding } from "./BindingHttp.ts";
 import type { Secret } from "./Secret.ts";
 
 export interface UpdateSecretVersionStageRequest extends Omit<
@@ -49,4 +51,13 @@ export interface UpdateSecretVersionStage extends Binding.Service<
 
 export const UpdateSecretVersionStage = Binding.Service<UpdateSecretVersionStage>(
   "AWS.SecretsManager.UpdateSecretVersionStage",
+);
+
+export const UpdateSecretVersionStageHttp = Layer.effect(
+  UpdateSecretVersionStage,
+  makeSecretHttpBinding({
+    tag: "AWS.SecretsManager.UpdateSecretVersionStage",
+    operation: secretsmanager.updateSecretVersionStage,
+    actions: ["secretsmanager:UpdateSecretVersionStage"],
+  }),
 );

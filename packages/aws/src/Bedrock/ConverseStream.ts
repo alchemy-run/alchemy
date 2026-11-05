@@ -1,6 +1,8 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-runtime";
+import * as bedrock from "@distilled.cloud/aws/bedrock-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeModelScopedHttpBinding } from "./BindingHttp.ts";
 
 /**
  * The `ConverseStream` request with the binding-injected `modelId` made
@@ -64,3 +66,14 @@ export interface ConverseStream extends Binding.Service<
   >
 > {}
 export const ConverseStream = Binding.Service<ConverseStream>("AWS.Bedrock.ConverseStream");
+
+export const ConverseStreamHttp = Layer.effect(
+  ConverseStream,
+  makeModelScopedHttpBinding({
+    tag: "AWS.Bedrock.ConverseStream",
+    operation: bedrock.converseStream,
+    // Streaming operations authorize against this action, not
+    // bedrock:InvokeModel.
+    actions: ["bedrock:InvokeModelWithResponseStream"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:ListVocabularies` — list the custom vocabularies in the account.
@@ -31,4 +33,13 @@ export interface ListVocabularies extends Binding.Service<
 > {}
 export const ListVocabularies = Binding.Service<ListVocabularies>(
   "AWS.Transcribe.ListVocabularies",
+);
+
+export const ListVocabulariesHttp = Layer.effect(
+  ListVocabularies,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.ListVocabularies",
+    operation: transcribe.listVocabularies,
+    actions: ["transcribe:ListVocabularies"],
+  }),
 );

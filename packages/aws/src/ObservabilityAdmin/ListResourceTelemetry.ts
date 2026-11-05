@@ -1,6 +1,8 @@
-import type * as obs from "@distilled.cloud/aws/observabilityadmin";
+import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeObservabilityAdminHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `observabilityadmin:ListResourceTelemetry` — audits
@@ -44,4 +46,13 @@ export interface ListResourceTelemetry extends Binding.Service<
 
 export const ListResourceTelemetry = Binding.Service<ListResourceTelemetry>(
   "AWS.ObservabilityAdmin.ListResourceTelemetry",
+);
+
+export const ListResourceTelemetryHttp = Layer.effect(
+  ListResourceTelemetry,
+  makeObservabilityAdminHttpBinding({
+    capability: "ListResourceTelemetry",
+    iamActions: ["observabilityadmin:ListResourceTelemetry"],
+    operation: obs.listResourceTelemetry,
+  }),
 );

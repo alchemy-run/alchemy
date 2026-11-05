@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface StopTaskRequest extends Omit<ECS.StopTaskRequest, "cluster"> {}
@@ -35,3 +37,15 @@ export interface StopTask extends Binding.Service<
   >
 > {}
 export const StopTask = Binding.Service<StopTask>("AWS.ECS.StopTask");
+
+export const StopTaskHttp = Layer.effect(
+  StopTask,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.StopTask",
+    operation: ECS.stopTask,
+    actions: ["ecs:StopTask"],
+    // `ecs:StopTask` authorizes against the task resource:
+    // arn:aws:ecs:{region}:{account}:task/{clusterName}/*
+    resources: ["task"],
+  }),
+);

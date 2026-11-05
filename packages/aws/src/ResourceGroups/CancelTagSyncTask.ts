@@ -1,6 +1,8 @@
-import type * as resourcegroups from "@distilled.cloud/aws/resource-groups";
+import * as resourcegroups from "@distilled.cloud/aws/resource-groups";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeResourceGroupsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `resource-groups:CancelTagSyncTask`.
@@ -35,4 +37,13 @@ export interface CancelTagSyncTask extends Binding.Service<
 > {}
 export const CancelTagSyncTask = Binding.Service<CancelTagSyncTask>(
   "AWS.ResourceGroups.CancelTagSyncTask",
+);
+
+export const CancelTagSyncTaskHttp = Layer.effect(
+  CancelTagSyncTask,
+  makeResourceGroupsAccountHttpBinding({
+    tag: "AWS.ResourceGroups.CancelTagSyncTask",
+    operation: resourcegroups.cancelTagSyncTask,
+    actions: ["resource-groups:CancelTagSyncTask"],
+  }),
 );

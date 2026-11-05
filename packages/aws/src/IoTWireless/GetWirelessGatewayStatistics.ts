@@ -1,6 +1,8 @@
-import type * as iotw from "@distilled.cloud/aws/iot-wireless";
+import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotWirelessGatewayHttpBinding } from "./BindingHttp.ts";
 import type { WirelessGateway } from "./WirelessGateway.ts";
 
 /**
@@ -52,4 +54,17 @@ export interface GetWirelessGatewayStatistics extends Binding.Service<
 > {}
 export const GetWirelessGatewayStatistics = Binding.Service<GetWirelessGatewayStatistics>(
   "AWS.IoTWireless.GetWirelessGatewayStatistics",
+);
+
+export const GetWirelessGatewayStatisticsHttp = Layer.effect(
+  GetWirelessGatewayStatistics,
+  makeIotWirelessGatewayHttpBinding({
+    capability: "GetWirelessGatewayStatistics",
+    iamActions: ["iotwireless:GetWirelessGatewayStatistics"],
+    operation: iotw.getWirelessGatewayStatistics,
+    prepare: (request: GetWirelessGatewayStatisticsRequest | undefined, wirelessGatewayId) => ({
+      ...request,
+      WirelessGatewayId: wirelessGatewayId,
+    }),
+  }),
 );

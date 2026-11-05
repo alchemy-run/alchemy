@@ -1,6 +1,8 @@
-import type * as iam from "@distilled.cloud/aws/iam";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIamHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iam:GetServiceLastAccessedDetailsWithEntities` — after
@@ -44,3 +46,12 @@ export const GetServiceLastAccessedDetailsWithEntities =
   Binding.Service<GetServiceLastAccessedDetailsWithEntities>(
     "AWS.IAM.GetServiceLastAccessedDetailsWithEntities",
   );
+
+export const GetServiceLastAccessedDetailsWithEntitiesHttp = Layer.effect(
+  GetServiceLastAccessedDetailsWithEntities,
+  makeIamHttpBinding({
+    capability: "GetServiceLastAccessedDetailsWithEntities",
+    iamActions: ["iam:GetServiceLastAccessedDetailsWithEntities"],
+    operation: iam.getServiceLastAccessedDetailsWithEntities,
+  }),
+);

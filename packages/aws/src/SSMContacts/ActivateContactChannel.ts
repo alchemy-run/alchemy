@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeContactChannelHttpBinding } from "./BindingHttp.ts";
 import type { ContactChannel } from "./ContactChannel.ts";
 
 /**
@@ -34,4 +36,13 @@ export interface ActivateContactChannel extends Binding.Service<
 > {}
 export const ActivateContactChannel = Binding.Service<ActivateContactChannel>(
   "AWS.SSMContacts.ActivateContactChannel",
+);
+
+export const ActivateContactChannelHttp = Layer.effect(
+  ActivateContactChannel,
+  makeContactChannelHttpBinding({
+    tag: "AWS.SSMContacts.ActivateContactChannel",
+    operation: ssm.activateContactChannel,
+    actions: ["ssm-contacts:ActivateContactChannel"],
+  }),
 );

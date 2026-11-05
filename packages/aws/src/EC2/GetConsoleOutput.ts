@@ -1,6 +1,8 @@
-import type * as ec2 from "@distilled.cloud/aws/ec2";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -47,3 +49,13 @@ export interface GetConsoleOutput extends Binding.Service<
 > {}
 
 export const GetConsoleOutput = Binding.Service<GetConsoleOutput>("AWS.EC2.GetConsoleOutput");
+
+export const GetConsoleOutputHttp = Layer.effect(
+  GetConsoleOutput,
+  makeInstanceHttpBinding({
+    tag: "AWS.EC2.GetConsoleOutput",
+    operation: ec2.getConsoleOutput,
+    actions: ["ec2:GetConsoleOutput"],
+    requestKey: "InstanceId",
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
+import * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConnectFlowHttpBinding } from "./BindingHttp.ts";
 import type { Flow } from "./Flow.ts";
 
 /**
@@ -41,4 +43,13 @@ export interface DescribeFlowSourceThumbnail extends Binding.Service<
 > {}
 export const DescribeFlowSourceThumbnail = Binding.Service<DescribeFlowSourceThumbnail>(
   "AWS.MediaConnect.DescribeFlowSourceThumbnail",
+);
+
+export const DescribeFlowSourceThumbnailHttp = Layer.effect(
+  DescribeFlowSourceThumbnail,
+  makeMediaConnectFlowHttpBinding({
+    tag: "AWS.MediaConnect.DescribeFlowSourceThumbnail",
+    operation: mediaconnect.describeFlowSourceThumbnail,
+    actions: ["mediaconnect:DescribeFlowSourceThumbnail"],
+  }),
 );

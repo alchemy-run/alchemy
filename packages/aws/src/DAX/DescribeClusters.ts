@@ -1,6 +1,8 @@
-import type * as dax from "@distilled.cloud/aws/dax";
+import * as dax from "@distilled.cloud/aws/dax";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDaxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeClusters` operation (IAM action
@@ -33,3 +35,12 @@ export interface DescribeClusters extends Binding.Service<
   >
 > {}
 export const DescribeClusters = Binding.Service<DescribeClusters>("AWS.DAX.DescribeClusters");
+
+export const DescribeClustersHttp = Layer.effect(
+  DescribeClusters,
+  makeDaxAccountHttpBinding({
+    tag: "AWS.DAX.DescribeClusters",
+    operation: dax.describeClusters,
+    actions: ["dax:DescribeClusters"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsServiceHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 export interface StopServiceDeploymentRequest extends ECS.StopServiceDeploymentRequest {}
@@ -39,4 +41,16 @@ export interface StopServiceDeployment extends Binding.Service<
 > {}
 export const StopServiceDeployment = Binding.Service<StopServiceDeployment>(
   "AWS.ECS.StopServiceDeployment",
+);
+
+export const StopServiceDeploymentHttp = Layer.effect(
+  StopServiceDeployment,
+  makeEcsServiceHttpBinding({
+    tag: "AWS.ECS.StopServiceDeployment",
+    operation: ECS.stopServiceDeployment,
+    actions: ["ecs:StopServiceDeployment"],
+    // Authorizes against the service-deployment resource:
+    // arn:aws:ecs:{region}:{account}:service-deployment/{cluster}/{service}/*
+    resources: ["service-deployment"],
+  }),
 );

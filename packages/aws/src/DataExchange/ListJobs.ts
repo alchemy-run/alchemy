@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataExchangeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dataexchange:ListJobs`.
@@ -30,3 +32,12 @@ export interface ListJobs extends Binding.Service<
   >
 > {}
 export const ListJobs = Binding.Service<ListJobs>("AWS.DataExchange.ListJobs");
+
+export const ListJobsHttp = Layer.effect(
+  ListJobs,
+  makeDataExchangeAccountHttpBinding({
+    tag: "AWS.DataExchange.ListJobs",
+    operation: dataexchange.listJobs,
+    actions: ["dataexchange:ListJobs"],
+  }),
+);

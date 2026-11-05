@@ -1,6 +1,8 @@
-import type * as bcm from "@distilled.cloud/aws/bcm-data-exports";
+import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataExportsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListExports}.
@@ -36,3 +38,12 @@ export interface ListExports extends Binding.Service<
 > {}
 
 export const ListExports = Binding.Service<ListExports>("AWS.BCMDataExports.ListExports");
+
+export const ListExportsHttp = Layer.effect(
+  ListExports,
+  makeDataExportsAccountHttpBinding({
+    capability: "ListExports",
+    iamActions: ["bcm-data-exports:ListExports"],
+    operation: bcm.listExports,
+  }),
+);

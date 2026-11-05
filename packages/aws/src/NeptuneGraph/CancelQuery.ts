@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneGraphGraphHttpBinding } from "./BindingHttp.ts";
 import type { Graph } from "./Graph.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface CancelQuery extends Binding.Service<
   >
 > {}
 export const CancelQuery = Binding.Service<CancelQuery>("AWS.NeptuneGraph.CancelQuery");
+
+export const CancelQueryHttp = Layer.effect(
+  CancelQuery,
+  makeNeptuneGraphGraphHttpBinding({
+    tag: "AWS.NeptuneGraph.CancelQuery",
+    operation: neptunegraph.cancelQuery,
+    actions: ["neptune-graph:CancelQuery"],
+  }),
+);

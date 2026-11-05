@@ -1,7 +1,9 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Adapter } from "./Adapter.ts";
+import { makeTextractAdapterHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:ListAdapterVersions` — list the versions
@@ -33,4 +35,13 @@ export interface ListAdapterVersions extends Binding.Service<
 > {}
 export const ListAdapterVersions = Binding.Service<ListAdapterVersions>(
   "AWS.Textract.ListAdapterVersions",
+);
+
+export const ListAdapterVersionsHttp = Layer.effect(
+  ListAdapterVersions,
+  makeTextractAdapterHttpBinding({
+    capability: "ListAdapterVersions",
+    iamActions: ["textract:ListAdapterVersions"],
+    operation: textract.listAdapterVersions,
+  }),
 );

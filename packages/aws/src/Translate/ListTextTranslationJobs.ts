@@ -1,6 +1,8 @@
-import type * as translate from "@distilled.cloud/aws/translate";
+import * as translate from "@distilled.cloud/aws/translate";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranslateHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `translate:ListTextTranslationJobs` — list the batch
@@ -37,4 +39,13 @@ export interface ListTextTranslationJobs extends Binding.Service<
 > {}
 export const ListTextTranslationJobs = Binding.Service<ListTextTranslationJobs>(
   "AWS.Translate.ListTextTranslationJobs",
+);
+
+export const ListTextTranslationJobsHttp = Layer.effect(
+  ListTextTranslationJobs,
+  makeTranslateHttpBinding({
+    tag: "AWS.Translate.ListTextTranslationJobs",
+    operation: translate.listTextTranslationJobs,
+    actions: ["translate:ListTextTranslationJobs"],
+  }),
 );

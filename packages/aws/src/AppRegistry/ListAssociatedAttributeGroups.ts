@@ -1,7 +1,9 @@
-import type * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
+import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeApplicationScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `ListAssociatedAttributeGroups` request with `application` injected from the bound {@link Application}. */
 export interface ListAssociatedAttributeGroupsRequest extends Omit<
@@ -46,4 +48,13 @@ export interface ListAssociatedAttributeGroups extends Binding.Service<
 
 export const ListAssociatedAttributeGroups = Binding.Service<ListAssociatedAttributeGroups>(
   "AWS.AppRegistry.ListAssociatedAttributeGroups",
+);
+
+export const ListAssociatedAttributeGroupsHttp = Layer.effect(
+  ListAssociatedAttributeGroups,
+  makeApplicationScopedHttpBinding({
+    tag: "AWS.AppRegistry.ListAssociatedAttributeGroups",
+    operation: appregistry.listAssociatedAttributeGroups,
+    actions: ["servicecatalog:ListAssociatedAttributeGroups"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as efs from "@distilled.cloud/aws/efs";
+import * as efs from "@distilled.cloud/aws/efs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEfsFileSystemHttpBinding } from "./BindingHttp.ts";
 import type { FileSystem } from "./FileSystem.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface DescribeLifecycleConfiguration extends Binding.Service<
 > {}
 export const DescribeLifecycleConfiguration = Binding.Service<DescribeLifecycleConfiguration>(
   "AWS.EFS.DescribeLifecycleConfiguration",
+);
+
+export const DescribeLifecycleConfigurationHttp = Layer.effect(
+  DescribeLifecycleConfiguration,
+  makeEfsFileSystemHttpBinding({
+    tag: "AWS.EFS.DescribeLifecycleConfiguration",
+    operation: efs.describeLifecycleConfiguration,
+    actions: ["elasticfilesystem:DescribeLifecycleConfiguration"],
+  }),
 );

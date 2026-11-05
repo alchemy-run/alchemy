@@ -1,6 +1,8 @@
-import type * as aiops from "@distilled.cloud/aws/aiops";
+import * as aiops from "@distilled.cloud/aws/aiops";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAIOpsGroupHttpBinding } from "./BindingHttp.ts";
 import type { InvestigationGroup } from "./InvestigationGroup.ts";
 
 /**
@@ -34,4 +36,14 @@ export interface ListTagsForResource extends Binding.Service<
 > {}
 export const ListTagsForResource = Binding.Service<ListTagsForResource>(
   "AWS.AIOps.ListTagsForResource",
+);
+
+export const ListTagsForResourceHttp = Layer.effect(
+  ListTagsForResource,
+  makeAIOpsGroupHttpBinding({
+    tag: "AWS.AIOps.ListTagsForResource",
+    operation: aiops.listTagsForResource,
+    actions: ["aiops:ListTagsForResource"],
+    input: (resourceArn) => ({ resourceArn }),
+  }),
 );

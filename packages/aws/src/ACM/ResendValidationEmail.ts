@@ -1,6 +1,8 @@
-import type * as acm from "@distilled.cloud/aws/acm";
+import * as acm from "@distilled.cloud/aws/acm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAcmCertificateHttpBinding } from "./BindingHttp.ts";
 import type { Certificate } from "./Certificate.ts";
 
 /**
@@ -50,4 +52,13 @@ export interface ResendValidationEmail extends Binding.Service<
 
 export const ResendValidationEmail = Binding.Service<ResendValidationEmail>(
   "AWS.ACM.ResendValidationEmail",
+);
+
+export const ResendValidationEmailHttp = Layer.effect(
+  ResendValidationEmail,
+  makeAcmCertificateHttpBinding({
+    capability: "ResendValidationEmail",
+    iamActions: ["acm:ResendValidationEmail"],
+    operation: acm.resendValidationEmail,
+  }),
 );

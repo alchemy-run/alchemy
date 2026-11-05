@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `CancelSubscription` request with `applicationId` injected from the bound application.
@@ -43,4 +45,13 @@ export interface CancelSubscription extends Binding.Service<
 > {}
 export const CancelSubscription = Binding.Service<CancelSubscription>(
   "AWS.QBusiness.CancelSubscription",
+);
+
+export const CancelSubscriptionHttp = Layer.effect(
+  CancelSubscription,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.CancelSubscription",
+    operation: qbusiness.cancelSubscription,
+    actions: ["qbusiness:CancelSubscription"],
+  }),
 );

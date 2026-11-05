@@ -1,6 +1,8 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTextractHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:DetectDocumentText` — synchronous OCR that
@@ -40,4 +42,14 @@ export interface DetectDocumentText extends Binding.Service<
 > {}
 export const DetectDocumentText = Binding.Service<DetectDocumentText>(
   "AWS.Textract.DetectDocumentText",
+);
+
+export const DetectDocumentTextHttp = Layer.effect(
+  DetectDocumentText,
+  makeTextractHttpBinding({
+    capability: "DetectDocumentText",
+    // textract:DetectDocumentText has no resource-level IAM.
+    iamActions: ["textract:DetectDocumentText"],
+    operation: textract.detectDocumentText,
+  }),
 );

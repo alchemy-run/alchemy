@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsSubscriptionHttpBinding } from "./BindingHttp.ts";
 import type { Subscription } from "./Subscription.ts";
 
 export interface SetSubscriptionAttributesRequest extends Omit<
@@ -46,4 +48,14 @@ export interface SetSubscriptionAttributes extends Binding.Service<
 > {}
 export const SetSubscriptionAttributes = Binding.Service<SetSubscriptionAttributes>(
   "AWS.SNS.SetSubscriptionAttributes",
+);
+
+export const SetSubscriptionAttributesHttp = Layer.effect(
+  SetSubscriptionAttributes,
+  makeSnsSubscriptionHttpBinding({
+    tag: "AWS.SNS.SetSubscriptionAttributes",
+    operation: sns.setSubscriptionAttributes,
+    actions: ["sns:SetSubscriptionAttributes"],
+    key: "SubscriptionArn",
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:BatchDetectEntities` — detect named entities for a batch of up to 25 documents in a single call.
@@ -37,4 +39,13 @@ export interface BatchDetectEntities extends Binding.Service<
 > {}
 export const BatchDetectEntities = Binding.Service<BatchDetectEntities>(
   "AWS.Comprehend.BatchDetectEntities",
+);
+
+export const BatchDetectEntitiesHttp = Layer.effect(
+  BatchDetectEntities,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.BatchDetectEntities",
+    operation: comprehend.batchDetectEntities,
+    actions: ["comprehend:BatchDetectEntities"],
+  }),
 );

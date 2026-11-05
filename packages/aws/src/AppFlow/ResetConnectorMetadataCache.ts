@@ -1,6 +1,8 @@
-import type * as appflow from "@distilled.cloud/aws/appflow";
+import * as appflow from "@distilled.cloud/aws/appflow";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAppFlowHttpBinding } from "./BindingHttp.ts";
 import type { ConnectorProfile } from "./ConnectorProfile.ts";
 
 export interface ResetConnectorMetadataCacheRequest extends Omit<
@@ -50,4 +52,15 @@ export interface ResetConnectorMetadataCache extends Binding.Service<
 
 export const ResetConnectorMetadataCache = Binding.Service<ResetConnectorMetadataCache>(
   "AWS.AppFlow.ResetConnectorMetadataCache",
+);
+
+export const ResetConnectorMetadataCacheHttp = Layer.effect(
+  ResetConnectorMetadataCache,
+  makeAppFlowHttpBinding({
+    action: "ResetConnectorMetadataCache",
+    operation: appflow.resetConnectorMetadataCache,
+    identifier: (profile: ConnectorProfile) => profile.connectorProfileName,
+    requestKey: "connectorProfileName",
+    resources: (profile: ConnectorProfile) => [profile.connectorProfileArn],
+  }),
 );

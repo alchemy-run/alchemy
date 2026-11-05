@@ -1,6 +1,8 @@
-import type * as geoPlaces from "@distilled.cloud/aws/geo-places";
+import * as geoPlaces from "@distilled.cloud/aws/geo-places";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoPlacesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-places:Geocode` — convert an address or place
@@ -40,3 +42,12 @@ export interface Geocode extends Binding.Service<
   >
 > {}
 export const Geocode = Binding.Service<Geocode>("AWS.GeoPlaces.Geocode");
+
+export const GeocodeHttp = Layer.effect(
+  Geocode,
+  makeGeoPlacesHttpBinding({
+    capability: "Geocode",
+    iamActions: ["geo-places:Geocode"],
+    operation: geoPlaces.geocode,
+  }),
+);

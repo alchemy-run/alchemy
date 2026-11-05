@@ -1,6 +1,8 @@
-import type * as geoPlaces from "@distilled.cloud/aws/geo-places";
+import * as geoPlaces from "@distilled.cloud/aws/geo-places";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoPlacesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-places:Autocomplete` — complete potential places
@@ -41,3 +43,12 @@ export interface Autocomplete extends Binding.Service<
   >
 > {}
 export const Autocomplete = Binding.Service<Autocomplete>("AWS.GeoPlaces.Autocomplete");
+
+export const AutocompleteHttp = Layer.effect(
+  Autocomplete,
+  makeGeoPlacesHttpBinding({
+    capability: "Autocomplete",
+    iamActions: ["geo-places:Autocomplete"],
+    operation: geoPlaces.autocomplete,
+  }),
+);

@@ -1,6 +1,8 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQueueUrlHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface SendMessageBatchRequest extends Omit<sqs.SendMessageBatchRequest, "QueueUrl"> {}
@@ -46,3 +48,13 @@ export interface SendMessageBatch extends Binding.Service<
 > {}
 
 export const SendMessageBatch = Binding.Service<SendMessageBatch>("AWS.SQS.SendMessageBatch");
+
+export const SendMessageBatchHttp = Layer.effect(
+  SendMessageBatch,
+  makeQueueUrlHttpBinding({
+    tag: "AWS.SQS.SendMessageBatch",
+    operation: sqs.sendMessageBatch,
+    // Batch entries are authorized by the singular action.
+    actions: ["sqs:SendMessage"],
+  }),
+);

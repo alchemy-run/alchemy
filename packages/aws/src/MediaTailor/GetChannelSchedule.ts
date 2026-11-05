@@ -1,6 +1,8 @@
-import type * as mediatailor from "@distilled.cloud/aws/mediatailor";
+import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaTailorHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediatailor:GetChannelSchedule` — read the current
@@ -31,4 +33,13 @@ export interface GetChannelSchedule extends Binding.Service<
 > {}
 export const GetChannelSchedule = Binding.Service<GetChannelSchedule>(
   "AWS.MediaTailor.GetChannelSchedule",
+);
+
+export const GetChannelScheduleHttp = Layer.effect(
+  GetChannelSchedule,
+  makeMediaTailorHttpBinding({
+    capability: "GetChannelSchedule",
+    iamActions: ["mediatailor:GetChannelSchedule"],
+    operation: mediatailor.getChannelSchedule,
+  }),
 );

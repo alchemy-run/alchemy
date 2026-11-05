@@ -1,6 +1,8 @@
-import type * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
+import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudTrailEventDataStoreHttpBinding } from "./BindingHttp.ts";
 import type { EventDataStore } from "./EventDataStore.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface CancelQuery extends Binding.Service<
   >
 > {}
 export const CancelQuery = Binding.Service<CancelQuery>("AWS.CloudTrail.CancelQuery");
+
+export const CancelQueryHttp = Layer.effect(
+  CancelQuery,
+  makeCloudTrailEventDataStoreHttpBinding({
+    tag: "AWS.CloudTrail.CancelQuery",
+    operation: cloudtrail.cancelQuery,
+    actions: ["cloudtrail:CancelQuery"],
+  }),
+);

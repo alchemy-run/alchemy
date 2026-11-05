@@ -1,6 +1,8 @@
-import type * as memorydb from "@distilled.cloud/aws/memorydb";
+import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMemoryDBAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeSnapshots` operation (IAM action
@@ -34,4 +36,13 @@ export interface DescribeSnapshots extends Binding.Service<
 > {}
 export const DescribeSnapshots = Binding.Service<DescribeSnapshots>(
   "AWS.MemoryDB.DescribeSnapshots",
+);
+
+export const DescribeSnapshotsHttp = Layer.effect(
+  DescribeSnapshots,
+  makeMemoryDBAccountHttpBinding({
+    tag: "AWS.MemoryDB.DescribeSnapshots",
+    operation: memorydb.describeSnapshots,
+    actions: ["memorydb:DescribeSnapshots"],
+  }),
 );

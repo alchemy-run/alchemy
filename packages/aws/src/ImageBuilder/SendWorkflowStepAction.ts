@@ -1,6 +1,8 @@
-import type * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeImageBuilderAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `imagebuilder:SendWorkflowStepAction`.
@@ -42,4 +44,13 @@ export interface SendWorkflowStepAction extends Binding.Service<
 > {}
 export const SendWorkflowStepAction = Binding.Service<SendWorkflowStepAction>(
   "AWS.ImageBuilder.SendWorkflowStepAction",
+);
+
+export const SendWorkflowStepActionHttp = Layer.effect(
+  SendWorkflowStepAction,
+  makeImageBuilderAccountHttpBinding({
+    tag: "AWS.ImageBuilder.SendWorkflowStepAction",
+    operation: imagebuilder.sendWorkflowStepAction,
+    actions: ["imagebuilder:SendWorkflowStepAction"],
+  }),
 );

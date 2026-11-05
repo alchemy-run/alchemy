@@ -1,6 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListTablesRequest extends DynamoDB.ListTablesInput {}
 
@@ -32,3 +34,12 @@ export interface ListTables extends Binding.Service<
 > {}
 
 export const ListTables = Binding.Service<ListTables>("AWS.DynamoDB.ListTables");
+
+export const ListTablesHttp = Layer.effect(
+  ListTables,
+  makeAccountHttpBinding({
+    tag: "AWS.DynamoDB.ListTables",
+    operation: DynamoDB.listTables,
+    actions: ["dynamodb:ListTables"],
+  }),
+);

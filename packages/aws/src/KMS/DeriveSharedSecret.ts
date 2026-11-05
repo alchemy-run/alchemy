@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AliasName } from "./Alias.ts";
+import { makeKmsKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface DeriveSharedSecretRequest extends Omit<kms.DeriveSharedSecretRequest, "KeyId"> {}
@@ -44,3 +46,12 @@ export interface DeriveSharedSecret extends Binding.Service<
 > {}
 
 export const DeriveSharedSecret = Binding.Service<DeriveSharedSecret>("AWS.KMS.DeriveSharedSecret");
+
+export const DeriveSharedSecretHttp = Layer.effect(
+  DeriveSharedSecret,
+  makeKmsKeyHttpBinding({
+    tag: "AWS.KMS.DeriveSharedSecret",
+    operation: kms.deriveSharedSecret,
+    actions: ["kms:DeriveSharedSecret"],
+  }),
+);

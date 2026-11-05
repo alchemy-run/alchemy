@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `StartServiceSoftwareUpdate` operation (IAM action
@@ -33,4 +35,13 @@ export interface StartServiceSoftwareUpdate extends Binding.Service<
 > {}
 export const StartServiceSoftwareUpdate = Binding.Service<StartServiceSoftwareUpdate>(
   "AWS.OpenSearch.StartServiceSoftwareUpdate",
+);
+
+export const StartServiceSoftwareUpdateHttp = Layer.effect(
+  StartServiceSoftwareUpdate,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.StartServiceSoftwareUpdate",
+    operation: opensearch.startServiceSoftwareUpdate,
+    actions: ["es:StartServiceSoftwareUpdate"],
+  }),
 );

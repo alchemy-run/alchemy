@@ -1,6 +1,8 @@
-import type * as appflow from "@distilled.cloud/aws/appflow";
+import * as appflow from "@distilled.cloud/aws/appflow";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAppFlowHttpBinding } from "./BindingHttp.ts";
 import type { Flow } from "./Flow.ts";
 
 export interface CancelFlowExecutionsRequest extends Omit<
@@ -47,4 +49,15 @@ export interface CancelFlowExecutions extends Binding.Service<
 
 export const CancelFlowExecutions = Binding.Service<CancelFlowExecutions>(
   "AWS.AppFlow.CancelFlowExecutions",
+);
+
+export const CancelFlowExecutionsHttp = Layer.effect(
+  CancelFlowExecutions,
+  makeAppFlowHttpBinding({
+    action: "CancelFlowExecutions",
+    operation: appflow.cancelFlowExecutions,
+    identifier: (flow: Flow) => flow.flowName,
+    requestKey: "flowName",
+    resources: (flow: Flow) => [flow.flowArn],
+  }),
 );

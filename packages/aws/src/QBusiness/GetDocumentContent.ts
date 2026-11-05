@@ -1,6 +1,8 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQBusinessIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -43,4 +45,13 @@ export interface GetDocumentContent extends Binding.Service<
 > {}
 export const GetDocumentContent = Binding.Service<GetDocumentContent>(
   "AWS.QBusiness.GetDocumentContent",
+);
+
+export const GetDocumentContentHttp = Layer.effect(
+  GetDocumentContent,
+  makeQBusinessIndexHttpBinding({
+    tag: "AWS.QBusiness.GetDocumentContent",
+    operation: qbusiness.getDocumentContent,
+    actions: ["qbusiness:GetDocumentContent"],
+  }),
 );

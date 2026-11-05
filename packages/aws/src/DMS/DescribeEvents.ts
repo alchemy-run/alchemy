@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dms:DescribeEvents`.
@@ -35,3 +37,12 @@ export interface DescribeEvents extends Binding.Service<
 > {}
 
 export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.DMS.DescribeEvents");
+
+export const DescribeEventsHttp = Layer.effect(
+  DescribeEvents,
+  makeDmsAccountHttpBinding({
+    tag: "AWS.DMS.DescribeEvents",
+    actions: ["dms:DescribeEvents"],
+    operation: dms.describeEvents,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DescribeStreamProcessor` — describe a stream processor — status, input/output configuration, and settings.
@@ -38,4 +40,13 @@ export interface DescribeStreamProcessor extends Binding.Service<
 > {}
 export const DescribeStreamProcessor = Binding.Service<DescribeStreamProcessor>(
   "AWS.Rekognition.DescribeStreamProcessor",
+);
+
+export const DescribeStreamProcessorHttp = Layer.effect(
+  DescribeStreamProcessor,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DescribeStreamProcessor",
+    operation: rekognition.describeStreamProcessor,
+    actions: ["rekognition:DescribeStreamProcessor"],
+  }),
 );

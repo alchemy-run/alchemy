@@ -1,6 +1,13 @@
-import type * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
+import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import {
+  COMPOSITION_ARN_WILDCARD,
+  ENCODER_CONFIGURATION_ARN_WILDCARD,
+  makeIvsRealtimeStageHttpBinding,
+  STORAGE_CONFIGURATION_ARN_WILDCARD,
+} from "./BindingHttp.ts";
 import type { Stage } from "./Stage.ts";
 
 /** The `stageArn` is injected by the binding from the bound stage. */
@@ -43,4 +50,20 @@ export interface StartComposition extends Binding.Service<
 > {}
 export const StartComposition = Binding.Service<StartComposition>(
   "AWS.IVSRealtime.StartComposition",
+);
+
+export const StartCompositionHttp = Layer.effect(
+  StartComposition,
+  makeIvsRealtimeStageHttpBinding({
+    tag: "AWS.IVSRealtime.StartComposition",
+    operation: ivsrealtime.startComposition,
+    actions: ["ivs:StartComposition"],
+    // The created composition and any referenced encoder/storage
+    // configurations are runtime data.
+    extraResources: [
+      COMPOSITION_ARN_WILDCARD,
+      ENCODER_CONFIGURATION_ARN_WILDCARD,
+      STORAGE_CONFIGURATION_ARN_WILDCARD,
+    ],
+  }),
 );

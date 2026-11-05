@@ -1,6 +1,8 @@
-import type * as geoRoutes from "@distilled.cloud/aws/geo-routes";
+import * as geoRoutes from "@distilled.cloud/aws/geo-routes";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoRoutesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-routes:CalculateRouteMatrix` — compute travel time
@@ -56,4 +58,13 @@ export interface CalculateRouteMatrix extends Binding.Service<
 > {}
 export const CalculateRouteMatrix = Binding.Service<CalculateRouteMatrix>(
   "AWS.GeoRoutes.CalculateRouteMatrix",
+);
+
+export const CalculateRouteMatrixHttp = Layer.effect(
+  CalculateRouteMatrix,
+  makeGeoRoutesHttpBinding({
+    capability: "CalculateRouteMatrix",
+    iamActions: ["geo-routes:CalculateRouteMatrix"],
+    operation: geoRoutes.calculateRouteMatrix,
+  }),
 );

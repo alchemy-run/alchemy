@@ -1,6 +1,8 @@
-import type * as forecastquery from "@distilled.cloud/aws/forecastquery";
+import * as forecastquery from "@distilled.cloud/aws/forecastquery";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:QueryWhatIfForecast` — retrieve the
@@ -41,4 +43,13 @@ export interface QueryWhatIfForecast extends Binding.Service<
 > {}
 export const QueryWhatIfForecast = Binding.Service<QueryWhatIfForecast>(
   "AWS.Forecast.QueryWhatIfForecast",
+);
+
+export const QueryWhatIfForecastHttp = Layer.effect(
+  QueryWhatIfForecast,
+  makeForecastHttpBinding({
+    capability: "QueryWhatIfForecast",
+    iamActions: ["forecast:QueryWhatIfForecast"],
+    operation: forecastquery.queryWhatIfForecast,
+  }),
 );

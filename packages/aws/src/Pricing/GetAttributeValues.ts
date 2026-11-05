@@ -1,6 +1,8 @@
-import type * as pricing from "@distilled.cloud/aws/pricing";
+import * as pricing from "@distilled.cloud/aws/pricing";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePricingHttpBinding } from "./BindingHttp.ts";
 
 export interface GetAttributeValuesRequest extends pricing.GetAttributeValuesRequest {}
 
@@ -44,4 +46,13 @@ export interface GetAttributeValues extends Binding.Service<
 > {}
 export const GetAttributeValues = Binding.Service<GetAttributeValues>(
   "AWS.Pricing.GetAttributeValues",
+);
+
+export const GetAttributeValuesHttp = Layer.effect(
+  GetAttributeValues,
+  makePricingHttpBinding({
+    capability: "GetAttributeValues",
+    iamActions: ["pricing:GetAttributeValues"],
+    operation: pricing.getAttributeValues,
+  }),
 );

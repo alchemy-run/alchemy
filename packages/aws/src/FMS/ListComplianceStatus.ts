@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListComplianceStatus}.
@@ -37,4 +39,13 @@ export interface ListComplianceStatus extends Binding.Service<
 
 export const ListComplianceStatus = Binding.Service<ListComplianceStatus>(
   "AWS.FMS.ListComplianceStatus",
+);
+
+export const ListComplianceStatusHttp = Layer.effect(
+  ListComplianceStatus,
+  makeFmsHttpBinding({
+    capability: "ListComplianceStatus",
+    iamActions: ["fms:ListComplianceStatus"],
+    operation: fms.listComplianceStatus,
+  }),
 );

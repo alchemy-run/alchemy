@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:GetCelebrityInfo` — get the name and additional links for a celebrity ID returned by RecognizeCelebrities.
@@ -35,4 +37,13 @@ export interface GetCelebrityInfo extends Binding.Service<
 > {}
 export const GetCelebrityInfo = Binding.Service<GetCelebrityInfo>(
   "AWS.Rekognition.GetCelebrityInfo",
+);
+
+export const GetCelebrityInfoHttp = Layer.effect(
+  GetCelebrityInfo,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.GetCelebrityInfo",
+    operation: rekognition.getCelebrityInfo,
+    actions: ["rekognition:GetCelebrityInfo"],
+  }),
 );

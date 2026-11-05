@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface GetAssetRequest extends Omit<datazone.GetAssetInput, "domainIdentifier"> {}
@@ -33,3 +35,12 @@ export interface GetAsset extends Binding.Service<
   >
 > {}
 export const GetAsset = Binding.Service<GetAsset>("AWS.DataZone.GetAsset");
+
+export const GetAssetHttp = Layer.effect(
+  GetAsset,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.GetAsset",
+    operation: datazone.getAsset,
+    actions: ["datazone:GetAsset"],
+  }),
+);

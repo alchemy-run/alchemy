@@ -1,6 +1,8 @@
-import type * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudHsmHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteBackup` operation (IAM action
@@ -31,3 +33,12 @@ export interface DeleteBackup extends Binding.Service<
   >
 > {}
 export const DeleteBackup = Binding.Service<DeleteBackup>("AWS.CloudHSMV2.DeleteBackup");
+
+export const DeleteBackupHttp = Layer.effect(
+  DeleteBackup,
+  makeCloudHsmHttpBinding({
+    tag: "AWS.CloudHSMV2.DeleteBackup",
+    operation: cloudhsm.deleteBackup,
+    actions: ["cloudhsm:DeleteBackup"],
+  }),
+);

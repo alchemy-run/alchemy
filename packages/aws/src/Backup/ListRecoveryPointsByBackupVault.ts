@@ -1,7 +1,9 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { BackupVault } from "./BackupVault.ts";
+import { makeBackupVaultHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `ListRecoveryPointsByBackupVault` request with `BackupVaultName` injected
@@ -47,4 +49,13 @@ export interface ListRecoveryPointsByBackupVault extends Binding.Service<
 > {}
 export const ListRecoveryPointsByBackupVault = Binding.Service<ListRecoveryPointsByBackupVault>(
   "AWS.Backup.ListRecoveryPointsByBackupVault",
+);
+
+export const ListRecoveryPointsByBackupVaultHttp = Layer.effect(
+  ListRecoveryPointsByBackupVault,
+  makeBackupVaultHttpBinding({
+    tag: "AWS.Backup.ListRecoveryPointsByBackupVault",
+    operation: backup.listRecoveryPointsByBackupVault,
+    actions: ["backup:ListRecoveryPointsByBackupVault"],
+  }),
 );

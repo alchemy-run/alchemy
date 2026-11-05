@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetUsageForecast}.
@@ -42,4 +44,13 @@ export interface GetUsageForecast extends Binding.Service<
 
 export const GetUsageForecast = Binding.Service<GetUsageForecast>(
   "AWS.CostExplorer.GetUsageForecast",
+);
+
+export const GetUsageForecastHttp = Layer.effect(
+  GetUsageForecast,
+  makeCostExplorerHttpBinding({
+    capability: "GetUsageForecast",
+    iamActions: ["ce:GetUsageForecast"],
+    operation: ce.getUsageForecast,
+  }),
 );

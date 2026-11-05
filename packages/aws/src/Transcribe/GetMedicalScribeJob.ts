@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:GetMedicalScribeJob` — read a Medical Scribe job's status and, once complete, the clinical note and transcript locations.
@@ -33,4 +35,13 @@ export interface GetMedicalScribeJob extends Binding.Service<
 > {}
 export const GetMedicalScribeJob = Binding.Service<GetMedicalScribeJob>(
   "AWS.Transcribe.GetMedicalScribeJob",
+);
+
+export const GetMedicalScribeJobHttp = Layer.effect(
+  GetMedicalScribeJob,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.GetMedicalScribeJob",
+    operation: transcribe.getMedicalScribeJob,
+    actions: ["transcribe:GetMedicalScribeJob"],
+  }),
 );

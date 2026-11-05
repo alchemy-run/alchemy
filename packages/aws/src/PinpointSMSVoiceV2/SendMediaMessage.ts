@@ -1,6 +1,8 @@
-import type * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
+import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSmsVoicePhoneNumberHttpBinding } from "./BindingHttp.ts";
 import type { PhoneNumber } from "./PhoneNumber.ts";
 
 /**
@@ -51,4 +53,13 @@ export interface SendMediaMessage extends Binding.Service<
 > {}
 export const SendMediaMessage = Binding.Service<SendMediaMessage>(
   "AWS.PinpointSMSVoiceV2.SendMediaMessage",
+);
+
+export const SendMediaMessageHttp = Layer.effect(
+  SendMediaMessage,
+  makeSmsVoicePhoneNumberHttpBinding({
+    tag: "AWS.PinpointSMSVoiceV2.SendMediaMessage",
+    operation: smsvoice.sendMediaMessage,
+    actions: ["sms-voice:SendMediaMessage"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as aoss from "@distilled.cloud/aws/opensearchserverless";
+import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAossAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `BatchGetEffectiveLifecyclePolicy` operation (IAM
@@ -43,4 +45,13 @@ export interface BatchGetEffectiveLifecyclePolicy extends Binding.Service<
 > {}
 export const BatchGetEffectiveLifecyclePolicy = Binding.Service<BatchGetEffectiveLifecyclePolicy>(
   "AWS.OpenSearchServerless.BatchGetEffectiveLifecyclePolicy",
+);
+
+export const BatchGetEffectiveLifecyclePolicyHttp = Layer.effect(
+  BatchGetEffectiveLifecyclePolicy,
+  makeAossAccountHttpBinding({
+    tag: "AWS.OpenSearchServerless.BatchGetEffectiveLifecyclePolicy",
+    operation: aoss.batchGetEffectiveLifecyclePolicy,
+    actions: ["aoss:BatchGetEffectiveLifecyclePolicy"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as batch from "@distilled.cloud/aws/batch";
+import * as batch from "@distilled.cloud/aws/batch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBatchJobHttpBinding } from "./BindingHttp.ts";
 import type { JobQueue } from "./JobQueue.ts";
 
 export interface DescribeJobsRequest extends batch.DescribeJobsRequest {}
@@ -32,3 +34,13 @@ export interface DescribeJobs extends Binding.Service<
   >
 > {}
 export const DescribeJobs = Binding.Service<DescribeJobs>("AWS.Batch.DescribeJobs");
+
+export const DescribeJobsHttp = Layer.effect(
+  DescribeJobs,
+  // batch:DescribeJobs does not support resource-level IAM.
+  makeBatchJobHttpBinding({
+    tag: "AWS.Batch.DescribeJobs",
+    operation: batch.describeJobs,
+    actions: ["batch:DescribeJobs"],
+  }),
+);

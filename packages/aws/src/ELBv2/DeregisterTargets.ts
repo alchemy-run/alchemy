@@ -1,6 +1,8 @@
-import type * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTargetGroupHttpBinding } from "./BindingHttp.ts";
 import type { TargetGroup } from "./TargetGroup.ts";
 
 /**
@@ -49,3 +51,12 @@ export interface DeregisterTargets extends Binding.Service<
 > {}
 
 export const DeregisterTargets = Binding.Service<DeregisterTargets>("AWS.ELBv2.DeregisterTargets");
+
+export const DeregisterTargetsHttp = Layer.effect(
+  DeregisterTargets,
+  makeTargetGroupHttpBinding({
+    tag: "AWS.ELBv2.DeregisterTargets",
+    operation: elbv2.deregisterTargets,
+    actions: ["elasticloadbalancing:DeregisterTargets"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSESHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `sesv2:PutSuppressedDestination`.
@@ -36,4 +38,13 @@ export interface PutSuppressedDestination extends Binding.Service<
 > {}
 export const PutSuppressedDestination = Binding.Service<PutSuppressedDestination>(
   "AWS.SES.PutSuppressedDestination",
+);
+
+export const PutSuppressedDestinationHttp = Layer.effect(
+  PutSuppressedDestination,
+  makeSESHttpBinding({
+    tag: "AWS.SES.PutSuppressedDestination",
+    operation: sesv2.putSuppressedDestination,
+    actions: ["ses:PutSuppressedDestination"],
+  }),
 );

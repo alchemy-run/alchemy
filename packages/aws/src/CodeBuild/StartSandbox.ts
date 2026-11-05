@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildProjectNameHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 /**
@@ -29,3 +32,12 @@ export interface StartSandbox extends Binding.Service<
   >
 > {}
 export const StartSandbox = Binding.Service<StartSandbox>("AWS.CodeBuild.StartSandbox");
+
+export const StartSandboxHttp = Layer.effect(
+  StartSandbox,
+  makeCodeBuildProjectNameHttpBinding({
+    tag: "AWS.CodeBuild.StartSandbox",
+    operation: codebuild.startSandbox,
+    actions: ["codebuild:StartSandbox"],
+  }),
+);

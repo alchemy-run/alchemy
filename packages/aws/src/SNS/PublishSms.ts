@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface PublishSmsRequest extends Omit<sns.PublishInput, "TopicArn" | "TargetArn"> {}
 
@@ -32,3 +34,14 @@ export interface PublishSms extends Binding.Service<
 > {}
 
 export const PublishSms = Binding.Service<PublishSms>("AWS.SNS.PublishSms");
+
+export const PublishSmsHttp = Layer.effect(
+  PublishSms,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.PublishSms",
+    operation: sns.publish,
+    // Direct SMS delivery is backed by `sms-voice:SendTextMessage`
+    // (probe-verified).
+    actions: ["sns:Publish", "sms-voice:SendTextMessage"],
+  }),
+);

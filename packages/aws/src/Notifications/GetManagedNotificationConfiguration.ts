@@ -1,6 +1,8 @@
-import type * as notifications from "@distilled.cloud/aws/notifications";
+import * as notifications from "@distilled.cloud/aws/notifications";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNotificationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetManagedNotificationConfiguration}.
@@ -47,3 +49,12 @@ export const GetManagedNotificationConfiguration =
   Binding.Service<GetManagedNotificationConfiguration>(
     "AWS.Notifications.GetManagedNotificationConfiguration",
   );
+
+export const GetManagedNotificationConfigurationHttp = Layer.effect(
+  GetManagedNotificationConfiguration,
+  makeNotificationsHttpBinding({
+    capability: "GetManagedNotificationConfiguration",
+    iamActions: ["notifications:GetManagedNotificationConfiguration"],
+    operation: notifications.getManagedNotificationConfiguration,
+  }),
+);

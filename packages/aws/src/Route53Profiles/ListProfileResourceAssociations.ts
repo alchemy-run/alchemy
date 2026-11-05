@@ -1,6 +1,8 @@
-import type * as profiles from "@distilled.cloud/aws/route53profiles";
+import * as profiles from "@distilled.cloud/aws/route53profiles";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeProfilesHttpBinding } from "./BindingHttp.ts";
 import type { Profile } from "./Profile.ts";
 
 /**
@@ -57,4 +59,13 @@ export interface ListProfileResourceAssociations extends Binding.Service<
 
 export const ListProfileResourceAssociations = Binding.Service<ListProfileResourceAssociations>(
   "AWS.Route53Profiles.ListProfileResourceAssociations",
+);
+
+export const ListProfileResourceAssociationsHttp = Layer.effect(
+  ListProfileResourceAssociations,
+  makeProfilesHttpBinding({
+    tag: "AWS.Route53Profiles.ListProfileResourceAssociations",
+    operation: profiles.listProfileResourceAssociations,
+    actions: ["route53profiles:ListProfileResourceAssociations"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as servicequotas from "@distilled.cloud/aws/service-quotas";
+import * as servicequotas from "@distilled.cloud/aws/service-quotas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceQuotasHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for
@@ -39,3 +41,12 @@ export const ListRequestedServiceQuotaChangeHistory =
   Binding.Service<ListRequestedServiceQuotaChangeHistory>(
     "AWS.ServiceQuotas.ListRequestedServiceQuotaChangeHistory",
   );
+
+export const ListRequestedServiceQuotaChangeHistoryHttp = Layer.effect(
+  ListRequestedServiceQuotaChangeHistory,
+  makeServiceQuotasHttpBinding({
+    capability: "ListRequestedServiceQuotaChangeHistory",
+    iamActions: ["servicequotas:ListRequestedServiceQuotaChangeHistory"],
+    operation: servicequotas.listRequestedServiceQuotaChangeHistory,
+  }),
+);

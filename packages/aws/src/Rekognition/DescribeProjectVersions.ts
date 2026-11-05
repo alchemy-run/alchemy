@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DescribeProjectVersions` — describe the model versions of a Rekognition project — training status, evaluation results, and hosting status.
@@ -38,4 +40,13 @@ export interface DescribeProjectVersions extends Binding.Service<
 > {}
 export const DescribeProjectVersions = Binding.Service<DescribeProjectVersions>(
   "AWS.Rekognition.DescribeProjectVersions",
+);
+
+export const DescribeProjectVersionsHttp = Layer.effect(
+  DescribeProjectVersions,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DescribeProjectVersions",
+    operation: rekognition.describeProjectVersions,
+    actions: ["rekognition:DescribeProjectVersions"],
+  }),
 );

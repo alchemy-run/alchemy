@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface PutRecordRequest extends Omit<Kinesis.PutRecordInput, "StreamName"> {}
@@ -49,3 +51,13 @@ export interface PutRecord extends Binding.Service<
 > {}
 
 export const PutRecord = Binding.Service<PutRecord>("AWS.Kinesis.PutRecord");
+
+export const PutRecordHttp = Layer.effect(
+  PutRecord,
+  makeStreamHttpBinding({
+    tag: "AWS.Kinesis.PutRecord",
+    operation: Kinesis.putRecord,
+    actions: ["kinesis:PutRecord"],
+    key: "StreamName",
+  }),
+);

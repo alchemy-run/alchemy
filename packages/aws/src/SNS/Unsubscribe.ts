@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface UnsubscribeRequest extends sns.UnsubscribeInput {}
 
@@ -28,3 +30,12 @@ export interface Unsubscribe extends Binding.Service<
 > {}
 
 export const Unsubscribe = Binding.Service<Unsubscribe>("AWS.SNS.Unsubscribe");
+
+export const UnsubscribeHttp = Layer.effect(
+  Unsubscribe,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.Unsubscribe",
+    operation: sns.unsubscribe,
+    actions: ["sns:Unsubscribe"],
+  }),
+);

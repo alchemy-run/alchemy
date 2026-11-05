@@ -1,6 +1,8 @@
-import type * as glacier from "@distilled.cloud/aws/glacier";
+import * as glacier from "@distilled.cloud/aws/glacier";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlacierVaultHttpBinding } from "./BindingHttp.ts";
 import type { Vault } from "./Vault.ts";
 
 /**
@@ -49,4 +51,13 @@ export interface InitiateMultipartUpload extends Binding.Service<
 > {}
 export const InitiateMultipartUpload = Binding.Service<InitiateMultipartUpload>(
   "AWS.Glacier.InitiateMultipartUpload",
+);
+
+export const InitiateMultipartUploadHttp = Layer.effect(
+  InitiateMultipartUpload,
+  makeGlacierVaultHttpBinding({
+    tag: "AWS.Glacier.InitiateMultipartUpload",
+    operation: glacier.initiateMultipartUpload,
+    actions: ["glacier:InitiateMultipartUpload"],
+  }),
 );

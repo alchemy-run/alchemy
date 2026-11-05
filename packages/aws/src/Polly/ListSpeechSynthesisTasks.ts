@@ -1,6 +1,8 @@
-import type * as polly from "@distilled.cloud/aws/polly";
+import * as polly from "@distilled.cloud/aws/polly";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePollyHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `polly:ListSpeechSynthesisTasks` — list asynchronous
@@ -37,4 +39,13 @@ export interface ListSpeechSynthesisTasks extends Binding.Service<
 > {}
 export const ListSpeechSynthesisTasks = Binding.Service<ListSpeechSynthesisTasks>(
   "AWS.Polly.ListSpeechSynthesisTasks",
+);
+
+export const ListSpeechSynthesisTasksHttp = Layer.effect(
+  ListSpeechSynthesisTasks,
+  makePollyHttpBinding({
+    capability: "ListSpeechSynthesisTasks",
+    iamActions: ["polly:ListSpeechSynthesisTasks"],
+    operation: polly.listSpeechSynthesisTasks,
+  }),
 );

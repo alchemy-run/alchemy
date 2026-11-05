@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:CreateUser` — create a user in a face collection to aggregate multiple face IDs of the same person.
@@ -33,3 +35,12 @@ export interface CreateUser extends Binding.Service<
   >
 > {}
 export const CreateUser = Binding.Service<CreateUser>("AWS.Rekognition.CreateUser");
+
+export const CreateUserHttp = Layer.effect(
+  CreateUser,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.CreateUser",
+    operation: rekognition.createUser,
+    actions: ["rekognition:CreateUser"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dms:DescribeOrderableReplicationInstances`.
@@ -38,3 +40,12 @@ export const DescribeOrderableReplicationInstances =
   Binding.Service<DescribeOrderableReplicationInstances>(
     "AWS.DMS.DescribeOrderableReplicationInstances",
   );
+
+export const DescribeOrderableReplicationInstancesHttp = Layer.effect(
+  DescribeOrderableReplicationInstances,
+  makeDmsAccountHttpBinding({
+    tag: "AWS.DMS.DescribeOrderableReplicationInstances",
+    actions: ["dms:DescribeOrderableReplicationInstances"],
+    operation: dms.describeOrderableReplicationInstances,
+  }),
+);

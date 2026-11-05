@@ -1,6 +1,8 @@
-import type * as redshift from "@distilled.cloud/aws/redshift";
+import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { clusterSnapshotArnPattern, makeRedshiftClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -41,4 +43,14 @@ export interface CreateClusterSnapshot extends Binding.Service<
 > {}
 export const CreateClusterSnapshot = Binding.Service<CreateClusterSnapshot>(
   "AWS.Redshift.CreateClusterSnapshot",
+);
+
+export const CreateClusterSnapshotHttp = Layer.effect(
+  CreateClusterSnapshot,
+  makeRedshiftClusterHttpBinding({
+    tag: "AWS.Redshift.CreateClusterSnapshot",
+    operation: redshift.createClusterSnapshot,
+    actions: ["redshift:CreateClusterSnapshot"],
+    extraResources: (clusterArn) => [clusterSnapshotArnPattern(clusterArn)],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as qapps from "@distilled.cloud/aws/qapps";
+import * as qapps from "@distilled.cloud/aws/qapps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQAppHttpBinding } from "./BindingHttp.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -49,4 +51,14 @@ export interface CreatePresignedUrl extends Binding.Service<
 
 export const CreatePresignedUrl = Binding.Service<CreatePresignedUrl>(
   "AWS.QApps.CreatePresignedUrl",
+);
+
+export const CreatePresignedUrlHttp = Layer.effect(
+  CreatePresignedUrl,
+  makeQAppHttpBinding({
+    capability: "CreatePresignedUrl",
+    iamActions: ["qapps:CreatePresignedUrl"],
+    operation: qapps.createPresignedUrl,
+    injectAppId: true,
+  }),
 );

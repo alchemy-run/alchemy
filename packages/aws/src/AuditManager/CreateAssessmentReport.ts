@@ -1,7 +1,9 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Assessment } from "./Assessment.ts";
+import { makeAssessmentScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `CreateAssessmentReport` request with `assessmentId` injected from the bound {@link Assessment}. */
 export interface CreateAssessmentReportRequest extends Omit<
@@ -41,4 +43,13 @@ export interface CreateAssessmentReport extends Binding.Service<
 
 export const CreateAssessmentReport = Binding.Service<CreateAssessmentReport>(
   "AWS.AuditManager.CreateAssessmentReport",
+);
+
+export const CreateAssessmentReportHttp = Layer.effect(
+  CreateAssessmentReport,
+  makeAssessmentScopedHttpBinding({
+    tag: "AWS.AuditManager.CreateAssessmentReport",
+    operation: auditmanager.createAssessmentReport,
+    actions: ["auditmanager:CreateAssessmentReport"],
+  }),
 );

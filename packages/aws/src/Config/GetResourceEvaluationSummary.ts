@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `config:GetResourceEvaluationSummary` — read the
@@ -39,4 +41,13 @@ export interface GetResourceEvaluationSummary extends Binding.Service<
 
 export const GetResourceEvaluationSummary = Binding.Service<GetResourceEvaluationSummary>(
   "AWS.Config.GetResourceEvaluationSummary",
+);
+
+export const GetResourceEvaluationSummaryHttp = Layer.effect(
+  GetResourceEvaluationSummary,
+  makeConfigAccountHttpBinding({
+    tag: "AWS.Config.GetResourceEvaluationSummary",
+    operation: config.getResourceEvaluationSummary,
+    actions: ["config:GetResourceEvaluationSummary"],
+  }),
 );

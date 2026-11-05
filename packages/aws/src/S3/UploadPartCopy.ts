@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface UploadPartCopyRequest extends Omit<S3.UploadPartCopyRequest, "Bucket"> {}
@@ -43,3 +45,12 @@ export interface UploadPartCopy extends Binding.Service<
   >
 > {}
 export const UploadPartCopy = Binding.Service<UploadPartCopy>("AWS.S3.UploadPartCopy");
+
+export const UploadPartCopyHttp = Layer.effect(
+  UploadPartCopy,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.UploadPartCopy",
+    operation: S3.uploadPartCopy,
+    actions: ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"],
+  }),
+);

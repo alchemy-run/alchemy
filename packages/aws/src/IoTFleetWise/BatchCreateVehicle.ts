@@ -1,6 +1,8 @@
-import type * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFleetWiseAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `BatchCreateVehicle` operation (IAM action
@@ -44,4 +46,21 @@ export interface BatchCreateVehicle extends Binding.Service<
 > {}
 export const BatchCreateVehicle = Binding.Service<BatchCreateVehicle>(
   "AWS.IoTFleetWise.BatchCreateVehicle",
+);
+
+export const BatchCreateVehicleHttp = Layer.effect(
+  BatchCreateVehicle,
+  makeFleetWiseAccountHttpBinding({
+    tag: "AWS.IoTFleetWise.BatchCreateVehicle",
+    operation: iotfleetwise.batchCreateVehicle,
+    // The vehicle ARNs only exist after the call; iot:CreateThing /
+    // iot:DescribeThing are dependent actions when the association
+    // behavior auto-creates the backing IoT thing.
+    actions: [
+      "iotfleetwise:BatchCreateVehicle",
+      "iotfleetwise:CreateVehicle",
+      "iot:CreateThing",
+      "iot:DescribeThing",
+    ],
+  }),
 );

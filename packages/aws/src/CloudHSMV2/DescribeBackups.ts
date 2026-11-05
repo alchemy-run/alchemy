@@ -1,6 +1,8 @@
-import type * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudHsmHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeBackups` operation (IAM action
@@ -33,3 +35,12 @@ export interface DescribeBackups extends Binding.Service<
   >
 > {}
 export const DescribeBackups = Binding.Service<DescribeBackups>("AWS.CloudHSMV2.DescribeBackups");
+
+export const DescribeBackupsHttp = Layer.effect(
+  DescribeBackups,
+  makeCloudHsmHttpBinding({
+    tag: "AWS.CloudHSMV2.DescribeBackups",
+    operation: cloudhsm.describeBackups,
+    actions: ["cloudhsm:DescribeBackups"],
+  }),
+);

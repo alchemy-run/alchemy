@@ -1,7 +1,9 @@
-import type * as mm from "@distilled.cloud/aws/mailmanager";
+import * as mm from "@distilled.cloud/aws/mailmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AddressList } from "./AddressList.ts";
+import { makeAddressListHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ses:GetMemberOfAddressList`.
@@ -38,4 +40,13 @@ export interface GetMemberOfAddressList extends Binding.Service<
 > {}
 export const GetMemberOfAddressList = Binding.Service<GetMemberOfAddressList>(
   "AWS.MailManager.GetMemberOfAddressList",
+);
+
+export const GetMemberOfAddressListHttp = Layer.effect(
+  GetMemberOfAddressList,
+  makeAddressListHttpBinding({
+    tag: "AWS.MailManager.GetMemberOfAddressList",
+    operation: mm.getMemberOfAddressList,
+    actions: ["ses:GetMemberOfAddressList"],
+  }),
 );

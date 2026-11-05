@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsInstanceHttpBinding } from "./BindingHttp.ts";
 import type { DBInstance } from "./DBInstance.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface StartDBInstance extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<rds.StartDBInstanceResult, rds.StartDBInstanceError>>
 > {}
 export const StartDBInstance = Binding.Service<StartDBInstance>("AWS.RDS.StartDBInstance");
+
+export const StartDBInstanceHttp = Layer.effect(
+  StartDBInstance,
+  makeRdsInstanceHttpBinding({
+    tag: "AWS.RDS.StartDBInstance",
+    operation: rds.startDBInstance,
+    actions: ["rds:StartDBInstance"],
+  }),
+);

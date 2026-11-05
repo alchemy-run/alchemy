@@ -1,6 +1,8 @@
-import type * as fis from "@distilled.cloud/aws/fis";
+import * as fis from "@distilled.cloud/aws/fis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFisAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `fis:GetAction`.
@@ -30,3 +32,12 @@ export interface GetAction extends Binding.Service<
   >
 > {}
 export const GetAction = Binding.Service<GetAction>("AWS.FIS.GetAction");
+
+export const GetActionHttp = Layer.effect(
+  GetAction,
+  makeFisAccountHttpBinding({
+    tag: "AWS.FIS.GetAction",
+    operation: fis.getAction,
+    actions: ["fis:GetAction"],
+  }),
+);

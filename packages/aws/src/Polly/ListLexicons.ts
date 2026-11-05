@@ -1,6 +1,8 @@
-import type * as polly from "@distilled.cloud/aws/polly";
+import * as polly from "@distilled.cloud/aws/polly";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePollyHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `polly:ListLexicons` — list the pronunciation
@@ -34,3 +36,12 @@ export interface ListLexicons extends Binding.Service<
   >
 > {}
 export const ListLexicons = Binding.Service<ListLexicons>("AWS.Polly.ListLexicons");
+
+export const ListLexiconsHttp = Layer.effect(
+  ListLexicons,
+  makePollyHttpBinding({
+    capability: "ListLexicons",
+    iamActions: ["polly:ListLexicons"],
+    operation: polly.listLexicons,
+  }),
+);

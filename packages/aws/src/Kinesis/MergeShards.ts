@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface MergeShardsRequest extends Omit<
@@ -45,3 +47,13 @@ export interface MergeShards extends Binding.Service<
 > {}
 
 export const MergeShards = Binding.Service<MergeShards>("AWS.Kinesis.MergeShards");
+
+export const MergeShardsHttp = Layer.effect(
+  MergeShards,
+  makeStreamHttpBinding({
+    tag: "AWS.Kinesis.MergeShards",
+    operation: Kinesis.mergeShards,
+    actions: ["kinesis:MergeShards"],
+    key: "StreamARN",
+  }),
+);

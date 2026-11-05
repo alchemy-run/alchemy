@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `eks:DescribeAddonVersions`.
@@ -35,4 +37,13 @@ export interface DescribeAddonVersions extends Binding.Service<
 > {}
 export const DescribeAddonVersions = Binding.Service<DescribeAddonVersions>(
   "AWS.EKS.DescribeAddonVersions",
+);
+
+export const DescribeAddonVersionsHttp = Layer.effect(
+  DescribeAddonVersions,
+  makeEKSAccountHttpBinding({
+    tag: "AWS.EKS.DescribeAddonVersions",
+    operation: eks.describeAddonVersions,
+    actions: ["eks:DescribeAddonVersions"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:ListTranscriptionJobs` — list the batch transcription jobs in the account, optionally filtered by status or name prefix.
@@ -37,4 +39,13 @@ export interface ListTranscriptionJobs extends Binding.Service<
 > {}
 export const ListTranscriptionJobs = Binding.Service<ListTranscriptionJobs>(
   "AWS.Transcribe.ListTranscriptionJobs",
+);
+
+export const ListTranscriptionJobsHttp = Layer.effect(
+  ListTranscriptionJobs,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.ListTranscriptionJobs",
+    operation: transcribe.listTranscriptionJobs,
+    actions: ["transcribe:ListTranscriptionJobs"],
+  }),
 );

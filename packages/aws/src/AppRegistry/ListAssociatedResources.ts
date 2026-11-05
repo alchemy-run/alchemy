@@ -1,7 +1,9 @@
-import type * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
+import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeApplicationScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `ListAssociatedResources` request with `application` injected from the bound {@link Application}. */
 export interface ListAssociatedResourcesRequest extends Omit<
@@ -46,4 +48,13 @@ export interface ListAssociatedResources extends Binding.Service<
 
 export const ListAssociatedResources = Binding.Service<ListAssociatedResources>(
   "AWS.AppRegistry.ListAssociatedResources",
+);
+
+export const ListAssociatedResourcesHttp = Layer.effect(
+  ListAssociatedResources,
+  makeApplicationScopedHttpBinding({
+    tag: "AWS.AppRegistry.ListAssociatedResources",
+    operation: appregistry.listAssociatedResources,
+    actions: ["servicecatalog:ListAssociatedResources"],
+  }),
 );

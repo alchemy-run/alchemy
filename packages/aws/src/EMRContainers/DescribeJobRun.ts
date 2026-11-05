@@ -1,6 +1,8 @@
-import type * as emrc from "@distilled.cloud/aws/emr-containers";
+import * as emrc from "@distilled.cloud/aws/emr-containers";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEMRContainersVirtualClusterHttpBinding } from "./BindingHttp.ts";
 import type { VirtualCluster } from "./VirtualCluster.ts";
 
 /**
@@ -43,3 +45,12 @@ export interface DescribeJobRun extends Binding.Service<
   >
 > {}
 export const DescribeJobRun = Binding.Service<DescribeJobRun>("AWS.EMRContainers.DescribeJobRun");
+
+export const DescribeJobRunHttp = Layer.effect(
+  DescribeJobRun,
+  makeEMRContainersVirtualClusterHttpBinding({
+    tag: "AWS.EMRContainers.DescribeJobRun",
+    operation: emrc.describeJobRun,
+    actions: ["emr-containers:DescribeJobRun"],
+  }),
+);

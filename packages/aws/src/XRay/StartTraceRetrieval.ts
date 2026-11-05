@@ -1,6 +1,8 @@
-import type * as xray from "@distilled.cloud/aws/xray";
+import * as xray from "@distilled.cloud/aws/xray";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeXRayHttpBinding } from "./BindingHttp.ts";
 
 export interface StartTraceRetrievalRequest extends xray.StartTraceRetrievalRequest {}
 
@@ -44,4 +46,31 @@ export interface StartTraceRetrieval extends Binding.Service<
 > {}
 export const StartTraceRetrieval = Binding.Service<StartTraceRetrieval>(
   "AWS.XRay.StartTraceRetrieval",
+);
+
+/**
+ * HTTP implementation of the `XRay.StartTraceRetrieval` binding.
+ *
+ * At deploy time it grants `xray:StartTraceRetrieval` on `*` to the host Lambda
+ * Function (the action does not support resource-level permissions); at
+ * runtime it calls the X-Ray API with the function's execution role
+ * credentials.
+ *
+ * @example Provide on the Function effect
+ * ```typescript
+ * import * as XRay from "@alchemy.run/aws/XRay";
+ *
+ * Effect.gen(function* () {
+ *   const startTraceRetrieval = yield* XRay.StartTraceRetrieval();
+ *   // ...
+ * }).pipe(Effect.provide(XRay.StartTraceRetrievalHttp));
+ * ```
+ */
+export const StartTraceRetrievalHttp = Layer.effect(
+  StartTraceRetrieval,
+  makeXRayHttpBinding({
+    tag: "AWS.XRay.StartTraceRetrieval",
+    operation: xray.startTraceRetrieval,
+    actions: ["xray:StartTraceRetrieval"],
+  }),
 );

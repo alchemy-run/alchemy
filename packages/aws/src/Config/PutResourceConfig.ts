@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `config:PutResourceConfig` — record the
@@ -37,3 +39,12 @@ export interface PutResourceConfig extends Binding.Service<
 > {}
 
 export const PutResourceConfig = Binding.Service<PutResourceConfig>("AWS.Config.PutResourceConfig");
+
+export const PutResourceConfigHttp = Layer.effect(
+  PutResourceConfig,
+  makeConfigAccountHttpBinding({
+    tag: "AWS.Config.PutResourceConfig",
+    operation: config.putResourceConfig,
+    actions: ["config:PutResourceConfig"],
+  }),
+);

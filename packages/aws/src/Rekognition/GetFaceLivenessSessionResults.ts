@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:GetFaceLivenessSessionResults` — get the confidence score, status, and audit images of a completed Face Liveness session.
@@ -40,4 +42,13 @@ export interface GetFaceLivenessSessionResults extends Binding.Service<
 > {}
 export const GetFaceLivenessSessionResults = Binding.Service<GetFaceLivenessSessionResults>(
   "AWS.Rekognition.GetFaceLivenessSessionResults",
+);
+
+export const GetFaceLivenessSessionResultsHttp = Layer.effect(
+  GetFaceLivenessSessionResults,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.GetFaceLivenessSessionResults",
+    operation: rekognition.getFaceLivenessSessionResults,
+    actions: ["rekognition:GetFaceLivenessSessionResults"],
+  }),
 );

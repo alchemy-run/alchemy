@@ -1,6 +1,8 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -47,4 +49,14 @@ export interface ListGroupsOlderThanOrderingId extends Binding.Service<
 > {}
 export const ListGroupsOlderThanOrderingId = Binding.Service<ListGroupsOlderThanOrderingId>(
   "AWS.Kendra.ListGroupsOlderThanOrderingId",
+);
+
+export const ListGroupsOlderThanOrderingIdHttp = Layer.effect(
+  ListGroupsOlderThanOrderingId,
+  makeKendraIndexHttpBinding({
+    tag: "AWS.Kendra.ListGroupsOlderThanOrderingId",
+    operation: kendra.listGroupsOlderThanOrderingId,
+    actions: ["kendra:ListGroupsOlderThanOrderingId"],
+    subResources: ["data-source/*"],
+  }),
 );

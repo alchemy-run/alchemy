@@ -1,6 +1,8 @@
-import type * as ec2 from "@distilled.cloud/aws/ec2";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeVolumeHttpBinding } from "./BindingHttp.ts";
 import type { Volume } from "./Volume.ts";
 
 /**
@@ -45,3 +47,16 @@ export interface CreateSnapshot extends Binding.Service<
 > {}
 
 export const CreateSnapshot = Binding.Service<CreateSnapshot>("AWS.EC2.CreateSnapshot");
+
+export const CreateSnapshotHttp = Layer.effect(
+  CreateSnapshot,
+  makeVolumeHttpBinding({
+    tag: "AWS.EC2.CreateSnapshot",
+    operation: ec2.createSnapshot,
+    // `ec2:CreateTags` covers `TagSpecifications` on the new snapshot.
+    actions: ["ec2:CreateSnapshot", "ec2:CreateTags"],
+    // Snapshot creation authorizes against both the source volume and the
+    // new snapshot; snapshot ARNs carry no account id.
+    extraResources: ["arn:aws:ec2:*::snapshot/*"],
+  }),
+);

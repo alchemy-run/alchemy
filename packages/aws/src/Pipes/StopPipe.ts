@@ -1,6 +1,8 @@
-import type * as pipes from "@distilled.cloud/aws/pipes";
+import * as pipes from "@distilled.cloud/aws/pipes";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePipesHttpBinding } from "./BindingHttp.ts";
 import type { Pipe } from "./Pipe.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface StopPipe extends Binding.Service<
   (pipe: Pipe) => Effect.Effect<() => Effect.Effect<pipes.StopPipeResponse, pipes.StopPipeError>>
 > {}
 export const StopPipe = Binding.Service<StopPipe>("AWS.Pipes.StopPipe");
+
+export const StopPipeHttp = Layer.effect(
+  StopPipe,
+  makePipesHttpBinding({
+    tag: "AWS.Pipes.StopPipe",
+    operation: pipes.stopPipe,
+    actions: ["pipes:StopPipe"],
+  }),
+);

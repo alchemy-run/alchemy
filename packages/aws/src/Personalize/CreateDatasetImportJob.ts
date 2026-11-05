@@ -1,6 +1,8 @@
-import type * as personalize from "@distilled.cloud/aws/personalize";
+import * as personalize from "@distilled.cloud/aws/personalize";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `personalize:CreateDatasetImportJob` — Starts a bulk import of training data from S3 into a dataset — the
@@ -41,4 +43,14 @@ export interface CreateDatasetImportJob extends Binding.Service<
 > {}
 export const CreateDatasetImportJob = Binding.Service<CreateDatasetImportJob>(
   "AWS.Personalize.CreateDatasetImportJob",
+);
+
+export const CreateDatasetImportJobHttp = Layer.effect(
+  CreateDatasetImportJob,
+  makePersonalizeAccountHttpBinding({
+    tag: "AWS.Personalize.CreateDatasetImportJob",
+    operation: personalize.createDatasetImportJob,
+    actions: ["personalize:CreateDatasetImportJob"],
+    passRole: true,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { Memory } from "./Memory.ts";
 
 export interface ListActorsRequest extends Omit<agentcore.ListActorsInput, "memoryId"> {}
@@ -43,3 +45,15 @@ export interface ListActors extends Binding.Service<
   >
 > {}
 export const ListActors = Binding.Service<ListActors>("AWS.BedrockAgentCore.ListActors");
+
+export const ListActorsHttp = Layer.effect(
+  ListActors,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.ListActors",
+    operation: agentcore.listActors,
+    actions: ["bedrock-agentcore:ListActors"],
+    requestKey: "memoryId",
+    identifier: (memory: Memory) => memory.memoryId,
+    arns: (memory: Memory) => [memory.memoryArn],
+  }),
+);

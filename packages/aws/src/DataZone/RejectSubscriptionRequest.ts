@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface RejectSubscriptionRequestRequest extends Omit<
@@ -42,4 +44,13 @@ export interface RejectSubscriptionRequest extends Binding.Service<
 > {}
 export const RejectSubscriptionRequest = Binding.Service<RejectSubscriptionRequest>(
   "AWS.DataZone.RejectSubscriptionRequest",
+);
+
+export const RejectSubscriptionRequestHttp = Layer.effect(
+  RejectSubscriptionRequest,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.RejectSubscriptionRequest",
+    operation: datazone.rejectSubscriptionRequest,
+    actions: ["datazone:RejectSubscriptionRequest"],
+  }),
 );

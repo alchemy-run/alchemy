@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface VerifySMSSandboxPhoneNumberRequest extends sns.VerifySMSSandboxPhoneNumberInput {}
 
@@ -34,4 +36,13 @@ export interface VerifySMSSandboxPhoneNumber extends Binding.Service<
 
 export const VerifySMSSandboxPhoneNumber = Binding.Service<VerifySMSSandboxPhoneNumber>(
   "AWS.SNS.VerifySMSSandboxPhoneNumber",
+);
+
+export const VerifySMSSandboxPhoneNumberHttp = Layer.effect(
+  VerifySMSSandboxPhoneNumber,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.VerifySMSSandboxPhoneNumber",
+    operation: sns.verifySMSSandboxPhoneNumber,
+    actions: ["sns:VerifySMSSandboxPhoneNumber", "sms-voice:VerifyDestinationNumber"],
+  }),
 );

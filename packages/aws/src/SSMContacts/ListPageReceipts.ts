@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-contacts:ListPageReceipts`.
@@ -31,4 +33,13 @@ export interface ListPageReceipts extends Binding.Service<
 > {}
 export const ListPageReceipts = Binding.Service<ListPageReceipts>(
   "AWS.SSMContacts.ListPageReceipts",
+);
+
+export const ListPageReceiptsHttp = Layer.effect(
+  ListPageReceipts,
+  makeAccountHttpBinding({
+    tag: "AWS.SSMContacts.ListPageReceipts",
+    operation: ssm.listPageReceipts,
+    actions: ["ssm-contacts:ListPageReceipts"],
+  }),
 );

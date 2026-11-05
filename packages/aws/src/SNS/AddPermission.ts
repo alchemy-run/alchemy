@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsTopicHttpBinding } from "./BindingHttp.ts";
 import type { Topic } from "./Topic.ts";
 
 export interface AddPermissionRequest extends Omit<sns.AddPermissionInput, "TopicArn"> {}
@@ -42,3 +44,13 @@ export interface AddPermission extends Binding.Service<
 > {}
 
 export const AddPermission = Binding.Service<AddPermission>("AWS.SNS.AddPermission");
+
+export const AddPermissionHttp = Layer.effect(
+  AddPermission,
+  makeSnsTopicHttpBinding({
+    tag: "AWS.SNS.AddPermission",
+    operation: sns.addPermission,
+    actions: ["sns:AddPermission"],
+    key: "TopicArn",
+  }),
+);

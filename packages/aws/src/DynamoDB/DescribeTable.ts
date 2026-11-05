@@ -1,6 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface DescribeTableRequest extends Omit<DynamoDB.DescribeTableInput, "TableName"> {}
@@ -35,3 +37,12 @@ export interface DescribeTable extends Binding.Service<
 > {}
 
 export const DescribeTable = Binding.Service<DescribeTable>("AWS.DynamoDB.DescribeTable");
+
+export const DescribeTableHttp = Layer.effect(
+  DescribeTable,
+  makeTableHttpBinding({
+    tag: "AWS.DynamoDB.DescribeTable",
+    operation: DynamoDB.describeTable,
+    actions: ["dynamodb:DescribeTable"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSESHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `sesv2:GetDomainStatisticsReport`.
@@ -40,4 +42,13 @@ export interface GetDomainStatisticsReport extends Binding.Service<
 > {}
 export const GetDomainStatisticsReport = Binding.Service<GetDomainStatisticsReport>(
   "AWS.SES.GetDomainStatisticsReport",
+);
+
+export const GetDomainStatisticsReportHttp = Layer.effect(
+  GetDomainStatisticsReport,
+  makeSESHttpBinding({
+    tag: "AWS.SES.GetDomainStatisticsReport",
+    operation: sesv2.getDomainStatisticsReport,
+    actions: ["ses:GetDomainStatisticsReport"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTrustStoreHttpBinding } from "./BindingHttp.ts";
 import type { TrustStore } from "./TrustStore.ts";
 
 /**
@@ -52,4 +54,13 @@ export interface GetTrustStoreRevocationContent extends Binding.Service<
 
 export const GetTrustStoreRevocationContent = Binding.Service<GetTrustStoreRevocationContent>(
   "AWS.ELBv2.GetTrustStoreRevocationContent",
+);
+
+export const GetTrustStoreRevocationContentHttp = Layer.effect(
+  GetTrustStoreRevocationContent,
+  makeTrustStoreHttpBinding({
+    tag: "AWS.ELBv2.GetTrustStoreRevocationContent",
+    operation: elbv2.getTrustStoreRevocationContent,
+    actions: ["elasticloadbalancing:GetTrustStoreRevocationContent"],
+  }),
 );

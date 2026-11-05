@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:ListAutomationRules`.
@@ -35,4 +37,13 @@ export interface ListAutomationRules extends Binding.Service<
 > {}
 export const ListAutomationRules = Binding.Service<ListAutomationRules>(
   "AWS.SecurityHub.ListAutomationRules",
+);
+
+export const ListAutomationRulesHttp = Layer.effect(
+  ListAutomationRules,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.ListAutomationRules",
+    operation: securityhub.listAutomationRules,
+    actions: ["securityhub:ListAutomationRules"],
+  }),
 );

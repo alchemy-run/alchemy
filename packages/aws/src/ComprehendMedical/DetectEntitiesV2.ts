@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:DetectEntitiesV2` — extract medical
@@ -41,4 +43,13 @@ export interface DetectEntitiesV2 extends Binding.Service<
 > {}
 export const DetectEntitiesV2 = Binding.Service<DetectEntitiesV2>(
   "AWS.ComprehendMedical.DetectEntitiesV2",
+);
+
+export const DetectEntitiesV2Http = Layer.effect(
+  DetectEntitiesV2,
+  makeComprehendMedicalHttpBinding({
+    capability: "DetectEntitiesV2",
+    iamActions: ["comprehendmedical:DetectEntitiesV2"],
+    operation: comprehendmedical.detectEntitiesV2,
+  }),
 );

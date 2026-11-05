@@ -1,6 +1,8 @@
-import type * as incidents from "@distilled.cloud/aws/ssm-incidents";
+import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIncidentsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-incidents:GetIncidentRecord`.
@@ -33,4 +35,13 @@ export interface GetIncidentRecord extends Binding.Service<
 > {}
 export const GetIncidentRecord = Binding.Service<GetIncidentRecord>(
   "AWS.SSMIncidents.GetIncidentRecord",
+);
+
+export const GetIncidentRecordHttp = Layer.effect(
+  GetIncidentRecord,
+  makeIncidentsAccountHttpBinding({
+    tag: "AWS.SSMIncidents.GetIncidentRecord",
+    operation: incidents.getIncidentRecord,
+    actions: ["ssm-incidents:GetIncidentRecord"],
+  }),
 );

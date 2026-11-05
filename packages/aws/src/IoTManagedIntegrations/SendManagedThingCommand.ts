@@ -1,6 +1,8 @@
-import type * as mi from "@distilled.cloud/aws/iot-managed-integrations";
+import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeManagedThingHttpBinding } from "./BindingHttp.ts";
 import type { ManagedThing } from "./ManagedThing.ts";
 
 /**
@@ -59,4 +61,14 @@ export interface SendManagedThingCommand extends Binding.Service<
 > {}
 export const SendManagedThingCommand = Binding.Service<SendManagedThingCommand>(
   "AWS.IoTManagedIntegrations.SendManagedThingCommand",
+);
+
+export const SendManagedThingCommandHttp = Layer.effect(
+  SendManagedThingCommand,
+  makeManagedThingHttpBinding({
+    capability: "SendManagedThingCommand",
+    iamActions: ["iotmanagedintegrations:SendManagedThingCommand"],
+    operation: mi.sendManagedThingCommand,
+    key: "ManagedThingId",
+  }),
 );

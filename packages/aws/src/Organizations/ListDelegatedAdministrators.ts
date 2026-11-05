@@ -1,6 +1,8 @@
-import type * as organizations from "@distilled.cloud/aws/organizations";
+import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOrganizationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `organizations:ListDelegatedAdministrators`.
@@ -35,4 +37,13 @@ export interface ListDelegatedAdministrators extends Binding.Service<
 > {}
 export const ListDelegatedAdministrators = Binding.Service<ListDelegatedAdministrators>(
   "AWS.Organizations.ListDelegatedAdministrators",
+);
+
+export const ListDelegatedAdministratorsHttp = Layer.effect(
+  ListDelegatedAdministrators,
+  makeOrganizationsHttpBinding({
+    capability: "ListDelegatedAdministrators",
+    iamActions: ["organizations:ListDelegatedAdministrators"],
+    operation: organizations.listDelegatedAdministrators,
+  }),
 );

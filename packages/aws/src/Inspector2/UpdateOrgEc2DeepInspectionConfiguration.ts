@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:UpdateOrgEc2DeepInspectionConfiguration`.
@@ -38,3 +40,12 @@ export const UpdateOrgEc2DeepInspectionConfiguration =
   Binding.Service<UpdateOrgEc2DeepInspectionConfiguration>(
     "AWS.Inspector2.UpdateOrgEc2DeepInspectionConfiguration",
   );
+
+export const UpdateOrgEc2DeepInspectionConfigurationHttp = Layer.effect(
+  UpdateOrgEc2DeepInspectionConfiguration,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.UpdateOrgEc2DeepInspectionConfiguration",
+    operation: inspector2.updateOrgEc2DeepInspectionConfiguration,
+    actions: ["inspector2:UpdateOrgEc2DeepInspectionConfiguration"],
+  }),
+);

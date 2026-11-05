@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface DescribeAlarmsForMetricRequest extends cloudwatch.DescribeAlarmsForMetricInput {}
 
@@ -43,4 +45,13 @@ export interface DescribeAlarmsForMetric extends Binding.Service<
 
 export const DescribeAlarmsForMetric = Binding.Service<DescribeAlarmsForMetric>(
   "AWS.CloudWatch.DescribeAlarmsForMetric",
+);
+
+export const DescribeAlarmsForMetricHttp = Layer.effect(
+  DescribeAlarmsForMetric,
+  makeCloudWatchAccountHttpBinding({
+    tag: "AWS.CloudWatch.DescribeAlarmsForMetric",
+    operation: cloudwatch.describeAlarmsForMetric,
+    actions: ["cloudwatch:DescribeAlarmsForMetric"],
+  }),
 );

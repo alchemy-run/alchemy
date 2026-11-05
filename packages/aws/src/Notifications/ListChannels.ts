@@ -1,6 +1,8 @@
-import type * as notifications from "@distilled.cloud/aws/notifications";
+import * as notifications from "@distilled.cloud/aws/notifications";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNotificationConfigurationHttpBinding } from "./BindingHttp.ts";
 import type { NotificationConfiguration } from "./NotificationConfiguration.ts";
 
 /**
@@ -44,3 +46,12 @@ export interface ListChannels extends Binding.Service<
 > {}
 
 export const ListChannels = Binding.Service<ListChannels>("AWS.Notifications.ListChannels");
+
+export const ListChannelsHttp = Layer.effect(
+  ListChannels,
+  makeNotificationConfigurationHttpBinding({
+    capability: "ListChannels",
+    iamActions: ["notifications:ListChannels"],
+    operation: notifications.listChannels,
+  }),
+);

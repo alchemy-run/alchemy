@@ -1,6 +1,8 @@
-import type * as appsignals from "@distilled.cloud/aws/application-signals";
+import * as appsignals from "@distilled.cloud/aws/application-signals";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSloBatchHttpBinding } from "./BindingHttp.ts";
 import type { ServiceLevelObjective } from "./ServiceLevelObjective.ts";
 
 /**
@@ -55,3 +57,16 @@ export const BatchGetServiceLevelObjectiveBudgetReport =
   Binding.Service<BatchGetServiceLevelObjectiveBudgetReport>(
     "AWS.ApplicationSignals.BatchGetServiceLevelObjectiveBudgetReport",
   );
+
+export const BatchGetServiceLevelObjectiveBudgetReportHttp = Layer.effect(
+  BatchGetServiceLevelObjectiveBudgetReport,
+  makeSloBatchHttpBinding({
+    tag: "AWS.ApplicationSignals.BatchGetServiceLevelObjectiveBudgetReport",
+    operation: appsignals.batchGetServiceLevelObjectiveBudgetReport,
+    actions: ["application-signals:BatchGetServiceLevelObjectiveBudgetReport"],
+    // Budget reports evaluate the SLI with the CALLER's credentials —
+    // verified live: without cloudwatch:GetMetricData the operation fails
+    // with AccessDeniedException (empty message).
+    accountActions: ["cloudwatch:GetMetricData"],
+  }),
+);

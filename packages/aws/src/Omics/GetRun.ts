@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface GetRunRequest extends omics.GetRunRequest {}
 
@@ -29,3 +31,12 @@ export interface GetRun extends Binding.Service<
 > {}
 
 export const GetRun = Binding.Service<GetRun>("AWS.Omics.GetRun");
+
+export const GetRunHttp = Layer.effect(
+  GetRun,
+  makeOmicsAccountHttpBinding({
+    tag: "AWS.Omics.GetRun",
+    operation: omics.getRun,
+    actions: ["omics:GetRun"],
+  }),
+);

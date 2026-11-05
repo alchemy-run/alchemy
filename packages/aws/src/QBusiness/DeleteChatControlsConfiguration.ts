@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `DeleteChatControlsConfiguration` request with `applicationId` injected from the bound application.
@@ -46,4 +48,13 @@ export interface DeleteChatControlsConfiguration extends Binding.Service<
 > {}
 export const DeleteChatControlsConfiguration = Binding.Service<DeleteChatControlsConfiguration>(
   "AWS.QBusiness.DeleteChatControlsConfiguration",
+);
+
+export const DeleteChatControlsConfigurationHttp = Layer.effect(
+  DeleteChatControlsConfiguration,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.DeleteChatControlsConfiguration",
+    operation: qbusiness.deleteChatControlsConfiguration,
+    actions: ["qbusiness:DeleteChatControlsConfiguration"],
+  }),
 );

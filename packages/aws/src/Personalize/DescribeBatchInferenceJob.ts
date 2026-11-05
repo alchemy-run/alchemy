@@ -1,6 +1,8 @@
-import type * as personalize from "@distilled.cloud/aws/personalize";
+import * as personalize from "@distilled.cloud/aws/personalize";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `personalize:DescribeBatchInferenceJob` — Polls a batch inference job for completion — pairs with
@@ -36,4 +38,13 @@ export interface DescribeBatchInferenceJob extends Binding.Service<
 > {}
 export const DescribeBatchInferenceJob = Binding.Service<DescribeBatchInferenceJob>(
   "AWS.Personalize.DescribeBatchInferenceJob",
+);
+
+export const DescribeBatchInferenceJobHttp = Layer.effect(
+  DescribeBatchInferenceJob,
+  makePersonalizeAccountHttpBinding({
+    tag: "AWS.Personalize.DescribeBatchInferenceJob",
+    operation: personalize.describeBatchInferenceJob,
+    actions: ["personalize:DescribeBatchInferenceJob"],
+  }),
 );

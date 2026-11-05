@@ -1,6 +1,8 @@
-import type * as ram from "@distilled.cloud/aws/ram";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRAMHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ram:ListPrincipals`.
@@ -32,3 +34,12 @@ export interface ListPrincipals extends Binding.Service<
   >
 > {}
 export const ListPrincipals = Binding.Service<ListPrincipals>("AWS.RAM.ListPrincipals");
+
+export const ListPrincipalsHttp = Layer.effect(
+  ListPrincipals,
+  makeRAMHttpBinding({
+    capability: "ListPrincipals",
+    iamActions: ["ram:ListPrincipals"],
+    operation: ram.listPrincipals,
+  }),
+);

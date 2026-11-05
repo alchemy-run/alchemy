@@ -1,6 +1,8 @@
-import type * as ec2 from "@distilled.cloud/aws/ec2";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityGroupHttpBinding } from "./BindingHttp.ts";
 import type { SecurityGroup } from "./SecurityGroup.ts";
 
 /**
@@ -52,4 +54,13 @@ export interface RevokeSecurityGroupIngress extends Binding.Service<
 
 export const RevokeSecurityGroupIngress = Binding.Service<RevokeSecurityGroupIngress>(
   "AWS.EC2.RevokeSecurityGroupIngress",
+);
+
+export const RevokeSecurityGroupIngressHttp = Layer.effect(
+  RevokeSecurityGroupIngress,
+  makeSecurityGroupHttpBinding({
+    tag: "AWS.EC2.RevokeSecurityGroupIngress",
+    operation: ec2.revokeSecurityGroupIngress,
+    actions: ["ec2:RevokeSecurityGroupIngress"],
+  }),
 );

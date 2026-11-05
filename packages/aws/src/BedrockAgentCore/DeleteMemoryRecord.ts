@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { Memory } from "./Memory.ts";
 
 export interface DeleteMemoryRecordRequest extends Omit<
@@ -45,4 +47,16 @@ export interface DeleteMemoryRecord extends Binding.Service<
 > {}
 export const DeleteMemoryRecord = Binding.Service<DeleteMemoryRecord>(
   "AWS.BedrockAgentCore.DeleteMemoryRecord",
+);
+
+export const DeleteMemoryRecordHttp = Layer.effect(
+  DeleteMemoryRecord,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.DeleteMemoryRecord",
+    operation: agentcore.deleteMemoryRecord,
+    actions: ["bedrock-agentcore:DeleteMemoryRecord"],
+    requestKey: "memoryId",
+    identifier: (memory: Memory) => memory.memoryId,
+    arns: (memory: Memory) => [memory.memoryArn],
+  }),
 );

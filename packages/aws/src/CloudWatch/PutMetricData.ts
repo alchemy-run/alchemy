@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface PutMetricDataRequest extends cloudwatch.PutMetricDataInput {}
 
@@ -50,3 +52,12 @@ export interface PutMetricData extends Binding.Service<
 > {}
 
 export const PutMetricData = Binding.Service<PutMetricData>("AWS.CloudWatch.PutMetricData");
+
+export const PutMetricDataHttp = Layer.effect(
+  PutMetricData,
+  makeCloudWatchAccountHttpBinding({
+    tag: "AWS.CloudWatch.PutMetricData",
+    operation: cloudwatch.putMetricData,
+    actions: ["cloudwatch:PutMetricData"],
+  }),
+);

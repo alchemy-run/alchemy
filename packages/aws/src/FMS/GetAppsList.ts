@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetAppsList}.
@@ -34,3 +36,12 @@ export interface GetAppsList extends Binding.Service<
 > {}
 
 export const GetAppsList = Binding.Service<GetAppsList>("AWS.FMS.GetAppsList");
+
+export const GetAppsListHttp = Layer.effect(
+  GetAppsList,
+  makeFmsHttpBinding({
+    capability: "GetAppsList",
+    iamActions: ["fms:GetAppsList"],
+    operation: fms.getAppsList,
+  }),
+);

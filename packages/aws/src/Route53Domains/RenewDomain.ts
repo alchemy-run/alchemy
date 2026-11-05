@@ -1,6 +1,8 @@
-import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
+import * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53DomainsHttpBinding } from "./BindingHttp.ts";
 
 export interface RenewDomainRequest extends route53domains.RenewDomainRequest {}
 
@@ -50,3 +52,12 @@ export interface RenewDomain extends Binding.Service<
   >
 > {}
 export const RenewDomain = Binding.Service<RenewDomain>("AWS.Route53Domains.RenewDomain");
+
+export const RenewDomainHttp = Layer.effect(
+  RenewDomain,
+  makeRoute53DomainsHttpBinding({
+    capability: "RenewDomain",
+    iamActions: ["route53domains:RenewDomain"],
+    operation: route53domains.renewDomain,
+  }),
+);

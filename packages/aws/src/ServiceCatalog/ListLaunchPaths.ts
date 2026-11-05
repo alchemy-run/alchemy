@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:ListLaunchPaths`.
@@ -36,4 +38,13 @@ export interface ListLaunchPaths extends Binding.Service<
 > {}
 export const ListLaunchPaths = Binding.Service<ListLaunchPaths>(
   "AWS.ServiceCatalog.ListLaunchPaths",
+);
+
+export const ListLaunchPathsHttp = Layer.effect(
+  ListLaunchPaths,
+  makeServiceCatalogHttpBinding({
+    capability: "ListLaunchPaths",
+    iamActions: ["servicecatalog:ListLaunchPaths"],
+    operation: servicecatalog.listLaunchPaths,
+  }),
 );

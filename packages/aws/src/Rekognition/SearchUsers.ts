@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:SearchUsers` — search a face collection for users matching a face ID or user ID.
@@ -37,3 +39,12 @@ export interface SearchUsers extends Binding.Service<
   >
 > {}
 export const SearchUsers = Binding.Service<SearchUsers>("AWS.Rekognition.SearchUsers");
+
+export const SearchUsersHttp = Layer.effect(
+  SearchUsers,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.SearchUsers",
+    operation: rekognition.searchUsers,
+    actions: ["rekognition:SearchUsers"],
+  }),
+);

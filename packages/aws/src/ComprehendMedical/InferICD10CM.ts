@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:InferICD10CM` — detect medical
@@ -39,3 +41,12 @@ export interface InferICD10CM extends Binding.Service<
   >
 > {}
 export const InferICD10CM = Binding.Service<InferICD10CM>("AWS.ComprehendMedical.InferICD10CM");
+
+export const InferICD10CMHttp = Layer.effect(
+  InferICD10CM,
+  makeComprehendMedicalHttpBinding({
+    capability: "InferICD10CM",
+    iamActions: ["comprehendmedical:InferICD10CM"],
+    operation: comprehendmedical.inferICD10CM,
+  }),
+);

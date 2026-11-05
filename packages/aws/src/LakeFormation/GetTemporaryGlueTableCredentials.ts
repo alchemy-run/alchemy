@@ -1,6 +1,8 @@
-import type * as lf from "@distilled.cloud/aws/lakeformation";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLakeFormationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetTemporaryGlueTableCredentials}.
@@ -49,4 +51,13 @@ export interface GetTemporaryGlueTableCredentials extends Binding.Service<
 
 export const GetTemporaryGlueTableCredentials = Binding.Service<GetTemporaryGlueTableCredentials>(
   "AWS.LakeFormation.GetTemporaryGlueTableCredentials",
+);
+
+export const GetTemporaryGlueTableCredentialsHttp = Layer.effect(
+  GetTemporaryGlueTableCredentials,
+  makeLakeFormationHttpBinding({
+    capability: "GetTemporaryGlueTableCredentials",
+    iamActions: ["lakeformation:GetDataAccess"],
+    operation: lf.getTemporaryGlueTableCredentials,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as sfn from "@distilled.cloud/aws/sfn";
+import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeExecutionScopedHttpBinding } from "./BindingHttp.ts";
 import type { StateMachine } from "./StateMachine.ts";
 
 export interface UpdateMapRunRequest extends sfn.UpdateMapRunInput {}
@@ -31,3 +33,13 @@ export interface UpdateMapRun extends Binding.Service<
   >
 > {}
 export const UpdateMapRun = Binding.Service<UpdateMapRun>("AWS.StepFunctions.UpdateMapRun");
+
+export const UpdateMapRunHttp = Layer.effect(
+  UpdateMapRun,
+  makeExecutionScopedHttpBinding({
+    tag: "AWS.StepFunctions.UpdateMapRun",
+    operation: sfn.updateMapRun,
+    actions: ["states:UpdateMapRun"],
+    scope: "mapRun",
+  }),
+);

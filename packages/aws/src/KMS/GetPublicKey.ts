@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AliasName } from "./Alias.ts";
+import { makeKmsKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface GetPublicKeyRequest extends Omit<kms.GetPublicKeyRequest, "KeyId"> {}
@@ -38,3 +40,12 @@ export interface GetPublicKey extends Binding.Service<
 > {}
 
 export const GetPublicKey = Binding.Service<GetPublicKey>("AWS.KMS.GetPublicKey");
+
+export const GetPublicKeyHttp = Layer.effect(
+  GetPublicKey,
+  makeKmsKeyHttpBinding({
+    tag: "AWS.KMS.GetPublicKey",
+    operation: kms.getPublicKey,
+    actions: ["kms:GetPublicKey"],
+  }),
+);

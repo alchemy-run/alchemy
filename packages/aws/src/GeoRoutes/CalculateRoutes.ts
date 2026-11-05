@@ -1,6 +1,8 @@
-import type * as geoRoutes from "@distilled.cloud/aws/geo-routes";
+import * as geoRoutes from "@distilled.cloud/aws/geo-routes";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoRoutesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-routes:CalculateRoutes` — compute one or more
@@ -43,3 +45,12 @@ export interface CalculateRoutes extends Binding.Service<
   >
 > {}
 export const CalculateRoutes = Binding.Service<CalculateRoutes>("AWS.GeoRoutes.CalculateRoutes");
+
+export const CalculateRoutesHttp = Layer.effect(
+  CalculateRoutes,
+  makeGeoRoutesHttpBinding({
+    capability: "CalculateRoutes",
+    iamActions: ["geo-routes:CalculateRoutes"],
+    operation: geoRoutes.calculateRoutes,
+  }),
+);

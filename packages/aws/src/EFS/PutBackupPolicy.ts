@@ -1,6 +1,8 @@
-import type * as efs from "@distilled.cloud/aws/efs";
+import * as efs from "@distilled.cloud/aws/efs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEfsFileSystemHttpBinding } from "./BindingHttp.ts";
 import type { FileSystem } from "./FileSystem.ts";
 
 /**
@@ -42,3 +44,12 @@ export interface PutBackupPolicy extends Binding.Service<
   >
 > {}
 export const PutBackupPolicy = Binding.Service<PutBackupPolicy>("AWS.EFS.PutBackupPolicy");
+
+export const PutBackupPolicyHttp = Layer.effect(
+  PutBackupPolicy,
+  makeEfsFileSystemHttpBinding({
+    tag: "AWS.EFS.PutBackupPolicy",
+    operation: efs.putBackupPolicy,
+    actions: ["elasticfilesystem:PutBackupPolicy"],
+  }),
+);

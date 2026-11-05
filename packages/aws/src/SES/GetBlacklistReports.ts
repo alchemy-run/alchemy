@@ -1,6 +1,8 @@
-import type * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSESHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `sesv2:GetBlacklistReports`.
@@ -35,4 +37,13 @@ export interface GetBlacklistReports extends Binding.Service<
 > {}
 export const GetBlacklistReports = Binding.Service<GetBlacklistReports>(
   "AWS.SES.GetBlacklistReports",
+);
+
+export const GetBlacklistReportsHttp = Layer.effect(
+  GetBlacklistReports,
+  makeSESHttpBinding({
+    tag: "AWS.SES.GetBlacklistReports",
+    operation: sesv2.getBlacklistReports,
+    actions: ["ses:GetBlacklistReports"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:DescribeFeedback`.
@@ -32,4 +34,13 @@ export interface DescribeFeedback extends Binding.Service<
 > {}
 export const DescribeFeedback = Binding.Service<DescribeFeedback>(
   "AWS.DevOpsGuru.DescribeFeedback",
+);
+
+export const DescribeFeedbackHttp = Layer.effect(
+  DescribeFeedback,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.DescribeFeedback",
+    operation: devopsguru.describeFeedback,
+    actions: ["devops-guru:DescribeFeedback"],
+  }),
 );

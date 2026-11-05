@@ -1,6 +1,8 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQueueUrlHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface ReceiveMessageRequest extends Omit<sqs.ReceiveMessageRequest, "QueueUrl"> {}
@@ -46,3 +48,12 @@ export interface ReceiveMessage extends Binding.Service<
 > {}
 
 export const ReceiveMessage = Binding.Service<ReceiveMessage>("AWS.SQS.ReceiveMessage");
+
+export const ReceiveMessageHttp = Layer.effect(
+  ReceiveMessage,
+  makeQueueUrlHttpBinding({
+    tag: "AWS.SQS.ReceiveMessage",
+    operation: sqs.receiveMessage,
+    actions: ["sqs:ReceiveMessage"],
+  }),
+);

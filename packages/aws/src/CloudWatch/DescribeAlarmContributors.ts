@@ -1,7 +1,9 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AlarmResource } from "./binding-common.ts";
+import { makeCloudWatchResourceHttpBinding } from "./BindingHttp.ts";
 
 export interface DescribeAlarmContributorsRequest extends Omit<
   cloudwatch.DescribeAlarmContributorsInput,
@@ -53,4 +55,16 @@ export interface DescribeAlarmContributors extends Binding.Service<
 
 export const DescribeAlarmContributors = Binding.Service<DescribeAlarmContributors>(
   "AWS.CloudWatch.DescribeAlarmContributors",
+);
+
+export const DescribeAlarmContributorsHttp = Layer.effect(
+  DescribeAlarmContributors,
+  makeCloudWatchResourceHttpBinding({
+    tag: "AWS.CloudWatch.DescribeAlarmContributors",
+    operation: cloudwatch.describeAlarmContributors,
+    actions: ["cloudwatch:DescribeAlarmContributors"],
+    requestKey: "AlarmName",
+    identifier: (alarm: AlarmResource) => alarm.alarmName,
+    resourceArn: (alarm: AlarmResource) => alarm.alarmArn,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as neptune from "@distilled.cloud/aws/neptune";
+import * as neptune from "@distilled.cloud/aws/neptune";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneClusterHttpBinding } from "./BindingHttp.ts";
 import type { DBCluster } from "./DBCluster.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface StartDBCluster extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<neptune.StartDBClusterResult, neptune.StartDBClusterError>>
 > {}
 export const StartDBCluster = Binding.Service<StartDBCluster>("AWS.Neptune.StartDBCluster");
+
+export const StartDBClusterHttp = Layer.effect(
+  StartDBCluster,
+  makeNeptuneClusterHttpBinding({
+    tag: "AWS.Neptune.StartDBCluster",
+    operation: neptune.startDBCluster,
+    actions: ["rds:StartDBCluster"],
+  }),
+);

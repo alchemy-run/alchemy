@@ -1,6 +1,8 @@
-import type * as bdar from "@distilled.cloud/aws/bedrock-data-automation-runtime";
+import * as bdar from "@distilled.cloud/aws/bedrock-data-automation-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBdaAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetDataAutomationStatus` operation (IAM action
@@ -36,4 +38,13 @@ export interface GetDataAutomationStatus extends Binding.Service<
 > {}
 export const GetDataAutomationStatus = Binding.Service<GetDataAutomationStatus>(
   "AWS.BedrockDataAutomation.GetDataAutomationStatus",
+);
+
+export const GetDataAutomationStatusHttp = Layer.effect(
+  GetDataAutomationStatus,
+  makeBdaAccountHttpBinding({
+    tag: "AWS.BedrockDataAutomation.GetDataAutomationStatus",
+    operation: bdar.getDataAutomationStatus,
+    actions: ["bedrock:GetDataAutomationStatus"],
+  }),
 );

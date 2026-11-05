@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneGraphAccountHttpBinding, SNAPSHOT_ARN_WILDCARD } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteGraphSnapshot` operation (IAM action `neptune-graph:DeleteGraphSnapshot`).
@@ -31,4 +33,14 @@ export interface DeleteGraphSnapshot extends Binding.Service<
 > {}
 export const DeleteGraphSnapshot = Binding.Service<DeleteGraphSnapshot>(
   "AWS.NeptuneGraph.DeleteGraphSnapshot",
+);
+
+export const DeleteGraphSnapshotHttp = Layer.effect(
+  DeleteGraphSnapshot,
+  makeNeptuneGraphAccountHttpBinding({
+    tag: "AWS.NeptuneGraph.DeleteGraphSnapshot",
+    operation: neptunegraph.deleteGraphSnapshot,
+    actions: ["neptune-graph:DeleteGraphSnapshot"],
+    resources: [SNAPSHOT_ARN_WILDCARD],
+  }),
 );

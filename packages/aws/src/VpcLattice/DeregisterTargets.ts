@@ -1,6 +1,8 @@
-import type * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
+import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeVpcLatticeTargetGroupHttpBinding } from "./BindingHttp.ts";
 import type { TargetGroup } from "./TargetGroup.ts";
 
 /**
@@ -42,4 +44,13 @@ export interface DeregisterTargets extends Binding.Service<
 > {}
 export const DeregisterTargets = Binding.Service<DeregisterTargets>(
   "AWS.VpcLattice.DeregisterTargets",
+);
+
+export const DeregisterTargetsHttp = Layer.effect(
+  DeregisterTargets,
+  makeVpcLatticeTargetGroupHttpBinding({
+    tag: "AWS.VpcLattice.DeregisterTargets",
+    operation: vpclattice.deregisterTargets,
+    actions: ["vpc-lattice:DeregisterTargets"],
+  }),
 );

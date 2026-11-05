@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsInstanceHttpBinding } from "./BindingHttp.ts";
 import type { DBInstance } from "./DBInstance.ts";
 
 /**
@@ -38,3 +40,16 @@ export interface CreateDBSnapshot extends Binding.Service<
   >
 > {}
 export const CreateDBSnapshot = Binding.Service<CreateDBSnapshot>("AWS.RDS.CreateDBSnapshot");
+
+export const CreateDBSnapshotHttp = Layer.effect(
+  CreateDBSnapshot,
+  makeRdsInstanceHttpBinding({
+    tag: "AWS.RDS.CreateDBSnapshot",
+    operation: rds.createDBSnapshot,
+    actions: ["rds:CreateDBSnapshot", "rds:AddTagsToResource"],
+    // Snapshot creation authorizes against BOTH the source ARN and the
+    // target snapshot ARN — widen the grant to the account's
+    // `snapshot` ARN space.
+    extraResources: (arn) => [`${arn.split(":").slice(0, 5).join(":")}:snapshot:*`],
+  }),
+);

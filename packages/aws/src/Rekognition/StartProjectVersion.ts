@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StartProjectVersion` — start hosting a trained Custom Labels model version so it can serve DetectCustomLabels requests.
@@ -41,4 +43,13 @@ export interface StartProjectVersion extends Binding.Service<
 > {}
 export const StartProjectVersion = Binding.Service<StartProjectVersion>(
   "AWS.Rekognition.StartProjectVersion",
+);
+
+export const StartProjectVersionHttp = Layer.effect(
+  StartProjectVersion,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StartProjectVersion",
+    operation: rekognition.startProjectVersion,
+    actions: ["rekognition:StartProjectVersion"],
+  }),
 );

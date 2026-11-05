@@ -1,6 +1,8 @@
-import type * as mi from "@distilled.cloud/aws/iot-managed-integrations";
+import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeManagedThingHttpBinding } from "./BindingHttp.ts";
 import type { ManagedThing } from "./ManagedThing.ts";
 
 /**
@@ -36,4 +38,14 @@ export interface GetManagedThingCapabilities extends Binding.Service<
 > {}
 export const GetManagedThingCapabilities = Binding.Service<GetManagedThingCapabilities>(
   "AWS.IoTManagedIntegrations.GetManagedThingCapabilities",
+);
+
+export const GetManagedThingCapabilitiesHttp = Layer.effect(
+  GetManagedThingCapabilities,
+  makeManagedThingHttpBinding({
+    capability: "GetManagedThingCapabilities",
+    iamActions: ["iotmanagedintegrations:GetManagedThingCapabilities"],
+    operation: mi.getManagedThingCapabilities,
+    key: "Identifier",
+  }),
 );

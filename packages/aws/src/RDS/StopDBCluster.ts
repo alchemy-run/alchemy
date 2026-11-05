@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsClusterHttpBinding } from "./BindingHttp.ts";
 import type { DBCluster } from "./DBCluster.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface StopDBCluster extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<rds.StopDBClusterResult, rds.StopDBClusterError>>
 > {}
 export const StopDBCluster = Binding.Service<StopDBCluster>("AWS.RDS.StopDBCluster");
+
+export const StopDBClusterHttp = Layer.effect(
+  StopDBCluster,
+  makeRdsClusterHttpBinding({
+    tag: "AWS.RDS.StopDBCluster",
+    operation: rds.stopDBCluster,
+    actions: ["rds:StopDBCluster"],
+  }),
+);

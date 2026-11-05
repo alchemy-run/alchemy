@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CancelDataRepositoryTask` operation (IAM action
@@ -35,4 +37,13 @@ export interface CancelDataRepositoryTask extends Binding.Service<
 > {}
 export const CancelDataRepositoryTask = Binding.Service<CancelDataRepositoryTask>(
   "AWS.FSx.CancelDataRepositoryTask",
+);
+
+export const CancelDataRepositoryTaskHttp = Layer.effect(
+  CancelDataRepositoryTask,
+  makeFSxAccountHttpBinding({
+    tag: "AWS.FSx.CancelDataRepositoryTask",
+    operation: fsx.cancelDataRepositoryTask,
+    actions: ["fsx:CancelDataRepositoryTask"],
+  }),
 );

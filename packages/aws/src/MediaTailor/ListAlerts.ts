@@ -1,6 +1,8 @@
-import type * as mediatailor from "@distilled.cloud/aws/mediatailor";
+import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaTailorHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediatailor:ListAlerts` — read the operational alerts
@@ -31,3 +33,12 @@ export interface ListAlerts extends Binding.Service<
   >
 > {}
 export const ListAlerts = Binding.Service<ListAlerts>("AWS.MediaTailor.ListAlerts");
+
+export const ListAlertsHttp = Layer.effect(
+  ListAlerts,
+  makeMediaTailorHttpBinding({
+    capability: "ListAlerts",
+    iamActions: ["mediatailor:ListAlerts"],
+    operation: mediatailor.listAlerts,
+  }),
+);

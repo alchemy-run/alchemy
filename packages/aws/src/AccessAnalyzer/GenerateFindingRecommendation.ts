@@ -1,7 +1,9 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Analyzer } from "./Analyzer.ts";
+import { makeAnalyzerScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `GenerateFindingRecommendation` request with `analyzerArn` injected from the bound {@link Analyzer}. */
 export interface GenerateFindingRecommendationRequest extends Omit<
@@ -42,4 +44,13 @@ export interface GenerateFindingRecommendation extends Binding.Service<
 
 export const GenerateFindingRecommendation = Binding.Service<GenerateFindingRecommendation>(
   "AWS.AccessAnalyzer.GenerateFindingRecommendation",
+);
+
+export const GenerateFindingRecommendationHttp = Layer.effect(
+  GenerateFindingRecommendation,
+  makeAnalyzerScopedHttpBinding({
+    tag: "AWS.AccessAnalyzer.GenerateFindingRecommendation",
+    operation: aa.generateFindingRecommendation,
+    actions: ["access-analyzer:GenerateFindingRecommendation"],
+  }),
 );

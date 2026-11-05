@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsTopicHttpBinding } from "./BindingHttp.ts";
 import type { Topic } from "./Topic.ts";
 
 export interface GetTopicAttributesRequest extends Omit<sns.GetTopicAttributesInput, "TopicArn"> {}
@@ -39,3 +41,13 @@ export interface GetTopicAttributes extends Binding.Service<
 > {}
 
 export const GetTopicAttributes = Binding.Service<GetTopicAttributes>("AWS.SNS.GetTopicAttributes");
+
+export const GetTopicAttributesHttp = Layer.effect(
+  GetTopicAttributes,
+  makeSnsTopicHttpBinding({
+    tag: "AWS.SNS.GetTopicAttributes",
+    operation: sns.getTopicAttributes,
+    actions: ["sns:GetTopicAttributes"],
+    key: "TopicArn",
+  }),
+);

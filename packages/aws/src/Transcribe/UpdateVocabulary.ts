@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:UpdateVocabulary` — replace a custom vocabulary's phrases (the vocabulary re-enters `PENDING` while it reprocesses).
@@ -35,4 +37,13 @@ export interface UpdateVocabulary extends Binding.Service<
 > {}
 export const UpdateVocabulary = Binding.Service<UpdateVocabulary>(
   "AWS.Transcribe.UpdateVocabulary",
+);
+
+export const UpdateVocabularyHttp = Layer.effect(
+  UpdateVocabulary,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.UpdateVocabulary",
+    operation: transcribe.updateVocabulary,
+    actions: ["transcribe:UpdateVocabulary"],
+  }),
 );

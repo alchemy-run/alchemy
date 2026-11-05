@@ -1,6 +1,8 @@
-import type * as polly from "@distilled.cloud/aws/polly";
+import * as polly from "@distilled.cloud/aws/polly";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePollyHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `polly:DescribeVoices` — list the voices available
@@ -33,3 +35,12 @@ export interface DescribeVoices extends Binding.Service<
   >
 > {}
 export const DescribeVoices = Binding.Service<DescribeVoices>("AWS.Polly.DescribeVoices");
+
+export const DescribeVoicesHttp = Layer.effect(
+  DescribeVoices,
+  makePollyHttpBinding({
+    capability: "DescribeVoices",
+    iamActions: ["polly:DescribeVoices"],
+    operation: polly.describeVoices,
+  }),
+);

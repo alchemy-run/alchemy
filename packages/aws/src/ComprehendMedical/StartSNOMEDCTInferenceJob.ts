@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:StartSNOMEDCTInferenceJob` — start an asynchronous SNOMED CT ontology linking job over a collection of documents in S3. Also grants `iam:PassRole` (conditioned to `comprehendmedical.amazonaws.com`) for the job's data-access role.
@@ -40,4 +42,14 @@ export interface StartSNOMEDCTInferenceJob extends Binding.Service<
 > {}
 export const StartSNOMEDCTInferenceJob = Binding.Service<StartSNOMEDCTInferenceJob>(
   "AWS.ComprehendMedical.StartSNOMEDCTInferenceJob",
+);
+
+export const StartSNOMEDCTInferenceJobHttp = Layer.effect(
+  StartSNOMEDCTInferenceJob,
+  makeComprehendMedicalHttpBinding({
+    capability: "StartSNOMEDCTInferenceJob",
+    iamActions: ["comprehendmedical:StartSNOMEDCTInferenceJob"],
+    operation: comprehendmedical.startSNOMEDCTInferenceJob,
+    passRole: true,
+  }),
 );

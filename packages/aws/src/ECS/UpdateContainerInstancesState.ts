@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface UpdateContainerInstancesStateRequest extends Omit<
@@ -48,4 +50,16 @@ export interface UpdateContainerInstancesState extends Binding.Service<
 > {}
 export const UpdateContainerInstancesState = Binding.Service<UpdateContainerInstancesState>(
   "AWS.ECS.UpdateContainerInstancesState",
+);
+
+export const UpdateContainerInstancesStateHttp = Layer.effect(
+  UpdateContainerInstancesState,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.UpdateContainerInstancesState",
+    operation: ECS.updateContainerInstancesState,
+    actions: ["ecs:UpdateContainerInstancesState"],
+    // Authorizes against the container-instance resource:
+    // arn:aws:ecs:{region}:{account}:container-instance/{clusterName}/*
+    resources: ["container-instance"],
+  }),
 );

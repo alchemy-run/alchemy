@@ -1,6 +1,8 @@
-import type * as identitystore from "@distilled.cloud/aws/identitystore";
+import * as identitystore from "@distilled.cloud/aws/identitystore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIdentityStoreHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -39,3 +41,12 @@ export interface CreateUser extends Binding.Service<
   >
 > {}
 export const CreateUser = Binding.Service<CreateUser>("AWS.IdentityCenter.CreateUser");
+
+export const CreateUserHttp = Layer.effect(
+  CreateUser,
+  makeIdentityStoreHttpBinding({
+    tag: "AWS.IdentityCenter.CreateUser",
+    operation: identitystore.createUser,
+    actions: ["identitystore:CreateUser"],
+  }),
+);

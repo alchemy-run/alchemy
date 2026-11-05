@@ -1,6 +1,8 @@
-import type * as batch from "@distilled.cloud/aws/batch";
+import * as batch from "@distilled.cloud/aws/batch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBatchJobHttpBinding } from "./BindingHttp.ts";
 import type { JobQueue } from "./JobQueue.ts";
 
 export interface CancelJobRequest extends batch.CancelJobRequest {}
@@ -30,3 +32,14 @@ export interface CancelJob extends Binding.Service<
   >
 > {}
 export const CancelJob = Binding.Service<CancelJob>("AWS.Batch.CancelJob");
+
+export const CancelJobHttp = Layer.effect(
+  CancelJob,
+  // Job ARNs (arn:…:job/{jobId}) are only known at runtime, so the statement
+  // cannot enumerate them at deploy time.
+  makeBatchJobHttpBinding({
+    tag: "AWS.Batch.CancelJob",
+    operation: batch.cancelJob,
+    actions: ["batch:CancelJob"],
+  }),
+);

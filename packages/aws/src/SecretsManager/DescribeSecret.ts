@@ -1,6 +1,8 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecretHttpBinding } from "./BindingHttp.ts";
 import type { Secret } from "./Secret.ts";
 
 /**
@@ -35,3 +37,12 @@ export interface DescribeSecret extends Binding.Service<
 > {}
 
 export const DescribeSecret = Binding.Service<DescribeSecret>("AWS.SecretsManager.DescribeSecret");
+
+export const DescribeSecretHttp = Layer.effect(
+  DescribeSecret,
+  makeSecretHttpBinding({
+    tag: "AWS.SecretsManager.DescribeSecret",
+    operation: secretsmanager.describeSecret,
+    actions: ["secretsmanager:DescribeSecret"],
+  }),
+);

@@ -1,6 +1,8 @@
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInternetMonitorMonitorHttpBinding } from "./BindingHttp.ts";
 import type { Monitor } from "./Monitor.ts";
 
 export interface GetQueryResultsRequest extends Omit<im.GetQueryResultsInput, "MonitorName"> {}
@@ -38,4 +40,13 @@ export interface GetQueryResults extends Binding.Service<
 
 export const GetQueryResults = Binding.Service<GetQueryResults>(
   "AWS.InternetMonitor.GetQueryResults",
+);
+
+export const GetQueryResultsHttp = Layer.effect(
+  GetQueryResults,
+  makeInternetMonitorMonitorHttpBinding({
+    tag: "AWS.InternetMonitor.GetQueryResults",
+    operation: im.getQueryResults,
+    actions: ["internetmonitor:GetQueryResults"],
+  }),
 );

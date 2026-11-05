@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface DescribeContainerInstancesRequest extends Omit<
@@ -43,4 +45,16 @@ export interface DescribeContainerInstances extends Binding.Service<
 > {}
 export const DescribeContainerInstances = Binding.Service<DescribeContainerInstances>(
   "AWS.ECS.DescribeContainerInstances",
+);
+
+export const DescribeContainerInstancesHttp = Layer.effect(
+  DescribeContainerInstances,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.DescribeContainerInstances",
+    operation: ECS.describeContainerInstances,
+    actions: ["ecs:DescribeContainerInstances"],
+    // Authorizes against the container-instance resource:
+    // arn:aws:ecs:{region}:{account}:container-instance/{clusterName}/*
+    resources: ["container-instance"],
+  }),
 );

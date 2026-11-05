@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `DisassociatePermission` request with `applicationId` injected from the bound application.
@@ -45,4 +47,13 @@ export interface DisassociatePermission extends Binding.Service<
 > {}
 export const DisassociatePermission = Binding.Service<DisassociatePermission>(
   "AWS.QBusiness.DisassociatePermission",
+);
+
+export const DisassociatePermissionHttp = Layer.effect(
+  DisassociatePermission,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.DisassociatePermission",
+    operation: qbusiness.disassociatePermission,
+    actions: ["qbusiness:DisassociatePermission"],
+  }),
 );

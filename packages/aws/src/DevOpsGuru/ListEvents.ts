@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:ListEvents`.
@@ -33,3 +35,12 @@ export interface ListEvents extends Binding.Service<
   >
 > {}
 export const ListEvents = Binding.Service<ListEvents>("AWS.DevOpsGuru.ListEvents");
+
+export const ListEventsHttp = Layer.effect(
+  ListEvents,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.ListEvents",
+    operation: devopsguru.listEvents,
+    actions: ["devops-guru:ListEvents"],
+  }),
+);

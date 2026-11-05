@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -39,4 +41,15 @@ export interface ListIdentityProviderConfigs extends Binding.Service<
 > {}
 export const ListIdentityProviderConfigs = Binding.Service<ListIdentityProviderConfigs>(
   "AWS.EKS.ListIdentityProviderConfigs",
+);
+
+export const ListIdentityProviderConfigsHttp = Layer.effect(
+  ListIdentityProviderConfigs,
+  makeEKSClusterHttpBinding({
+    tag: "AWS.EKS.ListIdentityProviderConfigs",
+    operation: eks.listIdentityProviderConfigs,
+    actions: ["eks:ListIdentityProviderConfigs"],
+    key: "clusterName",
+    scope: "cluster",
+  }),
 );

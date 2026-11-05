@@ -1,6 +1,8 @@
-import type * as notifications from "@distilled.cloud/aws/notifications";
+import * as notifications from "@distilled.cloud/aws/notifications";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNotificationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListManagedNotificationEvents}.
@@ -46,4 +48,13 @@ export interface ListManagedNotificationEvents extends Binding.Service<
 
 export const ListManagedNotificationEvents = Binding.Service<ListManagedNotificationEvents>(
   "AWS.Notifications.ListManagedNotificationEvents",
+);
+
+export const ListManagedNotificationEventsHttp = Layer.effect(
+  ListManagedNotificationEvents,
+  makeNotificationsHttpBinding({
+    capability: "ListManagedNotificationEvents",
+    iamActions: ["notifications:ListManagedNotificationEvents"],
+    operation: notifications.listManagedNotificationEvents,
+  }),
 );

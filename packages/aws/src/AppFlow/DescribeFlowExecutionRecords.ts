@@ -1,6 +1,8 @@
-import type * as appflow from "@distilled.cloud/aws/appflow";
+import * as appflow from "@distilled.cloud/aws/appflow";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAppFlowHttpBinding } from "./BindingHttp.ts";
 import type { Flow } from "./Flow.ts";
 
 export interface DescribeFlowExecutionRecordsRequest extends Omit<
@@ -49,4 +51,15 @@ export interface DescribeFlowExecutionRecords extends Binding.Service<
 
 export const DescribeFlowExecutionRecords = Binding.Service<DescribeFlowExecutionRecords>(
   "AWS.AppFlow.DescribeFlowExecutionRecords",
+);
+
+export const DescribeFlowExecutionRecordsHttp = Layer.effect(
+  DescribeFlowExecutionRecords,
+  makeAppFlowHttpBinding({
+    action: "DescribeFlowExecutionRecords",
+    operation: appflow.describeFlowExecutionRecords,
+    identifier: (flow: Flow) => flow.flowName,
+    requestKey: "flowName",
+    resources: (flow: Flow) => [flow.flowArn],
+  }),
 );

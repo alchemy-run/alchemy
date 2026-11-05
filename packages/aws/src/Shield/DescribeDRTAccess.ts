@@ -1,6 +1,8 @@
-import type * as shield from "@distilled.cloud/aws/shield";
+import * as shield from "@distilled.cloud/aws/shield";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeShieldHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `shield:DescribeDRTAccess`.
@@ -34,3 +36,12 @@ export interface DescribeDRTAccess extends Binding.Service<
   >
 > {}
 export const DescribeDRTAccess = Binding.Service<DescribeDRTAccess>("AWS.Shield.DescribeDRTAccess");
+
+export const DescribeDRTAccessHttp = Layer.effect(
+  DescribeDRTAccess,
+  makeShieldHttpBinding({
+    tag: "AWS.Shield.DescribeDRTAccess",
+    operation: shield.describeDRTAccess,
+    actions: ["shield:DescribeDRTAccess"],
+  }),
+);

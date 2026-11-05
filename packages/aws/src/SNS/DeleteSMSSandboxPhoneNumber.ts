@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface DeleteSMSSandboxPhoneNumberRequest extends sns.DeleteSMSSandboxPhoneNumberInput {}
 
@@ -31,4 +33,13 @@ export interface DeleteSMSSandboxPhoneNumber extends Binding.Service<
 
 export const DeleteSMSSandboxPhoneNumber = Binding.Service<DeleteSMSSandboxPhoneNumber>(
   "AWS.SNS.DeleteSMSSandboxPhoneNumber",
+);
+
+export const DeleteSMSSandboxPhoneNumberHttp = Layer.effect(
+  DeleteSMSSandboxPhoneNumber,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.DeleteSMSSandboxPhoneNumber",
+    operation: sns.deleteSMSSandboxPhoneNumber,
+    actions: ["sns:DeleteSMSSandboxPhoneNumber", "sms-voice:DeleteVerifiedDestinationNumber"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:StartTranscriptionJob` — kick off an
@@ -44,4 +46,13 @@ export interface StartTranscriptionJob extends Binding.Service<
 > {}
 export const StartTranscriptionJob = Binding.Service<StartTranscriptionJob>(
   "AWS.Transcribe.StartTranscriptionJob",
+);
+
+export const StartTranscriptionJobHttp = Layer.effect(
+  StartTranscriptionJob,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.StartTranscriptionJob",
+    operation: transcribe.startTranscriptionJob,
+    actions: ["transcribe:StartTranscriptionJob"],
+  }),
 );

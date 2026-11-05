@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 import type { ReferenceStore } from "./ReferenceStore.ts";
 
 export interface GetReferenceImportJobRequest extends Omit<
@@ -40,4 +42,16 @@ export interface GetReferenceImportJob extends Binding.Service<
 
 export const GetReferenceImportJob = Binding.Service<GetReferenceImportJob>(
   "AWS.Omics.GetReferenceImportJob",
+);
+
+export const GetReferenceImportJobHttp = Layer.effect(
+  GetReferenceImportJob,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.GetReferenceImportJob",
+    operation: omics.getReferenceImportJob,
+    actions: ["omics:GetReferenceImportJob"],
+    key: "referenceStoreId",
+    id: (store: ReferenceStore) => store.referenceStoreId,
+    arn: (store: ReferenceStore) => store.referenceStoreArn,
+  }),
 );

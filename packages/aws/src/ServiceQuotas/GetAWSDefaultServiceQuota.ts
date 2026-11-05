@@ -1,6 +1,8 @@
-import type * as servicequotas from "@distilled.cloud/aws/service-quotas";
+import * as servicequotas from "@distilled.cloud/aws/service-quotas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceQuotasHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicequotas:GetAWSDefaultServiceQuota` — read the
@@ -38,4 +40,13 @@ export interface GetAWSDefaultServiceQuota extends Binding.Service<
 > {}
 export const GetAWSDefaultServiceQuota = Binding.Service<GetAWSDefaultServiceQuota>(
   "AWS.ServiceQuotas.GetAWSDefaultServiceQuota",
+);
+
+export const GetAWSDefaultServiceQuotaHttp = Layer.effect(
+  GetAWSDefaultServiceQuota,
+  makeServiceQuotasHttpBinding({
+    capability: "GetAWSDefaultServiceQuota",
+    iamActions: ["servicequotas:GetAWSDefaultServiceQuota"],
+    operation: servicequotas.getAWSDefaultServiceQuota,
+  }),
 );

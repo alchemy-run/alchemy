@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link AssociateThirdPartyFirewall}.
@@ -44,4 +46,13 @@ export interface AssociateThirdPartyFirewall extends Binding.Service<
 
 export const AssociateThirdPartyFirewall = Binding.Service<AssociateThirdPartyFirewall>(
   "AWS.FMS.AssociateThirdPartyFirewall",
+);
+
+export const AssociateThirdPartyFirewallHttp = Layer.effect(
+  AssociateThirdPartyFirewall,
+  makeFmsHttpBinding({
+    capability: "AssociateThirdPartyFirewall",
+    iamActions: ["fms:AssociateThirdPartyFirewall"],
+    operation: fms.associateThirdPartyFirewall,
+  }),
 );

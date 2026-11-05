@@ -1,6 +1,8 @@
-import type * as ga from "@distilled.cloud/aws/global-accelerator";
+import * as ga from "@distilled.cloud/aws/global-accelerator";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGaEndpointGroupHttpBinding } from "./BindingHttp.ts";
 import type { EndpointGroup } from "./EndpointGroup.ts";
 
 /**
@@ -41,4 +43,13 @@ export interface DescribeEndpointGroup extends Binding.Service<
 > {}
 export const DescribeEndpointGroup = Binding.Service<DescribeEndpointGroup>(
   "AWS.GlobalAccelerator.DescribeEndpointGroup",
+);
+
+export const DescribeEndpointGroupHttp = Layer.effect(
+  DescribeEndpointGroup,
+  makeGaEndpointGroupHttpBinding({
+    tag: "AWS.GlobalAccelerator.DescribeEndpointGroup",
+    operation: ga.describeEndpointGroup,
+    actions: ["globalaccelerator:DescribeEndpointGroup"],
+  }),
 );

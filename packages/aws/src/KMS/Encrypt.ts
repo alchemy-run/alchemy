@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AliasName } from "./Alias.ts";
+import { makeKmsKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface EncryptRequest extends Omit<kms.EncryptRequest, "KeyId"> {}
@@ -83,3 +85,12 @@ export interface Encrypt extends Binding.Service<
 > {}
 
 export const Encrypt = Binding.Service<Encrypt>("AWS.KMS.Encrypt");
+
+export const EncryptHttp = Layer.effect(
+  Encrypt,
+  makeKmsKeyHttpBinding({
+    tag: "AWS.KMS.Encrypt",
+    operation: kms.encrypt,
+    actions: ["kms:Encrypt"],
+  }),
+);

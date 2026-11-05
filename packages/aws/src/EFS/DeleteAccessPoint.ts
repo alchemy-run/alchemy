@@ -1,6 +1,8 @@
-import type * as efs from "@distilled.cloud/aws/efs";
+import * as efs from "@distilled.cloud/aws/efs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEfsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteAccessPoint` operation (IAM action
@@ -35,3 +37,12 @@ export interface DeleteAccessPoint extends Binding.Service<
   >
 > {}
 export const DeleteAccessPoint = Binding.Service<DeleteAccessPoint>("AWS.EFS.DeleteAccessPoint");
+
+export const DeleteAccessPointHttp = Layer.effect(
+  DeleteAccessPoint,
+  makeEfsAccountHttpBinding({
+    tag: "AWS.EFS.DeleteAccessPoint",
+    operation: efs.deleteAccessPoint,
+    actions: ["elasticfilesystem:DeleteAccessPoint"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListCostAllocationTags}.
@@ -38,4 +40,13 @@ export interface ListCostAllocationTags extends Binding.Service<
 
 export const ListCostAllocationTags = Binding.Service<ListCostAllocationTags>(
   "AWS.CostExplorer.ListCostAllocationTags",
+);
+
+export const ListCostAllocationTagsHttp = Layer.effect(
+  ListCostAllocationTags,
+  makeCostExplorerHttpBinding({
+    capability: "ListCostAllocationTags",
+    iamActions: ["ce:ListCostAllocationTags"],
+    operation: ce.listCostAllocationTags,
+  }),
 );

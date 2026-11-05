@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetCostComparisonDrivers}.
@@ -42,4 +44,13 @@ export interface GetCostComparisonDrivers extends Binding.Service<
 
 export const GetCostComparisonDrivers = Binding.Service<GetCostComparisonDrivers>(
   "AWS.CostExplorer.GetCostComparisonDrivers",
+);
+
+export const GetCostComparisonDriversHttp = Layer.effect(
+  GetCostComparisonDrivers,
+  makeCostExplorerHttpBinding({
+    capability: "GetCostComparisonDrivers",
+    iamActions: ["ce:GetCostComparisonDrivers"],
+    operation: ce.getCostComparisonDrivers,
+  }),
 );

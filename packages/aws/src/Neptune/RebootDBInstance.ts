@@ -1,6 +1,8 @@
-import type * as neptune from "@distilled.cloud/aws/neptune";
+import * as neptune from "@distilled.cloud/aws/neptune";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneInstanceHttpBinding } from "./BindingHttp.ts";
 import type { DBInstance } from "./DBInstance.ts";
 
 /**
@@ -35,3 +37,12 @@ export interface RebootDBInstance extends Binding.Service<
   >
 > {}
 export const RebootDBInstance = Binding.Service<RebootDBInstance>("AWS.Neptune.RebootDBInstance");
+
+export const RebootDBInstanceHttp = Layer.effect(
+  RebootDBInstance,
+  makeNeptuneInstanceHttpBinding({
+    tag: "AWS.Neptune.RebootDBInstance",
+    operation: neptune.rebootDBInstance,
+    actions: ["rds:RebootDBInstance"],
+  }),
+);

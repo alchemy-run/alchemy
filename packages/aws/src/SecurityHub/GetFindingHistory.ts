@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:GetFindingHistory`.
@@ -34,4 +36,13 @@ export interface GetFindingHistory extends Binding.Service<
 > {}
 export const GetFindingHistory = Binding.Service<GetFindingHistory>(
   "AWS.SecurityHub.GetFindingHistory",
+);
+
+export const GetFindingHistoryHttp = Layer.effect(
+  GetFindingHistory,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.GetFindingHistory",
+    operation: securityhub.getFindingHistory,
+    actions: ["securityhub:GetFindingHistory"],
+  }),
 );

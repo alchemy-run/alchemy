@@ -1,6 +1,8 @@
-import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import * as chatbot from "@distilled.cloud/aws/chatbot";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeChatbotAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `chatbot:DeleteMicrosoftTeamsConfiguredTeam`.
@@ -39,3 +41,12 @@ export const DeleteMicrosoftTeamsConfiguredTeam =
   Binding.Service<DeleteMicrosoftTeamsConfiguredTeam>(
     "AWS.Chatbot.DeleteMicrosoftTeamsConfiguredTeam",
   );
+
+export const DeleteMicrosoftTeamsConfiguredTeamHttp = Layer.effect(
+  DeleteMicrosoftTeamsConfiguredTeam,
+  makeChatbotAccountHttpBinding({
+    tag: "AWS.Chatbot.DeleteMicrosoftTeamsConfiguredTeam",
+    operation: chatbot.deleteMicrosoftTeamsConfiguredTeam,
+    actions: ["chatbot:DeleteMicrosoftTeamsConfiguredTeam"],
+  }),
+);

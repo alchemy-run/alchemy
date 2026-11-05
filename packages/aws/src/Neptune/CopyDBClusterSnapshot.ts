@@ -1,6 +1,8 @@
-import type * as neptune from "@distilled.cloud/aws/neptune";
+import * as neptune from "@distilled.cloud/aws/neptune";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CopyDBClusterSnapshot` operation (IAM action
@@ -34,4 +36,13 @@ export interface CopyDBClusterSnapshot extends Binding.Service<
 > {}
 export const CopyDBClusterSnapshot = Binding.Service<CopyDBClusterSnapshot>(
   "AWS.Neptune.CopyDBClusterSnapshot",
+);
+
+export const CopyDBClusterSnapshotHttp = Layer.effect(
+  CopyDBClusterSnapshot,
+  makeNeptuneAccountHttpBinding({
+    tag: "AWS.Neptune.CopyDBClusterSnapshot",
+    operation: neptune.copyDBClusterSnapshot,
+    actions: ["rds:CopyDBClusterSnapshot"],
+  }),
 );

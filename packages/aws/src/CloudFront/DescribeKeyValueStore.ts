@@ -1,6 +1,8 @@
-import type * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
+import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKeyValueStoreScopedHttpBinding } from "./BindingHttp.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
 
 export interface DescribeKeyValueStoreRequest extends Omit<
@@ -42,4 +44,13 @@ export interface DescribeKeyValueStore extends Binding.Service<
 
 export const DescribeKeyValueStore = Binding.Service<DescribeKeyValueStore>(
   "AWS.CloudFront.DescribeKeyValueStore",
+);
+
+export const DescribeKeyValueStoreHttp = Layer.effect(
+  DescribeKeyValueStore,
+  makeKeyValueStoreScopedHttpBinding({
+    tag: "AWS.CloudFront.DescribeKeyValueStore",
+    operation: kvs.describeKeyValueStore,
+    actions: ["cloudfront-keyvaluestore:DescribeKeyValueStore"],
+  }),
 );

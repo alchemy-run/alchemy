@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:ListPHIDetectionJobs` — list the asynchronous protected health information (PHI) detection jobs you have submitted.
@@ -36,4 +38,13 @@ export interface ListPHIDetectionJobs extends Binding.Service<
 > {}
 export const ListPHIDetectionJobs = Binding.Service<ListPHIDetectionJobs>(
   "AWS.ComprehendMedical.ListPHIDetectionJobs",
+);
+
+export const ListPHIDetectionJobsHttp = Layer.effect(
+  ListPHIDetectionJobs,
+  makeComprehendMedicalHttpBinding({
+    capability: "ListPHIDetectionJobs",
+    iamActions: ["comprehendmedical:ListPHIDetectionJobs"],
+    operation: comprehendmedical.listPHIDetectionJobs,
+  }),
 );

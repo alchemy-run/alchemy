@@ -1,6 +1,8 @@
-import type * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudHsmHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `PutResourcePolicy` operation (IAM action
@@ -42,4 +44,13 @@ export interface PutResourcePolicy extends Binding.Service<
 > {}
 export const PutResourcePolicy = Binding.Service<PutResourcePolicy>(
   "AWS.CloudHSMV2.PutResourcePolicy",
+);
+
+export const PutResourcePolicyHttp = Layer.effect(
+  PutResourcePolicy,
+  makeCloudHsmHttpBinding({
+    tag: "AWS.CloudHSMV2.PutResourcePolicy",
+    operation: cloudhsm.putResourcePolicy,
+    actions: ["cloudhsm:PutResourcePolicy"],
+  }),
 );

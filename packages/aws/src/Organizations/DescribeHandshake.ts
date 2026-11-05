@@ -1,6 +1,8 @@
-import type * as organizations from "@distilled.cloud/aws/organizations";
+import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOrganizationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `organizations:DescribeHandshake`.
@@ -35,4 +37,13 @@ export interface DescribeHandshake extends Binding.Service<
 > {}
 export const DescribeHandshake = Binding.Service<DescribeHandshake>(
   "AWS.Organizations.DescribeHandshake",
+);
+
+export const DescribeHandshakeHttp = Layer.effect(
+  DescribeHandshake,
+  makeOrganizationsHttpBinding({
+    capability: "DescribeHandshake",
+    iamActions: ["organizations:DescribeHandshake"],
+    operation: organizations.describeHandshake,
+  }),
 );

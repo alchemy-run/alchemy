@@ -1,6 +1,8 @@
-import type * as budgets from "@distilled.cloud/aws/budgets";
+import * as budgets from "@distilled.cloud/aws/budgets";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBudgetHttpBinding } from "./BindingHttp.ts";
 import type { Budget } from "./Budget.ts";
 
 /**
@@ -51,4 +53,13 @@ export interface DescribeBudgetPerformanceHistory extends Binding.Service<
 
 export const DescribeBudgetPerformanceHistory = Binding.Service<DescribeBudgetPerformanceHistory>(
   "AWS.Budgets.DescribeBudgetPerformanceHistory",
+);
+
+export const DescribeBudgetPerformanceHistoryHttp = Layer.effect(
+  DescribeBudgetPerformanceHistory,
+  makeBudgetHttpBinding({
+    tag: "AWS.Budgets.DescribeBudgetPerformanceHistory",
+    actions: ["budgets:ViewBudget"],
+    operation: budgets.describeBudgetPerformanceHistory,
+  }),
 );

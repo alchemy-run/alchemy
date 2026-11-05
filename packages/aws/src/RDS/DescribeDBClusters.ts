@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeDBClusters` operation (IAM action
@@ -33,3 +35,12 @@ export interface DescribeDBClusters extends Binding.Service<
   >
 > {}
 export const DescribeDBClusters = Binding.Service<DescribeDBClusters>("AWS.RDS.DescribeDBClusters");
+
+export const DescribeDBClustersHttp = Layer.effect(
+  DescribeDBClusters,
+  makeRdsAccountHttpBinding({
+    tag: "AWS.RDS.DescribeDBClusters",
+    operation: rds.describeDBClusters,
+    actions: ["rds:DescribeDBClusters"],
+  }),
+);

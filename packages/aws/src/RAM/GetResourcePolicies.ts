@@ -1,6 +1,8 @@
-import type * as ram from "@distilled.cloud/aws/ram";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRAMHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ram:GetResourcePolicies`.
@@ -35,4 +37,13 @@ export interface GetResourcePolicies extends Binding.Service<
 > {}
 export const GetResourcePolicies = Binding.Service<GetResourcePolicies>(
   "AWS.RAM.GetResourcePolicies",
+);
+
+export const GetResourcePoliciesHttp = Layer.effect(
+  GetResourcePolicies,
+  makeRAMHttpBinding({
+    capability: "GetResourcePolicies",
+    iamActions: ["ram:GetResourcePolicies"],
+    operation: ram.getResourcePolicies,
+  }),
 );

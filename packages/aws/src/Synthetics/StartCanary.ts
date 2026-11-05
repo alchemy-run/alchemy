@@ -1,6 +1,8 @@
-import type * as synthetics from "@distilled.cloud/aws/synthetics";
+import * as synthetics from "@distilled.cloud/aws/synthetics";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSyntheticsCanaryHttpBinding } from "./BindingHttp.ts";
 import type { Canary } from "./Canary.ts";
 
 /**
@@ -36,3 +38,12 @@ export interface StartCanary extends Binding.Service<
 > {}
 
 export const StartCanary = Binding.Service<StartCanary>("AWS.Synthetics.StartCanary");
+
+export const StartCanaryHttp = Layer.effect(
+  StartCanary,
+  makeSyntheticsCanaryHttpBinding({
+    tag: "AWS.Synthetics.StartCanary",
+    operation: synthetics.startCanary,
+    actions: ["synthetics:StartCanary"],
+  }),
+);

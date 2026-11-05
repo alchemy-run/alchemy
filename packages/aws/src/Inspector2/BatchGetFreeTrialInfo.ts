@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:BatchGetFreeTrialInfo`.
@@ -35,4 +37,13 @@ export interface BatchGetFreeTrialInfo extends Binding.Service<
 > {}
 export const BatchGetFreeTrialInfo = Binding.Service<BatchGetFreeTrialInfo>(
   "AWS.Inspector2.BatchGetFreeTrialInfo",
+);
+
+export const BatchGetFreeTrialInfoHttp = Layer.effect(
+  BatchGetFreeTrialInfo,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.BatchGetFreeTrialInfo",
+    operation: inspector2.batchGetFreeTrialInfo,
+    actions: ["inspector2:BatchGetFreeTrialInfo"],
+  }),
 );

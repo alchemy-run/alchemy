@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:DetectDominantLanguage` — determine the
@@ -40,4 +42,13 @@ export interface DetectDominantLanguage extends Binding.Service<
 > {}
 export const DetectDominantLanguage = Binding.Service<DetectDominantLanguage>(
   "AWS.Comprehend.DetectDominantLanguage",
+);
+
+export const DetectDominantLanguageHttp = Layer.effect(
+  DetectDominantLanguage,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.DetectDominantLanguage",
+    operation: comprehend.detectDominantLanguage,
+    actions: ["comprehend:DetectDominantLanguage"],
+  }),
 );

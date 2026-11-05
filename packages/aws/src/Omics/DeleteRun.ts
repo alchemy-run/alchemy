@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface DeleteRunRequest extends omics.DeleteRunRequest {}
 
@@ -29,3 +31,12 @@ export interface DeleteRun extends Binding.Service<
 > {}
 
 export const DeleteRun = Binding.Service<DeleteRun>("AWS.Omics.DeleteRun");
+
+export const DeleteRunHttp = Layer.effect(
+  DeleteRun,
+  makeOmicsAccountHttpBinding({
+    tag: "AWS.Omics.DeleteRun",
+    operation: omics.deleteRun,
+    actions: ["omics:DeleteRun"],
+  }),
+);

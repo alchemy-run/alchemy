@@ -1,6 +1,8 @@
-import type * as location from "@distilled.cloud/aws/location";
+import * as location from "@distilled.cloud/aws/location";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLocationAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Cancels a running Location batch metadata job.
@@ -30,3 +32,12 @@ export interface CancelJob extends Binding.Service<
   >
 > {}
 export const CancelJob = Binding.Service<CancelJob>("AWS.Location.CancelJob");
+
+export const CancelJobHttp = Layer.effect(
+  CancelJob,
+  makeLocationAccountHttpBinding({
+    tag: "AWS.Location.CancelJob",
+    operation: location.cancelJob,
+    actions: ["geo:CancelJob"],
+  }),
+);

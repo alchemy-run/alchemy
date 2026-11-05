@@ -1,7 +1,9 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Assessment } from "./Assessment.ts";
+import { makeAssessmentScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `DeleteAssessmentReport` request with `assessmentId` injected from the bound {@link Assessment}. */
 export interface DeleteAssessmentReportRequest extends Omit<
@@ -41,4 +43,13 @@ export interface DeleteAssessmentReport extends Binding.Service<
 
 export const DeleteAssessmentReport = Binding.Service<DeleteAssessmentReport>(
   "AWS.AuditManager.DeleteAssessmentReport",
+);
+
+export const DeleteAssessmentReportHttp = Layer.effect(
+  DeleteAssessmentReport,
+  makeAssessmentScopedHttpBinding({
+    tag: "AWS.AuditManager.DeleteAssessmentReport",
+    operation: auditmanager.deleteAssessmentReport,
+    actions: ["auditmanager:DeleteAssessmentReport"],
+  }),
 );

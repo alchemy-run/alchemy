@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:CreateDatasetImportJob` — start an
@@ -49,4 +51,14 @@ export interface CreateDatasetImportJob extends Binding.Service<
 > {}
 export const CreateDatasetImportJob = Binding.Service<CreateDatasetImportJob>(
   "AWS.Forecast.CreateDatasetImportJob",
+);
+
+export const CreateDatasetImportJobHttp = Layer.effect(
+  CreateDatasetImportJob,
+  makeForecastHttpBinding({
+    capability: "CreateDatasetImportJob",
+    iamActions: ["forecast:CreateDatasetImportJob"],
+    operation: forecast.createDatasetImportJob,
+    passRole: true,
+  }),
 );

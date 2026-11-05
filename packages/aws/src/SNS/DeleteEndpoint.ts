@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsEndpointHttpBinding } from "./BindingHttp.ts";
 import type { PlatformApplication } from "./PlatformApplication.ts";
 
 export interface DeleteEndpointRequest extends sns.DeleteEndpointInput {}
@@ -33,3 +35,12 @@ export interface DeleteEndpoint extends Binding.Service<
 > {}
 
 export const DeleteEndpoint = Binding.Service<DeleteEndpoint>("AWS.SNS.DeleteEndpoint");
+
+export const DeleteEndpointHttp = Layer.effect(
+  DeleteEndpoint,
+  makeSnsEndpointHttpBinding({
+    tag: "AWS.SNS.DeleteEndpoint",
+    operation: sns.deleteEndpoint,
+    actions: ["sns:DeleteEndpoint"],
+  }),
+);

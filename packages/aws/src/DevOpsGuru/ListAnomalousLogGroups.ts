@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:ListAnomalousLogGroups`.
@@ -39,4 +41,13 @@ export interface ListAnomalousLogGroups extends Binding.Service<
 > {}
 export const ListAnomalousLogGroups = Binding.Service<ListAnomalousLogGroups>(
   "AWS.DevOpsGuru.ListAnomalousLogGroups",
+);
+
+export const ListAnomalousLogGroupsHttp = Layer.effect(
+  ListAnomalousLogGroups,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.ListAnomalousLogGroups",
+    operation: devopsguru.listAnomalousLogGroups,
+    actions: ["devops-guru:ListAnomalousLogGroups"],
+  }),
 );

@@ -1,6 +1,8 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecretsManagerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `secretsmanager:ListSecrets`.
@@ -35,3 +37,12 @@ export interface ListSecrets extends Binding.Service<
 > {}
 
 export const ListSecrets = Binding.Service<ListSecrets>("AWS.SecretsManager.ListSecrets");
+
+export const ListSecretsHttp = Layer.effect(
+  ListSecrets,
+  makeSecretsManagerAccountHttpBinding({
+    tag: "AWS.SecretsManager.ListSecrets",
+    operation: secretsmanager.listSecrets,
+    actions: ["secretsmanager:ListSecrets"],
+  }),
+);

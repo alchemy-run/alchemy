@@ -1,6 +1,8 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBackupAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetRestoreJobMetadata` operation (IAM action
@@ -36,4 +38,13 @@ export interface GetRestoreJobMetadata extends Binding.Service<
 > {}
 export const GetRestoreJobMetadata = Binding.Service<GetRestoreJobMetadata>(
   "AWS.Backup.GetRestoreJobMetadata",
+);
+
+export const GetRestoreJobMetadataHttp = Layer.effect(
+  GetRestoreJobMetadata,
+  makeBackupAccountHttpBinding({
+    tag: "AWS.Backup.GetRestoreJobMetadata",
+    operation: backup.getRestoreJobMetadata,
+    actions: ["backup:GetRestoreJobMetadata"],
+  }),
 );

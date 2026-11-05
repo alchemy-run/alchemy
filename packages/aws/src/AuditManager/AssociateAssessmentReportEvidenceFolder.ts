@@ -1,7 +1,9 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Assessment } from "./Assessment.ts";
+import { makeAssessmentScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `AssociateAssessmentReportEvidenceFolder` request with `assessmentId` injected from the bound {@link Assessment}. */
 export interface AssociateAssessmentReportEvidenceFolderRequest extends Omit<
@@ -43,3 +45,12 @@ export const AssociateAssessmentReportEvidenceFolder =
   Binding.Service<AssociateAssessmentReportEvidenceFolder>(
     "AWS.AuditManager.AssociateAssessmentReportEvidenceFolder",
   );
+
+export const AssociateAssessmentReportEvidenceFolderHttp = Layer.effect(
+  AssociateAssessmentReportEvidenceFolder,
+  makeAssessmentScopedHttpBinding({
+    tag: "AWS.AuditManager.AssociateAssessmentReportEvidenceFolder",
+    operation: auditmanager.associateAssessmentReportEvidenceFolder,
+    actions: ["auditmanager:AssociateAssessmentReportEvidenceFolder"],
+  }),
+);

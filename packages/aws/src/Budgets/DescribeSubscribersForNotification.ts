@@ -1,6 +1,8 @@
-import type * as budgets from "@distilled.cloud/aws/budgets";
+import * as budgets from "@distilled.cloud/aws/budgets";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBudgetHttpBinding } from "./BindingHttp.ts";
 import type { Budget } from "./Budget.ts";
 
 /**
@@ -60,3 +62,12 @@ export const DescribeSubscribersForNotification =
   Binding.Service<DescribeSubscribersForNotification>(
     "AWS.Budgets.DescribeSubscribersForNotification",
   );
+
+export const DescribeSubscribersForNotificationHttp = Layer.effect(
+  DescribeSubscribersForNotification,
+  makeBudgetHttpBinding({
+    tag: "AWS.Budgets.DescribeSubscribersForNotification",
+    actions: ["budgets:ViewBudget"],
+    operation: budgets.describeSubscribersForNotification,
+  }),
+);

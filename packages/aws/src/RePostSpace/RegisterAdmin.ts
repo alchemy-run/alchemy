@@ -1,6 +1,8 @@
-import type * as repostspace from "@distilled.cloud/aws/repostspace";
+import * as repostspace from "@distilled.cloud/aws/repostspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRePostSpaceHttpBinding } from "./BindingHttp.ts";
 import type { Space } from "./Space.ts";
 
 export interface RegisterAdminRequest extends Omit<repostspace.RegisterAdminInput, "spaceId"> {}
@@ -35,3 +37,12 @@ export interface RegisterAdmin extends Binding.Service<
   >
 > {}
 export const RegisterAdmin = Binding.Service<RegisterAdmin>("AWS.RePostSpace.RegisterAdmin");
+
+export const RegisterAdminHttp = Layer.effect(
+  RegisterAdmin,
+  makeRePostSpaceHttpBinding({
+    tag: "AWS.RePostSpace.RegisterAdmin",
+    operation: repostspace.registerAdmin,
+    actions: ["repostspace:RegisterAdmin"],
+  }),
+);

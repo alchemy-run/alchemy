@@ -1,6 +1,8 @@
-import type * as route53 from "@distilled.cloud/aws/route-53";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListHostedZonesByVPC` operation (IAM actions
@@ -35,4 +37,16 @@ export interface ListHostedZonesByVPC extends Binding.Service<
 > {}
 export const ListHostedZonesByVPC = Binding.Service<ListHostedZonesByVPC>(
   "AWS.Route53.ListHostedZonesByVPC",
+);
+
+export const ListHostedZonesByVPCHttp = Layer.effect(
+  ListHostedZonesByVPC,
+  makeRoute53AccountHttpBinding({
+    tag: "AWS.Route53.ListHostedZonesByVPC",
+    operation: route53.listHostedZonesByVPC,
+    // Route 53 verifies the VPC on the caller's behalf via ec2:DescribeVpcs —
+    // without that grant every call fails with AccessDeniedException
+    // ("Failed to verify the given VPC by calling ec2:DescribeVpcs").
+    actions: ["route53:ListHostedZonesByVPC", "ec2:DescribeVpcs"],
+  }),
 );

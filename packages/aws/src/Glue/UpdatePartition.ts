@@ -1,6 +1,8 @@
-import type * as glue from "@distilled.cloud/aws/glue";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlueTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface UpdatePartitionRequest extends Omit<
@@ -48,3 +50,13 @@ export interface UpdatePartition extends Binding.Service<
 > {}
 
 export const UpdatePartition = Binding.Service<UpdatePartition>("AWS.Glue.UpdatePartition");
+
+export const UpdatePartitionHttp = Layer.effect(
+  UpdatePartition,
+  makeGlueTableHttpBinding({
+    tag: "AWS.Glue.UpdatePartition",
+    operation: glue.updatePartition,
+    actions: ["glue:UpdatePartition"],
+    tableNameKey: "TableName",
+  }),
+);

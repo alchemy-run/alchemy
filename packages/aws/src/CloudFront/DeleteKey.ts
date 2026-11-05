@@ -1,6 +1,8 @@
-import type * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
+import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKeyValueStoreScopedHttpBinding } from "./BindingHttp.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
 
 export interface DeleteKeyRequest extends Omit<kvs.DeleteKeyRequest, "KvsARN"> {}
@@ -37,3 +39,12 @@ export interface DeleteKey extends Binding.Service<
 > {}
 
 export const DeleteKey = Binding.Service<DeleteKey>("AWS.CloudFront.DeleteKey");
+
+export const DeleteKeyHttp = Layer.effect(
+  DeleteKey,
+  makeKeyValueStoreScopedHttpBinding({
+    tag: "AWS.CloudFront.DeleteKey",
+    operation: kvs.deleteKey,
+    actions: ["cloudfront-keyvaluestore:DeleteKey"],
+  }),
+);

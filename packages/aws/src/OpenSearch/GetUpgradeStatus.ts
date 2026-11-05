@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetUpgradeStatus` operation (IAM action
@@ -30,4 +32,13 @@ export interface GetUpgradeStatus extends Binding.Service<
 > {}
 export const GetUpgradeStatus = Binding.Service<GetUpgradeStatus>(
   "AWS.OpenSearch.GetUpgradeStatus",
+);
+
+export const GetUpgradeStatusHttp = Layer.effect(
+  GetUpgradeStatus,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.GetUpgradeStatus",
+    operation: opensearch.getUpgradeStatus,
+    actions: ["es:GetUpgradeStatus"],
+  }),
 );

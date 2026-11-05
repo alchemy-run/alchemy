@@ -1,6 +1,8 @@
-import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import * as chatbot from "@distilled.cloud/aws/chatbot";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeChatbotAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `chatbot:DeleteSlackWorkspaceAuthorization`.
@@ -35,4 +37,13 @@ export interface DeleteSlackWorkspaceAuthorization extends Binding.Service<
 
 export const DeleteSlackWorkspaceAuthorization = Binding.Service<DeleteSlackWorkspaceAuthorization>(
   "AWS.Chatbot.DeleteSlackWorkspaceAuthorization",
+);
+
+export const DeleteSlackWorkspaceAuthorizationHttp = Layer.effect(
+  DeleteSlackWorkspaceAuthorization,
+  makeChatbotAccountHttpBinding({
+    tag: "AWS.Chatbot.DeleteSlackWorkspaceAuthorization",
+    operation: chatbot.deleteSlackWorkspaceAuthorization,
+    actions: ["chatbot:DeleteSlackWorkspaceAuthorization"],
+  }),
 );

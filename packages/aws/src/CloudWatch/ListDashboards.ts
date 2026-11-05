@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListDashboardsRequest extends cloudwatch.ListDashboardsInput {}
 
@@ -34,3 +36,12 @@ export interface ListDashboards extends Binding.Service<
 > {}
 
 export const ListDashboards = Binding.Service<ListDashboards>("AWS.CloudWatch.ListDashboards");
+
+export const ListDashboardsHttp = Layer.effect(
+  ListDashboards,
+  makeCloudWatchAccountHttpBinding({
+    tag: "AWS.CloudWatch.ListDashboards",
+    operation: cloudwatch.listDashboards,
+    actions: ["cloudwatch:ListDashboards"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as sfn from "@distilled.cloud/aws/sfn";
+import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeExecutionScopedHttpBinding } from "./BindingHttp.ts";
 import type { StateMachine } from "./StateMachine.ts";
 
 export interface RedriveExecutionRequest extends sfn.RedriveExecutionInput {}
@@ -38,4 +40,13 @@ export interface RedriveExecution extends Binding.Service<
 > {}
 export const RedriveExecution = Binding.Service<RedriveExecution>(
   "AWS.StepFunctions.RedriveExecution",
+);
+
+export const RedriveExecutionHttp = Layer.effect(
+  RedriveExecution,
+  makeExecutionScopedHttpBinding({
+    tag: "AWS.StepFunctions.RedriveExecution",
+    operation: sfn.redriveExecution,
+    actions: ["states:RedriveExecution"],
+  }),
 );

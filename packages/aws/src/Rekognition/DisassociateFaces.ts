@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DisassociateFaces` — remove the association between face IDs and a user.
@@ -38,4 +40,13 @@ export interface DisassociateFaces extends Binding.Service<
 > {}
 export const DisassociateFaces = Binding.Service<DisassociateFaces>(
   "AWS.Rekognition.DisassociateFaces",
+);
+
+export const DisassociateFacesHttp = Layer.effect(
+  DisassociateFaces,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DisassociateFaces",
+    operation: rekognition.disassociateFaces,
+    actions: ["rekognition:DisassociateFaces"],
+  }),
 );

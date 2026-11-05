@@ -1,6 +1,8 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAuditManagerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `auditmanager:ListNotifications`.
@@ -29,4 +31,13 @@ export interface ListNotifications extends Binding.Service<
 
 export const ListNotifications = Binding.Service<ListNotifications>(
   "AWS.AuditManager.ListNotifications",
+);
+
+export const ListNotificationsHttp = Layer.effect(
+  ListNotifications,
+  makeAuditManagerAccountHttpBinding({
+    tag: "AWS.AuditManager.ListNotifications",
+    operation: auditmanager.listNotifications,
+    actions: ["auditmanager:ListNotifications"],
+  }),
 );

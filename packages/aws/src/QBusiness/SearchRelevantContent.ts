@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `SearchRelevantContent` request with `applicationId` injected from the bound application.
@@ -50,4 +52,14 @@ export interface SearchRelevantContent extends Binding.Service<
 > {}
 export const SearchRelevantContent = Binding.Service<SearchRelevantContent>(
   "AWS.QBusiness.SearchRelevantContent",
+);
+
+export const SearchRelevantContentHttp = Layer.effect(
+  SearchRelevantContent,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.SearchRelevantContent",
+    operation: qbusiness.searchRelevantContent,
+    actions: ["qbusiness:SearchRelevantContent"],
+    subResources: ["retriever/*"],
+  }),
 );

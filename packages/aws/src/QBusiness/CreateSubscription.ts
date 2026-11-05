@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `CreateSubscription` request with `applicationId` injected from the bound application.
@@ -46,4 +48,13 @@ export interface CreateSubscription extends Binding.Service<
 > {}
 export const CreateSubscription = Binding.Service<CreateSubscription>(
   "AWS.QBusiness.CreateSubscription",
+);
+
+export const CreateSubscriptionHttp = Layer.effect(
+  CreateSubscription,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.CreateSubscription",
+    operation: qbusiness.createSubscription,
+    actions: ["qbusiness:CreateSubscription"],
+  }),
 );

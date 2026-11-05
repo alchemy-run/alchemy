@@ -1,6 +1,8 @@
-import type * as iam from "@distilled.cloud/aws/iam";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIamHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iam:GetContextKeysForCustomPolicy` — list the condition
@@ -37,4 +39,13 @@ export interface GetContextKeysForCustomPolicy extends Binding.Service<
 > {}
 export const GetContextKeysForCustomPolicy = Binding.Service<GetContextKeysForCustomPolicy>(
   "AWS.IAM.GetContextKeysForCustomPolicy",
+);
+
+export const GetContextKeysForCustomPolicyHttp = Layer.effect(
+  GetContextKeysForCustomPolicy,
+  makeIamHttpBinding({
+    capability: "GetContextKeysForCustomPolicy",
+    iamActions: ["iam:GetContextKeysForCustomPolicy"],
+    operation: iam.getContextKeysForCustomPolicy,
+  }),
 );

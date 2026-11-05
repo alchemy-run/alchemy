@@ -1,6 +1,8 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTextractHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:ListAdapters` — list the Textract
@@ -29,3 +31,13 @@ export interface ListAdapters extends Binding.Service<
   >
 > {}
 export const ListAdapters = Binding.Service<ListAdapters>("AWS.Textract.ListAdapters");
+
+export const ListAdaptersHttp = Layer.effect(
+  ListAdapters,
+  makeTextractHttpBinding({
+    capability: "ListAdapters",
+    // No resource-level IAM for this action.
+    iamActions: ["textract:ListAdapters"],
+    operation: textract.listAdapters,
+  }),
+);

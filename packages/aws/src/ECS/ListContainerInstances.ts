@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface ListContainerInstancesRequest extends Omit<
@@ -40,4 +42,15 @@ export interface ListContainerInstances extends Binding.Service<
 > {}
 export const ListContainerInstances = Binding.Service<ListContainerInstances>(
   "AWS.ECS.ListContainerInstances",
+);
+
+export const ListContainerInstancesHttp = Layer.effect(
+  ListContainerInstances,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.ListContainerInstances",
+    operation: ECS.listContainerInstances,
+    actions: ["ecs:ListContainerInstances"],
+    // `ecs:ListContainerInstances` authorizes against the cluster.
+    resources: ["cluster"],
+  }),
 );

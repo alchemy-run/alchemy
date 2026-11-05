@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StartPersonTracking` — start asynchronous detection of the path of persons in a stored video.
@@ -45,4 +47,13 @@ export interface StartPersonTracking extends Binding.Service<
 > {}
 export const StartPersonTracking = Binding.Service<StartPersonTracking>(
   "AWS.Rekognition.StartPersonTracking",
+);
+
+export const StartPersonTrackingHttp = Layer.effect(
+  StartPersonTracking,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StartPersonTracking",
+    operation: rekognition.startPersonTracking,
+    actions: ["rekognition:StartPersonTracking"],
+  }),
 );

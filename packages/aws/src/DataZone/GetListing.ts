@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface GetListingRequest extends Omit<datazone.GetListingInput, "domainIdentifier"> {}
@@ -35,3 +37,12 @@ export interface GetListing extends Binding.Service<
   >
 > {}
 export const GetListing = Binding.Service<GetListing>("AWS.DataZone.GetListing");
+
+export const GetListingHttp = Layer.effect(
+  GetListing,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.GetListing",
+    operation: datazone.getListing,
+    actions: ["datazone:GetListing"],
+  }),
+);

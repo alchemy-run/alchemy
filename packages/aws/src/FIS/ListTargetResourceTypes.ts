@@ -1,6 +1,8 @@
-import type * as fis from "@distilled.cloud/aws/fis";
+import * as fis from "@distilled.cloud/aws/fis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFisAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `fis:ListTargetResourceTypes`.
@@ -32,4 +34,13 @@ export interface ListTargetResourceTypes extends Binding.Service<
 > {}
 export const ListTargetResourceTypes = Binding.Service<ListTargetResourceTypes>(
   "AWS.FIS.ListTargetResourceTypes",
+);
+
+export const ListTargetResourceTypesHttp = Layer.effect(
+  ListTargetResourceTypes,
+  makeFisAccountHttpBinding({
+    tag: "AWS.FIS.ListTargetResourceTypes",
+    operation: fis.listTargetResourceTypes,
+    actions: ["fis:ListTargetResourceTypes"],
+  }),
 );

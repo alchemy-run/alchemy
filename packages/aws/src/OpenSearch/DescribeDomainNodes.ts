@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeDomainNodes` operation (IAM action
@@ -30,4 +32,13 @@ export interface DescribeDomainNodes extends Binding.Service<
 > {}
 export const DescribeDomainNodes = Binding.Service<DescribeDomainNodes>(
   "AWS.OpenSearch.DescribeDomainNodes",
+);
+
+export const DescribeDomainNodesHttp = Layer.effect(
+  DescribeDomainNodes,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.DescribeDomainNodes",
+    operation: opensearch.describeDomainNodes,
+    actions: ["es:DescribeDomainNodes"],
+  }),
 );

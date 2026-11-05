@@ -1,7 +1,9 @@
-import type * as sfn from "@distilled.cloud/aws/sfn";
+import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Activity } from "./Activity.ts";
+import { makeTaskCallbackHttpBinding } from "./BindingHttp.ts";
 
 export interface SendTaskSuccessRequest extends sfn.SendTaskSuccessInput {}
 
@@ -38,4 +40,13 @@ export interface SendTaskSuccess extends Binding.Service<
 > {}
 export const SendTaskSuccess = Binding.Service<SendTaskSuccess>(
   "AWS.StepFunctions.SendTaskSuccess",
+);
+
+export const SendTaskSuccessHttp = Layer.effect(
+  SendTaskSuccess,
+  makeTaskCallbackHttpBinding({
+    tag: "AWS.StepFunctions.SendTaskSuccess",
+    operation: sfn.sendTaskSuccess,
+    actions: ["states:SendTaskSuccess"],
+  }),
 );

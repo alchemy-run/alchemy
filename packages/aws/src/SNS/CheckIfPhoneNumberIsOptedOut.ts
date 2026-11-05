@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface CheckIfPhoneNumberIsOptedOutRequest
   extends sns.CheckIfPhoneNumberIsOptedOutInput {}
@@ -35,4 +37,15 @@ export interface CheckIfPhoneNumberIsOptedOut extends Binding.Service<
 
 export const CheckIfPhoneNumberIsOptedOut = Binding.Service<CheckIfPhoneNumberIsOptedOut>(
   "AWS.SNS.CheckIfPhoneNumberIsOptedOut",
+);
+
+export const CheckIfPhoneNumberIsOptedOutHttp = Layer.effect(
+  CheckIfPhoneNumberIsOptedOut,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.CheckIfPhoneNumberIsOptedOut",
+    operation: sns.checkIfPhoneNumberIsOptedOut,
+    // Opt-out reads are backed by `sms-voice:DescribeOptedOutNumbers`
+    // (probe-verified).
+    actions: ["sns:CheckIfPhoneNumberIsOptedOut", "sms-voice:DescribeOptedOutNumbers"],
+  }),
 );

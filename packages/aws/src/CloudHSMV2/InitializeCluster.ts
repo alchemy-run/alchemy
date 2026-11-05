@@ -1,6 +1,8 @@
-import type * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudHsmHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `InitializeCluster` operation (IAM action
@@ -37,4 +39,13 @@ export interface InitializeCluster extends Binding.Service<
 > {}
 export const InitializeCluster = Binding.Service<InitializeCluster>(
   "AWS.CloudHSMV2.InitializeCluster",
+);
+
+export const InitializeClusterHttp = Layer.effect(
+  InitializeCluster,
+  makeCloudHsmHttpBinding({
+    tag: "AWS.CloudHSMV2.InitializeCluster",
+    operation: cloudhsm.initializeCluster,
+    actions: ["cloudhsm:InitializeCluster"],
+  }),
 );

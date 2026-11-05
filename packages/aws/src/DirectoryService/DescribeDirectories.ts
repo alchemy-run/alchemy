@@ -1,6 +1,8 @@
-import type * as ds from "@distilled.cloud/aws/directory-service";
+import * as ds from "@distilled.cloud/aws/directory-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDirectoryServiceAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeDirectories` operation (IAM action
@@ -38,4 +40,13 @@ export interface DescribeDirectories extends Binding.Service<
 > {}
 export const DescribeDirectories = Binding.Service<DescribeDirectories>(
   "AWS.DirectoryService.DescribeDirectories",
+);
+
+export const DescribeDirectoriesHttp = Layer.effect(
+  DescribeDirectories,
+  makeDirectoryServiceAccountHttpBinding({
+    tag: "AWS.DirectoryService.DescribeDirectories",
+    operation: ds.describeDirectories,
+    actions: ["ds:DescribeDirectories"],
+  }),
 );

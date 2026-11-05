@@ -1,6 +1,8 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBackupAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListBackupJobs` operation (IAM action
@@ -29,3 +31,12 @@ export interface ListBackupJobs extends Binding.Service<
   >
 > {}
 export const ListBackupJobs = Binding.Service<ListBackupJobs>("AWS.Backup.ListBackupJobs");
+
+export const ListBackupJobsHttp = Layer.effect(
+  ListBackupJobs,
+  makeBackupAccountHttpBinding({
+    tag: "AWS.Backup.ListBackupJobs",
+    operation: backup.listBackupJobs,
+    actions: ["backup:ListBackupJobs"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as identitystore from "@distilled.cloud/aws/identitystore";
+import * as identitystore from "@distilled.cloud/aws/identitystore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIdentityStoreHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface DeleteUser extends Binding.Service<
   >
 > {}
 export const DeleteUser = Binding.Service<DeleteUser>("AWS.IdentityCenter.DeleteUser");
+
+export const DeleteUserHttp = Layer.effect(
+  DeleteUser,
+  makeIdentityStoreHttpBinding({
+    tag: "AWS.IdentityCenter.DeleteUser",
+    operation: identitystore.deleteUser,
+    actions: ["identitystore:DeleteUser"],
+  }),
+);

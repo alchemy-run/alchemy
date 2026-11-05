@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseManagerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListTokens}.
@@ -36,3 +38,12 @@ export interface ListTokens extends Binding.Service<
   >
 > {}
 export const ListTokens = Binding.Service<ListTokens>("AWS.LicenseManager.ListTokens");
+
+export const ListTokensHttp = Layer.effect(
+  ListTokens,
+  makeLicenseManagerHttpBinding({
+    capability: "ListTokens",
+    iamActions: ["license-manager:ListTokens"],
+    operation: licensemanager.listTokens,
+  }),
+);

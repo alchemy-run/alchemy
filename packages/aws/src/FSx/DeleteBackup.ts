@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteBackup` operation (IAM action
@@ -33,3 +35,12 @@ export interface DeleteBackup extends Binding.Service<
   >
 > {}
 export const DeleteBackup = Binding.Service<DeleteBackup>("AWS.FSx.DeleteBackup");
+
+export const DeleteBackupHttp = Layer.effect(
+  DeleteBackup,
+  makeFSxAccountHttpBinding({
+    tag: "AWS.FSx.DeleteBackup",
+    operation: fsx.deleteBackup,
+    actions: ["fsx:DeleteBackup"],
+  }),
+);

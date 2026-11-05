@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseManagerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link CheckoutLicense}.
@@ -48,4 +50,13 @@ export interface CheckoutLicense extends Binding.Service<
 > {}
 export const CheckoutLicense = Binding.Service<CheckoutLicense>(
   "AWS.LicenseManager.CheckoutLicense",
+);
+
+export const CheckoutLicenseHttp = Layer.effect(
+  CheckoutLicense,
+  makeLicenseManagerHttpBinding({
+    capability: "CheckoutLicense",
+    iamActions: ["license-manager:CheckoutLicense"],
+    operation: licensemanager.checkoutLicense,
+  }),
 );

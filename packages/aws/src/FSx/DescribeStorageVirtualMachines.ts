@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeStorageVirtualMachines` operation (IAM
@@ -41,4 +43,13 @@ export interface DescribeStorageVirtualMachines extends Binding.Service<
 > {}
 export const DescribeStorageVirtualMachines = Binding.Service<DescribeStorageVirtualMachines>(
   "AWS.FSx.DescribeStorageVirtualMachines",
+);
+
+export const DescribeStorageVirtualMachinesHttp = Layer.effect(
+  DescribeStorageVirtualMachines,
+  makeFSxAccountHttpBinding({
+    tag: "AWS.FSx.DescribeStorageVirtualMachines",
+    operation: fsx.describeStorageVirtualMachines,
+    actions: ["fsx:DescribeStorageVirtualMachines"],
+  }),
 );

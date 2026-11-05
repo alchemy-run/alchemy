@@ -1,6 +1,8 @@
-import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
+import * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53DomainsHttpBinding } from "./BindingHttp.ts";
 
 export interface UpdateDomainNameserversRequest
   extends route53domains.UpdateDomainNameserversRequest {}
@@ -58,4 +60,13 @@ export interface UpdateDomainNameservers extends Binding.Service<
 > {}
 export const UpdateDomainNameservers = Binding.Service<UpdateDomainNameservers>(
   "AWS.Route53Domains.UpdateDomainNameservers",
+);
+
+export const UpdateDomainNameserversHttp = Layer.effect(
+  UpdateDomainNameservers,
+  makeRoute53DomainsHttpBinding({
+    capability: "UpdateDomainNameservers",
+    iamActions: ["route53domains:UpdateDomainNameservers"],
+    operation: route53domains.updateDomainNameservers,
+  }),
 );

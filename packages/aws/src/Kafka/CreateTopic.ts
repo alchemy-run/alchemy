@@ -1,6 +1,8 @@
-import type * as kafka from "@distilled.cloud/aws/kafka";
+import * as kafka from "@distilled.cloud/aws/kafka";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKafkaClusterHttpBinding } from "./BindingHttp.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
 
 /**
@@ -36,3 +38,15 @@ export interface CreateTopic extends Binding.Service<
   >
 > {}
 export const CreateTopic = Binding.Service<CreateTopic>("AWS.Kafka.CreateTopic");
+
+export const CreateTopicHttp = Layer.effect(
+  CreateTopic,
+  makeKafkaClusterHttpBinding({
+    tag: "AWS.Kafka.CreateTopic",
+    operation: kafka.createTopic,
+    // The control-plane action authorizes against the topic ARN; the
+    // kafka-cluster analogs cover the underlying Kafka admin operation.
+    actions: ["kafka:CreateTopic", "kafka-cluster:Connect", "kafka-cluster:CreateTopic"],
+    topicScoped: true,
+  }),
+);

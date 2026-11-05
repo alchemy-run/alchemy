@@ -1,6 +1,8 @@
-import type * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
+import * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConnectFlowHttpBinding } from "./BindingHttp.ts";
 import type { Flow } from "./Flow.ts";
 
 /**
@@ -43,4 +45,17 @@ export interface RevokeFlowEntitlement extends Binding.Service<
 > {}
 export const RevokeFlowEntitlement = Binding.Service<RevokeFlowEntitlement>(
   "AWS.MediaConnect.RevokeFlowEntitlement",
+);
+
+export const RevokeFlowEntitlementHttp = Layer.effect(
+  RevokeFlowEntitlement,
+  makeMediaConnectFlowHttpBinding({
+    tag: "AWS.MediaConnect.RevokeFlowEntitlement",
+    operation: mediaconnect.revokeFlowEntitlement,
+    actions: ["mediaconnect:RevokeFlowEntitlement"],
+    // The IAM resource types for RevokeFlowEntitlement are the flow AND
+    // the entitlement; entitlement ARNs are siblings of (not derived
+    // from) the flow ARN, so they are granted by wildcard.
+    extraResources: ["arn:aws:mediaconnect:*:*:entitlement:*"],
+  }),
 );

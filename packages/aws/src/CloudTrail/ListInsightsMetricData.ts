@@ -1,6 +1,8 @@
-import type * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
+import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudTrailAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `cloudtrail:ListInsightsMetricData`.
@@ -42,4 +44,13 @@ export interface ListInsightsMetricData extends Binding.Service<
 > {}
 export const ListInsightsMetricData = Binding.Service<ListInsightsMetricData>(
   "AWS.CloudTrail.ListInsightsMetricData",
+);
+
+export const ListInsightsMetricDataHttp = Layer.effect(
+  ListInsightsMetricData,
+  makeCloudTrailAccountHttpBinding({
+    tag: "AWS.CloudTrail.ListInsightsMetricData",
+    operation: cloudtrail.listInsightsMetricData,
+    actions: ["cloudtrail:ListInsightsMetricData"],
+  }),
 );

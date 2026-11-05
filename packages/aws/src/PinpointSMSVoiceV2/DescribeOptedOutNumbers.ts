@@ -1,6 +1,8 @@
-import type * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
+import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSmsVoiceOptOutListHttpBinding } from "./BindingHttp.ts";
 import type { OptOutList } from "./OptOutList.ts";
 
 /**
@@ -53,4 +55,13 @@ export interface DescribeOptedOutNumbers extends Binding.Service<
 > {}
 export const DescribeOptedOutNumbers = Binding.Service<DescribeOptedOutNumbers>(
   "AWS.PinpointSMSVoiceV2.DescribeOptedOutNumbers",
+);
+
+export const DescribeOptedOutNumbersHttp = Layer.effect(
+  DescribeOptedOutNumbers,
+  makeSmsVoiceOptOutListHttpBinding({
+    tag: "AWS.PinpointSMSVoiceV2.DescribeOptedOutNumbers",
+    operation: smsvoice.describeOptedOutNumbers,
+    actions: ["sms-voice:DescribeOptedOutNumbers"],
+  }),
 );

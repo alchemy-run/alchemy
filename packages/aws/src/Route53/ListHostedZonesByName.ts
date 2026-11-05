@@ -1,6 +1,8 @@
-import type * as route53 from "@distilled.cloud/aws/route-53";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListHostedZonesByName` operation (IAM action
@@ -35,4 +37,13 @@ export interface ListHostedZonesByName extends Binding.Service<
 > {}
 export const ListHostedZonesByName = Binding.Service<ListHostedZonesByName>(
   "AWS.Route53.ListHostedZonesByName",
+);
+
+export const ListHostedZonesByNameHttp = Layer.effect(
+  ListHostedZonesByName,
+  makeRoute53AccountHttpBinding({
+    tag: "AWS.Route53.ListHostedZonesByName",
+    operation: route53.listHostedZonesByName,
+    actions: ["route53:ListHostedZonesByName"],
+  }),
 );

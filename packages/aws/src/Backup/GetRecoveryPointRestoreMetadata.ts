@@ -1,7 +1,9 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { BackupVault } from "./BackupVault.ts";
+import { makeBackupVaultHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `GetRecoveryPointRestoreMetadata` request with `BackupVaultName` injected
@@ -54,4 +56,16 @@ export interface GetRecoveryPointRestoreMetadata extends Binding.Service<
 > {}
 export const GetRecoveryPointRestoreMetadata = Binding.Service<GetRecoveryPointRestoreMetadata>(
   "AWS.Backup.GetRecoveryPointRestoreMetadata",
+);
+
+export const GetRecoveryPointRestoreMetadataHttp = Layer.effect(
+  GetRecoveryPointRestoreMetadata,
+  makeBackupVaultHttpBinding({
+    tag: "AWS.Backup.GetRecoveryPointRestoreMetadata",
+    operation: backup.getRecoveryPointRestoreMetadata,
+    actions: ["backup:GetRecoveryPointRestoreMetadata"],
+    // Recovery-point actions authorize on the recovery point ARN (the
+    // underlying resource's snapshot ARN), not the vault ARN.
+    wildcardIam: true,
+  }),
 );

@@ -1,7 +1,9 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Analyzer } from "./Analyzer.ts";
+import { makeAnalyzerScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `UpdateFindings` request with `analyzerArn` injected from the bound {@link Analyzer}. */
 export interface UpdateFindingsRequest extends Omit<aa.UpdateFindingsRequest, "analyzerArn"> {}
@@ -34,3 +36,12 @@ export interface UpdateFindings extends Binding.Service<
 > {}
 
 export const UpdateFindings = Binding.Service<UpdateFindings>("AWS.AccessAnalyzer.UpdateFindings");
+
+export const UpdateFindingsHttp = Layer.effect(
+  UpdateFindings,
+  makeAnalyzerScopedHttpBinding({
+    tag: "AWS.AccessAnalyzer.UpdateFindings",
+    operation: aa.updateFindings,
+    actions: ["access-analyzer:UpdateFindings"],
+  }),
+);

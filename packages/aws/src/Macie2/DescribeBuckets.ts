@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:DescribeBuckets`.
@@ -31,3 +33,12 @@ export interface DescribeBuckets extends Binding.Service<
   >
 > {}
 export const DescribeBuckets = Binding.Service<DescribeBuckets>("AWS.Macie2.DescribeBuckets");
+
+export const DescribeBucketsHttp = Layer.effect(
+  DescribeBuckets,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.DescribeBuckets",
+    operation: macie2.describeBuckets,
+    actions: ["macie2:DescribeBuckets"],
+  }),
+);

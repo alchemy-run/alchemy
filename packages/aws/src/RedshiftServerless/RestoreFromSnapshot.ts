@@ -1,6 +1,8 @@
-import type * as serverless from "@distilled.cloud/aws/redshift-serverless";
+import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServerlessNamespaceHttpBinding, serverlessArnPrefix } from "./BindingHttp.ts";
 import type { Namespace } from "./Namespace.ts";
 
 /**
@@ -38,4 +40,19 @@ export interface RestoreFromSnapshot extends Binding.Service<
 > {}
 export const RestoreFromSnapshot = Binding.Service<RestoreFromSnapshot>(
   "AWS.RedshiftServerless.RestoreFromSnapshot",
+);
+
+export const RestoreFromSnapshotHttp = Layer.effect(
+  RestoreFromSnapshot,
+  makeServerlessNamespaceHttpBinding({
+    tag: "AWS.RedshiftServerless.RestoreFromSnapshot",
+    operation: serverless.restoreFromSnapshot,
+    actions: ["redshift-serverless:RestoreFromSnapshot"],
+    // The operation authorizes against sibling resource ARNs (snapshots,
+    // recovery points, the serving workgroup) in addition to the namespace.
+    extraResources: (arn) => {
+      const prefix = serverlessArnPrefix(arn);
+      return [`${prefix}:snapshot/*`, `${prefix}:workgroup/*`];
+    },
+  }),
 );

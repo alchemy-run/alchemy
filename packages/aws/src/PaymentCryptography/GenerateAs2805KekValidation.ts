@@ -1,6 +1,8 @@
-import type * as paymentcryptographydata from "@distilled.cloud/aws/payment-cryptography-data";
+import * as paymentcryptographydata from "@distilled.cloud/aws/payment-cryptography-data";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePaymentCryptographyKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface GenerateAs2805KekValidationRequest extends Omit<
@@ -47,4 +49,18 @@ export interface GenerateAs2805KekValidation extends Binding.Service<
 
 export const GenerateAs2805KekValidation = Binding.Service<GenerateAs2805KekValidation>(
   "AWS.PaymentCryptography.GenerateAs2805KekValidation",
+);
+
+/**
+ * HTTP implementation of {@link GenerateAs2805KekValidation} — grants the
+ * host Function `payment-cryptography:GenerateAs2805KekValidation` on the
+ * KEK and calls the Payment Cryptography Data API at runtime.
+ */
+export const GenerateAs2805KekValidationHttp = Layer.effect(
+  GenerateAs2805KekValidation,
+  makePaymentCryptographyKeyHttpBinding({
+    tag: "AWS.PaymentCryptography.GenerateAs2805KekValidation",
+    operation: paymentcryptographydata.generateAs2805KekValidation,
+    actions: ["payment-cryptography:GenerateAs2805KekValidation"],
+  }),
 );

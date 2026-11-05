@@ -1,6 +1,8 @@
-import type * as bcm from "@distilled.cloud/aws/bcm-data-exports";
+import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeExportHttpBinding } from "./BindingHttp.ts";
 import type { Export } from "./Export.ts";
 
 /**
@@ -41,3 +43,12 @@ export interface GetExecution extends Binding.Service<
 > {}
 
 export const GetExecution = Binding.Service<GetExecution>("AWS.BCMDataExports.GetExecution");
+
+export const GetExecutionHttp = Layer.effect(
+  GetExecution,
+  makeExportHttpBinding({
+    capability: "GetExecution",
+    iamActions: ["bcm-data-exports:GetExecution"],
+    operation: bcm.getExecution,
+  }),
+);

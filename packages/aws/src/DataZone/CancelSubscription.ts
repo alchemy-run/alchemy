@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface CancelSubscriptionRequest extends Omit<
@@ -39,4 +41,13 @@ export interface CancelSubscription extends Binding.Service<
 > {}
 export const CancelSubscription = Binding.Service<CancelSubscription>(
   "AWS.DataZone.CancelSubscription",
+);
+
+export const CancelSubscriptionHttp = Layer.effect(
+  CancelSubscription,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.CancelSubscription",
+    operation: datazone.cancelSubscription,
+    actions: ["datazone:CancelSubscription"],
+  }),
 );

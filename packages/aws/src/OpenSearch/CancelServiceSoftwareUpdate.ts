@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CancelServiceSoftwareUpdate` operation (IAM action
@@ -33,4 +35,13 @@ export interface CancelServiceSoftwareUpdate extends Binding.Service<
 > {}
 export const CancelServiceSoftwareUpdate = Binding.Service<CancelServiceSoftwareUpdate>(
   "AWS.OpenSearch.CancelServiceSoftwareUpdate",
+);
+
+export const CancelServiceSoftwareUpdateHttp = Layer.effect(
+  CancelServiceSoftwareUpdate,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.CancelServiceSoftwareUpdate",
+    operation: opensearch.cancelServiceSoftwareUpdate,
+    actions: ["es:CancelServiceSoftwareUpdate"],
+  }),
 );

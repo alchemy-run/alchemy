@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:CompareFaces` — compare the largest face in a source image against faces in a target image and return match confidence.
@@ -38,3 +40,12 @@ export interface CompareFaces extends Binding.Service<
   >
 > {}
 export const CompareFaces = Binding.Service<CompareFaces>("AWS.Rekognition.CompareFaces");
+
+export const CompareFacesHttp = Layer.effect(
+  CompareFaces,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.CompareFaces",
+    operation: rekognition.compareFaces,
+    actions: ["rekognition:CompareFaces"],
+  }),
+);

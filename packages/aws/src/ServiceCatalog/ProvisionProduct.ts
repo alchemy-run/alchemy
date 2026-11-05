@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:ProvisionProduct`.
@@ -41,4 +43,22 @@ export interface ProvisionProduct extends Binding.Service<
 > {}
 export const ProvisionProduct = Binding.Service<ProvisionProduct>(
   "AWS.ServiceCatalog.ProvisionProduct",
+);
+
+export const ProvisionProductHttp = Layer.effect(
+  ProvisionProduct,
+  makeServiceCatalogHttpBinding({
+    capability: "ProvisionProduct",
+    iamActions: [
+      "servicecatalog:ProvisionProduct",
+      "cloudformation:CreateStack",
+      "cloudformation:DescribeStacks",
+      "cloudformation:DescribeStackEvents",
+      "cloudformation:GetTemplateSummary",
+      "cloudformation:SetStackPolicy",
+      "cloudformation:ValidateTemplate",
+      "s3:GetObject",
+    ],
+    operation: servicecatalog.provisionProduct,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as transfer from "@distilled.cloud/aws/transfer";
+import * as transfer from "@distilled.cloud/aws/transfer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTransferUserHttpBinding } from "./BindingHttp.ts";
 import type { User } from "./User.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface ImportSshPublicKey extends Binding.Service<
 > {}
 export const ImportSshPublicKey = Binding.Service<ImportSshPublicKey>(
   "AWS.Transfer.ImportSshPublicKey",
+);
+
+export const ImportSshPublicKeyHttp = Layer.effect(
+  ImportSshPublicKey,
+  makeTransferUserHttpBinding({
+    tag: "AWS.Transfer.ImportSshPublicKey",
+    operation: transfer.importSshPublicKey,
+    actions: ["transfer:ImportSshPublicKey"],
+  }),
 );

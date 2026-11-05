@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:DeleteCallAnalyticsCategory` — delete a Call Analytics category.
@@ -34,4 +36,13 @@ export interface DeleteCallAnalyticsCategory extends Binding.Service<
 > {}
 export const DeleteCallAnalyticsCategory = Binding.Service<DeleteCallAnalyticsCategory>(
   "AWS.Transcribe.DeleteCallAnalyticsCategory",
+);
+
+export const DeleteCallAnalyticsCategoryHttp = Layer.effect(
+  DeleteCallAnalyticsCategory,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.DeleteCallAnalyticsCategory",
+    operation: transcribe.deleteCallAnalyticsCategory,
+    actions: ["transcribe:DeleteCallAnalyticsCategory"],
+  }),
 );

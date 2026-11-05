@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataExchangeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dataexchange:DeleteDataGrant`.
@@ -29,3 +31,12 @@ export interface DeleteDataGrant extends Binding.Service<
   >
 > {}
 export const DeleteDataGrant = Binding.Service<DeleteDataGrant>("AWS.DataExchange.DeleteDataGrant");
+
+export const DeleteDataGrantHttp = Layer.effect(
+  DeleteDataGrant,
+  makeDataExchangeAccountHttpBinding({
+    tag: "AWS.DataExchange.DeleteDataGrant",
+    operation: dataexchange.deleteDataGrant,
+    actions: ["dataexchange:DeleteDataGrant"],
+  }),
+);

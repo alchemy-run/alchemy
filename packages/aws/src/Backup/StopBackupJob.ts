@@ -1,6 +1,8 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBackupAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `StopBackupJob` operation (IAM action
@@ -29,3 +31,12 @@ export interface StopBackupJob extends Binding.Service<
   >
 > {}
 export const StopBackupJob = Binding.Service<StopBackupJob>("AWS.Backup.StopBackupJob");
+
+export const StopBackupJobHttp = Layer.effect(
+  StopBackupJob,
+  makeBackupAccountHttpBinding({
+    tag: "AWS.Backup.StopBackupJob",
+    operation: backup.stopBackupJob,
+    actions: ["backup:StopBackupJob"],
+  }),
+);

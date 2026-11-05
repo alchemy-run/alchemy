@@ -1,7 +1,10 @@
 import type * as SVC from "@distilled.cloud/aws/codedeploy";
+import * as codedeploy from "@distilled.cloud/aws/codedeploy";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeCodeDeployApplicationHttpBinding } from "./BindingHttp.ts";
 
 export interface RegisterApplicationRevisionRequest extends Omit<
   SVC.RegisterApplicationRevisionInput,
@@ -44,4 +47,13 @@ export interface RegisterApplicationRevision extends Binding.Service<
 > {}
 export const RegisterApplicationRevision = Binding.Service<RegisterApplicationRevision>(
   "AWS.CodeDeploy.RegisterApplicationRevision",
+);
+
+export const RegisterApplicationRevisionHttp = Layer.effect(
+  RegisterApplicationRevision,
+  makeCodeDeployApplicationHttpBinding({
+    tag: "AWS.CodeDeploy.RegisterApplicationRevision",
+    operation: codedeploy.registerApplicationRevision,
+    actions: ["codedeploy:RegisterApplicationRevision"],
+  }),
 );

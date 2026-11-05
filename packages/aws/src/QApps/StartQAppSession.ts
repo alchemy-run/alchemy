@@ -1,6 +1,8 @@
-import type * as qapps from "@distilled.cloud/aws/qapps";
+import * as qapps from "@distilled.cloud/aws/qapps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQAppHttpBinding } from "./BindingHttp.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -42,3 +44,13 @@ export interface StartQAppSession extends Binding.Service<
 > {}
 
 export const StartQAppSession = Binding.Service<StartQAppSession>("AWS.QApps.StartQAppSession");
+
+export const StartQAppSessionHttp = Layer.effect(
+  StartQAppSession,
+  makeQAppHttpBinding({
+    capability: "StartQAppSession",
+    iamActions: ["qapps:StartQAppSession"],
+    operation: qapps.startQAppSession,
+    injectAppId: true,
+  }),
+);

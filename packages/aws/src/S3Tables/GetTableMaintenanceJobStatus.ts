@@ -1,6 +1,8 @@
-import type * as s3tables from "@distilled.cloud/aws/s3tables";
+import * as s3tables from "@distilled.cloud/aws/s3tables";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeS3TablesTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface GetTableMaintenanceJobStatus extends Binding.Service<
 > {}
 export const GetTableMaintenanceJobStatus = Binding.Service<GetTableMaintenanceJobStatus>(
   "AWS.S3Tables.GetTableMaintenanceJobStatus",
+);
+
+export const GetTableMaintenanceJobStatusHttp = Layer.effect(
+  GetTableMaintenanceJobStatus,
+  makeS3TablesTableHttpBinding({
+    tag: "AWS.S3Tables.GetTableMaintenanceJobStatus",
+    operation: s3tables.getTableMaintenanceJobStatus,
+    actions: ["s3tables:GetTableMaintenanceJobStatus"],
+  }),
 );

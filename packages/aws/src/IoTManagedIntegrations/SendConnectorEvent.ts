@@ -1,6 +1,8 @@
-import type * as mi from "@distilled.cloud/aws/iot-managed-integrations";
+import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeManagedIntegrationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link SendConnectorEvent}.
@@ -47,4 +49,13 @@ export interface SendConnectorEvent extends Binding.Service<
 > {}
 export const SendConnectorEvent = Binding.Service<SendConnectorEvent>(
   "AWS.IoTManagedIntegrations.SendConnectorEvent",
+);
+
+export const SendConnectorEventHttp = Layer.effect(
+  SendConnectorEvent,
+  makeManagedIntegrationsHttpBinding({
+    capability: "SendConnectorEvent",
+    iamActions: ["iotmanagedintegrations:SendConnectorEvent"],
+    operation: mi.sendConnectorEvent,
+  }),
 );

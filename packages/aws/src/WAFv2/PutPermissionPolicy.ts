@@ -1,6 +1,9 @@
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
+import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWafv2RuleGroupHttpBinding } from "./BindingHttp.ts";
 import type { RuleGroup } from "./RuleGroup.ts";
 
 export interface PutPermissionPolicyRequest extends Omit<
@@ -55,4 +58,13 @@ export interface PutPermissionPolicy extends Binding.Service<
 
 export const PutPermissionPolicy = Binding.Service<PutPermissionPolicy>(
   "AWS.WAFv2.PutPermissionPolicy",
+);
+
+export const PutPermissionPolicyHttp = Layer.effect(
+  PutPermissionPolicy,
+  makeWafv2RuleGroupHttpBinding({
+    tag: "AWS.WAFv2.PutPermissionPolicy",
+    operation: wafv2.putPermissionPolicy,
+    actions: ["wafv2:PutPermissionPolicy"],
+  }),
 );

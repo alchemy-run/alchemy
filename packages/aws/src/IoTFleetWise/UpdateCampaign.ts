@@ -1,6 +1,8 @@
-import type * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFleetWiseResourceHttpBinding } from "./BindingHttp.ts";
 import type { Campaign } from "./Campaign.ts";
 
 /**
@@ -40,3 +42,15 @@ export interface UpdateCampaign extends Binding.Service<
   >
 > {}
 export const UpdateCampaign = Binding.Service<UpdateCampaign>("AWS.IoTFleetWise.UpdateCampaign");
+
+export const UpdateCampaignHttp = Layer.effect(
+  UpdateCampaign,
+  makeFleetWiseResourceHttpBinding({
+    tag: "AWS.IoTFleetWise.UpdateCampaign",
+    operation: iotfleetwise.updateCampaign,
+    actions: ["iotfleetwise:UpdateCampaign"],
+    requestKey: "name",
+    identifier: (campaign: Campaign) => campaign.campaignName,
+    resources: (campaign: Campaign) => [campaign.campaignArn],
+  }),
+);

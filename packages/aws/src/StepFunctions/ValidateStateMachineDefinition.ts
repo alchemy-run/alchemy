@@ -1,6 +1,8 @@
-import type * as sfn from "@distilled.cloud/aws/sfn";
+import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSfnServiceHttpBinding } from "./BindingHttp.ts";
 
 export interface ValidateStateMachineDefinitionRequest
   extends sfn.ValidateStateMachineDefinitionInput {}
@@ -43,4 +45,13 @@ export interface ValidateStateMachineDefinition extends Binding.Service<
 > {}
 export const ValidateStateMachineDefinition = Binding.Service<ValidateStateMachineDefinition>(
   "AWS.StepFunctions.ValidateStateMachineDefinition",
+);
+
+export const ValidateStateMachineDefinitionHttp = Layer.effect(
+  ValidateStateMachineDefinition,
+  makeSfnServiceHttpBinding({
+    tag: "AWS.StepFunctions.ValidateStateMachineDefinition",
+    actions: ["states:ValidateStateMachineDefinition"],
+    operation: sfn.validateStateMachineDefinition,
+  }),
 );

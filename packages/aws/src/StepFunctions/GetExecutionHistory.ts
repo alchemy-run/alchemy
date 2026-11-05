@@ -1,6 +1,8 @@
-import type * as sfn from "@distilled.cloud/aws/sfn";
+import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeExecutionScopedHttpBinding } from "./BindingHttp.ts";
 import type { StateMachine } from "./StateMachine.ts";
 
 export interface GetExecutionHistoryRequest extends sfn.GetExecutionHistoryInput {}
@@ -41,4 +43,13 @@ export interface GetExecutionHistory extends Binding.Service<
 > {}
 export const GetExecutionHistory = Binding.Service<GetExecutionHistory>(
   "AWS.StepFunctions.GetExecutionHistory",
+);
+
+export const GetExecutionHistoryHttp = Layer.effect(
+  GetExecutionHistory,
+  makeExecutionScopedHttpBinding({
+    tag: "AWS.StepFunctions.GetExecutionHistory",
+    operation: sfn.getExecutionHistory,
+    actions: ["states:GetExecutionHistory"],
+  }),
 );

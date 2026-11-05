@@ -1,6 +1,8 @@
-import type * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
+import * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMedicalImagingDatastoreHttpBinding } from "./BindingHttp.ts";
 import type { Datastore } from "./Datastore.ts";
 
 /**
@@ -44,3 +46,12 @@ export interface DeleteImageSet extends Binding.Service<
   >
 > {}
 export const DeleteImageSet = Binding.Service<DeleteImageSet>("AWS.MedicalImaging.DeleteImageSet");
+
+export const DeleteImageSetHttp = Layer.effect(
+  DeleteImageSet,
+  makeMedicalImagingDatastoreHttpBinding({
+    tag: "AWS.MedicalImaging.DeleteImageSet",
+    operation: medicalimaging.deleteImageSet,
+    actions: ["medical-imaging:DeleteImageSet"],
+  }),
+);

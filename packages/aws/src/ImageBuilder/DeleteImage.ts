@@ -1,6 +1,8 @@
-import type * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeImageBuilderAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `imagebuilder:DeleteImage`.
@@ -32,3 +34,12 @@ export interface DeleteImage extends Binding.Service<
   >
 > {}
 export const DeleteImage = Binding.Service<DeleteImage>("AWS.ImageBuilder.DeleteImage");
+
+export const DeleteImageHttp = Layer.effect(
+  DeleteImage,
+  makeImageBuilderAccountHttpBinding({
+    tag: "AWS.ImageBuilder.DeleteImage",
+    operation: imagebuilder.deleteImage,
+    actions: ["imagebuilder:DeleteImage"],
+  }),
+);

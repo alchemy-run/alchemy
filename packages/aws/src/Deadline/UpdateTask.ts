@@ -1,6 +1,8 @@
-import type * as deadline from "@distilled.cloud/aws/deadline";
+import * as deadline from "@distilled.cloud/aws/deadline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDeadlineQueueHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface UpdateTask extends Binding.Service<
   >
 > {}
 export const UpdateTask = Binding.Service<UpdateTask>("AWS.Deadline.UpdateTask");
+
+export const UpdateTaskHttp = Layer.effect(
+  UpdateTask,
+  makeDeadlineQueueHttpBinding({
+    tag: "AWS.Deadline.UpdateTask",
+    operation: deadline.updateTask,
+    actions: ["deadline:UpdateTask"],
+  }),
+);

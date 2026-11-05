@@ -1,6 +1,8 @@
-import type * as kafka from "@distilled.cloud/aws/kafka";
+import * as kafka from "@distilled.cloud/aws/kafka";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKafkaClusterHttpBinding } from "./BindingHttp.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
 
 /**
@@ -33,3 +35,13 @@ export interface ListTopics extends Binding.Service<
   >
 > {}
 export const ListTopics = Binding.Service<ListTopics>("AWS.Kafka.ListTopics");
+
+export const ListTopicsHttp = Layer.effect(
+  ListTopics,
+  makeKafkaClusterHttpBinding({
+    tag: "AWS.Kafka.ListTopics",
+    operation: kafka.listTopics,
+    actions: ["kafka:ListTopics", "kafka-cluster:Connect", "kafka-cluster:DescribeTopic"],
+    topicScoped: true,
+  }),
+);

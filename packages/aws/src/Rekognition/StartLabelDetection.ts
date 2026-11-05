@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StartLabelDetection` — start asynchronous detection of labels (objects, scenes, activities) in a stored video.
@@ -45,4 +47,13 @@ export interface StartLabelDetection extends Binding.Service<
 > {}
 export const StartLabelDetection = Binding.Service<StartLabelDetection>(
   "AWS.Rekognition.StartLabelDetection",
+);
+
+export const StartLabelDetectionHttp = Layer.effect(
+  StartLabelDetection,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StartLabelDetection",
+    operation: rekognition.startLabelDetection,
+    actions: ["rekognition:StartLabelDetection"],
+  }),
 );

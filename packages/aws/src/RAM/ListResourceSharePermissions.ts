@@ -1,6 +1,8 @@
-import type * as ram from "@distilled.cloud/aws/ram";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRAMHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ram:ListResourceSharePermissions`.
@@ -38,4 +40,13 @@ export interface ListResourceSharePermissions extends Binding.Service<
 > {}
 export const ListResourceSharePermissions = Binding.Service<ListResourceSharePermissions>(
   "AWS.RAM.ListResourceSharePermissions",
+);
+
+export const ListResourceSharePermissionsHttp = Layer.effect(
+  ListResourceSharePermissions,
+  makeRAMHttpBinding({
+    capability: "ListResourceSharePermissions",
+    iamActions: ["ram:ListResourceSharePermissions"],
+    operation: ram.listResourceSharePermissions,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetUpgradeHistory` operation (IAM action
@@ -30,4 +32,13 @@ export interface GetUpgradeHistory extends Binding.Service<
 > {}
 export const GetUpgradeHistory = Binding.Service<GetUpgradeHistory>(
   "AWS.OpenSearch.GetUpgradeHistory",
+);
+
+export const GetUpgradeHistoryHttp = Layer.effect(
+  GetUpgradeHistory,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.GetUpgradeHistory",
+    operation: opensearch.getUpgradeHistory,
+    actions: ["es:GetUpgradeHistory"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as controltower from "@distilled.cloud/aws/controltower";
+import * as controltower from "@distilled.cloud/aws/controltower";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeControlTowerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `controltower:ListLandingZoneOperations`.
@@ -41,4 +43,13 @@ export interface ListLandingZoneOperations extends Binding.Service<
 
 export const ListLandingZoneOperations = Binding.Service<ListLandingZoneOperations>(
   "AWS.ControlTower.ListLandingZoneOperations",
+);
+
+export const ListLandingZoneOperationsHttp = Layer.effect(
+  ListLandingZoneOperations,
+  makeControlTowerAccountHttpBinding({
+    capability: "ListLandingZoneOperations",
+    iamActions: ["controltower:ListLandingZoneOperations"],
+    operation: controltower.listLandingZoneOperations,
+  }),
 );

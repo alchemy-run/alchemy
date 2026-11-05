@@ -1,7 +1,9 @@
-import type * as ga from "@distilled.cloud/aws/global-accelerator";
+import * as ga from "@distilled.cloud/aws/global-accelerator";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Accelerator } from "./Accelerator.ts";
+import { makeGaAcceleratorHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `globalaccelerator:DescribeAccelerator`.
@@ -37,4 +39,13 @@ export interface DescribeAccelerator extends Binding.Service<
 > {}
 export const DescribeAccelerator = Binding.Service<DescribeAccelerator>(
   "AWS.GlobalAccelerator.DescribeAccelerator",
+);
+
+export const DescribeAcceleratorHttp = Layer.effect(
+  DescribeAccelerator,
+  makeGaAcceleratorHttpBinding({
+    tag: "AWS.GlobalAccelerator.DescribeAccelerator",
+    operation: ga.describeAccelerator,
+    actions: ["globalaccelerator:DescribeAccelerator"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface PostLineageEventRequest extends Omit<
@@ -38,3 +40,12 @@ export interface PostLineageEvent extends Binding.Service<
   >
 > {}
 export const PostLineageEvent = Binding.Service<PostLineageEvent>("AWS.DataZone.PostLineageEvent");
+
+export const PostLineageEventHttp = Layer.effect(
+  PostLineageEvent,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.PostLineageEvent",
+    operation: datazone.postLineageEvent,
+    actions: ["datazone:PostLineageEvent"],
+  }),
+);

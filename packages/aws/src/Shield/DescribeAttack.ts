@@ -1,6 +1,8 @@
-import type * as shield from "@distilled.cloud/aws/shield";
+import * as shield from "@distilled.cloud/aws/shield";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeShieldHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `shield:DescribeAttack`.
@@ -34,3 +36,12 @@ export interface DescribeAttack extends Binding.Service<
   >
 > {}
 export const DescribeAttack = Binding.Service<DescribeAttack>("AWS.Shield.DescribeAttack");
+
+export const DescribeAttackHttp = Layer.effect(
+  DescribeAttack,
+  makeShieldHttpBinding({
+    tag: "AWS.Shield.DescribeAttack",
+    operation: shield.describeAttack,
+    actions: ["shield:DescribeAttack"],
+  }),
+);

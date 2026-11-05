@@ -1,6 +1,8 @@
-import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
+import * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53DomainsHttpBinding } from "./BindingHttp.ts";
 
 export interface ListOperationsRequest extends route53domains.ListOperationsRequest {}
 
@@ -46,3 +48,12 @@ export interface ListOperations extends Binding.Service<
   >
 > {}
 export const ListOperations = Binding.Service<ListOperations>("AWS.Route53Domains.ListOperations");
+
+export const ListOperationsHttp = Layer.effect(
+  ListOperations,
+  makeRoute53DomainsHttpBinding({
+    capability: "ListOperations",
+    iamActions: ["route53domains:ListOperations"],
+    operation: route53domains.listOperations,
+  }),
+);

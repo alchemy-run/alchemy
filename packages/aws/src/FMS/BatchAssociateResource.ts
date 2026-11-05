@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link BatchAssociateResource}.
@@ -40,4 +42,13 @@ export interface BatchAssociateResource extends Binding.Service<
 
 export const BatchAssociateResource = Binding.Service<BatchAssociateResource>(
   "AWS.FMS.BatchAssociateResource",
+);
+
+export const BatchAssociateResourceHttp = Layer.effect(
+  BatchAssociateResource,
+  makeFmsHttpBinding({
+    capability: "BatchAssociateResource",
+    iamActions: ["fms:BatchAssociateResource"],
+    operation: fms.batchAssociateResource,
+  }),
 );

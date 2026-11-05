@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface GetTimeSeriesDataPointRequest extends Omit<
@@ -44,4 +46,13 @@ export interface GetTimeSeriesDataPoint extends Binding.Service<
 > {}
 export const GetTimeSeriesDataPoint = Binding.Service<GetTimeSeriesDataPoint>(
   "AWS.DataZone.GetTimeSeriesDataPoint",
+);
+
+export const GetTimeSeriesDataPointHttp = Layer.effect(
+  GetTimeSeriesDataPoint,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.GetTimeSeriesDataPoint",
+    operation: datazone.getTimeSeriesDataPoint,
+    actions: ["datazone:GetTimeSeriesDataPoint"],
+  }),
 );

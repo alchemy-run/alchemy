@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AliasName } from "./Alias.ts";
+import { makeKmsKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface DescribeKeyRequest extends Omit<kms.DescribeKeyRequest, "KeyId"> {}
@@ -36,3 +38,12 @@ export interface DescribeKey extends Binding.Service<
 > {}
 
 export const DescribeKey = Binding.Service<DescribeKey>("AWS.KMS.DescribeKey");
+
+export const DescribeKeyHttp = Layer.effect(
+  DescribeKey,
+  makeKmsKeyHttpBinding({
+    tag: "AWS.KMS.DescribeKey",
+    operation: kms.describeKey,
+    actions: ["kms:DescribeKey"],
+  }),
+);

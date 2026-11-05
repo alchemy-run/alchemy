@@ -1,6 +1,8 @@
-import type * as location from "@distilled.cloud/aws/location";
+import * as location from "@distilled.cloud/aws/location";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLocationAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Retrieves the status, configuration, and error report of a Location batch metadata job.
@@ -31,3 +33,12 @@ export interface GetJob extends Binding.Service<
   >
 > {}
 export const GetJob = Binding.Service<GetJob>("AWS.Location.GetJob");
+
+export const GetJobHttp = Layer.effect(
+  GetJob,
+  makeLocationAccountHttpBinding({
+    tag: "AWS.Location.GetJob",
+    operation: location.getJob,
+    actions: ["geo:GetJob"],
+  }),
+);

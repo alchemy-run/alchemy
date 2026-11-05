@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:BatchGetMemberEc2DeepInspectionStatus`.
@@ -39,3 +41,12 @@ export const BatchGetMemberEc2DeepInspectionStatus =
   Binding.Service<BatchGetMemberEc2DeepInspectionStatus>(
     "AWS.Inspector2.BatchGetMemberEc2DeepInspectionStatus",
   );
+
+export const BatchGetMemberEc2DeepInspectionStatusHttp = Layer.effect(
+  BatchGetMemberEc2DeepInspectionStatus,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.BatchGetMemberEc2DeepInspectionStatus",
+    operation: inspector2.batchGetMemberEc2DeepInspectionStatus,
+    actions: ["inspector2:BatchGetMemberEc2DeepInspectionStatus"],
+  }),
+);

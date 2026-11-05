@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsInstanceHttpBinding } from "./BindingHttp.ts";
 import type { DBInstance } from "./DBInstance.ts";
 
 /**
@@ -35,3 +37,12 @@ export interface StopDBInstance extends Binding.Service<
   >
 > {}
 export const StopDBInstance = Binding.Service<StopDBInstance>("AWS.RDS.StopDBInstance");
+
+export const StopDBInstanceHttp = Layer.effect(
+  StopDBInstance,
+  makeRdsInstanceHttpBinding({
+    tag: "AWS.RDS.StopDBInstance",
+    operation: rds.stopDBInstance,
+    actions: ["rds:StopDBInstance"],
+  }),
+);

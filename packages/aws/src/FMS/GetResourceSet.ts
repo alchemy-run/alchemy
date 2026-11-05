@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetResourceSet}.
@@ -36,3 +38,12 @@ export interface GetResourceSet extends Binding.Service<
 > {}
 
 export const GetResourceSet = Binding.Service<GetResourceSet>("AWS.FMS.GetResourceSet");
+
+export const GetResourceSetHttp = Layer.effect(
+  GetResourceSet,
+  makeFmsHttpBinding({
+    capability: "GetResourceSet",
+    iamActions: ["fms:GetResourceSet"],
+    operation: fms.getResourceSet,
+  }),
+);

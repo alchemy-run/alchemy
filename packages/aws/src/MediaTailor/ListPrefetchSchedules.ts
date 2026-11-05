@@ -1,6 +1,8 @@
-import type * as mediatailor from "@distilled.cloud/aws/mediatailor";
+import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaTailorPlaybackHttpBinding } from "./BindingHttp.ts";
 import type { PlaybackConfiguration } from "./PlaybackConfiguration.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface ListPrefetchSchedules extends Binding.Service<
 > {}
 export const ListPrefetchSchedules = Binding.Service<ListPrefetchSchedules>(
   "AWS.MediaTailor.ListPrefetchSchedules",
+);
+
+export const ListPrefetchSchedulesHttp = Layer.effect(
+  ListPrefetchSchedules,
+  makeMediaTailorPlaybackHttpBinding({
+    capability: "ListPrefetchSchedules",
+    iamActions: ["mediatailor:ListPrefetchSchedules"],
+    operation: mediatailor.listPrefetchSchedules,
+  }),
 );

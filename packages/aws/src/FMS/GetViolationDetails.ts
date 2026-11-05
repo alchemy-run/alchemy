@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetViolationDetails}.
@@ -42,4 +44,13 @@ export interface GetViolationDetails extends Binding.Service<
 
 export const GetViolationDetails = Binding.Service<GetViolationDetails>(
   "AWS.FMS.GetViolationDetails",
+);
+
+export const GetViolationDetailsHttp = Layer.effect(
+  GetViolationDetails,
+  makeFmsHttpBinding({
+    capability: "GetViolationDetails",
+    iamActions: ["fms:GetViolationDetails"],
+    operation: fms.getViolationDetails,
+  }),
 );

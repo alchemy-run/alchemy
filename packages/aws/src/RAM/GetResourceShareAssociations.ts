@@ -1,6 +1,8 @@
-import type * as ram from "@distilled.cloud/aws/ram";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRAMHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ram:GetResourceShareAssociations`.
@@ -37,4 +39,13 @@ export interface GetResourceShareAssociations extends Binding.Service<
 > {}
 export const GetResourceShareAssociations = Binding.Service<GetResourceShareAssociations>(
   "AWS.RAM.GetResourceShareAssociations",
+);
+
+export const GetResourceShareAssociationsHttp = Layer.effect(
+  GetResourceShareAssociations,
+  makeRAMHttpBinding({
+    capability: "GetResourceShareAssociations",
+    iamActions: ["ram:GetResourceShareAssociations"],
+    operation: ram.getResourceShareAssociations,
+  }),
 );

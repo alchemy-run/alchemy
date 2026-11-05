@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:StopRxNormInferenceJob` — stop an in-progress asynchronous RxNorm ontology linking job.
@@ -35,4 +37,13 @@ export interface StopRxNormInferenceJob extends Binding.Service<
 > {}
 export const StopRxNormInferenceJob = Binding.Service<StopRxNormInferenceJob>(
   "AWS.ComprehendMedical.StopRxNormInferenceJob",
+);
+
+export const StopRxNormInferenceJobHttp = Layer.effect(
+  StopRxNormInferenceJob,
+  makeComprehendMedicalHttpBinding({
+    capability: "StopRxNormInferenceJob",
+    iamActions: ["comprehendmedical:StopRxNormInferenceJob"],
+    operation: comprehendmedical.stopRxNormInferenceJob,
+  }),
 );

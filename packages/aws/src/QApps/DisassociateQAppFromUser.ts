@@ -1,6 +1,8 @@
-import type * as qapps from "@distilled.cloud/aws/qapps";
+import * as qapps from "@distilled.cloud/aws/qapps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQAppHttpBinding } from "./BindingHttp.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -42,4 +44,14 @@ export interface DisassociateQAppFromUser extends Binding.Service<
 
 export const DisassociateQAppFromUser = Binding.Service<DisassociateQAppFromUser>(
   "AWS.QApps.DisassociateQAppFromUser",
+);
+
+export const DisassociateQAppFromUserHttp = Layer.effect(
+  DisassociateQAppFromUser,
+  makeQAppHttpBinding({
+    capability: "DisassociateQAppFromUser",
+    iamActions: ["qapps:DisassociateQAppFromUser"],
+    operation: qapps.disassociateQAppFromUser,
+    injectAppId: true,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as ecrpublic from "@distilled.cloud/aws/ecr-public";
+import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePublicRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { PublicRepository } from "./Repository.ts";
 
 /** Request for {@link PutImage} — `repositoryName` is injected. */
@@ -42,3 +44,12 @@ export interface PutImage extends Binding.Service<
 > {}
 
 export const PutImage = Binding.Service<PutImage>("AWS.ECRPublic.PutImage");
+
+export const PutImageHttp = Layer.effect(
+  PutImage,
+  makePublicRepositoryHttpBinding({
+    capability: "PutImage",
+    iamActions: ["ecr-public:PutImage"],
+    operation: ecrpublic.putImage,
+  }),
+);

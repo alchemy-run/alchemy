@@ -1,6 +1,8 @@
-import type * as ram from "@distilled.cloud/aws/ram";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRAMHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ram:GetPermission`.
@@ -34,3 +36,12 @@ export interface GetPermission extends Binding.Service<
   >
 > {}
 export const GetPermission = Binding.Service<GetPermission>("AWS.RAM.GetPermission");
+
+export const GetPermissionHttp = Layer.effect(
+  GetPermission,
+  makeRAMHttpBinding({
+    capability: "GetPermission",
+    iamActions: ["ram:GetPermission"],
+    operation: ram.getPermission,
+  }),
+);

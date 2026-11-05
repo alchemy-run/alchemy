@@ -1,6 +1,8 @@
-import type * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFleetWiseResourceHttpBinding } from "./BindingHttp.ts";
 import type { Vehicle } from "./Vehicle.ts";
 
 /**
@@ -47,4 +49,18 @@ export interface GetVehicleStatus extends Binding.Service<
 > {}
 export const GetVehicleStatus = Binding.Service<GetVehicleStatus>(
   "AWS.IoTFleetWise.GetVehicleStatus",
+);
+
+export const GetVehicleStatusHttp = Layer.effect(
+  GetVehicleStatus,
+  makeFleetWiseResourceHttpBinding({
+    tag: "AWS.IoTFleetWise.GetVehicleStatus",
+    operation: iotfleetwise.getVehicleStatus,
+    actions: ["iotfleetwise:GetVehicleStatus"],
+    requestKey: "vehicleName",
+    identifier: (vehicle: Vehicle) => vehicle.vehicleName,
+    // GetVehicleStatus authorizes on both the vehicle and its associated
+    // campaigns — the campaign ARNs are unknowable at deploy time.
+    resources: (vehicle: Vehicle) => [vehicle.vehicleArn, "arn:aws:iotfleetwise:*:*:campaign/*"],
+  }),
 );

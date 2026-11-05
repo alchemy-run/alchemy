@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:CreateSbomExport`.
@@ -35,4 +37,13 @@ export interface CreateSbomExport extends Binding.Service<
 > {}
 export const CreateSbomExport = Binding.Service<CreateSbomExport>(
   "AWS.Inspector2.CreateSbomExport",
+);
+
+export const CreateSbomExportHttp = Layer.effect(
+  CreateSbomExport,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.CreateSbomExport",
+    operation: inspector2.createSbomExport,
+    actions: ["inspector2:CreateSbomExport"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link DeleteProtocolsList}.
@@ -36,4 +38,13 @@ export interface DeleteProtocolsList extends Binding.Service<
 
 export const DeleteProtocolsList = Binding.Service<DeleteProtocolsList>(
   "AWS.FMS.DeleteProtocolsList",
+);
+
+export const DeleteProtocolsListHttp = Layer.effect(
+  DeleteProtocolsList,
+  makeFmsHttpBinding({
+    capability: "DeleteProtocolsList",
+    iamActions: ["fms:DeleteProtocolsList"],
+    operation: fms.deleteProtocolsList,
+  }),
 );

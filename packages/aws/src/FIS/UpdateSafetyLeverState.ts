@@ -1,6 +1,8 @@
-import type * as fis from "@distilled.cloud/aws/fis";
+import * as fis from "@distilled.cloud/aws/fis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFisAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `fis:UpdateSafetyLeverState`.
@@ -37,4 +39,13 @@ export interface UpdateSafetyLeverState extends Binding.Service<
 > {}
 export const UpdateSafetyLeverState = Binding.Service<UpdateSafetyLeverState>(
   "AWS.FIS.UpdateSafetyLeverState",
+);
+
+export const UpdateSafetyLeverStateHttp = Layer.effect(
+  UpdateSafetyLeverState,
+  makeFisAccountHttpBinding({
+    tag: "AWS.FIS.UpdateSafetyLeverState",
+    operation: fis.updateSafetyLeverState,
+    actions: ["fis:UpdateSafetyLeverState"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as deadline from "@distilled.cloud/aws/deadline";
+import * as deadline from "@distilled.cloud/aws/deadline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDeadlineQueueHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface GetStep extends Binding.Service<
   >
 > {}
 export const GetStep = Binding.Service<GetStep>("AWS.Deadline.GetStep");
+
+export const GetStepHttp = Layer.effect(
+  GetStep,
+  makeDeadlineQueueHttpBinding({
+    tag: "AWS.Deadline.GetStep",
+    operation: deadline.getStep,
+    actions: ["deadline:GetStep"],
+  }),
+);

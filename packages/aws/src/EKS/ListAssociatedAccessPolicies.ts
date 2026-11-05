@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -41,4 +43,15 @@ export interface ListAssociatedAccessPolicies extends Binding.Service<
 > {}
 export const ListAssociatedAccessPolicies = Binding.Service<ListAssociatedAccessPolicies>(
   "AWS.EKS.ListAssociatedAccessPolicies",
+);
+
+export const ListAssociatedAccessPoliciesHttp = Layer.effect(
+  ListAssociatedAccessPolicies,
+  makeEKSClusterHttpBinding({
+    tag: "AWS.EKS.ListAssociatedAccessPolicies",
+    operation: eks.listAssociatedAccessPolicies,
+    actions: ["eks:ListAssociatedAccessPolicies"],
+    key: "clusterName",
+    scope: "subresources",
+  }),
 );

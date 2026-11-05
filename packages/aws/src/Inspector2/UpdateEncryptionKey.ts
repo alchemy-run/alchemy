@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:UpdateEncryptionKey`.
@@ -37,4 +39,13 @@ export interface UpdateEncryptionKey extends Binding.Service<
 > {}
 export const UpdateEncryptionKey = Binding.Service<UpdateEncryptionKey>(
   "AWS.Inspector2.UpdateEncryptionKey",
+);
+
+export const UpdateEncryptionKeyHttp = Layer.effect(
+  UpdateEncryptionKey,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.UpdateEncryptionKey",
+    operation: inspector2.updateEncryptionKey,
+    actions: ["inspector2:UpdateEncryptionKey"],
+  }),
 );

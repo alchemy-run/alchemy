@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListSubscriptionsRequest extends sns.ListSubscriptionsInput {}
 
@@ -38,3 +40,12 @@ export interface ListSubscriptions extends Binding.Service<
 > {}
 
 export const ListSubscriptions = Binding.Service<ListSubscriptions>("AWS.SNS.ListSubscriptions");
+
+export const ListSubscriptionsHttp = Layer.effect(
+  ListSubscriptions,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.ListSubscriptions",
+    operation: sns.listSubscriptions,
+    actions: ["sns:ListSubscriptions"],
+  }),
+);

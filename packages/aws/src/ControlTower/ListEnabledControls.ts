@@ -1,6 +1,8 @@
-import type * as controltower from "@distilled.cloud/aws/controltower";
+import * as controltower from "@distilled.cloud/aws/controltower";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeControlTowerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `controltower:ListEnabledControls`.
@@ -40,4 +42,13 @@ export interface ListEnabledControls extends Binding.Service<
 
 export const ListEnabledControls = Binding.Service<ListEnabledControls>(
   "AWS.ControlTower.ListEnabledControls",
+);
+
+export const ListEnabledControlsHttp = Layer.effect(
+  ListEnabledControls,
+  makeControlTowerAccountHttpBinding({
+    capability: "ListEnabledControls",
+    iamActions: ["controltower:ListEnabledControls"],
+    operation: controltower.listEnabledControls,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRevisionHttpBinding } from "./BindingHttp.ts";
 import type { Revision } from "./Revision.ts";
 
 /**
@@ -33,3 +35,12 @@ export interface GetRevision extends Binding.Service<
   >
 > {}
 export const GetRevision = Binding.Service<GetRevision>("AWS.DataExchange.GetRevision");
+
+export const GetRevisionHttp = Layer.effect(
+  GetRevision,
+  makeRevisionHttpBinding({
+    tag: "AWS.DataExchange.GetRevision",
+    operation: dataexchange.getRevision,
+    actions: ["dataexchange:GetRevision"],
+  }),
+);

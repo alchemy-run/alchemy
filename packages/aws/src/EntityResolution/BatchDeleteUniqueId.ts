@@ -1,6 +1,8 @@
-import type * as entityresolution from "@distilled.cloud/aws/entityresolution";
+import * as entityresolution from "@distilled.cloud/aws/entityresolution";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWorkflowHttpBinding } from "./BindingHttp.ts";
 import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface BatchDeleteUniqueId extends Binding.Service<
 
 export const BatchDeleteUniqueId = Binding.Service<BatchDeleteUniqueId>(
   "AWS.EntityResolution.BatchDeleteUniqueId",
+);
+
+export const BatchDeleteUniqueIdHttp = Layer.effect(
+  BatchDeleteUniqueId,
+  makeWorkflowHttpBinding({
+    tag: "AWS.EntityResolution.BatchDeleteUniqueId",
+    operation: entityresolution.batchDeleteUniqueId,
+    actions: ["entityresolution:BatchDeleteUniqueId"],
+  }),
 );

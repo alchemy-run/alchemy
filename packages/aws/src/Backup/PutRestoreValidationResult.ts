@@ -1,6 +1,8 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBackupAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `PutRestoreValidationResult` operation (IAM action
@@ -42,4 +44,13 @@ export interface PutRestoreValidationResult extends Binding.Service<
 > {}
 export const PutRestoreValidationResult = Binding.Service<PutRestoreValidationResult>(
   "AWS.Backup.PutRestoreValidationResult",
+);
+
+export const PutRestoreValidationResultHttp = Layer.effect(
+  PutRestoreValidationResult,
+  makeBackupAccountHttpBinding({
+    tag: "AWS.Backup.PutRestoreValidationResult",
+    operation: backup.putRestoreValidationResult,
+    actions: ["backup:PutRestoreValidationResult"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQBusinessIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -39,3 +41,13 @@ export interface GetGroup extends Binding.Service<
   >
 > {}
 export const GetGroup = Binding.Service<GetGroup>("AWS.QBusiness.GetGroup");
+
+export const GetGroupHttp = Layer.effect(
+  GetGroup,
+  makeQBusinessIndexHttpBinding({
+    tag: "AWS.QBusiness.GetGroup",
+    operation: qbusiness.getGroup,
+    actions: ["qbusiness:GetGroup"],
+    subResources: ["data-source/*"],
+  }),
+);

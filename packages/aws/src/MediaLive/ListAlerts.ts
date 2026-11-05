@@ -1,6 +1,8 @@
-import type * as medialive from "@distilled.cloud/aws/medialive";
+import * as medialive from "@distilled.cloud/aws/medialive";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaLiveChannelHttpBinding } from "./BindingHttp.ts";
 import type { Channel } from "./Channel.ts";
 
 /**
@@ -37,3 +39,12 @@ export interface ListAlerts extends Binding.Service<
   >
 > {}
 export const ListAlerts = Binding.Service<ListAlerts>("AWS.MediaLive.ListAlerts");
+
+export const ListAlertsHttp = Layer.effect(
+  ListAlerts,
+  makeMediaLiveChannelHttpBinding({
+    tag: "AWS.MediaLive.ListAlerts",
+    operation: medialive.listAlerts,
+    actions: ["medialive:ListAlerts"],
+  }),
+);

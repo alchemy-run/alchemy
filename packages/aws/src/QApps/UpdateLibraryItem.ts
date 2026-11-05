@@ -1,6 +1,8 @@
-import type * as qapps from "@distilled.cloud/aws/qapps";
+import * as qapps from "@distilled.cloud/aws/qapps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQAppsInstanceHttpBinding } from "./BindingHttp.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -41,3 +43,12 @@ export interface UpdateLibraryItem extends Binding.Service<
 > {}
 
 export const UpdateLibraryItem = Binding.Service<UpdateLibraryItem>("AWS.QApps.UpdateLibraryItem");
+
+export const UpdateLibraryItemHttp = Layer.effect(
+  UpdateLibraryItem,
+  makeQAppsInstanceHttpBinding({
+    capability: "UpdateLibraryItem",
+    iamActions: ["qapps:UpdateLibraryItem"],
+    operation: qapps.updateLibraryItem,
+  }),
+);

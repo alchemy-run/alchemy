@@ -1,7 +1,9 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Assessment } from "./Assessment.ts";
+import { makeAssessmentScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `BatchCreateDelegationByAssessment` request with `assessmentId` injected from the bound {@link Assessment}. */
 export interface BatchCreateDelegationByAssessmentRequest extends Omit<
@@ -47,4 +49,13 @@ export interface BatchCreateDelegationByAssessment extends Binding.Service<
 
 export const BatchCreateDelegationByAssessment = Binding.Service<BatchCreateDelegationByAssessment>(
   "AWS.AuditManager.BatchCreateDelegationByAssessment",
+);
+
+export const BatchCreateDelegationByAssessmentHttp = Layer.effect(
+  BatchCreateDelegationByAssessment,
+  makeAssessmentScopedHttpBinding({
+    tag: "AWS.AuditManager.BatchCreateDelegationByAssessment",
+    operation: auditmanager.batchCreateDelegationByAssessment,
+    actions: ["auditmanager:BatchCreateDelegationByAssessment"],
+  }),
 );

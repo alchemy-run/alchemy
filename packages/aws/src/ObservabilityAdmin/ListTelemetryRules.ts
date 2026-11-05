@@ -1,6 +1,8 @@
-import type * as obs from "@distilled.cloud/aws/observabilityadmin";
+import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeObservabilityAdminHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `observabilityadmin:ListTelemetryRules` — enumerates
@@ -36,4 +38,13 @@ export interface ListTelemetryRules extends Binding.Service<
 
 export const ListTelemetryRules = Binding.Service<ListTelemetryRules>(
   "AWS.ObservabilityAdmin.ListTelemetryRules",
+);
+
+export const ListTelemetryRulesHttp = Layer.effect(
+  ListTelemetryRules,
+  makeObservabilityAdminHttpBinding({
+    capability: "ListTelemetryRules",
+    iamActions: ["observabilityadmin:ListTelemetryRules"],
+    operation: obs.listTelemetryRules,
+  }),
 );

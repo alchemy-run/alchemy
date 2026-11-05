@@ -1,6 +1,8 @@
-import type * as ram from "@distilled.cloud/aws/ram";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRAMHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ram:ListResourceTypes`.
@@ -32,3 +34,12 @@ export interface ListResourceTypes extends Binding.Service<
   >
 > {}
 export const ListResourceTypes = Binding.Service<ListResourceTypes>("AWS.RAM.ListResourceTypes");
+
+export const ListResourceTypesHttp = Layer.effect(
+  ListResourceTypes,
+  makeRAMHttpBinding({
+    capability: "ListResourceTypes",
+    iamActions: ["ram:ListResourceTypes"],
+    operation: ram.listResourceTypes,
+  }),
+);

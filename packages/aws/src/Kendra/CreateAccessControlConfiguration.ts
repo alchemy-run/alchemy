@@ -1,6 +1,8 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -55,4 +57,14 @@ export interface CreateAccessControlConfiguration extends Binding.Service<
 > {}
 export const CreateAccessControlConfiguration = Binding.Service<CreateAccessControlConfiguration>(
   "AWS.Kendra.CreateAccessControlConfiguration",
+);
+
+export const CreateAccessControlConfigurationHttp = Layer.effect(
+  CreateAccessControlConfiguration,
+  makeKendraIndexHttpBinding({
+    tag: "AWS.Kendra.CreateAccessControlConfiguration",
+    operation: kendra.createAccessControlConfiguration,
+    actions: ["kendra:CreateAccessControlConfiguration"],
+    subResources: ["access-control-configuration/*"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface DescribeTimeToLiveRequest extends Omit<
@@ -38,4 +40,13 @@ export interface DescribeTimeToLive extends Binding.Service<
 > {}
 export const DescribeTimeToLive = Binding.Service<DescribeTimeToLive>(
   "AWS.DynamoDB.DescribeTimeToLive",
+);
+
+export const DescribeTimeToLiveHttp = Layer.effect(
+  DescribeTimeToLive,
+  makeTableHttpBinding({
+    tag: "AWS.DynamoDB.DescribeTimeToLive",
+    operation: DynamoDB.describeTimeToLive,
+    actions: ["dynamodb:DescribeTimeToLive"],
+  }),
 );

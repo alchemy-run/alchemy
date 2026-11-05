@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 import type { ReferenceStore } from "./ReferenceStore.ts";
 
 export interface GetReferenceMetadataRequest extends Omit<
@@ -40,4 +42,16 @@ export interface GetReferenceMetadata extends Binding.Service<
 
 export const GetReferenceMetadata = Binding.Service<GetReferenceMetadata>(
   "AWS.Omics.GetReferenceMetadata",
+);
+
+export const GetReferenceMetadataHttp = Layer.effect(
+  GetReferenceMetadata,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.GetReferenceMetadata",
+    operation: omics.getReferenceMetadata,
+    actions: ["omics:GetReferenceMetadata"],
+    key: "referenceStoreId",
+    id: (store: ReferenceStore) => store.referenceStoreId,
+    arn: (store: ReferenceStore) => store.referenceStoreArn,
+  }),
 );

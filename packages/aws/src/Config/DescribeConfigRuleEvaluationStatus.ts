@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `config:DescribeConfigRuleEvaluationStatus` — read
@@ -41,3 +43,12 @@ export const DescribeConfigRuleEvaluationStatus =
   Binding.Service<DescribeConfigRuleEvaluationStatus>(
     "AWS.Config.DescribeConfigRuleEvaluationStatus",
   );
+
+export const DescribeConfigRuleEvaluationStatusHttp = Layer.effect(
+  DescribeConfigRuleEvaluationStatus,
+  makeConfigAccountHttpBinding({
+    tag: "AWS.Config.DescribeConfigRuleEvaluationStatus",
+    operation: config.describeConfigRuleEvaluationStatus,
+    actions: ["config:DescribeConfigRuleEvaluationStatus"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -35,4 +37,13 @@ export interface DisassociateMembers extends Binding.Service<
 > {}
 export const DisassociateMembers = Binding.Service<DisassociateMembers>(
   "AWS.GuardDuty.DisassociateMembers",
+);
+
+export const DisassociateMembersHttp = Layer.effect(
+  DisassociateMembers,
+  makeGuardDutyDetectorHttpBinding({
+    tag: "AWS.GuardDuty.DisassociateMembers",
+    operation: guardduty.disassociateMembers,
+    actions: ["guardduty:DisassociateMembers"],
+  }),
 );

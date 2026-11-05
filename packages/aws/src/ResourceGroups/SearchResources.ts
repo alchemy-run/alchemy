@@ -1,6 +1,8 @@
-import type * as resourcegroups from "@distilled.cloud/aws/resource-groups";
+import * as resourcegroups from "@distilled.cloud/aws/resource-groups";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeResourceGroupsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `resource-groups:SearchResources`.
@@ -43,4 +45,20 @@ export interface SearchResources extends Binding.Service<
 > {}
 export const SearchResources = Binding.Service<SearchResources>(
   "AWS.ResourceGroups.SearchResources",
+);
+
+export const SearchResourcesHttp = Layer.effect(
+  SearchResources,
+  makeResourceGroupsAccountHttpBinding({
+    tag: "AWS.ResourceGroups.SearchResources",
+    operation: resourcegroups.searchResources,
+    // Documented minimum permissions: the search reads through the Resource
+    // Groups Tagging API and (for stack queries) CloudFormation.
+    actions: [
+      "resource-groups:SearchResources",
+      "tag:GetResources",
+      "cloudformation:DescribeStacks",
+      "cloudformation:ListStackResources",
+    ],
+  }),
 );

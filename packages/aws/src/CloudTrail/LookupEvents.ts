@@ -1,6 +1,8 @@
-import type * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
+import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudTrailAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `cloudtrail:LookupEvents`.
@@ -37,3 +39,12 @@ export interface LookupEvents extends Binding.Service<
   >
 > {}
 export const LookupEvents = Binding.Service<LookupEvents>("AWS.CloudTrail.LookupEvents");
+
+export const LookupEventsHttp = Layer.effect(
+  LookupEvents,
+  makeCloudTrailAccountHttpBinding({
+    tag: "AWS.CloudTrail.LookupEvents",
+    operation: cloudtrail.lookupEvents,
+    actions: ["cloudtrail:LookupEvents"],
+  }),
+);

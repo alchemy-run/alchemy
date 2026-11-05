@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StartStreamProcessor` — start a stream processor that analyzes a Kinesis Video Stream (face search or connected-home label detection).
@@ -38,4 +40,13 @@ export interface StartStreamProcessor extends Binding.Service<
 > {}
 export const StartStreamProcessor = Binding.Service<StartStreamProcessor>(
   "AWS.Rekognition.StartStreamProcessor",
+);
+
+export const StartStreamProcessorHttp = Layer.effect(
+  StartStreamProcessor,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StartStreamProcessor",
+    operation: rekognition.startStreamProcessor,
+    actions: ["rekognition:StartStreamProcessor"],
+  }),
 );

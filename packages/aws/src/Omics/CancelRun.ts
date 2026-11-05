@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface CancelRunRequest extends omics.CancelRunRequest {}
 
@@ -29,3 +31,12 @@ export interface CancelRun extends Binding.Service<
 > {}
 
 export const CancelRun = Binding.Service<CancelRun>("AWS.Omics.CancelRun");
+
+export const CancelRunHttp = Layer.effect(
+  CancelRun,
+  makeOmicsAccountHttpBinding({
+    tag: "AWS.Omics.CancelRun",
+    operation: omics.cancelRun,
+    actions: ["omics:CancelRun"],
+  }),
+);

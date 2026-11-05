@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:DetectSentiment` — infer the prevailing
@@ -39,3 +41,12 @@ export interface DetectSentiment extends Binding.Service<
   >
 > {}
 export const DetectSentiment = Binding.Service<DetectSentiment>("AWS.Comprehend.DetectSentiment");
+
+export const DetectSentimentHttp = Layer.effect(
+  DetectSentiment,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.DetectSentiment",
+    operation: comprehend.detectSentiment,
+    actions: ["comprehend:DetectSentiment"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
+import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKeyValueStoreScopedHttpBinding } from "./BindingHttp.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
 
 export interface UpdateKeysRequest extends Omit<kvs.UpdateKeysRequest, "KvsARN"> {}
@@ -42,3 +44,12 @@ export interface UpdateKeys extends Binding.Service<
 > {}
 
 export const UpdateKeys = Binding.Service<UpdateKeys>("AWS.CloudFront.UpdateKeys");
+
+export const UpdateKeysHttp = Layer.effect(
+  UpdateKeys,
+  makeKeyValueStoreScopedHttpBinding({
+    tag: "AWS.CloudFront.UpdateKeys",
+    operation: kvs.updateKeys,
+    actions: ["cloudfront-keyvaluestore:UpdateKeys"],
+  }),
+);

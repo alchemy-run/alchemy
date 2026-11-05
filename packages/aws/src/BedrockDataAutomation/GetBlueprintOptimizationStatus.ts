@@ -1,6 +1,8 @@
-import type * as bda from "@distilled.cloud/aws/bedrock-data-automation";
+import * as bda from "@distilled.cloud/aws/bedrock-data-automation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBdaAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetBlueprintOptimizationStatus` operation (IAM
@@ -42,4 +44,13 @@ export interface GetBlueprintOptimizationStatus extends Binding.Service<
 > {}
 export const GetBlueprintOptimizationStatus = Binding.Service<GetBlueprintOptimizationStatus>(
   "AWS.BedrockDataAutomation.GetBlueprintOptimizationStatus",
+);
+
+export const GetBlueprintOptimizationStatusHttp = Layer.effect(
+  GetBlueprintOptimizationStatus,
+  makeBdaAccountHttpBinding({
+    tag: "AWS.BedrockDataAutomation.GetBlueprintOptimizationStatus",
+    operation: bda.getBlueprintOptimizationStatus,
+    actions: ["bedrock:GetBlueprintOptimizationStatus"],
+  }),
 );

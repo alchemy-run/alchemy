@@ -1,6 +1,8 @@
-import type * as route53 from "@distilled.cloud/aws/route-53";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53ZoneHttpBinding } from "./BindingHttp.ts";
 import type { HostedZone } from "./HostedZone.ts";
 
 /**
@@ -60,4 +62,13 @@ export interface ChangeResourceRecordSets extends Binding.Service<
 > {}
 export const ChangeResourceRecordSets = Binding.Service<ChangeResourceRecordSets>(
   "AWS.Route53.ChangeResourceRecordSets",
+);
+
+export const ChangeResourceRecordSetsHttp = Layer.effect(
+  ChangeResourceRecordSets,
+  makeRoute53ZoneHttpBinding({
+    tag: "AWS.Route53.ChangeResourceRecordSets",
+    operation: route53.changeResourceRecordSets,
+    actions: ["route53:ChangeResourceRecordSets"],
+  }),
 );

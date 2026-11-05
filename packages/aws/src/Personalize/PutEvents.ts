@@ -1,6 +1,8 @@
-import type * as personalizeevents from "@distilled.cloud/aws/personalize-events";
+import * as personalizeevents from "@distilled.cloud/aws/personalize-events";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeEventTrackerHttpBinding } from "./BindingHttp.ts";
 import type { EventTracker } from "./EventTracker.ts";
 
 /**
@@ -44,3 +46,12 @@ export interface PutEvents extends Binding.Service<
   >
 > {}
 export const PutEvents = Binding.Service<PutEvents>("AWS.Personalize.PutEvents");
+
+export const PutEventsHttp = Layer.effect(
+  PutEvents,
+  makePersonalizeEventTrackerHttpBinding({
+    tag: "AWS.Personalize.PutEvents",
+    operation: personalizeevents.putEvents,
+    actions: ["personalize:PutEvents"],
+  }),
+);

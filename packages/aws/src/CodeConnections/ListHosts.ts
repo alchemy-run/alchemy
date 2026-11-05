@@ -1,6 +1,8 @@
-import type * as codeconnections from "@distilled.cloud/aws/codeconnections";
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeConnectionsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListHosts}.
@@ -40,3 +42,12 @@ export interface ListHosts extends Binding.Service<
 > {}
 
 export const ListHosts = Binding.Service<ListHosts>("AWS.CodeConnections.ListHosts");
+
+export const ListHostsHttp = Layer.effect(
+  ListHosts,
+  makeCodeConnectionsAccountHttpBinding({
+    tag: "AWS.CodeConnections.ListHosts",
+    actions: ["codeconnections:ListHosts"],
+    operation: codeconnections.listHosts,
+  }),
+);

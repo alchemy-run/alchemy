@@ -1,6 +1,8 @@
-import type * as glue from "@distilled.cloud/aws/glue";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlueJobHttpBinding } from "./BindingHttp.ts";
 import type { Job } from "./Job.ts";
 
 export interface GetJobBookmarkRequest extends Omit<glue.GetJobBookmarkRequest, "JobName"> {}
@@ -44,3 +46,15 @@ export interface GetJobBookmark extends Binding.Service<
 > {}
 
 export const GetJobBookmark = Binding.Service<GetJobBookmark>("AWS.Glue.GetJobBookmark");
+
+export const GetJobBookmarkHttp = Layer.effect(
+  GetJobBookmark,
+  makeGlueJobHttpBinding({
+    tag: "AWS.Glue.GetJobBookmark",
+    operation: glue.getJobBookmark,
+    actions: ["glue:GetJobBookmark"],
+    // Glue evaluates bookmark actions without a resource — an ARN-scoped
+    // grant never matches (verified live via the IAM policy simulator).
+    anyResource: true,
+  }),
+);

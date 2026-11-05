@@ -1,7 +1,10 @@
-import type * as amplify from "@distilled.cloud/aws/amplify";
+import * as amplify from "@distilled.cloud/aws/amplify";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { App } from "./App.ts";
+import { makeAmplifyHttpBinding } from "./BindingHttp.ts";
 
 export interface ListJobsRequest extends Omit<amplify.ListJobsRequest, "appId"> {}
 
@@ -38,3 +41,13 @@ export interface ListJobs extends Binding.Service<
 > {}
 
 export const ListJobs = Binding.Service<ListJobs>("AWS.Amplify.ListJobs");
+
+export const ListJobsHttp = Layer.effect(
+  ListJobs,
+  makeAmplifyHttpBinding({
+    name: "ListJobs",
+    operation: amplify.listJobs,
+    actions: ["amplify:ListJobs"],
+    resources: (app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`],
+  }),
+);

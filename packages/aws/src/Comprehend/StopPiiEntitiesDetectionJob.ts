@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:StopPiiEntitiesDetectionJob` — request termination
@@ -38,4 +40,13 @@ export interface StopPiiEntitiesDetectionJob extends Binding.Service<
 > {}
 export const StopPiiEntitiesDetectionJob = Binding.Service<StopPiiEntitiesDetectionJob>(
   "AWS.Comprehend.StopPiiEntitiesDetectionJob",
+);
+
+export const StopPiiEntitiesDetectionJobHttp = Layer.effect(
+  StopPiiEntitiesDetectionJob,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.StopPiiEntitiesDetectionJob",
+    operation: comprehend.stopPiiEntitiesDetectionJob,
+    actions: ["comprehend:StopPiiEntitiesDetectionJob"],
+  }),
 );

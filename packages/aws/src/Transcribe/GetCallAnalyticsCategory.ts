@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:GetCallAnalyticsCategory` — read a Call Analytics category's rules.
@@ -36,4 +38,13 @@ export interface GetCallAnalyticsCategory extends Binding.Service<
 > {}
 export const GetCallAnalyticsCategory = Binding.Service<GetCallAnalyticsCategory>(
   "AWS.Transcribe.GetCallAnalyticsCategory",
+);
+
+export const GetCallAnalyticsCategoryHttp = Layer.effect(
+  GetCallAnalyticsCategory,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.GetCallAnalyticsCategory",
+    operation: transcribe.getCallAnalyticsCategory,
+    actions: ["transcribe:GetCallAnalyticsCategory"],
+  }),
 );

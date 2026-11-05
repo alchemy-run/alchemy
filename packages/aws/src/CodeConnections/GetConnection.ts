@@ -1,6 +1,8 @@
-import type * as codeconnections from "@distilled.cloud/aws/codeconnections";
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConnectionScopedHttpBinding } from "./BindingHttp.ts";
 import type { Connection } from "./Connection.ts";
 
 /**
@@ -37,3 +39,12 @@ export interface GetConnection extends Binding.Service<
 > {}
 
 export const GetConnection = Binding.Service<GetConnection>("AWS.CodeConnections.GetConnection");
+
+export const GetConnectionHttp = Layer.effect(
+  GetConnection,
+  makeConnectionScopedHttpBinding({
+    tag: "AWS.CodeConnections.GetConnection",
+    actions: ["codeconnections:GetConnection"],
+    operation: codeconnections.getConnection,
+  }),
+);

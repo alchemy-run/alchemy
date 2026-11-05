@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:BatchDetectSentiment` — infer the prevailing sentiment for a batch of up to 25 documents in a single call.
@@ -40,4 +42,13 @@ export interface BatchDetectSentiment extends Binding.Service<
 > {}
 export const BatchDetectSentiment = Binding.Service<BatchDetectSentiment>(
   "AWS.Comprehend.BatchDetectSentiment",
+);
+
+export const BatchDetectSentimentHttp = Layer.effect(
+  BatchDetectSentiment,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.BatchDetectSentiment",
+    operation: comprehend.batchDetectSentiment,
+    actions: ["comprehend:BatchDetectSentiment"],
+  }),
 );

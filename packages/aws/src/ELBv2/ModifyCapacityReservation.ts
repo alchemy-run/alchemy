@@ -1,6 +1,8 @@
-import type * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLoadBalancerHttpBinding } from "./BindingHttp.ts";
 import type { LoadBalancer } from "./LoadBalancer.ts";
 
 /**
@@ -55,4 +57,13 @@ export interface ModifyCapacityReservation extends Binding.Service<
 
 export const ModifyCapacityReservation = Binding.Service<ModifyCapacityReservation>(
   "AWS.ELBv2.ModifyCapacityReservation",
+);
+
+export const ModifyCapacityReservationHttp = Layer.effect(
+  ModifyCapacityReservation,
+  makeLoadBalancerHttpBinding({
+    tag: "AWS.ELBv2.ModifyCapacityReservation",
+    operation: elbv2.modifyCapacityReservation,
+    actions: ["elasticloadbalancing:ModifyCapacityReservation"],
+  }),
 );

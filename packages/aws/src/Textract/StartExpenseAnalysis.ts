@@ -1,6 +1,8 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTextractHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:StartExpenseAnalysis` — start an
@@ -33,4 +35,14 @@ export interface StartExpenseAnalysis extends Binding.Service<
 > {}
 export const StartExpenseAnalysis = Binding.Service<StartExpenseAnalysis>(
   "AWS.Textract.StartExpenseAnalysis",
+);
+
+export const StartExpenseAnalysisHttp = Layer.effect(
+  StartExpenseAnalysis,
+  makeTextractHttpBinding({
+    capability: "StartExpenseAnalysis",
+    // No resource-level IAM for this action.
+    iamActions: ["textract:StartExpenseAnalysis"],
+    operation: textract.startExpenseAnalysis,
+  }),
 );

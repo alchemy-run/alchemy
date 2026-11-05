@@ -1,6 +1,8 @@
-import type * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
+import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudTrailEventDataStoreHttpBinding } from "./BindingHttp.ts";
 import type { EventDataStore } from "./EventDataStore.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface GetQueryResults extends Binding.Service<
   >
 > {}
 export const GetQueryResults = Binding.Service<GetQueryResults>("AWS.CloudTrail.GetQueryResults");
+
+export const GetQueryResultsHttp = Layer.effect(
+  GetQueryResults,
+  makeCloudTrailEventDataStoreHttpBinding({
+    tag: "AWS.CloudTrail.GetQueryResults",
+    operation: cloudtrail.getQueryResults,
+    actions: ["cloudtrail:GetQueryResults"],
+  }),
+);

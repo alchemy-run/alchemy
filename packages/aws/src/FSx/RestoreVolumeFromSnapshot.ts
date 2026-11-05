@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `RestoreVolumeFromSnapshot` operation (IAM action
@@ -37,4 +39,13 @@ export interface RestoreVolumeFromSnapshot extends Binding.Service<
 > {}
 export const RestoreVolumeFromSnapshot = Binding.Service<RestoreVolumeFromSnapshot>(
   "AWS.FSx.RestoreVolumeFromSnapshot",
+);
+
+export const RestoreVolumeFromSnapshotHttp = Layer.effect(
+  RestoreVolumeFromSnapshot,
+  makeFSxAccountHttpBinding({
+    tag: "AWS.FSx.RestoreVolumeFromSnapshot",
+    operation: fsx.restoreVolumeFromSnapshot,
+    actions: ["fsx:RestoreVolumeFromSnapshot"],
+  }),
 );

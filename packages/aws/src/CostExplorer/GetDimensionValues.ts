@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetDimensionValues}.
@@ -42,4 +44,13 @@ export interface GetDimensionValues extends Binding.Service<
 
 export const GetDimensionValues = Binding.Service<GetDimensionValues>(
   "AWS.CostExplorer.GetDimensionValues",
+);
+
+export const GetDimensionValuesHttp = Layer.effect(
+  GetDimensionValues,
+  makeCostExplorerHttpBinding({
+    capability: "GetDimensionValues",
+    iamActions: ["ce:GetDimensionValues"],
+    operation: ce.getDimensionValues,
+  }),
 );

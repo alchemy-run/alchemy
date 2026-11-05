@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:GetClustersForImage`.
@@ -34,4 +36,13 @@ export interface GetClustersForImage extends Binding.Service<
 > {}
 export const GetClustersForImage = Binding.Service<GetClustersForImage>(
   "AWS.Inspector2.GetClustersForImage",
+);
+
+export const GetClustersForImageHttp = Layer.effect(
+  GetClustersForImage,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.GetClustersForImage",
+    operation: inspector2.getClustersForImage,
+    actions: ["inspector2:GetClustersForImage"],
+  }),
 );

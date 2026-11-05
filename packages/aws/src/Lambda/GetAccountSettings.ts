@@ -1,6 +1,8 @@
-import type * as Lambda from "@distilled.cloud/aws/lambda";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLambdaAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `lambda:GetAccountSettings`.
@@ -29,4 +31,13 @@ export interface GetAccountSettings extends Binding.Service<
 > {}
 export const GetAccountSettings = Binding.Service<GetAccountSettings>(
   "AWS.Lambda.GetAccountSettings",
+);
+
+export const GetAccountSettingsHttp = Layer.effect(
+  GetAccountSettings,
+  makeLambdaAccountHttpBinding({
+    tag: "AWS.Lambda.GetAccountSettings",
+    operation: Lambda.getAccountSettings,
+    actions: ["lambda:GetAccountSettings"],
+  }),
 );

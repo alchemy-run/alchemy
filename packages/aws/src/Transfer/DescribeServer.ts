@@ -1,6 +1,8 @@
-import type * as transfer from "@distilled.cloud/aws/transfer";
+import * as transfer from "@distilled.cloud/aws/transfer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTransferServerHttpBinding } from "./BindingHttp.ts";
 import type { Server } from "./Server.ts";
 
 /**
@@ -36,3 +38,12 @@ export interface DescribeServer extends Binding.Service<
   >
 > {}
 export const DescribeServer = Binding.Service<DescribeServer>("AWS.Transfer.DescribeServer");
+
+export const DescribeServerHttp = Layer.effect(
+  DescribeServer,
+  makeTransferServerHttpBinding({
+    tag: "AWS.Transfer.DescribeServer",
+    operation: transfer.describeServer,
+    actions: ["transfer:DescribeServer"],
+  }),
+);

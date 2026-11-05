@@ -1,6 +1,8 @@
-import type * as s3tables from "@distilled.cloud/aws/s3tables";
+import * as s3tables from "@distilled.cloud/aws/s3tables";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeS3TablesTableBucketHttpBinding } from "./BindingHttp.ts";
 import type { TableBucket } from "./TableBucket.ts";
 
 /**
@@ -45,3 +47,12 @@ export interface ListNamespaces extends Binding.Service<
   >
 > {}
 export const ListNamespaces = Binding.Service<ListNamespaces>("AWS.S3Tables.ListNamespaces");
+
+export const ListNamespacesHttp = Layer.effect(
+  ListNamespaces,
+  makeS3TablesTableBucketHttpBinding({
+    tag: "AWS.S3Tables.ListNamespaces",
+    operation: s3tables.listNamespaces,
+    actions: ["s3tables:ListNamespaces"],
+  }),
+);

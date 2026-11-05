@@ -1,6 +1,8 @@
-import type * as mi from "@distilled.cloud/aws/iot-managed-integrations";
+import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeManagedIntegrationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetSchemaVersion}.
@@ -40,4 +42,13 @@ export interface GetSchemaVersion extends Binding.Service<
 > {}
 export const GetSchemaVersion = Binding.Service<GetSchemaVersion>(
   "AWS.IoTManagedIntegrations.GetSchemaVersion",
+);
+
+export const GetSchemaVersionHttp = Layer.effect(
+  GetSchemaVersion,
+  makeManagedIntegrationsHttpBinding({
+    capability: "GetSchemaVersion",
+    iamActions: ["iotmanagedintegrations:GetSchemaVersion"],
+    operation: mi.getSchemaVersion,
+  }),
 );

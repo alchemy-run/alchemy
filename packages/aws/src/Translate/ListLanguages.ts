@@ -1,6 +1,8 @@
-import type * as translate from "@distilled.cloud/aws/translate";
+import * as translate from "@distilled.cloud/aws/translate";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranslateHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `translate:ListLanguages` — list the languages
@@ -29,3 +31,12 @@ export interface ListLanguages extends Binding.Service<
   >
 > {}
 export const ListLanguages = Binding.Service<ListLanguages>("AWS.Translate.ListLanguages");
+
+export const ListLanguagesHttp = Layer.effect(
+  ListLanguages,
+  makeTranslateHttpBinding({
+    tag: "AWS.Translate.ListLanguages",
+    operation: translate.listLanguages,
+    actions: ["translate:ListLanguages"],
+  }),
+);

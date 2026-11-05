@@ -1,6 +1,8 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -43,4 +45,13 @@ export interface GetQuerySuggestions extends Binding.Service<
 > {}
 export const GetQuerySuggestions = Binding.Service<GetQuerySuggestions>(
   "AWS.Kendra.GetQuerySuggestions",
+);
+
+export const GetQuerySuggestionsHttp = Layer.effect(
+  GetQuerySuggestions,
+  makeKendraIndexHttpBinding({
+    tag: "AWS.Kendra.GetQuerySuggestions",
+    operation: kendra.getQuerySuggestions,
+    actions: ["kendra:GetQuerySuggestions"],
+  }),
 );

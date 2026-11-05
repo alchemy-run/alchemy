@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface ListSubscriptionsRequest extends Omit<
@@ -39,4 +41,13 @@ export interface ListSubscriptions extends Binding.Service<
 > {}
 export const ListSubscriptions = Binding.Service<ListSubscriptions>(
   "AWS.DataZone.ListSubscriptions",
+);
+
+export const ListSubscriptionsHttp = Layer.effect(
+  ListSubscriptions,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.ListSubscriptions",
+    operation: datazone.listSubscriptions,
+    actions: ["datazone:ListSubscriptions"],
+  }),
 );

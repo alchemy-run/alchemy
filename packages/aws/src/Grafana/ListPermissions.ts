@@ -1,6 +1,8 @@
-import type * as grafana from "@distilled.cloud/aws/grafana";
+import * as grafana from "@distilled.cloud/aws/grafana";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGrafanaWorkspaceHttpBinding } from "./BindingHttp.ts";
 import type { Workspace } from "./Workspace.ts";
 
 /**
@@ -36,3 +38,12 @@ export interface ListPermissions extends Binding.Service<
   >
 > {}
 export const ListPermissions = Binding.Service<ListPermissions>("AWS.Grafana.ListPermissions");
+
+export const ListPermissionsHttp = Layer.effect(
+  ListPermissions,
+  makeGrafanaWorkspaceHttpBinding({
+    tag: "AWS.Grafana.ListPermissions",
+    operation: grafana.listPermissions,
+    actions: ["grafana:ListPermissions"],
+  }),
+);

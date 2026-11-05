@@ -1,6 +1,8 @@
-import type * as location from "@distilled.cloud/aws/location";
+import * as location from "@distilled.cloud/aws/location";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLocationTrackerHttpBinding } from "./BindingHttp.ts";
 import type { Tracker } from "./Tracker.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface BatchGetDevicePosition extends Binding.Service<
 > {}
 export const BatchGetDevicePosition = Binding.Service<BatchGetDevicePosition>(
   "AWS.Location.BatchGetDevicePosition",
+);
+
+export const BatchGetDevicePositionHttp = Layer.effect(
+  BatchGetDevicePosition,
+  makeLocationTrackerHttpBinding({
+    tag: "AWS.Location.BatchGetDevicePosition",
+    operation: location.batchGetDevicePosition,
+    actions: ["geo:BatchGetDevicePosition"],
+  }),
 );

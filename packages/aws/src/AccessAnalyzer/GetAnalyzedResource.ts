@@ -1,7 +1,9 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Analyzer } from "./Analyzer.ts";
+import { makeAnalyzerScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `GetAnalyzedResource` request with `analyzerArn` injected from the bound {@link Analyzer}. */
 export interface GetAnalyzedResourceRequest extends Omit<
@@ -39,4 +41,13 @@ export interface GetAnalyzedResource extends Binding.Service<
 
 export const GetAnalyzedResource = Binding.Service<GetAnalyzedResource>(
   "AWS.AccessAnalyzer.GetAnalyzedResource",
+);
+
+export const GetAnalyzedResourceHttp = Layer.effect(
+  GetAnalyzedResource,
+  makeAnalyzerScopedHttpBinding({
+    tag: "AWS.AccessAnalyzer.GetAnalyzedResource",
+    operation: aa.getAnalyzedResource,
+    actions: ["access-analyzer:GetAnalyzedResource"],
+  }),
 );

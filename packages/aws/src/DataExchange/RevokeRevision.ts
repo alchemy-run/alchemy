@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRevisionHttpBinding } from "./BindingHttp.ts";
 import type { Revision } from "./Revision.ts";
 
 /**
@@ -37,3 +39,12 @@ export interface RevokeRevision extends Binding.Service<
   >
 > {}
 export const RevokeRevision = Binding.Service<RevokeRevision>("AWS.DataExchange.RevokeRevision");
+
+export const RevokeRevisionHttp = Layer.effect(
+  RevokeRevision,
+  makeRevisionHttpBinding({
+    tag: "AWS.DataExchange.RevokeRevision",
+    operation: dataexchange.revokeRevision,
+    actions: ["dataexchange:RevokeRevision"],
+  }),
+);

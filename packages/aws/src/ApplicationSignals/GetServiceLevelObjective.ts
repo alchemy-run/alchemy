@@ -1,6 +1,8 @@
-import type * as appsignals from "@distilled.cloud/aws/application-signals";
+import * as appsignals from "@distilled.cloud/aws/application-signals";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSloIdHttpBinding } from "./BindingHttp.ts";
 import type { ServiceLevelObjective } from "./ServiceLevelObjective.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface GetServiceLevelObjective extends Binding.Service<
 
 export const GetServiceLevelObjective = Binding.Service<GetServiceLevelObjective>(
   "AWS.ApplicationSignals.GetServiceLevelObjective",
+);
+
+export const GetServiceLevelObjectiveHttp = Layer.effect(
+  GetServiceLevelObjective,
+  makeSloIdHttpBinding({
+    tag: "AWS.ApplicationSignals.GetServiceLevelObjective",
+    operation: appsignals.getServiceLevelObjective,
+    actions: ["application-signals:GetServiceLevelObjective"],
+  }),
 );

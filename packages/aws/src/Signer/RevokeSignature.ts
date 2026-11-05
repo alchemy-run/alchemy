@@ -1,6 +1,8 @@
-import type * as signer from "@distilled.cloud/aws/signer";
+import * as signer from "@distilled.cloud/aws/signer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSignerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `signer:RevokeSignature`.
@@ -32,3 +34,12 @@ export interface RevokeSignature extends Binding.Service<
   >
 > {}
 export const RevokeSignature = Binding.Service<RevokeSignature>("AWS.Signer.RevokeSignature");
+
+export const RevokeSignatureHttp = Layer.effect(
+  RevokeSignature,
+  makeSignerHttpBinding({
+    tag: "AWS.Signer.RevokeSignature",
+    operation: signer.revokeSignature,
+    actions: ["signer:RevokeSignature"],
+  }),
+);

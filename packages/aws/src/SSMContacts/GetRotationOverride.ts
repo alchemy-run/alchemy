@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRotationHttpBinding } from "./BindingHttp.ts";
 import type { Rotation } from "./Rotation.ts";
 
 /**
@@ -36,4 +38,13 @@ export interface GetRotationOverride extends Binding.Service<
 > {}
 export const GetRotationOverride = Binding.Service<GetRotationOverride>(
   "AWS.SSMContacts.GetRotationOverride",
+);
+
+export const GetRotationOverrideHttp = Layer.effect(
+  GetRotationOverride,
+  makeRotationHttpBinding({
+    tag: "AWS.SSMContacts.GetRotationOverride",
+    operation: ssm.getRotationOverride,
+    actions: ["ssm-contacts:GetRotationOverride"],
+  }),
 );

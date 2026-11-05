@@ -1,6 +1,8 @@
-import type * as dax from "@distilled.cloud/aws/dax";
+import * as dax from "@distilled.cloud/aws/dax";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDaxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeEvents` operation (IAM action
@@ -36,3 +38,12 @@ export interface DescribeEvents extends Binding.Service<
   >
 > {}
 export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.DAX.DescribeEvents");
+
+export const DescribeEventsHttp = Layer.effect(
+  DescribeEvents,
+  makeDaxAccountHttpBinding({
+    tag: "AWS.DAX.DescribeEvents",
+    operation: dax.describeEvents,
+    actions: ["dax:DescribeEvents"],
+  }),
+);

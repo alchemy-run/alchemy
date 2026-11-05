@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseManagerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link DeleteToken}.
@@ -36,3 +38,12 @@ export interface DeleteToken extends Binding.Service<
   >
 > {}
 export const DeleteToken = Binding.Service<DeleteToken>("AWS.LicenseManager.DeleteToken");
+
+export const DeleteTokenHttp = Layer.effect(
+  DeleteToken,
+  makeLicenseManagerHttpBinding({
+    capability: "DeleteToken",
+    iamActions: ["license-manager:DeleteToken"],
+    operation: licensemanager.deleteToken,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:DescribeEntitiesDetectionV2Job` — get the properties and status of an asynchronous medical entity detection job.
@@ -36,4 +38,13 @@ export interface DescribeEntitiesDetectionV2Job extends Binding.Service<
 > {}
 export const DescribeEntitiesDetectionV2Job = Binding.Service<DescribeEntitiesDetectionV2Job>(
   "AWS.ComprehendMedical.DescribeEntitiesDetectionV2Job",
+);
+
+export const DescribeEntitiesDetectionV2JobHttp = Layer.effect(
+  DescribeEntitiesDetectionV2Job,
+  makeComprehendMedicalHttpBinding({
+    capability: "DescribeEntitiesDetectionV2Job",
+    iamActions: ["comprehendmedical:DescribeEntitiesDetectionV2Job"],
+    operation: comprehendmedical.describeEntitiesDetectionV2Job,
+  }),
 );

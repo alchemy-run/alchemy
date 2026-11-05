@@ -1,6 +1,8 @@
-import type * as controltower from "@distilled.cloud/aws/controltower";
+import * as controltower from "@distilled.cloud/aws/controltower";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeControlTowerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `controltower:GetControlOperation`.
@@ -41,4 +43,13 @@ export interface GetControlOperation extends Binding.Service<
 
 export const GetControlOperation = Binding.Service<GetControlOperation>(
   "AWS.ControlTower.GetControlOperation",
+);
+
+export const GetControlOperationHttp = Layer.effect(
+  GetControlOperation,
+  makeControlTowerAccountHttpBinding({
+    capability: "GetControlOperation",
+    iamActions: ["controltower:GetControlOperation"],
+    operation: controltower.getControlOperation,
+  }),
 );

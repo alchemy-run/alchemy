@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:StopPHIDetectionJob` — stop an in-progress asynchronous protected health information (PHI) detection job.
@@ -35,4 +37,13 @@ export interface StopPHIDetectionJob extends Binding.Service<
 > {}
 export const StopPHIDetectionJob = Binding.Service<StopPHIDetectionJob>(
   "AWS.ComprehendMedical.StopPHIDetectionJob",
+);
+
+export const StopPHIDetectionJobHttp = Layer.effect(
+  StopPHIDetectionJob,
+  makeComprehendMedicalHttpBinding({
+    capability: "StopPHIDetectionJob",
+    iamActions: ["comprehendmedical:StopPHIDetectionJob"],
+    operation: comprehendmedical.stopPHIDetectionJob,
+  }),
 );

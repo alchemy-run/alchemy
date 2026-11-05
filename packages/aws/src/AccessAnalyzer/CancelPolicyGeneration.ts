@@ -1,6 +1,8 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccessAnalyzerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `access-analyzer:CancelPolicyGeneration`.
@@ -29,4 +31,13 @@ export interface CancelPolicyGeneration extends Binding.Service<
 
 export const CancelPolicyGeneration = Binding.Service<CancelPolicyGeneration>(
   "AWS.AccessAnalyzer.CancelPolicyGeneration",
+);
+
+export const CancelPolicyGenerationHttp = Layer.effect(
+  CancelPolicyGeneration,
+  makeAccessAnalyzerAccountHttpBinding({
+    tag: "AWS.AccessAnalyzer.CancelPolicyGeneration",
+    operation: aa.cancelPolicyGeneration,
+    actions: ["access-analyzer:CancelPolicyGeneration"],
+  }),
 );

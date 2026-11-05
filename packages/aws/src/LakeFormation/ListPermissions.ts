@@ -1,6 +1,8 @@
-import type * as lf from "@distilled.cloud/aws/lakeformation";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLakeFormationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListPermissions}.
@@ -40,4 +42,13 @@ export interface ListPermissions extends Binding.Service<
 
 export const ListPermissions = Binding.Service<ListPermissions>(
   "AWS.LakeFormation.ListPermissions",
+);
+
+export const ListPermissionsHttp = Layer.effect(
+  ListPermissions,
+  makeLakeFormationHttpBinding({
+    capability: "ListPermissions",
+    iamActions: ["lakeformation:ListPermissions"],
+    operation: lf.listPermissions,
+  }),
 );

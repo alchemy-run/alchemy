@@ -1,6 +1,8 @@
-import type * as rbin from "@distilled.cloud/aws/rbin";
+import * as rbin from "@distilled.cloud/aws/rbin";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRbinRuleHttpBinding } from "./BindingHttp.ts";
 import type { Rule } from "./Rule.ts";
 
 /**
@@ -33,3 +35,12 @@ export interface GetRule extends Binding.Service<
   (rule: Rule) => Effect.Effect<() => Effect.Effect<rbin.GetRuleResponse, rbin.GetRuleError>>
 > {}
 export const GetRule = Binding.Service<GetRule>("AWS.Rbin.GetRule");
+
+export const GetRuleHttp = Layer.effect(
+  GetRule,
+  makeRbinRuleHttpBinding({
+    tag: "AWS.Rbin.GetRule",
+    operation: rbin.getRule,
+    actions: ["rbin:GetRule"],
+  }),
+);

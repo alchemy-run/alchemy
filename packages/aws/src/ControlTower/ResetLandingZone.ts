@@ -1,6 +1,8 @@
-import type * as controltower from "@distilled.cloud/aws/controltower";
+import * as controltower from "@distilled.cloud/aws/controltower";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeControlTowerHttpBinding } from "./BindingHttp.ts";
 import type { LandingZone } from "./LandingZone.ts";
 
 /**
@@ -36,4 +38,15 @@ export interface ResetLandingZone extends Binding.Service<
 
 export const ResetLandingZone = Binding.Service<ResetLandingZone>(
   "AWS.ControlTower.ResetLandingZone",
+);
+
+export const ResetLandingZoneHttp = Layer.effect(
+  ResetLandingZone,
+  makeControlTowerHttpBinding({
+    capability: "ResetLandingZone",
+    iamActions: ["controltower:ResetLandingZone"],
+    requestKey: "landingZoneIdentifier",
+    identifier: (landingZone: LandingZone) => landingZone.landingZoneArn,
+    operation: controltower.resetLandingZone,
+  }),
 );

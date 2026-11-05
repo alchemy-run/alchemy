@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CopySnapshotAndUpdateVolume` operation (IAM
@@ -40,4 +42,13 @@ export interface CopySnapshotAndUpdateVolume extends Binding.Service<
 > {}
 export const CopySnapshotAndUpdateVolume = Binding.Service<CopySnapshotAndUpdateVolume>(
   "AWS.FSx.CopySnapshotAndUpdateVolume",
+);
+
+export const CopySnapshotAndUpdateVolumeHttp = Layer.effect(
+  CopySnapshotAndUpdateVolume,
+  makeFSxAccountHttpBinding({
+    tag: "AWS.FSx.CopySnapshotAndUpdateVolume",
+    operation: fsx.copySnapshotAndUpdateVolume,
+    actions: ["fsx:CopySnapshotAndUpdateVolume"],
+  }),
 );

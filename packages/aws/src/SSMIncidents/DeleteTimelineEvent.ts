@@ -1,6 +1,8 @@
-import type * as incidents from "@distilled.cloud/aws/ssm-incidents";
+import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIncidentsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-incidents:DeleteTimelineEvent`.
@@ -34,4 +36,13 @@ export interface DeleteTimelineEvent extends Binding.Service<
 > {}
 export const DeleteTimelineEvent = Binding.Service<DeleteTimelineEvent>(
   "AWS.SSMIncidents.DeleteTimelineEvent",
+);
+
+export const DeleteTimelineEventHttp = Layer.effect(
+  DeleteTimelineEvent,
+  makeIncidentsAccountHttpBinding({
+    tag: "AWS.SSMIncidents.DeleteTimelineEvent",
+    operation: incidents.deleteTimelineEvent,
+    actions: ["ssm-incidents:DeleteTimelineEvent"],
+  }),
 );

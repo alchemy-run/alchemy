@@ -1,6 +1,8 @@
-import type * as medialive from "@distilled.cloud/aws/medialive";
+import * as medialive from "@distilled.cloud/aws/medialive";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaLiveAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `medialive:ListChannels`.
@@ -34,3 +36,12 @@ export interface ListChannels extends Binding.Service<
   >
 > {}
 export const ListChannels = Binding.Service<ListChannels>("AWS.MediaLive.ListChannels");
+
+export const ListChannelsHttp = Layer.effect(
+  ListChannels,
+  makeMediaLiveAccountHttpBinding({
+    tag: "AWS.MediaLive.ListChannels",
+    operation: medialive.listChannels,
+    actions: ["medialive:ListChannels"],
+  }),
+);

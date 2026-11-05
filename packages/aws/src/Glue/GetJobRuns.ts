@@ -1,6 +1,8 @@
-import type * as glue from "@distilled.cloud/aws/glue";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlueJobHttpBinding } from "./BindingHttp.ts";
 import type { Job } from "./Job.ts";
 
 export interface GetJobRunsRequest extends Omit<glue.GetJobRunsRequest, "JobName"> {}
@@ -38,3 +40,12 @@ export interface GetJobRuns extends Binding.Service<
 > {}
 
 export const GetJobRuns = Binding.Service<GetJobRuns>("AWS.Glue.GetJobRuns");
+
+export const GetJobRunsHttp = Layer.effect(
+  GetJobRuns,
+  makeGlueJobHttpBinding({
+    tag: "AWS.Glue.GetJobRuns",
+    operation: glue.getJobRuns,
+    actions: ["glue:GetJobRuns"],
+  }),
+);

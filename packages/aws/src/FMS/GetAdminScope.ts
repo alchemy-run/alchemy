@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetAdminScope}.
@@ -36,3 +38,13 @@ export interface GetAdminScope extends Binding.Service<
 > {}
 
 export const GetAdminScope = Binding.Service<GetAdminScope>("AWS.FMS.GetAdminScope");
+
+export const GetAdminScopeHttp = Layer.effect(
+  GetAdminScope,
+  makeFmsHttpBinding({
+    capability: "GetAdminScope",
+    iamActions: ["fms:GetAdminScope"],
+    operation: fms.getAdminScope,
+    pinToAdminRegion: true,
+  }),
+);

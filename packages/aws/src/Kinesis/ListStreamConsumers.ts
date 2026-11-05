@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface ListStreamConsumersRequest extends Omit<
@@ -42,4 +44,14 @@ export interface ListStreamConsumers extends Binding.Service<
 
 export const ListStreamConsumers = Binding.Service<ListStreamConsumers>(
   "AWS.Kinesis.ListStreamConsumers",
+);
+
+export const ListStreamConsumersHttp = Layer.effect(
+  ListStreamConsumers,
+  makeStreamHttpBinding({
+    tag: "AWS.Kinesis.ListStreamConsumers",
+    operation: Kinesis.listStreamConsumers,
+    actions: ["kinesis:ListStreamConsumers"],
+    key: "StreamARN",
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as mediaconvert from "@distilled.cloud/aws/mediaconvert";
+import * as mediaconvert from "@distilled.cloud/aws/mediaconvert";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConvertHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediaconvert:SearchJobs` — search your recent
@@ -36,3 +38,12 @@ export interface SearchJobs extends Binding.Service<
   >
 > {}
 export const SearchJobs = Binding.Service<SearchJobs>("AWS.MediaConvert.SearchJobs");
+
+export const SearchJobsHttp = Layer.effect(
+  SearchJobs,
+  makeMediaConvertHttpBinding({
+    capability: "SearchJobs",
+    iamActions: ["mediaconvert:SearchJobs"],
+    operation: mediaconvert.searchJobs,
+  }),
+);

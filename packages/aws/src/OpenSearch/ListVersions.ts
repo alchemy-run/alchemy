@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListVersions` operation (IAM action
@@ -29,3 +31,12 @@ export interface ListVersions extends Binding.Service<
   >
 > {}
 export const ListVersions = Binding.Service<ListVersions>("AWS.OpenSearch.ListVersions");
+
+export const ListVersionsHttp = Layer.effect(
+  ListVersions,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.ListVersions",
+    operation: opensearch.listVersions,
+    actions: ["es:ListVersions"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as iotw from "@distilled.cloud/aws/iot-wireless";
+import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotWirelessDeviceHttpBinding } from "./BindingHttp.ts";
 import type { WirelessDevice } from "./WirelessDevice.ts";
 
 /**
@@ -53,4 +55,17 @@ export interface SendDataToWirelessDevice extends Binding.Service<
 > {}
 export const SendDataToWirelessDevice = Binding.Service<SendDataToWirelessDevice>(
   "AWS.IoTWireless.SendDataToWirelessDevice",
+);
+
+export const SendDataToWirelessDeviceHttp = Layer.effect(
+  SendDataToWirelessDevice,
+  makeIotWirelessDeviceHttpBinding({
+    capability: "SendDataToWirelessDevice",
+    iamActions: ["iotwireless:SendDataToWirelessDevice"],
+    operation: iotw.sendDataToWirelessDevice,
+    prepare: (request: SendDataToWirelessDeviceRequest, wirelessDeviceId) => ({
+      ...request,
+      Id: wirelessDeviceId,
+    }),
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:ListMonitoredResources`.
@@ -35,4 +37,13 @@ export interface ListMonitoredResources extends Binding.Service<
 > {}
 export const ListMonitoredResources = Binding.Service<ListMonitoredResources>(
   "AWS.DevOpsGuru.ListMonitoredResources",
+);
+
+export const ListMonitoredResourcesHttp = Layer.effect(
+  ListMonitoredResources,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.ListMonitoredResources",
+    operation: devopsguru.listMonitoredResources,
+    actions: ["devops-guru:ListMonitoredResources"],
+  }),
 );

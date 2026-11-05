@@ -1,6 +1,8 @@
-import type * as mq from "@distilled.cloud/aws/mq";
+import * as mq from "@distilled.cloud/aws/mq";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMqBrokerHttpBinding } from "./BindingHttp.ts";
 import type { Broker } from "./Broker.ts";
 
 /**
@@ -38,3 +40,16 @@ export interface CreateUser extends Binding.Service<
   >
 > {}
 export const CreateUser = Binding.Service<CreateUser>("AWS.MQ.CreateUser");
+
+export const CreateUserHttp = Layer.effect(
+  CreateUser,
+  makeMqBrokerHttpBinding<
+    Omit<mq.CreateUserRequest, "BrokerId">,
+    mq.CreateUserResponse,
+    mq.CreateUserError
+  >({
+    capability: "CreateUser",
+    operation: mq.createUser,
+    iamActions: ["mq:CreateUser"],
+  }),
+);

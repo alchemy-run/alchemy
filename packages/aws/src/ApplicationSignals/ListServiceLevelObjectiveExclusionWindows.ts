@@ -1,6 +1,8 @@
-import type * as appsignals from "@distilled.cloud/aws/application-signals";
+import * as appsignals from "@distilled.cloud/aws/application-signals";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSloIdHttpBinding } from "./BindingHttp.ts";
 import type { ServiceLevelObjective } from "./ServiceLevelObjective.ts";
 
 /**
@@ -53,3 +55,12 @@ export const ListServiceLevelObjectiveExclusionWindows =
   Binding.Service<ListServiceLevelObjectiveExclusionWindows>(
     "AWS.ApplicationSignals.ListServiceLevelObjectiveExclusionWindows",
   );
+
+export const ListServiceLevelObjectiveExclusionWindowsHttp = Layer.effect(
+  ListServiceLevelObjectiveExclusionWindows,
+  makeSloIdHttpBinding({
+    tag: "AWS.ApplicationSignals.ListServiceLevelObjectiveExclusionWindows",
+    operation: appsignals.listServiceLevelObjectiveExclusionWindows,
+    actions: ["application-signals:ListServiceLevelObjectiveExclusionWindows"],
+  }),
+);

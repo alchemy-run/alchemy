@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link StartCommitmentPurchaseAnalysis}.
@@ -44,4 +46,13 @@ export interface StartCommitmentPurchaseAnalysis extends Binding.Service<
 
 export const StartCommitmentPurchaseAnalysis = Binding.Service<StartCommitmentPurchaseAnalysis>(
   "AWS.CostExplorer.StartCommitmentPurchaseAnalysis",
+);
+
+export const StartCommitmentPurchaseAnalysisHttp = Layer.effect(
+  StartCommitmentPurchaseAnalysis,
+  makeCostExplorerHttpBinding({
+    capability: "StartCommitmentPurchaseAnalysis",
+    iamActions: ["ce:StartCommitmentPurchaseAnalysis"],
+    operation: ce.startCommitmentPurchaseAnalysis,
+  }),
 );

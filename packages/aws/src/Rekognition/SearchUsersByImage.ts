@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:SearchUsersByImage` — search a face collection for users matching the largest face in a supplied image.
@@ -38,4 +40,13 @@ export interface SearchUsersByImage extends Binding.Service<
 > {}
 export const SearchUsersByImage = Binding.Service<SearchUsersByImage>(
   "AWS.Rekognition.SearchUsersByImage",
+);
+
+export const SearchUsersByImageHttp = Layer.effect(
+  SearchUsersByImage,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.SearchUsersByImage",
+    operation: rekognition.searchUsersByImage,
+    actions: ["rekognition:SearchUsersByImage"],
+  }),
 );

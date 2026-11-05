@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `config:DescribeComplianceByResource` — read whether
@@ -38,4 +40,13 @@ export interface DescribeComplianceByResource extends Binding.Service<
 
 export const DescribeComplianceByResource = Binding.Service<DescribeComplianceByResource>(
   "AWS.Config.DescribeComplianceByResource",
+);
+
+export const DescribeComplianceByResourceHttp = Layer.effect(
+  DescribeComplianceByResource,
+  makeConfigAccountHttpBinding({
+    tag: "AWS.Config.DescribeComplianceByResource",
+    operation: config.describeComplianceByResource,
+    actions: ["config:DescribeComplianceByResource"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAuditManagerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `auditmanager:ListControlDomainInsights`.
@@ -32,4 +34,13 @@ export interface ListControlDomainInsights extends Binding.Service<
 
 export const ListControlDomainInsights = Binding.Service<ListControlDomainInsights>(
   "AWS.AuditManager.ListControlDomainInsights",
+);
+
+export const ListControlDomainInsightsHttp = Layer.effect(
+  ListControlDomainInsights,
+  makeAuditManagerAccountHttpBinding({
+    tag: "AWS.AuditManager.ListControlDomainInsights",
+    operation: auditmanager.listControlDomainInsights,
+    actions: ["auditmanager:ListControlDomainInsights"],
+  }),
 );

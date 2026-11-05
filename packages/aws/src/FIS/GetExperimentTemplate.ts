@@ -1,6 +1,8 @@
-import type * as fis from "@distilled.cloud/aws/fis";
+import * as fis from "@distilled.cloud/aws/fis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFisTemplateHttpBinding } from "./BindingHttp.ts";
 import type { ExperimentTemplate } from "./ExperimentTemplate.ts";
 
 /**
@@ -35,4 +37,14 @@ export interface GetExperimentTemplate extends Binding.Service<
 > {}
 export const GetExperimentTemplate = Binding.Service<GetExperimentTemplate>(
   "AWS.FIS.GetExperimentTemplate",
+);
+
+export const GetExperimentTemplateHttp = Layer.effect(
+  GetExperimentTemplate,
+  makeFisTemplateHttpBinding({
+    tag: "AWS.FIS.GetExperimentTemplate",
+    operation: fis.getExperimentTemplate,
+    actions: ["fis:GetExperimentTemplate"],
+    requestKey: "id",
+  }),
 );

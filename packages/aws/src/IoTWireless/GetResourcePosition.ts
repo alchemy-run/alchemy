@@ -1,6 +1,8 @@
-import type * as iotw from "@distilled.cloud/aws/iot-wireless";
+import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotWirelessDeviceHttpBinding } from "./BindingHttp.ts";
 import type { WirelessDevice } from "./WirelessDevice.ts";
 
 /**
@@ -53,4 +55,21 @@ export interface GetResourcePosition extends Binding.Service<
 > {}
 export const GetResourcePosition = Binding.Service<GetResourcePosition>(
   "AWS.IoTWireless.GetResourcePosition",
+);
+
+export const GetResourcePositionHttp = Layer.effect(
+  GetResourcePosition,
+  makeIotWirelessDeviceHttpBinding({
+    capability: "GetResourcePosition",
+    iamActions: ["iotwireless:GetResourcePosition"],
+    // IoT Wireless authorizes the position APIs against a type-level ARN
+    // (…:WirelessDevice/WirelessDevice) — the device ARN never matches.
+    resourceScope: "any",
+    operation: iotw.getResourcePosition,
+    prepare: (request: GetResourcePositionRequest | undefined, wirelessDeviceId) => ({
+      ...request,
+      ResourceIdentifier: wirelessDeviceId,
+      ResourceType: "WirelessDevice" as const,
+    }),
+  }),
 );

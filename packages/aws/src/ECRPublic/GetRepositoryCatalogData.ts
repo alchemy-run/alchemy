@@ -1,6 +1,8 @@
-import type * as ecrpublic from "@distilled.cloud/aws/ecr-public";
+import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePublicRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { PublicRepository } from "./Repository.ts";
 
 /**
@@ -50,4 +52,13 @@ export interface GetRepositoryCatalogData extends Binding.Service<
 
 export const GetRepositoryCatalogData = Binding.Service<GetRepositoryCatalogData>(
   "AWS.ECRPublic.GetRepositoryCatalogData",
+);
+
+export const GetRepositoryCatalogDataHttp = Layer.effect(
+  GetRepositoryCatalogData,
+  makePublicRepositoryHttpBinding({
+    capability: "GetRepositoryCatalogData",
+    iamActions: ["ecr-public:GetRepositoryCatalogData"],
+    operation: ecrpublic.getRepositoryCatalogData,
+  }),
 );

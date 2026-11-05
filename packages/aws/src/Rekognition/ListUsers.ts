@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:ListUsers` — list the users in a face collection.
@@ -34,3 +36,12 @@ export interface ListUsers extends Binding.Service<
   >
 > {}
 export const ListUsers = Binding.Service<ListUsers>("AWS.Rekognition.ListUsers");
+
+export const ListUsersHttp = Layer.effect(
+  ListUsers,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.ListUsers",
+    operation: rekognition.listUsers,
+    actions: ["rekognition:ListUsers"],
+  }),
+);

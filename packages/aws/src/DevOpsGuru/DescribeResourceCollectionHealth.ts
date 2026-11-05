@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:DescribeResourceCollectionHealth`.
@@ -39,4 +41,13 @@ export interface DescribeResourceCollectionHealth extends Binding.Service<
 > {}
 export const DescribeResourceCollectionHealth = Binding.Service<DescribeResourceCollectionHealth>(
   "AWS.DevOpsGuru.DescribeResourceCollectionHealth",
+);
+
+export const DescribeResourceCollectionHealthHttp = Layer.effect(
+  DescribeResourceCollectionHealth,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.DescribeResourceCollectionHealth",
+    operation: devopsguru.describeResourceCollectionHealth,
+    actions: ["devops-guru:DescribeResourceCollectionHealth"],
+  }),
 );

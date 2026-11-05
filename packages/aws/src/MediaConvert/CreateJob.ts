@@ -1,6 +1,8 @@
-import type * as mediaconvert from "@distilled.cloud/aws/mediaconvert";
+import * as mediaconvert from "@distilled.cloud/aws/mediaconvert";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConvertHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediaconvert:CreateJob` — submit a transcode job from
@@ -38,3 +40,13 @@ export interface CreateJob extends Binding.Service<
   >
 > {}
 export const CreateJob = Binding.Service<CreateJob>("AWS.MediaConvert.CreateJob");
+
+export const CreateJobHttp = Layer.effect(
+  CreateJob,
+  makeMediaConvertHttpBinding({
+    capability: "CreateJob",
+    iamActions: ["mediaconvert:CreateJob"],
+    operation: mediaconvert.createJob,
+    passRole: true,
+  }),
+);

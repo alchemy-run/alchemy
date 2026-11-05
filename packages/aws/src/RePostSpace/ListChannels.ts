@@ -1,6 +1,8 @@
-import type * as repostspace from "@distilled.cloud/aws/repostspace";
+import * as repostspace from "@distilled.cloud/aws/repostspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRePostSpaceHttpBinding } from "./BindingHttp.ts";
 import type { Space } from "./Space.ts";
 
 export interface ListChannelsRequest extends Omit<repostspace.ListChannelsInput, "spaceId"> {}
@@ -35,3 +37,12 @@ export interface ListChannels extends Binding.Service<
   >
 > {}
 export const ListChannels = Binding.Service<ListChannels>("AWS.RePostSpace.ListChannels");
+
+export const ListChannelsHttp = Layer.effect(
+  ListChannels,
+  makeRePostSpaceHttpBinding({
+    tag: "AWS.RePostSpace.ListChannels",
+    operation: repostspace.listChannels,
+    actions: ["repostspace:ListChannels"],
+  }),
+);

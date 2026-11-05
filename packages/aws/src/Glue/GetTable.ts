@@ -1,6 +1,8 @@
-import type * as glue from "@distilled.cloud/aws/glue";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlueTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface GetTableRequest extends Omit<
@@ -40,3 +42,13 @@ export interface GetTable extends Binding.Service<
 > {}
 
 export const GetTable = Binding.Service<GetTable>("AWS.Glue.GetTable");
+
+export const GetTableHttp = Layer.effect(
+  GetTable,
+  makeGlueTableHttpBinding({
+    tag: "AWS.Glue.GetTable",
+    operation: glue.getTable,
+    actions: ["glue:GetTable"],
+    tableNameKey: "Name",
+  }),
+);

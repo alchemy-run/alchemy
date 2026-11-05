@@ -1,6 +1,8 @@
-import type * as ecrpublic from "@distilled.cloud/aws/ecr-public";
+import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePublicRegistryHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ecr-public:GetAuthorizationToken` (plus the
@@ -38,4 +40,14 @@ export interface GetAuthorizationToken extends Binding.Service<
 
 export const GetAuthorizationToken = Binding.Service<GetAuthorizationToken>(
   "AWS.ECRPublic.GetAuthorizationToken",
+);
+
+export const GetAuthorizationTokenHttp = Layer.effect(
+  GetAuthorizationToken,
+  makePublicRegistryHttpBinding({
+    capability: "GetAuthorizationToken",
+    // The API requires both permissions; see the GetAuthorizationToken docs.
+    iamActions: ["ecr-public:GetAuthorizationToken", "sts:GetServiceBearerToken"],
+    operation: ecrpublic.getAuthorizationToken,
+  }),
 );

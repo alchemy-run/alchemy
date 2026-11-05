@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link DeleteResourceSet}.
@@ -35,3 +37,12 @@ export interface DeleteResourceSet extends Binding.Service<
 > {}
 
 export const DeleteResourceSet = Binding.Service<DeleteResourceSet>("AWS.FMS.DeleteResourceSet");
+
+export const DeleteResourceSetHttp = Layer.effect(
+  DeleteResourceSet,
+  makeFmsHttpBinding({
+    capability: "DeleteResourceSet",
+    iamActions: ["fms:DeleteResourceSet"],
+    operation: fms.deleteResourceSet,
+  }),
+);

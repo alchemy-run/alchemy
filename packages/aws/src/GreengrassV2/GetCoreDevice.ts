@@ -1,6 +1,8 @@
-import type * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
+import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGreengrassAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `greengrass:GetCoreDevice`.
@@ -33,3 +35,15 @@ export interface GetCoreDevice extends Binding.Service<
   >
 > {}
 export const GetCoreDevice = Binding.Service<GetCoreDevice>("AWS.GreengrassV2.GetCoreDevice");
+
+export const GetCoreDeviceHttp = Layer.effect(
+  GetCoreDevice,
+  makeGreengrassAccountHttpBinding({
+    tag: "AWS.GreengrassV2.GetCoreDevice",
+    operation: greengrassv2.getCoreDevice,
+    // Core devices are IoT things; Greengrass authorizes the IoT-side lookup
+    // with the caller's credentials before resolving the device (observed
+    // "not authorized to call Iot Core services for thing" without it).
+    actions: ["greengrass:GetCoreDevice", "iot:DescribeThing"],
+  }),
+);

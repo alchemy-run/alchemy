@@ -1,6 +1,8 @@
-import type * as account from "@distilled.cloud/aws/account";
+import * as account from "@distilled.cloud/aws/account";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `account:ListRegions`.
@@ -37,3 +39,12 @@ export interface ListRegions extends Binding.Service<
   >
 > {}
 export const ListRegions = Binding.Service<ListRegions>("AWS.Account.ListRegions");
+
+export const ListRegionsHttp = Layer.effect(
+  ListRegions,
+  makeAccountHttpBinding({
+    capability: "ListRegions",
+    iamActions: ["account:ListRegions"],
+    operation: account.listRegions,
+  }),
+);

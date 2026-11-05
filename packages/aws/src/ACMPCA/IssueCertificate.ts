@@ -1,6 +1,8 @@
-import type * as acmpca from "@distilled.cloud/aws/acm-pca";
+import * as acmpca from "@distilled.cloud/aws/acm-pca";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeACMPCAHttpBinding } from "./BindingHttp.ts";
 import type { CertificateAuthority } from "./CertificateAuthority.ts";
 
 export interface IssueCertificateRequest extends Omit<
@@ -49,3 +51,11 @@ export interface IssueCertificate extends Binding.Service<
 > {}
 
 export const IssueCertificate = Binding.Service<IssueCertificate>("AWS.ACMPCA.IssueCertificate");
+
+export const IssueCertificateHttp = Layer.effect(
+  IssueCertificate,
+  makeACMPCAHttpBinding({
+    action: "IssueCertificate",
+    operation: acmpca.issueCertificate,
+  }),
+);

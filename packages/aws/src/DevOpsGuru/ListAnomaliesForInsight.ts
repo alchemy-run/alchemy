@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:ListAnomaliesForInsight`.
@@ -37,4 +39,13 @@ export interface ListAnomaliesForInsight extends Binding.Service<
 > {}
 export const ListAnomaliesForInsight = Binding.Service<ListAnomaliesForInsight>(
   "AWS.DevOpsGuru.ListAnomaliesForInsight",
+);
+
+export const ListAnomaliesForInsightHttp = Layer.effect(
+  ListAnomaliesForInsight,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.ListAnomaliesForInsight",
+    operation: devopsguru.listAnomaliesForInsight,
+    actions: ["devops-guru:ListAnomaliesForInsight"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:DetectSyntax` — tokenize the input text
@@ -35,3 +37,12 @@ export interface DetectSyntax extends Binding.Service<
   >
 > {}
 export const DetectSyntax = Binding.Service<DetectSyntax>("AWS.Comprehend.DetectSyntax");
+
+export const DetectSyntaxHttp = Layer.effect(
+  DetectSyntax,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.DetectSyntax",
+    operation: comprehend.detectSyntax,
+    actions: ["comprehend:DetectSyntax"],
+  }),
+);

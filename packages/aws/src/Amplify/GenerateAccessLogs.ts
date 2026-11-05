@@ -1,7 +1,9 @@
-import type * as amplify from "@distilled.cloud/aws/amplify";
+import * as amplify from "@distilled.cloud/aws/amplify";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { App } from "./App.ts";
+import { makeAmplifyHttpBinding } from "./BindingHttp.ts";
 
 export interface GenerateAccessLogsRequest extends Omit<
   amplify.GenerateAccessLogsRequest,
@@ -45,4 +47,14 @@ export interface GenerateAccessLogs extends Binding.Service<
 
 export const GenerateAccessLogs = Binding.Service<GenerateAccessLogs>(
   "AWS.Amplify.GenerateAccessLogs",
+);
+
+export const GenerateAccessLogsHttp = Layer.effect(
+  GenerateAccessLogs,
+  makeAmplifyHttpBinding({
+    name: "GenerateAccessLogs",
+    operation: amplify.generateAccessLogs,
+    actions: ["amplify:GenerateAccessLogs"],
+    resources: (app) => [app.appArn],
+  }),
 );

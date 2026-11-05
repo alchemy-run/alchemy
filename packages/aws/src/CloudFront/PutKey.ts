@@ -1,6 +1,8 @@
-import type * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
+import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKeyValueStoreScopedHttpBinding } from "./BindingHttp.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
 
 export interface PutKeyRequest extends Omit<kvs.PutKeyRequest, "KvsARN"> {}
@@ -41,3 +43,12 @@ export interface PutKey extends Binding.Service<
 > {}
 
 export const PutKey = Binding.Service<PutKey>("AWS.CloudFront.PutKey");
+
+export const PutKeyHttp = Layer.effect(
+  PutKey,
+  makeKeyValueStoreScopedHttpBinding({
+    tag: "AWS.CloudFront.PutKey",
+    operation: kvs.putKey,
+    actions: ["cloudfront-keyvaluestore:PutKey"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTrustStoreHttpBinding } from "./BindingHttp.ts";
 import type { TrustStore } from "./TrustStore.ts";
 
 /**
@@ -42,4 +44,13 @@ export interface GetTrustStoreCaCertificatesBundle extends Binding.Service<
 
 export const GetTrustStoreCaCertificatesBundle = Binding.Service<GetTrustStoreCaCertificatesBundle>(
   "AWS.ELBv2.GetTrustStoreCaCertificatesBundle",
+);
+
+export const GetTrustStoreCaCertificatesBundleHttp = Layer.effect(
+  GetTrustStoreCaCertificatesBundle,
+  makeTrustStoreHttpBinding({
+    tag: "AWS.ELBv2.GetTrustStoreCaCertificatesBundle",
+    operation: elbv2.getTrustStoreCaCertificatesBundle,
+    actions: ["elasticloadbalancing:GetTrustStoreCaCertificatesBundle"],
+  }),
 );

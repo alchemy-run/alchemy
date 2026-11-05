@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:ListRecordHistory`.
@@ -37,4 +39,13 @@ export interface ListRecordHistory extends Binding.Service<
 > {}
 export const ListRecordHistory = Binding.Service<ListRecordHistory>(
   "AWS.ServiceCatalog.ListRecordHistory",
+);
+
+export const ListRecordHistoryHttp = Layer.effect(
+  ListRecordHistory,
+  makeServiceCatalogHttpBinding({
+    capability: "ListRecordHistory",
+    iamActions: ["servicecatalog:ListRecordHistory"],
+    operation: servicecatalog.listRecordHistory,
+  }),
 );

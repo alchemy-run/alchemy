@@ -1,6 +1,8 @@
-import type * as contacts from "@distilled.cloud/aws/notificationscontacts";
+import * as contacts from "@distilled.cloud/aws/notificationscontacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmailContactHttpBinding } from "./BindingHttp.ts";
 import type { EmailContact } from "./EmailContact.ts";
 
 /**
@@ -47,4 +49,13 @@ export interface ActivateEmailContact extends Binding.Service<
 
 export const ActivateEmailContact = Binding.Service<ActivateEmailContact>(
   "AWS.NotificationsContacts.ActivateEmailContact",
+);
+
+export const ActivateEmailContactHttp = Layer.effect(
+  ActivateEmailContact,
+  makeEmailContactHttpBinding({
+    tag: "AWS.NotificationsContacts.ActivateEmailContact",
+    actions: ["notifications-contacts:ActivateEmailContact"],
+    operation: contacts.activateEmailContact,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeDomainChangeProgress` operation (IAM action
@@ -33,4 +35,13 @@ export interface DescribeDomainChangeProgress extends Binding.Service<
 > {}
 export const DescribeDomainChangeProgress = Binding.Service<DescribeDomainChangeProgress>(
   "AWS.OpenSearch.DescribeDomainChangeProgress",
+);
+
+export const DescribeDomainChangeProgressHttp = Layer.effect(
+  DescribeDomainChangeProgress,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.DescribeDomainChangeProgress",
+    operation: opensearch.describeDomainChangeProgress,
+    actions: ["es:DescribeDomainChangeProgress"],
+  }),
 );

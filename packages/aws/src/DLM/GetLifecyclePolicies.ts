@@ -1,6 +1,8 @@
-import type * as dlm from "@distilled.cloud/aws/dlm";
+import * as dlm from "@distilled.cloud/aws/dlm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDlmAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dlm:GetLifecyclePolicies`.
@@ -37,4 +39,13 @@ export interface GetLifecyclePolicies extends Binding.Service<
 > {}
 export const GetLifecyclePolicies = Binding.Service<GetLifecyclePolicies>(
   "AWS.DLM.GetLifecyclePolicies",
+);
+
+export const GetLifecyclePoliciesHttp = Layer.effect(
+  GetLifecyclePolicies,
+  makeDlmAccountHttpBinding({
+    tag: "AWS.DLM.GetLifecyclePolicies",
+    operation: dlm.getLifecyclePolicies,
+    actions: ["dlm:GetLifecyclePolicies"],
+  }),
 );

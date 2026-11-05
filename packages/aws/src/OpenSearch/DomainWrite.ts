@@ -3,6 +3,8 @@ import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
 import type { SourceError } from "effect/ConfigProvider";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchDataPlaneBinding, makeWriteDomainClient } from "./DataPlaneHttp.ts";
 import type {
   BulkResponse,
   IndexDocumentOptions,
@@ -96,3 +98,12 @@ export interface DomainWrite extends Binding.Service<
   (domain: Domain) => Effect.Effect<WriteDomainClient>
 > {}
 export const DomainWrite = Binding.Service<DomainWrite>("AWS.OpenSearch.DomainWrite");
+
+export const DomainWriteHttp = Layer.effect(
+  DomainWrite,
+  makeOpenSearchDataPlaneBinding({
+    name: "DomainWrite",
+    iamActions: ["es:ESHttpPut", "es:ESHttpPost", "es:ESHttpDelete", "es:ESHttpPatch"],
+    makeClient: makeWriteDomainClient,
+  }),
+);

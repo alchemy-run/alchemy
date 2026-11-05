@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `guardduty:DeleteInvitations`.
@@ -33,4 +35,13 @@ export interface DeleteInvitations extends Binding.Service<
 > {}
 export const DeleteInvitations = Binding.Service<DeleteInvitations>(
   "AWS.GuardDuty.DeleteInvitations",
+);
+
+export const DeleteInvitationsHttp = Layer.effect(
+  DeleteInvitations,
+  makeGuardDutyAccountHttpBinding({
+    tag: "AWS.GuardDuty.DeleteInvitations",
+    operation: guardduty.deleteInvitations,
+    actions: ["guardduty:DeleteInvitations"],
+  }),
 );

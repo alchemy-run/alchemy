@@ -1,6 +1,8 @@
-import type * as location from "@distilled.cloud/aws/location";
+import * as location from "@distilled.cloud/aws/location";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLocationPlaceIndexHttpBinding } from "./BindingHttp.ts";
 import type { PlaceIndex } from "./PlaceIndex.ts";
 
 /**
@@ -49,4 +51,13 @@ export interface SearchPlaceIndexForPosition extends Binding.Service<
 > {}
 export const SearchPlaceIndexForPosition = Binding.Service<SearchPlaceIndexForPosition>(
   "AWS.Location.SearchPlaceIndexForPosition",
+);
+
+export const SearchPlaceIndexForPositionHttp = Layer.effect(
+  SearchPlaceIndexForPosition,
+  makeLocationPlaceIndexHttpBinding({
+    tag: "AWS.Location.SearchPlaceIndexForPosition",
+    operation: location.searchPlaceIndexForPosition,
+    actions: ["geo:SearchPlaceIndexForPosition"],
+  }),
 );

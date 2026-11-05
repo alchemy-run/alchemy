@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StopProjectVersion` — stop hosting a Custom Labels model version to stop incurring inference-unit charges.
@@ -35,4 +37,13 @@ export interface StopProjectVersion extends Binding.Service<
 > {}
 export const StopProjectVersion = Binding.Service<StopProjectVersion>(
   "AWS.Rekognition.StopProjectVersion",
+);
+
+export const StopProjectVersionHttp = Layer.effect(
+  StopProjectVersion,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StopProjectVersion",
+    operation: rekognition.stopProjectVersion,
+    actions: ["rekognition:StopProjectVersion"],
+  }),
 );

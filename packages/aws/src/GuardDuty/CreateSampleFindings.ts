@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -37,4 +39,13 @@ export interface CreateSampleFindings extends Binding.Service<
 > {}
 export const CreateSampleFindings = Binding.Service<CreateSampleFindings>(
   "AWS.GuardDuty.CreateSampleFindings",
+);
+
+export const CreateSampleFindingsHttp = Layer.effect(
+  CreateSampleFindings,
+  makeGuardDutyDetectorHttpBinding({
+    tag: "AWS.GuardDuty.CreateSampleFindings",
+    operation: guardduty.createSampleFindings,
+    actions: ["guardduty:CreateSampleFindings"],
+  }),
 );

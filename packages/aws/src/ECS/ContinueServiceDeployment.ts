@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsServiceHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 export interface ContinueServiceDeploymentRequest extends ECS.ContinueServiceDeploymentRequest {}
@@ -41,4 +43,16 @@ export interface ContinueServiceDeployment extends Binding.Service<
 > {}
 export const ContinueServiceDeployment = Binding.Service<ContinueServiceDeployment>(
   "AWS.ECS.ContinueServiceDeployment",
+);
+
+export const ContinueServiceDeploymentHttp = Layer.effect(
+  ContinueServiceDeployment,
+  makeEcsServiceHttpBinding({
+    tag: "AWS.ECS.ContinueServiceDeployment",
+    operation: ECS.continueServiceDeployment,
+    actions: ["ecs:ContinueServiceDeployment"],
+    // Authorizes against the service-deployment resource:
+    // arn:aws:ecs:{region}:{account}:service-deployment/{cluster}/{service}/*
+    resources: ["service-deployment"],
+  }),
 );

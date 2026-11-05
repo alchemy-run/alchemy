@@ -1,6 +1,8 @@
-import type * as quicksight from "@distilled.cloud/aws/quicksight";
+import * as quicksight from "@distilled.cloud/aws/quicksight";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQuickSightDashboardHttpBinding } from "./BindingHttp.ts";
 import type { Dashboard } from "./Dashboard.ts";
 
 /**
@@ -49,3 +51,12 @@ export const DescribeDashboardSnapshotJobResult =
   Binding.Service<DescribeDashboardSnapshotJobResult>(
     "AWS.QuickSight.DescribeDashboardSnapshotJobResult",
   );
+
+export const DescribeDashboardSnapshotJobResultHttp = Layer.effect(
+  DescribeDashboardSnapshotJobResult,
+  makeQuickSightDashboardHttpBinding({
+    tag: "AWS.QuickSight.DescribeDashboardSnapshotJobResult",
+    operation: quicksight.describeDashboardSnapshotJobResult,
+    actions: ["quicksight:DescribeDashboardSnapshotJobResult"],
+  }),
+);

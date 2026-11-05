@@ -1,6 +1,8 @@
-import type * as glacier from "@distilled.cloud/aws/glacier";
+import * as glacier from "@distilled.cloud/aws/glacier";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlacierVaultHttpBinding } from "./BindingHttp.ts";
 import type { Vault } from "./Vault.ts";
 
 /**
@@ -30,3 +32,12 @@ export interface DescribeVault extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<glacier.DescribeVaultOutput, glacier.DescribeVaultError>>
 > {}
 export const DescribeVault = Binding.Service<DescribeVault>("AWS.Glacier.DescribeVault");
+
+export const DescribeVaultHttp = Layer.effect(
+  DescribeVault,
+  makeGlacierVaultHttpBinding({
+    tag: "AWS.Glacier.DescribeVault",
+    operation: glacier.describeVault,
+    actions: ["glacier:DescribeVault"],
+  }),
+);

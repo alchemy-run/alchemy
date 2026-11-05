@@ -1,6 +1,8 @@
-import type * as mediaconvert from "@distilled.cloud/aws/mediaconvert";
+import * as mediaconvert from "@distilled.cloud/aws/mediaconvert";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConvertHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediaconvert:Probe` — analyze an input media file in
@@ -39,3 +41,12 @@ export interface Probe extends Binding.Service<
   >
 > {}
 export const Probe = Binding.Service<Probe>("AWS.MediaConvert.Probe");
+
+export const ProbeHttp = Layer.effect(
+  Probe,
+  makeMediaConvertHttpBinding({
+    capability: "Probe",
+    iamActions: ["mediaconvert:Probe"],
+    operation: mediaconvert.probe,
+  }),
+);

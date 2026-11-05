@@ -1,6 +1,8 @@
-import type * as cloudformation from "@distilled.cloud/aws/cloudformation";
+import * as cloudformation from "@distilled.cloud/aws/cloudformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudFormationStackHttpBinding } from "./BindingHttp.ts";
 import type { Stack } from "./Stack.ts";
 
 /**
@@ -38,3 +40,12 @@ export interface SignalResource extends Binding.Service<
   >
 > {}
 export const SignalResource = Binding.Service<SignalResource>("AWS.CloudFormation.SignalResource");
+
+export const SignalResourceHttp = Layer.effect(
+  SignalResource,
+  makeCloudFormationStackHttpBinding({
+    tag: "AWS.CloudFormation.SignalResource",
+    operation: cloudformation.signalResource,
+    actions: ["cloudformation:SignalResource"],
+  }),
+);

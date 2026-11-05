@@ -1,6 +1,8 @@
-import type * as mq from "@distilled.cloud/aws/mq";
+import * as mq from "@distilled.cloud/aws/mq";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMqAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListBrokers` operation (IAM action
@@ -27,3 +29,12 @@ export interface ListBrokers extends Binding.Service<
   >
 > {}
 export const ListBrokers = Binding.Service<ListBrokers>("AWS.MQ.ListBrokers");
+
+export const ListBrokersHttp = Layer.effect(
+  ListBrokers,
+  makeMqAccountHttpBinding({
+    capability: "ListBrokers",
+    operation: mq.listBrokers,
+    iamActions: ["mq:ListBrokers"],
+  }),
+);

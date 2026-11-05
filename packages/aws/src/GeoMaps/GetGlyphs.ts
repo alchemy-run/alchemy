@@ -1,6 +1,8 @@
-import type * as geoMaps from "@distilled.cloud/aws/geo-maps";
+import * as geoMaps from "@distilled.cloud/aws/geo-maps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoMapsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-maps:GetGlyphs` — fetch a glyph (font) PBF range
@@ -41,3 +43,12 @@ export interface GetGlyphs extends Binding.Service<
   >
 > {}
 export const GetGlyphs = Binding.Service<GetGlyphs>("AWS.GeoMaps.GetGlyphs");
+
+export const GetGlyphsHttp = Layer.effect(
+  GetGlyphs,
+  makeGeoMapsHttpBinding({
+    capability: "GetGlyphs",
+    iamActions: ["geo-maps:GetGlyphs"],
+    operation: geoMaps.getGlyphs,
+  }),
+);

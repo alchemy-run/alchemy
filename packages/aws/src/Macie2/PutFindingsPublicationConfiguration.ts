@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:PutFindingsPublicationConfiguration`.
@@ -42,3 +44,12 @@ export const PutFindingsPublicationConfiguration =
   Binding.Service<PutFindingsPublicationConfiguration>(
     "AWS.Macie2.PutFindingsPublicationConfiguration",
   );
+
+export const PutFindingsPublicationConfigurationHttp = Layer.effect(
+  PutFindingsPublicationConfiguration,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.PutFindingsPublicationConfiguration",
+    operation: macie2.putFindingsPublicationConfiguration,
+    actions: ["macie2:PutFindingsPublicationConfiguration"],
+  }),
+);

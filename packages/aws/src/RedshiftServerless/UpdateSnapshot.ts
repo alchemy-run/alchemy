@@ -1,6 +1,8 @@
-import type * as serverless from "@distilled.cloud/aws/redshift-serverless";
+import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServerlessAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `UpdateSnapshot` operation (IAM actions
@@ -31,4 +33,13 @@ export interface UpdateSnapshot extends Binding.Service<
 > {}
 export const UpdateSnapshot = Binding.Service<UpdateSnapshot>(
   "AWS.RedshiftServerless.UpdateSnapshot",
+);
+
+export const UpdateSnapshotHttp = Layer.effect(
+  UpdateSnapshot,
+  makeServerlessAccountHttpBinding({
+    tag: "AWS.RedshiftServerless.UpdateSnapshot",
+    operation: serverless.updateSnapshot,
+    actions: ["redshift-serverless:UpdateSnapshot"],
+  }),
 );

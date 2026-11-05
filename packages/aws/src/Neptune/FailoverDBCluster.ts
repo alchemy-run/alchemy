@@ -1,6 +1,8 @@
-import type * as neptune from "@distilled.cloud/aws/neptune";
+import * as neptune from "@distilled.cloud/aws/neptune";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneClusterHttpBinding } from "./BindingHttp.ts";
 import type { DBCluster } from "./DBCluster.ts";
 
 /**
@@ -39,4 +41,13 @@ export interface FailoverDBCluster extends Binding.Service<
 > {}
 export const FailoverDBCluster = Binding.Service<FailoverDBCluster>(
   "AWS.Neptune.FailoverDBCluster",
+);
+
+export const FailoverDBClusterHttp = Layer.effect(
+  FailoverDBCluster,
+  makeNeptuneClusterHttpBinding({
+    tag: "AWS.Neptune.FailoverDBCluster",
+    operation: neptune.failoverDBCluster,
+    actions: ["rds:FailoverDBCluster"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as servicequotas from "@distilled.cloud/aws/service-quotas";
+import * as servicequotas from "@distilled.cloud/aws/service-quotas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceQuotasHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicequotas:RequestServiceQuotaIncrease` — submit a
@@ -45,4 +47,13 @@ export interface RequestServiceQuotaIncrease extends Binding.Service<
 > {}
 export const RequestServiceQuotaIncrease = Binding.Service<RequestServiceQuotaIncrease>(
   "AWS.ServiceQuotas.RequestServiceQuotaIncrease",
+);
+
+export const RequestServiceQuotaIncreaseHttp = Layer.effect(
+  RequestServiceQuotaIncrease,
+  makeServiceQuotasHttpBinding({
+    capability: "RequestServiceQuotaIncrease",
+    iamActions: ["servicequotas:RequestServiceQuotaIncrease"],
+    operation: servicequotas.requestServiceQuotaIncrease,
+  }),
 );

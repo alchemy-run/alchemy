@@ -1,6 +1,8 @@
-import type * as qapps from "@distilled.cloud/aws/qapps";
+import * as qapps from "@distilled.cloud/aws/qapps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQAppsInstanceHttpBinding } from "./BindingHttp.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -44,4 +46,13 @@ export interface BatchCreateCategory extends Binding.Service<
 
 export const BatchCreateCategory = Binding.Service<BatchCreateCategory>(
   "AWS.QApps.BatchCreateCategory",
+);
+
+export const BatchCreateCategoryHttp = Layer.effect(
+  BatchCreateCategory,
+  makeQAppsInstanceHttpBinding({
+    capability: "BatchCreateCategory",
+    iamActions: ["qapps:BatchCreateCategory"],
+    operation: qapps.batchCreateCategory,
+  }),
 );

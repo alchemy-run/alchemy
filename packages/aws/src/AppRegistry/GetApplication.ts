@@ -1,7 +1,9 @@
-import type * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
+import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeApplicationScopedHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:GetApplication`.
@@ -34,3 +36,12 @@ export interface GetApplication extends Binding.Service<
 > {}
 
 export const GetApplication = Binding.Service<GetApplication>("AWS.AppRegistry.GetApplication");
+
+export const GetApplicationHttp = Layer.effect(
+  GetApplication,
+  makeApplicationScopedHttpBinding({
+    tag: "AWS.AppRegistry.GetApplication",
+    operation: appregistry.getApplication,
+    actions: ["servicecatalog:GetApplication"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as iotw from "@distilled.cloud/aws/iot-wireless";
+import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotWirelessAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iotwireless:GetServiceEndpoint` — read the
@@ -36,4 +38,14 @@ export interface GetServiceEndpoint extends Binding.Service<
 > {}
 export const GetServiceEndpoint = Binding.Service<GetServiceEndpoint>(
   "AWS.IoTWireless.GetServiceEndpoint",
+);
+
+export const GetServiceEndpointHttp = Layer.effect(
+  GetServiceEndpoint,
+  makeIotWirelessAccountHttpBinding({
+    capability: "GetServiceEndpoint",
+    iamActions: ["iotwireless:GetServiceEndpoint"],
+    operation: iotw.getServiceEndpoint,
+    prepare: (request: iotw.GetServiceEndpointRequest | undefined) => request ?? {},
+  }),
 );

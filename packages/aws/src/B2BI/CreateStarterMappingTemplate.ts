@@ -1,6 +1,8 @@
-import type * as b2bi from "@distilled.cloud/aws/b2bi";
+import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeB2biAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `b2bi:CreateStarterMappingTemplate`.
@@ -43,4 +45,15 @@ export interface CreateStarterMappingTemplate extends Binding.Service<
 > {}
 export const CreateStarterMappingTemplate = Binding.Service<CreateStarterMappingTemplate>(
   "AWS.B2BI.CreateStarterMappingTemplate",
+);
+
+export const CreateStarterMappingTemplateHttp = Layer.effect(
+  CreateStarterMappingTemplate,
+  makeB2biAccountHttpBinding({
+    tag: "AWS.B2BI.CreateStarterMappingTemplate",
+    operation: b2bi.createStarterMappingTemplate,
+    // `outputSampleLocation` is written through the caller's session
+    // (forward-access), so the S3 write grant rides along.
+    actions: ["b2bi:CreateStarterMappingTemplate", "s3:PutObject"],
+  }),
 );

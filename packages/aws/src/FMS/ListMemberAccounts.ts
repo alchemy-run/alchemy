@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListMemberAccounts}.
@@ -36,3 +38,12 @@ export interface ListMemberAccounts extends Binding.Service<
 > {}
 
 export const ListMemberAccounts = Binding.Service<ListMemberAccounts>("AWS.FMS.ListMemberAccounts");
+
+export const ListMemberAccountsHttp = Layer.effect(
+  ListMemberAccounts,
+  makeFmsHttpBinding({
+    capability: "ListMemberAccounts",
+    iamActions: ["fms:ListMemberAccounts"],
+    operation: fms.listMemberAccounts,
+  }),
+);

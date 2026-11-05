@@ -1,6 +1,8 @@
-import type * as memorydb from "@distilled.cloud/aws/memorydb";
+import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMemoryDBAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `BatchUpdateCluster` operation (IAM action
@@ -38,4 +40,16 @@ export interface BatchUpdateCluster extends Binding.Service<
 > {}
 export const BatchUpdateCluster = Binding.Service<BatchUpdateCluster>(
   "AWS.MemoryDB.BatchUpdateCluster",
+);
+
+export const BatchUpdateClusterHttp = Layer.effect(
+  BatchUpdateCluster,
+  makeMemoryDBAccountHttpBinding({
+    tag: "AWS.MemoryDB.BatchUpdateCluster",
+    operation: memorydb.batchUpdateCluster,
+    // Clusters are addressed by a runtime name list — grant on the cluster
+    // ARN wildcard.
+    actions: ["memorydb:BatchUpdateCluster"],
+    resources: ["arn:aws:memorydb:*:*:cluster/*"],
+  }),
 );

@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface SplitShardRequest extends Omit<
@@ -45,3 +47,13 @@ export interface SplitShard extends Binding.Service<
 > {}
 
 export const SplitShard = Binding.Service<SplitShard>("AWS.Kinesis.SplitShard");
+
+export const SplitShardHttp = Layer.effect(
+  SplitShard,
+  makeStreamHttpBinding({
+    tag: "AWS.Kinesis.SplitShard",
+    operation: Kinesis.splitShard,
+    actions: ["kinesis:SplitShard"],
+    key: "StreamARN",
+  }),
+);

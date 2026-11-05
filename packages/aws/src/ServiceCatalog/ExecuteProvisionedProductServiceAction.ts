@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:ExecuteProvisionedProductServiceAction`.
@@ -44,3 +46,12 @@ export const ExecuteProvisionedProductServiceAction =
   Binding.Service<ExecuteProvisionedProductServiceAction>(
     "AWS.ServiceCatalog.ExecuteProvisionedProductServiceAction",
   );
+
+export const ExecuteProvisionedProductServiceActionHttp = Layer.effect(
+  ExecuteProvisionedProductServiceAction,
+  makeServiceCatalogHttpBinding({
+    capability: "ExecuteProvisionedProductServiceAction",
+    iamActions: ["servicecatalog:ExecuteProvisionedProductServiceAction"],
+    operation: servicecatalog.executeProvisionedProductServiceAction,
+  }),
+);

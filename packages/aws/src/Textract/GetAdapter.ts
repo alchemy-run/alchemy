@@ -1,7 +1,9 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Adapter } from "./Adapter.ts";
+import { makeTextractAdapterHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:GetAdapter` — read the configuration
@@ -30,3 +32,12 @@ export interface GetAdapter extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<textract.GetAdapterResponse, textract.GetAdapterError>>
 > {}
 export const GetAdapter = Binding.Service<GetAdapter>("AWS.Textract.GetAdapter");
+
+export const GetAdapterHttp = Layer.effect(
+  GetAdapter,
+  makeTextractAdapterHttpBinding({
+    capability: "GetAdapter",
+    iamActions: ["textract:GetAdapter"],
+    operation: textract.getAdapter,
+  }),
+);

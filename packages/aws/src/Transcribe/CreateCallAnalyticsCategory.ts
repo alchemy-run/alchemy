@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:CreateCallAnalyticsCategory` — create a Call Analytics category whose rules automatically flag matching calls (e.g. long silence, specific phrases, negative sentiment).
@@ -37,4 +39,13 @@ export interface CreateCallAnalyticsCategory extends Binding.Service<
 > {}
 export const CreateCallAnalyticsCategory = Binding.Service<CreateCallAnalyticsCategory>(
   "AWS.Transcribe.CreateCallAnalyticsCategory",
+);
+
+export const CreateCallAnalyticsCategoryHttp = Layer.effect(
+  CreateCallAnalyticsCategory,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.CreateCallAnalyticsCategory",
+    operation: transcribe.createCallAnalyticsCategory,
+    actions: ["transcribe:CreateCallAnalyticsCategory"],
+  }),
 );

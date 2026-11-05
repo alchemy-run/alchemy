@@ -1,6 +1,8 @@
-import type * as acm from "@distilled.cloud/aws/acm";
+import * as acm from "@distilled.cloud/aws/acm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAcmCertificateHttpBinding } from "./BindingHttp.ts";
 import type { Certificate } from "./Certificate.ts";
 
 /**
@@ -32,3 +34,12 @@ export interface RenewCertificate extends Binding.Service<
 > {}
 
 export const RenewCertificate = Binding.Service<RenewCertificate>("AWS.ACM.RenewCertificate");
+
+export const RenewCertificateHttp = Layer.effect(
+  RenewCertificate,
+  makeAcmCertificateHttpBinding({
+    capability: "RenewCertificate",
+    iamActions: ["acm:RenewCertificate"],
+    operation: acm.renewCertificate,
+  }),
+);

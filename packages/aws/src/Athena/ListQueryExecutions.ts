@@ -1,6 +1,8 @@
-import type * as athena from "@distilled.cloud/aws/athena";
+import * as athena from "@distilled.cloud/aws/athena";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWorkGroupScopedHttpBinding } from "./BindingHttp.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
 
 /**
@@ -36,4 +38,14 @@ export interface ListQueryExecutions extends Binding.Service<
 
 export const ListQueryExecutions = Binding.Service<ListQueryExecutions>(
   "AWS.Athena.ListQueryExecutions",
+);
+
+export const ListQueryExecutionsHttp = Layer.effect(
+  ListQueryExecutions,
+  makeWorkGroupScopedHttpBinding({
+    tag: "AWS.Athena.ListQueryExecutions",
+    operation: athena.listQueryExecutions,
+    actions: ["athena:ListQueryExecutions"],
+    injectWorkGroup: true,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as geoMaps from "@distilled.cloud/aws/geo-maps";
+import * as geoMaps from "@distilled.cloud/aws/geo-maps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoMapsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-maps:GetStyleDescriptor` — fetch the MapLibre
@@ -40,4 +42,13 @@ export interface GetStyleDescriptor extends Binding.Service<
 > {}
 export const GetStyleDescriptor = Binding.Service<GetStyleDescriptor>(
   "AWS.GeoMaps.GetStyleDescriptor",
+);
+
+export const GetStyleDescriptorHttp = Layer.effect(
+  GetStyleDescriptor,
+  makeGeoMapsHttpBinding({
+    capability: "GetStyleDescriptor",
+    iamActions: ["geo-maps:GetStyleDescriptor"],
+    operation: geoMaps.getStyleDescriptor,
+  }),
 );

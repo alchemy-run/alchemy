@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:DescribeAnomaly`.
@@ -31,3 +33,12 @@ export interface DescribeAnomaly extends Binding.Service<
   >
 > {}
 export const DescribeAnomaly = Binding.Service<DescribeAnomaly>("AWS.DevOpsGuru.DescribeAnomaly");
+
+export const DescribeAnomalyHttp = Layer.effect(
+  DescribeAnomaly,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.DescribeAnomaly",
+    operation: devopsguru.describeAnomaly,
+    actions: ["devops-guru:DescribeAnomaly"],
+  }),
+);

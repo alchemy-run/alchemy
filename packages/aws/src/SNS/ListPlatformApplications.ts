@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListPlatformApplicationsRequest extends sns.ListPlatformApplicationsInput {}
 
@@ -31,4 +33,13 @@ export interface ListPlatformApplications extends Binding.Service<
 
 export const ListPlatformApplications = Binding.Service<ListPlatformApplications>(
   "AWS.SNS.ListPlatformApplications",
+);
+
+export const ListPlatformApplicationsHttp = Layer.effect(
+  ListPlatformApplications,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.ListPlatformApplications",
+    operation: sns.listPlatformApplications,
+    actions: ["sns:ListPlatformApplications"],
+  }),
 );

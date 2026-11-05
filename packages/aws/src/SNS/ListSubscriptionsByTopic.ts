@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsTopicHttpBinding } from "./BindingHttp.ts";
 import type { Topic } from "./Topic.ts";
 
 export interface ListSubscriptionsByTopicRequest extends Omit<
@@ -43,4 +45,14 @@ export interface ListSubscriptionsByTopic extends Binding.Service<
 > {}
 export const ListSubscriptionsByTopic = Binding.Service<ListSubscriptionsByTopic>(
   "AWS.SNS.ListSubscriptionsByTopic",
+);
+
+export const ListSubscriptionsByTopicHttp = Layer.effect(
+  ListSubscriptionsByTopic,
+  makeSnsTopicHttpBinding({
+    tag: "AWS.SNS.ListSubscriptionsByTopic",
+    operation: sns.listSubscriptionsByTopic,
+    actions: ["sns:ListSubscriptionsByTopic"],
+    key: "TopicArn",
+  }),
 );

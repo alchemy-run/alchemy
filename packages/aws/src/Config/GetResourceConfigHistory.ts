@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `config:GetResourceConfigHistory` — read the list of
@@ -41,4 +43,13 @@ export interface GetResourceConfigHistory extends Binding.Service<
 
 export const GetResourceConfigHistory = Binding.Service<GetResourceConfigHistory>(
   "AWS.Config.GetResourceConfigHistory",
+);
+
+export const GetResourceConfigHistoryHttp = Layer.effect(
+  GetResourceConfigHistory,
+  makeConfigAccountHttpBinding({
+    tag: "AWS.Config.GetResourceConfigHistory",
+    operation: config.getResourceConfigHistory,
+    actions: ["config:GetResourceConfigHistory"],
+  }),
 );

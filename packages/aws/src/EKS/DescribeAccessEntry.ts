@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -35,4 +37,15 @@ export interface DescribeAccessEntry extends Binding.Service<
 > {}
 export const DescribeAccessEntry = Binding.Service<DescribeAccessEntry>(
   "AWS.EKS.DescribeAccessEntry",
+);
+
+export const DescribeAccessEntryHttp = Layer.effect(
+  DescribeAccessEntry,
+  makeEKSClusterHttpBinding({
+    tag: "AWS.EKS.DescribeAccessEntry",
+    operation: eks.describeAccessEntry,
+    actions: ["eks:DescribeAccessEntry"],
+    key: "clusterName",
+    scope: "subresources",
+  }),
 );

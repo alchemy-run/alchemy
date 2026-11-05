@@ -1,6 +1,8 @@
-import type * as acmpca from "@distilled.cloud/aws/acm-pca";
+import * as acmpca from "@distilled.cloud/aws/acm-pca";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeACMPCAHttpBinding } from "./BindingHttp.ts";
 import type { CertificateAuthority } from "./CertificateAuthority.ts";
 
 export interface ImportCertificateAuthorityCertificateRequest extends Omit<
@@ -54,3 +56,11 @@ export const ImportCertificateAuthorityCertificate =
   Binding.Service<ImportCertificateAuthorityCertificate>(
     "AWS.ACMPCA.ImportCertificateAuthorityCertificate",
   );
+
+export const ImportCertificateAuthorityCertificateHttp = Layer.effect(
+  ImportCertificateAuthorityCertificate,
+  makeACMPCAHttpBinding({
+    action: "ImportCertificateAuthorityCertificate",
+    operation: acmpca.importCertificateAuthorityCertificate,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as organizations from "@distilled.cloud/aws/organizations";
+import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOrganizationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `organizations:ListEffectivePolicyValidationErrors`.
@@ -41,3 +43,12 @@ export const ListEffectivePolicyValidationErrors =
   Binding.Service<ListEffectivePolicyValidationErrors>(
     "AWS.Organizations.ListEffectivePolicyValidationErrors",
   );
+
+export const ListEffectivePolicyValidationErrorsHttp = Layer.effect(
+  ListEffectivePolicyValidationErrors,
+  makeOrganizationsHttpBinding({
+    capability: "ListEffectivePolicyValidationErrors",
+    iamActions: ["organizations:ListEffectivePolicyValidationErrors"],
+    operation: organizations.listEffectivePolicyValidationErrors,
+  }),
+);

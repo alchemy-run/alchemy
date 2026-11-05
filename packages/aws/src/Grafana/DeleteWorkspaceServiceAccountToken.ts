@@ -1,6 +1,8 @@
-import type * as grafana from "@distilled.cloud/aws/grafana";
+import * as grafana from "@distilled.cloud/aws/grafana";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGrafanaWorkspaceHttpBinding } from "./BindingHttp.ts";
 import type { Workspace } from "./Workspace.ts";
 
 /**
@@ -43,3 +45,12 @@ export const DeleteWorkspaceServiceAccountToken =
   Binding.Service<DeleteWorkspaceServiceAccountToken>(
     "AWS.Grafana.DeleteWorkspaceServiceAccountToken",
   );
+
+export const DeleteWorkspaceServiceAccountTokenHttp = Layer.effect(
+  DeleteWorkspaceServiceAccountToken,
+  makeGrafanaWorkspaceHttpBinding({
+    tag: "AWS.Grafana.DeleteWorkspaceServiceAccountToken",
+    operation: grafana.deleteWorkspaceServiceAccountToken,
+    actions: ["grafana:DeleteWorkspaceServiceAccountToken"],
+  }),
+);

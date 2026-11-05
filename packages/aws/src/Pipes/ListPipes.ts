@@ -1,6 +1,8 @@
-import type * as pipes from "@distilled.cloud/aws/pipes";
+import * as pipes from "@distilled.cloud/aws/pipes";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePipesAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `pipes:ListPipes`.
@@ -32,3 +34,12 @@ export interface ListPipes extends Binding.Service<
   >
 > {}
 export const ListPipes = Binding.Service<ListPipes>("AWS.Pipes.ListPipes");
+
+export const ListPipesHttp = Layer.effect(
+  ListPipes,
+  makePipesAccountHttpBinding({
+    tag: "AWS.Pipes.ListPipes",
+    operation: pipes.listPipes,
+    actions: ["pipes:ListPipes"],
+  }),
+);

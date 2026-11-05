@@ -1,6 +1,8 @@
-import type * as organizations from "@distilled.cloud/aws/organizations";
+import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOrganizationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `organizations:CancelHandshake`.
@@ -32,4 +34,13 @@ export interface CancelHandshake extends Binding.Service<
 > {}
 export const CancelHandshake = Binding.Service<CancelHandshake>(
   "AWS.Organizations.CancelHandshake",
+);
+
+export const CancelHandshakeHttp = Layer.effect(
+  CancelHandshake,
+  makeOrganizationsHttpBinding({
+    capability: "CancelHandshake",
+    iamActions: ["organizations:CancelHandshake"],
+    operation: organizations.cancelHandshake,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `UpdateSnapshot` operation (IAM action
@@ -36,3 +38,12 @@ export interface UpdateSnapshot extends Binding.Service<
   >
 > {}
 export const UpdateSnapshot = Binding.Service<UpdateSnapshot>("AWS.FSx.UpdateSnapshot");
+
+export const UpdateSnapshotHttp = Layer.effect(
+  UpdateSnapshot,
+  makeFSxAccountHttpBinding({
+    tag: "AWS.FSx.UpdateSnapshot",
+    operation: fsx.updateSnapshot,
+    actions: ["fsx:UpdateSnapshot"],
+  }),
+);

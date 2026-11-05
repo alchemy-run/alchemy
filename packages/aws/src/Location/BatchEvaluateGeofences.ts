@@ -1,6 +1,8 @@
-import type * as location from "@distilled.cloud/aws/location";
+import * as location from "@distilled.cloud/aws/location";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLocationCollectionHttpBinding } from "./BindingHttp.ts";
 import type { GeofenceCollection } from "./GeofenceCollection.ts";
 
 /**
@@ -53,4 +55,13 @@ export interface BatchEvaluateGeofences extends Binding.Service<
 > {}
 export const BatchEvaluateGeofences = Binding.Service<BatchEvaluateGeofences>(
   "AWS.Location.BatchEvaluateGeofences",
+);
+
+export const BatchEvaluateGeofencesHttp = Layer.effect(
+  BatchEvaluateGeofences,
+  makeLocationCollectionHttpBinding({
+    tag: "AWS.Location.BatchEvaluateGeofences",
+    operation: location.batchEvaluateGeofences,
+    actions: ["geo:BatchEvaluateGeofences"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as glue from "@distilled.cloud/aws/glue";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlueTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface BatchGetPartitionRequest extends Omit<
@@ -43,3 +45,13 @@ export interface BatchGetPartition extends Binding.Service<
 > {}
 
 export const BatchGetPartition = Binding.Service<BatchGetPartition>("AWS.Glue.BatchGetPartition");
+
+export const BatchGetPartitionHttp = Layer.effect(
+  BatchGetPartition,
+  makeGlueTableHttpBinding({
+    tag: "AWS.Glue.BatchGetPartition",
+    operation: glue.batchGetPartition,
+    actions: ["glue:BatchGetPartition", "glue:GetPartition"],
+    tableNameKey: "TableName",
+  }),
+);

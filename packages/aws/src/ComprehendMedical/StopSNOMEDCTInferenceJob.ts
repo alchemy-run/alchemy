@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:StopSNOMEDCTInferenceJob` — stop an in-progress asynchronous SNOMED CT ontology linking job.
@@ -35,4 +37,13 @@ export interface StopSNOMEDCTInferenceJob extends Binding.Service<
 > {}
 export const StopSNOMEDCTInferenceJob = Binding.Service<StopSNOMEDCTInferenceJob>(
   "AWS.ComprehendMedical.StopSNOMEDCTInferenceJob",
+);
+
+export const StopSNOMEDCTInferenceJobHttp = Layer.effect(
+  StopSNOMEDCTInferenceJob,
+  makeComprehendMedicalHttpBinding({
+    capability: "StopSNOMEDCTInferenceJob",
+    iamActions: ["comprehendmedical:StopSNOMEDCTInferenceJob"],
+    operation: comprehendmedical.stopSNOMEDCTInferenceJob,
+  }),
 );

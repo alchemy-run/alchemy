@@ -1,6 +1,8 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccessAnalyzerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `access-analyzer:StartPolicyGeneration`.
@@ -32,4 +34,13 @@ export interface StartPolicyGeneration extends Binding.Service<
 
 export const StartPolicyGeneration = Binding.Service<StartPolicyGeneration>(
   "AWS.AccessAnalyzer.StartPolicyGeneration",
+);
+
+export const StartPolicyGenerationHttp = Layer.effect(
+  StartPolicyGeneration,
+  makeAccessAnalyzerAccountHttpBinding({
+    tag: "AWS.AccessAnalyzer.StartPolicyGeneration",
+    operation: aa.startPolicyGeneration,
+    actions: ["access-analyzer:StartPolicyGeneration"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as Lambda from "@distilled.cloud/aws/lambda";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFunctionHttpBinding } from "./BindingHttp.ts";
 import type { Function } from "./Function.ts";
 
 export interface InvokeWithResponseStreamRequest extends Omit<
@@ -45,4 +47,14 @@ export interface InvokeWithResponseStream extends Binding.Service<
 > {}
 export const InvokeWithResponseStream = Binding.Service<InvokeWithResponseStream>(
   "AWS.Lambda.InvokeWithResponseStream",
+);
+
+export const InvokeWithResponseStreamHttp = Layer.effect(
+  InvokeWithResponseStream,
+  makeFunctionHttpBinding({
+    tag: "AWS.Lambda.InvokeWithResponseStream",
+    operation: Lambda.invokeWithResponseStream,
+    actions: ["lambda:InvokeFunction"],
+    qualified: true,
+  }),
 );

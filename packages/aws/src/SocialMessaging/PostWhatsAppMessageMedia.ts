@@ -1,6 +1,8 @@
-import type * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
+import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWabaPhonePlaneHttpBinding } from "./BindingHttp.ts";
 import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAccount.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface PostWhatsAppMessageMedia extends Binding.Service<
 > {}
 export const PostWhatsAppMessageMedia = Binding.Service<PostWhatsAppMessageMedia>(
   "AWS.SocialMessaging.PostWhatsAppMessageMedia",
+);
+
+export const PostWhatsAppMessageMediaHttp = Layer.effect(
+  PostWhatsAppMessageMedia,
+  makeWabaPhonePlaneHttpBinding({
+    tag: "AWS.SocialMessaging.PostWhatsAppMessageMedia",
+    operation: socialmessaging.postWhatsAppMessageMedia,
+    actions: ["social-messaging:PostWhatsAppMessageMedia"],
+  }),
 );

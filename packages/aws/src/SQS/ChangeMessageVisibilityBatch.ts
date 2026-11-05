@@ -1,6 +1,8 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQueueUrlHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface ChangeMessageVisibilityBatchRequest extends Omit<
@@ -54,4 +56,14 @@ export interface ChangeMessageVisibilityBatch extends Binding.Service<
 
 export const ChangeMessageVisibilityBatch = Binding.Service<ChangeMessageVisibilityBatch>(
   "AWS.SQS.ChangeMessageVisibilityBatch",
+);
+
+export const ChangeMessageVisibilityBatchHttp = Layer.effect(
+  ChangeMessageVisibilityBatch,
+  makeQueueUrlHttpBinding({
+    tag: "AWS.SQS.ChangeMessageVisibilityBatch",
+    operation: sqs.changeMessageVisibilityBatch,
+    // Batch entries are authorized by the singular action.
+    actions: ["sqs:ChangeMessageVisibility"],
+  }),
 );

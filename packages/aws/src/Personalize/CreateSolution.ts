@@ -1,6 +1,8 @@
-import type * as personalize from "@distilled.cloud/aws/personalize";
+import * as personalize from "@distilled.cloud/aws/personalize";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `personalize:CreateSolution` — Creates a solution (a recipe + configuration to train models with)
@@ -34,3 +36,12 @@ export interface CreateSolution extends Binding.Service<
   >
 > {}
 export const CreateSolution = Binding.Service<CreateSolution>("AWS.Personalize.CreateSolution");
+
+export const CreateSolutionHttp = Layer.effect(
+  CreateSolution,
+  makePersonalizeAccountHttpBinding({
+    tag: "AWS.Personalize.CreateSolution",
+    operation: personalize.createSolution,
+    actions: ["personalize:CreateSolution"],
+  }),
+);

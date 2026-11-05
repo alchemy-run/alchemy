@@ -1,7 +1,9 @@
-import type * as mm from "@distilled.cloud/aws/mailmanager";
+import * as mm from "@distilled.cloud/aws/mailmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AddressList } from "./AddressList.ts";
+import { makeAddressListHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ses:DeregisterMemberFromAddressList`.
@@ -36,4 +38,13 @@ export interface DeregisterMemberFromAddressList extends Binding.Service<
 > {}
 export const DeregisterMemberFromAddressList = Binding.Service<DeregisterMemberFromAddressList>(
   "AWS.MailManager.DeregisterMemberFromAddressList",
+);
+
+export const DeregisterMemberFromAddressListHttp = Layer.effect(
+  DeregisterMemberFromAddressList,
+  makeAddressListHttpBinding({
+    tag: "AWS.MailManager.DeregisterMemberFromAddressList",
+    operation: mm.deregisterMemberFromAddressList,
+    actions: ["ses:DeregisterMemberFromAddressList"],
+  }),
 );

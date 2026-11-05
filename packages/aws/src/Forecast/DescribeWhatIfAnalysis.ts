@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:DescribeWhatIfAnalysis` — poll the status of
@@ -40,4 +42,13 @@ export interface DescribeWhatIfAnalysis extends Binding.Service<
 > {}
 export const DescribeWhatIfAnalysis = Binding.Service<DescribeWhatIfAnalysis>(
   "AWS.Forecast.DescribeWhatIfAnalysis",
+);
+
+export const DescribeWhatIfAnalysisHttp = Layer.effect(
+  DescribeWhatIfAnalysis,
+  makeForecastHttpBinding({
+    capability: "DescribeWhatIfAnalysis",
+    iamActions: ["forecast:DescribeWhatIfAnalysis"],
+    operation: forecast.describeWhatIfAnalysis,
+  }),
 );

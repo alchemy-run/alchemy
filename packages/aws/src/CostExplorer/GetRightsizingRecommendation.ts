@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetRightsizingRecommendation}.
@@ -44,4 +46,13 @@ export interface GetRightsizingRecommendation extends Binding.Service<
 
 export const GetRightsizingRecommendation = Binding.Service<GetRightsizingRecommendation>(
   "AWS.CostExplorer.GetRightsizingRecommendation",
+);
+
+export const GetRightsizingRecommendationHttp = Layer.effect(
+  GetRightsizingRecommendation,
+  makeCostExplorerHttpBinding({
+    capability: "GetRightsizingRecommendation",
+    iamActions: ["ce:GetRightsizingRecommendation"],
+    operation: ce.getRightsizingRecommendation,
+  }),
 );

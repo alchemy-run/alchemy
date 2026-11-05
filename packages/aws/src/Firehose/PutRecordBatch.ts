@@ -1,6 +1,8 @@
-import type * as Firehose from "@distilled.cloud/aws/firehose";
+import * as Firehose from "@distilled.cloud/aws/firehose";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDeliveryStreamHttpBinding } from "./BindingHttp.ts";
 import type { DeliveryStream } from "./DeliveryStream.ts";
 
 export interface PutRecordBatchRequest extends Omit<
@@ -49,3 +51,18 @@ export interface PutRecordBatch extends Binding.Service<
 > {}
 
 export const PutRecordBatch = Binding.Service<PutRecordBatch>("AWS.Firehose.PutRecordBatch");
+
+/**
+ * HTTP implementation of {@link PutRecordBatch}. At deploy time it grants
+ * `firehose:PutRecordBatch` on the bound delivery stream; at runtime it calls
+ * the Firehose API with the host Function's credentials. Provide this layer
+ * on the Function using the binding.
+ */
+export const PutRecordBatchHttp = Layer.effect(
+  PutRecordBatch,
+  makeDeliveryStreamHttpBinding({
+    tag: "AWS.Firehose.PutRecordBatch",
+    operation: Firehose.putRecordBatch,
+    actions: ["firehose:PutRecordBatch"],
+  }),
+);

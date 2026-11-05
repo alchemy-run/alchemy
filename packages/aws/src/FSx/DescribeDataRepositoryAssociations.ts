@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeDataRepositoryAssociations` operation
@@ -39,3 +41,12 @@ export interface DescribeDataRepositoryAssociations extends Binding.Service<
 > {}
 export const DescribeDataRepositoryAssociations =
   Binding.Service<DescribeDataRepositoryAssociations>("AWS.FSx.DescribeDataRepositoryAssociations");
+
+export const DescribeDataRepositoryAssociationsHttp = Layer.effect(
+  DescribeDataRepositoryAssociations,
+  makeFSxAccountHttpBinding({
+    tag: "AWS.FSx.DescribeDataRepositoryAssociations",
+    operation: fsx.describeDataRepositoryAssociations,
+    actions: ["fsx:DescribeDataRepositoryAssociations"],
+  }),
+);

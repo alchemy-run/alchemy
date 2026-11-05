@@ -1,6 +1,8 @@
-import type * as frauddetector from "@distilled.cloud/aws/frauddetector";
+import * as frauddetector from "@distilled.cloud/aws/frauddetector";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFraudDetectorEventTypeHttpBinding } from "./BindingHttp.ts";
 import type { EventType } from "./EventType.ts";
 
 /**
@@ -58,3 +60,12 @@ export interface SendEvent extends Binding.Service<
   >
 > {}
 export const SendEvent = Binding.Service<SendEvent>("AWS.FraudDetector.SendEvent");
+
+export const SendEventHttp = Layer.effect(
+  SendEvent,
+  makeFraudDetectorEventTypeHttpBinding({
+    tag: "AWS.FraudDetector.SendEvent",
+    operation: frauddetector.sendEvent,
+    actions: ["frauddetector:SendEvent"],
+  }),
+);

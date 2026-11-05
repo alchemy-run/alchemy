@@ -1,6 +1,8 @@
-import type * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSESHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `sesv2:GetMessageInsights`.
@@ -34,3 +36,12 @@ export interface GetMessageInsights extends Binding.Service<
   >
 > {}
 export const GetMessageInsights = Binding.Service<GetMessageInsights>("AWS.SES.GetMessageInsights");
+
+export const GetMessageInsightsHttp = Layer.effect(
+  GetMessageInsights,
+  makeSESHttpBinding({
+    tag: "AWS.SES.GetMessageInsights",
+    operation: sesv2.getMessageInsights,
+    actions: ["ses:GetMessageInsights"],
+  }),
+);

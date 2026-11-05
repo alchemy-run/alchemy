@@ -1,6 +1,8 @@
-import type * as sfn from "@distilled.cloud/aws/sfn";
+import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSfnServiceHttpBinding } from "./BindingHttp.ts";
 
 export interface TestStateRequest extends sfn.TestStateInput {}
 
@@ -39,3 +41,12 @@ export interface TestState extends Binding.Service<
   >
 > {}
 export const TestState = Binding.Service<TestState>("AWS.StepFunctions.TestState");
+
+export const TestStateHttp = Layer.effect(
+  TestState,
+  makeSfnServiceHttpBinding({
+    tag: "AWS.StepFunctions.TestState",
+    actions: ["states:TestState"],
+    operation: sfn.testState,
+  }),
+);

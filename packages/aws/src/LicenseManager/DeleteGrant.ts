@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseManagerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link DeleteGrant}.
@@ -37,3 +39,12 @@ export interface DeleteGrant extends Binding.Service<
   >
 > {}
 export const DeleteGrant = Binding.Service<DeleteGrant>("AWS.LicenseManager.DeleteGrant");
+
+export const DeleteGrantHttp = Layer.effect(
+  DeleteGrant,
+  makeLicenseManagerHttpBinding({
+    capability: "DeleteGrant",
+    iamActions: ["license-manager:DeleteGrant"],
+    operation: licensemanager.deleteGrant,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigResourceHttpBinding } from "./BindingHttp.ts";
 import type { ConfigRule } from "./ConfigRule.ts";
 
 /** Request for {@link PutExternalEvaluation} — the rule name is injected from the bound rule. */
@@ -50,4 +52,15 @@ export interface PutExternalEvaluation extends Binding.Service<
 
 export const PutExternalEvaluation = Binding.Service<PutExternalEvaluation>(
   "AWS.Config.PutExternalEvaluation",
+);
+
+export const PutExternalEvaluationHttp = Layer.effect(
+  PutExternalEvaluation,
+  makeConfigResourceHttpBinding({
+    tag: "AWS.Config.PutExternalEvaluation",
+    operation: config.putExternalEvaluation,
+    actions: ["config:PutExternalEvaluation"],
+    requestKey: "ConfigRuleName",
+    identifier: (rule: ConfigRule) => rule.configRuleName,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as securitylake from "@distilled.cloud/aws/securitylake";
+import * as securitylake from "@distilled.cloud/aws/securitylake";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityLakeDataLakeHttpBinding } from "./BindingHttp.ts";
 import type { DataLake } from "./DataLake.ts";
 
 /**
@@ -39,4 +41,13 @@ export interface ListDataLakeExceptions extends Binding.Service<
 > {}
 export const ListDataLakeExceptions = Binding.Service<ListDataLakeExceptions>(
   "AWS.SecurityLake.ListDataLakeExceptions",
+);
+
+export const ListDataLakeExceptionsHttp = Layer.effect(
+  ListDataLakeExceptions,
+  makeSecurityLakeDataLakeHttpBinding({
+    tag: "AWS.SecurityLake.ListDataLakeExceptions",
+    operation: securitylake.listDataLakeExceptions,
+    actions: ["securitylake:ListDataLakeExceptions"],
+  }),
 );

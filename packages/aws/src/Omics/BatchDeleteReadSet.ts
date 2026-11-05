@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 import type { SequenceStore } from "./SequenceStore.ts";
 
 export interface BatchDeleteReadSetRequest extends Omit<
@@ -40,4 +42,16 @@ export interface BatchDeleteReadSet extends Binding.Service<
 
 export const BatchDeleteReadSet = Binding.Service<BatchDeleteReadSet>(
   "AWS.Omics.BatchDeleteReadSet",
+);
+
+export const BatchDeleteReadSetHttp = Layer.effect(
+  BatchDeleteReadSet,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.BatchDeleteReadSet",
+    operation: omics.batchDeleteReadSet,
+    actions: ["omics:BatchDeleteReadSet"],
+    key: "sequenceStoreId",
+    id: (store: SequenceStore) => store.sequenceStoreId,
+    arn: (store: SequenceStore) => store.sequenceStoreArn,
+  }),
 );

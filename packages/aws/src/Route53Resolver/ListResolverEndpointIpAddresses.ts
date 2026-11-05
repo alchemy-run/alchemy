@@ -1,6 +1,8 @@
-import type * as r53r from "@distilled.cloud/aws/route53resolver";
+import * as r53r from "@distilled.cloud/aws/route53resolver";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53ResolverEndpointHttpBinding } from "./BindingHttp.ts";
 import type { ResolverEndpoint } from "./ResolverEndpoint.ts";
 
 export interface ListResolverEndpointIpAddressesRequest extends Omit<
@@ -50,4 +52,13 @@ export interface ListResolverEndpointIpAddresses extends Binding.Service<
 
 export const ListResolverEndpointIpAddresses = Binding.Service<ListResolverEndpointIpAddresses>(
   "AWS.Route53Resolver.ListResolverEndpointIpAddresses",
+);
+
+export const ListResolverEndpointIpAddressesHttp = Layer.effect(
+  ListResolverEndpointIpAddresses,
+  makeRoute53ResolverEndpointHttpBinding({
+    tag: "AWS.Route53Resolver.ListResolverEndpointIpAddresses",
+    operation: r53r.listResolverEndpointIpAddresses,
+    actions: ["route53resolver:ListResolverEndpointIpAddresses"],
+  }),
 );

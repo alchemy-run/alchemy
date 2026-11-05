@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:BatchUpdateStandardsControlAssociations`.
@@ -44,3 +46,12 @@ export const BatchUpdateStandardsControlAssociations =
   Binding.Service<BatchUpdateStandardsControlAssociations>(
     "AWS.SecurityHub.BatchUpdateStandardsControlAssociations",
   );
+
+export const BatchUpdateStandardsControlAssociationsHttp = Layer.effect(
+  BatchUpdateStandardsControlAssociations,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.BatchUpdateStandardsControlAssociations",
+    operation: securityhub.batchUpdateStandardsControlAssociations,
+    actions: ["securityhub:BatchUpdateStandardsControlAssociations"],
+  }),
+);

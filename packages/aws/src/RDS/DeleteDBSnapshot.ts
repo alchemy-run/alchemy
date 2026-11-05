@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteDBSnapshot` operation (IAM action
@@ -29,3 +31,12 @@ export interface DeleteDBSnapshot extends Binding.Service<
   >
 > {}
 export const DeleteDBSnapshot = Binding.Service<DeleteDBSnapshot>("AWS.RDS.DeleteDBSnapshot");
+
+export const DeleteDBSnapshotHttp = Layer.effect(
+  DeleteDBSnapshot,
+  makeRdsAccountHttpBinding({
+    tag: "AWS.RDS.DeleteDBSnapshot",
+    operation: rds.deleteDBSnapshot,
+    actions: ["rds:DeleteDBSnapshot"],
+  }),
+);

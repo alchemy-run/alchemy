@@ -1,7 +1,9 @@
-import type * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
+import { makeGroupHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `SetInstanceProtection` request with `AutoScalingGroupName` injected from
@@ -53,4 +55,13 @@ export interface SetInstanceProtection extends Binding.Service<
 
 export const SetInstanceProtection = Binding.Service<SetInstanceProtection>(
   "AWS.AutoScaling.SetInstanceProtection",
+);
+
+export const SetInstanceProtectionHttp = Layer.effect(
+  SetInstanceProtection,
+  makeGroupHttpBinding({
+    tag: "AWS.AutoScaling.SetInstanceProtection",
+    operation: autoscaling.setInstanceProtection,
+    actions: ["autoscaling:SetInstanceProtection"],
+  }),
 );

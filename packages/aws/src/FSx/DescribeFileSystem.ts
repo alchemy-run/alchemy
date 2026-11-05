@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxFileSystemHttpBinding } from "./BindingHttp.ts";
 import type { FileSystem } from "./FileSystem.ts";
 
 /**
@@ -35,3 +37,13 @@ export interface DescribeFileSystem extends Binding.Service<
   >
 > {}
 export const DescribeFileSystem = Binding.Service<DescribeFileSystem>("AWS.FSx.DescribeFileSystem");
+
+export const DescribeFileSystemHttp = Layer.effect(
+  DescribeFileSystem,
+  makeFSxFileSystemHttpBinding({
+    tag: "AWS.FSx.DescribeFileSystem",
+    operation: fsx.describeFileSystems,
+    actions: ["fsx:DescribeFileSystems"],
+    requestKey: "FileSystemIds",
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as acm from "@distilled.cloud/aws/acm";
+import * as acm from "@distilled.cloud/aws/acm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAcmCertificateHttpBinding } from "./BindingHttp.ts";
 import type { Certificate } from "./Certificate.ts";
 
 /**
@@ -57,3 +59,12 @@ export interface ExportCertificate extends Binding.Service<
 > {}
 
 export const ExportCertificate = Binding.Service<ExportCertificate>("AWS.ACM.ExportCertificate");
+
+export const ExportCertificateHttp = Layer.effect(
+  ExportCertificate,
+  makeAcmCertificateHttpBinding({
+    capability: "ExportCertificate",
+    iamActions: ["acm:ExportCertificate"],
+    operation: acm.exportCertificate,
+  }),
+);

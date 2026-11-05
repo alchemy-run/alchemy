@@ -1,6 +1,8 @@
-import type * as transfer from "@distilled.cloud/aws/transfer";
+import * as transfer from "@distilled.cloud/aws/transfer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTransferUserHttpBinding } from "./BindingHttp.ts";
 import type { User } from "./User.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface DeleteSshPublicKey extends Binding.Service<
 > {}
 export const DeleteSshPublicKey = Binding.Service<DeleteSshPublicKey>(
   "AWS.Transfer.DeleteSshPublicKey",
+);
+
+export const DeleteSshPublicKeyHttp = Layer.effect(
+  DeleteSshPublicKey,
+  makeTransferUserHttpBinding({
+    tag: "AWS.Transfer.DeleteSshPublicKey",
+    operation: transfer.deleteSshPublicKey,
+    actions: ["transfer:DeleteSshPublicKey"],
+  }),
 );

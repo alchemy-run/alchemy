@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsTopicHttpBinding } from "./BindingHttp.ts";
 import type { Topic } from "./Topic.ts";
 
 export interface PublishRequest extends Omit<
@@ -59,3 +61,13 @@ export interface Publish extends Binding.Service<
 > {}
 
 export const Publish = Binding.Service<Publish>("AWS.SNS.Publish");
+
+export const PublishHttp = Layer.effect(
+  Publish,
+  makeSnsTopicHttpBinding({
+    tag: "AWS.SNS.Publish",
+    operation: sns.publish,
+    actions: ["sns:Publish"],
+    key: "TopicArn",
+  }),
+);

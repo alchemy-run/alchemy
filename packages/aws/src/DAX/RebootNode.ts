@@ -1,6 +1,8 @@
-import type * as dax from "@distilled.cloud/aws/dax";
+import * as dax from "@distilled.cloud/aws/dax";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDaxClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface RebootNode extends Binding.Service<
   >
 > {}
 export const RebootNode = Binding.Service<RebootNode>("AWS.DAX.RebootNode");
+
+export const RebootNodeHttp = Layer.effect(
+  RebootNode,
+  makeDaxClusterHttpBinding({
+    tag: "AWS.DAX.RebootNode",
+    operation: dax.rebootNode,
+    actions: ["dax:RebootNode"],
+  }),
+);

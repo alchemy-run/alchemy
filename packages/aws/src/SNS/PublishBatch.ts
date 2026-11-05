@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsTopicHttpBinding } from "./BindingHttp.ts";
 import type { Topic } from "./Topic.ts";
 
 export interface PublishBatchRequest extends Omit<sns.PublishBatchInput, "TopicArn"> {}
@@ -44,3 +46,13 @@ export interface PublishBatch extends Binding.Service<
 > {}
 
 export const PublishBatch = Binding.Service<PublishBatch>("AWS.SNS.PublishBatch");
+
+export const PublishBatchHttp = Layer.effect(
+  PublishBatch,
+  makeSnsTopicHttpBinding({
+    tag: "AWS.SNS.PublishBatch",
+    operation: sns.publishBatch,
+    actions: ["sns:Publish"],
+    key: "TopicArn",
+  }),
+);

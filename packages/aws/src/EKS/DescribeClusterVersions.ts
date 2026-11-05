@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `eks:DescribeClusterVersions`.
@@ -34,4 +36,13 @@ export interface DescribeClusterVersions extends Binding.Service<
 > {}
 export const DescribeClusterVersions = Binding.Service<DescribeClusterVersions>(
   "AWS.EKS.DescribeClusterVersions",
+);
+
+export const DescribeClusterVersionsHttp = Layer.effect(
+  DescribeClusterVersions,
+  makeEKSAccountHttpBinding({
+    tag: "AWS.EKS.DescribeClusterVersions",
+    operation: eks.describeClusterVersions,
+    actions: ["eks:DescribeClusterVersions"],
+  }),
 );

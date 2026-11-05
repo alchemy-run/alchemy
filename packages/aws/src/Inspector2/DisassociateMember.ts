@@ -1,6 +1,8 @@
-import type * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInspector2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `inspector2:DisassociateMember`.
@@ -32,4 +34,13 @@ export interface DisassociateMember extends Binding.Service<
 > {}
 export const DisassociateMember = Binding.Service<DisassociateMember>(
   "AWS.Inspector2.DisassociateMember",
+);
+
+export const DisassociateMemberHttp = Layer.effect(
+  DisassociateMember,
+  makeInspector2AccountHttpBinding({
+    tag: "AWS.Inspector2.DisassociateMember",
+    operation: inspector2.disassociateMember,
+    actions: ["inspector2:DisassociateMember"],
+  }),
 );

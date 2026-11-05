@@ -1,6 +1,8 @@
-import type * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
+import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSmsVoiceAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `sms-voice:PutMessageFeedback`.
@@ -40,4 +42,13 @@ export interface PutMessageFeedback extends Binding.Service<
 > {}
 export const PutMessageFeedback = Binding.Service<PutMessageFeedback>(
   "AWS.PinpointSMSVoiceV2.PutMessageFeedback",
+);
+
+export const PutMessageFeedbackHttp = Layer.effect(
+  PutMessageFeedback,
+  makeSmsVoiceAccountHttpBinding({
+    tag: "AWS.PinpointSMSVoiceV2.PutMessageFeedback",
+    operation: smsvoice.putMessageFeedback,
+    actions: ["sms-voice:PutMessageFeedback"],
+  }),
 );

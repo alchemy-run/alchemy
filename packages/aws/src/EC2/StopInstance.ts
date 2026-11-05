@@ -1,6 +1,8 @@
-import type * as ec2 from "@distilled.cloud/aws/ec2";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -46,3 +48,13 @@ export interface StopInstance extends Binding.Service<
 > {}
 
 export const StopInstance = Binding.Service<StopInstance>("AWS.EC2.StopInstance");
+
+export const StopInstanceHttp = Layer.effect(
+  StopInstance,
+  makeInstanceHttpBinding({
+    tag: "AWS.EC2.StopInstance",
+    operation: ec2.stopInstances,
+    actions: ["ec2:StopInstances"],
+    requestKey: "InstanceIds",
+  }),
+);

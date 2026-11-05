@@ -1,6 +1,8 @@
-import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
+import * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53DomainsHttpBinding } from "./BindingHttp.ts";
 
 export interface RegisterDomainRequest extends route53domains.RegisterDomainRequest {}
 
@@ -56,3 +58,17 @@ export interface RegisterDomain extends Binding.Service<
   >
 > {}
 export const RegisterDomain = Binding.Service<RegisterDomain>("AWS.Route53Domains.RegisterDomain");
+
+export const RegisterDomainHttp = Layer.effect(
+  RegisterDomain,
+  makeRoute53DomainsHttpBinding({
+    capability: "RegisterDomain",
+    // RegisterDomain pre-validates that the caller can create the hosted
+    // zone Route 53 auto-creates during registration — without
+    // route53:CreateHostedZone the API rejects the call with
+    // AccessDeniedException ("not authorized to perform:
+    // route53:CreateHostedZone") before even validating the TLD.
+    iamActions: ["route53domains:RegisterDomain", "route53:CreateHostedZone"],
+    operation: route53domains.registerDomain,
+  }),
+);

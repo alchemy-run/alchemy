@@ -1,6 +1,8 @@
-import type * as incidents from "@distilled.cloud/aws/ssm-incidents";
+import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIncidentsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-incidents:GetTimelineEvent`.
@@ -33,4 +35,13 @@ export interface GetTimelineEvent extends Binding.Service<
 > {}
 export const GetTimelineEvent = Binding.Service<GetTimelineEvent>(
   "AWS.SSMIncidents.GetTimelineEvent",
+);
+
+export const GetTimelineEventHttp = Layer.effect(
+  GetTimelineEvent,
+  makeIncidentsAccountHttpBinding({
+    tag: "AWS.SSMIncidents.GetTimelineEvent",
+    operation: incidents.getTimelineEvent,
+    actions: ["ssm-incidents:GetTimelineEvent"],
+  }),
 );

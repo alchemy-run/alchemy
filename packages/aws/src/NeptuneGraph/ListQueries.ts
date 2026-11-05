@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneGraphGraphHttpBinding } from "./BindingHttp.ts";
 import type { Graph } from "./Graph.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface ListQueries extends Binding.Service<
   >
 > {}
 export const ListQueries = Binding.Service<ListQueries>("AWS.NeptuneGraph.ListQueries");
+
+export const ListQueriesHttp = Layer.effect(
+  ListQueries,
+  makeNeptuneGraphGraphHttpBinding({
+    tag: "AWS.NeptuneGraph.ListQueries",
+    operation: neptunegraph.listQueries,
+    actions: ["neptune-graph:ListQueries"],
+  }),
+);

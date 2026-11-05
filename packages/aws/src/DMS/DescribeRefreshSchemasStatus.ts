@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsEndpointScopedHttpBinding } from "./BindingHttp.ts";
 import type { Endpoint } from "./Endpoint.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface DescribeRefreshSchemasStatus extends Binding.Service<
 
 export const DescribeRefreshSchemasStatus = Binding.Service<DescribeRefreshSchemasStatus>(
   "AWS.DMS.DescribeRefreshSchemasStatus",
+);
+
+export const DescribeRefreshSchemasStatusHttp = Layer.effect(
+  DescribeRefreshSchemasStatus,
+  makeDmsEndpointScopedHttpBinding({
+    tag: "AWS.DMS.DescribeRefreshSchemasStatus",
+    actions: ["dms:DescribeRefreshSchemasStatus"],
+    operation: dms.describeRefreshSchemasStatus,
+  }),
 );

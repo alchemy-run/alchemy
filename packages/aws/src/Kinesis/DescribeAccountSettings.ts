@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKinesisAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface DescribeAccountSettingsRequest extends Kinesis.DescribeAccountSettingsInput {}
 
@@ -34,4 +36,13 @@ export interface DescribeAccountSettings extends Binding.Service<
 
 export const DescribeAccountSettings = Binding.Service<DescribeAccountSettings>(
   "AWS.Kinesis.DescribeAccountSettings",
+);
+
+export const DescribeAccountSettingsHttp = Layer.effect(
+  DescribeAccountSettings,
+  makeKinesisAccountHttpBinding({
+    tag: "AWS.Kinesis.DescribeAccountSettings",
+    operation: Kinesis.describeAccountSettings,
+    actions: ["kinesis:DescribeAccountSettings"],
+  }),
 );

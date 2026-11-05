@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:GetClassificationExportConfiguration`.
@@ -37,3 +39,12 @@ export const GetClassificationExportConfiguration =
   Binding.Service<GetClassificationExportConfiguration>(
     "AWS.Macie2.GetClassificationExportConfiguration",
   );
+
+export const GetClassificationExportConfigurationHttp = Layer.effect(
+  GetClassificationExportConfiguration,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.GetClassificationExportConfiguration",
+    operation: macie2.getClassificationExportConfiguration,
+    actions: ["macie2:GetClassificationExportConfiguration"],
+  }),
+);

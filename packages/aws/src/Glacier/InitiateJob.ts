@@ -1,6 +1,8 @@
-import type * as glacier from "@distilled.cloud/aws/glacier";
+import * as glacier from "@distilled.cloud/aws/glacier";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlacierVaultHttpBinding } from "./BindingHttp.ts";
 import type { Vault } from "./Vault.ts";
 
 /**
@@ -47,3 +49,12 @@ export interface InitiateJob extends Binding.Service<
   >
 > {}
 export const InitiateJob = Binding.Service<InitiateJob>("AWS.Glacier.InitiateJob");
+
+export const InitiateJobHttp = Layer.effect(
+  InitiateJob,
+  makeGlacierVaultHttpBinding({
+    tag: "AWS.Glacier.InitiateJob",
+    operation: glacier.initiateJob,
+    actions: ["glacier:InitiateJob"],
+  }),
+);

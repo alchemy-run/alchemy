@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface DescribeTasksRequest extends Omit<ECS.DescribeTasksRequest, "cluster"> {}
@@ -36,3 +38,15 @@ export interface DescribeTasks extends Binding.Service<
   >
 > {}
 export const DescribeTasks = Binding.Service<DescribeTasks>("AWS.ECS.DescribeTasks");
+
+export const DescribeTasksHttp = Layer.effect(
+  DescribeTasks,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.DescribeTasks",
+    operation: ECS.describeTasks,
+    actions: ["ecs:DescribeTasks"],
+    // `ecs:DescribeTasks` authorizes against the task resource:
+    // arn:aws:ecs:{region}:{account}:task/{clusterName}/*
+    resources: ["task"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as mwaa from "@distilled.cloud/aws/mwaa";
+import * as mwaa from "@distilled.cloud/aws/mwaa";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMWAAEnvironmentHttpBinding } from "./BindingHttp.ts";
 import type { Environment } from "./Environment.ts";
 
 /**
@@ -44,3 +46,12 @@ export interface CreateCliToken extends Binding.Service<
 > {}
 
 export const CreateCliToken = Binding.Service<CreateCliToken>("AWS.MWAA.CreateCliToken");
+
+export const CreateCliTokenHttp = Layer.effect(
+  CreateCliToken,
+  makeMWAAEnvironmentHttpBinding({
+    tag: "AWS.MWAA.CreateCliToken",
+    operation: mwaa.createCliToken,
+    actions: ["airflow:CreateCliToken"],
+  }),
+);

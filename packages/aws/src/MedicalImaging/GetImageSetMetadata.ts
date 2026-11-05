@@ -1,6 +1,8 @@
-import type * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
+import * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMedicalImagingDatastoreHttpBinding } from "./BindingHttp.ts";
 import type { Datastore } from "./Datastore.ts";
 
 /**
@@ -49,4 +51,13 @@ export interface GetImageSetMetadata extends Binding.Service<
 > {}
 export const GetImageSetMetadata = Binding.Service<GetImageSetMetadata>(
   "AWS.MedicalImaging.GetImageSetMetadata",
+);
+
+export const GetImageSetMetadataHttp = Layer.effect(
+  GetImageSetMetadata,
+  makeMedicalImagingDatastoreHttpBinding({
+    tag: "AWS.MedicalImaging.GetImageSetMetadata",
+    operation: medicalimaging.getImageSetMetadata,
+    actions: ["medical-imaging:GetImageSetMetadata"],
+  }),
 );

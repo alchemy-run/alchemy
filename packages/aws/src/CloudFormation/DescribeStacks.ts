@@ -1,6 +1,8 @@
-import type * as cloudformation from "@distilled.cloud/aws/cloudformation";
+import * as cloudformation from "@distilled.cloud/aws/cloudformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudFormationStackHttpBinding } from "./BindingHttp.ts";
 import type { Stack } from "./Stack.ts";
 
 /**
@@ -37,3 +39,12 @@ export interface DescribeStacks extends Binding.Service<
   >
 > {}
 export const DescribeStacks = Binding.Service<DescribeStacks>("AWS.CloudFormation.DescribeStacks");
+
+export const DescribeStacksHttp = Layer.effect(
+  DescribeStacks,
+  makeCloudFormationStackHttpBinding({
+    tag: "AWS.CloudFormation.DescribeStacks",
+    operation: cloudformation.describeStacks,
+    actions: ["cloudformation:DescribeStacks"],
+  }),
+);

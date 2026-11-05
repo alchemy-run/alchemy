@@ -1,6 +1,8 @@
-import type * as location from "@distilled.cloud/aws/location";
+import * as location from "@distilled.cloud/aws/location";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLocationCalculatorHttpBinding } from "./BindingHttp.ts";
 import type { RouteCalculator } from "./RouteCalculator.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface CalculateRouteMatrix extends Binding.Service<
 > {}
 export const CalculateRouteMatrix = Binding.Service<CalculateRouteMatrix>(
   "AWS.Location.CalculateRouteMatrix",
+);
+
+export const CalculateRouteMatrixHttp = Layer.effect(
+  CalculateRouteMatrix,
+  makeLocationCalculatorHttpBinding({
+    tag: "AWS.Location.CalculateRouteMatrix",
+    operation: location.calculateRouteMatrix,
+    actions: ["geo:CalculateRouteMatrix"],
+  }),
 );

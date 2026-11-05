@@ -1,6 +1,8 @@
-import type * as schemas from "@distilled.cloud/aws/schemas";
+import * as schemas from "@distilled.cloud/aws/schemas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSchemasDiscovererHttpBinding } from "./BindingHttp.ts";
 import type { Discoverer } from "./Discoverer.ts";
 
 /**
@@ -34,3 +36,14 @@ export interface StopDiscoverer extends Binding.Service<
   >
 > {}
 export const StopDiscoverer = Binding.Service<StopDiscoverer>("AWS.Schemas.StopDiscoverer");
+
+export const StopDiscovererHttp = Layer.effect(
+  StopDiscoverer,
+  makeSchemasDiscovererHttpBinding({
+    tag: "AWS.Schemas.StopDiscoverer",
+    operation: schemas.stopDiscoverer,
+    actions: ["schemas:StopDiscoverer"],
+    // StopDiscoverer disables the discoverer's managed EventBridge rule.
+    ruleActions: ["events:DisableRule"],
+  }),
+);

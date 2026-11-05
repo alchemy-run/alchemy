@@ -1,6 +1,8 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-agent";
+import * as bedrock from "@distilled.cloud/aws/bedrock-agent";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataSourceScopedHttpBinding } from "./BindingHttp.ts";
 import type { DataSource } from "./DataSource.ts";
 
 /**
@@ -53,4 +55,13 @@ export interface GetKnowledgeBaseDocuments extends Binding.Service<
 > {}
 export const GetKnowledgeBaseDocuments = Binding.Service<GetKnowledgeBaseDocuments>(
   "AWS.Bedrock.GetKnowledgeBaseDocuments",
+);
+
+export const GetKnowledgeBaseDocumentsHttp = Layer.effect(
+  GetKnowledgeBaseDocuments,
+  makeDataSourceScopedHttpBinding({
+    tag: "AWS.Bedrock.GetKnowledgeBaseDocuments",
+    operation: bedrock.getKnowledgeBaseDocuments,
+    actions: ["bedrock:GetKnowledgeBaseDocuments"],
+  }),
 );

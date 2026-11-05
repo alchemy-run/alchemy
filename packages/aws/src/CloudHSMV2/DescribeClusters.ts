@@ -1,6 +1,8 @@
-import type * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudHsmHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeClusters` operation (IAM action
@@ -37,4 +39,13 @@ export interface DescribeClusters extends Binding.Service<
 > {}
 export const DescribeClusters = Binding.Service<DescribeClusters>(
   "AWS.CloudHSMV2.DescribeClusters",
+);
+
+export const DescribeClustersHttp = Layer.effect(
+  DescribeClusters,
+  makeCloudHsmHttpBinding({
+    tag: "AWS.CloudHSMV2.DescribeClusters",
+    operation: cloudhsm.describeClusters,
+    actions: ["cloudhsm:DescribeClusters"],
+  }),
 );

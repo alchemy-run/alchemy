@@ -1,6 +1,8 @@
-import type * as neptune from "@distilled.cloud/aws/neptune";
+import * as neptune from "@distilled.cloud/aws/neptune";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeDBClusterSnapshots` operation (IAM action
@@ -34,4 +36,13 @@ export interface DescribeDBClusterSnapshots extends Binding.Service<
 > {}
 export const DescribeDBClusterSnapshots = Binding.Service<DescribeDBClusterSnapshots>(
   "AWS.Neptune.DescribeDBClusterSnapshots",
+);
+
+export const DescribeDBClusterSnapshotsHttp = Layer.effect(
+  DescribeDBClusterSnapshots,
+  makeNeptuneAccountHttpBinding({
+    tag: "AWS.Neptune.DescribeDBClusterSnapshots",
+    operation: neptune.describeDBClusterSnapshots,
+    actions: ["rds:DescribeDBClusterSnapshots"],
+  }),
 );

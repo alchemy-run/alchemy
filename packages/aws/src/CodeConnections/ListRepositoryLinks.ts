@@ -1,6 +1,8 @@
-import type * as codeconnections from "@distilled.cloud/aws/codeconnections";
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeConnectionsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListRepositoryLinks}.
@@ -45,4 +47,13 @@ export interface ListRepositoryLinks extends Binding.Service<
 
 export const ListRepositoryLinks = Binding.Service<ListRepositoryLinks>(
   "AWS.CodeConnections.ListRepositoryLinks",
+);
+
+export const ListRepositoryLinksHttp = Layer.effect(
+  ListRepositoryLinks,
+  makeCodeConnectionsAccountHttpBinding({
+    tag: "AWS.CodeConnections.ListRepositoryLinks",
+    actions: ["codeconnections:ListRepositoryLinks"],
+    operation: codeconnections.listRepositoryLinks,
+  }),
 );

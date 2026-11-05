@@ -1,6 +1,8 @@
-import type * as osis from "@distilled.cloud/aws/osis";
+import * as osis from "@distilled.cloud/aws/osis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOsisPipelineHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 /**
@@ -37,4 +39,15 @@ export interface GetPipelineChangeProgress extends Binding.Service<
 > {}
 export const GetPipelineChangeProgress = Binding.Service<GetPipelineChangeProgress>(
   "AWS.OSIS.GetPipelineChangeProgress",
+);
+
+export const GetPipelineChangeProgressHttp = Layer.effect(
+  GetPipelineChangeProgress,
+  makeOsisPipelineHttpBinding({
+    tag: "AWS.OSIS.GetPipelineChangeProgress",
+    operation: osis.getPipelineChangeProgress,
+    actions: ["osis:GetPipelineChangeProgress"],
+    requestKey: "PipelineName",
+    identifier: (pipeline) => pipeline.pipelineName,
+  }),
 );

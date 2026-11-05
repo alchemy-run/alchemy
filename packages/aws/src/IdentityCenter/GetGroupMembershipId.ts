@@ -1,6 +1,8 @@
-import type * as identitystore from "@distilled.cloud/aws/identitystore";
+import * as identitystore from "@distilled.cloud/aws/identitystore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIdentityStoreHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -41,4 +43,13 @@ export interface GetGroupMembershipId extends Binding.Service<
 > {}
 export const GetGroupMembershipId = Binding.Service<GetGroupMembershipId>(
   "AWS.IdentityCenter.GetGroupMembershipId",
+);
+
+export const GetGroupMembershipIdHttp = Layer.effect(
+  GetGroupMembershipId,
+  makeIdentityStoreHttpBinding({
+    tag: "AWS.IdentityCenter.GetGroupMembershipId",
+    operation: identitystore.getGroupMembershipId,
+    actions: ["identitystore:GetGroupMembershipId"],
+  }),
 );

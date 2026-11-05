@@ -1,6 +1,8 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQueueGrantHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface CancelMessageMoveTaskRequest extends sqs.CancelMessageMoveTaskRequest {}
@@ -42,4 +44,15 @@ export interface CancelMessageMoveTask extends Binding.Service<
 
 export const CancelMessageMoveTask = Binding.Service<CancelMessageMoveTask>(
   "AWS.SQS.CancelMessageMoveTask",
+);
+
+export const CancelMessageMoveTaskHttp = Layer.effect(
+  CancelMessageMoveTask,
+  // The request identifies the task by `TaskHandle` only; the bound queue
+  // exists purely to scope the IAM grant to the redrive source.
+  makeQueueGrantHttpBinding({
+    tag: "AWS.SQS.CancelMessageMoveTask",
+    operation: sqs.cancelMessageMoveTask,
+    actions: ["sqs:CancelMessageMoveTask"],
+  }),
 );

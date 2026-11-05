@@ -1,6 +1,8 @@
-import type * as iotw from "@distilled.cloud/aws/iot-wireless";
+import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotWirelessDeviceHttpBinding } from "./BindingHttp.ts";
 import type { WirelessDevice } from "./WirelessDevice.ts";
 
 /**
@@ -45,4 +47,17 @@ export interface DeleteQueuedMessages extends Binding.Service<
 > {}
 export const DeleteQueuedMessages = Binding.Service<DeleteQueuedMessages>(
   "AWS.IoTWireless.DeleteQueuedMessages",
+);
+
+export const DeleteQueuedMessagesHttp = Layer.effect(
+  DeleteQueuedMessages,
+  makeIotWirelessDeviceHttpBinding({
+    capability: "DeleteQueuedMessages",
+    iamActions: ["iotwireless:DeleteQueuedMessages"],
+    operation: iotw.deleteQueuedMessages,
+    prepare: (request: DeleteQueuedMessagesRequest, wirelessDeviceId) => ({
+      ...request,
+      Id: wirelessDeviceId,
+    }),
+  }),
 );

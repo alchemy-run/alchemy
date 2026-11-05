@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StartSegmentDetection` — start asynchronous detection of technical cues and shot segments in a stored video.
@@ -45,4 +47,13 @@ export interface StartSegmentDetection extends Binding.Service<
 > {}
 export const StartSegmentDetection = Binding.Service<StartSegmentDetection>(
   "AWS.Rekognition.StartSegmentDetection",
+);
+
+export const StartSegmentDetectionHttp = Layer.effect(
+  StartSegmentDetection,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StartSegmentDetection",
+    operation: rekognition.startSegmentDetection,
+    actions: ["rekognition:StartSegmentDetection"],
+  }),
 );

@@ -1,7 +1,10 @@
-import type * as amplify from "@distilled.cloud/aws/amplify";
+import * as amplify from "@distilled.cloud/aws/amplify";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { App } from "./App.ts";
+import { makeAmplifyHttpBinding } from "./BindingHttp.ts";
 
 export interface StartDeploymentRequest extends Omit<amplify.StartDeploymentRequest, "appId"> {}
 
@@ -51,3 +54,13 @@ export interface StartDeployment extends Binding.Service<
 > {}
 
 export const StartDeployment = Binding.Service<StartDeployment>("AWS.Amplify.StartDeployment");
+
+export const StartDeploymentHttp = Layer.effect(
+  StartDeployment,
+  makeAmplifyHttpBinding({
+    name: "StartDeployment",
+    operation: amplify.startDeployment,
+    actions: ["amplify:StartDeployment"],
+    resources: (app) => [Output.interpolate`${app.appArn}/branches/*`],
+  }),
+);

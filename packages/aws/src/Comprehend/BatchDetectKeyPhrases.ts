@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:BatchDetectKeyPhrases` — extract key phrases for a batch of up to 25 documents in a single call.
@@ -40,4 +42,13 @@ export interface BatchDetectKeyPhrases extends Binding.Service<
 > {}
 export const BatchDetectKeyPhrases = Binding.Service<BatchDetectKeyPhrases>(
   "AWS.Comprehend.BatchDetectKeyPhrases",
+);
+
+export const BatchDetectKeyPhrasesHttp = Layer.effect(
+  BatchDetectKeyPhrases,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.BatchDetectKeyPhrases",
+    operation: comprehend.batchDetectKeyPhrases,
+    actions: ["comprehend:BatchDetectKeyPhrases"],
+  }),
 );

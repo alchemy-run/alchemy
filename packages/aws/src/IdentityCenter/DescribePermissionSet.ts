@@ -1,6 +1,8 @@
-import type * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
+import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIdentityCenterInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface DescribePermissionSet extends Binding.Service<
 > {}
 export const DescribePermissionSet = Binding.Service<DescribePermissionSet>(
   "AWS.IdentityCenter.DescribePermissionSet",
+);
+
+export const DescribePermissionSetHttp = Layer.effect(
+  DescribePermissionSet,
+  makeIdentityCenterInstanceHttpBinding({
+    tag: "AWS.IdentityCenter.DescribePermissionSet",
+    operation: ssoAdmin.describePermissionSet,
+    actions: ["sso:DescribePermissionSet"],
+  }),
 );

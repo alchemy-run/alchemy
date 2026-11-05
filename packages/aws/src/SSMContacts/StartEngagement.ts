@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeContactHttpBinding } from "./BindingHttp.ts";
 import type { Contact } from "./Contact.ts";
 
 /**
@@ -40,3 +42,12 @@ export interface StartEngagement extends Binding.Service<
   >
 > {}
 export const StartEngagement = Binding.Service<StartEngagement>("AWS.SSMContacts.StartEngagement");
+
+export const StartEngagementHttp = Layer.effect(
+  StartEngagement,
+  makeContactHttpBinding({
+    tag: "AWS.SSMContacts.StartEngagement",
+    operation: ssm.startEngagement,
+    actions: ["ssm-contacts:StartEngagement"],
+  }),
+);

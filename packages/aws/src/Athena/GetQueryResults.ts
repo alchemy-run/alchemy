@@ -1,6 +1,8 @@
-import type * as athena from "@distilled.cloud/aws/athena";
+import * as athena from "@distilled.cloud/aws/athena";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWorkGroupScopedHttpBinding } from "./BindingHttp.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
 
 /**
@@ -37,3 +39,12 @@ export interface GetQueryResults extends Binding.Service<
 > {}
 
 export const GetQueryResults = Binding.Service<GetQueryResults>("AWS.Athena.GetQueryResults");
+
+export const GetQueryResultsHttp = Layer.effect(
+  GetQueryResults,
+  makeWorkGroupScopedHttpBinding({
+    tag: "AWS.Athena.GetQueryResults",
+    operation: athena.getQueryResults,
+    actions: ["athena:GetQueryResults"],
+  }),
+);

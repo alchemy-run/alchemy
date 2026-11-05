@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxFileSystemHttpBinding } from "./BindingHttp.ts";
 import type { FileSystem } from "./FileSystem.ts";
 
 /**
@@ -44,4 +46,16 @@ export interface CreateDataRepositoryTask extends Binding.Service<
 > {}
 export const CreateDataRepositoryTask = Binding.Service<CreateDataRepositoryTask>(
   "AWS.FSx.CreateDataRepositoryTask",
+);
+
+export const CreateDataRepositoryTaskHttp = Layer.effect(
+  CreateDataRepositoryTask,
+  makeFSxFileSystemHttpBinding({
+    tag: "AWS.FSx.CreateDataRepositoryTask",
+    operation: fsx.createDataRepositoryTask,
+    actions: ["fsx:CreateDataRepositoryTask", "fsx:TagResource"],
+    // The operation also authorizes on the new task's own ARN, which is
+    // unknowable at deploy time.
+    extraResourceArns: ["arn:aws:fsx:*:*:task/*"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as efs from "@distilled.cloud/aws/efs";
+import * as efs from "@distilled.cloud/aws/efs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEfsFileSystemHttpBinding } from "./BindingHttp.ts";
 import type { FileSystem } from "./FileSystem.ts";
 
 /**
@@ -53,3 +55,16 @@ export interface CreateAccessPoint extends Binding.Service<
   >
 > {}
 export const CreateAccessPoint = Binding.Service<CreateAccessPoint>("AWS.EFS.CreateAccessPoint");
+
+export const CreateAccessPointHttp = Layer.effect(
+  CreateAccessPoint,
+  makeEfsFileSystemHttpBinding({
+    tag: "AWS.EFS.CreateAccessPoint",
+    operation: efs.createAccessPoint,
+    actions: ["elasticfilesystem:CreateAccessPoint"],
+    // Tag-on-create authorizes elasticfilesystem:TagResource against the
+    // ARN of the access point being created, which is unknowable at deploy
+    // time — grant it on `*`.
+    wildcardActions: ["elasticfilesystem:TagResource"],
+  }),
+);

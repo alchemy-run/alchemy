@@ -1,6 +1,8 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -42,3 +44,12 @@ export interface SubmitFeedback extends Binding.Service<
   >
 > {}
 export const SubmitFeedback = Binding.Service<SubmitFeedback>("AWS.Kendra.SubmitFeedback");
+
+export const SubmitFeedbackHttp = Layer.effect(
+  SubmitFeedback,
+  makeKendraIndexHttpBinding({
+    tag: "AWS.Kendra.SubmitFeedback",
+    operation: kendra.submitFeedback,
+    actions: ["kendra:SubmitFeedback"],
+  }),
+);

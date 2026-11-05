@@ -1,6 +1,8 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraDataSourceHttpBinding } from "./BindingHttp.ts";
 import type { DataSource } from "./DataSource.ts";
 
 /**
@@ -34,4 +36,13 @@ export interface StartDataSourceSyncJob extends Binding.Service<
 > {}
 export const StartDataSourceSyncJob = Binding.Service<StartDataSourceSyncJob>(
   "AWS.Kendra.StartDataSourceSyncJob",
+);
+
+export const StartDataSourceSyncJobHttp = Layer.effect(
+  StartDataSourceSyncJob,
+  makeKendraDataSourceHttpBinding({
+    tag: "AWS.Kendra.StartDataSourceSyncJob",
+    operation: kendra.startDataSourceSyncJob,
+    actions: ["kendra:StartDataSourceSyncJob"],
+  }),
 );

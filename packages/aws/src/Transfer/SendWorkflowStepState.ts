@@ -1,6 +1,8 @@
-import type * as transfer from "@distilled.cloud/aws/transfer";
+import * as transfer from "@distilled.cloud/aws/transfer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTransferAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transfer:SendWorkflowStepState`.
@@ -41,4 +43,13 @@ export interface SendWorkflowStepState extends Binding.Service<
 > {}
 export const SendWorkflowStepState = Binding.Service<SendWorkflowStepState>(
   "AWS.Transfer.SendWorkflowStepState",
+);
+
+export const SendWorkflowStepStateHttp = Layer.effect(
+  SendWorkflowStepState,
+  makeTransferAccountHttpBinding({
+    tag: "AWS.Transfer.SendWorkflowStepState",
+    operation: transfer.sendWorkflowStepState,
+    actions: ["transfer:SendWorkflowStepState"],
+  }),
 );

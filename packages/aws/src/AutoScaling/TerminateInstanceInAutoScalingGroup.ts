@@ -1,7 +1,9 @@
-import type * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
+import { makeGroupHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `TerminateInstanceInAutoScalingGroup` request. The operation is
@@ -57,3 +59,12 @@ export const TerminateInstanceInAutoScalingGroup =
   Binding.Service<TerminateInstanceInAutoScalingGroup>(
     "AWS.AutoScaling.TerminateInstanceInAutoScalingGroup",
   );
+
+export const TerminateInstanceInAutoScalingGroupHttp = Layer.effect(
+  TerminateInstanceInAutoScalingGroup,
+  makeGroupHttpBinding({
+    tag: "AWS.AutoScaling.TerminateInstanceInAutoScalingGroup",
+    operation: autoscaling.terminateInstanceInAutoScalingGroup,
+    actions: ["autoscaling:TerminateInstanceInAutoScalingGroup"],
+  }),
+);

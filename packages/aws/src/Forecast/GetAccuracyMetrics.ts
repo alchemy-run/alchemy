@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:GetAccuracyMetrics` — read a trained
@@ -36,4 +38,13 @@ export interface GetAccuracyMetrics extends Binding.Service<
 > {}
 export const GetAccuracyMetrics = Binding.Service<GetAccuracyMetrics>(
   "AWS.Forecast.GetAccuracyMetrics",
+);
+
+export const GetAccuracyMetricsHttp = Layer.effect(
+  GetAccuracyMetrics,
+  makeForecastHttpBinding({
+    capability: "GetAccuracyMetrics",
+    iamActions: ["forecast:GetAccuracyMetrics"],
+    operation: forecast.getAccuracyMetrics,
+  }),
 );

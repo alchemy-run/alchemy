@@ -1,6 +1,8 @@
-import type * as geoMaps from "@distilled.cloud/aws/geo-maps";
+import * as geoMaps from "@distilled.cloud/aws/geo-maps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoMapsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-maps:GetStaticMap` — render a static map image
@@ -44,3 +46,12 @@ export interface GetStaticMap extends Binding.Service<
   >
 > {}
 export const GetStaticMap = Binding.Service<GetStaticMap>("AWS.GeoMaps.GetStaticMap");
+
+export const GetStaticMapHttp = Layer.effect(
+  GetStaticMap,
+  makeGeoMapsHttpBinding({
+    capability: "GetStaticMap",
+    iamActions: ["geo-maps:GetStaticMap"],
+    operation: geoMaps.getStaticMap,
+  }),
+);

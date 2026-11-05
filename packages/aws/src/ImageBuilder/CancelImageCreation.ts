@@ -1,6 +1,8 @@
-import type * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeImageBuilderAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `imagebuilder:CancelImageCreation`.
@@ -37,4 +39,13 @@ export interface CancelImageCreation extends Binding.Service<
 > {}
 export const CancelImageCreation = Binding.Service<CancelImageCreation>(
   "AWS.ImageBuilder.CancelImageCreation",
+);
+
+export const CancelImageCreationHttp = Layer.effect(
+  CancelImageCreation,
+  makeImageBuilderAccountHttpBinding({
+    tag: "AWS.ImageBuilder.CancelImageCreation",
+    operation: imagebuilder.cancelImageCreation,
+    actions: ["imagebuilder:CancelImageCreation"],
+  }),
 );

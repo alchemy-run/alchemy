@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface GetUserProfileRequest extends Omit<
@@ -38,3 +40,12 @@ export interface GetUserProfile extends Binding.Service<
   >
 > {}
 export const GetUserProfile = Binding.Service<GetUserProfile>("AWS.DataZone.GetUserProfile");
+
+export const GetUserProfileHttp = Layer.effect(
+  GetUserProfile,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.GetUserProfile",
+    operation: datazone.getUserProfile,
+    actions: ["datazone:GetUserProfile"],
+  }),
+);

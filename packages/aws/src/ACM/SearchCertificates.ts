@@ -1,6 +1,8 @@
-import type * as acm from "@distilled.cloud/aws/acm";
+import * as acm from "@distilled.cloud/aws/acm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAcmAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface SearchCertificatesRequest extends acm.SearchCertificatesRequest {}
 
@@ -38,3 +40,12 @@ export interface SearchCertificates extends Binding.Service<
 > {}
 
 export const SearchCertificates = Binding.Service<SearchCertificates>("AWS.ACM.SearchCertificates");
+
+export const SearchCertificatesHttp = Layer.effect(
+  SearchCertificates,
+  makeAcmAccountHttpBinding({
+    capability: "SearchCertificates",
+    iamActions: ["acm:SearchCertificates"],
+    operation: acm.searchCertificates,
+  }),
+);

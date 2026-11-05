@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface GetTaskProtectionRequest extends Omit<ECS.GetTaskProtectionRequest, "cluster"> {}
@@ -35,3 +37,15 @@ export interface GetTaskProtection extends Binding.Service<
   >
 > {}
 export const GetTaskProtection = Binding.Service<GetTaskProtection>("AWS.ECS.GetTaskProtection");
+
+export const GetTaskProtectionHttp = Layer.effect(
+  GetTaskProtection,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.GetTaskProtection",
+    operation: ECS.getTaskProtection,
+    actions: ["ecs:GetTaskProtection"],
+    // Authorizes against the task resource:
+    // arn:aws:ecs:{region}:{account}:task/{clusterName}/*
+    resources: ["task"],
+  }),
+);

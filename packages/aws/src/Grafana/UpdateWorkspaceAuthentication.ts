@@ -1,6 +1,8 @@
-import type * as grafana from "@distilled.cloud/aws/grafana";
+import * as grafana from "@distilled.cloud/aws/grafana";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGrafanaWorkspaceHttpBinding } from "./BindingHttp.ts";
 import type { Workspace } from "./Workspace.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface UpdateWorkspaceAuthentication extends Binding.Service<
 > {}
 export const UpdateWorkspaceAuthentication = Binding.Service<UpdateWorkspaceAuthentication>(
   "AWS.Grafana.UpdateWorkspaceAuthentication",
+);
+
+export const UpdateWorkspaceAuthenticationHttp = Layer.effect(
+  UpdateWorkspaceAuthentication,
+  makeGrafanaWorkspaceHttpBinding({
+    tag: "AWS.Grafana.UpdateWorkspaceAuthentication",
+    operation: grafana.updateWorkspaceAuthentication,
+    actions: ["grafana:UpdateWorkspaceAuthentication"],
+  }),
 );

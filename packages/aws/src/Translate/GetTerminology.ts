@@ -1,6 +1,8 @@
-import type * as translate from "@distilled.cloud/aws/translate";
+import * as translate from "@distilled.cloud/aws/translate";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranslateHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `translate:GetTerminology` — retrieve a custom
@@ -31,3 +33,12 @@ export interface GetTerminology extends Binding.Service<
   >
 > {}
 export const GetTerminology = Binding.Service<GetTerminology>("AWS.Translate.GetTerminology");
+
+export const GetTerminologyHttp = Layer.effect(
+  GetTerminology,
+  makeTranslateHttpBinding({
+    tag: "AWS.Translate.GetTerminology",
+    operation: translate.getTerminology,
+    actions: ["translate:GetTerminology"],
+  }),
+);

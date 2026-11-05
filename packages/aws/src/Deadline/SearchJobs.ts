@@ -1,6 +1,8 @@
-import type * as deadline from "@distilled.cloud/aws/deadline";
+import * as deadline from "@distilled.cloud/aws/deadline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDeadlineQueueSearchHttpBinding } from "./BindingHttp.ts";
 import type { Queue } from "./Queue.ts";
 
 /**
@@ -48,3 +50,12 @@ export interface SearchJobs extends Binding.Service<
   >
 > {}
 export const SearchJobs = Binding.Service<SearchJobs>("AWS.Deadline.SearchJobs");
+
+export const SearchJobsHttp = Layer.effect(
+  SearchJobs,
+  makeDeadlineQueueSearchHttpBinding({
+    tag: "AWS.Deadline.SearchJobs",
+    operation: deadline.searchJobs,
+    actions: ["deadline:SearchJobs"],
+  }),
+);

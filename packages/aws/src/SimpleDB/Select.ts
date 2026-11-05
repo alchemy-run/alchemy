@@ -1,7 +1,10 @@
-import type * as sdb from "@distilled.cloud/aws/simpledb";
+import * as sdb from "@distilled.cloud/aws/simpledb";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
+import { RegisterSimpleDbBinding } from "./Binding.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface SelectRequest extends Omit<sdb.SelectRequest, "SelectExpression"> {
@@ -54,3 +57,27 @@ export interface Select extends Binding.Service<
   >
 > {}
 export const Select = Binding.Service<Select>("AWS.SimpleDB.Select");
+
+export const SelectHttp = Layer.effect(
+  Select,
+  Effect.gen(function* () {
+    const registerSimpleDbBinding = yield* RegisterSimpleDbBinding;
+    const select = yield* AWSBindings.withCredentials(sdb.select);
+
+    return Effect.fn(function* (domain: Domain) {
+      const domainName = yield* domain.domainName;
+      yield* registerSimpleDbBinding("Select", domain);
+      return Effect.fn(`AWS.SimpleDB.Select(${domain.LogicalId})`)(function* (
+        request: SelectRequest,
+      ) {
+        const { SelectExpression, ...rest } = request;
+        const name = yield* domainName;
+        return yield* select({
+          ...rest,
+          SelectExpression:
+            typeof SelectExpression === "function" ? SelectExpression(name) : SelectExpression,
+        });
+      });
+    });
+  }),
+);

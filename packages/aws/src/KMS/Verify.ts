@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AliasName } from "./Alias.ts";
+import { makeKmsKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface VerifyRequest extends Omit<kms.VerifyRequest, "KeyId"> {}
@@ -52,3 +54,12 @@ export interface Verify extends Binding.Service<
 > {}
 
 export const Verify = Binding.Service<Verify>("AWS.KMS.Verify");
+
+export const VerifyHttp = Layer.effect(
+  Verify,
+  makeKmsKeyHttpBinding({
+    tag: "AWS.KMS.Verify",
+    operation: kms.verify,
+    actions: ["kms:Verify"],
+  }),
+);

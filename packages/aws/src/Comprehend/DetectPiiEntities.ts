@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:DetectPiiEntities` — locate personally
@@ -38,4 +40,13 @@ export interface DetectPiiEntities extends Binding.Service<
 > {}
 export const DetectPiiEntities = Binding.Service<DetectPiiEntities>(
   "AWS.Comprehend.DetectPiiEntities",
+);
+
+export const DetectPiiEntitiesHttp = Layer.effect(
+  DetectPiiEntities,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.DetectPiiEntities",
+    operation: comprehend.detectPiiEntities,
+    actions: ["comprehend:DetectPiiEntities"],
+  }),
 );

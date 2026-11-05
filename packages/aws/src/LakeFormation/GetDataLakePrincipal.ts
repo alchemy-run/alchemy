@@ -1,6 +1,8 @@
-import type * as lf from "@distilled.cloud/aws/lakeformation";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLakeFormationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetDataLakePrincipal}.
@@ -38,4 +40,13 @@ export interface GetDataLakePrincipal extends Binding.Service<
 
 export const GetDataLakePrincipal = Binding.Service<GetDataLakePrincipal>(
   "AWS.LakeFormation.GetDataLakePrincipal",
+);
+
+export const GetDataLakePrincipalHttp = Layer.effect(
+  GetDataLakePrincipal,
+  makeLakeFormationHttpBinding({
+    capability: "GetDataLakePrincipal",
+    iamActions: ["lakeformation:GetDataLakePrincipal"],
+    operation: lf.getDataLakePrincipal,
+  }),
 );

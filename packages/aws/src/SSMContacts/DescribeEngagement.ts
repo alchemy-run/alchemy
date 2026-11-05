@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-contacts:DescribeEngagement`.
@@ -31,4 +33,13 @@ export interface DescribeEngagement extends Binding.Service<
 > {}
 export const DescribeEngagement = Binding.Service<DescribeEngagement>(
   "AWS.SSMContacts.DescribeEngagement",
+);
+
+export const DescribeEngagementHttp = Layer.effect(
+  DescribeEngagement,
+  makeAccountHttpBinding({
+    tag: "AWS.SSMContacts.DescribeEngagement",
+    operation: ssm.describeEngagement,
+    actions: ["ssm-contacts:DescribeEngagement"],
+  }),
 );

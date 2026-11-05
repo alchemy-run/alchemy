@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetCostAndUsage}.
@@ -42,3 +44,12 @@ export interface GetCostAndUsage extends Binding.Service<
 > {}
 
 export const GetCostAndUsage = Binding.Service<GetCostAndUsage>("AWS.CostExplorer.GetCostAndUsage");
+
+export const GetCostAndUsageHttp = Layer.effect(
+  GetCostAndUsage,
+  makeCostExplorerHttpBinding({
+    capability: "GetCostAndUsage",
+    iamActions: ["ce:GetCostAndUsage"],
+    operation: ce.getCostAndUsage,
+  }),
+);

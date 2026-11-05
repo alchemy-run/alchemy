@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link DeleteNotificationChannel}.
@@ -36,4 +38,13 @@ export interface DeleteNotificationChannel extends Binding.Service<
 
 export const DeleteNotificationChannel = Binding.Service<DeleteNotificationChannel>(
   "AWS.FMS.DeleteNotificationChannel",
+);
+
+export const DeleteNotificationChannelHttp = Layer.effect(
+  DeleteNotificationChannel,
+  makeFmsHttpBinding({
+    capability: "DeleteNotificationChannel",
+    iamActions: ["fms:DeleteNotificationChannel"],
+    operation: fms.deleteNotificationChannel,
+  }),
 );

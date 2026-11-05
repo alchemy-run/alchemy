@@ -1,6 +1,8 @@
-import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
+import * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53DomainsHttpBinding } from "./BindingHttp.ts";
 
 export interface CheckDomainTransferabilityRequest
   extends route53domains.CheckDomainTransferabilityRequest {}
@@ -51,4 +53,13 @@ export interface CheckDomainTransferability extends Binding.Service<
 > {}
 export const CheckDomainTransferability = Binding.Service<CheckDomainTransferability>(
   "AWS.Route53Domains.CheckDomainTransferability",
+);
+
+export const CheckDomainTransferabilityHttp = Layer.effect(
+  CheckDomainTransferability,
+  makeRoute53DomainsHttpBinding({
+    capability: "CheckDomainTransferability",
+    iamActions: ["route53domains:CheckDomainTransferability"],
+    operation: route53domains.checkDomainTransferability,
+  }),
 );

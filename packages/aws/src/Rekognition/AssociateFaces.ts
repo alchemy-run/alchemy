@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:AssociateFaces` — associate up to 100 indexed face IDs with a user.
@@ -38,3 +40,12 @@ export interface AssociateFaces extends Binding.Service<
   >
 > {}
 export const AssociateFaces = Binding.Service<AssociateFaces>("AWS.Rekognition.AssociateFaces");
+
+export const AssociateFacesHttp = Layer.effect(
+  AssociateFaces,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.AssociateFaces",
+    operation: rekognition.associateFaces,
+    actions: ["rekognition:AssociateFaces"],
+  }),
+);

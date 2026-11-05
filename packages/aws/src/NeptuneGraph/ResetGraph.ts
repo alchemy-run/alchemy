@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneGraphGraphHttpBinding } from "./BindingHttp.ts";
 import type { Graph } from "./Graph.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface ResetGraph extends Binding.Service<
   >
 > {}
 export const ResetGraph = Binding.Service<ResetGraph>("AWS.NeptuneGraph.ResetGraph");
+
+export const ResetGraphHttp = Layer.effect(
+  ResetGraph,
+  makeNeptuneGraphGraphHttpBinding({
+    tag: "AWS.NeptuneGraph.ResetGraph",
+    operation: neptunegraph.resetGraph,
+    actions: ["neptune-graph:ResetGraph"],
+  }),
+);

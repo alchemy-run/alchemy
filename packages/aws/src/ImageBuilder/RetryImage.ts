@@ -1,6 +1,8 @@
-import type * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeImageBuilderAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `imagebuilder:RetryImage`.
@@ -31,3 +33,12 @@ export interface RetryImage extends Binding.Service<
   >
 > {}
 export const RetryImage = Binding.Service<RetryImage>("AWS.ImageBuilder.RetryImage");
+
+export const RetryImageHttp = Layer.effect(
+  RetryImage,
+  makeImageBuilderAccountHttpBinding({
+    tag: "AWS.ImageBuilder.RetryImage",
+    operation: imagebuilder.retryImage,
+    actions: ["imagebuilder:RetryImage"],
+  }),
+);

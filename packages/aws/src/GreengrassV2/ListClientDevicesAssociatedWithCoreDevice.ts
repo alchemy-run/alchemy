@@ -1,6 +1,8 @@
-import type * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
+import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGreengrassAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `greengrass:ListClientDevicesAssociatedWithCoreDevice`.
@@ -41,3 +43,12 @@ export const ListClientDevicesAssociatedWithCoreDevice =
   Binding.Service<ListClientDevicesAssociatedWithCoreDevice>(
     "AWS.GreengrassV2.ListClientDevicesAssociatedWithCoreDevice",
   );
+
+export const ListClientDevicesAssociatedWithCoreDeviceHttp = Layer.effect(
+  ListClientDevicesAssociatedWithCoreDevice,
+  makeGreengrassAccountHttpBinding({
+    tag: "AWS.GreengrassV2.ListClientDevicesAssociatedWithCoreDevice",
+    operation: greengrassv2.listClientDevicesAssociatedWithCoreDevice,
+    actions: ["greengrass:ListClientDevicesAssociatedWithCoreDevice"],
+  }),
+);

@@ -1,6 +1,8 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEventBridgeBusHttpBinding } from "./BindingHttp.ts";
 import type { EventBus } from "./EventBus.ts";
 
 export interface DescribeEventBusRequest extends Omit<
@@ -41,4 +43,20 @@ export interface DescribeEventBus extends Binding.Service<
 > {}
 export const DescribeEventBus = Binding.Service<DescribeEventBus>(
   "AWS.EventBridge.DescribeEventBus",
+);
+
+/**
+ * HTTP implementation of {@link DescribeEventBus}. At deploy time it grants
+ * `events:DescribeEventBus` on the bound bus; at runtime it calls the
+ * EventBridge API with the host Function's credentials. Provide this layer on
+ * the Function using the binding.
+ */
+export const DescribeEventBusHttp = Layer.effect(
+  DescribeEventBus,
+  makeEventBridgeBusHttpBinding({
+    tag: "AWS.EventBridge.DescribeEventBus",
+    operation: eventbridge.describeEventBus,
+    actions: ["events:DescribeEventBus"],
+    busNameKey: "Name",
+  }),
 );

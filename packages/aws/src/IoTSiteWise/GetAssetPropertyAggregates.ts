@@ -1,7 +1,9 @@
-import type * as sitewise from "@distilled.cloud/aws/iotsitewise";
+import * as sitewise from "@distilled.cloud/aws/iotsitewise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Asset } from "./Asset.ts";
+import { makeSiteWiseAssetHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetAssetPropertyAggregates}. The bound asset's id is
@@ -59,4 +61,17 @@ export interface GetAssetPropertyAggregates extends Binding.Service<
 > {}
 export const GetAssetPropertyAggregates = Binding.Service<GetAssetPropertyAggregates>(
   "AWS.IoTSiteWise.GetAssetPropertyAggregates",
+);
+
+export const GetAssetPropertyAggregatesHttp = Layer.effect(
+  GetAssetPropertyAggregates,
+  makeSiteWiseAssetHttpBinding({
+    capability: "GetAssetPropertyAggregates",
+    iamActions: ["iotsitewise:GetAssetPropertyAggregates"],
+    operation: sitewise.getAssetPropertyAggregates,
+    prepare: (request: GetAssetPropertyAggregatesRequest, assetId) => ({
+      ...request,
+      assetId,
+    }),
+  }),
 );

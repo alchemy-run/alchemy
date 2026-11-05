@@ -1,6 +1,7 @@
-import type * as apprunner from "@distilled.cloud/aws/apprunner";
+import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeAppRunnerHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 /**
@@ -31,3 +32,19 @@ export interface StartDeployment extends Binding.Service<
   >
 > {}
 export const StartDeployment = Binding.Service<StartDeployment>("AWS.AppRunner.StartDeployment");
+
+/**
+ * HTTP implementation of the {@link StartDeployment} binding. Calls
+ * `apprunner:StartDeployment` with the Lambda's IAM role, scoped to the
+ * bound service.
+ */
+export const StartDeploymentHttp = makeAppRunnerHttpBinding(StartDeployment, {
+  operation: apprunner.startDeployment,
+  spec: (service: Service) => ({
+    identifiers: { ServiceArn: service.serviceArn },
+    iam: () => ({
+      actions: ["apprunner:StartDeployment"],
+      resources: [service.serviceArn],
+    }),
+  }),
+});

@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseManagerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ExtendLicenseConsumption}.
@@ -44,4 +46,13 @@ export interface ExtendLicenseConsumption extends Binding.Service<
 > {}
 export const ExtendLicenseConsumption = Binding.Service<ExtendLicenseConsumption>(
   "AWS.LicenseManager.ExtendLicenseConsumption",
+);
+
+export const ExtendLicenseConsumptionHttp = Layer.effect(
+  ExtendLicenseConsumption,
+  makeLicenseManagerHttpBinding({
+    capability: "ExtendLicenseConsumption",
+    iamActions: ["license-manager:ExtendLicenseConsumption"],
+    operation: licensemanager.extendLicenseConsumption,
+  }),
 );

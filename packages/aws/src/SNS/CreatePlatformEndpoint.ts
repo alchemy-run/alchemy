@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsPlatformHttpBinding } from "./BindingHttp.ts";
 import type { PlatformApplication } from "./PlatformApplication.ts";
 
 export interface CreatePlatformEndpointRequest extends Omit<
@@ -38,4 +40,13 @@ export interface CreatePlatformEndpoint extends Binding.Service<
 
 export const CreatePlatformEndpoint = Binding.Service<CreatePlatformEndpoint>(
   "AWS.SNS.CreatePlatformEndpoint",
+);
+
+export const CreatePlatformEndpointHttp = Layer.effect(
+  CreatePlatformEndpoint,
+  makeSnsPlatformHttpBinding({
+    tag: "AWS.SNS.CreatePlatformEndpoint",
+    operation: sns.createPlatformEndpoint,
+    actions: ["sns:CreatePlatformEndpoint"],
+  }),
 );

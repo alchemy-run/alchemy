@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsServiceHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 export interface DescribeServiceRevisionsRequest extends ECS.DescribeServiceRevisionsRequest {}
@@ -40,4 +42,16 @@ export interface DescribeServiceRevisions extends Binding.Service<
 > {}
 export const DescribeServiceRevisions = Binding.Service<DescribeServiceRevisions>(
   "AWS.ECS.DescribeServiceRevisions",
+);
+
+export const DescribeServiceRevisionsHttp = Layer.effect(
+  DescribeServiceRevisions,
+  makeEcsServiceHttpBinding({
+    tag: "AWS.ECS.DescribeServiceRevisions",
+    operation: ECS.describeServiceRevisions,
+    actions: ["ecs:DescribeServiceRevisions"],
+    // Authorizes against the service-revision resource:
+    // arn:aws:ecs:{region}:{account}:service-revision/{cluster}/{service}/*
+    resources: ["service-revision"],
+  }),
 );

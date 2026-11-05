@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:ListCallAnalyticsJobs` — list the Call Analytics jobs in the account.
@@ -34,4 +36,13 @@ export interface ListCallAnalyticsJobs extends Binding.Service<
 > {}
 export const ListCallAnalyticsJobs = Binding.Service<ListCallAnalyticsJobs>(
   "AWS.Transcribe.ListCallAnalyticsJobs",
+);
+
+export const ListCallAnalyticsJobsHttp = Layer.effect(
+  ListCallAnalyticsJobs,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.ListCallAnalyticsJobs",
+    operation: transcribe.listCallAnalyticsJobs,
+    actions: ["transcribe:ListCallAnalyticsJobs"],
+  }),
 );

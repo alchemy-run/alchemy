@@ -1,6 +1,8 @@
-import type * as athena from "@distilled.cloud/aws/athena";
+import * as athena from "@distilled.cloud/aws/athena";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWorkGroupScopedHttpBinding } from "./BindingHttp.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
 
 /**
@@ -37,4 +39,13 @@ export interface BatchGetQueryExecution extends Binding.Service<
 
 export const BatchGetQueryExecution = Binding.Service<BatchGetQueryExecution>(
   "AWS.Athena.BatchGetQueryExecution",
+);
+
+export const BatchGetQueryExecutionHttp = Layer.effect(
+  BatchGetQueryExecution,
+  makeWorkGroupScopedHttpBinding({
+    tag: "AWS.Athena.BatchGetQueryExecution",
+    operation: athena.batchGetQueryExecution,
+    actions: ["athena:BatchGetQueryExecution"],
+  }),
 );

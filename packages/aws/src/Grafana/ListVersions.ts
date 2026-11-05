@@ -1,6 +1,8 @@
-import type * as grafana from "@distilled.cloud/aws/grafana";
+import * as grafana from "@distilled.cloud/aws/grafana";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGrafanaAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListVersions` operation (IAM action
@@ -31,3 +33,12 @@ export interface ListVersions extends Binding.Service<
   >
 > {}
 export const ListVersions = Binding.Service<ListVersions>("AWS.Grafana.ListVersions");
+
+export const ListVersionsHttp = Layer.effect(
+  ListVersions,
+  makeGrafanaAccountHttpBinding({
+    tag: "AWS.Grafana.ListVersions",
+    operation: grafana.listVersions,
+    actions: ["grafana:ListVersions"],
+  }),
+);

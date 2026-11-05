@@ -1,6 +1,8 @@
-import type * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
+import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGreengrassAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `greengrass:ListCoreDevices`.
@@ -31,3 +33,12 @@ export interface ListCoreDevices extends Binding.Service<
   >
 > {}
 export const ListCoreDevices = Binding.Service<ListCoreDevices>("AWS.GreengrassV2.ListCoreDevices");
+
+export const ListCoreDevicesHttp = Layer.effect(
+  ListCoreDevices,
+  makeGreengrassAccountHttpBinding({
+    tag: "AWS.GreengrassV2.ListCoreDevices",
+    operation: greengrassv2.listCoreDevices,
+    actions: ["greengrass:ListCoreDevices"],
+  }),
+);

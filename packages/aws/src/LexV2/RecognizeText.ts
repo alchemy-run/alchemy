@@ -1,6 +1,8 @@
-import type * as lexr from "@distilled.cloud/aws/lex-runtime-v2";
+import * as lexr from "@distilled.cloud/aws/lex-runtime-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLexAliasHttpBinding } from "./BindingHttp.ts";
 import type { BotAlias } from "./BotAlias.ts";
 
 /**
@@ -77,3 +79,21 @@ export interface RecognizeText extends Binding.Service<
 > {}
 
 export const RecognizeText = Binding.Service<RecognizeText>("AWS.LexV2.RecognizeText");
+
+/**
+ * HTTP implementation of {@link RecognizeText} — calls the
+ * `lex-runtime-v2` `RecognizeText` operation with the Lambda role's
+ * credentials and grants the host `lex:RecognizeText` on the alias.
+ */
+export const RecognizeTextHttp = Layer.effect(
+  RecognizeText,
+  makeLexAliasHttpBinding<
+    RecognizeTextRequest,
+    lexr.RecognizeTextResponse,
+    lexr.RecognizeTextError
+  >({
+    capability: "RecognizeText",
+    iamActions: ["lex:RecognizeText"],
+    operation: lexr.recognizeText,
+  }),
+);

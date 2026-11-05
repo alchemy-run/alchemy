@@ -1,6 +1,8 @@
-import type * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
+import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWabaScopedHttpBinding } from "./BindingHttp.ts";
 import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAccount.ts";
 
 /**
@@ -51,4 +53,13 @@ export interface DeleteWhatsAppFlow extends Binding.Service<
 > {}
 export const DeleteWhatsAppFlow = Binding.Service<DeleteWhatsAppFlow>(
   "AWS.SocialMessaging.DeleteWhatsAppFlow",
+);
+
+export const DeleteWhatsAppFlowHttp = Layer.effect(
+  DeleteWhatsAppFlow,
+  makeWabaScopedHttpBinding({
+    tag: "AWS.SocialMessaging.DeleteWhatsAppFlow",
+    operation: socialmessaging.deleteWhatsAppFlow,
+    actions: ["social-messaging:DeleteWhatsAppFlow"],
+  }),
 );

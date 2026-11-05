@@ -1,6 +1,8 @@
-import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDistributionScopedHttpBinding } from "./BindingHttp.ts";
 import type { Distribution } from "./Distribution.ts";
 
 export interface ListInvalidationsRequest extends Omit<
@@ -41,4 +43,13 @@ export interface ListInvalidations extends Binding.Service<
 
 export const ListInvalidations = Binding.Service<ListInvalidations>(
   "AWS.CloudFront.ListInvalidations",
+);
+
+export const ListInvalidationsHttp = Layer.effect(
+  ListInvalidations,
+  makeDistributionScopedHttpBinding({
+    tag: "AWS.CloudFront.ListInvalidations",
+    operation: cloudfront.listInvalidations,
+    actions: ["cloudfront:ListInvalidations"],
+  }),
 );

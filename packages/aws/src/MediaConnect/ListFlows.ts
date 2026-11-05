@@ -1,6 +1,8 @@
-import type * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
+import * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConnectAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediaconnect:ListFlows`.
@@ -32,3 +34,12 @@ export interface ListFlows extends Binding.Service<
   >
 > {}
 export const ListFlows = Binding.Service<ListFlows>("AWS.MediaConnect.ListFlows");
+
+export const ListFlowsHttp = Layer.effect(
+  ListFlows,
+  makeMediaConnectAccountHttpBinding({
+    tag: "AWS.MediaConnect.ListFlows",
+    operation: mediaconnect.listFlows,
+    actions: ["mediaconnect:ListFlows"],
+  }),
+);

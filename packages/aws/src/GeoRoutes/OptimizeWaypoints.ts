@@ -1,6 +1,8 @@
-import type * as geoRoutes from "@distilled.cloud/aws/geo-routes";
+import * as geoRoutes from "@distilled.cloud/aws/geo-routes";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoRoutesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-routes:OptimizeWaypoints` — calculate the optimal
@@ -47,4 +49,13 @@ export interface OptimizeWaypoints extends Binding.Service<
 > {}
 export const OptimizeWaypoints = Binding.Service<OptimizeWaypoints>(
   "AWS.GeoRoutes.OptimizeWaypoints",
+);
+
+export const OptimizeWaypointsHttp = Layer.effect(
+  OptimizeWaypoints,
+  makeGeoRoutesHttpBinding({
+    capability: "OptimizeWaypoints",
+    iamActions: ["geo-routes:OptimizeWaypoints"],
+    operation: geoRoutes.optimizeWaypoints,
+  }),
 );

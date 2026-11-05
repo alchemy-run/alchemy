@@ -1,6 +1,8 @@
-import type * as account from "@distilled.cloud/aws/account";
+import * as account from "@distilled.cloud/aws/account";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `account:GetAccountInformation`.
@@ -33,4 +35,13 @@ export interface GetAccountInformation extends Binding.Service<
 > {}
 export const GetAccountInformation = Binding.Service<GetAccountInformation>(
   "AWS.Account.GetAccountInformation",
+);
+
+export const GetAccountInformationHttp = Layer.effect(
+  GetAccountInformation,
+  makeAccountHttpBinding({
+    capability: "GetAccountInformation",
+    iamActions: ["account:GetAccountInformation"],
+    operation: account.getAccountInformation,
+  }),
 );

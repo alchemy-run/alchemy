@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListManagedInsightRulesRequest extends cloudwatch.ListManagedInsightRulesInput {}
 
@@ -42,4 +44,13 @@ export interface ListManagedInsightRules extends Binding.Service<
 
 export const ListManagedInsightRules = Binding.Service<ListManagedInsightRules>(
   "AWS.CloudWatch.ListManagedInsightRules",
+);
+
+export const ListManagedInsightRulesHttp = Layer.effect(
+  ListManagedInsightRules,
+  makeCloudWatchAccountHttpBinding({
+    tag: "AWS.CloudWatch.ListManagedInsightRules",
+    operation: cloudwatch.listManagedInsightRules,
+    actions: ["cloudwatch:ListManagedInsightRules"],
+  }),
 );

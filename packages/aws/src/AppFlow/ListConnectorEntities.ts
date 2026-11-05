@@ -1,6 +1,8 @@
-import type * as appflow from "@distilled.cloud/aws/appflow";
+import * as appflow from "@distilled.cloud/aws/appflow";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAppFlowHttpBinding } from "./BindingHttp.ts";
 import type { ConnectorProfile } from "./ConnectorProfile.ts";
 
 export interface ListConnectorEntitiesRequest extends Omit<
@@ -46,4 +48,15 @@ export interface ListConnectorEntities extends Binding.Service<
 
 export const ListConnectorEntities = Binding.Service<ListConnectorEntities>(
   "AWS.AppFlow.ListConnectorEntities",
+);
+
+export const ListConnectorEntitiesHttp = Layer.effect(
+  ListConnectorEntities,
+  makeAppFlowHttpBinding({
+    action: "ListConnectorEntities",
+    operation: appflow.listConnectorEntities,
+    identifier: (profile: ConnectorProfile) => profile.connectorProfileName,
+    requestKey: "connectorProfileName",
+    resources: (profile: ConnectorProfile) => [profile.connectorProfileArn],
+  }),
 );

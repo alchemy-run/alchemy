@@ -1,6 +1,8 @@
-import type * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
+import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { COMPOSITION_ARN_WILDCARD, makeIvsRealtimeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Read a composition's detail — state, layout, destinations, and per
@@ -30,3 +32,13 @@ export interface GetComposition extends Binding.Service<
   >
 > {}
 export const GetComposition = Binding.Service<GetComposition>("AWS.IVSRealtime.GetComposition");
+
+export const GetCompositionHttp = Layer.effect(
+  GetComposition,
+  makeIvsRealtimeAccountHttpBinding({
+    tag: "AWS.IVSRealtime.GetComposition",
+    operation: ivsrealtime.getComposition,
+    actions: ["ivs:GetComposition"],
+    resources: [COMPOSITION_ARN_WILDCARD],
+  }),
+);

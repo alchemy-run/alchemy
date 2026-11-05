@@ -1,6 +1,8 @@
-import type * as b2bi from "@distilled.cloud/aws/b2bi";
+import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeB2biAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `b2bi:TestMapping`.
@@ -37,3 +39,12 @@ export interface TestMapping extends Binding.Service<
   >
 > {}
 export const TestMapping = Binding.Service<TestMapping>("AWS.B2BI.TestMapping");
+
+export const TestMappingHttp = Layer.effect(
+  TestMapping,
+  makeB2biAccountHttpBinding({
+    tag: "AWS.B2BI.TestMapping",
+    operation: b2bi.testMapping,
+    actions: ["b2bi:TestMapping"],
+  }),
+);

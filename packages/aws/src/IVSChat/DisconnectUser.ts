@@ -1,6 +1,8 @@
-import type * as ivschat from "@distilled.cloud/aws/ivschat";
+import * as ivschat from "@distilled.cloud/aws/ivschat";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsChatRoomHttpBinding } from "./BindingHttp.ts";
 import type { Room } from "./Room.ts";
 
 /**
@@ -57,3 +59,12 @@ export interface DisconnectUser extends Binding.Service<
   >
 > {}
 export const DisconnectUser = Binding.Service<DisconnectUser>("AWS.IVSChat.DisconnectUser");
+
+export const DisconnectUserHttp = Layer.effect(
+  DisconnectUser,
+  makeIvsChatRoomHttpBinding({
+    tag: "AWS.IVSChat.DisconnectUser",
+    operation: ivschat.disconnectUser,
+    actions: ["ivschat:DisconnectUser"],
+  }),
+);

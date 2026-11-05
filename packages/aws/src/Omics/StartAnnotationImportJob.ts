@@ -1,7 +1,9 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AnnotationStore } from "./AnnotationStore.ts";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 
 export interface StartAnnotationImportJobRequest extends Omit<
   omics.StartAnnotationImportRequest,
@@ -45,4 +47,17 @@ export interface StartAnnotationImportJob extends Binding.Service<
 
 export const StartAnnotationImportJob = Binding.Service<StartAnnotationImportJob>(
   "AWS.Omics.StartAnnotationImportJob",
+);
+
+export const StartAnnotationImportJobHttp = Layer.effect(
+  StartAnnotationImportJob,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.StartAnnotationImportJob",
+    operation: omics.startAnnotationImportJob,
+    actions: ["omics:StartAnnotationImportJob"],
+    key: "destinationName",
+    id: (store) => store.name,
+    arn: (store) => store.annotationStoreArn,
+    passRole: true,
+  }),
 );

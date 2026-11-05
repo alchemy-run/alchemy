@@ -1,6 +1,8 @@
-import type * as servicequotas from "@distilled.cloud/aws/service-quotas";
+import * as servicequotas from "@distilled.cloud/aws/service-quotas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceQuotasHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicequotas:ListServices` — list the services that
@@ -30,3 +32,12 @@ export interface ListServices extends Binding.Service<
   >
 > {}
 export const ListServices = Binding.Service<ListServices>("AWS.ServiceQuotas.ListServices");
+
+export const ListServicesHttp = Layer.effect(
+  ListServices,
+  makeServiceQuotasHttpBinding({
+    capability: "ListServices",
+    iamActions: ["servicequotas:ListServices"],
+    operation: servicequotas.listServices,
+  }),
+);

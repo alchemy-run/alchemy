@@ -1,6 +1,8 @@
-import type * as iam from "@distilled.cloud/aws/iam";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIamHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iam:SimulateCustomPolicy` — evaluate how a set of
@@ -47,4 +49,13 @@ export interface SimulateCustomPolicy extends Binding.Service<
 > {}
 export const SimulateCustomPolicy = Binding.Service<SimulateCustomPolicy>(
   "AWS.IAM.SimulateCustomPolicy",
+);
+
+export const SimulateCustomPolicyHttp = Layer.effect(
+  SimulateCustomPolicy,
+  makeIamHttpBinding({
+    capability: "SimulateCustomPolicy",
+    iamActions: ["iam:SimulateCustomPolicy"],
+    operation: iam.simulateCustomPolicy,
+  }),
 );

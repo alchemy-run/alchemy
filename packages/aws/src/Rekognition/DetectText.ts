@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DetectText` — detect and extract lines and words of text in an image.
@@ -36,3 +38,12 @@ export interface DetectText extends Binding.Service<
   >
 > {}
 export const DetectText = Binding.Service<DetectText>("AWS.Rekognition.DetectText");
+
+export const DetectTextHttp = Layer.effect(
+  DetectText,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DetectText",
+    operation: rekognition.detectText,
+    actions: ["rekognition:DetectText"],
+  }),
+);

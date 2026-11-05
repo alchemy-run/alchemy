@@ -1,6 +1,8 @@
-import type * as serverless from "@distilled.cloud/aws/redshift-serverless";
+import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServerlessAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetTableRestoreStatus` operation (IAM actions
@@ -36,4 +38,13 @@ export interface GetTableRestoreStatus extends Binding.Service<
 > {}
 export const GetTableRestoreStatus = Binding.Service<GetTableRestoreStatus>(
   "AWS.RedshiftServerless.GetTableRestoreStatus",
+);
+
+export const GetTableRestoreStatusHttp = Layer.effect(
+  GetTableRestoreStatus,
+  makeServerlessAccountHttpBinding({
+    tag: "AWS.RedshiftServerless.GetTableRestoreStatus",
+    operation: serverless.getTableRestoreStatus,
+    actions: ["redshift-serverless:GetTableRestoreStatus"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudHsmHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `RestoreBackup` operation (IAM action
@@ -31,3 +33,12 @@ export interface RestoreBackup extends Binding.Service<
   >
 > {}
 export const RestoreBackup = Binding.Service<RestoreBackup>("AWS.CloudHSMV2.RestoreBackup");
+
+export const RestoreBackupHttp = Layer.effect(
+  RestoreBackup,
+  makeCloudHsmHttpBinding({
+    tag: "AWS.CloudHSMV2.RestoreBackup",
+    operation: cloudhsm.restoreBackup,
+    actions: ["cloudhsm:RestoreBackup"],
+  }),
+);

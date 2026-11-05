@@ -1,6 +1,8 @@
-import type * as servicequotas from "@distilled.cloud/aws/service-quotas";
+import * as servicequotas from "@distilled.cloud/aws/service-quotas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceQuotasHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicequotas:GetAutoManagementConfiguration` — read
@@ -36,4 +38,13 @@ export interface GetAutoManagementConfiguration extends Binding.Service<
 > {}
 export const GetAutoManagementConfiguration = Binding.Service<GetAutoManagementConfiguration>(
   "AWS.ServiceQuotas.GetAutoManagementConfiguration",
+);
+
+export const GetAutoManagementConfigurationHttp = Layer.effect(
+  GetAutoManagementConfiguration,
+  makeServiceQuotasHttpBinding({
+    capability: "GetAutoManagementConfiguration",
+    iamActions: ["servicequotas:GetAutoManagementConfiguration"],
+    operation: servicequotas.getAutoManagementConfiguration,
+  }),
 );

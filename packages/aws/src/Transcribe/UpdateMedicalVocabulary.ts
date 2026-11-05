@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:UpdateMedicalVocabulary` — replace a medical vocabulary with a new source file.
@@ -38,4 +40,13 @@ export interface UpdateMedicalVocabulary extends Binding.Service<
 > {}
 export const UpdateMedicalVocabulary = Binding.Service<UpdateMedicalVocabulary>(
   "AWS.Transcribe.UpdateMedicalVocabulary",
+);
+
+export const UpdateMedicalVocabularyHttp = Layer.effect(
+  UpdateMedicalVocabulary,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.UpdateMedicalVocabulary",
+    operation: transcribe.updateMedicalVocabulary,
+    actions: ["transcribe:UpdateMedicalVocabulary"],
+  }),
 );

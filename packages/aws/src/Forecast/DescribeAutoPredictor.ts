@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:DescribeAutoPredictor` — poll a training run
@@ -37,4 +39,13 @@ export interface DescribeAutoPredictor extends Binding.Service<
 > {}
 export const DescribeAutoPredictor = Binding.Service<DescribeAutoPredictor>(
   "AWS.Forecast.DescribeAutoPredictor",
+);
+
+export const DescribeAutoPredictorHttp = Layer.effect(
+  DescribeAutoPredictor,
+  makeForecastHttpBinding({
+    capability: "DescribeAutoPredictor",
+    iamActions: ["forecast:DescribeAutoPredictor"],
+    operation: forecast.describeAutoPredictor,
+  }),
 );

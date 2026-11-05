@@ -1,6 +1,8 @@
-import type * as s3tables from "@distilled.cloud/aws/s3tables";
+import * as s3tables from "@distilled.cloud/aws/s3tables";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeS3TablesTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface GetTableMetadataLocation extends Binding.Service<
 > {}
 export const GetTableMetadataLocation = Binding.Service<GetTableMetadataLocation>(
   "AWS.S3Tables.GetTableMetadataLocation",
+);
+
+export const GetTableMetadataLocationHttp = Layer.effect(
+  GetTableMetadataLocation,
+  makeS3TablesTableHttpBinding({
+    tag: "AWS.S3Tables.GetTableMetadataLocation",
+    operation: s3tables.getTableMetadataLocation,
+    actions: ["s3tables:GetTableMetadataLocation"],
+  }),
 );

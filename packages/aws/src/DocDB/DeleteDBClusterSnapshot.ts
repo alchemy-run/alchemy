@@ -1,6 +1,8 @@
-import type * as docdb from "@distilled.cloud/aws/docdb";
+import * as docdb from "@distilled.cloud/aws/docdb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DeleteDBClusterSnapshot` operation (IAM action
@@ -37,4 +39,13 @@ export interface DeleteDBClusterSnapshot extends Binding.Service<
 > {}
 export const DeleteDBClusterSnapshot = Binding.Service<DeleteDBClusterSnapshot>(
   "AWS.DocDB.DeleteDBClusterSnapshot",
+);
+
+export const DeleteDBClusterSnapshotHttp = Layer.effect(
+  DeleteDBClusterSnapshot,
+  makeDocDBAccountHttpBinding({
+    tag: "AWS.DocDB.DeleteDBClusterSnapshot",
+    operation: docdb.deleteDBClusterSnapshot,
+    actions: ["rds:DeleteDBClusterSnapshot"],
+  }),
 );

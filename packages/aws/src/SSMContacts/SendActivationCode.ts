@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeContactChannelHttpBinding } from "./BindingHttp.ts";
 import type { ContactChannel } from "./ContactChannel.ts";
 
 /**
@@ -32,4 +34,13 @@ export interface SendActivationCode extends Binding.Service<
 > {}
 export const SendActivationCode = Binding.Service<SendActivationCode>(
   "AWS.SSMContacts.SendActivationCode",
+);
+
+export const SendActivationCodeHttp = Layer.effect(
+  SendActivationCode,
+  makeContactChannelHttpBinding({
+    tag: "AWS.SSMContacts.SendActivationCode",
+    operation: ssm.sendActivationCode,
+    actions: ["ssm-contacts:SendActivationCode"],
+  }),
 );

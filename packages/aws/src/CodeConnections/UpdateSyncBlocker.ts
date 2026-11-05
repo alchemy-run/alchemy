@@ -1,6 +1,8 @@
-import type * as codeconnections from "@distilled.cloud/aws/codeconnections";
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSyncConfigurationScopedHttpBinding } from "./BindingHttp.ts";
 import type { SyncConfiguration } from "./SyncConfiguration.ts";
 
 /**
@@ -52,4 +54,13 @@ export interface UpdateSyncBlocker extends Binding.Service<
 
 export const UpdateSyncBlocker = Binding.Service<UpdateSyncBlocker>(
   "AWS.CodeConnections.UpdateSyncBlocker",
+);
+
+export const UpdateSyncBlockerHttp = Layer.effect(
+  UpdateSyncBlocker,
+  makeSyncConfigurationScopedHttpBinding({
+    tag: "AWS.CodeConnections.UpdateSyncBlocker",
+    actions: ["codeconnections:UpdateSyncBlocker"],
+    operation: codeconnections.updateSyncBlocker,
+  }),
 );

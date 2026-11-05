@@ -1,6 +1,8 @@
-import type * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
+import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGreengrassComponentHttpBinding } from "./BindingHttp.ts";
 import type { ComponentVersion } from "./ComponentVersion.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface DescribeComponent extends Binding.Service<
 > {}
 export const DescribeComponent = Binding.Service<DescribeComponent>(
   "AWS.GreengrassV2.DescribeComponent",
+);
+
+export const DescribeComponentHttp = Layer.effect(
+  DescribeComponent,
+  makeGreengrassComponentHttpBinding({
+    tag: "AWS.GreengrassV2.DescribeComponent",
+    operation: greengrassv2.describeComponent,
+    actions: ["greengrass:DescribeComponent"],
+  }),
 );

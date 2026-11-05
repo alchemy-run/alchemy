@@ -1,6 +1,8 @@
-import type * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
+import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsRealtimeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * List the account's compositions in the current region, optionally
@@ -29,4 +31,13 @@ export interface ListCompositions extends Binding.Service<
 > {}
 export const ListCompositions = Binding.Service<ListCompositions>(
   "AWS.IVSRealtime.ListCompositions",
+);
+
+export const ListCompositionsHttp = Layer.effect(
+  ListCompositions,
+  makeIvsRealtimeAccountHttpBinding({
+    tag: "AWS.IVSRealtime.ListCompositions",
+    operation: ivsrealtime.listCompositions,
+    actions: ["ivs:ListCompositions"],
+  }),
 );

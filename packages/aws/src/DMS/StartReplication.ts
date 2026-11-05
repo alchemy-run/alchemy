@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dms:StartReplication`.
@@ -36,3 +38,12 @@ export interface StartReplication extends Binding.Service<
 > {}
 
 export const StartReplication = Binding.Service<StartReplication>("AWS.DMS.StartReplication");
+
+export const StartReplicationHttp = Layer.effect(
+  StartReplication,
+  makeDmsAccountHttpBinding({
+    tag: "AWS.DMS.StartReplication",
+    actions: ["dms:StartReplication"],
+    operation: dms.startReplication,
+  }),
+);

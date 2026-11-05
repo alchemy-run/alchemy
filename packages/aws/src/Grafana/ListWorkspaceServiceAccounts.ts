@@ -1,6 +1,8 @@
-import type * as grafana from "@distilled.cloud/aws/grafana";
+import * as grafana from "@distilled.cloud/aws/grafana";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGrafanaWorkspaceHttpBinding } from "./BindingHttp.ts";
 import type { Workspace } from "./Workspace.ts";
 
 /**
@@ -41,4 +43,13 @@ export interface ListWorkspaceServiceAccounts extends Binding.Service<
 > {}
 export const ListWorkspaceServiceAccounts = Binding.Service<ListWorkspaceServiceAccounts>(
   "AWS.Grafana.ListWorkspaceServiceAccounts",
+);
+
+export const ListWorkspaceServiceAccountsHttp = Layer.effect(
+  ListWorkspaceServiceAccounts,
+  makeGrafanaWorkspaceHttpBinding({
+    tag: "AWS.Grafana.ListWorkspaceServiceAccounts",
+    operation: grafana.listWorkspaceServiceAccounts,
+    actions: ["grafana:ListWorkspaceServiceAccounts"],
+  }),
 );

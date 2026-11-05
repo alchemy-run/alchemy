@@ -1,6 +1,8 @@
-import type * as redshift from "@distilled.cloud/aws/redshift";
+import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRedshiftClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface ResumeCluster extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<redshift.ResumeClusterResult, redshift.ResumeClusterError>>
 > {}
 export const ResumeCluster = Binding.Service<ResumeCluster>("AWS.Redshift.ResumeCluster");
+
+export const ResumeClusterHttp = Layer.effect(
+  ResumeCluster,
+  makeRedshiftClusterHttpBinding({
+    tag: "AWS.Redshift.ResumeCluster",
+    operation: redshift.resumeCluster,
+    actions: ["redshift:ResumeCluster"],
+  }),
+);

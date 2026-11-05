@@ -1,6 +1,8 @@
-import type * as ivs from "@distilled.cloud/aws/ivs";
+import * as ivs from "@distilled.cloud/aws/ivs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ivs:ListStreams`.
@@ -32,3 +34,12 @@ export interface ListStreams extends Binding.Service<
   >
 > {}
 export const ListStreams = Binding.Service<ListStreams>("AWS.IVS.ListStreams");
+
+export const ListStreamsHttp = Layer.effect(
+  ListStreams,
+  makeIvsAccountHttpBinding({
+    tag: "AWS.IVS.ListStreams",
+    operation: ivs.listStreams,
+    actions: ["ivs:ListStreams"],
+  }),
+);

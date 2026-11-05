@@ -1,6 +1,8 @@
-import type * as batch from "@distilled.cloud/aws/batch";
+import * as batch from "@distilled.cloud/aws/batch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBatchQueueHttpBinding } from "./BindingHttp.ts";
 import type { JobQueue } from "./JobQueue.ts";
 
 /** The queue is injected by the binding; the request carries nothing else. */
@@ -37,4 +39,15 @@ export interface GetJobQueueSnapshot extends Binding.Service<
 > {}
 export const GetJobQueueSnapshot = Binding.Service<GetJobQueueSnapshot>(
   "AWS.Batch.GetJobQueueSnapshot",
+);
+
+export const GetJobQueueSnapshotHttp = Layer.effect(
+  GetJobQueueSnapshot,
+  // batch:GetJobQueueSnapshot supports the job-queue resource type — scope
+  // the grant to the bound queue's ARN.
+  makeBatchQueueHttpBinding({
+    tag: "AWS.Batch.GetJobQueueSnapshot",
+    operation: batch.getJobQueueSnapshot,
+    actions: ["batch:GetJobQueueSnapshot"],
+  }),
 );

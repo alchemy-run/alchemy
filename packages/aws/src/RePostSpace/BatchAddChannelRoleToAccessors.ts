@@ -1,6 +1,8 @@
-import type * as repostspace from "@distilled.cloud/aws/repostspace";
+import * as repostspace from "@distilled.cloud/aws/repostspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRePostSpaceHttpBinding } from "./BindingHttp.ts";
 import type { Space } from "./Space.ts";
 
 export interface BatchAddChannelRoleToAccessorsRequest extends Omit<
@@ -49,4 +51,13 @@ export interface BatchAddChannelRoleToAccessors extends Binding.Service<
 > {}
 export const BatchAddChannelRoleToAccessors = Binding.Service<BatchAddChannelRoleToAccessors>(
   "AWS.RePostSpace.BatchAddChannelRoleToAccessors",
+);
+
+export const BatchAddChannelRoleToAccessorsHttp = Layer.effect(
+  BatchAddChannelRoleToAccessors,
+  makeRePostSpaceHttpBinding({
+    tag: "AWS.RePostSpace.BatchAddChannelRoleToAccessors",
+    operation: repostspace.batchAddChannelRoleToAccessors,
+    actions: ["repostspace:BatchAddChannelRoleToAccessors"],
+  }),
 );

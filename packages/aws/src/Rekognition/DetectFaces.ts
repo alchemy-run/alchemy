@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DetectFaces` — detect the 100 largest faces in an image and return facial landmarks, pose, and optional attributes (age range, emotions, etc.).
@@ -37,3 +39,12 @@ export interface DetectFaces extends Binding.Service<
   >
 > {}
 export const DetectFaces = Binding.Service<DetectFaces>("AWS.Rekognition.DetectFaces");
+
+export const DetectFacesHttp = Layer.effect(
+  DetectFaces,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DetectFaces",
+    operation: rekognition.detectFaces,
+    actions: ["rekognition:DetectFaces"],
+  }),
+);

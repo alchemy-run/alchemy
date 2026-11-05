@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -34,3 +36,14 @@ export interface ListCapabilities extends Binding.Service<
   >
 > {}
 export const ListCapabilities = Binding.Service<ListCapabilities>("AWS.EKS.ListCapabilities");
+
+export const ListCapabilitiesHttp = Layer.effect(
+  ListCapabilities,
+  makeEKSClusterHttpBinding({
+    tag: "AWS.EKS.ListCapabilities",
+    operation: eks.listCapabilities,
+    actions: ["eks:ListCapabilities"],
+    key: "clusterName",
+    scope: "cluster",
+  }),
+);

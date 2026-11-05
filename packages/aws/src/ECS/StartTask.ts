@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsTaskLaunchHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { Task } from "./Task.ts";
 
@@ -57,3 +59,12 @@ export interface StartTask extends Binding.Service<
   >
 > {}
 export const StartTask = Binding.Service<StartTask>("AWS.ECS.StartTask");
+
+export const StartTaskHttp = Layer.effect(
+  StartTask,
+  makeEcsTaskLaunchHttpBinding({
+    tag: "AWS.ECS.StartTask",
+    operation: ECS.startTask,
+    actions: ["ecs:StartTask"],
+  }),
+);

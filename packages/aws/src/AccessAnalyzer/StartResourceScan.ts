@@ -1,7 +1,9 @@
-import type * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Analyzer } from "./Analyzer.ts";
+import { makeAnalyzerScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `StartResourceScan` request with `analyzerArn` injected from the bound {@link Analyzer}. */
 export interface StartResourceScanRequest extends Omit<
@@ -38,4 +40,13 @@ export interface StartResourceScan extends Binding.Service<
 
 export const StartResourceScan = Binding.Service<StartResourceScan>(
   "AWS.AccessAnalyzer.StartResourceScan",
+);
+
+export const StartResourceScanHttp = Layer.effect(
+  StartResourceScan,
+  makeAnalyzerScopedHttpBinding({
+    tag: "AWS.AccessAnalyzer.StartResourceScan",
+    operation: aa.startResourceScan,
+    actions: ["access-analyzer:StartResourceScan"],
+  }),
 );

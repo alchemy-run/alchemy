@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DeleteFaces` — delete faces from a face collection by face ID.
@@ -37,3 +39,12 @@ export interface DeleteFaces extends Binding.Service<
   >
 > {}
 export const DeleteFaces = Binding.Service<DeleteFaces>("AWS.Rekognition.DeleteFaces");
+
+export const DeleteFacesHttp = Layer.effect(
+  DeleteFaces,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DeleteFaces",
+    operation: rekognition.deleteFaces,
+    actions: ["rekognition:DeleteFaces"],
+  }),
+);

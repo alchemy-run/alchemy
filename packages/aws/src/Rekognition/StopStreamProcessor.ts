@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:StopStreamProcessor` — stop a running stream processor.
@@ -37,4 +39,13 @@ export interface StopStreamProcessor extends Binding.Service<
 > {}
 export const StopStreamProcessor = Binding.Service<StopStreamProcessor>(
   "AWS.Rekognition.StopStreamProcessor",
+);
+
+export const StopStreamProcessorHttp = Layer.effect(
+  StopStreamProcessor,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.StopStreamProcessor",
+    operation: rekognition.stopStreamProcessor,
+    actions: ["rekognition:StopStreamProcessor"],
+  }),
 );

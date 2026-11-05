@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface GetMetricStatisticsRequest extends cloudwatch.GetMetricStatisticsInput {}
 
@@ -44,4 +46,13 @@ export interface GetMetricStatistics extends Binding.Service<
 
 export const GetMetricStatistics = Binding.Service<GetMetricStatistics>(
   "AWS.CloudWatch.GetMetricStatistics",
+);
+
+export const GetMetricStatisticsHttp = Layer.effect(
+  GetMetricStatistics,
+  makeCloudWatchAccountHttpBinding({
+    tag: "AWS.CloudWatch.GetMetricStatistics",
+    operation: cloudwatch.getMetricStatistics,
+    actions: ["cloudwatch:GetMetricStatistics"],
+  }),
 );

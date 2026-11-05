@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface ListServicesRequest extends Omit<ECS.ListServicesRequest, "cluster"> {}
@@ -32,3 +34,15 @@ export interface ListServices extends Binding.Service<
   >
 > {}
 export const ListServices = Binding.Service<ListServices>("AWS.ECS.ListServices");
+
+export const ListServicesHttp = Layer.effect(
+  ListServices,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.ListServices",
+    operation: ECS.listServices,
+    actions: ["ecs:ListServices"],
+    // `ecs:ListServices` has no resource-level scoping — grant `*`
+    // conditioned on the bound cluster.
+    resources: "cluster-condition",
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as appsignals from "@distilled.cloud/aws/application-signals";
+import * as appsignals from "@distilled.cloud/aws/application-signals";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeApplicationSignalsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `application-signals:ListServiceDependents`.
@@ -45,4 +47,13 @@ export interface ListServiceDependents extends Binding.Service<
 
 export const ListServiceDependents = Binding.Service<ListServiceDependents>(
   "AWS.ApplicationSignals.ListServiceDependents",
+);
+
+export const ListServiceDependentsHttp = Layer.effect(
+  ListServiceDependents,
+  makeApplicationSignalsAccountHttpBinding({
+    tag: "AWS.ApplicationSignals.ListServiceDependents",
+    operation: appsignals.listServiceDependents,
+    actions: ["application-signals:ListServiceDependents"],
+  }),
 );

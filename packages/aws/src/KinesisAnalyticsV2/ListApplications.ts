@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/kinesis-analytics-v2";
+import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKinesisAnalyticsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListApplications}.
@@ -42,4 +45,13 @@ export interface ListApplications extends Binding.Service<
 > {}
 export const ListApplications = Binding.Service<ListApplications>(
   "AWS.KinesisAnalyticsV2.ListApplications",
+);
+
+export const ListApplicationsHttp = Layer.effect(
+  ListApplications,
+  makeKinesisAnalyticsAccountHttpBinding({
+    tag: "AWS.KinesisAnalyticsV2.ListApplications",
+    operation: analytics.listApplications,
+    actions: ["kinesisanalytics:ListApplications"],
+  }),
 );

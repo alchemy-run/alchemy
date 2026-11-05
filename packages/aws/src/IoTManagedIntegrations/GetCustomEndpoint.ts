@@ -1,6 +1,8 @@
-import type * as mi from "@distilled.cloud/aws/iot-managed-integrations";
+import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeManagedIntegrationsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iotmanagedintegrations:GetCustomEndpoint`
@@ -27,4 +29,13 @@ export interface GetCustomEndpoint extends Binding.Service<
 > {}
 export const GetCustomEndpoint = Binding.Service<GetCustomEndpoint>(
   "AWS.IoTManagedIntegrations.GetCustomEndpoint",
+);
+
+export const GetCustomEndpointHttp = Layer.effect(
+  GetCustomEndpoint,
+  makeManagedIntegrationsHttpBinding({
+    capability: "GetCustomEndpoint",
+    iamActions: ["iotmanagedintegrations:GetCustomEndpoint"],
+    operation: mi.getCustomEndpoint,
+  }),
 );

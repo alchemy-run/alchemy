@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:DisassociateMembers`.
@@ -35,4 +37,13 @@ export interface DisassociateMembers extends Binding.Service<
 > {}
 export const DisassociateMembers = Binding.Service<DisassociateMembers>(
   "AWS.SecurityHub.DisassociateMembers",
+);
+
+export const DisassociateMembersHttp = Layer.effect(
+  DisassociateMembers,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.DisassociateMembers",
+    operation: securityhub.disassociateMembers,
+    actions: ["securityhub:DisassociateMembers"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as medialive from "@distilled.cloud/aws/medialive";
+import * as medialive from "@distilled.cloud/aws/medialive";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaLiveChannelHttpBinding } from "./BindingHttp.ts";
 import type { Channel } from "./Channel.ts";
 
 /**
@@ -53,4 +55,13 @@ export interface BatchUpdateSchedule extends Binding.Service<
 > {}
 export const BatchUpdateSchedule = Binding.Service<BatchUpdateSchedule>(
   "AWS.MediaLive.BatchUpdateSchedule",
+);
+
+export const BatchUpdateScheduleHttp = Layer.effect(
+  BatchUpdateSchedule,
+  makeMediaLiveChannelHttpBinding({
+    tag: "AWS.MediaLive.BatchUpdateSchedule",
+    operation: medialive.batchUpdateSchedule,
+    actions: ["medialive:BatchUpdateSchedule"],
+  }),
 );

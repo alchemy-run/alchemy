@@ -1,6 +1,8 @@
-import type * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTargetGroupHttpBinding } from "./BindingHttp.ts";
 import type { TargetGroup } from "./TargetGroup.ts";
 
 /**
@@ -48,3 +50,12 @@ export interface RegisterTargets extends Binding.Service<
 > {}
 
 export const RegisterTargets = Binding.Service<RegisterTargets>("AWS.ELBv2.RegisterTargets");
+
+export const RegisterTargetsHttp = Layer.effect(
+  RegisterTargets,
+  makeTargetGroupHttpBinding({
+    tag: "AWS.ELBv2.RegisterTargets",
+    operation: elbv2.registerTargets,
+    actions: ["elasticloadbalancing:RegisterTargets"],
+  }),
+);

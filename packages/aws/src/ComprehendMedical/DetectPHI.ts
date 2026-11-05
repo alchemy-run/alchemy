@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:DetectPHI` — detect protected health
@@ -37,3 +39,12 @@ export interface DetectPHI extends Binding.Service<
   >
 > {}
 export const DetectPHI = Binding.Service<DetectPHI>("AWS.ComprehendMedical.DetectPHI");
+
+export const DetectPHIHttp = Layer.effect(
+  DetectPHI,
+  makeComprehendMedicalHttpBinding({
+    capability: "DetectPHI",
+    iamActions: ["comprehendmedical:DetectPHI"],
+    operation: comprehendmedical.detectPHI,
+  }),
+);

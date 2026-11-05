@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:ListEventsDetectionJobs` — list the account's
@@ -39,4 +41,13 @@ export interface ListEventsDetectionJobs extends Binding.Service<
 > {}
 export const ListEventsDetectionJobs = Binding.Service<ListEventsDetectionJobs>(
   "AWS.Comprehend.ListEventsDetectionJobs",
+);
+
+export const ListEventsDetectionJobsHttp = Layer.effect(
+  ListEventsDetectionJobs,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.ListEventsDetectionJobs",
+    operation: comprehend.listEventsDetectionJobs,
+    actions: ["comprehend:ListEventsDetectionJobs"],
+  }),
 );

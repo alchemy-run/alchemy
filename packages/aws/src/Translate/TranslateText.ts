@@ -1,6 +1,8 @@
-import type * as translate from "@distilled.cloud/aws/translate";
+import * as translate from "@distilled.cloud/aws/translate";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranslateHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `translate:TranslateText` — translate text between
@@ -40,3 +42,12 @@ export interface TranslateText extends Binding.Service<
   >
 > {}
 export const TranslateText = Binding.Service<TranslateText>("AWS.Translate.TranslateText");
+
+export const TranslateTextHttp = Layer.effect(
+  TranslateText,
+  makeTranslateHttpBinding({
+    tag: "AWS.Translate.TranslateText",
+    operation: translate.translateText,
+    actions: ["translate:TranslateText"],
+  }),
+);

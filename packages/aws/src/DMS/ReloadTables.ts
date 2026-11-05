@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dms:ReloadTables`.
@@ -36,3 +38,12 @@ export interface ReloadTables extends Binding.Service<
 > {}
 
 export const ReloadTables = Binding.Service<ReloadTables>("AWS.DMS.ReloadTables");
+
+export const ReloadTablesHttp = Layer.effect(
+  ReloadTables,
+  makeDmsAccountHttpBinding({
+    tag: "AWS.DMS.ReloadTables",
+    actions: ["dms:ReloadTables"],
+    operation: dms.reloadTables,
+  }),
+);

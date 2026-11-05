@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `CreateUser` request with `applicationId` injected from the bound application.
@@ -43,3 +45,12 @@ export interface CreateUser extends Binding.Service<
   >
 > {}
 export const CreateUser = Binding.Service<CreateUser>("AWS.QBusiness.CreateUser");
+
+export const CreateUserHttp = Layer.effect(
+  CreateUser,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.CreateUser",
+    operation: qbusiness.createUser,
+    actions: ["qbusiness:CreateUser"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as polly from "@distilled.cloud/aws/polly";
+import * as polly from "@distilled.cloud/aws/polly";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePollyHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `polly:StartSpeechSynthesisTask` — start an
@@ -43,4 +45,13 @@ export interface StartSpeechSynthesisTask extends Binding.Service<
 > {}
 export const StartSpeechSynthesisTask = Binding.Service<StartSpeechSynthesisTask>(
   "AWS.Polly.StartSpeechSynthesisTask",
+);
+
+export const StartSpeechSynthesisTaskHttp = Layer.effect(
+  StartSpeechSynthesisTask,
+  makePollyHttpBinding({
+    capability: "StartSpeechSynthesisTask",
+    iamActions: ["polly:StartSpeechSynthesisTask"],
+    operation: polly.startSpeechSynthesisTask,
+  }),
 );

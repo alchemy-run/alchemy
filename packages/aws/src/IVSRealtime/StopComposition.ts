@@ -1,6 +1,8 @@
-import type * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
+import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { COMPOSITION_ARN_WILDCARD, makeIvsRealtimeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Stop and delete a composition — any broadcast to the composition's
@@ -29,3 +31,13 @@ export interface StopComposition extends Binding.Service<
   >
 > {}
 export const StopComposition = Binding.Service<StopComposition>("AWS.IVSRealtime.StopComposition");
+
+export const StopCompositionHttp = Layer.effect(
+  StopComposition,
+  makeIvsRealtimeAccountHttpBinding({
+    tag: "AWS.IVSRealtime.StopComposition",
+    operation: ivsrealtime.stopComposition,
+    actions: ["ivs:StopComposition"],
+    resources: [COMPOSITION_ARN_WILDCARD],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as personalize from "@distilled.cloud/aws/personalize";
+import * as personalize from "@distilled.cloud/aws/personalize";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `personalize:DescribeDatasetImportJob` — Polls a bulk dataset import job for completion — pairs with
@@ -36,4 +38,13 @@ export interface DescribeDatasetImportJob extends Binding.Service<
 > {}
 export const DescribeDatasetImportJob = Binding.Service<DescribeDatasetImportJob>(
   "AWS.Personalize.DescribeDatasetImportJob",
+);
+
+export const DescribeDatasetImportJobHttp = Layer.effect(
+  DescribeDatasetImportJob,
+  makePersonalizeAccountHttpBinding({
+    tag: "AWS.Personalize.DescribeDatasetImportJob",
+    operation: personalize.describeDatasetImportJob,
+    actions: ["personalize:DescribeDatasetImportJob"],
+  }),
 );

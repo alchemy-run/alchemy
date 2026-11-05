@@ -1,6 +1,8 @@
-import type * as bda from "@distilled.cloud/aws/bedrock-data-automation";
+import * as bda from "@distilled.cloud/aws/bedrock-data-automation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBdaLibraryHttpBinding } from "./BindingHttp.ts";
 import type { DataAutomationLibrary } from "./DataAutomationLibrary.ts";
 
 /**
@@ -52,4 +54,13 @@ export interface ListDataAutomationLibraryEntities extends Binding.Service<
 > {}
 export const ListDataAutomationLibraryEntities = Binding.Service<ListDataAutomationLibraryEntities>(
   "AWS.BedrockDataAutomation.ListDataAutomationLibraryEntities",
+);
+
+export const ListDataAutomationLibraryEntitiesHttp = Layer.effect(
+  ListDataAutomationLibraryEntities,
+  makeBdaLibraryHttpBinding({
+    tag: "AWS.BedrockDataAutomation.ListDataAutomationLibraryEntities",
+    operation: bda.listDataAutomationLibraryEntities,
+    actions: ["bedrock:ListDataAutomationLibraryEntities"],
+  }),
 );

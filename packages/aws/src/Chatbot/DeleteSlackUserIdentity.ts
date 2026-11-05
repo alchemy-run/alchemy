@@ -1,6 +1,8 @@
-import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import * as chatbot from "@distilled.cloud/aws/chatbot";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeChatbotAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `chatbot:DeleteSlackUserIdentity`.
@@ -36,4 +38,13 @@ export interface DeleteSlackUserIdentity extends Binding.Service<
 
 export const DeleteSlackUserIdentity = Binding.Service<DeleteSlackUserIdentity>(
   "AWS.Chatbot.DeleteSlackUserIdentity",
+);
+
+export const DeleteSlackUserIdentityHttp = Layer.effect(
+  DeleteSlackUserIdentity,
+  makeChatbotAccountHttpBinding({
+    tag: "AWS.Chatbot.DeleteSlackUserIdentity",
+    operation: chatbot.deleteSlackUserIdentity,
+    actions: ["chatbot:DeleteSlackUserIdentity"],
+  }),
 );

@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsEndpointHttpBinding } from "./BindingHttp.ts";
 import type { PlatformApplication } from "./PlatformApplication.ts";
 
 export interface SetEndpointAttributesRequest extends sns.SetEndpointAttributesInput {}
@@ -37,4 +39,13 @@ export interface SetEndpointAttributes extends Binding.Service<
 
 export const SetEndpointAttributes = Binding.Service<SetEndpointAttributes>(
   "AWS.SNS.SetEndpointAttributes",
+);
+
+export const SetEndpointAttributesHttp = Layer.effect(
+  SetEndpointAttributes,
+  makeSnsEndpointHttpBinding({
+    tag: "AWS.SNS.SetEndpointAttributes",
+    operation: sns.setEndpointAttributes,
+    actions: ["sns:SetEndpointAttributes"],
+  }),
 );

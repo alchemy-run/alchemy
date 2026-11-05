@@ -1,6 +1,8 @@
-import type * as redshift from "@distilled.cloud/aws/redshift";
+import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRedshiftAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CopyClusterSnapshot` operation (IAM action
@@ -34,4 +36,13 @@ export interface CopyClusterSnapshot extends Binding.Service<
 > {}
 export const CopyClusterSnapshot = Binding.Service<CopyClusterSnapshot>(
   "AWS.Redshift.CopyClusterSnapshot",
+);
+
+export const CopyClusterSnapshotHttp = Layer.effect(
+  CopyClusterSnapshot,
+  makeRedshiftAccountHttpBinding({
+    tag: "AWS.Redshift.CopyClusterSnapshot",
+    operation: redshift.copyClusterSnapshot,
+    actions: ["redshift:CopyClusterSnapshot"],
+  }),
 );

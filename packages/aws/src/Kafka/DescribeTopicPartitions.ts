@@ -1,6 +1,8 @@
-import type * as kafka from "@distilled.cloud/aws/kafka";
+import * as kafka from "@distilled.cloud/aws/kafka";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKafkaClusterHttpBinding } from "./BindingHttp.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
 
 /**
@@ -35,4 +37,18 @@ export interface DescribeTopicPartitions extends Binding.Service<
 > {}
 export const DescribeTopicPartitions = Binding.Service<DescribeTopicPartitions>(
   "AWS.Kafka.DescribeTopicPartitions",
+);
+
+export const DescribeTopicPartitionsHttp = Layer.effect(
+  DescribeTopicPartitions,
+  makeKafkaClusterHttpBinding({
+    tag: "AWS.Kafka.DescribeTopicPartitions",
+    operation: kafka.describeTopicPartitions,
+    actions: [
+      "kafka:DescribeTopicPartitions",
+      "kafka-cluster:Connect",
+      "kafka-cluster:DescribeTopic",
+    ],
+    topicScoped: true,
+  }),
 );

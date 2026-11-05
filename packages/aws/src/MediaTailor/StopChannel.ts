@@ -1,6 +1,8 @@
-import type * as mediatailor from "@distilled.cloud/aws/mediatailor";
+import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaTailorHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediatailor:StopChannel` — stop a running
@@ -30,3 +32,12 @@ export interface StopChannel extends Binding.Service<
   >
 > {}
 export const StopChannel = Binding.Service<StopChannel>("AWS.MediaTailor.StopChannel");
+
+export const StopChannelHttp = Layer.effect(
+  StopChannel,
+  makeMediaTailorHttpBinding({
+    capability: "StopChannel",
+    iamActions: ["mediatailor:StopChannel"],
+    operation: mediatailor.stopChannel,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as fis from "@distilled.cloud/aws/fis";
+import * as fis from "@distilled.cloud/aws/fis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFisAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `fis:StopExperiment`.
@@ -33,3 +35,12 @@ export interface StopExperiment extends Binding.Service<
   >
 > {}
 export const StopExperiment = Binding.Service<StopExperiment>("AWS.FIS.StopExperiment");
+
+export const StopExperimentHttp = Layer.effect(
+  StopExperiment,
+  makeFisAccountHttpBinding({
+    tag: "AWS.FIS.StopExperiment",
+    operation: fis.stopExperiment,
+    actions: ["fis:StopExperiment"],
+  }),
+);

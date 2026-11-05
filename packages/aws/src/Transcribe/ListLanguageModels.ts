@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:ListLanguageModels` — list the custom language models in the account.
@@ -31,4 +33,13 @@ export interface ListLanguageModels extends Binding.Service<
 > {}
 export const ListLanguageModels = Binding.Service<ListLanguageModels>(
   "AWS.Transcribe.ListLanguageModels",
+);
+
+export const ListLanguageModelsHttp = Layer.effect(
+  ListLanguageModels,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.ListLanguageModels",
+    operation: transcribe.listLanguageModels,
+    actions: ["transcribe:ListLanguageModels"],
+  }),
 );

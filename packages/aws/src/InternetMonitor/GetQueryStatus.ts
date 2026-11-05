@@ -1,6 +1,8 @@
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInternetMonitorMonitorHttpBinding } from "./BindingHttp.ts";
 import type { Monitor } from "./Monitor.ts";
 
 export interface GetQueryStatusRequest extends Omit<im.GetQueryStatusInput, "MonitorName"> {}
@@ -44,3 +46,12 @@ export interface GetQueryStatus extends Binding.Service<
 > {}
 
 export const GetQueryStatus = Binding.Service<GetQueryStatus>("AWS.InternetMonitor.GetQueryStatus");
+
+export const GetQueryStatusHttp = Layer.effect(
+  GetQueryStatus,
+  makeInternetMonitorMonitorHttpBinding({
+    tag: "AWS.InternetMonitor.GetQueryStatus",
+    operation: im.getQueryStatus,
+    actions: ["internetmonitor:GetQueryStatus"],
+  }),
+);

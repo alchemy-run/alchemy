@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:DescribeOrganizationConfiguration`.
@@ -35,4 +37,13 @@ export interface DescribeOrganizationConfiguration extends Binding.Service<
 > {}
 export const DescribeOrganizationConfiguration = Binding.Service<DescribeOrganizationConfiguration>(
   "AWS.Macie2.DescribeOrganizationConfiguration",
+);
+
+export const DescribeOrganizationConfigurationHttp = Layer.effect(
+  DescribeOrganizationConfiguration,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.DescribeOrganizationConfiguration",
+    operation: macie2.describeOrganizationConfiguration,
+    actions: ["macie2:DescribeOrganizationConfiguration"],
+  }),
 );

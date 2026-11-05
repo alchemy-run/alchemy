@@ -1,6 +1,8 @@
-import type * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFleetWiseResourceHttpBinding } from "./BindingHttp.ts";
 import type { ModelManifest } from "./ModelManifest.ts";
 
 /**
@@ -48,4 +50,16 @@ export interface ListModelManifestNodes extends Binding.Service<
 > {}
 export const ListModelManifestNodes = Binding.Service<ListModelManifestNodes>(
   "AWS.IoTFleetWise.ListModelManifestNodes",
+);
+
+export const ListModelManifestNodesHttp = Layer.effect(
+  ListModelManifestNodes,
+  makeFleetWiseResourceHttpBinding({
+    tag: "AWS.IoTFleetWise.ListModelManifestNodes",
+    operation: iotfleetwise.listModelManifestNodes,
+    actions: ["iotfleetwise:ListModelManifestNodes"],
+    requestKey: "name",
+    identifier: (model: ModelManifest) => model.modelManifestName,
+    resources: (model: ModelManifest) => [model.modelManifestArn],
+  }),
 );

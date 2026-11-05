@@ -1,6 +1,8 @@
-import type * as forecastquery from "@distilled.cloud/aws/forecastquery";
+import * as forecastquery from "@distilled.cloud/aws/forecastquery";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:QueryForecast` — the Forecast Query data
@@ -38,3 +40,12 @@ export interface QueryForecast extends Binding.Service<
   >
 > {}
 export const QueryForecast = Binding.Service<QueryForecast>("AWS.Forecast.QueryForecast");
+
+export const QueryForecastHttp = Layer.effect(
+  QueryForecast,
+  makeForecastHttpBinding({
+    capability: "QueryForecast",
+    iamActions: ["forecast:QueryForecast"],
+    operation: forecastquery.queryForecast,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:RecognizeCelebrities` — recognize up to 64 celebrities in an image.
@@ -40,4 +42,13 @@ export interface RecognizeCelebrities extends Binding.Service<
 > {}
 export const RecognizeCelebrities = Binding.Service<RecognizeCelebrities>(
   "AWS.Rekognition.RecognizeCelebrities",
+);
+
+export const RecognizeCelebritiesHttp = Layer.effect(
+  RecognizeCelebrities,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.RecognizeCelebrities",
+    operation: rekognition.recognizeCelebrities,
+    actions: ["rekognition:RecognizeCelebrities"],
+  }),
 );

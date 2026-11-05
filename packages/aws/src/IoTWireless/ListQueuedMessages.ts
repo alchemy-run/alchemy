@@ -1,6 +1,8 @@
-import type * as iotw from "@distilled.cloud/aws/iot-wireless";
+import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotWirelessDeviceHttpBinding } from "./BindingHttp.ts";
 import type { WirelessDevice } from "./WirelessDevice.ts";
 
 /**
@@ -46,4 +48,17 @@ export interface ListQueuedMessages extends Binding.Service<
 > {}
 export const ListQueuedMessages = Binding.Service<ListQueuedMessages>(
   "AWS.IoTWireless.ListQueuedMessages",
+);
+
+export const ListQueuedMessagesHttp = Layer.effect(
+  ListQueuedMessages,
+  makeIotWirelessDeviceHttpBinding({
+    capability: "ListQueuedMessages",
+    iamActions: ["iotwireless:ListQueuedMessages"],
+    operation: iotw.listQueuedMessages,
+    prepare: (request: ListQueuedMessagesRequest | undefined, wirelessDeviceId) => ({
+      ...request,
+      Id: wirelessDeviceId,
+    }),
+  }),
 );

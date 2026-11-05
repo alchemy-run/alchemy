@@ -1,6 +1,8 @@
-import type * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFleetWiseResourceHttpBinding } from "./BindingHttp.ts";
 import type { DecoderManifest } from "./DecoderManifest.ts";
 
 /**
@@ -48,4 +50,16 @@ export interface ListDecoderManifestSignals extends Binding.Service<
 > {}
 export const ListDecoderManifestSignals = Binding.Service<ListDecoderManifestSignals>(
   "AWS.IoTFleetWise.ListDecoderManifestSignals",
+);
+
+export const ListDecoderManifestSignalsHttp = Layer.effect(
+  ListDecoderManifestSignals,
+  makeFleetWiseResourceHttpBinding({
+    tag: "AWS.IoTFleetWise.ListDecoderManifestSignals",
+    operation: iotfleetwise.listDecoderManifestSignals,
+    actions: ["iotfleetwise:ListDecoderManifestSignals"],
+    requestKey: "name",
+    identifier: (decoder: DecoderManifest) => decoder.decoderManifestName,
+    resources: (decoder: DecoderManifest) => [decoder.decoderManifestArn],
+  }),
 );

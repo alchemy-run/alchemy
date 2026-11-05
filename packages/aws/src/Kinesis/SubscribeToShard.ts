@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConsumerHttpBinding } from "./BindingHttp.ts";
 import type { StreamConsumer } from "./StreamConsumer.ts";
 
 export interface SubscribeToShardRequest extends Omit<
@@ -47,3 +49,12 @@ export interface SubscribeToShard extends Binding.Service<
 > {}
 
 export const SubscribeToShard = Binding.Service<SubscribeToShard>("AWS.Kinesis.SubscribeToShard");
+
+export const SubscribeToShardHttp = Layer.effect(
+  SubscribeToShard,
+  makeConsumerHttpBinding({
+    tag: "AWS.Kinesis.SubscribeToShard",
+    operation: Kinesis.subscribeToShard,
+    actions: ["kinesis:SubscribeToShard"],
+  }),
+);

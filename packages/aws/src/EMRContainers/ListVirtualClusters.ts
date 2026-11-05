@@ -1,6 +1,8 @@
-import type * as emrc from "@distilled.cloud/aws/emr-containers";
+import * as emrc from "@distilled.cloud/aws/emr-containers";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEMRContainersAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `emr-containers:ListVirtualClusters`.
@@ -35,4 +37,13 @@ export interface ListVirtualClusters extends Binding.Service<
 > {}
 export const ListVirtualClusters = Binding.Service<ListVirtualClusters>(
   "AWS.EMRContainers.ListVirtualClusters",
+);
+
+export const ListVirtualClustersHttp = Layer.effect(
+  ListVirtualClusters,
+  makeEMRContainersAccountHttpBinding({
+    tag: "AWS.EMRContainers.ListVirtualClusters",
+    operation: emrc.listVirtualClusters,
+    actions: ["emr-containers:ListVirtualClusters"],
+  }),
 );

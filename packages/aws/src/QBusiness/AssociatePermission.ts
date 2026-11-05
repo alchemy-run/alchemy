@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `AssociatePermission` request with `applicationId` injected from the bound application.
@@ -48,4 +50,13 @@ export interface AssociatePermission extends Binding.Service<
 > {}
 export const AssociatePermission = Binding.Service<AssociatePermission>(
   "AWS.QBusiness.AssociatePermission",
+);
+
+export const AssociatePermissionHttp = Layer.effect(
+  AssociatePermission,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.AssociatePermission",
+    operation: qbusiness.associatePermission,
+    actions: ["qbusiness:AssociatePermission"],
+  }),
 );

@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `GetPolicy` request with `applicationId` injected from the bound application.
@@ -39,3 +41,12 @@ export interface GetPolicy extends Binding.Service<
   >
 > {}
 export const GetPolicy = Binding.Service<GetPolicy>("AWS.QBusiness.GetPolicy");
+
+export const GetPolicyHttp = Layer.effect(
+  GetPolicy,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.GetPolicy",
+    operation: qbusiness.getPolicy,
+    actions: ["qbusiness:GetPolicy"],
+  }),
+);

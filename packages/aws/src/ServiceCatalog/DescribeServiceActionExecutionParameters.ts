@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:DescribeServiceActionExecutionParameters`.
@@ -43,3 +45,12 @@ export const DescribeServiceActionExecutionParameters =
   Binding.Service<DescribeServiceActionExecutionParameters>(
     "AWS.ServiceCatalog.DescribeServiceActionExecutionParameters",
   );
+
+export const DescribeServiceActionExecutionParametersHttp = Layer.effect(
+  DescribeServiceActionExecutionParameters,
+  makeServiceCatalogHttpBinding({
+    capability: "DescribeServiceActionExecutionParameters",
+    iamActions: ["servicecatalog:DescribeServiceActionExecutionParameters"],
+    operation: servicecatalog.describeServiceActionExecutionParameters,
+  }),
+);

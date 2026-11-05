@@ -1,7 +1,10 @@
 import * as Binding from "alchemy/Binding";
 import type { Input } from "alchemy/Input";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Output from "alchemy/Output";
+import { type RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { connectEnvPrefix as makeConnectEnvPrefix } from "../Connection/internal.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -53,4 +56,58 @@ export interface ConnectCacheCluster extends Binding.Service<
 > {}
 export const ConnectCacheCluster = Binding.Service<ConnectCacheCluster>(
   "AWS.ElastiCache.ConnectCacheCluster",
+);
+
+export const ConnectCacheClusterHttp = Layer.effect(
+  ConnectCacheCluster,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    return Effect.fn(function* (cluster: CacheCluster, options?: ConnectCacheClusterOptions) {
+      const prefix = cacheClusterConnectEnvPrefix(cluster.LogicalId);
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
+          env: {
+            [`${prefix}_ENDPOINTS`]: Output.map(cluster.endpoints, JSON.stringify),
+            [`${prefix}_TLS`]: Output.map(cluster.transitEncryptionEnabled, (tls) =>
+              String(tls ?? false),
+            ),
+          },
+        });
+        if (options?.subnetIds || options?.securityGroupIds) {
+          yield* AWSBindings.bindVpc`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
+            subnetIds: options?.subnetIds ?? [],
+            securityGroupIds: options?.securityGroupIds ?? [],
+          });
+        }
+      }
+      return Effect.gen(function* () {
+        const endpoints = unpackEnvValue<Array<{ address: string; port: number }>>(
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- unpackEnvValue needs the raw env; Config would unwrap packed values
+          process.env[`${prefix}_ENDPOINTS`],
+        );
+        if (endpoints !== undefined) {
+          if (!endpoints.length) {
+            return yield* Effect.die(
+              `Memcached endpoints for '${cluster.LogicalId}' are not available`,
+            );
+          }
+          return {
+            endpoints,
+            // oxlint-disable-next-line effecttsgo/process-env-in-effect -- unpackEnvValue needs the raw env; Config would unwrap packed values
+            tls: unpackEnvValue<boolean>(process.env[`${prefix}_TLS`]) ?? false,
+          };
+        }
+        const clusterEndpoints = yield* yield* cluster.endpoints;
+        if (!clusterEndpoints.length) {
+          return yield* Effect.die(
+            `Memcached endpoints for '${cluster.LogicalId}' are not available yet`,
+          );
+        }
+        return {
+          endpoints: clusterEndpoints,
+          tls: yield* yield* cluster.transitEncryptionEnabled,
+        };
+      });
+    });
+  }),
 );

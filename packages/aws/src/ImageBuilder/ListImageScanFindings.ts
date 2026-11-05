@@ -1,6 +1,8 @@
-import type * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeImageBuilderAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `imagebuilder:ListImageScanFindings`.
@@ -39,4 +41,17 @@ export interface ListImageScanFindings extends Binding.Service<
 > {}
 export const ListImageScanFindings = Binding.Service<ListImageScanFindings>(
   "AWS.ImageBuilder.ListImageScanFindings",
+);
+
+export const ListImageScanFindingsHttp = Layer.effect(
+  ListImageScanFindings,
+  makeImageBuilderAccountHttpBinding({
+    tag: "AWS.ImageBuilder.ListImageScanFindings",
+    operation: imagebuilder.listImageScanFindings,
+    // Image Builder serves scan findings from Amazon Inspector, so the API
+    // authorizes the dependent inspector2 action too — without it the call
+    // fails with AccessDeniedException even when the imagebuilder action is
+    // granted.
+    actions: ["imagebuilder:ListImageScanFindings", "inspector2:ListFindings"],
+  }),
 );

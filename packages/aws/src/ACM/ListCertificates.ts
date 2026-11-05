@@ -1,6 +1,8 @@
-import type * as acm from "@distilled.cloud/aws/acm";
+import * as acm from "@distilled.cloud/aws/acm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAcmAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListCertificatesRequest extends acm.ListCertificatesRequest {}
 
@@ -43,3 +45,12 @@ export interface ListCertificates extends Binding.Service<
 > {}
 
 export const ListCertificates = Binding.Service<ListCertificates>("AWS.ACM.ListCertificates");
+
+export const ListCertificatesHttp = Layer.effect(
+  ListCertificates,
+  makeAcmAccountHttpBinding({
+    capability: "ListCertificates",
+    iamActions: ["acm:ListCertificates"],
+    operation: acm.listCertificates,
+  }),
+);

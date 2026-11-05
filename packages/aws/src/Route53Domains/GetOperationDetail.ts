@@ -1,6 +1,8 @@
-import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
+import * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53DomainsHttpBinding } from "./BindingHttp.ts";
 
 export interface GetOperationDetailRequest extends route53domains.GetOperationDetailRequest {}
 
@@ -51,4 +53,13 @@ export interface GetOperationDetail extends Binding.Service<
 > {}
 export const GetOperationDetail = Binding.Service<GetOperationDetail>(
   "AWS.Route53Domains.GetOperationDetail",
+);
+
+export const GetOperationDetailHttp = Layer.effect(
+  GetOperationDetail,
+  makeRoute53DomainsHttpBinding({
+    capability: "GetOperationDetail",
+    iamActions: ["route53domains:GetOperationDetail"],
+    operation: route53domains.getOperationDetail,
+  }),
 );

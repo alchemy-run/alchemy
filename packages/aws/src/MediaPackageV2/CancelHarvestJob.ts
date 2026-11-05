@@ -1,6 +1,8 @@
-import type * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
+import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaPackageV2OriginEndpointHttpBinding } from "./BindingHttp.ts";
 import type { OriginEndpoint } from "./OriginEndpoint.ts";
 
 /**
@@ -42,4 +44,14 @@ export interface CancelHarvestJob extends Binding.Service<
 > {}
 export const CancelHarvestJob = Binding.Service<CancelHarvestJob>(
   "AWS.MediaPackageV2.CancelHarvestJob",
+);
+
+export const CancelHarvestJobHttp = Layer.effect(
+  CancelHarvestJob,
+  makeMediaPackageV2OriginEndpointHttpBinding({
+    tag: "AWS.MediaPackageV2.CancelHarvestJob",
+    operation: mediapackagev2.cancelHarvestJob,
+    actions: ["mediapackagev2:CancelHarvestJob"],
+    harvestJobScoped: true,
+  }),
 );

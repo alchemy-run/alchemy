@@ -1,6 +1,8 @@
-import type * as lf from "@distilled.cloud/aws/lakeformation";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLakeFormationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListLFTags}.
@@ -33,3 +35,12 @@ export interface ListLFTags extends Binding.Service<
 > {}
 
 export const ListLFTags = Binding.Service<ListLFTags>("AWS.LakeFormation.ListLFTags");
+
+export const ListLFTagsHttp = Layer.effect(
+  ListLFTags,
+  makeLakeFormationHttpBinding({
+    capability: "ListLFTags",
+    iamActions: ["lakeformation:ListLFTags"],
+    operation: lf.listLFTags,
+  }),
+);

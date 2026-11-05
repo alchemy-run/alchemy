@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:GetMediaAnalysisJob` — get the status and results location of a media analysis job.
@@ -38,4 +40,13 @@ export interface GetMediaAnalysisJob extends Binding.Service<
 > {}
 export const GetMediaAnalysisJob = Binding.Service<GetMediaAnalysisJob>(
   "AWS.Rekognition.GetMediaAnalysisJob",
+);
+
+export const GetMediaAnalysisJobHttp = Layer.effect(
+  GetMediaAnalysisJob,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.GetMediaAnalysisJob",
+    operation: rekognition.getMediaAnalysisJob,
+    actions: ["rekognition:GetMediaAnalysisJob"],
+  }),
 );

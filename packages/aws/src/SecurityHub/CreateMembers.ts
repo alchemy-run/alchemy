@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:CreateMembers`.
@@ -33,3 +35,12 @@ export interface CreateMembers extends Binding.Service<
   >
 > {}
 export const CreateMembers = Binding.Service<CreateMembers>("AWS.SecurityHub.CreateMembers");
+
+export const CreateMembersHttp = Layer.effect(
+  CreateMembers,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.CreateMembers",
+    operation: securityhub.createMembers,
+    actions: ["securityhub:CreateMembers"],
+  }),
+);

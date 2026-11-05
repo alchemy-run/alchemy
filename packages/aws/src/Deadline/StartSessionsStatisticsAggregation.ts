@@ -1,6 +1,8 @@
-import type * as deadline from "@distilled.cloud/aws/deadline";
+import * as deadline from "@distilled.cloud/aws/deadline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDeadlineFarmHttpBinding } from "./BindingHttp.ts";
 import type { Farm } from "./Farm.ts";
 
 /**
@@ -48,3 +50,12 @@ export const StartSessionsStatisticsAggregation =
   Binding.Service<StartSessionsStatisticsAggregation>(
     "AWS.Deadline.StartSessionsStatisticsAggregation",
   );
+
+export const StartSessionsStatisticsAggregationHttp = Layer.effect(
+  StartSessionsStatisticsAggregation,
+  makeDeadlineFarmHttpBinding({
+    tag: "AWS.Deadline.StartSessionsStatisticsAggregation",
+    operation: deadline.startSessionsStatisticsAggregation,
+    actions: ["deadline:StartSessionsStatisticsAggregation"],
+  }),
+);

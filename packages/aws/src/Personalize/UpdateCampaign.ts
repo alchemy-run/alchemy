@@ -1,6 +1,8 @@
-import type * as personalize from "@distilled.cloud/aws/personalize";
+import * as personalize from "@distilled.cloud/aws/personalize";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `personalize:UpdateCampaign` — Points a live campaign at a newly trained solution version (or adjusts
@@ -29,3 +31,12 @@ export interface UpdateCampaign extends Binding.Service<
   >
 > {}
 export const UpdateCampaign = Binding.Service<UpdateCampaign>("AWS.Personalize.UpdateCampaign");
+
+export const UpdateCampaignHttp = Layer.effect(
+  UpdateCampaign,
+  makePersonalizeAccountHttpBinding({
+    tag: "AWS.Personalize.UpdateCampaign",
+    operation: personalize.updateCampaign,
+    actions: ["personalize:UpdateCampaign"],
+  }),
+);

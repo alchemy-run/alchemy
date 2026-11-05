@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:DetectKeyPhrases` — extract the key noun
@@ -36,4 +38,13 @@ export interface DetectKeyPhrases extends Binding.Service<
 > {}
 export const DetectKeyPhrases = Binding.Service<DetectKeyPhrases>(
   "AWS.Comprehend.DetectKeyPhrases",
+);
+
+export const DetectKeyPhrasesHttp = Layer.effect(
+  DetectKeyPhrases,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.DetectKeyPhrases",
+    operation: comprehend.detectKeyPhrases,
+    actions: ["comprehend:DetectKeyPhrases"],
+  }),
 );

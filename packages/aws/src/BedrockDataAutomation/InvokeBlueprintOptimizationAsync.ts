@@ -1,6 +1,8 @@
-import type * as bda from "@distilled.cloud/aws/bedrock-data-automation";
+import * as bda from "@distilled.cloud/aws/bedrock-data-automation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBdaBlueprintOptimizationHttpBinding } from "./BindingHttp.ts";
 import type { Blueprint } from "./Blueprint.ts";
 
 /**
@@ -63,4 +65,13 @@ export interface InvokeBlueprintOptimizationAsync extends Binding.Service<
 > {}
 export const InvokeBlueprintOptimizationAsync = Binding.Service<InvokeBlueprintOptimizationAsync>(
   "AWS.BedrockDataAutomation.InvokeBlueprintOptimizationAsync",
+);
+
+export const InvokeBlueprintOptimizationAsyncHttp = Layer.effect(
+  InvokeBlueprintOptimizationAsync,
+  makeBdaBlueprintOptimizationHttpBinding({
+    tag: "AWS.BedrockDataAutomation.InvokeBlueprintOptimizationAsync",
+    operation: bda.invokeBlueprintOptimizationAsync,
+    actions: ["bedrock:InvokeBlueprintOptimizationAsync"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as licensemanager from "@distilled.cloud/aws/license-manager";
+import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLicenseManagerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link RejectGrant}.
@@ -35,3 +37,12 @@ export interface RejectGrant extends Binding.Service<
   >
 > {}
 export const RejectGrant = Binding.Service<RejectGrant>("AWS.LicenseManager.RejectGrant");
+
+export const RejectGrantHttp = Layer.effect(
+  RejectGrant,
+  makeLicenseManagerHttpBinding({
+    capability: "RejectGrant",
+    iamActions: ["license-manager:RejectGrant"],
+    operation: licensemanager.rejectGrant,
+  }),
+);

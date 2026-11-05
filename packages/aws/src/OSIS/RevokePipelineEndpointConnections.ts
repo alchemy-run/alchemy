@@ -1,6 +1,8 @@
-import type * as osis from "@distilled.cloud/aws/osis";
+import * as osis from "@distilled.cloud/aws/osis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOsisPipelineHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 /**
@@ -40,4 +42,15 @@ export interface RevokePipelineEndpointConnections extends Binding.Service<
 > {}
 export const RevokePipelineEndpointConnections = Binding.Service<RevokePipelineEndpointConnections>(
   "AWS.OSIS.RevokePipelineEndpointConnections",
+);
+
+export const RevokePipelineEndpointConnectionsHttp = Layer.effect(
+  RevokePipelineEndpointConnections,
+  makeOsisPipelineHttpBinding({
+    tag: "AWS.OSIS.RevokePipelineEndpointConnections",
+    operation: osis.revokePipelineEndpointConnections,
+    actions: ["osis:RevokePipelineEndpointConnections"],
+    requestKey: "PipelineArn",
+    identifier: (pipeline) => pipeline.pipelineArn,
+  }),
 );

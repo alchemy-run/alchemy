@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:DeleteMedicalTranscriptionJob` — delete a medical transcription job.
@@ -34,4 +36,13 @@ export interface DeleteMedicalTranscriptionJob extends Binding.Service<
 > {}
 export const DeleteMedicalTranscriptionJob = Binding.Service<DeleteMedicalTranscriptionJob>(
   "AWS.Transcribe.DeleteMedicalTranscriptionJob",
+);
+
+export const DeleteMedicalTranscriptionJobHttp = Layer.effect(
+  DeleteMedicalTranscriptionJob,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.DeleteMedicalTranscriptionJob",
+    operation: transcribe.deleteMedicalTranscriptionJob,
+    actions: ["transcribe:DeleteMedicalTranscriptionJob"],
+  }),
 );

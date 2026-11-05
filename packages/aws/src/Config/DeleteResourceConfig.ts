@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `config:DeleteResourceConfig` — delete the recorded
@@ -36,4 +38,13 @@ export interface DeleteResourceConfig extends Binding.Service<
 
 export const DeleteResourceConfig = Binding.Service<DeleteResourceConfig>(
   "AWS.Config.DeleteResourceConfig",
+);
+
+export const DeleteResourceConfigHttp = Layer.effect(
+  DeleteResourceConfig,
+  makeConfigAccountHttpBinding({
+    tag: "AWS.Config.DeleteResourceConfig",
+    operation: config.deleteResourceConfig,
+    actions: ["config:DeleteResourceConfig"],
+  }),
 );

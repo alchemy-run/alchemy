@@ -1,6 +1,8 @@
-import type * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSESHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `sesv2:ListSuppressedDestinations`.
@@ -37,4 +39,13 @@ export interface ListSuppressedDestinations extends Binding.Service<
 > {}
 export const ListSuppressedDestinations = Binding.Service<ListSuppressedDestinations>(
   "AWS.SES.ListSuppressedDestinations",
+);
+
+export const ListSuppressedDestinationsHttp = Layer.effect(
+  ListSuppressedDestinations,
+  makeSESHttpBinding({
+    tag: "AWS.SES.ListSuppressedDestinations",
+    operation: sesv2.listSuppressedDestinations,
+    actions: ["ses:ListSuppressedDestinations"],
+  }),
 );

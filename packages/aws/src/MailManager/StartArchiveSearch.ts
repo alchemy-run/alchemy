@@ -1,7 +1,9 @@
-import type * as mm from "@distilled.cloud/aws/mailmanager";
+import * as mm from "@distilled.cloud/aws/mailmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Archive } from "./Archive.ts";
+import { makeArchiveHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ses:StartArchiveSearch`.
@@ -38,4 +40,13 @@ export interface StartArchiveSearch extends Binding.Service<
 > {}
 export const StartArchiveSearch = Binding.Service<StartArchiveSearch>(
   "AWS.MailManager.StartArchiveSearch",
+);
+
+export const StartArchiveSearchHttp = Layer.effect(
+  StartArchiveSearch,
+  makeArchiveHttpBinding({
+    tag: "AWS.MailManager.StartArchiveSearch",
+    operation: mm.startArchiveSearch,
+    actions: ["ses:StartArchiveSearch"],
+  }),
 );

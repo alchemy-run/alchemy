@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:StopResource` — halt an in-progress Forecast
@@ -34,3 +36,12 @@ export interface StopResource extends Binding.Service<
   >
 > {}
 export const StopResource = Binding.Service<StopResource>("AWS.Forecast.StopResource");
+
+export const StopResourceHttp = Layer.effect(
+  StopResource,
+  makeForecastHttpBinding({
+    capability: "StopResource",
+    iamActions: ["forecast:StopResource"],
+    operation: forecast.stopResource,
+  }),
+);

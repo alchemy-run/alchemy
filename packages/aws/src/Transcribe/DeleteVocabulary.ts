@@ -1,6 +1,8 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranscribeHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `transcribe:DeleteVocabulary` — delete a custom vocabulary.
@@ -31,4 +33,13 @@ export interface DeleteVocabulary extends Binding.Service<
 > {}
 export const DeleteVocabulary = Binding.Service<DeleteVocabulary>(
   "AWS.Transcribe.DeleteVocabulary",
+);
+
+export const DeleteVocabularyHttp = Layer.effect(
+  DeleteVocabulary,
+  makeTranscribeHttpBinding({
+    tag: "AWS.Transcribe.DeleteVocabulary",
+    operation: transcribe.deleteVocabulary,
+    actions: ["transcribe:DeleteVocabulary"],
+  }),
 );

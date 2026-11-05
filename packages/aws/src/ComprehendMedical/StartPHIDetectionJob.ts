@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:StartPHIDetectionJob` — start an asynchronous protected health information (PHI) detection job over a collection of documents in S3. Also grants `iam:PassRole` (conditioned to `comprehendmedical.amazonaws.com`) for the job's data-access role.
@@ -40,4 +42,14 @@ export interface StartPHIDetectionJob extends Binding.Service<
 > {}
 export const StartPHIDetectionJob = Binding.Service<StartPHIDetectionJob>(
   "AWS.ComprehendMedical.StartPHIDetectionJob",
+);
+
+export const StartPHIDetectionJobHttp = Layer.effect(
+  StartPHIDetectionJob,
+  makeComprehendMedicalHttpBinding({
+    capability: "StartPHIDetectionJob",
+    iamActions: ["comprehendmedical:StartPHIDetectionJob"],
+    operation: comprehendmedical.startPHIDetectionJob,
+    passRole: true,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as iam from "@distilled.cloud/aws/iam";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIamHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iam:GetCredentialReport` — download the account-wide
@@ -42,4 +44,13 @@ export interface GetCredentialReport extends Binding.Service<
 > {}
 export const GetCredentialReport = Binding.Service<GetCredentialReport>(
   "AWS.IAM.GetCredentialReport",
+);
+
+export const GetCredentialReportHttp = Layer.effect(
+  GetCredentialReport,
+  makeIamHttpBinding({
+    capability: "GetCredentialReport",
+    iamActions: ["iam:GetCredentialReport"],
+    operation: iam.getCredentialReport,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as b2bi from "@distilled.cloud/aws/b2bi";
+import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeB2biAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `b2bi:TestParsing`.
@@ -39,3 +41,16 @@ export interface TestParsing extends Binding.Service<
   >
 > {}
 export const TestParsing = Binding.Service<TestParsing>("AWS.B2BI.TestParsing");
+
+export const TestParsingHttp = Layer.effect(
+  TestParsing,
+  makeB2biAccountHttpBinding({
+    tag: "AWS.B2BI.TestParsing",
+    operation: b2bi.testParsing,
+    // B2BI reads `inputFile` through the caller's session (verified live:
+    // "Access denied when getting object attributes from s3://…" without
+    // the S3 grants), so the documented companion permissions are granted
+    // alongside.
+    actions: ["b2bi:TestParsing", "s3:GetObject", "s3:GetObjectAttributes"],
+  }),
+);

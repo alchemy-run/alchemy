@@ -1,6 +1,8 @@
-import type * as kafka from "@distilled.cloud/aws/kafka";
+import * as kafka from "@distilled.cloud/aws/kafka";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKafkaClusterHttpBinding } from "./BindingHttp.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
 
 /**
@@ -34,4 +36,13 @@ export interface GetBootstrapBrokers extends Binding.Service<
 > {}
 export const GetBootstrapBrokers = Binding.Service<GetBootstrapBrokers>(
   "AWS.Kafka.GetBootstrapBrokers",
+);
+
+export const GetBootstrapBrokersHttp = Layer.effect(
+  GetBootstrapBrokers,
+  makeKafkaClusterHttpBinding({
+    tag: "AWS.Kafka.GetBootstrapBrokers",
+    operation: kafka.getBootstrapBrokers,
+    actions: ["kafka:GetBootstrapBrokers"],
+  }),
 );

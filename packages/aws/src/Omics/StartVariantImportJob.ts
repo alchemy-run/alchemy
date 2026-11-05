@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 import type { VariantStore } from "./VariantStore.ts";
 
 export interface StartVariantImportJobRequest extends Omit<
@@ -44,4 +46,17 @@ export interface StartVariantImportJob extends Binding.Service<
 
 export const StartVariantImportJob = Binding.Service<StartVariantImportJob>(
   "AWS.Omics.StartVariantImportJob",
+);
+
+export const StartVariantImportJobHttp = Layer.effect(
+  StartVariantImportJob,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.StartVariantImportJob",
+    operation: omics.startVariantImportJob,
+    actions: ["omics:StartVariantImportJob"],
+    key: "destinationName",
+    id: (store) => store.name,
+    arn: (store) => store.variantStoreArn,
+    passRole: true,
+  }),
 );

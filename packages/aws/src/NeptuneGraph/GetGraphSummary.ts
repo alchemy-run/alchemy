@@ -1,6 +1,8 @@
-import type * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
+import * as neptunegraph from "@distilled.cloud/aws/neptune-graph";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneGraphGraphHttpBinding } from "./BindingHttp.ts";
 import type { Graph } from "./Graph.ts";
 
 /**
@@ -32,3 +34,12 @@ export interface GetGraphSummary extends Binding.Service<
   >
 > {}
 export const GetGraphSummary = Binding.Service<GetGraphSummary>("AWS.NeptuneGraph.GetGraphSummary");
+
+export const GetGraphSummaryHttp = Layer.effect(
+  GetGraphSummary,
+  makeNeptuneGraphGraphHttpBinding({
+    tag: "AWS.NeptuneGraph.GetGraphSummary",
+    operation: neptunegraph.getGraphSummary,
+    actions: ["neptune-graph:GetGraphSummary"],
+  }),
+);

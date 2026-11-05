@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CopyBackup` operation (IAM actions
@@ -33,3 +35,14 @@ export interface CopyBackup extends Binding.Service<
   >
 > {}
 export const CopyBackup = Binding.Service<CopyBackup>("AWS.FSx.CopyBackup");
+
+export const CopyBackupHttp = Layer.effect(
+  CopyBackup,
+  makeFSxAccountHttpBinding({
+    tag: "AWS.FSx.CopyBackup",
+    // CopyBackup tags the new backup it creates, so it needs TagResource
+    // alongside the copy itself.
+    operation: fsx.copyBackup,
+    actions: ["fsx:CopyBackup", "fsx:TagResource"],
+  }),
+);

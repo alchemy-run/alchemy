@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelinePipelineNameHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export interface DisableStageTransitionRequest extends Omit<
@@ -40,4 +43,14 @@ export interface DisableStageTransition extends Binding.Service<
 > {}
 export const DisableStageTransition = Binding.Service<DisableStageTransition>(
   "AWS.CodePipeline.DisableStageTransition",
+);
+
+export const DisableStageTransitionHttp = Layer.effect(
+  DisableStageTransition,
+  makeCodePipelinePipelineNameHttpBinding({
+    tag: "AWS.CodePipeline.DisableStageTransition",
+    operation: codepipeline.disableStageTransition,
+    actions: ["codepipeline:DisableStageTransition"],
+    subScoped: true,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:BatchDetectDominantLanguage` — determine the dominant language for a batch of up to 25 documents in a single call.
@@ -39,4 +41,13 @@ export interface BatchDetectDominantLanguage extends Binding.Service<
 > {}
 export const BatchDetectDominantLanguage = Binding.Service<BatchDetectDominantLanguage>(
   "AWS.Comprehend.BatchDetectDominantLanguage",
+);
+
+export const BatchDetectDominantLanguageHttp = Layer.effect(
+  BatchDetectDominantLanguage,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.BatchDetectDominantLanguage",
+    operation: comprehend.batchDetectDominantLanguage,
+    actions: ["comprehend:BatchDetectDominantLanguage"],
+  }),
 );

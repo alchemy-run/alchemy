@@ -1,6 +1,8 @@
-import type * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
+import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWabaScopedHttpBinding } from "./BindingHttp.ts";
 import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAccount.ts";
 
 /**
@@ -55,4 +57,13 @@ export interface CreateWhatsAppFlow extends Binding.Service<
 > {}
 export const CreateWhatsAppFlow = Binding.Service<CreateWhatsAppFlow>(
   "AWS.SocialMessaging.CreateWhatsAppFlow",
+);
+
+export const CreateWhatsAppFlowHttp = Layer.effect(
+  CreateWhatsAppFlow,
+  makeWabaScopedHttpBinding({
+    tag: "AWS.SocialMessaging.CreateWhatsAppFlow",
+    operation: socialmessaging.createWhatsAppFlow,
+    actions: ["social-messaging:CreateWhatsAppFlow"],
+  }),
 );

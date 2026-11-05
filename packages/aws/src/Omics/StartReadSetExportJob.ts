@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
 import type { SequenceStore } from "./SequenceStore.ts";
 
 export interface StartReadSetExportJobRequest extends Omit<
@@ -40,4 +42,17 @@ export interface StartReadSetExportJob extends Binding.Service<
 
 export const StartReadSetExportJob = Binding.Service<StartReadSetExportJob>(
   "AWS.Omics.StartReadSetExportJob",
+);
+
+export const StartReadSetExportJobHttp = Layer.effect(
+  StartReadSetExportJob,
+  makeOmicsResourceHttpBinding({
+    tag: "AWS.Omics.StartReadSetExportJob",
+    operation: omics.startReadSetExportJob,
+    actions: ["omics:StartReadSetExportJob"],
+    key: "sequenceStoreId",
+    id: (store: SequenceStore) => store.sequenceStoreId,
+    arn: (store: SequenceStore) => store.sequenceStoreArn,
+    passRole: true,
+  }),
 );

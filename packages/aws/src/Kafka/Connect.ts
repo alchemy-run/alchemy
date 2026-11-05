@@ -1,8 +1,20 @@
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import { connectEnvPrefix as makeConnectEnvPrefix } from "../Connection/internal.ts";
+import * as Layer from "effect/Layer";
+import {
+  KAFKA_CONNECT_ACTIONS,
+  KAFKA_READ_GROUP_ACTIONS,
+  KAFKA_READ_TOPIC_ACTIONS,
+  makeKafkaConnectHttpBinding,
+  KAFKA_WRITE_CLUSTER_ACTIONS,
+  KAFKA_WRITE_TOPIC_ACTIONS,
+  KAFKA_WRITE_TRANSACTION_ACTIONS,
+} from "./ConnectHttp.ts";
+import { connectEnvPrefix } from "./ConnectHttp.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
+
+export { connectEnvPrefix };
 
 /**
  * Connection descriptor for an MSK {@link ServerlessCluster}. Alchemy does
@@ -27,15 +39,6 @@ export interface ClusterConnectionInfo {
    */
   authentication: "iam";
 }
-
-/**
- * Environment variable prefix under which the connect bindings publish the
- * cluster endpoint on the host Function, derived from the cluster's logical
- * ID. A cluster with logical ID `Events` yields `MSK_EVENTS` and the
- * variables `MSK_EVENTS_BROKERS` and `MSK_EVENTS_ARN`.
- */
-export const connectEnvPrefix = (logicalId: string): string =>
-  makeConnectEnvPrefix("MSK", logicalId);
 
 /**
  * Read-only (consumer) runtime access to an MSK {@link ServerlessCluster}'s
@@ -139,3 +142,34 @@ export interface ConnectReadWrite extends Binding.Service<
   ) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>>
 > {}
 export const ConnectReadWrite = Binding.Service<ConnectReadWrite>("AWS.Kafka.ConnectReadWrite");
+
+export const ConnectReadHttp = Layer.effect(
+  ConnectRead,
+  makeKafkaConnectHttpBinding({
+    tag: "AWS.Kafka.ConnectRead",
+    clusterActions: KAFKA_CONNECT_ACTIONS,
+    topicActions: KAFKA_READ_TOPIC_ACTIONS,
+    groupActions: KAFKA_READ_GROUP_ACTIONS,
+  }),
+);
+
+export const ConnectReadWriteHttp = Layer.effect(
+  ConnectReadWrite,
+  makeKafkaConnectHttpBinding({
+    tag: "AWS.Kafka.ConnectReadWrite",
+    clusterActions: [...KAFKA_CONNECT_ACTIONS, ...KAFKA_WRITE_CLUSTER_ACTIONS],
+    topicActions: [...new Set([...KAFKA_READ_TOPIC_ACTIONS, ...KAFKA_WRITE_TOPIC_ACTIONS])],
+    groupActions: KAFKA_READ_GROUP_ACTIONS,
+    transactionActions: KAFKA_WRITE_TRANSACTION_ACTIONS,
+  }),
+);
+
+export const ConnectWriteHttp = Layer.effect(
+  ConnectWrite,
+  makeKafkaConnectHttpBinding({
+    tag: "AWS.Kafka.ConnectWrite",
+    clusterActions: [...KAFKA_CONNECT_ACTIONS, ...KAFKA_WRITE_CLUSTER_ACTIONS],
+    topicActions: KAFKA_WRITE_TOPIC_ACTIONS,
+    transactionActions: KAFKA_WRITE_TRANSACTION_ACTIONS,
+  }),
+);

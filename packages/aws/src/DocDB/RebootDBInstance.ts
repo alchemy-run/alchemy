@@ -1,6 +1,8 @@
-import type * as docdb from "@distilled.cloud/aws/docdb";
+import * as docdb from "@distilled.cloud/aws/docdb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBInstanceHttpBinding } from "./BindingHttp.ts";
 import type { DBInstance } from "./DBInstance.ts";
 
 /**
@@ -35,3 +37,12 @@ export interface RebootDBInstance extends Binding.Service<
   >
 > {}
 export const RebootDBInstance = Binding.Service<RebootDBInstance>("AWS.DocDB.RebootDBInstance");
+
+export const RebootDBInstanceHttp = Layer.effect(
+  RebootDBInstance,
+  makeDocDBInstanceHttpBinding({
+    tag: "AWS.DocDB.RebootDBInstance",
+    operation: docdb.rebootDBInstance,
+    actions: ["rds:RebootDBInstance"],
+  }),
+);

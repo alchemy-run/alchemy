@@ -1,7 +1,9 @@
-import type * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
+import { makeGroupHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `ExecutePolicy` request with `AutoScalingGroupName` injected from the bound
@@ -50,3 +52,12 @@ export interface ExecutePolicy extends Binding.Service<
 > {}
 
 export const ExecutePolicy = Binding.Service<ExecutePolicy>("AWS.AutoScaling.ExecutePolicy");
+
+export const ExecutePolicyHttp = Layer.effect(
+  ExecutePolicy,
+  makeGroupHttpBinding({
+    tag: "AWS.AutoScaling.ExecutePolicy",
+    operation: autoscaling.executePolicy,
+    actions: ["autoscaling:ExecutePolicy"],
+  }),
+);

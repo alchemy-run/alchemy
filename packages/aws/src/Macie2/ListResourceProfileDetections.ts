@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:ListResourceProfileDetections`.
@@ -35,4 +37,13 @@ export interface ListResourceProfileDetections extends Binding.Service<
 > {}
 export const ListResourceProfileDetections = Binding.Service<ListResourceProfileDetections>(
   "AWS.Macie2.ListResourceProfileDetections",
+);
+
+export const ListResourceProfileDetectionsHttp = Layer.effect(
+  ListResourceProfileDetections,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.ListResourceProfileDetections",
+    operation: macie2.listResourceProfileDetections,
+    actions: ["macie2:ListResourceProfileDetections"],
+  }),
 );

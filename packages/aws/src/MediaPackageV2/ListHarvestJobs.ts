@@ -1,6 +1,8 @@
-import type * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
+import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaPackageV2ChannelGroupHttpBinding } from "./BindingHttp.ts";
 import type { ChannelGroup } from "./ChannelGroup.ts";
 
 /**
@@ -36,4 +38,13 @@ export interface ListHarvestJobs extends Binding.Service<
 > {}
 export const ListHarvestJobs = Binding.Service<ListHarvestJobs>(
   "AWS.MediaPackageV2.ListHarvestJobs",
+);
+
+export const ListHarvestJobsHttp = Layer.effect(
+  ListHarvestJobs,
+  makeMediaPackageV2ChannelGroupHttpBinding({
+    tag: "AWS.MediaPackageV2.ListHarvestJobs",
+    operation: mediapackagev2.listHarvestJobs,
+    actions: ["mediapackagev2:ListHarvestJobs"],
+  }),
 );

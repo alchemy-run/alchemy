@@ -1,6 +1,8 @@
-import type * as glue from "@distilled.cloud/aws/glue";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGlueCrawlerHttpBinding } from "./BindingHttp.ts";
 import type { Crawler } from "./Crawler.ts";
 
 /**
@@ -34,3 +36,12 @@ export interface StartCrawler extends Binding.Service<
 > {}
 
 export const StartCrawler = Binding.Service<StartCrawler>("AWS.Glue.StartCrawler");
+
+export const StartCrawlerHttp = Layer.effect(
+  StartCrawler,
+  makeGlueCrawlerHttpBinding({
+    tag: "AWS.Glue.StartCrawler",
+    operation: glue.startCrawler,
+    actions: ["glue:StartCrawler"],
+  }),
+);

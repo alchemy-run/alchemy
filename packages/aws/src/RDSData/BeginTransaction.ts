@@ -2,8 +2,10 @@ import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import { makeRDSDataHttpBinding } from "./BindingHttp.ts";
 
 export interface BeginTransactionOptions {
   secret: Secret;
@@ -68,3 +70,22 @@ export interface BeginTransaction extends Binding.Service<
 > {}
 
 export const BeginTransaction = Binding.Service<BeginTransaction>("AWS.RDSData.BeginTransaction");
+
+export const BeginTransactionHttp = Layer.effect(
+  BeginTransaction,
+  makeRDSDataHttpBinding({
+    tag: "AWS.RDSData.BeginTransaction",
+    action: "rds-data:BeginTransaction",
+    operation: rdsdata.beginTransaction,
+    // the runtime callable takes no request — everything comes from bind time
+    makeInput: (
+      _request: void,
+      { resourceArn, secretArn, database, schema },
+    ): rdsdata.BeginTransactionRequest => ({
+      resourceArn,
+      secretArn,
+      database,
+      schema,
+    }),
+  }),
+);

@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/finspace";
+import * as finspace from "@distilled.cloud/aws/finspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFinSpaceKxHttpBinding } from "./BindingHttp.ts";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
@@ -30,4 +33,13 @@ export interface DeleteKxClusterNode extends Binding.Service<
 > {}
 export const DeleteKxClusterNode = Binding.Service<DeleteKxClusterNode>(
   "AWS.FinSpace.DeleteKxClusterNode",
+);
+
+export const DeleteKxClusterNodeHttp = Layer.effect(
+  DeleteKxClusterNode,
+  makeFinSpaceKxHttpBinding({
+    tag: "AWS.FinSpace.DeleteKxClusterNode",
+    operation: finspace.deleteKxClusterNode,
+    actions: ["finspace:DeleteKxClusterNode"],
+  }),
 );

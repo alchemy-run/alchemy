@@ -1,6 +1,8 @@
-import type * as geoMaps from "@distilled.cloud/aws/geo-maps";
+import * as geoMaps from "@distilled.cloud/aws/geo-maps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoMapsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-maps:GetTile` — fetch a single map tile addressed
@@ -43,3 +45,12 @@ export interface GetTile extends Binding.Service<
   >
 > {}
 export const GetTile = Binding.Service<GetTile>("AWS.GeoMaps.GetTile");
+
+export const GetTileHttp = Layer.effect(
+  GetTile,
+  makeGeoMapsHttpBinding({
+    capability: "GetTile",
+    iamActions: ["geo-maps:GetTile"],
+    operation: geoMaps.getTile,
+  }),
+);

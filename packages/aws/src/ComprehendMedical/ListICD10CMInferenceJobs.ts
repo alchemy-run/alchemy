@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:ListICD10CMInferenceJobs` — list the asynchronous ICD-10-CM ontology linking jobs you have submitted.
@@ -36,4 +38,13 @@ export interface ListICD10CMInferenceJobs extends Binding.Service<
 > {}
 export const ListICD10CMInferenceJobs = Binding.Service<ListICD10CMInferenceJobs>(
   "AWS.ComprehendMedical.ListICD10CMInferenceJobs",
+);
+
+export const ListICD10CMInferenceJobsHttp = Layer.effect(
+  ListICD10CMInferenceJobs,
+  makeComprehendMedicalHttpBinding({
+    capability: "ListICD10CMInferenceJobs",
+    iamActions: ["comprehendmedical:ListICD10CMInferenceJobs"],
+    operation: comprehendmedical.listICD10CMInferenceJobs,
+  }),
 );

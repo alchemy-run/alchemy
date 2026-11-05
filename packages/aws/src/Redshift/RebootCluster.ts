@@ -1,6 +1,8 @@
-import type * as redshift from "@distilled.cloud/aws/redshift";
+import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRedshiftClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -31,3 +33,12 @@ export interface RebootCluster extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<redshift.RebootClusterResult, redshift.RebootClusterError>>
 > {}
 export const RebootCluster = Binding.Service<RebootCluster>("AWS.Redshift.RebootCluster");
+
+export const RebootClusterHttp = Layer.effect(
+  RebootCluster,
+  makeRedshiftClusterHttpBinding({
+    tag: "AWS.Redshift.RebootCluster",
+    operation: redshift.rebootCluster,
+    actions: ["redshift:RebootCluster"],
+  }),
+);

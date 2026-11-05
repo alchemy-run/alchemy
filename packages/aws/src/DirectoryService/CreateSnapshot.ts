@@ -1,6 +1,8 @@
-import type * as ds from "@distilled.cloud/aws/directory-service";
+import * as ds from "@distilled.cloud/aws/directory-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDirectoryHttpBinding } from "./BindingHttp.ts";
 import type { Directory } from "./Directory.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface CreateSnapshot extends Binding.Service<
 > {}
 export const CreateSnapshot = Binding.Service<CreateSnapshot>(
   "AWS.DirectoryService.CreateSnapshot",
+);
+
+export const CreateSnapshotHttp = Layer.effect(
+  CreateSnapshot,
+  makeDirectoryHttpBinding({
+    tag: "AWS.DirectoryService.CreateSnapshot",
+    operation: ds.createSnapshot,
+    actions: ["ds:CreateSnapshot"],
+  }),
 );

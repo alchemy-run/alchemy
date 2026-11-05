@@ -1,6 +1,8 @@
-import type * as docdb from "@distilled.cloud/aws/docdb";
+import * as docdb from "@distilled.cloud/aws/docdb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBClusterHttpBinding } from "./BindingHttp.ts";
 import type { DBCluster } from "./DBCluster.ts";
 
 /**
@@ -38,3 +40,12 @@ export interface FailoverDBCluster extends Binding.Service<
   >
 > {}
 export const FailoverDBCluster = Binding.Service<FailoverDBCluster>("AWS.DocDB.FailoverDBCluster");
+
+export const FailoverDBClusterHttp = Layer.effect(
+  FailoverDBCluster,
+  makeDocDBClusterHttpBinding({
+    tag: "AWS.DocDB.FailoverDBCluster",
+    operation: docdb.failoverDBCluster,
+    actions: ["rds:FailoverDBCluster"],
+  }),
+);

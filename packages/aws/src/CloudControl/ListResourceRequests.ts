@@ -1,6 +1,8 @@
-import type * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
+import * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudControlHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `cloudformation:ListResourceRequests`.
@@ -37,4 +39,13 @@ export interface ListResourceRequests extends Binding.Service<
 
 export const ListResourceRequests = Binding.Service<ListResourceRequests>(
   "AWS.CloudControl.ListResourceRequests",
+);
+
+export const ListResourceRequestsHttp = Layer.effect(
+  ListResourceRequests,
+  makeCloudControlHttpBinding({
+    tag: "AWS.CloudControl.ListResourceRequests",
+    operation: cloudcontrol.listResourceRequests,
+    actions: ["cloudformation:ListResourceRequests"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as qapps from "@distilled.cloud/aws/qapps";
+import * as qapps from "@distilled.cloud/aws/qapps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQAppHttpBinding } from "./BindingHttp.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -44,4 +46,14 @@ export interface UpdateQAppPermissions extends Binding.Service<
 
 export const UpdateQAppPermissions = Binding.Service<UpdateQAppPermissions>(
   "AWS.QApps.UpdateQAppPermissions",
+);
+
+export const UpdateQAppPermissionsHttp = Layer.effect(
+  UpdateQAppPermissions,
+  makeQAppHttpBinding({
+    capability: "UpdateQAppPermissions",
+    iamActions: ["qapps:UpdateQAppPermissions"],
+    operation: qapps.updateQAppPermissions,
+    injectAppId: true,
+  }),
 );

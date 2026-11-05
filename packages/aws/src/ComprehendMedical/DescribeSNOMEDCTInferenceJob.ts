@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:DescribeSNOMEDCTInferenceJob` — get the properties and status of an asynchronous SNOMED CT ontology linking job.
@@ -36,4 +38,13 @@ export interface DescribeSNOMEDCTInferenceJob extends Binding.Service<
 > {}
 export const DescribeSNOMEDCTInferenceJob = Binding.Service<DescribeSNOMEDCTInferenceJob>(
   "AWS.ComprehendMedical.DescribeSNOMEDCTInferenceJob",
+);
+
+export const DescribeSNOMEDCTInferenceJobHttp = Layer.effect(
+  DescribeSNOMEDCTInferenceJob,
+  makeComprehendMedicalHttpBinding({
+    capability: "DescribeSNOMEDCTInferenceJob",
+    iamActions: ["comprehendmedical:DescribeSNOMEDCTInferenceJob"],
+    operation: comprehendmedical.describeSNOMEDCTInferenceJob,
+  }),
 );

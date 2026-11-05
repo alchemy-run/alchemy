@@ -1,6 +1,8 @@
-import type * as docdb from "@distilled.cloud/aws/docdb";
+import * as docdb from "@distilled.cloud/aws/docdb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocDBAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribeDBInstances` operation (IAM action
@@ -37,4 +39,13 @@ export interface DescribeDBInstances extends Binding.Service<
 > {}
 export const DescribeDBInstances = Binding.Service<DescribeDBInstances>(
   "AWS.DocDB.DescribeDBInstances",
+);
+
+export const DescribeDBInstancesHttp = Layer.effect(
+  DescribeDBInstances,
+  makeDocDBAccountHttpBinding({
+    tag: "AWS.DocDB.DescribeDBInstances",
+    operation: docdb.describeDBInstances,
+    actions: ["rds:DescribeDBInstances"],
+  }),
 );

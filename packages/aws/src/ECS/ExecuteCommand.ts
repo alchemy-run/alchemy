@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface ExecuteCommandRequest extends Omit<ECS.ExecuteCommandRequest, "cluster"> {}
@@ -44,3 +46,14 @@ export interface ExecuteCommand extends Binding.Service<
   >
 > {}
 export const ExecuteCommand = Binding.Service<ExecuteCommand>("AWS.ECS.ExecuteCommand");
+
+export const ExecuteCommandHttp = Layer.effect(
+  ExecuteCommand,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.ExecuteCommand",
+    operation: ECS.executeCommand,
+    actions: ["ecs:ExecuteCommand"],
+    // `ecs:ExecuteCommand` authorizes against both the cluster and the task.
+    resources: ["cluster", "task"],
+  }),
+);

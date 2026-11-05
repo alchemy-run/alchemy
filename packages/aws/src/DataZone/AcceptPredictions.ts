@@ -1,6 +1,8 @@
-import type * as datazone from "@distilled.cloud/aws/datazone";
+import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataZoneDomainHttpBinding } from "./BindingHttp.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface AcceptPredictionsRequest extends Omit<
@@ -39,4 +41,13 @@ export interface AcceptPredictions extends Binding.Service<
 > {}
 export const AcceptPredictions = Binding.Service<AcceptPredictions>(
   "AWS.DataZone.AcceptPredictions",
+);
+
+export const AcceptPredictionsHttp = Layer.effect(
+  AcceptPredictions,
+  makeDataZoneDomainHttpBinding({
+    tag: "AWS.DataZone.AcceptPredictions",
+    operation: datazone.acceptPredictions,
+    actions: ["datazone:AcceptPredictions"],
+  }),
 );

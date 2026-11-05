@@ -1,6 +1,8 @@
-import type * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDevOpsGuruAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `devops-guru:DeleteInsight`.
@@ -30,3 +32,12 @@ export interface DeleteInsight extends Binding.Service<
   >
 > {}
 export const DeleteInsight = Binding.Service<DeleteInsight>("AWS.DevOpsGuru.DeleteInsight");
+
+export const DeleteInsightHttp = Layer.effect(
+  DeleteInsight,
+  makeDevOpsGuruAccountHttpBinding({
+    tag: "AWS.DevOpsGuru.DeleteInsight",
+    operation: devopsguru.deleteInsight,
+    actions: ["devops-guru:DeleteInsight"],
+  }),
+);

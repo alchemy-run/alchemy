@@ -1,6 +1,8 @@
-import type * as acm from "@distilled.cloud/aws/acm";
+import * as acm from "@distilled.cloud/aws/acm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAcmCertificateHttpBinding } from "./BindingHttp.ts";
 import type { Certificate } from "./Certificate.ts";
 
 /**
@@ -43,3 +45,12 @@ export interface RevokeCertificate extends Binding.Service<
 > {}
 
 export const RevokeCertificate = Binding.Service<RevokeCertificate>("AWS.ACM.RevokeCertificate");
+
+export const RevokeCertificateHttp = Layer.effect(
+  RevokeCertificate,
+  makeAcmCertificateHttpBinding({
+    capability: "RevokeCertificate",
+    iamActions: ["acm:RevokeCertificate"],
+    operation: acm.revokeCertificate,
+  }),
+);

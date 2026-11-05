@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:DetectProtectiveEquipment` — detect personal protective equipment (face covers, hand covers, head covers) worn by persons in an image.
@@ -43,4 +45,13 @@ export interface DetectProtectiveEquipment extends Binding.Service<
 > {}
 export const DetectProtectiveEquipment = Binding.Service<DetectProtectiveEquipment>(
   "AWS.Rekognition.DetectProtectiveEquipment",
+);
+
+export const DetectProtectiveEquipmentHttp = Layer.effect(
+  DetectProtectiveEquipment,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.DetectProtectiveEquipment",
+    operation: rekognition.detectProtectiveEquipment,
+    actions: ["rekognition:DetectProtectiveEquipment"],
+  }),
 );

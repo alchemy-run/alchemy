@@ -1,6 +1,8 @@
-import type * as iam from "@distilled.cloud/aws/iam";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIamHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `iam:GetAccountAuthorizationDetails` — snapshot every
@@ -42,4 +44,13 @@ export interface GetAccountAuthorizationDetails extends Binding.Service<
 > {}
 export const GetAccountAuthorizationDetails = Binding.Service<GetAccountAuthorizationDetails>(
   "AWS.IAM.GetAccountAuthorizationDetails",
+);
+
+export const GetAccountAuthorizationDetailsHttp = Layer.effect(
+  GetAccountAuthorizationDetails,
+  makeIamHttpBinding({
+    capability: "GetAccountAuthorizationDetails",
+    iamActions: ["iam:GetAccountAuthorizationDetails"],
+    operation: iam.getAccountAuthorizationDetails,
+  }),
 );

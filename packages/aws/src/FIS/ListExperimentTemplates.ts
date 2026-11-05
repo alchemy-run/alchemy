@@ -1,6 +1,8 @@
-import type * as fis from "@distilled.cloud/aws/fis";
+import * as fis from "@distilled.cloud/aws/fis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFisAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `fis:ListExperimentTemplates`.
@@ -32,4 +34,13 @@ export interface ListExperimentTemplates extends Binding.Service<
 > {}
 export const ListExperimentTemplates = Binding.Service<ListExperimentTemplates>(
   "AWS.FIS.ListExperimentTemplates",
+);
+
+export const ListExperimentTemplatesHttp = Layer.effect(
+  ListExperimentTemplates,
+  makeFisAccountHttpBinding({
+    tag: "AWS.FIS.ListExperimentTemplates",
+    operation: fis.listExperimentTemplates,
+    actions: ["fis:ListExperimentTemplates"],
+  }),
 );

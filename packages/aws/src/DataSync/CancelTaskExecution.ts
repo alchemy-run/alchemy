@@ -1,6 +1,8 @@
-import type * as datasync from "@distilled.cloud/aws/datasync";
+import * as datasync from "@distilled.cloud/aws/datasync";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataSyncTaskExecutionHttpBinding } from "./BindingHttp.ts";
 import type { Task } from "./Task.ts";
 
 /**
@@ -37,4 +39,13 @@ export interface CancelTaskExecution extends Binding.Service<
 > {}
 export const CancelTaskExecution = Binding.Service<CancelTaskExecution>(
   "AWS.DataSync.CancelTaskExecution",
+);
+
+export const CancelTaskExecutionHttp = Layer.effect(
+  CancelTaskExecution,
+  makeDataSyncTaskExecutionHttpBinding({
+    tag: "AWS.DataSync.CancelTaskExecution",
+    operation: datasync.cancelTaskExecution,
+    actions: ["datasync:CancelTaskExecution"],
+  }),
 );

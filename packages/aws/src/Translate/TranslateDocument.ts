@@ -1,6 +1,8 @@
-import type * as translate from "@distilled.cloud/aws/translate";
+import * as translate from "@distilled.cloud/aws/translate";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTranslateHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `translate:TranslateDocument` — synchronously
@@ -43,4 +45,13 @@ export interface TranslateDocument extends Binding.Service<
 > {}
 export const TranslateDocument = Binding.Service<TranslateDocument>(
   "AWS.Translate.TranslateDocument",
+);
+
+export const TranslateDocumentHttp = Layer.effect(
+  TranslateDocument,
+  makeTranslateHttpBinding({
+    tag: "AWS.Translate.TranslateDocument",
+    operation: translate.translateDocument,
+    actions: ["translate:TranslateDocument"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as geoPlaces from "@distilled.cloud/aws/geo-places";
+import * as geoPlaces from "@distilled.cloud/aws/geo-places";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGeoPlacesHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `geo-places:GetPlace` — fetch the full details of a
@@ -43,3 +45,12 @@ export interface GetPlace extends Binding.Service<
   >
 > {}
 export const GetPlace = Binding.Service<GetPlace>("AWS.GeoPlaces.GetPlace");
+
+export const GetPlaceHttp = Layer.effect(
+  GetPlace,
+  makeGeoPlacesHttpBinding({
+    capability: "GetPlace",
+    iamActions: ["geo-places:GetPlace"],
+    operation: geoPlaces.getPlace,
+  }),
+);

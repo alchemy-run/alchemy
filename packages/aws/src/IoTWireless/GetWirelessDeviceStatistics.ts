@@ -1,6 +1,8 @@
-import type * as iotw from "@distilled.cloud/aws/iot-wireless";
+import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotWirelessDeviceHttpBinding } from "./BindingHttp.ts";
 import type { WirelessDevice } from "./WirelessDevice.ts";
 
 /**
@@ -53,4 +55,17 @@ export interface GetWirelessDeviceStatistics extends Binding.Service<
 > {}
 export const GetWirelessDeviceStatistics = Binding.Service<GetWirelessDeviceStatistics>(
   "AWS.IoTWireless.GetWirelessDeviceStatistics",
+);
+
+export const GetWirelessDeviceStatisticsHttp = Layer.effect(
+  GetWirelessDeviceStatistics,
+  makeIotWirelessDeviceHttpBinding({
+    capability: "GetWirelessDeviceStatistics",
+    iamActions: ["iotwireless:GetWirelessDeviceStatistics"],
+    operation: iotw.getWirelessDeviceStatistics,
+    prepare: (request: GetWirelessDeviceStatisticsRequest | undefined, wirelessDeviceId) => ({
+      ...request,
+      WirelessDeviceId: wirelessDeviceId,
+    }),
+  }),
 );

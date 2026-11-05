@@ -1,6 +1,8 @@
-import type * as athena from "@distilled.cloud/aws/athena";
+import * as athena from "@distilled.cloud/aws/athena";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWorkGroupScopedHttpBinding } from "./BindingHttp.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
 
 /**
@@ -35,4 +37,13 @@ export interface StopQueryExecution extends Binding.Service<
 
 export const StopQueryExecution = Binding.Service<StopQueryExecution>(
   "AWS.Athena.StopQueryExecution",
+);
+
+export const StopQueryExecutionHttp = Layer.effect(
+  StopQueryExecution,
+  makeWorkGroupScopedHttpBinding({
+    tag: "AWS.Athena.StopQueryExecution",
+    operation: athena.stopQueryExecution,
+    actions: ["athena:StopQueryExecution"],
+  }),
 );

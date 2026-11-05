@@ -1,6 +1,8 @@
-import type * as ses from "@distilled.cloud/aws/ses";
+import * as ses from "@distilled.cloud/aws/ses";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSESHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ses:SendBounce` (classic SES).
@@ -41,3 +43,12 @@ export interface SendBounce extends Binding.Service<
   >
 > {}
 export const SendBounce = Binding.Service<SendBounce>("AWS.SES.SendBounce");
+
+export const SendBounceHttp = Layer.effect(
+  SendBounce,
+  makeSESHttpBinding({
+    tag: "AWS.SES.SendBounce",
+    operation: ses.sendBounce,
+    actions: ["ses:SendBounce"],
+  }),
+);

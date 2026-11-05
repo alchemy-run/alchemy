@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:StartRxNormInferenceJob` — start an asynchronous RxNorm ontology linking job over a collection of documents in S3. Also grants `iam:PassRole` (conditioned to `comprehendmedical.amazonaws.com`) for the job's data-access role.
@@ -40,4 +42,14 @@ export interface StartRxNormInferenceJob extends Binding.Service<
 > {}
 export const StartRxNormInferenceJob = Binding.Service<StartRxNormInferenceJob>(
   "AWS.ComprehendMedical.StartRxNormInferenceJob",
+);
+
+export const StartRxNormInferenceJobHttp = Layer.effect(
+  StartRxNormInferenceJob,
+  makeComprehendMedicalHttpBinding({
+    capability: "StartRxNormInferenceJob",
+    iamActions: ["comprehendmedical:StartRxNormInferenceJob"],
+    operation: comprehendmedical.startRxNormInferenceJob,
+    passRole: true,
+  }),
 );

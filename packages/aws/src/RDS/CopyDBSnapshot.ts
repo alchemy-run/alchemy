@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `CopyDBSnapshot` operation (IAM actions
@@ -33,3 +35,12 @@ export interface CopyDBSnapshot extends Binding.Service<
   >
 > {}
 export const CopyDBSnapshot = Binding.Service<CopyDBSnapshot>("AWS.RDS.CopyDBSnapshot");
+
+export const CopyDBSnapshotHttp = Layer.effect(
+  CopyDBSnapshot,
+  makeRdsAccountHttpBinding({
+    tag: "AWS.RDS.CopyDBSnapshot",
+    operation: rds.copyDBSnapshot,
+    actions: ["rds:CopyDBSnapshot", "rds:AddTagsToResource"],
+  }),
+);

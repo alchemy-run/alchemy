@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:CreateFaceLivenessSession` — create a Face Liveness session whose ID the client-side FaceLivenessDetector component uses to run the liveness check.
@@ -40,4 +42,13 @@ export interface CreateFaceLivenessSession extends Binding.Service<
 > {}
 export const CreateFaceLivenessSession = Binding.Service<CreateFaceLivenessSession>(
   "AWS.Rekognition.CreateFaceLivenessSession",
+);
+
+export const CreateFaceLivenessSessionHttp = Layer.effect(
+  CreateFaceLivenessSession,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.CreateFaceLivenessSession",
+    operation: rekognition.createFaceLivenessSession,
+    actions: ["rekognition:CreateFaceLivenessSession"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface GetAdministratorAccount extends Binding.Service<
 > {}
 export const GetAdministratorAccount = Binding.Service<GetAdministratorAccount>(
   "AWS.GuardDuty.GetAdministratorAccount",
+);
+
+export const GetAdministratorAccountHttp = Layer.effect(
+  GetAdministratorAccount,
+  makeGuardDutyDetectorHttpBinding({
+    tag: "AWS.GuardDuty.GetAdministratorAccount",
+    operation: guardduty.getAdministratorAccount,
+    actions: ["guardduty:GetAdministratorAccount"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface ListTasksRequest extends Omit<ECS.ListTasksRequest, "cluster"> {}
@@ -34,3 +36,16 @@ export interface ListTasks extends Binding.Service<
   >
 > {}
 export const ListTasks = Binding.Service<ListTasks>("AWS.ECS.ListTasks");
+
+export const ListTasksHttp = Layer.effect(
+  ListTasks,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.ListTasks",
+    operation: ECS.listTasks,
+    actions: ["ecs:ListTasks"],
+    // `ecs:ListTasks` has no useful resource-level scoping on Fargate (its
+    // resource type is container-instance), so grant `*` conditioned on the
+    // bound cluster.
+    resources: "cluster-condition",
+  }),
+);

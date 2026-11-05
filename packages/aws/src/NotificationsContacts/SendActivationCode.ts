@@ -1,6 +1,8 @@
-import type * as contacts from "@distilled.cloud/aws/notificationscontacts";
+import * as contacts from "@distilled.cloud/aws/notificationscontacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmailContactHttpBinding } from "./BindingHttp.ts";
 import type { EmailContact } from "./EmailContact.ts";
 
 /**
@@ -36,4 +38,13 @@ export interface SendActivationCode extends Binding.Service<
 
 export const SendActivationCode = Binding.Service<SendActivationCode>(
   "AWS.NotificationsContacts.SendActivationCode",
+);
+
+export const SendActivationCodeHttp = Layer.effect(
+  SendActivationCode,
+  makeEmailContactHttpBinding({
+    tag: "AWS.NotificationsContacts.SendActivationCode",
+    actions: ["notifications-contacts:SendActivationCode"],
+    operation: contacts.sendActivationCode,
+  }),
 );

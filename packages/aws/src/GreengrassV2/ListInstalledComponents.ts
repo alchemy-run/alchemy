@@ -1,6 +1,8 @@
-import type * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
+import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGreengrassAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `greengrass:ListInstalledComponents`.
@@ -39,4 +41,13 @@ export interface ListInstalledComponents extends Binding.Service<
 > {}
 export const ListInstalledComponents = Binding.Service<ListInstalledComponents>(
   "AWS.GreengrassV2.ListInstalledComponents",
+);
+
+export const ListInstalledComponentsHttp = Layer.effect(
+  ListInstalledComponents,
+  makeGreengrassAccountHttpBinding({
+    tag: "AWS.GreengrassV2.ListInstalledComponents",
+    operation: greengrassv2.listInstalledComponents,
+    actions: ["greengrass:ListInstalledComponents"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as ec2 from "@distilled.cloud/aws/ec2";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -47,3 +49,13 @@ export interface GetPasswordData extends Binding.Service<
 > {}
 
 export const GetPasswordData = Binding.Service<GetPasswordData>("AWS.EC2.GetPasswordData");
+
+export const GetPasswordDataHttp = Layer.effect(
+  GetPasswordData,
+  makeInstanceHttpBinding({
+    tag: "AWS.EC2.GetPasswordData",
+    operation: ec2.getPasswordData,
+    actions: ["ec2:GetPasswordData"],
+    requestKey: "InstanceId",
+  }),
+);

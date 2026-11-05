@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:GetUsageStatistics`.
@@ -32,4 +34,13 @@ export interface GetUsageStatistics extends Binding.Service<
 > {}
 export const GetUsageStatistics = Binding.Service<GetUsageStatistics>(
   "AWS.Macie2.GetUsageStatistics",
+);
+
+export const GetUsageStatisticsHttp = Layer.effect(
+  GetUsageStatistics,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.GetUsageStatistics",
+    operation: macie2.getUsageStatistics,
+    actions: ["macie2:GetUsageStatistics"],
+  }),
 );

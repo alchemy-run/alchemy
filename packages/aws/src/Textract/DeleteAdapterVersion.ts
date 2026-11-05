@@ -1,7 +1,9 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Adapter } from "./Adapter.ts";
+import { makeTextractAdapterHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:DeleteAdapterVersion` — delete a version
@@ -33,4 +35,13 @@ export interface DeleteAdapterVersion extends Binding.Service<
 > {}
 export const DeleteAdapterVersion = Binding.Service<DeleteAdapterVersion>(
   "AWS.Textract.DeleteAdapterVersion",
+);
+
+export const DeleteAdapterVersionHttp = Layer.effect(
+  DeleteAdapterVersion,
+  makeTextractAdapterHttpBinding({
+    capability: "DeleteAdapterVersion",
+    iamActions: ["textract:DeleteAdapterVersion"],
+    operation: textract.deleteAdapterVersion,
+  }),
 );

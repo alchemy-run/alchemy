@@ -1,6 +1,8 @@
-import type * as serverless from "@distilled.cloud/aws/redshift-serverless";
+import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServerlessAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetIdentityCenterAuthToken` operation (IAM actions
@@ -38,4 +40,13 @@ export interface GetIdentityCenterAuthToken extends Binding.Service<
 > {}
 export const GetIdentityCenterAuthToken = Binding.Service<GetIdentityCenterAuthToken>(
   "AWS.RedshiftServerless.GetIdentityCenterAuthToken",
+);
+
+export const GetIdentityCenterAuthTokenHttp = Layer.effect(
+  GetIdentityCenterAuthToken,
+  makeServerlessAccountHttpBinding({
+    tag: "AWS.RedshiftServerless.GetIdentityCenterAuthToken",
+    operation: serverless.getIdentityCenterAuthToken,
+    actions: ["redshift-serverless:GetIdentityCenterAuthToken"],
+  }),
 );

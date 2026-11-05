@@ -1,6 +1,8 @@
-import type * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
+import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudTrailAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `cloudtrail:ListPublicKeys`.
@@ -32,3 +34,12 @@ export interface ListPublicKeys extends Binding.Service<
   >
 > {}
 export const ListPublicKeys = Binding.Service<ListPublicKeys>("AWS.CloudTrail.ListPublicKeys");
+
+export const ListPublicKeysHttp = Layer.effect(
+  ListPublicKeys,
+  makeCloudTrailAccountHttpBinding({
+    tag: "AWS.CloudTrail.ListPublicKeys",
+    operation: cloudtrail.listPublicKeys,
+    actions: ["cloudtrail:ListPublicKeys"],
+  }),
+);

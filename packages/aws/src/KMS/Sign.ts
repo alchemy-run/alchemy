@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AliasName } from "./Alias.ts";
+import { makeKmsKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface SignRequest extends Omit<kms.SignRequest, "KeyId"> {}
@@ -46,3 +48,12 @@ export interface Sign extends Binding.Service<
 > {}
 
 export const Sign = Binding.Service<Sign>("AWS.KMS.Sign");
+
+export const SignHttp = Layer.effect(
+  Sign,
+  makeKmsKeyHttpBinding({
+    tag: "AWS.KMS.Sign",
+    operation: kms.sign,
+    actions: ["kms:Sign"],
+  }),
+);

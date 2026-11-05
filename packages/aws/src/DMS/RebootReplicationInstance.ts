@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsInstanceScopedHttpBinding } from "./BindingHttp.ts";
 import type { ReplicationInstance } from "./ReplicationInstance.ts";
 
 /**
@@ -36,4 +38,14 @@ export interface RebootReplicationInstance extends Binding.Service<
 
 export const RebootReplicationInstance = Binding.Service<RebootReplicationInstance>(
   "AWS.DMS.RebootReplicationInstance",
+);
+
+export const RebootReplicationInstanceHttp = Layer.effect(
+  RebootReplicationInstance,
+  makeDmsInstanceScopedHttpBinding({
+    tag: "AWS.DMS.RebootReplicationInstance",
+    actions: ["dms:RebootReplicationInstance"],
+    operation: dms.rebootReplicationInstance,
+    iam: "resource",
+  }),
 );

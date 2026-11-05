@@ -1,6 +1,8 @@
-import type * as qapps from "@distilled.cloud/aws/qapps";
+import * as qapps from "@distilled.cloud/aws/qapps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQAppHttpBinding } from "./BindingHttp.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -42,4 +44,14 @@ export interface AssociateQAppWithUser extends Binding.Service<
 
 export const AssociateQAppWithUser = Binding.Service<AssociateQAppWithUser>(
   "AWS.QApps.AssociateQAppWithUser",
+);
+
+export const AssociateQAppWithUserHttp = Layer.effect(
+  AssociateQAppWithUser,
+  makeQAppHttpBinding({
+    capability: "AssociateQAppWithUser",
+    iamActions: ["qapps:AssociateQAppWithUser"],
+    operation: qapps.associateQAppWithUser,
+    injectAppId: true,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as qapps from "@distilled.cloud/aws/qapps";
+import * as qapps from "@distilled.cloud/aws/qapps";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQAppHttpBinding } from "./BindingHttp.ts";
 import type { QApp } from "./QApp.ts";
 
 /**
@@ -43,4 +45,13 @@ export interface GetQAppSessionMetadata extends Binding.Service<
 
 export const GetQAppSessionMetadata = Binding.Service<GetQAppSessionMetadata>(
   "AWS.QApps.GetQAppSessionMetadata",
+);
+
+export const GetQAppSessionMetadataHttp = Layer.effect(
+  GetQAppSessionMetadata,
+  makeQAppHttpBinding({
+    capability: "GetQAppSessionMetadata",
+    iamActions: ["qapps:GetQAppSessionMetadata"],
+    operation: qapps.getQAppSessionMetadata,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:GetInsights`.
@@ -31,3 +33,12 @@ export interface GetInsights extends Binding.Service<
   >
 > {}
 export const GetInsights = Binding.Service<GetInsights>("AWS.SecurityHub.GetInsights");
+
+export const GetInsightsHttp = Layer.effect(
+  GetInsights,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.GetInsights",
+    operation: securityhub.getInsights,
+    actions: ["securityhub:GetInsights"],
+  }),
+);

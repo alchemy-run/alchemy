@@ -1,6 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOmicsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListRunTasksRequest extends omics.ListRunTasksRequest {}
 
@@ -31,3 +33,12 @@ export interface ListRunTasks extends Binding.Service<
 > {}
 
 export const ListRunTasks = Binding.Service<ListRunTasks>("AWS.Omics.ListRunTasks");
+
+export const ListRunTasksHttp = Layer.effect(
+  ListRunTasks,
+  makeOmicsAccountHttpBinding({
+    tag: "AWS.Omics.ListRunTasks",
+    operation: omics.listRunTasks,
+    actions: ["omics:ListRunTasks"],
+  }),
+);

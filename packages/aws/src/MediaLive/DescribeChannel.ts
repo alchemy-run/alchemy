@@ -1,6 +1,8 @@
-import type * as medialive from "@distilled.cloud/aws/medialive";
+import * as medialive from "@distilled.cloud/aws/medialive";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaLiveChannelHttpBinding } from "./BindingHttp.ts";
 import type { Channel } from "./Channel.ts";
 
 /**
@@ -35,3 +37,12 @@ export interface DescribeChannel extends Binding.Service<
   >
 > {}
 export const DescribeChannel = Binding.Service<DescribeChannel>("AWS.MediaLive.DescribeChannel");
+
+export const DescribeChannelHttp = Layer.effect(
+  DescribeChannel,
+  makeMediaLiveChannelHttpBinding({
+    tag: "AWS.MediaLive.DescribeChannel",
+    operation: medialive.describeChannel,
+    actions: ["medialive:DescribeChannel"],
+  }),
+);

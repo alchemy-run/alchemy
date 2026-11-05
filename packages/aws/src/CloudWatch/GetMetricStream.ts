@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchResourceHttpBinding } from "./BindingHttp.ts";
 import type { MetricStream } from "./MetricStream.ts";
 
 export interface GetMetricStreamRequest extends Omit<cloudwatch.GetMetricStreamInput, "Name"> {}
@@ -38,3 +40,15 @@ export interface GetMetricStream extends Binding.Service<
 > {}
 
 export const GetMetricStream = Binding.Service<GetMetricStream>("AWS.CloudWatch.GetMetricStream");
+
+export const GetMetricStreamHttp = Layer.effect(
+  GetMetricStream,
+  makeCloudWatchResourceHttpBinding({
+    tag: "AWS.CloudWatch.GetMetricStream",
+    operation: cloudwatch.getMetricStream,
+    actions: ["cloudwatch:GetMetricStream"],
+    requestKey: "Name",
+    identifier: (metricStream: MetricStream) => metricStream.metricStreamName,
+    resourceArn: (metricStream: MetricStream) => metricStream.metricStreamArn,
+  }),
+);

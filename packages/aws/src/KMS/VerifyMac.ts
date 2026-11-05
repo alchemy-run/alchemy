@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AliasName } from "./Alias.ts";
+import { makeKmsKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface VerifyMacRequest extends Omit<kms.VerifyMacRequest, "KeyId"> {}
@@ -47,3 +49,12 @@ export interface VerifyMac extends Binding.Service<
 > {}
 
 export const VerifyMac = Binding.Service<VerifyMac>("AWS.KMS.VerifyMac");
+
+export const VerifyMacHttp = Layer.effect(
+  VerifyMac,
+  makeKmsKeyHttpBinding({
+    tag: "AWS.KMS.VerifyMac",
+    operation: kms.verifyMac,
+    actions: ["kms:VerifyMac"],
+  }),
+);

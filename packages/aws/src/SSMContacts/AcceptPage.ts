@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-contacts:AcceptPage`.
@@ -32,3 +34,12 @@ export interface AcceptPage extends Binding.Service<
   >
 > {}
 export const AcceptPage = Binding.Service<AcceptPage>("AWS.SSMContacts.AcceptPage");
+
+export const AcceptPageHttp = Layer.effect(
+  AcceptPage,
+  makeAccountHttpBinding({
+    tag: "AWS.SSMContacts.AcceptPage",
+    operation: ssm.acceptPage,
+    actions: ["ssm-contacts:AcceptPage"],
+  }),
+);

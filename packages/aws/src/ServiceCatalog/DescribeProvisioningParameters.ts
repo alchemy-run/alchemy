@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:DescribeProvisioningParameters`.
@@ -41,4 +43,13 @@ export interface DescribeProvisioningParameters extends Binding.Service<
 > {}
 export const DescribeProvisioningParameters = Binding.Service<DescribeProvisioningParameters>(
   "AWS.ServiceCatalog.DescribeProvisioningParameters",
+);
+
+export const DescribeProvisioningParametersHttp = Layer.effect(
+  DescribeProvisioningParameters,
+  makeServiceCatalogHttpBinding({
+    capability: "DescribeProvisioningParameters",
+    iamActions: ["servicecatalog:DescribeProvisioningParameters"],
+    operation: servicecatalog.describeProvisioningParameters,
+  }),
 );

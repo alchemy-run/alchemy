@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataExchangeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `dataexchange:GetDataGrant`.
@@ -31,3 +33,12 @@ export interface GetDataGrant extends Binding.Service<
   >
 > {}
 export const GetDataGrant = Binding.Service<GetDataGrant>("AWS.DataExchange.GetDataGrant");
+
+export const GetDataGrantHttp = Layer.effect(
+  GetDataGrant,
+  makeDataExchangeAccountHttpBinding({
+    tag: "AWS.DataExchange.GetDataGrant",
+    operation: dataexchange.getDataGrant,
+    actions: ["dataexchange:GetDataGrant"],
+  }),
+);

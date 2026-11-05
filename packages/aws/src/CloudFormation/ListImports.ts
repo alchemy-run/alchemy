@@ -1,6 +1,8 @@
-import type * as cloudformation from "@distilled.cloud/aws/cloudformation";
+import * as cloudformation from "@distilled.cloud/aws/cloudformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudFormationAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListImports` operation (IAM action
@@ -29,3 +31,12 @@ export interface ListImports extends Binding.Service<
   >
 > {}
 export const ListImports = Binding.Service<ListImports>("AWS.CloudFormation.ListImports");
+
+export const ListImportsHttp = Layer.effect(
+  ListImports,
+  makeCloudFormationAccountHttpBinding({
+    tag: "AWS.CloudFormation.ListImports",
+    operation: cloudformation.listImports,
+    actions: ["cloudformation:ListImports"],
+  }),
+);

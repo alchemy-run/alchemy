@@ -1,7 +1,9 @@
-import type * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
+import { makeGroupHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `DescribeScalingActivities` request with `AutoScalingGroupName` injected
@@ -50,4 +52,14 @@ export interface DescribeScalingActivities extends Binding.Service<
 
 export const DescribeScalingActivities = Binding.Service<DescribeScalingActivities>(
   "AWS.AutoScaling.DescribeScalingActivities",
+);
+
+export const DescribeScalingActivitiesHttp = Layer.effect(
+  DescribeScalingActivities,
+  makeGroupHttpBinding({
+    tag: "AWS.AutoScaling.DescribeScalingActivities",
+    operation: autoscaling.describeScalingActivities,
+    actions: ["autoscaling:DescribeScalingActivities"],
+    resource: "*",
+  }),
 );

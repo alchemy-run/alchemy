@@ -1,6 +1,8 @@
-import type * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
+import * as mediaconnect from "@distilled.cloud/aws/mediaconnect";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaConnectAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `mediaconnect:ListEntitlements`.
@@ -35,4 +37,13 @@ export interface ListEntitlements extends Binding.Service<
 > {}
 export const ListEntitlements = Binding.Service<ListEntitlements>(
   "AWS.MediaConnect.ListEntitlements",
+);
+
+export const ListEntitlementsHttp = Layer.effect(
+  ListEntitlements,
+  makeMediaConnectAccountHttpBinding({
+    tag: "AWS.MediaConnect.ListEntitlements",
+    operation: mediaconnect.listEntitlements,
+    actions: ["mediaconnect:ListEntitlements"],
+  }),
 );

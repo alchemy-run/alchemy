@@ -1,6 +1,8 @@
-import type * as backupsearch from "@distilled.cloud/aws/backupsearch";
+import * as backupsearch from "@distilled.cloud/aws/backupsearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSearchJobScopedHttpBinding } from "./BindingHttp.ts";
 import type { SearchJob } from "./SearchJob.ts";
 
 /**
@@ -42,3 +44,12 @@ export interface GetSearchJob extends Binding.Service<
 > {}
 
 export const GetSearchJob = Binding.Service<GetSearchJob>("AWS.BackupSearch.GetSearchJob");
+
+export const GetSearchJobHttp = Layer.effect(
+  GetSearchJob,
+  makeSearchJobScopedHttpBinding({
+    tag: "AWS.BackupSearch.GetSearchJob",
+    operation: backupsearch.getSearchJob,
+    actions: ["backup-search:GetSearchJob"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeImageBuilderAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `imagebuilder:ListWaitingWorkflowSteps`.
@@ -37,4 +39,13 @@ export interface ListWaitingWorkflowSteps extends Binding.Service<
 > {}
 export const ListWaitingWorkflowSteps = Binding.Service<ListWaitingWorkflowSteps>(
   "AWS.ImageBuilder.ListWaitingWorkflowSteps",
+);
+
+export const ListWaitingWorkflowStepsHttp = Layer.effect(
+  ListWaitingWorkflowSteps,
+  makeImageBuilderAccountHttpBinding({
+    tag: "AWS.ImageBuilder.ListWaitingWorkflowSteps",
+    operation: imagebuilder.listWaitingWorkflowSteps,
+    actions: ["imagebuilder:ListWaitingWorkflowSteps"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as neptune from "@distilled.cloud/aws/neptune";
+import * as neptune from "@distilled.cloud/aws/neptune";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNeptuneAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `DescribePendingMaintenanceActions` operation (IAM
@@ -37,4 +39,13 @@ export interface DescribePendingMaintenanceActions extends Binding.Service<
 > {}
 export const DescribePendingMaintenanceActions = Binding.Service<DescribePendingMaintenanceActions>(
   "AWS.Neptune.DescribePendingMaintenanceActions",
+);
+
+export const DescribePendingMaintenanceActionsHttp = Layer.effect(
+  DescribePendingMaintenanceActions,
+  makeNeptuneAccountHttpBinding({
+    tag: "AWS.Neptune.DescribePendingMaintenanceActions",
+    operation: neptune.describePendingMaintenanceActions,
+    actions: ["rds:DescribePendingMaintenanceActions"],
+  }),
 );

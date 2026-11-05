@@ -1,6 +1,8 @@
-import type * as cloudformation from "@distilled.cloud/aws/cloudformation";
+import * as cloudformation from "@distilled.cloud/aws/cloudformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudFormationAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ValidateTemplate` operation (IAM action
@@ -34,4 +36,13 @@ export interface ValidateTemplate extends Binding.Service<
 > {}
 export const ValidateTemplate = Binding.Service<ValidateTemplate>(
   "AWS.CloudFormation.ValidateTemplate",
+);
+
+export const ValidateTemplateHttp = Layer.effect(
+  ValidateTemplate,
+  makeCloudFormationAccountHttpBinding({
+    tag: "AWS.CloudFormation.ValidateTemplate",
+    operation: cloudformation.validateTemplate,
+    actions: ["cloudformation:ValidateTemplate"],
+  }),
 );

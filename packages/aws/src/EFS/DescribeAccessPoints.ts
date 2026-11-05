@@ -1,6 +1,8 @@
-import type * as efs from "@distilled.cloud/aws/efs";
+import * as efs from "@distilled.cloud/aws/efs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEfsFileSystemHttpBinding } from "./BindingHttp.ts";
 import type { FileSystem } from "./FileSystem.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface DescribeAccessPoints extends Binding.Service<
 > {}
 export const DescribeAccessPoints = Binding.Service<DescribeAccessPoints>(
   "AWS.EFS.DescribeAccessPoints",
+);
+
+export const DescribeAccessPointsHttp = Layer.effect(
+  DescribeAccessPoints,
+  makeEfsFileSystemHttpBinding({
+    tag: "AWS.EFS.DescribeAccessPoints",
+    operation: efs.describeAccessPoints,
+    actions: ["elasticfilesystem:DescribeAccessPoints"],
+  }),
 );

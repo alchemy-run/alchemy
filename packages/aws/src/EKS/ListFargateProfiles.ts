@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -35,4 +37,15 @@ export interface ListFargateProfiles extends Binding.Service<
 > {}
 export const ListFargateProfiles = Binding.Service<ListFargateProfiles>(
   "AWS.EKS.ListFargateProfiles",
+);
+
+export const ListFargateProfilesHttp = Layer.effect(
+  ListFargateProfiles,
+  makeEKSClusterHttpBinding({
+    tag: "AWS.EKS.ListFargateProfiles",
+    operation: eks.listFargateProfiles,
+    actions: ["eks:ListFargateProfiles"],
+    key: "clusterName",
+    scope: "cluster",
+  }),
 );

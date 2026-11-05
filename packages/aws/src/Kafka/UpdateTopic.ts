@@ -1,6 +1,8 @@
-import type * as kafka from "@distilled.cloud/aws/kafka";
+import * as kafka from "@distilled.cloud/aws/kafka";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKafkaClusterHttpBinding } from "./BindingHttp.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
 
 /**
@@ -32,3 +34,18 @@ export interface UpdateTopic extends Binding.Service<
   >
 > {}
 export const UpdateTopic = Binding.Service<UpdateTopic>("AWS.Kafka.UpdateTopic");
+
+export const UpdateTopicHttp = Layer.effect(
+  UpdateTopic,
+  makeKafkaClusterHttpBinding({
+    tag: "AWS.Kafka.UpdateTopic",
+    operation: kafka.updateTopic,
+    actions: [
+      "kafka:UpdateTopic",
+      "kafka-cluster:Connect",
+      "kafka-cluster:AlterTopic",
+      "kafka-cluster:AlterTopicDynamicConfiguration",
+    ],
+    topicScoped: true,
+  }),
+);

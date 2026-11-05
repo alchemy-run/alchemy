@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link StartCostAllocationTagBackfill}.
@@ -43,4 +45,13 @@ export interface StartCostAllocationTagBackfill extends Binding.Service<
 
 export const StartCostAllocationTagBackfill = Binding.Service<StartCostAllocationTagBackfill>(
   "AWS.CostExplorer.StartCostAllocationTagBackfill",
+);
+
+export const StartCostAllocationTagBackfillHttp = Layer.effect(
+  StartCostAllocationTagBackfill,
+  makeCostExplorerHttpBinding({
+    capability: "StartCostAllocationTagBackfill",
+    iamActions: ["ce:StartCostAllocationTagBackfill"],
+    operation: ce.startCostAllocationTagBackfill,
+  }),
 );

@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsEndpointHttpBinding } from "./BindingHttp.ts";
 import type { PlatformApplication } from "./PlatformApplication.ts";
 
 export interface PublishToEndpointRequest extends Omit<
@@ -38,3 +40,12 @@ export interface PublishToEndpoint extends Binding.Service<
 > {}
 
 export const PublishToEndpoint = Binding.Service<PublishToEndpoint>("AWS.SNS.PublishToEndpoint");
+
+export const PublishToEndpointHttp = Layer.effect(
+  PublishToEndpoint,
+  makeSnsEndpointHttpBinding({
+    tag: "AWS.SNS.PublishToEndpoint",
+    operation: sns.publish,
+    actions: ["sns:Publish"],
+  }),
+);

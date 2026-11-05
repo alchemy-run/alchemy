@@ -1,6 +1,8 @@
-import type * as route53 from "@distilled.cloud/aws/route-53";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRoute53ZoneHttpBinding } from "./BindingHttp.ts";
 import type { HostedZone } from "./HostedZone.ts";
 
 /**
@@ -31,3 +33,14 @@ export interface GetHostedZone extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<route53.GetHostedZoneResponse, route53.GetHostedZoneError>>
 > {}
 export const GetHostedZone = Binding.Service<GetHostedZone>("AWS.Route53.GetHostedZone");
+
+export const GetHostedZoneHttp = Layer.effect(
+  GetHostedZone,
+  makeRoute53ZoneHttpBinding({
+    tag: "AWS.Route53.GetHostedZone",
+    operation: route53.getHostedZone,
+    actions: ["route53:GetHostedZone"],
+    // getHostedZone addresses the zone as `Id`, not `HostedZoneId`.
+    requestKey: "Id",
+  }),
+);

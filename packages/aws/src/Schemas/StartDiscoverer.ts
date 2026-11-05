@@ -1,6 +1,8 @@
-import type * as schemas from "@distilled.cloud/aws/schemas";
+import * as schemas from "@distilled.cloud/aws/schemas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSchemasDiscovererHttpBinding } from "./BindingHttp.ts";
 import type { Discoverer } from "./Discoverer.ts";
 
 /**
@@ -33,3 +35,14 @@ export interface StartDiscoverer extends Binding.Service<
   >
 > {}
 export const StartDiscoverer = Binding.Service<StartDiscoverer>("AWS.Schemas.StartDiscoverer");
+
+export const StartDiscovererHttp = Layer.effect(
+  StartDiscoverer,
+  makeSchemasDiscovererHttpBinding({
+    tag: "AWS.Schemas.StartDiscoverer",
+    operation: schemas.startDiscoverer,
+    actions: ["schemas:StartDiscoverer"],
+    // StartDiscoverer re-enables the discoverer's managed EventBridge rule.
+    ruleActions: ["events:EnableRule"],
+  }),
+);

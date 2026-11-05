@@ -1,7 +1,9 @@
-import type * as sitewise from "@distilled.cloud/aws/iotsitewise";
+import * as sitewise from "@distilled.cloud/aws/iotsitewise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Asset } from "./Asset.ts";
+import { makeSiteWiseAssetHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetAssetPropertyValueHistory}. The bound asset's id is
@@ -57,4 +59,17 @@ export interface GetAssetPropertyValueHistory extends Binding.Service<
 > {}
 export const GetAssetPropertyValueHistory = Binding.Service<GetAssetPropertyValueHistory>(
   "AWS.IoTSiteWise.GetAssetPropertyValueHistory",
+);
+
+export const GetAssetPropertyValueHistoryHttp = Layer.effect(
+  GetAssetPropertyValueHistory,
+  makeSiteWiseAssetHttpBinding({
+    capability: "GetAssetPropertyValueHistory",
+    iamActions: ["iotsitewise:GetAssetPropertyValueHistory"],
+    operation: sitewise.getAssetPropertyValueHistory,
+    prepare: (request: GetAssetPropertyValueHistoryRequest, assetId) => ({
+      ...request,
+      assetId,
+    }),
+  }),
 );

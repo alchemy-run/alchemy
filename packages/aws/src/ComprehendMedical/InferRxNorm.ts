@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:InferRxNorm` — detect medication entities in clinical text and link them to concept identifiers in the RxNorm ontology (medication names, dosages, frequencies).
@@ -34,3 +36,12 @@ export interface InferRxNorm extends Binding.Service<
   >
 > {}
 export const InferRxNorm = Binding.Service<InferRxNorm>("AWS.ComprehendMedical.InferRxNorm");
+
+export const InferRxNormHttp = Layer.effect(
+  InferRxNorm,
+  makeComprehendMedicalHttpBinding({
+    capability: "InferRxNorm",
+    iamActions: ["comprehendmedical:InferRxNorm"],
+    operation: comprehendmedical.inferRxNorm,
+  }),
+);

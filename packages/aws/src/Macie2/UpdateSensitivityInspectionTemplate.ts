@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:UpdateSensitivityInspectionTemplate`.
@@ -40,3 +42,12 @@ export const UpdateSensitivityInspectionTemplate =
   Binding.Service<UpdateSensitivityInspectionTemplate>(
     "AWS.Macie2.UpdateSensitivityInspectionTemplate",
   );
+
+export const UpdateSensitivityInspectionTemplateHttp = Layer.effect(
+  UpdateSensitivityInspectionTemplate,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.UpdateSensitivityInspectionTemplate",
+    operation: macie2.updateSensitivityInspectionTemplate,
+    actions: ["macie2:UpdateSensitivityInspectionTemplate"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
+import * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudControlHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `cloudformation:CancelResourceRequest`.
@@ -37,4 +39,13 @@ export interface CancelResourceRequest extends Binding.Service<
 
 export const CancelResourceRequest = Binding.Service<CancelResourceRequest>(
   "AWS.CloudControl.CancelResourceRequest",
+);
+
+export const CancelResourceRequestHttp = Layer.effect(
+  CancelResourceRequest,
+  makeCloudControlHttpBinding({
+    tag: "AWS.CloudControl.CancelResourceRequest",
+    operation: cloudcontrol.cancelResourceRequest,
+    actions: ["cloudformation:CancelResourceRequest"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
+import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGreengrassAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `greengrass:UpdateConnectivityInfo`.
@@ -42,4 +44,15 @@ export interface UpdateConnectivityInfo extends Binding.Service<
 > {}
 export const UpdateConnectivityInfo = Binding.Service<UpdateConnectivityInfo>(
   "AWS.GreengrassV2.UpdateConnectivityInfo",
+);
+
+export const UpdateConnectivityInfoHttp = Layer.effect(
+  UpdateConnectivityInfo,
+  makeGreengrassAccountHttpBinding({
+    tag: "AWS.GreengrassV2.UpdateConnectivityInfo",
+    operation: greengrassv2.updateConnectivityInfo,
+    // Connectivity info is stored in IoT Core; Greengrass writes it with the
+    // caller's credentials (documented dependent action).
+    actions: ["greengrass:UpdateConnectivityInfo", "iot:GetThingShadow", "iot:UpdateThingShadow"],
+  }),
 );

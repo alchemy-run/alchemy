@@ -1,6 +1,8 @@
-import type * as resourcegroups from "@distilled.cloud/aws/resource-groups";
+import * as resourcegroups from "@distilled.cloud/aws/resource-groups";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeResourceGroupsGroupHttpBinding } from "./BindingHttp.ts";
 import type { Group } from "./Group.ts";
 
 /** Request for {@link GroupResources} — the group is injected from the binding. */
@@ -47,3 +49,15 @@ export interface GroupResources extends Binding.Service<
   >
 > {}
 export const GroupResources = Binding.Service<GroupResources>("AWS.ResourceGroups.GroupResources");
+
+export const GroupResourcesHttp = Layer.effect(
+  GroupResources,
+  makeResourceGroupsGroupHttpBinding({
+    tag: "AWS.ResourceGroups.GroupResources",
+    operation: resourcegroups.groupResources,
+    actions: ["resource-groups:GroupResources"],
+    // Application-group membership works by applying the `awsApplication`
+    // tag to the member through the Resource Groups Tagging API.
+    supportingActions: ["tag:GetResources", "tag:TagResources"],
+  }),
+);

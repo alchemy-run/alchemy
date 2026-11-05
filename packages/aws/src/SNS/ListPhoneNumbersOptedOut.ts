@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListPhoneNumbersOptedOutRequest extends sns.ListPhoneNumbersOptedOutInput {}
 
@@ -31,4 +33,13 @@ export interface ListPhoneNumbersOptedOut extends Binding.Service<
 
 export const ListPhoneNumbersOptedOut = Binding.Service<ListPhoneNumbersOptedOut>(
   "AWS.SNS.ListPhoneNumbersOptedOut",
+);
+
+export const ListPhoneNumbersOptedOutHttp = Layer.effect(
+  ListPhoneNumbersOptedOut,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.ListPhoneNumbersOptedOut",
+    operation: sns.listPhoneNumbersOptedOut,
+    actions: ["sns:ListPhoneNumbersOptedOut", "sms-voice:DescribeOptedOutNumbers"],
+  }),
 );

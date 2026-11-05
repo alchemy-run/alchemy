@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:ClassifyDocument` — classify a single
@@ -38,4 +40,13 @@ export interface ClassifyDocument extends Binding.Service<
 > {}
 export const ClassifyDocument = Binding.Service<ClassifyDocument>(
   "AWS.Comprehend.ClassifyDocument",
+);
+
+export const ClassifyDocumentHttp = Layer.effect(
+  ClassifyDocument,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.ClassifyDocument",
+    operation: comprehend.classifyDocument,
+    actions: ["comprehend:ClassifyDocument"],
+  }),
 );

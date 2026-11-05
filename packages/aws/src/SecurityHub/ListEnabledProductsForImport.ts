@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:ListEnabledProductsForImport`.
@@ -35,4 +37,13 @@ export interface ListEnabledProductsForImport extends Binding.Service<
 > {}
 export const ListEnabledProductsForImport = Binding.Service<ListEnabledProductsForImport>(
   "AWS.SecurityHub.ListEnabledProductsForImport",
+);
+
+export const ListEnabledProductsForImportHttp = Layer.effect(
+  ListEnabledProductsForImport,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.ListEnabledProductsForImport",
+    operation: securityhub.listEnabledProductsForImport,
+    actions: ["securityhub:ListEnabledProductsForImport"],
+  }),
 );

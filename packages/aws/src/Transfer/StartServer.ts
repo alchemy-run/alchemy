@@ -1,6 +1,8 @@
-import type * as transfer from "@distilled.cloud/aws/transfer";
+import * as transfer from "@distilled.cloud/aws/transfer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTransferServerHttpBinding } from "./BindingHttp.ts";
 import type { Server } from "./Server.ts";
 
 /**
@@ -38,3 +40,12 @@ export interface StartServer extends Binding.Service<
   >
 > {}
 export const StartServer = Binding.Service<StartServer>("AWS.Transfer.StartServer");
+
+export const StartServerHttp = Layer.effect(
+  StartServer,
+  makeTransferServerHttpBinding({
+    tag: "AWS.Transfer.StartServer",
+    operation: transfer.startServer,
+    actions: ["transfer:StartServer"],
+  }),
+);

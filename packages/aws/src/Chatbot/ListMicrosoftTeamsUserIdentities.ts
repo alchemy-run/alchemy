@@ -1,6 +1,8 @@
-import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import * as chatbot from "@distilled.cloud/aws/chatbot";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeChatbotAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `chatbot:ListMicrosoftTeamsUserIdentities`.
@@ -35,4 +37,13 @@ export interface ListMicrosoftTeamsUserIdentities extends Binding.Service<
 
 export const ListMicrosoftTeamsUserIdentities = Binding.Service<ListMicrosoftTeamsUserIdentities>(
   "AWS.Chatbot.ListMicrosoftTeamsUserIdentities",
+);
+
+export const ListMicrosoftTeamsUserIdentitiesHttp = Layer.effect(
+  ListMicrosoftTeamsUserIdentities,
+  makeChatbotAccountHttpBinding({
+    tag: "AWS.Chatbot.ListMicrosoftTeamsUserIdentities",
+    operation: chatbot.listMicrosoftTeamsUserIdentities,
+    actions: ["chatbot:ListMicrosoftTeamsUserIdentities"],
+  }),
 );

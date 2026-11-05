@@ -1,6 +1,8 @@
-import type * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceCatalogHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicecatalog:SearchProducts`.
@@ -33,3 +35,12 @@ export interface SearchProducts extends Binding.Service<
   >
 > {}
 export const SearchProducts = Binding.Service<SearchProducts>("AWS.ServiceCatalog.SearchProducts");
+
+export const SearchProductsHttp = Layer.effect(
+  SearchProducts,
+  makeServiceCatalogHttpBinding({
+    capability: "SearchProducts",
+    iamActions: ["servicecatalog:SearchProducts"],
+    operation: servicecatalog.searchProducts,
+  }),
+);

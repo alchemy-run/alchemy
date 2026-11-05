@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListScheduledActions` operation (IAM action
@@ -33,4 +35,13 @@ export interface ListScheduledActions extends Binding.Service<
 > {}
 export const ListScheduledActions = Binding.Service<ListScheduledActions>(
   "AWS.OpenSearch.ListScheduledActions",
+);
+
+export const ListScheduledActionsHttp = Layer.effect(
+  ListScheduledActions,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.ListScheduledActions",
+    operation: opensearch.listScheduledActions,
+    actions: ["es:ListScheduledActions"],
+  }),
 );

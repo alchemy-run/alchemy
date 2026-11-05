@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -37,3 +39,12 @@ export interface InviteMembers extends Binding.Service<
   >
 > {}
 export const InviteMembers = Binding.Service<InviteMembers>("AWS.GuardDuty.InviteMembers");
+
+export const InviteMembersHttp = Layer.effect(
+  InviteMembers,
+  makeGuardDutyDetectorHttpBinding({
+    tag: "AWS.GuardDuty.InviteMembers",
+    operation: guardduty.inviteMembers,
+    actions: ["guardduty:InviteMembers"],
+  }),
+);

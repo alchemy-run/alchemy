@@ -1,6 +1,8 @@
-import type * as detective from "@distilled.cloud/aws/detective";
+import * as detective from "@distilled.cloud/aws/detective";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDetectiveGraphHttpBinding } from "./BindingHttp.ts";
 import type { Graph } from "./Graph.ts";
 
 /**
@@ -42,4 +44,13 @@ export interface BatchGetGraphMemberDatasources extends Binding.Service<
 > {}
 export const BatchGetGraphMemberDatasources = Binding.Service<BatchGetGraphMemberDatasources>(
   "AWS.Detective.BatchGetGraphMemberDatasources",
+);
+
+export const BatchGetGraphMemberDatasourcesHttp = Layer.effect(
+  BatchGetGraphMemberDatasources,
+  makeDetectiveGraphHttpBinding({
+    tag: "AWS.Detective.BatchGetGraphMemberDatasources",
+    operation: detective.batchGetGraphMemberDatasources,
+    actions: ["detective:BatchGetGraphMemberDatasources"],
+  }),
 );

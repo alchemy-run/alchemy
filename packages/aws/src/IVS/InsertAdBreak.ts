@@ -1,6 +1,8 @@
-import type * as ivs from "@distilled.cloud/aws/ivs";
+import * as ivs from "@distilled.cloud/aws/ivs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsChannelHttpBinding } from "./BindingHttp.ts";
 import type { Channel } from "./Channel.ts";
 
 export interface InsertAdBreakRequest extends Omit<ivs.InsertAdBreakRequest, "channelArn"> {}
@@ -38,3 +40,12 @@ export interface InsertAdBreak extends Binding.Service<
   >
 > {}
 export const InsertAdBreak = Binding.Service<InsertAdBreak>("AWS.IVS.InsertAdBreak");
+
+export const InsertAdBreakHttp = Layer.effect(
+  InsertAdBreak,
+  makeIvsChannelHttpBinding({
+    tag: "AWS.IVS.InsertAdBreak",
+    operation: ivs.insertAdBreak,
+    actions: ["ivs:InsertAdBreak"],
+  }),
+);

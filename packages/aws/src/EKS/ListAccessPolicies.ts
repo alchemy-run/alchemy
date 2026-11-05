@@ -1,6 +1,8 @@
-import type * as eks from "@distilled.cloud/aws/eks";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEKSAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `eks:ListAccessPolicies`.
@@ -31,3 +33,12 @@ export interface ListAccessPolicies extends Binding.Service<
   >
 > {}
 export const ListAccessPolicies = Binding.Service<ListAccessPolicies>("AWS.EKS.ListAccessPolicies");
+
+export const ListAccessPoliciesHttp = Layer.effect(
+  ListAccessPolicies,
+  makeEKSAccountHttpBinding({
+    tag: "AWS.EKS.ListAccessPolicies",
+    operation: eks.listAccessPolicies,
+    actions: ["eks:ListAccessPolicies"],
+  }),
+);

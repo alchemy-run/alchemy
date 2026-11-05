@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:ListClassificationJobs`.
@@ -32,4 +34,13 @@ export interface ListClassificationJobs extends Binding.Service<
 > {}
 export const ListClassificationJobs = Binding.Service<ListClassificationJobs>(
   "AWS.Macie2.ListClassificationJobs",
+);
+
+export const ListClassificationJobsHttp = Layer.effect(
+  ListClassificationJobs,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.ListClassificationJobs",
+    operation: macie2.listClassificationJobs,
+    actions: ["macie2:ListClassificationJobs"],
+  }),
 );

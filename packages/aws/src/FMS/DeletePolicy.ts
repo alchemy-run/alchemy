@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link DeletePolicy}.
@@ -33,3 +35,12 @@ export interface DeletePolicy extends Binding.Service<
 > {}
 
 export const DeletePolicy = Binding.Service<DeletePolicy>("AWS.FMS.DeletePolicy");
+
+export const DeletePolicyHttp = Layer.effect(
+  DeletePolicy,
+  makeFmsHttpBinding({
+    capability: "DeletePolicy",
+    iamActions: ["fms:DeletePolicy"],
+    operation: fms.deletePolicy,
+  }),
+);

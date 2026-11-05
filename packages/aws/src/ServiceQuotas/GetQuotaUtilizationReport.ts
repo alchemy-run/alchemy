@@ -1,6 +1,8 @@
-import type * as servicequotas from "@distilled.cloud/aws/service-quotas";
+import * as servicequotas from "@distilled.cloud/aws/service-quotas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceQuotasHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `servicequotas:GetQuotaUtilizationReport` — read the
@@ -37,4 +39,13 @@ export interface GetQuotaUtilizationReport extends Binding.Service<
 > {}
 export const GetQuotaUtilizationReport = Binding.Service<GetQuotaUtilizationReport>(
   "AWS.ServiceQuotas.GetQuotaUtilizationReport",
+);
+
+export const GetQuotaUtilizationReportHttp = Layer.effect(
+  GetQuotaUtilizationReport,
+  makeServiceQuotasHttpBinding({
+    capability: "GetQuotaUtilizationReport",
+    iamActions: ["servicequotas:GetQuotaUtilizationReport"],
+    operation: servicequotas.getQuotaUtilizationReport,
+  }),
 );

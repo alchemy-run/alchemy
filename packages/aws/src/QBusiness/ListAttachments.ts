@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `ListAttachments` request with `applicationId` injected from the bound application.
@@ -41,3 +43,12 @@ export interface ListAttachments extends Binding.Service<
   >
 > {}
 export const ListAttachments = Binding.Service<ListAttachments>("AWS.QBusiness.ListAttachments");
+
+export const ListAttachmentsHttp = Layer.effect(
+  ListAttachments,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.ListAttachments",
+    operation: qbusiness.listAttachments,
+    actions: ["qbusiness:ListAttachments"],
+  }),
+);

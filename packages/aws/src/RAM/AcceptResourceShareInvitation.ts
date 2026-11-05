@@ -1,6 +1,8 @@
-import type * as ram from "@distilled.cloud/aws/ram";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRAMHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ram:AcceptResourceShareInvitation`.
@@ -39,4 +41,13 @@ export interface AcceptResourceShareInvitation extends Binding.Service<
 > {}
 export const AcceptResourceShareInvitation = Binding.Service<AcceptResourceShareInvitation>(
   "AWS.RAM.AcceptResourceShareInvitation",
+);
+
+export const AcceptResourceShareInvitationHttp = Layer.effect(
+  AcceptResourceShareInvitation,
+  makeRAMHttpBinding({
+    capability: "AcceptResourceShareInvitation",
+    iamActions: ["ram:AcceptResourceShareInvitation"],
+    operation: ram.acceptResourceShareInvitation,
+  }),
 );

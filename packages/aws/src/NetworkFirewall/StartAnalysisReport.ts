@@ -1,6 +1,9 @@
 import type * as NFW from "@distilled.cloud/aws/network-firewall";
+import * as nfw from "@distilled.cloud/aws/network-firewall";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNetworkFirewallFirewallHttpBinding } from "./BindingHttp.ts";
 import type { Firewall } from "./Firewall.ts";
 
 export interface StartAnalysisReportRequest extends Omit<
@@ -45,4 +48,13 @@ export interface StartAnalysisReport extends Binding.Service<
 
 export const StartAnalysisReport = Binding.Service<StartAnalysisReport>(
   "AWS.NetworkFirewall.StartAnalysisReport",
+);
+
+export const StartAnalysisReportHttp = Layer.effect(
+  StartAnalysisReport,
+  makeNetworkFirewallFirewallHttpBinding({
+    tag: "AWS.NetworkFirewall.StartAnalysisReport",
+    operation: nfw.startAnalysisReport,
+    actions: ["network-firewall:StartAnalysisReport"],
+  }),
 );

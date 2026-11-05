@@ -1,6 +1,8 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQBusinessIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -51,3 +53,12 @@ export interface BatchPutDocument extends Binding.Service<
   >
 > {}
 export const BatchPutDocument = Binding.Service<BatchPutDocument>("AWS.QBusiness.BatchPutDocument");
+
+export const BatchPutDocumentHttp = Layer.effect(
+  BatchPutDocument,
+  makeQBusinessIndexHttpBinding({
+    tag: "AWS.QBusiness.BatchPutDocument",
+    operation: qbusiness.batchPutDocument,
+    actions: ["qbusiness:BatchPutDocument"],
+  }),
+);

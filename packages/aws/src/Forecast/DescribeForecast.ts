@@ -1,6 +1,8 @@
-import type * as forecast from "@distilled.cloud/aws/forecast";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeForecastHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `forecast:DescribeForecast` — poll a forecast
@@ -36,3 +38,12 @@ export interface DescribeForecast extends Binding.Service<
   >
 > {}
 export const DescribeForecast = Binding.Service<DescribeForecast>("AWS.Forecast.DescribeForecast");
+
+export const DescribeForecastHttp = Layer.effect(
+  DescribeForecast,
+  makeForecastHttpBinding({
+    capability: "DescribeForecast",
+    iamActions: ["forecast:DescribeForecast"],
+    operation: forecast.describeForecast,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as ivs from "@distilled.cloud/aws/ivs";
+import * as ivs from "@distilled.cloud/aws/ivs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsChannelHttpBinding } from "./BindingHttp.ts";
 import type { Channel } from "./Channel.ts";
 
 export interface GetStreamSessionRequest extends Omit<ivs.GetStreamSessionRequest, "channelArn"> {}
@@ -38,3 +40,12 @@ export interface GetStreamSession extends Binding.Service<
   >
 > {}
 export const GetStreamSession = Binding.Service<GetStreamSession>("AWS.IVS.GetStreamSession");
+
+export const GetStreamSessionHttp = Layer.effect(
+  GetStreamSession,
+  makeIvsChannelHttpBinding({
+    tag: "AWS.IVS.GetStreamSession",
+    operation: ivs.getStreamSession,
+    actions: ["ivs:GetStreamSession"],
+  }),
+);

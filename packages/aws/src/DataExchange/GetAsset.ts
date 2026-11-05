@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRevisionHttpBinding, revisionAssetArns } from "./BindingHttp.ts";
 import type { Revision } from "./Revision.ts";
 
 /**
@@ -35,3 +37,13 @@ export interface GetAsset extends Binding.Service<
   >
 > {}
 export const GetAsset = Binding.Service<GetAsset>("AWS.DataExchange.GetAsset");
+
+export const GetAssetHttp = Layer.effect(
+  GetAsset,
+  makeRevisionHttpBinding({
+    tag: "AWS.DataExchange.GetAsset",
+    operation: dataexchange.getAsset,
+    actions: ["dataexchange:GetAsset"],
+    resources: revisionAssetArns,
+  }),
+);

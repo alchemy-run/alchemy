@@ -1,6 +1,8 @@
-import type * as osis from "@distilled.cloud/aws/osis";
+import * as osis from "@distilled.cloud/aws/osis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOsisAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `osis:ValidatePipeline`.
@@ -38,3 +40,12 @@ export interface ValidatePipeline extends Binding.Service<
   >
 > {}
 export const ValidatePipeline = Binding.Service<ValidatePipeline>("AWS.OSIS.ValidatePipeline");
+
+export const ValidatePipelineHttp = Layer.effect(
+  ValidatePipeline,
+  makeOsisAccountHttpBinding({
+    tag: "AWS.OSIS.ValidatePipeline",
+    operation: osis.validatePipeline,
+    actions: ["osis:ValidatePipeline"],
+  }),
+);

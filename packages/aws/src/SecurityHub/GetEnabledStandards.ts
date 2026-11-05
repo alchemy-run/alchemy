@@ -1,6 +1,8 @@
-import type * as securityhub from "@distilled.cloud/aws/securityhub";
+import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecurityHubHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `securityhub:GetEnabledStandards`.
@@ -35,4 +37,13 @@ export interface GetEnabledStandards extends Binding.Service<
 > {}
 export const GetEnabledStandards = Binding.Service<GetEnabledStandards>(
   "AWS.SecurityHub.GetEnabledStandards",
+);
+
+export const GetEnabledStandardsHttp = Layer.effect(
+  GetEnabledStandards,
+  makeSecurityHubHttpBinding({
+    tag: "AWS.SecurityHub.GetEnabledStandards",
+    operation: securityhub.getEnabledStandards,
+    actions: ["securityhub:GetEnabledStandards"],
+  }),
 );

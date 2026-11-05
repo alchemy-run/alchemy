@@ -1,6 +1,8 @@
-import type * as opensearch from "@distilled.cloud/aws/opensearch";
+import * as opensearch from "@distilled.cloud/aws/opensearch";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListDomainMaintenances` operation (IAM action
@@ -33,4 +35,13 @@ export interface ListDomainMaintenances extends Binding.Service<
 > {}
 export const ListDomainMaintenances = Binding.Service<ListDomainMaintenances>(
   "AWS.OpenSearch.ListDomainMaintenances",
+);
+
+export const ListDomainMaintenancesHttp = Layer.effect(
+  ListDomainMaintenances,
+  makeOpenSearchHttpBinding({
+    tag: "AWS.OpenSearch.ListDomainMaintenances",
+    operation: opensearch.listDomainMaintenances,
+    actions: ["es:ListDomainMaintenances"],
+  }),
 );

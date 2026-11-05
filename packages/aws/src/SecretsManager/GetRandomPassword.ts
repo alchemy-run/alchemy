@@ -1,6 +1,8 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecretsManagerAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `secretsmanager:GetRandomPassword`.
@@ -42,4 +44,13 @@ export interface GetRandomPassword extends Binding.Service<
 
 export const GetRandomPassword = Binding.Service<GetRandomPassword>(
   "AWS.SecretsManager.GetRandomPassword",
+);
+
+export const GetRandomPasswordHttp = Layer.effect(
+  GetRandomPassword,
+  makeSecretsManagerAccountHttpBinding({
+    tag: "AWS.SecretsManager.GetRandomPassword",
+    operation: secretsmanager.getRandomPassword,
+    actions: ["secretsmanager:GetRandomPassword"],
+  }),
 );

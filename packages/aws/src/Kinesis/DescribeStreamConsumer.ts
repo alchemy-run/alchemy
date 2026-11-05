@@ -1,6 +1,8 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConsumerHttpBinding } from "./BindingHttp.ts";
 import type { StreamConsumer } from "./StreamConsumer.ts";
 
 export interface DescribeStreamConsumerRequest extends Omit<
@@ -46,4 +48,13 @@ export interface DescribeStreamConsumer extends Binding.Service<
 
 export const DescribeStreamConsumer = Binding.Service<DescribeStreamConsumer>(
   "AWS.Kinesis.DescribeStreamConsumer",
+);
+
+export const DescribeStreamConsumerHttp = Layer.effect(
+  DescribeStreamConsumer,
+  makeConsumerHttpBinding({
+    tag: "AWS.Kinesis.DescribeStreamConsumer",
+    operation: Kinesis.describeStreamConsumer,
+    actions: ["kinesis:DescribeStreamConsumer"],
+  }),
 );

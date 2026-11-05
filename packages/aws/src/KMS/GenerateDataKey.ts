@@ -1,7 +1,9 @@
-import type * as kms from "@distilled.cloud/aws/kms";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AliasName } from "./Alias.ts";
+import { makeKmsKeyHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface GenerateDataKeyRequest extends Omit<kms.GenerateDataKeyRequest, "KeyId"> {}
@@ -82,3 +84,12 @@ export interface GenerateDataKey extends Binding.Service<
 > {}
 
 export const GenerateDataKey = Binding.Service<GenerateDataKey>("AWS.KMS.GenerateDataKey");
+
+export const GenerateDataKeyHttp = Layer.effect(
+  GenerateDataKey,
+  makeKmsKeyHttpBinding({
+    tag: "AWS.KMS.GenerateDataKey",
+    operation: kms.generateDataKey,
+    actions: ["kms:GenerateDataKey"],
+  }),
+);

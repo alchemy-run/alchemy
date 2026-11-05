@@ -1,6 +1,8 @@
-import type * as config from "@distilled.cloud/aws/config-service";
+import * as config from "@distilled.cloud/aws/config-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConfigAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `config:DescribeComplianceByConfigRule` — read
@@ -39,4 +41,13 @@ export interface DescribeComplianceByConfigRule extends Binding.Service<
 
 export const DescribeComplianceByConfigRule = Binding.Service<DescribeComplianceByConfigRule>(
   "AWS.Config.DescribeComplianceByConfigRule",
+);
+
+export const DescribeComplianceByConfigRuleHttp = Layer.effect(
+  DescribeComplianceByConfigRule,
+  makeConfigAccountHttpBinding({
+    tag: "AWS.Config.DescribeComplianceByConfigRule",
+    operation: config.describeComplianceByConfigRule,
+    actions: ["config:DescribeComplianceByConfigRule"],
+  }),
 );

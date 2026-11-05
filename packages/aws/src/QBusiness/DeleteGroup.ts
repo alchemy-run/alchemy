@@ -1,6 +1,8 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQBusinessIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -42,3 +44,13 @@ export interface DeleteGroup extends Binding.Service<
   >
 > {}
 export const DeleteGroup = Binding.Service<DeleteGroup>("AWS.QBusiness.DeleteGroup");
+
+export const DeleteGroupHttp = Layer.effect(
+  DeleteGroup,
+  makeQBusinessIndexHttpBinding({
+    tag: "AWS.QBusiness.DeleteGroup",
+    operation: qbusiness.deleteGroup,
+    actions: ["qbusiness:DeleteGroup"],
+    subResources: ["data-source/*"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBackupAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListRecoveryPointsByResource` operation (IAM
@@ -37,4 +39,13 @@ export interface ListRecoveryPointsByResource extends Binding.Service<
 > {}
 export const ListRecoveryPointsByResource = Binding.Service<ListRecoveryPointsByResource>(
   "AWS.Backup.ListRecoveryPointsByResource",
+);
+
+export const ListRecoveryPointsByResourceHttp = Layer.effect(
+  ListRecoveryPointsByResource,
+  makeBackupAccountHttpBinding({
+    tag: "AWS.Backup.ListRecoveryPointsByResource",
+    operation: backup.listRecoveryPointsByResource,
+    actions: ["backup:ListRecoveryPointsByResource"],
+  }),
 );

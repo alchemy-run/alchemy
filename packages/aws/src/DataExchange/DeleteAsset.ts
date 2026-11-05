@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRevisionHttpBinding, revisionAssetArns } from "./BindingHttp.ts";
 import type { Revision } from "./Revision.ts";
 
 /**
@@ -33,3 +35,13 @@ export interface DeleteAsset extends Binding.Service<
   >
 > {}
 export const DeleteAsset = Binding.Service<DeleteAsset>("AWS.DataExchange.DeleteAsset");
+
+export const DeleteAssetHttp = Layer.effect(
+  DeleteAsset,
+  makeRevisionHttpBinding({
+    tag: "AWS.DataExchange.DeleteAsset",
+    operation: dataexchange.deleteAsset,
+    actions: ["dataexchange:DeleteAsset"],
+    resources: revisionAssetArns,
+  }),
+);

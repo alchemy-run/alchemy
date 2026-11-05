@@ -1,7 +1,9 @@
-import type * as sitewise from "@distilled.cloud/aws/iotsitewise";
+import * as sitewise from "@distilled.cloud/aws/iotsitewise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Asset } from "./Asset.ts";
+import { makeSiteWiseAssetHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListAssetProperties}. The bound asset's id is injected
@@ -49,4 +51,17 @@ export interface ListAssetProperties extends Binding.Service<
 > {}
 export const ListAssetProperties = Binding.Service<ListAssetProperties>(
   "AWS.IoTSiteWise.ListAssetProperties",
+);
+
+export const ListAssetPropertiesHttp = Layer.effect(
+  ListAssetProperties,
+  makeSiteWiseAssetHttpBinding({
+    capability: "ListAssetProperties",
+    iamActions: ["iotsitewise:ListAssetProperties"],
+    operation: sitewise.listAssetProperties,
+    prepare: (request: ListAssetPropertiesRequest | undefined, assetId) => ({
+      ...request,
+      assetId,
+    }),
+  }),
 );

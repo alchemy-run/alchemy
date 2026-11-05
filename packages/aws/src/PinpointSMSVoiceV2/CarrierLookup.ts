@@ -1,6 +1,8 @@
-import type * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
+import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSmsVoiceAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `sms-voice:CarrierLookup`.
@@ -35,3 +37,12 @@ export interface CarrierLookup extends Binding.Service<
   >
 > {}
 export const CarrierLookup = Binding.Service<CarrierLookup>("AWS.PinpointSMSVoiceV2.CarrierLookup");
+
+export const CarrierLookupHttp = Layer.effect(
+  CarrierLookup,
+  makeSmsVoiceAccountHttpBinding({
+    tag: "AWS.PinpointSMSVoiceV2.CarrierLookup",
+    operation: smsvoice.carrierLookup,
+    actions: ["sms-voice:CarrierLookup"],
+  }),
+);

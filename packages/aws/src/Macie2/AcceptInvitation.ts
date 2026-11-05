@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:AcceptInvitation`.
@@ -31,3 +33,12 @@ export interface AcceptInvitation extends Binding.Service<
   >
 > {}
 export const AcceptInvitation = Binding.Service<AcceptInvitation>("AWS.Macie2.AcceptInvitation");
+
+export const AcceptInvitationHttp = Layer.effect(
+  AcceptInvitation,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.AcceptInvitation",
+    operation: macie2.acceptInvitation,
+    actions: ["macie2:AcceptInvitation"],
+  }),
+);

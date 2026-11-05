@@ -1,6 +1,8 @@
-import type * as rekognition from "@distilled.cloud/aws/rekognition";
+import * as rekognition from "@distilled.cloud/aws/rekognition";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRekognitionHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `rekognition:IndexFaces` — detect faces in an image and add them to a face collection for later search.
@@ -38,3 +40,12 @@ export interface IndexFaces extends Binding.Service<
   >
 > {}
 export const IndexFaces = Binding.Service<IndexFaces>("AWS.Rekognition.IndexFaces");
+
+export const IndexFacesHttp = Layer.effect(
+  IndexFaces,
+  makeRekognitionHttpBinding({
+    tag: "AWS.Rekognition.IndexFaces",
+    operation: rekognition.indexFaces,
+    actions: ["rekognition:IndexFaces"],
+  }),
+);

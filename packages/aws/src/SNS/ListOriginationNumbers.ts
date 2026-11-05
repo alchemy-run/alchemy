@@ -1,6 +1,8 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSnsAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListOriginationNumbersRequest extends sns.ListOriginationNumbersRequest {}
 
@@ -31,4 +33,13 @@ export interface ListOriginationNumbers extends Binding.Service<
 
 export const ListOriginationNumbers = Binding.Service<ListOriginationNumbers>(
   "AWS.SNS.ListOriginationNumbers",
+);
+
+export const ListOriginationNumbersHttp = Layer.effect(
+  ListOriginationNumbers,
+  makeSnsAccountHttpBinding({
+    tag: "AWS.SNS.ListOriginationNumbers",
+    operation: sns.listOriginationNumbers,
+    actions: ["sns:ListOriginationNumbers", "sms-voice:DescribePhoneNumbers"],
+  }),
 );

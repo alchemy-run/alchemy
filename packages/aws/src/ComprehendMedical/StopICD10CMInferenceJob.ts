@@ -1,6 +1,8 @@
-import type * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
+import * as comprehendmedical from "@distilled.cloud/aws/comprehendmedical";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendMedicalHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehendmedical:StopICD10CMInferenceJob` — stop an in-progress asynchronous ICD-10-CM ontology linking job.
@@ -35,4 +37,13 @@ export interface StopICD10CMInferenceJob extends Binding.Service<
 > {}
 export const StopICD10CMInferenceJob = Binding.Service<StopICD10CMInferenceJob>(
   "AWS.ComprehendMedical.StopICD10CMInferenceJob",
+);
+
+export const StopICD10CMInferenceJobHttp = Layer.effect(
+  StopICD10CMInferenceJob,
+  makeComprehendMedicalHttpBinding({
+    capability: "StopICD10CMInferenceJob",
+    iamActions: ["comprehendmedical:StopICD10CMInferenceJob"],
+    operation: comprehendmedical.stopICD10CMInferenceJob,
+  }),
 );

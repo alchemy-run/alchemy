@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetApproximateUsageRecords}.
@@ -42,4 +44,13 @@ export interface GetApproximateUsageRecords extends Binding.Service<
 
 export const GetApproximateUsageRecords = Binding.Service<GetApproximateUsageRecords>(
   "AWS.CostExplorer.GetApproximateUsageRecords",
+);
+
+export const GetApproximateUsageRecordsHttp = Layer.effect(
+  GetApproximateUsageRecords,
+  makeCostExplorerHttpBinding({
+    capability: "GetApproximateUsageRecords",
+    iamActions: ["ce:GetApproximateUsageRecords"],
+    operation: ce.getApproximateUsageRecords,
+  }),
 );

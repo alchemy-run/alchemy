@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListAlarmMuteRulesRequest extends cloudwatch.ListAlarmMuteRulesInput {}
 
@@ -35,4 +37,13 @@ export interface ListAlarmMuteRules extends Binding.Service<
 
 export const ListAlarmMuteRules = Binding.Service<ListAlarmMuteRules>(
   "AWS.CloudWatch.ListAlarmMuteRules",
+);
+
+export const ListAlarmMuteRulesHttp = Layer.effect(
+  ListAlarmMuteRules,
+  makeCloudWatchAccountHttpBinding({
+    tag: "AWS.CloudWatch.ListAlarmMuteRules",
+    operation: cloudwatch.listAlarmMuteRules,
+    actions: ["cloudwatch:ListAlarmMuteRules"],
+  }),
 );

@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `GetMedia` request with `applicationId` injected from the bound application.
@@ -37,3 +39,12 @@ export interface GetMedia extends Binding.Service<
   >
 > {}
 export const GetMedia = Binding.Service<GetMedia>("AWS.QBusiness.GetMedia");
+
+export const GetMediaHttp = Layer.effect(
+  GetMedia,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.GetMedia",
+    operation: qbusiness.getMedia,
+    actions: ["qbusiness:GetMedia"],
+  }),
+);

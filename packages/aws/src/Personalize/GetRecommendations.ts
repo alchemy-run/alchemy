@@ -1,6 +1,8 @@
-import type * as personalizeruntime from "@distilled.cloud/aws/personalize-runtime";
+import * as personalizeruntime from "@distilled.cloud/aws/personalize-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePersonalizeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `personalize:GetRecommendations` — Returns a list of recommended items for a user from a campaign or
@@ -39,4 +41,13 @@ export interface GetRecommendations extends Binding.Service<
 > {}
 export const GetRecommendations = Binding.Service<GetRecommendations>(
   "AWS.Personalize.GetRecommendations",
+);
+
+export const GetRecommendationsHttp = Layer.effect(
+  GetRecommendations,
+  makePersonalizeAccountHttpBinding({
+    tag: "AWS.Personalize.GetRecommendations",
+    operation: personalizeruntime.getRecommendations,
+    actions: ["personalize:GetRecommendations"],
+  }),
 );

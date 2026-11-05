@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchResourceHttpBinding } from "./BindingHttp.ts";
 import type { Dashboard } from "./Dashboard.ts";
 
 export interface GetDashboardRequest extends Omit<cloudwatch.GetDashboardInput, "DashboardName"> {}
@@ -38,3 +40,15 @@ export interface GetDashboard extends Binding.Service<
 > {}
 
 export const GetDashboard = Binding.Service<GetDashboard>("AWS.CloudWatch.GetDashboard");
+
+export const GetDashboardHttp = Layer.effect(
+  GetDashboard,
+  makeCloudWatchResourceHttpBinding({
+    tag: "AWS.CloudWatch.GetDashboard",
+    operation: cloudwatch.getDashboard,
+    actions: ["cloudwatch:GetDashboard"],
+    requestKey: "DashboardName",
+    identifier: (dashboard: Dashboard) => dashboard.dashboardName,
+    resourceArn: (dashboard: Dashboard) => dashboard.dashboardArn,
+  }),
+);

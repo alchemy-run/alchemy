@@ -1,6 +1,8 @@
-import type * as backup from "@distilled.cloud/aws/backup";
+import * as backup from "@distilled.cloud/aws/backup";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBackupAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `ListProtectedResources` operation (IAM action
@@ -30,4 +32,13 @@ export interface ListProtectedResources extends Binding.Service<
 > {}
 export const ListProtectedResources = Binding.Service<ListProtectedResources>(
   "AWS.Backup.ListProtectedResources",
+);
+
+export const ListProtectedResourcesHttp = Layer.effect(
+  ListProtectedResources,
+  makeBackupAccountHttpBinding({
+    tag: "AWS.Backup.ListProtectedResources",
+    operation: backup.listProtectedResources,
+    actions: ["backup:ListProtectedResources"],
+  }),
 );

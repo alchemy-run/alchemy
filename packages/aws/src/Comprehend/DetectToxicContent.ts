@@ -1,6 +1,8 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `comprehend:DetectToxicContent` — run toxicity
@@ -37,4 +39,13 @@ export interface DetectToxicContent extends Binding.Service<
 > {}
 export const DetectToxicContent = Binding.Service<DetectToxicContent>(
   "AWS.Comprehend.DetectToxicContent",
+);
+
+export const DetectToxicContentHttp = Layer.effect(
+  DetectToxicContent,
+  makeComprehendHttpBinding({
+    tag: "AWS.Comprehend.DetectToxicContent",
+    operation: comprehend.detectToxicContent,
+    actions: ["comprehend:DetectToxicContent"],
+  }),
 );

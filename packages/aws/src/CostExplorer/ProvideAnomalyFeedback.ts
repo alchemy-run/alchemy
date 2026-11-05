@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ProvideAnomalyFeedback}.
@@ -42,4 +44,13 @@ export interface ProvideAnomalyFeedback extends Binding.Service<
 
 export const ProvideAnomalyFeedback = Binding.Service<ProvideAnomalyFeedback>(
   "AWS.CostExplorer.ProvideAnomalyFeedback",
+);
+
+export const ProvideAnomalyFeedbackHttp = Layer.effect(
+  ProvideAnomalyFeedback,
+  makeCostExplorerHttpBinding({
+    capability: "ProvideAnomalyFeedback",
+    iamActions: ["ce:ProvideAnomalyFeedback"],
+    operation: ce.provideAnomalyFeedback,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
+import * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotClientHttpBinding } from "./BindingHttp.ts";
 
 export interface DeleteConnectionRequest extends iotdata.DeleteConnectionRequest {}
 
@@ -36,3 +38,17 @@ export interface DeleteConnection extends Binding.Service<
 > {}
 
 export const DeleteConnection = Binding.Service<DeleteConnection>("AWS.IoT.DeleteConnection");
+
+/**
+ * HTTP implementation of the {@link DeleteConnection} capability — grants
+ * `iot:DeleteConnection` on the bound client filter and calls the IoT
+ * data-plane `DeleteConnection` API.
+ */
+export const DeleteConnectionHttp = Layer.effect(
+  DeleteConnection,
+  makeIotClientHttpBinding({
+    tag: "AWS.IoT.DeleteConnection",
+    operation: iotdata.deleteConnection,
+    actions: ["iot:DeleteConnection"],
+  }),
+);

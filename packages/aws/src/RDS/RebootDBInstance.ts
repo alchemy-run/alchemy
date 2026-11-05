@@ -1,6 +1,8 @@
-import type * as rds from "@distilled.cloud/aws/rds";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRdsInstanceHttpBinding } from "./BindingHttp.ts";
 import type { DBInstance } from "./DBInstance.ts";
 
 /**
@@ -35,3 +37,12 @@ export interface RebootDBInstance extends Binding.Service<
   >
 > {}
 export const RebootDBInstance = Binding.Service<RebootDBInstance>("AWS.RDS.RebootDBInstance");
+
+export const RebootDBInstanceHttp = Layer.effect(
+  RebootDBInstance,
+  makeRdsInstanceHttpBinding({
+    tag: "AWS.RDS.RebootDBInstance",
+    operation: rds.rebootDBInstance,
+    actions: ["rds:RebootDBInstance"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as athena from "@distilled.cloud/aws/athena";
+import * as athena from "@distilled.cloud/aws/athena";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataCatalogScopedHttpBinding } from "./BindingHttp.ts";
 import type { DataCatalog } from "./DataCatalog.ts";
 
 /**
@@ -39,3 +41,12 @@ export interface GetTableMetadata extends Binding.Service<
 > {}
 
 export const GetTableMetadata = Binding.Service<GetTableMetadata>("AWS.Athena.GetTableMetadata");
+
+export const GetTableMetadataHttp = Layer.effect(
+  GetTableMetadata,
+  makeDataCatalogScopedHttpBinding({
+    tag: "AWS.Athena.GetTableMetadata",
+    operation: athena.getTableMetadata,
+    actions: ["athena:GetTableMetadata"],
+  }),
+);

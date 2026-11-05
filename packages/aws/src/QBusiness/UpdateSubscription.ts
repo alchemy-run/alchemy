@@ -1,7 +1,9 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeQBusinessApplicationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `UpdateSubscription` request with `applicationId` injected from the bound application.
@@ -42,4 +44,13 @@ export interface UpdateSubscription extends Binding.Service<
 > {}
 export const UpdateSubscription = Binding.Service<UpdateSubscription>(
   "AWS.QBusiness.UpdateSubscription",
+);
+
+export const UpdateSubscriptionHttp = Layer.effect(
+  UpdateSubscription,
+  makeQBusinessApplicationHttpBinding({
+    tag: "AWS.QBusiness.UpdateSubscription",
+    operation: qbusiness.updateSubscription,
+    actions: ["qbusiness:UpdateSubscription"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as frauddetector from "@distilled.cloud/aws/frauddetector";
+import * as frauddetector from "@distilled.cloud/aws/frauddetector";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFraudDetectorEventTypeHttpBinding } from "./BindingHttp.ts";
 import type { EventType } from "./EventType.ts";
 
 /**
@@ -54,3 +56,12 @@ export interface DeleteEvent extends Binding.Service<
   >
 > {}
 export const DeleteEvent = Binding.Service<DeleteEvent>("AWS.FraudDetector.DeleteEvent");
+
+export const DeleteEventHttp = Layer.effect(
+  DeleteEvent,
+  makeFraudDetectorEventTypeHttpBinding({
+    tag: "AWS.FraudDetector.DeleteEvent",
+    operation: frauddetector.deleteEvent,
+    actions: ["frauddetector:DeleteEvent"],
+  }),
+);

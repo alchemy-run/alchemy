@@ -1,7 +1,9 @@
-import type * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeEmrServerlessHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `emr-serverless:StartApplication`.
@@ -31,4 +33,13 @@ export interface StartApplication extends Binding.Service<
 > {}
 export const StartApplication = Binding.Service<StartApplication>(
   "AWS.EMRServerless.StartApplication",
+);
+
+export const StartApplicationHttp = Layer.effect(
+  StartApplication,
+  makeEmrServerlessHttpBinding({
+    tag: "AWS.EMRServerless.StartApplication",
+    operation: emr.startApplication,
+    actions: ["emr-serverless:StartApplication"],
+  }),
 );

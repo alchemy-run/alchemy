@@ -1,6 +1,8 @@
-import type * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
+import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsRealtimeStageHttpBinding } from "./BindingHttp.ts";
 import type { Stage } from "./Stage.ts";
 
 /** The `stageArn` is injected by the binding from the bound stage. */
@@ -39,3 +41,12 @@ export interface GetStageSession extends Binding.Service<
   >
 > {}
 export const GetStageSession = Binding.Service<GetStageSession>("AWS.IVSRealtime.GetStageSession");
+
+export const GetStageSessionHttp = Layer.effect(
+  GetStageSession,
+  makeIvsRealtimeStageHttpBinding({
+    tag: "AWS.IVSRealtime.GetStageSession",
+    operation: ivsrealtime.getStageSession,
+    actions: ["ivs:GetStageSession"],
+  }),
+);

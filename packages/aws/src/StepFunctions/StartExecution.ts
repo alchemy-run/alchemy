@@ -1,6 +1,8 @@
-import type * as sfn from "@distilled.cloud/aws/sfn";
+import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStateMachineArnHttpBinding } from "./BindingHttp.ts";
 import type { StateMachine } from "./StateMachine.ts";
 
 export interface StartExecutionRequest extends Omit<sfn.StartExecutionInput, "stateMachineArn"> {}
@@ -44,3 +46,12 @@ export interface StartExecution extends Binding.Service<
   >
 > {}
 export const StartExecution = Binding.Service<StartExecution>("AWS.StepFunctions.StartExecution");
+
+export const StartExecutionHttp = Layer.effect(
+  StartExecution,
+  makeStateMachineArnHttpBinding({
+    tag: "AWS.StepFunctions.StartExecution",
+    operation: sfn.startExecution,
+    actions: ["states:StartExecution"],
+  }),
+);

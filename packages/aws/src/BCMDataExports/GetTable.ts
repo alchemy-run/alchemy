@@ -1,6 +1,8 @@
-import type * as bcm from "@distilled.cloud/aws/bcm-data-exports";
+import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataExportsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetTable}.
@@ -38,3 +40,12 @@ export interface GetTable extends Binding.Service<
 > {}
 
 export const GetTable = Binding.Service<GetTable>("AWS.BCMDataExports.GetTable");
+
+export const GetTableHttp = Layer.effect(
+  GetTable,
+  makeDataExportsAccountHttpBinding({
+    capability: "GetTable",
+    iamActions: ["bcm-data-exports:GetTable"],
+    operation: bcm.getTable,
+  }),
+);

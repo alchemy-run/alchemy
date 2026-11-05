@@ -1,6 +1,8 @@
-import type * as resourcegroups from "@distilled.cloud/aws/resource-groups";
+import * as resourcegroups from "@distilled.cloud/aws/resource-groups";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeResourceGroupsAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `resource-groups:ListTagSyncTasks`.
@@ -35,4 +37,13 @@ export interface ListTagSyncTasks extends Binding.Service<
 > {}
 export const ListTagSyncTasks = Binding.Service<ListTagSyncTasks>(
   "AWS.ResourceGroups.ListTagSyncTasks",
+);
+
+export const ListTagSyncTasksHttp = Layer.effect(
+  ListTagSyncTasks,
+  makeResourceGroupsAccountHttpBinding({
+    tag: "AWS.ResourceGroups.ListTagSyncTasks",
+    operation: resourcegroups.listTagSyncTasks,
+    actions: ["resource-groups:ListTagSyncTasks"],
+  }),
 );

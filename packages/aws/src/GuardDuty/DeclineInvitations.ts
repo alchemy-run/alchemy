@@ -1,6 +1,8 @@
-import type * as guardduty from "@distilled.cloud/aws/guardduty";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeGuardDutyAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `guardduty:DeclineInvitations`.
@@ -33,4 +35,13 @@ export interface DeclineInvitations extends Binding.Service<
 > {}
 export const DeclineInvitations = Binding.Service<DeclineInvitations>(
   "AWS.GuardDuty.DeclineInvitations",
+);
+
+export const DeclineInvitationsHttp = Layer.effect(
+  DeclineInvitations,
+  makeGuardDutyAccountHttpBinding({
+    tag: "AWS.GuardDuty.DeclineInvitations",
+    operation: guardduty.declineInvitations,
+    actions: ["guardduty:DeclineInvitations"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as mediatailor from "@distilled.cloud/aws/mediatailor";
+import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMediaTailorPlaybackHttpBinding } from "./BindingHttp.ts";
 import type { PlaybackConfiguration } from "./PlaybackConfiguration.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface DeletePrefetchSchedule extends Binding.Service<
 > {}
 export const DeletePrefetchSchedule = Binding.Service<DeletePrefetchSchedule>(
   "AWS.MediaTailor.DeletePrefetchSchedule",
+);
+
+export const DeletePrefetchScheduleHttp = Layer.effect(
+  DeletePrefetchSchedule,
+  makeMediaTailorPlaybackHttpBinding({
+    capability: "DeletePrefetchSchedule",
+    iamActions: ["mediatailor:DeletePrefetchSchedule"],
+    operation: mediatailor.deletePrefetchSchedule,
+  }),
 );

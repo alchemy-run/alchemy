@@ -1,6 +1,8 @@
-import type * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
+import * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudControlHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `cloudformation:GetResourceRequestStatus`.
@@ -45,4 +47,13 @@ export interface GetResourceRequestStatus extends Binding.Service<
 
 export const GetResourceRequestStatus = Binding.Service<GetResourceRequestStatus>(
   "AWS.CloudControl.GetResourceRequestStatus",
+);
+
+export const GetResourceRequestStatusHttp = Layer.effect(
+  GetResourceRequestStatus,
+  makeCloudControlHttpBinding({
+    tag: "AWS.CloudControl.GetResourceRequestStatus",
+    operation: cloudcontrol.getResourceRequestStatus,
+    actions: ["cloudformation:GetResourceRequestStatus"],
+  }),
 );

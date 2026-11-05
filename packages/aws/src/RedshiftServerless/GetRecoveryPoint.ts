@@ -1,6 +1,8 @@
-import type * as serverless from "@distilled.cloud/aws/redshift-serverless";
+import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServerlessAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for the `GetRecoveryPoint` operation (IAM actions
@@ -30,4 +32,13 @@ export interface GetRecoveryPoint extends Binding.Service<
 > {}
 export const GetRecoveryPoint = Binding.Service<GetRecoveryPoint>(
   "AWS.RedshiftServerless.GetRecoveryPoint",
+);
+
+export const GetRecoveryPointHttp = Layer.effect(
+  GetRecoveryPoint,
+  makeServerlessAccountHttpBinding({
+    tag: "AWS.RedshiftServerless.GetRecoveryPoint",
+    operation: serverless.getRecoveryPoint,
+    actions: ["redshift-serverless:GetRecoveryPoint"],
+  }),
 );

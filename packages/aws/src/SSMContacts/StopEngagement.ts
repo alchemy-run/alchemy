@@ -1,6 +1,8 @@
-import type * as ssm from "@distilled.cloud/aws/ssm-contacts";
+import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `ssm-contacts:StopEngagement`.
@@ -34,3 +36,12 @@ export interface StopEngagement extends Binding.Service<
   >
 > {}
 export const StopEngagement = Binding.Service<StopEngagement>("AWS.SSMContacts.StopEngagement");
+
+export const StopEngagementHttp = Layer.effect(
+  StopEngagement,
+  makeAccountHttpBinding({
+    tag: "AWS.SSMContacts.StopEngagement",
+    operation: ssm.stopEngagement,
+    actions: ["ssm-contacts:StopEngagement"],
+  }),
+);

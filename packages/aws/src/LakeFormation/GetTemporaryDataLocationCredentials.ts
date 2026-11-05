@@ -1,6 +1,8 @@
-import type * as lf from "@distilled.cloud/aws/lakeformation";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLakeFormationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link GetTemporaryDataLocationCredentials}.
@@ -49,3 +51,12 @@ export const GetTemporaryDataLocationCredentials =
   Binding.Service<GetTemporaryDataLocationCredentials>(
     "AWS.LakeFormation.GetTemporaryDataLocationCredentials",
   );
+
+export const GetTemporaryDataLocationCredentialsHttp = Layer.effect(
+  GetTemporaryDataLocationCredentials,
+  makeLakeFormationHttpBinding({
+    capability: "GetTemporaryDataLocationCredentials",
+    iamActions: ["lakeformation:GetDataAccess"],
+    operation: lf.getTemporaryDataLocationCredentials,
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as fsx from "@distilled.cloud/aws/fsx";
+import * as fsx from "@distilled.cloud/aws/fsx";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFSxFileSystemHttpBinding } from "./BindingHttp.ts";
 import type { FileSystem } from "./FileSystem.ts";
 
 /**
@@ -41,3 +43,15 @@ export interface CreateBackup extends Binding.Service<
   >
 > {}
 export const CreateBackup = Binding.Service<CreateBackup>("AWS.FSx.CreateBackup");
+
+export const CreateBackupHttp = Layer.effect(
+  CreateBackup,
+  makeFSxFileSystemHttpBinding({
+    tag: "AWS.FSx.CreateBackup",
+    operation: fsx.createBackup,
+    actions: ["fsx:CreateBackup", "fsx:TagResource"],
+    // CreateBackup also authorizes on the new backup's own ARN, which is
+    // unknowable at deploy time.
+    extraResourceArns: ["arn:aws:fsx:*:*:backup/*"],
+  }),
+);

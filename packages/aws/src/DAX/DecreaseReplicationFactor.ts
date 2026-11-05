@@ -1,6 +1,8 @@
-import type * as dax from "@distilled.cloud/aws/dax";
+import * as dax from "@distilled.cloud/aws/dax";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDaxClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface DecreaseReplicationFactor extends Binding.Service<
 > {}
 export const DecreaseReplicationFactor = Binding.Service<DecreaseReplicationFactor>(
   "AWS.DAX.DecreaseReplicationFactor",
+);
+
+export const DecreaseReplicationFactorHttp = Layer.effect(
+  DecreaseReplicationFactor,
+  makeDaxClusterHttpBinding({
+    tag: "AWS.DAX.DecreaseReplicationFactor",
+    operation: dax.decreaseReplicationFactor,
+    actions: ["dax:DecreaseReplicationFactor"],
+  }),
 );

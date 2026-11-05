@@ -1,6 +1,8 @@
-import type * as macie2 from "@distilled.cloud/aws/macie2";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMacie2HttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `macie2:GetMember`.
@@ -31,3 +33,12 @@ export interface GetMember extends Binding.Service<
   >
 > {}
 export const GetMember = Binding.Service<GetMember>("AWS.Macie2.GetMember");
+
+export const GetMemberHttp = Layer.effect(
+  GetMember,
+  makeMacie2HttpBinding({
+    tag: "AWS.Macie2.GetMember",
+    operation: macie2.getMember,
+    actions: ["macie2:GetMember"],
+  }),
+);

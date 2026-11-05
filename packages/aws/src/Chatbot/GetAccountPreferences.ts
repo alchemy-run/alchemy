@@ -1,6 +1,8 @@
-import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import * as chatbot from "@distilled.cloud/aws/chatbot";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeChatbotAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `chatbot:GetAccountPreferences`.
@@ -31,4 +33,13 @@ export interface GetAccountPreferences extends Binding.Service<
 
 export const GetAccountPreferences = Binding.Service<GetAccountPreferences>(
   "AWS.Chatbot.GetAccountPreferences",
+);
+
+export const GetAccountPreferencesHttp = Layer.effect(
+  GetAccountPreferences,
+  makeChatbotAccountHttpBinding({
+    tag: "AWS.Chatbot.GetAccountPreferences",
+    operation: chatbot.getAccountPreferences,
+    actions: ["chatbot:GetAccountPreferences"],
+  }),
 );

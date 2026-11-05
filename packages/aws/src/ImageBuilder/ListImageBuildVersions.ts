@@ -1,6 +1,8 @@
-import type * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeImageBuilderAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `imagebuilder:ListImageBuildVersions`.
@@ -40,4 +42,13 @@ export interface ListImageBuildVersions extends Binding.Service<
 > {}
 export const ListImageBuildVersions = Binding.Service<ListImageBuildVersions>(
   "AWS.ImageBuilder.ListImageBuildVersions",
+);
+
+export const ListImageBuildVersionsHttp = Layer.effect(
+  ListImageBuildVersions,
+  makeImageBuilderAccountHttpBinding({
+    tag: "AWS.ImageBuilder.ListImageBuildVersions",
+    operation: imagebuilder.listImageBuildVersions,
+    actions: ["imagebuilder:ListImageBuildVersions"],
+  }),
 );

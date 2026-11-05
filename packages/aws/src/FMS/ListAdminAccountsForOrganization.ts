@@ -1,6 +1,8 @@
-import type * as fms from "@distilled.cloud/aws/fms";
+import * as fms from "@distilled.cloud/aws/fms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link ListAdminAccountsForOrganization}.
@@ -41,4 +43,14 @@ export interface ListAdminAccountsForOrganization extends Binding.Service<
 
 export const ListAdminAccountsForOrganization = Binding.Service<ListAdminAccountsForOrganization>(
   "AWS.FMS.ListAdminAccountsForOrganization",
+);
+
+export const ListAdminAccountsForOrganizationHttp = Layer.effect(
+  ListAdminAccountsForOrganization,
+  makeFmsHttpBinding({
+    capability: "ListAdminAccountsForOrganization",
+    iamActions: ["fms:ListAdminAccountsForOrganization"],
+    operation: fms.listAdminAccountsForOrganization,
+    pinToAdminRegion: true,
+  }),
 );
