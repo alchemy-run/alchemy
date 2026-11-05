@@ -234,7 +234,8 @@ if (grid) {
 const hasBackEdge = edges.some(
   (e) => (layerOf.get(e.to) ?? 0) <= (layerOf.get(e.from) ?? 0),
 );
-const BACK_EDGE_GUTTER = 56;
+// Back edges arc 36 below the nodes (LR) or to their right (TB), so only that side gets the room.
+const BACK_EDGE_GUTTER = edges.some((e) => e.label && (layerOf.get(e.to) ?? 0) <= (layerOf.get(e.from) ?? 0)) ? 44 : 32;
 
 const gridCols = grid ? Math.max(...nodes.map((n) => n.col!)) + 1 : 0;
 const gridRows = grid ? Math.max(...nodes.map((n) => n.row!)) + 1 : 0;
@@ -245,10 +246,10 @@ const W = grid
   direction === "LR"
     ? PAD * 2 +
       layers.length * NODE_W +
-      (layers.length - 1) * COL_GAP +
-      (hasBackEdge ? BACK_EDGE_GUTTER : 0)
+      (layers.length - 1) * COL_GAP
     : PAD * 2 +
-      Math.max(...layers.map((r) => r.length * (NODE_W + COL_GAP) - COL_GAP));
+      Math.max(...layers.map((r) => r.length * (NODE_W + COL_GAP) - COL_GAP)) +
+      (hasBackEdge ? BACK_EDGE_GUTTER : 0);
 const H = grid
   ? PAD * 2 + gridRows * NODE_H_TYPED + (gridRows - 1) * GRID_ROW_GAP
   :
@@ -256,8 +257,7 @@ const H = grid
     ? PAD * 2 + tallest + (hasBackEdge ? BACK_EDGE_GUTTER : 0)
     : PAD * 2 +
       layers.length * (NODE_H_TYPED + 60) -
-      60 +
-      (hasBackEdge ? BACK_EDGE_GUTTER : 0);
+      60;
 
 // ---------- Groups ----------
 

@@ -123,10 +123,9 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
 }
 
 <style>
+  /* The tree spans the panel, and every box and leaf grows to fill its row. */
   .alc-tree {
-    width: fit-content;
-    max-width: 100%;
-    margin-inline: auto;
+    width: 100%;
     font-family: var(--alc-font-mono);
   }
   .alc-tree__box {
@@ -161,6 +160,8 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
   }
   .alc-tree__side > .alc-tree__leaf {
     align-self: stretch;
+    /* A column only stretches leaves across, never taller. */
+    flex: 0 0 auto;
   }
   .alc-tree__side > .alc-tree__box {
     flex: 1 1 auto;
@@ -184,7 +185,7 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
     gap: 0.625rem;
   }
   .alc-tree__leaf {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     align-self: flex-start;
     min-width: 6.5rem;
     display: flex;

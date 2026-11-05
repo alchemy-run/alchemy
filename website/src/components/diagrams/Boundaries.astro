@@ -103,11 +103,19 @@ const zoneOf = (id: string) => {
   return z ? { ...boxes.get(z.id)!, tone: z.tone } : undefined;
 };
 const BREACH = 22;
+// Trim to what's drawn: no zone border on the left of the first column means no room kept for one.
+const minX = Math.min(...[...pos.values()].map((p) => p.x), ...[...boxes.values()].map((b) => b.x));
+const shift = PAD - minX;
+for (const p of pos.values()) p.x += shift;
+for (const b of boxes.values()) b.x += shift;
 // Labels beside vertical links can run past the last column.
-const sideLabel = Math.max(0, ...links.filter((l) => l.kind !== "blocked" && colOf.get(l.from) === colOf.get(l.to)).map((l) => (l.label ?? "").length * 6.6 + 20 - 30));
+const sideLabelRight = links
+  .filter((l) => l.kind !== "blocked" && l.label && colOf.get(l.from) === colOf.get(l.to))
+  .map((l) => pos.get(l.from)!.x + NW / 2 + 10 + l.label!.length * 6.6);
 const W = Math.max(
-  PAD + Math.max(...[...pos.values()].map((p) => p.x)) + NW + ZONE_PAD + sideLabel,
+  ...[...pos.values()].map((p) => p.x + NW + PAD),
   ...[...boxes.values()].map((b) => b.x + b.w + PAD),
+  ...sideLabelRight.map((x) => x + PAD),
 );
 const H = Math.max(rowY[maxRow]! + NH + PAD, ...[...boxes.values()].map((b) => b.y + b.h + PAD));
 ---
