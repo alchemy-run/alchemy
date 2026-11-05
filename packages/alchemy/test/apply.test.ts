@@ -3290,6 +3290,126 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  test.provider("an in-place update goes through and keeps protect", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "r", string: "v1" }).pipe(
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy);
+
+      const updated: string[] = [];
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "r", string: "v2" }).pipe(
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy, hook({ update: (id) => Effect.sync(() => void updated.push(id)) }));
+      expect(updated).toEqual(["A"]);
+      const row = yield* getState("A");
+      expect(row?.props).toMatchObject({ string: "v2" });
+      expect(row?.removalPolicy).toEqual("protect");
+    }),
+  );
+
+  test.provider(
+    "protect() added to an existing resource takes effect on the noop deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* reset(stack);
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" });
+        }).pipe(stack.deploy);
+
+        const protectedDecl = Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" }).pipe(RemovalPolicy.protect());
+        });
+        expect(actionOfPlan(yield* protectedDecl.pipe(stack.plan), "A")).toEqual("noop");
+        yield* protectedDecl.pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+        expect(yield* refusal(Effect.void.pipe(stack.deploy))).toMatchObject({
+          _tag: "ProtectedResource",
+          resources: [{ fqn: "A", action: "delete" }],
+        });
+      }),
+  );
+
+  test.provider("an adopted resource is protected from its first deploy", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      const adoption = Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" }).pipe(
+          adopt(true),
+          RemovalPolicy.protect(),
+        );
+      });
+      const unowned = Effect.provide(
+        Layer.succeed(TestResourceHooks, {
+          read: () =>
+            Effect.succeed(
+              Unowned({
+                string: "",
+                stringArray: [],
+                stableString: "A",
+                stableArray: ["A"],
+                replaceString: "v1",
+                redacted: undefined,
+                redactedArray: undefined,
+              } satisfies TestResource["Attributes"]),
+            ),
+        }),
+      );
+      expect(actionOfPlan(yield* adoption.pipe(stack.plan, unowned), "A")).toEqual("adopted");
+      yield* adoption.pipe(stack.deploy, unowned);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+
+      const error = yield* refusal(
+        Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2" }).pipe(RemovalPolicy.protect());
+        }).pipe(stack.deploy),
+      );
+      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+
+  test.provider("renaming a protected resource moves it instead of deleting it", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("Old", { string: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      const deleted: string[] = [];
+      yield* Effect.gen(function* () {
+        yield* TestResource("New", { string: "v1" }).pipe(
+          renamedFrom("Old"),
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy, hook({ delete: (id) => Effect.sync(() => void deleted.push(id)) }));
+      expect(deleted).toEqual([]);
+      expect(yield* getState("Old")).toBeUndefined();
+      expect((yield* getState("New"))?.removalPolicy).toEqual("protect");
+    }),
+  );
+
+  test.provider("an interrupted create of a protected resource resumes", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      const declaration = Effect.gen(function* () {
+        yield* TestResource("A", { string: "v1" }).pipe(RemovalPolicy.protect());
+      });
+      yield* Effect.exit(
+        declaration.pipe(stack.deploy, hook({ create: () => Effect.fail(new ResourceFailure()) })),
+      );
+      expect((yield* getState("A"))?.status).toEqual("creating");
+
+      yield* declaration.pipe(stack.deploy);
+      const row = yield* getState("A");
+      expect(row?.status).toEqual("created");
+      expect(row?.removalPolicy).toEqual("protect");
+    }),
+  );
+
   test.provider("protect(false) keeps the resource's default policy", (stack) =>
     Effect.gen(function* () {
       yield* reset(stack);
