@@ -111,8 +111,16 @@ const isUUID = Schema.is(Schema.String.check(Schema.isUUID()));
 const text = (value: string | Redacted.Redacted<string>) =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
-/** Download the selected secrets (plus imports) as a flat env map. */
-const downloadSecrets = Effect.fn("downloadInfisicalSecrets")(function* (
+/**
+ * Download the selected secrets (plus imports) as a flat env map.
+ *
+ * When the token belongs to a user, their personal overrides replace the
+ * shared values of the same keys, as `infisical run` does. A machine
+ * identity has no personal secrets, so it gets the shared values.
+ *
+ * @internal Exported for tests.
+ */
+export const downloadSecrets = Effect.fn("downloadInfisicalSecrets")(function* (
   options: InfisicalOptions,
   credentials: InfisicalCredentials,
 ) {
@@ -130,6 +138,9 @@ const downloadSecrets = Effect.fn("downloadInfisicalSecrets")(function* (
       includeImports,
       viewSecretValue: true,
       expandSecretReferences: true,
+      // Without it the API leaves personal secrets out. With it, the API
+      // returns one secret per key, the user's personal one when it exists.
+      includePersonalOverrides: true,
     });
   }).pipe(
     Retry.none,
