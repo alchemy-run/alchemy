@@ -1,9 +1,9 @@
 /**
- * Calls that could deadlock on the input gate: a transaction, or the
- * constructor, waiting on a call back into its own instance (directly or
- * through another instance), a transaction waiting on a call that needs
- * storage, work that outlives a transaction, and alarms that fail or run
- * longer than RivetKit lets an action run.
+ * Calls that could deadlock: a transaction, or the constructor, waiting on
+ * a call back into its own instance (directly or through another
+ * instance), a transaction waiting on a call that needs storage, work
+ * that outlives a transaction, and alarms that fail or run longer than
+ * RivetKit lets an action run.
  *
  * Every method reports how the work it ran ended, measured inside the
  * instance, so a defect a transaction dies with is visible to the test.

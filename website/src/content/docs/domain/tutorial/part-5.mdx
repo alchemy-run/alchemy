@@ -4,14 +4,13 @@ description: Host the bank on Durable Objects behind a Worker, run it locally, d
 sidebar:
   order: 5
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Put the bank on Cloudflare. Every account, customer, view and policy becomes a Durable Object, and a Worker serves the Api. You need a [configured Cloudflare profile](/cloudflare/setup).
 
 ## Install the Cloudflare provider
 
-```sh
-bun add @alchemy.run/cloudflare
-```
+<PackageManagers add="@alchemy.run/cloudflare" />
 
 ## Serve the Api from a Worker
 
@@ -65,9 +64,7 @@ The stack deploys the Worker and returns its URL.
 
 ## Run it locally
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs the Worker and its Durable Objects on your machine and prints the URL, such as `http://localhost:1337`.
 
@@ -134,9 +131,7 @@ The watch prints the balance each time it changes. Over HTTP it checks for chang
 
 ## Deploy
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The deploy prints the Worker's `url`. Run the same script against it.
 

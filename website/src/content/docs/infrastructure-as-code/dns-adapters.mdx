@@ -186,7 +186,7 @@ appear in the plan and in state like any other resource:
 | Adapter | Hostname aliases | Validation and verification records |
 | --- | --- | --- |
 | Cloudflare | `Cloudflare.DNS.Records` (`CNAME`), or `Cloudflare.DNS.RecordList` for addresses | `Cloudflare.DNS.RecordList` |
-| Route 53 | `AWS.Route53.Record` (`A`/`AAAA` alias or `CNAME`), `AWS.Route53.Records` for a Router | `AWS.Route53.RecordList` |
+| Route 53 | `AWS.Route53.Record` (`A`/`AAAA` alias or `CNAME`), `AWS.Route53.Records` (`A` + `AAAA`) for a Router | `AWS.Route53.RecordList` |
 | Hetzner | `Hetzner.DNS.RecordList` | `Hetzner.DNS.RecordList` |
 
 Record ownership follows the rest of Alchemy:
@@ -229,7 +229,7 @@ arguments:
 | Function | Declares |
 | --- | --- |
 | `alias(id, { zone, name, target, ipv6? })` | Records pointing one hostname at a hostname target (`CNAME`, or a Route 53 alias when `target.route53Alias` is set) or an address target (`A`/`AAAA`) |
-| `aliasSet(id, { zone, names?, target })` | A record set that other composites add hostnames to by binding `{ names }`, used by `AWS.Website.Router` |
+| `aliasSet(id, { zone, names?, target, ipv6? })` | A record set that other composites add hostnames to by binding `{ names }`, used by `AWS.Website.Router` |
 | `records(id, { zone, records, retain? })` | Explicit records whose values usually come from another resource's outputs |
 
 ## Build your own adapter

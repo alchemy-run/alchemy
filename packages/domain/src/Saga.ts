@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { type DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
 import { targetId } from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Rejection from "./Rejection.ts";
 import * as Telemetry from "./Telemetry.ts";
 
@@ -145,6 +146,7 @@ export interface Client<Key, Input, A, E> {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Saga";
+  readonly annotations: Annotations;
   readonly sagaName: string;
   readonly workflow: Workflow.Workflow<string, any, any, any>;
   readonly Implementation: Context.Key<unknown, true>;
@@ -245,6 +247,23 @@ export interface ImplementationKey<Name extends string> {
  * );
  * ```
  *
+ * ### Annotating sagas
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Nothing a client calls shows it; it is for the people and the tools that
+ * read the model, as `X.annotations`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class ExecuteTransfer extends Domain.Saga(
+ *   "ExecuteTransfer",
+ *   { key: TransferId, input: { from: AccountId, to: AccountId, amount: Cents } },
+ *   { description: "Debits one account, credits another, and refunds the debit if the credit fails." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -256,6 +275,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<K, I, R, Rejects>,
+  annotations: Annotations = {},
 ): SagaClass<Name, K, I, R, Rejects> => {
   const rejects = definition.rejects ?? [];
   const workflow = Workflow.make(name, {
@@ -277,6 +297,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Saga" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly sagaName: Name = name;
     static readonly definition = definition;
     static readonly workflow = workflow;
@@ -327,6 +348,7 @@ export interface SagaClass<
   Client<K["Type"], Schema.Struct.Type<I>, ResultSchema<R>["Type"], RejectsSchema<Rejects>["Type"]>
 > {
   readonly kind: "Saga";
+  readonly annotations: Annotations;
   readonly sagaName: Name;
   readonly definition: Definition<K, I, R, Rejects>;
   /** The Effect workflow the saga runs as. */

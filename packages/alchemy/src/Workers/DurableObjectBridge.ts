@@ -26,7 +26,7 @@ import { RuntimeContext } from "../RuntimeContext.ts";
 import { buildEventTelemetry } from "../TelemetryRuntime.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
 import { EventLifetime, makeEventLifetime } from "./EventLifetime.ts";
-import { gateCall } from "./InputGate.ts";
+import { gateCall, InstanceInputGate, makeInputGate } from "./InputGate.ts";
 import { handleRpcExit, type Pin, type WorkerBuild } from "./Worker.ts";
 import { withEventContext } from "./WorkerBridge.ts";
 
@@ -152,7 +152,11 @@ export const makeDurableObjectInstance = ({
 }: DurableObjectInstanceOptions): DurableObjectInstance => {
   const instance: Promise<BuiltDurableObject> = (gate ?? ((run) => run()))(() =>
     build(waitUntil).then(({ context, runtimeContext: runtime, export: exported, telemetry }) => {
-      const { constructor, services } = exported;
+      const { constructor } = exported;
+      // A class given the `InputGate` Layer gets a gate per instance.
+      const services = runtime?.inputGate
+        ? Context.add(exported.services, InstanceInputGate, Effect.runSync(makeInputGate))
+        : exported.services;
       const instanceRuntimeContext = runtimeContext ? runtimeContext(runtime, context) : runtime;
       const doContext = Layer.succeedContext(engineServices).pipe(
         Layer.provideMerge(Layer.succeedContext(services)),
@@ -201,7 +205,7 @@ export const makeDurableObjectInstance = ({
 
     const { instance: shape, services, context, runtime, telemetry } = await instance;
 
-    // An engine with async storage provides an `InputGate`; the call runs
+    // A class given the `InputGate` Layer has a gate; the call runs
     // through it so storage can't interleave between calls.
     return Effect.andThen(event.holdExporters, gateCall(Effect.suspend(() => fn(shape))))
       .pipe(

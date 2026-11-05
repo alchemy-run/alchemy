@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
 import { Cluster, FRONT_PORT } from "./cluster.ts";
 import Counter from "./counter.ts";
+import GatedTally from "./gated-tally.ts";
 import Greeter from "./greeter.ts";
 import { Reentrant } from "./reentrant-declaration.ts";
 import Tally from "./tally.ts";
@@ -31,7 +32,8 @@ export default class Front extends Docker.Service<Front>()(
   Effect.gen(function* () {
     const counters = yield* Counter;
     const greeters = yield* Greeter;
-    const tallies = yield* Tally;
+    const parallelTallies = yield* Tally;
+    const gatedTallies = yield* GatedTally;
     const reentrants = yield* Reentrant;
     const conformance = conformanceFetch(counters);
     return {
@@ -39,16 +41,22 @@ export default class Front extends Docker.Service<Front>()(
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://front");
         const [group, name] = url.pathname.split("/").filter((segment) => segment.length > 0);
+        // `?gated=1` sends a tally route to the class given `Workers.InputGate`.
+        const tallies = url.searchParams.get("gated") === "1" ? gatedTallies : parallelTallies;
         if (group === "greet" && name !== undefined) {
           const greeting = yield* greeters.getByName("front").greet(name);
           return yield* HttpServerResponse.json({ greeting });
         }
         // `n` concurrent increments on one instance; returns its final count.
+        // `?tx=1` makes each one a transaction.
         if (group === "race" && name !== undefined) {
           const n = Number(url.searchParams.get("n") ?? "50");
           const tally = tallies.getByName(name);
+          const tx = url.searchParams.get("tx") === "1";
           yield* Effect.forEach(
-            Array.from({ length: n }, () => tally.increment("count")),
+            Array.from({ length: n }, () =>
+              tx ? tally.incrementInTransaction("count") : tally.increment("count"),
+            ),
             (call) => call,
             { concurrency: "unbounded", discard: true },
           );
@@ -73,15 +81,26 @@ export default class Front extends Docker.Service<Front>()(
           );
           return yield* HttpServerResponse.json({ count: yield* tally.read("background") });
         }
+        // A burst of `n` writes and, once it has started, one read from
+        // another call: returns how many writes had finished when the read
+        // did.
+        if (group === "overlap" && name !== undefined) {
+          const n = Number(url.searchParams.get("n") ?? "500");
+          const tally = tallies.getByName(name);
+          const [, seen] = yield* Effect.all([tally.burst(n), tally.probe()], {
+            concurrency: "unbounded",
+          });
+          return yield* HttpServerResponse.json({ seen, n });
+        }
         // An alarm replaced while it fires; returns what's left afterwards.
         if (group === "alarm-replaced" && name !== undefined) {
           const tally = tallies.getByName(name);
           yield* tally.replaceFiringAlarm();
-          // Give the fired alarm's call time to run once the gate frees up.
+          // Give the fired alarm's call time to run once the transaction ends.
           yield* Effect.sleep("3 seconds");
           return yield* HttpServerResponse.json(yield* tally.alarmState());
         }
-        // Calls that could deadlock on the input gate (see reentrant.ts).
+        // Calls that could deadlock on a transaction (see reentrant.ts).
         // Each returns how the instance saw it end, then what it holds.
         if (group === "reentrant" && name !== undefined) {
           const which = url.pathname.split("/").filter((segment) => segment.length > 0)[2];
@@ -175,14 +194,18 @@ export default class Front extends Docker.Service<Front>()(
           }
         }
         // A slow transaction racing `n` increments, then a rolled-back one.
+        // `?tx=1` makes each increment a transaction.
         if (group === "transaction" && name !== undefined) {
           const n = Number(url.searchParams.get("n") ?? "10");
           const tally = tallies.getByName(name);
+          const tx = url.searchParams.get("tx") === "1";
           yield* Effect.all(
             [
               tally.addSlowly("count", 100, 300),
               Effect.forEach(
-                Array.from({ length: n }, () => tally.increment("count")),
+                Array.from({ length: n }, () =>
+                  tx ? tally.incrementInTransaction("count") : tally.increment("count"),
+                ),
                 (call) => Effect.andThen(Effect.sleep("20 millis"), call),
                 { concurrency: "unbounded", discard: true },
               ),

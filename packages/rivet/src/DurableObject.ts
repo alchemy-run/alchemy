@@ -242,7 +242,12 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
         // `shape` is what the class phase returned: the instance constructor.
         const instance = options?.shape as unknown as HostedDurableObject["instance"];
         if (globalThis.__ALCHEMY_RUNTIME__) {
-          hosted = { name: id, instance, context: yield* Effect.context<never>(), runtime: ctx };
+          hosted = {
+            name: id,
+            instance,
+            context: yield* Effect.context<never>(),
+            runtime: ctx,
+          };
           return;
         }
         // The class phase has run, so every Config value it read is in `env`.
@@ -286,6 +291,11 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * `@rivetkit/effect`, that its pool bundles and runs as it is. It needs a
  * pool of its own, and has no bindings or `yield*` calls.
  *
+ * An instance's calls run in parallel, storage included: unlike Cloudflare,
+ * there is no input gate. Make a read-then-write atomic with
+ * `state.storage.transaction(...)`, or provide `Workers.InputGate` (from
+ * `alchemy/Workers`) to run code written for Cloudflare's gate unchanged.
+ *
  * ### Declaring a Durable Object
  * **Example:** A counter on a local pool
  * ```typescript
@@ -299,12 +309,16 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  *     return Effect.gen(function* () {
  *       const state = yield* Rivet.DurableObjectState;
  *       return {
+ *         // Calls run in parallel: the transaction keeps the read and
+ *         // the write together.
  *         increment: () =>
- *           Effect.gen(function* () {
- *             const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
- *             yield* state.storage.put("count", count);
- *             return count;
- *           }),
+ *           state.storage.transaction(
+ *             Effect.gen(function* () {
+ *               const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+ *               yield* state.storage.put("count", count);
+ *               return count;
+ *             }),
+ *           ),
  *       };
  *     });
  *   }).pipe(Effect.provide(Default)),

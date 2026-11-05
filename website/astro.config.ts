@@ -378,6 +378,10 @@ export default defineConfig({
                   label: "Bindings",
                   link: "/infrastructure-as-effects/binding",
                 },
+                {
+                  label: "Identity Federation",
+                  link: "/infrastructure-as-effects/identity-federation",
+                },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Event Sources",
@@ -551,6 +555,7 @@ export default defineConfig({
           label: "Cloudflare",
           items: [
             { label: "Overview", link: "/cloudflare" },
+            { label: "What is Cloudflare?", link: "/cloudflare/what-is-cloudflare" },
             { label: "Setup", link: "/cloudflare/setup" },
             {
               label: "Local development",
@@ -561,57 +566,148 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "cloudflare/tutorial" } }],
             },
             {
-              label: "Compute",
+              label: "Accounts & access",
+              items: [
+                { label: "Accounts and API tokens", link: "/cloudflare/accounts-and-tokens" },
+                {
+                  label: "Secrets & env",
+                  link: "/cloudflare/security/secrets-env",
+                },
+                {
+                  label: "Secrets Store",
+                  link: "/cloudflare/security/secrets-store",
+                },
+                { label: "Access", link: "/cloudflare/security/access" },
+              ],
+            },
+            {
+              label: "Workers",
               items: [
                 { label: "Workers", link: "/cloudflare/compute/workers" },
+                { label: "Code updates", link: "/cloudflare/compute/code-updates" },
                 {
                   label: "Gradual deployments",
                   link: "/cloudflare/compute/gradual-deployments",
                 },
-                {
-                  label: "Python Workers",
-                  link: "/cloudflare/compute/python-workers",
-                },
+                { label: "Previews", link: "/cloudflare/compute/previews" },
+                { label: "Python Workers", link: "/cloudflare/compute/python-workers" },
                 { label: "Workers Cache", link: "/cloudflare/compute/cache" },
-                {
-                  label: "Rate limiting",
-                  link: "/cloudflare/compute/rate-limiting",
-                },
-                {
-                  label: "Browser rendering",
-                  link: "/cloudflare/compute/browser-rendering",
-                },
-                {
-                  label: "Worker Loader",
-                  link: "/cloudflare/compute/worker-loader",
-                },
+                { label: "Rate limiting", link: "/cloudflare/compute/rate-limiting" },
+                { label: "Browser rendering", link: "/cloudflare/compute/browser-rendering" },
+                { label: "Worker Loader", link: "/cloudflare/compute/worker-loader" },
                 {
                   label: "Workers for Platforms",
                   link: "/cloudflare/compute/workers-for-platforms",
                 },
-                {
-                  label: "Durable Objects",
-                  link: "/cloudflare/compute/durable-objects",
-                },
+              ],
+            },
+            {
+              label: "Durable Objects",
+              items: [
+                { label: "Durable Objects", link: "/cloudflare/compute/durable-objects" },
                 {
                   label: "Cross-worker DOs",
                   link: "/cloudflare/compute/cross-worker-durable-object",
                 },
-                {
-                  label: "WebSockets",
-                  link: "/cloudflare/compute/hibernatable-websockets",
-                },
-                {
-                  label: "Code updates",
-                  link: "/cloudflare/compute/code-updates",
-                },
+                { label: "WebSockets", link: "/cloudflare/compute/hibernatable-websockets" },
+              ],
+            },
+            {
+              label: "Workflows",
+              items: [
+                { label: "Workflows", link: "/cloudflare/compute/workflows" },
+                { label: "Add a Workflow", link: "/cloudflare/compute/add-a-workflow" },
+                { label: "Effect workflows", link: "/cloudflare/compute/effect-workflows" },
+              ],
+            },
+            {
+              label: "Containers",
+              items: [
                 { label: "Containers", link: "/cloudflare/compute/containers" },
+                { label: "Run a Container", link: "/cloudflare/compute/run-a-container" },
                 {
                   label: "Container lifecycle",
                   link: "/cloudflare/compute/container-lifecycle",
                 },
-                { label: "Workflows", link: "/cloudflare/compute/workflows" },
-                { label: "Effect workflows", link: "/cloudflare/compute/effect-workflows" },
+              ],
+            },
+            {
+              label: "Storage & databases",
+              items: [
+                { label: "D1", link: "/cloudflare/data/d1" },
+                { label: "KV", link: "/cloudflare/data/kv" },
+                { label: "R2", link: "/cloudflare/data/r2" },
+                {
+                  label: "R2 presigned URLs",
+                  link: "/cloudflare/data/r2-presigned-urls",
+                },
+                { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
+                {
+                  label: "Private database (Workers VPC)",
+                  link: "/cloudflare/data/hyperdrive-private-database",
+                },
+                { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
+                { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
+                { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
+                {
+                  label: "Shared database",
+                  link: "/cloudflare/data/shared-database",
+                },
+                {
+                  label: "Branch from a shared database",
+                  link: "/cloudflare/data/branch-from-shared-database",
+                },
+                { label: "Artifacts", link: "/cloudflare/data/artifacts" },
+                { label: "Pipelines", link: "/cloudflare/data/pipelines" },
+                { label: "Iceberg tables", link: "/cloudflare/data/iceberg-tables" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Queues", link: "/cloudflare/messaging/queues" },
+                { label: "K2 streams", link: "/cloudflare/messaging/k2" },
+                { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
+                {
+                  label: "GitHub events",
+                  link: "/cloudflare/messaging/github-events",
+                },
+              ],
+            },
+            {
+              label: "Networking & edge",
+              items: [
+                {
+                  label: "Domains & DNS",
+                  link: "/cloudflare/networking/domains",
+                },
+                {
+                  label: "Custom domains & routes",
+                  link: "/cloudflare/networking/custom-domains",
+                },
+                {
+                  label: "Federated APIs",
+                  link: "/cloudflare/networking/federated-apis",
+                },
+                { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
+                { label: "Turnstile", link: "/cloudflare/security/turnstile" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [
+                {
+                  label: "Native tracing",
+                  link: "/cloudflare/observability/workers-tracing",
+                },
+                {
+                  label: "Axiom telemetry",
+                  link: "/cloudflare/observability/axiom-observability",
+                },
+                {
+                  label: "Analytics Engine",
+                  link: "/cloudflare/observability/analytics-engine",
+                },
               ],
             },
             {
@@ -672,59 +768,6 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
-              items: [
-                { label: "D1", link: "/cloudflare/data/d1" },
-                { label: "KV", link: "/cloudflare/data/kv" },
-                { label: "R2", link: "/cloudflare/data/r2" },
-                {
-                  label: "R2 presigned URLs",
-                  link: "/cloudflare/data/r2-presigned-urls",
-                },
-                { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
-                {
-                  label: "Private database (Workers VPC)",
-                  link: "/cloudflare/data/hyperdrive-private-database",
-                },
-                { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
-                { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
-                { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
-                {
-                  label: "Shared database",
-                  link: "/cloudflare/data/shared-database",
-                },
-                {
-                  label: "Branch from a shared database",
-                  link: "/cloudflare/data/branch-from-shared-database",
-                },
-                { label: "Artifacts", link: "/cloudflare/data/artifacts" },
-                { label: "Pipelines", link: "/cloudflare/data/pipelines" },
-                { label: "Iceberg tables", link: "/cloudflare/data/iceberg-tables" },
-              ],
-            },
-            {
-              label: "Messaging & events",
-              items: [
-                { label: "Queues", link: "/cloudflare/messaging/queues" },
-                { label: "K2 streams", link: "/cloudflare/messaging/k2" },
-                { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
-                {
-                  label: "GitHub events",
-                  link: "/cloudflare/messaging/github-events",
-                },
-              ],
-            },
-            {
-              label: "Email",
-              items: [
-                { label: "Email", link: "/cloudflare/email" },
-                {
-                  label: "Send & receive email",
-                  link: "/cloudflare/email/send-and-receive",
-                },
-              ],
-            },
-            {
               label: "AI",
               items: [
                 { label: "Workers AI", link: "/cloudflare/ai/workers-ai" },
@@ -738,52 +781,13 @@ export default defineConfig({
               ],
             },
             {
-              label: "Security & secrets",
+              label: "Email",
               items: [
+                { label: "Email", link: "/cloudflare/email" },
                 {
-                  label: "Secrets & env",
-                  link: "/cloudflare/security/secrets-env",
+                  label: "Send & receive email",
+                  link: "/cloudflare/email/send-and-receive",
                 },
-                {
-                  label: "Secrets Store",
-                  link: "/cloudflare/security/secrets-store",
-                },
-                { label: "Turnstile", link: "/cloudflare/security/turnstile" },
-              ],
-            },
-            {
-              label: "Observability",
-              items: [
-                {
-                  label: "Native tracing",
-                  link: "/cloudflare/observability/workers-tracing",
-                },
-                {
-                  label: "Axiom telemetry",
-                  link: "/cloudflare/observability/axiom-observability",
-                },
-                {
-                  label: "Analytics Engine",
-                  link: "/cloudflare/observability/analytics-engine",
-                },
-              ],
-            },
-            {
-              label: "Networking",
-              items: [
-                {
-                  label: "Domains & DNS",
-                  link: "/cloudflare/networking/domains",
-                },
-                {
-                  label: "Custom domains & routes",
-                  link: "/cloudflare/networking/custom-domains",
-                },
-                {
-                  label: "Federated APIs",
-                  link: "/cloudflare/networking/federated-apis",
-                },
-                { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
               ],
             },
             providerResourcesEntry("Cloudflare"),
@@ -793,11 +797,21 @@ export default defineConfig({
           label: "AWS",
           items: [
             { label: "Overview", link: "/aws" },
+            { label: "What is AWS?", link: "/aws/what-is-aws" },
             { label: "Setup", link: "/aws/setup" },
             { label: "Local development", link: "/aws/local-development" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "aws/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Accounts and regions", link: "/aws/accounts-and-regions" },
+                { label: "IAM and bindings", link: "/aws/iam" },
+                { label: "Secrets & env", link: "/aws/security/secrets-env" },
+                { label: "Federated identity", link: "/aws/security/federated-identity" },
+              ],
             },
             {
               label: "Compute",
@@ -810,11 +824,52 @@ export default defineConfig({
                 { label: "Lambda Web Functions", link: "/aws/compute/web-functions" },
                 { label: "Effect workflows", link: "/aws/compute/effect-workflows" },
                 { label: "ECS", link: "/aws/compute/ecs" },
-                { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "EKS", link: "/aws/compute/eks" },
+                { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "HyperPod", link: "/aws/compute/hyperpod" },
                 { label: "Lambda MicroVMs", link: "/aws/compute/microvms" },
               ],
+            },
+            {
+              label: "Storage & databases",
+              items: [
+                { label: "S3", link: "/aws/data/s3" },
+                { label: "DynamoDB", link: "/aws/data/dynamodb" },
+                { label: "RDS & Aurora", link: "/aws/data/rds" },
+                { label: "Drizzle + Aurora", link: "/aws/data/drizzle-aurora" },
+                { label: "Drizzle + DSQL", link: "/aws/data/drizzle-dsql" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "SQS", link: "/aws/messaging/sqs" },
+                { label: "SNS", link: "/aws/messaging/sns" },
+                { label: "Kinesis", link: "/aws/messaging/kinesis" },
+                {
+                  label: "EventBridge & Scheduler",
+                  link: "/aws/messaging/eventbridge",
+                },
+                {
+                  label: "DynamoDB Streams",
+                  link: "/aws/messaging/dynamodb-streams",
+                },
+                { label: "S3 events", link: "/aws/messaging/s3-events" },
+              ],
+            },
+            {
+              label: "Networking & edge",
+              items: [
+                { label: "VPC & networking", link: "/aws/networking" },
+                {
+                  label: "Custom domains",
+                  link: "/aws/networking/custom-domains",
+                },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "CloudWatch", link: "/aws/observability/cloudwatch" }],
             },
             {
               label: "Frontend",
@@ -875,35 +930,8 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
-              items: [
-                { label: "DynamoDB", link: "/aws/data/dynamodb" },
-                { label: "S3", link: "/aws/data/s3" },
-                { label: "RDS & Aurora", link: "/aws/data/rds" },
-                { label: "Drizzle + Aurora", link: "/aws/data/drizzle-aurora" },
-                { label: "Drizzle + DSQL", link: "/aws/data/drizzle-dsql" },
-              ],
-            },
-            {
               label: "AI",
               items: [{ label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" }],
-            },
-            {
-              label: "Messaging & events",
-              items: [
-                { label: "SQS", link: "/aws/messaging/sqs" },
-                { label: "SNS", link: "/aws/messaging/sns" },
-                { label: "Kinesis", link: "/aws/messaging/kinesis" },
-                {
-                  label: "EventBridge & Scheduler",
-                  link: "/aws/messaging/eventbridge",
-                },
-                {
-                  label: "DynamoDB Streams",
-                  link: "/aws/messaging/dynamodb-streams",
-                },
-                { label: "S3 events", link: "/aws/messaging/s3-events" },
-              ],
             },
             {
               label: "Email",
@@ -918,27 +946,6 @@ export default defineConfig({
                 },
               ],
             },
-            {
-              label: "Security & secrets",
-              items: [
-                { label: "Secrets & env", link: "/aws/security/secrets-env" },
-                { label: "Federated identity", link: "/aws/security/federated-identity" },
-              ],
-            },
-            {
-              label: "Observability",
-              items: [{ label: "CloudWatch", link: "/aws/observability/cloudwatch" }],
-            },
-            {
-              label: "Networking",
-              items: [
-                { label: "VPC & networking", link: "/aws/networking" },
-                {
-                  label: "Custom domains",
-                  link: "/aws/networking/custom-domains",
-                },
-              ],
-            },
             providerResourcesEntry("AWS"),
           ],
         },
@@ -946,10 +953,20 @@ export default defineConfig({
           label: "GCP",
           items: [
             { label: "Overview", link: "/gcp" },
+            { label: "What is GCP?", link: "/gcp/what-is-gcp" },
             { label: "Setup", link: "/gcp/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "gcp/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Projects and regions", link: "/gcp/projects-and-regions" },
+                { label: "IAM & bindings", link: "/gcp/security/iam" },
+                { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
+                { label: "Federated identity", link: "/gcp/security/federated-identity" },
+              ],
             },
             {
               label: "Compute",
@@ -965,6 +982,36 @@ export default defineConfig({
                 { label: "Cloud Functions", link: "/gcp/compute/cloud-functions" },
                 { label: "GKE", link: "/gcp/compute/gke" },
               ],
+            },
+            {
+              label: "Storage & databases",
+              items: [
+                { label: "Firestore", link: "/gcp/data/firestore" },
+                { label: "Cloud Storage", link: "/gcp/data/storage" },
+                { label: "Cloud SQL", link: "/gcp/data/cloud-sql" },
+                { label: "BigQuery", link: "/gcp/data/bigquery" },
+                { label: "Memorystore", link: "/gcp/data/memorystore" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Pub/Sub", link: "/gcp/messaging/pubsub" },
+                { label: "Cloud Scheduler", link: "/gcp/messaging/scheduler" },
+                { label: "Storage events", link: "/gcp/messaging/storage-events" },
+                { label: "Eventarc", link: "/gcp/messaging/eventarc" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "VPC & private networking", link: "/gcp/networking/vpc" },
+                { label: "Private services", link: "/gcp/networking/private-services" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Logging & Monitoring", link: "/gcp/observability/monitoring" }],
             },
             {
               label: "Frontend",
@@ -996,46 +1043,8 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
-              items: [
-                { label: "Firestore", link: "/gcp/data/firestore" },
-                { label: "Cloud Storage", link: "/gcp/data/storage" },
-                { label: "Cloud SQL", link: "/gcp/data/cloud-sql" },
-                { label: "BigQuery", link: "/gcp/data/bigquery" },
-                { label: "Memorystore", link: "/gcp/data/memorystore" },
-              ],
-            },
-            {
               label: "AI",
               items: [{ label: "Vertex AI", link: "/gcp/ai/vertex-ai" }],
-            },
-            {
-              label: "Messaging & events",
-              items: [
-                { label: "Pub/Sub", link: "/gcp/messaging/pubsub" },
-                { label: "Cloud Scheduler", link: "/gcp/messaging/scheduler" },
-                { label: "Storage events", link: "/gcp/messaging/storage-events" },
-                { label: "Eventarc", link: "/gcp/messaging/eventarc" },
-              ],
-            },
-            {
-              label: "Security & secrets",
-              items: [
-                { label: "IAM & bindings", link: "/gcp/security/iam" },
-                { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
-                { label: "Federated identity", link: "/gcp/security/federated-identity" },
-              ],
-            },
-            {
-              label: "Observability",
-              items: [{ label: "Logging & Monitoring", link: "/gcp/observability/monitoring" }],
-            },
-            {
-              label: "Networking",
-              items: [
-                { label: "VPC & private networking", link: "/gcp/networking/vpc" },
-                { label: "Private services", link: "/gcp/networking/private-services" },
-              ],
             },
             providerResourcesEntry("GCP"),
           ],
@@ -1044,10 +1053,41 @@ export default defineConfig({
           label: "Hetzner",
           items: [
             { label: "Overview", link: "/hetzner" },
+            { label: "What is Hetzner?", link: "/hetzner/what-is-hetzner" },
             { label: "Setup", link: "/hetzner/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "hetzner/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Projects, tokens & SSH keys", link: "/hetzner/projects-and-tokens" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Servers", link: "/hetzner/compute/servers" },
+                { label: "Services", link: "/hetzner/compute/services" },
+              ],
+            },
+            {
+              label: "Storage",
+              items: [
+                { label: "Volumes", link: "/hetzner/data/volumes" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/hetzner/data/drizzle-postgres",
+                },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "Networking", link: "/hetzner/networking" },
+                { label: "DNS", link: "/hetzner/networking/dns" },
+              ],
             },
             {
               label: "Frontend",
@@ -1087,30 +1127,6 @@ export default defineConfig({
                 { label: "Waku", link: "/hetzner/frontend/waku" },
               ]),
             },
-            {
-              label: "Compute",
-              items: [
-                { label: "Servers", link: "/hetzner/compute/servers" },
-                { label: "Services", link: "/hetzner/compute/services" },
-              ],
-            },
-            {
-              label: "Data",
-              items: [
-                { label: "Volumes", link: "/hetzner/data/volumes" },
-                {
-                  label: "Drizzle + Postgres",
-                  link: "/hetzner/data/drizzle-postgres",
-                },
-              ],
-            },
-            {
-              label: "Networking",
-              items: [
-                { label: "Networking", link: "/hetzner/networking" },
-                { label: "DNS", link: "/hetzner/networking/dns" },
-              ],
-            },
             providerResourcesEntry("Hetzner"),
           ],
         },
@@ -1118,10 +1134,53 @@ export default defineConfig({
           label: "Fly",
           items: [
             { label: "Overview", link: "/fly" },
+            { label: "What is Fly?", link: "/fly/what-is-fly" },
             { label: "Setup", link: "/fly/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "fly/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Organizations and tokens", link: "/fly/organizations-and-tokens" },
+                { label: "Secrets", link: "/fly/data/secrets" },
+                { label: "Federated identity", link: "/fly/federated-identity" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/fly/compute/apps" },
+                { label: "Machines", link: "/fly/compute/machines" },
+                { label: "Services", link: "/fly/compute/services" },
+                {
+                  label: "Blue/green deployments",
+                  link: "/fly/compute/deployments",
+                },
+                { label: "Sprites", link: "/fly/compute/sprites" },
+                { label: "Regions", link: "/fly/compute/regions" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "Connect Services", link: "/fly/compute/connecting-services" },
+                { label: "IPs & certificates", link: "/fly/networking" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Volumes", link: "/fly/data/volumes" },
+                { label: "Postgres", link: "/fly/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/fly/data/drizzle-postgres",
+                },
+                { label: "Redis", link: "/fly/data/redis" },
+                { label: "Tigris", link: "/fly/data/tigris" },
+              ],
             },
             {
               label: "Frontend",
@@ -1161,42 +1220,6 @@ export default defineConfig({
                 { label: "Waku", link: "/fly/frontend/waku" },
               ]),
             },
-            {
-              label: "Compute",
-              items: [
-                { label: "Apps", link: "/fly/compute/apps" },
-                { label: "Machines", link: "/fly/compute/machines" },
-                { label: "Services", link: "/fly/compute/services" },
-                {
-                  label: "Connect Services",
-                  link: "/fly/compute/connecting-services",
-                },
-                {
-                  label: "Blue/green deployments",
-                  link: "/fly/compute/deployments",
-                },
-                { label: "Sprites", link: "/fly/compute/sprites" },
-                { label: "Regions", link: "/fly/compute/regions" },
-              ],
-            },
-            {
-              label: "Data",
-              items: [
-                { label: "Volumes", link: "/fly/data/volumes" },
-                { label: "Postgres", link: "/fly/data/postgres" },
-                {
-                  label: "Drizzle + Postgres",
-                  link: "/fly/data/drizzle-postgres",
-                },
-                { label: "Redis", link: "/fly/data/redis" },
-                { label: "Tigris", link: "/fly/data/tigris" },
-                { label: "Secrets", link: "/fly/data/secrets" },
-              ],
-            },
-            {
-              label: "Networking",
-              items: [{ label: "IPs & certificates", link: "/fly/networking" }],
-            },
             providerResourcesEntry("Fly"),
           ],
         },
@@ -1204,10 +1227,62 @@ export default defineConfig({
           label: "Railway",
           items: [
             { label: "Overview", link: "/railway" },
+            { label: "What is Railway?", link: "/railway/what-is-railway" },
             { label: "Setup", link: "/railway/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "railway/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Workspaces and tokens", link: "/railway/workspaces-and-tokens" },
+                { label: "Variables", link: "/railway/data/variables" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Projects", link: "/railway/compute/projects" },
+                { label: "Services", link: "/railway/compute/services" },
+                {
+                  label: "Functions, templates & VMs",
+                  link: "/railway/compute/functions",
+                },
+                {
+                  label: "Environments",
+                  link: "/railway/compute/environments",
+                },
+                { label: "Regions", link: "/railway/compute/regions" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Volumes", link: "/railway/data/volumes" },
+                { label: "Postgres", link: "/railway/data/postgres" },
+                { label: "MySQL", link: "/railway/data/mysql" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/railway/data/drizzle-postgres",
+                },
+                {
+                  label: "Drizzle + MySQL",
+                  link: "/railway/data/drizzle-mysql",
+                },
+                { label: "Mongo", link: "/railway/data/mongo" },
+                { label: "Redis", link: "/railway/data/redis" },
+                { label: "Buckets", link: "/railway/data/buckets" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                {
+                  label: "Custom domains, TCP & private networks",
+                  link: "/railway/networking",
+                },
+              ],
             },
             {
               label: "Frontend",
@@ -1247,51 +1322,6 @@ export default defineConfig({
                 { label: "Waku", link: "/railway/frontend/waku" },
               ]),
             },
-            {
-              label: "Compute",
-              items: [
-                { label: "Projects", link: "/railway/compute/projects" },
-                { label: "Services", link: "/railway/compute/services" },
-                {
-                  label: "Functions, templates & VMs",
-                  link: "/railway/compute/functions",
-                },
-                {
-                  label: "Environments",
-                  link: "/railway/compute/environments",
-                },
-                { label: "Regions", link: "/railway/compute/regions" },
-              ],
-            },
-            {
-              label: "Data",
-              items: [
-                { label: "Volumes", link: "/railway/data/volumes" },
-                { label: "Postgres", link: "/railway/data/postgres" },
-                { label: "MySQL", link: "/railway/data/mysql" },
-                {
-                  label: "Drizzle + Postgres",
-                  link: "/railway/data/drizzle-postgres",
-                },
-                {
-                  label: "Drizzle + MySQL",
-                  link: "/railway/data/drizzle-mysql",
-                },
-                { label: "Mongo", link: "/railway/data/mongo" },
-                { label: "Redis", link: "/railway/data/redis" },
-                { label: "Variables", link: "/railway/data/variables" },
-                { label: "Buckets", link: "/railway/data/buckets" },
-              ],
-            },
-            {
-              label: "Networking",
-              items: [
-                {
-                  label: "Custom domains, TCP & private networks",
-                  link: "/railway/networking",
-                },
-              ],
-            },
             providerResourcesEntry("Railway"),
           ],
         },
@@ -1299,15 +1329,30 @@ export default defineConfig({
           label: "PlanetScale",
           items: [
             { label: "Overview", link: "/planetscale" },
+            { label: "What is PlanetScale?", link: "/planetscale/what-is-planetscale" },
             { label: "Setup", link: "/planetscale/setup" },
             {
-              label: "Data",
+              label: "Accounts & access",
+              items: [
+                {
+                  label: "Organizations and tokens",
+                  link: "/planetscale/organizations-and-tokens",
+                },
+                { label: "Credentials", link: "/planetscale/data/credentials" },
+              ],
+            },
+            {
+              label: "Engines",
               items: [
                 { label: "Postgres", link: "/planetscale/data/postgres" },
                 { label: "MySQL", link: "/planetscale/data/mysql" },
+              ],
+            },
+            {
+              label: "Databases",
+              items: [
                 { label: "Migrations", link: "/planetscale/data/migrations" },
-                { label: "Credentials", link: "/planetscale/data/credentials" },
-                { label: "Backups", link: "/planetscale/data/backups" },
+                { label: "Backups & restores", link: "/planetscale/data/backups" },
               ],
             },
             {
@@ -1330,10 +1375,18 @@ export default defineConfig({
           label: "Turso",
           items: [
             { label: "Overview", link: "/turso" },
+            { label: "What is Turso?", link: "/turso/what-is-turso" },
             { label: "Setup", link: "/turso/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "turso/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Team & organization", link: "/turso/organization" },
+                { label: "Tokens", link: "/turso/tokens" },
+              ],
             },
             {
               label: "Databases",
@@ -1346,13 +1399,6 @@ export default defineConfig({
                 { label: "Preview databases", link: "/turso/preview-databases" },
               ],
             },
-            {
-              label: "Access",
-              items: [
-                { label: "Tokens", link: "/turso/tokens" },
-                { label: "Team & organization", link: "/turso/organization" },
-              ],
-            },
             providerResourcesEntry("Turso"),
           ],
         },
@@ -1360,29 +1406,8 @@ export default defineConfig({
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
+            { label: "What is Neon?", link: "/neon/what-is-neon" },
             { label: "Setup", link: "/neon/setup" },
-            { label: "Organization governance", link: "/neon/governance" },
-            {
-              label: "Frontend",
-              items: [
-                { label: "Vite", link: "/neon/frontend/vite" },
-                { label: "Astro", link: "/neon/frontend/astro" },
-                { label: "Next.js", link: "/neon/frontend/nextjs" },
-                { label: "Nuxt", link: "/neon/frontend/nuxt" },
-                { label: "SvelteKit", link: "/neon/frontend/sveltekit" },
-                { label: "React Router", link: "/neon/frontend/react-router" },
-                { label: "SolidStart", link: "/neon/frontend/solidstart" },
-                {
-                  label: "TanStack Start",
-                  link: "/neon/frontend/tanstack-start",
-                },
-                { label: "Waku", link: "/neon/frontend/waku" },
-                { label: "Octane", link: "/neon/frontend/octane" },
-                { label: "Foldkit", link: "/neon/frontend/foldkit" },
-                { label: "Vocs", link: "/neon/frontend/vocs" },
-                { label: "Static Site", link: "/neon/frontend/static-site" },
-              ],
-            },
             {
               label: "Upload tutorial",
               items: [
@@ -1394,12 +1419,26 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
+              label: "Accounts & access",
+              items: [
+                { label: "Organizations and keys", link: "/neon/organizations-and-keys" },
+                { label: "Organization governance", link: "/neon/governance" },
+                { label: "Roles", link: "/neon/data/roles" },
+              ],
+            },
+            {
+              label: "Postgres",
               items: [
                 { label: "Branching", link: "/neon/data/branching" },
                 { label: "Connections", link: "/neon/data/connections" },
-                { label: "Roles", link: "/neon/data/roles" },
                 { label: "Migrations", link: "/neon/data/migrations" },
+              ],
+            },
+            {
+              label: "Applications",
+              items: [
+                { label: "Functions", link: "/neon/functions" },
+                { label: "Storage", link: "/neon/storage" },
               ],
             },
             {
@@ -1429,6 +1468,27 @@ export default defineConfig({
                 { label: "Drizzle ORM", link: "/neon/guides/drizzle" },
               ],
             },
+            {
+              label: "Frontend",
+              items: [
+                { label: "Vite", link: "/neon/frontend/vite" },
+                { label: "Astro", link: "/neon/frontend/astro" },
+                { label: "Next.js", link: "/neon/frontend/nextjs" },
+                { label: "Nuxt", link: "/neon/frontend/nuxt" },
+                { label: "SvelteKit", link: "/neon/frontend/sveltekit" },
+                { label: "React Router", link: "/neon/frontend/react-router" },
+                { label: "SolidStart", link: "/neon/frontend/solidstart" },
+                {
+                  label: "TanStack Start",
+                  link: "/neon/frontend/tanstack-start",
+                },
+                { label: "Waku", link: "/neon/frontend/waku" },
+                { label: "Octane", link: "/neon/frontend/octane" },
+                { label: "Foldkit", link: "/neon/frontend/foldkit" },
+                { label: "Vocs", link: "/neon/frontend/vocs" },
+                { label: "Static Site", link: "/neon/frontend/static-site" },
+              ],
+            },
             providerResourcesEntry("Neon"),
           ],
         },
@@ -1436,17 +1496,15 @@ export default defineConfig({
           label: "Prisma",
           items: [
             { label: "Overview", link: "/prisma" },
+            { label: "What is Prisma?", link: "/prisma/what-is-prisma" },
             { label: "Setup", link: "/prisma/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "prisma/tutorial" } }],
             },
             {
-              label: "Compute",
-              items: [
-                { label: "Apps", link: "/prisma/compute/apps" },
-                { label: "Deployments", link: "/prisma/compute/deployments" },
-              ],
+              label: "Accounts & access",
+              items: [{ label: "Workspaces and tokens", link: "/prisma/workspaces-and-tokens" }],
             },
             {
               label: "Data",
@@ -1459,6 +1517,22 @@ export default defineConfig({
                 { label: "Branches", link: "/prisma/data/branches" },
                 { label: "Connections", link: "/prisma/data/connections" },
                 { label: "Buckets", link: "/prisma/data/buckets" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/prisma/compute/apps" },
+                { label: "Deployments", link: "/prisma/compute/deployments" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Connect from Workers",
+                  link: "/prisma/guides/cloudflare-workers",
+                },
               ],
             },
             {
@@ -1487,15 +1561,6 @@ export default defineConfig({
                 { label: "Waku", link: "/prisma/frontend/waku" },
               ]),
             },
-            {
-              label: "Guides",
-              items: [
-                {
-                  label: "Connect from Workers",
-                  link: "/prisma/guides/cloudflare-workers",
-                },
-              ],
-            },
             providerApiReferenceEntry("Prisma"),
           ],
         },
@@ -1503,7 +1568,12 @@ export default defineConfig({
           label: "Stripe",
           items: [
             { label: "Overview", link: "/stripe" },
+            { label: "What is Stripe?", link: "/stripe/what-is-stripe" },
             { label: "Setup", link: "/stripe/setup" },
+            {
+              label: "Accounts & access",
+              items: [{ label: "Accounts and API keys", link: "/stripe/accounts-and-keys" }],
+            },
             {
               label: "Guides",
               items: [
@@ -1528,6 +1598,7 @@ export default defineConfig({
           label: "Better Auth",
           items: [
             { label: "Overview", link: "/better-auth" },
+            { label: "What is Better Auth?", link: "/better-auth/what-is-better-auth" },
             {
               label: "Tutorial",
               collapsed: false,
@@ -1596,6 +1667,7 @@ export default defineConfig({
                 { label: "Saga", link: "/domain/saga" },
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
+                { label: "Annotations", link: "/domain/annotations" },
                 { label: "Story", link: "/domain/story" },
               ],
             },
@@ -1651,7 +1723,14 @@ export default defineConfig({
           label: "Axiom",
           items: [
             { label: "Overview", link: "/axiom" },
+            { label: "What is Axiom?", link: "/axiom/what-is-axiom" },
             { label: "Setup", link: "/axiom/setup" },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Organizations and tokens", link: "/axiom/organizations-and-tokens" },
+              ],
+            },
             {
               label: "Data",
               items: [{ label: "Datasets & ingest", link: "/axiom/data/ingest" }],
@@ -1671,13 +1750,25 @@ export default defineConfig({
           label: "GitHub",
           items: [
             { label: "Overview", link: "/github" },
+            { label: "What is GitHub?", link: "/github/what-is-github" },
             { label: "Setup", link: "/github/setup" },
-            { label: "Repositories", link: "/github/repository" },
             {
-              label: "Actions secrets & variables",
-              link: "/github/actions-config",
+              label: "Accounts & access",
+              items: [
+                { label: "Accounts and tokens", link: "/github/accounts-and-tokens" },
+                {
+                  label: "Actions secrets & variables",
+                  link: "/github/actions-config",
+                },
+              ],
             },
-            { label: "Webhooks & events", link: "/github/events" },
+            {
+              label: "Concepts",
+              items: [
+                { label: "Repositories", link: "/github/repository" },
+                { label: "Webhooks & events", link: "/github/events" },
+              ],
+            },
             providerResourcesEntry("GitHub"),
           ],
         },
@@ -1685,6 +1776,7 @@ export default defineConfig({
           label: "Git",
           items: [
             { label: "Overview", link: "/git" },
+            { label: "What is a git host?", link: "/git/what-is-git" },
             { label: "Getting Started", link: "/git/getting-started" },
             {
               label: "Tutorial",
@@ -1762,9 +1854,16 @@ export default defineConfig({
           label: "Docker",
           items: [
             { label: "Overview", link: "/docker" },
+            { label: "What is Docker?", link: "/docker/what-is-docker" },
             { label: "Setup", link: "/docker/setup" },
-            { label: "Run local services", link: "/docker/local-services" },
-            { label: "Build & push images", link: "/docker/build-and-push" },
+            {
+              label: "Guides",
+              items: [
+                { label: "Run local services", link: "/docker/local-services" },
+                { label: "Build & push images", link: "/docker/build-and-push" },
+                { label: "Docker Swarm", link: "/docker/swarm" },
+              ],
+            },
             providerResourcesEntry("Docker"),
           ],
         },
@@ -1772,6 +1871,7 @@ export default defineConfig({
           label: "Kubernetes",
           items: [
             { label: "Overview", link: "/kubernetes" },
+            { label: "What is Kubernetes?", link: "/kubernetes/what-is-kubernetes" },
             { label: "Setup", link: "/kubernetes/setup" },
             {
               label: "Tutorial",
@@ -1926,6 +2026,7 @@ export default defineConfig({
           label: "SQL",
           items: [
             { label: "Overview", link: "/sql" },
+            { label: "How SQL works", link: "/sql/what-is-sql" },
             { label: "Databases", link: "/sql/databases" },
             {
               label: "Effect SQL",
@@ -1966,6 +2067,7 @@ export default defineConfig({
           label: "Command",
           items: [
             { label: "Overview", link: "/command" },
+            { label: "How commands work", link: "/command/what-is-command" },
             {
               label: "Memoized builds & commands",
               link: "/command/memoization",
@@ -1978,6 +2080,7 @@ export default defineConfig({
           label: "ACME",
           items: [
             { label: "Overview", link: "/acme" },
+            { label: "What is ACME?", link: "/acme/what-is-acme" },
             { label: "Getting started", link: "/acme/getting-started" },
             {
               label: "Certificate authorities",

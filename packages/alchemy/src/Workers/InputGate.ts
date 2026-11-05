@@ -21,10 +21,12 @@
  * of it after it returns, so a background loop started by the constructor
  * is gated as one long call.
  *
- * It's opt-in: the Durable Object bridge runs a call through the gate only
- * when the engine provides {@link InputGate}, and storage only when the
- * engine wraps its operations in {@link gateStorage}. Cloudflare has its own
- * gate and provides neither.
+ * It's opt-in: provide the {@link InputGate} Layer (`Workers.InputGate`,
+ * from `alchemy/Workers`) to a Durable Object
+ * class's outer Effect, and the Durable Object bridge gives each of its
+ * instances a gate. Storage goes through the gate where the engine wraps
+ * its operations in {@link gateStorage}. Cloudflare has a gate of its own,
+ * so it's for engines without one (Rivet).
  *
  * @module
  */
@@ -33,6 +35,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scheduler from "effect/Scheduler";
+import { CurrentRuntimeContext } from "../RuntimeContext.ts";
 
 export interface InputGateShape {
   /**
@@ -56,8 +59,8 @@ export interface InputGateShape {
 }
 
 /** One Durable Object instance's input gate. */
-export class InputGate extends Context.Service<InputGate, InputGateShape>()(
-  "alchemy/Workers/InputGate",
+export class InstanceInputGate extends Context.Service<InstanceInputGate, InputGateShape>()(
+  "alchemy/Workers/InstanceInputGate",
 ) {}
 
 /** The call a fiber belongs to; forked fibers inherit it. */
@@ -183,23 +186,64 @@ export const makeInputGate: Effect.Effect<InputGateShape> = Effect.sync(() => {
   };
 });
 
-/** A fresh gate for each build: provide one per Durable Object instance. */
-export const InputGateLive: Layer.Layer<InputGate> = Layer.effect(InputGate, makeInputGate);
+/**
+ * Cloudflare's input gate, for a Durable Object on an engine without one.
+ *
+ * Without it, an instance's calls run fully in parallel, storage included:
+ * make a change atomic with a transaction. Provide it to a class's outer
+ * Effect and each instance gets its own gate, so storage behaves as on
+ * Cloudflare: while one call does storage, no other call's storage runs,
+ * and a `get` followed by a `put`, with only plain code between them, can't
+ * lose an update. Calls still overlap while they wait on anything else.
+ *
+ * Each storage operation then waits its turn, so give it to code written
+ * for Cloudflare's gate, and use transactions everywhere else.
+ *
+ * ### Running Cloudflare code unchanged
+ * **Example:** A get-then-put counter on Rivet that loses no updates
+ * ```typescript
+ * import * as Workers from "alchemy/Workers";
+ *
+ * export default class Counter extends Rivet.DurableObject<Counter>()(
+ *   "Counter",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return Effect.gen(function* () {
+ *       const state = yield* Rivet.DurableObjectState;
+ *       return {
+ *         increment: () =>
+ *           Effect.gen(function* () {
+ *             const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+ *             yield* state.storage.put("count", count);
+ *             return count;
+ *           }),
+ *       };
+ *     });
+ *   }).pipe(Effect.provide(Layer.mergeAll(Default, Workers.InputGate))),
+ * ) {}
+ * ```
+ */
+export const InputGate: Layer.Layer<never> = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const ctx = yield* CurrentRuntimeContext;
+    if (ctx !== undefined) ctx.inputGate = true;
+  }),
+);
 
 /** Run one call through the instance's gate, when it has one. */
 export const gateCall = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-  Effect.flatMap(Effect.serviceOption(InputGate), (gate) =>
+  Effect.flatMap(Effect.serviceOption(InstanceInputGate), (gate) =>
     Option.isSome(gate) ? gate.value.call(effect) : effect,
   );
 
 /** Run one storage operation through the instance's gate, when it has one. */
 export const gateStorage = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-  Effect.flatMap(Effect.serviceOption(InputGate), (gate) =>
+  Effect.flatMap(Effect.serviceOption(InstanceInputGate), (gate) =>
     Option.isSome(gate) ? gate.value.storage(effect) : effect,
   );
 
 /** Hold the instance's gate for the whole of `effect`, when it has one. */
 export const gateExclusive = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-  Effect.flatMap(Effect.serviceOption(InputGate), (gate) =>
+  Effect.flatMap(Effect.serviceOption(InstanceInputGate), (gate) =>
     Option.isSome(gate) ? gate.value.exclusive(effect) : effect,
   );

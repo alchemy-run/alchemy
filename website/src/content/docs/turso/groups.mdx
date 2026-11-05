@@ -2,8 +2,22 @@
 title: Groups
 description: Turso groups decide where your databases run.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Every Turso database belongs to a group. The group decides where its databases run.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization" },
+    { id: "g1", label: "Tenants", type: "group · aws-us-east-1", parent: "org" },
+    { id: "d1", label: "tenant-acme", type: "database", parent: "g1", tone: "accent" },
+    { id: "d2", label: "tenant-globex", type: "database", parent: "g1", tone: "accent" },
+    { id: "d3", label: "tenant-initech", type: "database", parent: "g1", tone: "accent" },
+    { id: "g2", label: "Analytics", type: "group · aws-eu-west-1", parent: "org", side: true },
+    { id: "d4", label: "events", type: "database", parent: "g2" },
+  ]}
+  caption="A group sets the location, and every database in it runs there. Moving a database to another location means another group."
+/>
 
 ## Create a group
 

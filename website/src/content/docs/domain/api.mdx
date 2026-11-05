@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, the views, streams and aggregates it may read, and the queries it may ask. Everything else in the model stays private.
 
-An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose. This chapter starts with what it means to publish a model, then covers what an Api can expose, declaring one, serving it, and calling it.
+An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose.
 
 ## Publish the model, keep the rest private
 
@@ -136,6 +136,20 @@ export class BankApi extends Domain.Api("BankApi", {
 `model` is the model the Api is over. `commands`, `views`, `streams` and `aggregates` name what of it a client may reach, and naming something the model doesn't hold is a type error. A kind you leave out is served whole, so `Domain.Api("BankApi", { model: Bank })` serves every command, view and stream, and every aggregate that declares `read`. `[]` serves none of a kind, and naming an aggregate without `read` is a type error.
 
 Leaving something out is how you keep it internal. `OpenAccount` isn't listed, because only the `MainAccountProvisioning` policy opens accounts. No client can send it, however it's built.
+
+## Describe what it serves
+
+Everything built from an Api shows the descriptions of what it serves: an agent's [MCP](/domain/mcp) tools, the [CLI](/domain/cli)'s help, and the OpenAPI document of [`toHttpApi`](/domain/http-api). Each comes from the [annotations](/domain/annotations) of the declaration, so describe each command, view, stream and aggregate where you declare it.
+
+An Api's own last argument is its annotations too. Its `description` heads the CLI's root help and is the OpenAPI document's `info.description`:
+
+```typescript title="src/BankApi.ts"
+export class BankApi extends Domain.Api(
+  "BankApi",
+  { model: Bank, commands: ["WithdrawMoney"], views: ["AccountSummary"] },
+  { description: "What a customer of the bank reaches." },
+) {}
+```
 
 ## Give each kind of client its own Api
 

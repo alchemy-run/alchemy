@@ -2,6 +2,7 @@
 title: Domains & DNS
 description: Manage Cloudflare zones, DNS records, DNSSEC, and zone settings as resources — and safely adopt the domains you already have.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 Your domain is infrastructure too. Alchemy manages Cloudflare
 zones, the DNS records inside them, DNSSEC, and per-zone settings
@@ -13,6 +14,18 @@ already exists in your Cloudflare account, hand-configured over
 the years. Adoption is designed for exactly that — Alchemy takes
 over an existing zone or record only when you explicitly opt in,
 so a deploy can never clobber DNS it doesn't own.
+
+<Tree
+  nodes={[
+    { id: "zone", label: "example.com", type: "zone · name servers on Cloudflare" },
+    { id: "a", label: "api.example.com", type: "A · proxied", parent: "zone" },
+    { id: "c", label: "app.example.com", type: "CNAME · proxied", parent: "zone" },
+    { id: "mx", label: "example.com", type: "MX · mail", parent: "zone" },
+    { id: "w", label: "shop.example.com", type: "Worker custom domain", parent: "zone", tone: "accent" },
+  ]}
+  scopes={[{ on: "zone", label: "DNSSEC · zone settings" }]}
+  caption="A zone holds one domain's DNS records and its settings. A Worker's custom domain is a hostname in the zone that the Worker answers."
+/>
 
 ## Create a zone
 

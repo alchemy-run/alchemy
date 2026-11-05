@@ -10,8 +10,9 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { unwrapRpcHandlers, type RpcWrapped } from "@/Local/RpcSerialization.ts";
 import type { RpcProxyApi } from "@/Local/RpcServer.ts";
+import { rpcSubpath } from "@/Local/RpcToken.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { openWebSocket, waitForExit } from "./fixtures/process-effect.ts";
+import { canOpenWebSocket, openWebSocket, waitForExit } from "./fixtures/process-effect.ts";
 import type { EchoClient } from "./fixtures/rpc-echo.ts";
 import { runtimes } from "./fixtures/runtimes.ts";
 
@@ -77,10 +78,16 @@ describe.concurrent("Local.RpcServer", { tags: ["local"] }, () => {
             // The sidecar listens on loopback only, under every runtime.
             expect(new URL(url).hostname).toBe("127.0.0.1");
 
+            // Every upgrade must carry the URL's token.
+            const origin = new URL(url).origin;
+            expect(yield* canOpenWebSocket(origin)).toBe(false);
+            expect(yield* canOpenWebSocket(`${origin}/parent`)).toBe(false);
+            expect(yield* canOpenWebSocket(`${origin}/${"0".repeat(64)}`)).toBe(false);
+
             // Open the parent websocket inside the scope so it stays alive
             // for the duration of the RPC exchange below; closing it later
             // is exactly what triggers the child to exit.
-            const parent = yield* openWebSocket(new URL("/parent", url));
+            const parent = yield* openWebSocket(new URL(rpcSubpath(url, "/parent")));
 
             // Drive a real RPC call through a session websocket. capnweb's
             // surface is Promise-based, so we wrap exactly at the boundary
@@ -127,7 +134,7 @@ describe.concurrent("Local.RpcServer", { tags: ["local"] }, () => {
               Effect.map((text) => text.match(ADDRESS_RE)?.[1]),
             );
             assert(url);
-            yield* openWebSocket(new URL("/parent", url));
+            yield* openWebSocket(new URL(rpcSubpath(url, "/parent")));
             const connect = () =>
               Effect.acquireRelease(
                 Effect.sync(() => {
@@ -272,7 +279,7 @@ describe.concurrent("Local.RpcServer", { tags: ["local"] }, () => {
               Effect.map((text) => text.match(ADDRESS_RE)?.[1]),
             );
             assert(url);
-            yield* openWebSocket(new URL("/parent", url));
+            yield* openWebSocket(new URL(rpcSubpath(url, "/parent")));
             const connect = () =>
               Effect.acquireRelease(
                 Effect.sync(() => {
