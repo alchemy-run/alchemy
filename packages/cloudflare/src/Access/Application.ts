@@ -262,6 +262,13 @@ export interface ApplicationProps {
    */
   eagerRedirectCookieSetting?: boolean;
   /**
+   * UUIDs of `Cloudflare.Access.CustomPage`s shown for this application,
+   * at most one per page type (`login`, `identity_denied`, `forbidden`,
+   * `interstitial`). An assigned page overrides the account default for
+   * its type. Pass `[]` to revert to the defaults.
+   */
+  customPages?: string[];
+  /**
    * Token TTL for sessions issued by this application. Accepts Go-style
    * duration strings, e.g. `"24h"`, `"720h"`, `"2h45m"`.
    *
@@ -1136,6 +1143,7 @@ const SETTINGS = [
   "enableBindingCookie",
   "pathCookieAttribute",
   "eagerRedirectCookieSetting",
+  "customPages",
 ] as const satisfies ReadonlyArray<keyof ApplicationProps>;
 
 type Settings = Pick<ApplicationProps, (typeof SETTINGS)[number]>;

@@ -16,7 +16,7 @@ export class CustomPageUnexpectedResponse extends Data.TaggedError("CustomPageUn
   readonly cause?: unknown;
 }> {}
 
-export type CustomPageType = "identity_denied" | "forbidden";
+export type CustomPageType = "login" | "identity_denied" | "forbidden" | "interstitial";
 
 export type CustomPageProps = {
   /**
@@ -28,15 +28,31 @@ export type CustomPageProps = {
    */
   name?: string;
   /**
-   * The type of Access event the page is shown for. `identity_denied` is
-   * shown when a user's identity is rejected by policy; `forbidden` is shown
-   * when access is blocked outright. Changing the type replaces the page.
+   * The Access page this template replaces:
+   * - `login` — the sign-in page. Must contain exactly one
+   *   `<cf-access-authbox></cf-access-authbox>`.
+   * - `identity_denied` — shown when a signed-in user fails an identity rule.
+   * - `forbidden` — shown when a request fails a non-identity rule (e.g. a
+   *   service-auth policy).
+   * - `interstitial` — approves or denies a command-line login. Must contain
+   *   exactly one `<cf-access-cli-approval></cf-access-cli-approval>`.
+   *
+   * Changing the type replaces the page.
    */
   type: CustomPageType;
   /**
-   * The custom HTML served for the page.
+   * The HTML served for the page. With `contractVersion` set, it is a Liquid
+   * template: variables such as `app_name` and `idps` (login) or `app`,
+   * `user`, `ray_id` and `policy_evaluation` (denial pages) are available,
+   * output is HTML-escaped, and scripts are stripped.
    */
   customHtml: string;
+  /**
+   * Version of the Liquid template contract `customHtml` is written against.
+   * Set it (>= 1) to render `customHtml` as a sanitized Liquid template; omit
+   * it to serve a legacy page verbatim.
+   */
+  contractVersion?: number;
 };
 
 export type CustomPage = Resource<
@@ -51,15 +67,19 @@ export type CustomPage = Resource<
     name: string;
     /** The Access event type the page is shown for. */
     type: CustomPageType;
+    /** Liquid template contract version, or `undefined` for a legacy page. */
+    contractVersion: number | undefined;
   },
   never,
   Providers
 >;
 
 /**
- * A Cloudflare Zero Trust Access custom page. Replaces the default Access
- * block pages (`identity_denied` / `forbidden`) with custom HTML, which can
- * then be selected on an Access application.
+ * A Cloudflare Zero Trust Access custom page. Replaces the built-in Access
+ * login, block (`identity_denied` / `forbidden`) and command-line approval
+ * (`interstitial`) pages with custom HTML or a Liquid template. Assign it to
+ * an application with `Cloudflare.Access.Application`'s `customPages`.
+ *
  * ### Creating a Custom Page
  * **Example:** Custom forbidden page
  * ```typescript
@@ -75,6 +95,41 @@ export type CustomPage = Resource<
  *   name: "corp-identity-denied",
  *   type: "identity_denied",
  *   customHtml: "<html><body><h1>Who are you?</h1></body></html>",
+ * });
+ * ```
+ *
+ * ### Liquid templates
+ * **Example:** Branded login page
+ * ```typescript
+ * const login = yield* Cloudflare.Access.CustomPage("Login", {
+ *   type: "login",
+ *   contractVersion: 1,
+ *   customHtml: `<html><body>
+ *     <h1>Sign in to {{ app_name }}</h1>
+ *     <cf-access-authbox></cf-access-authbox>
+ *   </body></html>`,
+ * });
+ * ```
+ *
+ * **Example:** Denial page that explains which checks failed
+ * ```typescript
+ * const denied = yield* Cloudflare.Access.CustomPage("Denied", {
+ *   type: "identity_denied",
+ *   contractVersion: 1,
+ *   customHtml: `<html><body>
+ *     <h1>{{ user.email }} can't open {{ app.name }}</h1>
+ *     <p>Ray ID: {{ ray_id }}</p>
+ *   </body></html>`,
+ * });
+ * ```
+ *
+ * ### Assigning to an Application
+ * **Example:** Per-application login and denial pages
+ * ```typescript
+ * const app = yield* Cloudflare.Access.Application("Grafana", {
+ *   type: "self_hosted",
+ *   domain: "grafana.example.com",
+ *   customPages: [login.customPageId, denied.customPageId],
  * });
  * ```
  *
@@ -184,6 +239,7 @@ export const CustomPageProvider = () =>
             name,
             type: news.type,
             customHtml: news.customHtml,
+            contractVersion: news.contractVersion,
           })
           .pipe(
             Effect.catch((err) =>
@@ -207,7 +263,8 @@ export const CustomPageProvider = () =>
       if (
         observed.name !== name ||
         observed.type !== news.type ||
-        observed.customHtml !== news.customHtml
+        observed.customHtml !== news.customHtml ||
+        (observed.contractVersion ?? 0) !== (news.contractVersion ?? 0)
       ) {
         const updated = yield* zeroTrust.updateAccessCustomPage({
           accountId: acct,
@@ -215,11 +272,13 @@ export const CustomPageProvider = () =>
           name,
           type: news.type,
           customHtml: news.customHtml,
+          contractVersion: news.contractVersion,
         });
         observed = {
           uid: updated.uid ?? observed.uid,
           name: updated.name ?? name,
           type: updated.type ?? news.type,
+          contractVersion: updated.contractVersion ?? news.contractVersion,
         };
       }
 
@@ -254,6 +313,7 @@ const toAttrs = (observed: ObservedPage, accountId: string) => ({
   accountId,
   name: observed.name ?? "",
   type: (observed.type ?? "forbidden") as CustomPageType,
+  contractVersion: observed.contractVersion ?? undefined,
 });
 
 type ObservedPage = {
@@ -261,4 +321,5 @@ type ObservedPage = {
   name?: string | null;
   type?: string | null;
   customHtml?: string | null;
+  contractVersion?: number | null;
 };
