@@ -302,6 +302,17 @@ const waitUntilGone = (volumeId: number) =>
     }),
   );
 
+/** Poll until the Volume is detached or gone. Bounded to ~30s. */
+const waitUntilDetached = (volumeId: number) =>
+  getById(volumeId).pipe(
+    Effect.map((volume) => volume === undefined || volume.server === null),
+    Effect.repeat({
+      schedule: Schedule.spaced(Duration.seconds(2)),
+      until: (detached) => detached,
+      times: 15,
+    }),
+  );
+
 const serverIdOf = (value: unknown): number | undefined => {
   if (value == null || typeof value !== "object") return undefined;
   const id = (value as { serverId?: unknown }).serverId;
@@ -460,6 +471,9 @@ export const VolumeProvider = () =>
           // Server delete detaches the Volume first; treat that race as
           // already-detached.
           Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.void),
+          // The server's own delete can also fail our detach action while it
+          // detaches the Volume itself; wait for that detach to land.
+          Effect.catchTag("ActionFailed", () => waitUntilDetached(current.id)),
         );
       }
 

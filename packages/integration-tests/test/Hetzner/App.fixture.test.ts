@@ -30,7 +30,7 @@ import {
 import Worker from "./fixtures/app/worker.ts";
 import { hetznerLoadBalancers, hetznerPrimaryIps } from "./limit.ts";
 
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+const { test, deploy, destroy } = Test.make({
   limit: hetznerPrimaryIps,
   providers: Hetzner.providers(),
 });
@@ -91,17 +91,13 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = beforeAll(deploy(Stack), { timeout: 180_000, exclusive: hetznerLoadBalancers });
-
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: 120_000,
-  exclusive: hetznerLoadBalancers,
-});
-
+// The deploy runs inside the test, not in `beforeAll`: the stack's Server and
+// Load Balancer hold primary IPs for as long as it is up, so it must stay up
+// only while the test holds its `hetznerPrimaryIps` permit.
 test(
   "deploys an effectful app and serves the mounted volume over HTTP",
   Effect.gen(function* () {
-    const out = yield* stack;
+    const out = yield* deploy(Stack);
 
     expect(out.serverId).toEqual(expect.any(Number));
     expect(out.serverIpv4).toEqual(expect.any(String));
@@ -180,7 +176,10 @@ test(
     );
     expect(body.path).toEqual(VOLUME_PATH);
     expect(body.text).toEqual(MARKER);
-  }).pipe(logLevel),
+  }).pipe(
+    Effect.ensuring(process.env.NO_DESTROY ? Effect.void : destroy(Stack).pipe(Effect.orDie)),
+    logLevel,
+  ),
   {
     tags: [
       "provider:hetzner",
@@ -194,7 +193,7 @@ test(
       "provider:hetzner:zone",
       "live",
     ],
-    timeout: 180_000,
+    timeout: 300_000,
     exclusive: hetznerLoadBalancers,
   },
 );
