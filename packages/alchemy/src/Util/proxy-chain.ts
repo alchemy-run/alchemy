@@ -1,5 +1,7 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 
 type Op = { kind: "get"; prop: PropertyKey } | { kind: "call"; args: unknown[] };
 
@@ -135,9 +137,12 @@ const isBrandProbe = (prop: PropertyKey): boolean =>
   typeof prop === "symbol" || (typeof prop === "string" && prop.startsWith("~effect/"));
 
 const chain = (cached: Effect.Effect<unknown, any, any>, ops: ReadonlyArray<Op> = []): unknown => {
-  const effect = Effect.flatMap(
+  const query = Effect.flatMap(
     cached,
     (root) => replay(root, ops, cached) as Effect.Effect<unknown, unknown, unknown>,
+  );
+  const effect = Effect.flatMap(Effect.serviceOption(Scope.Scope), (scope) =>
+    Option.isSome(scope) ? query : Effect.scoped(query),
   );
   const proxy = new Proxy(function () {}, {
     get(_, prop) {
