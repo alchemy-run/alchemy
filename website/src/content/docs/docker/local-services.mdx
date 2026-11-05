@@ -2,6 +2,7 @@
 title: "Local services: Postgres with containers, networks, and volumes"
 description: Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 A Docker `Container` runs an image; a `Network` gives containers a
 stable DNS name to reach each other; a `Volume` keeps data alive
@@ -16,6 +17,17 @@ You'll need a Docker daemon reachable from your CLI and the provider
 registered — see [Setup](/docker/setup) and the
 [Docker overview](/docker). The full program below is the checked-in
 [`examples/docker-postgres`](https://github.com/alchemy-run/alchemy/tree/main/examples/docker-postgres).
+
+<Tree
+  nodes={[
+    { id: "engine", label: "local Docker", type: "engine" },
+    { id: "net", label: "app-network", type: "Network · DNS by name", parent: "engine" },
+    { id: "pg", label: "postgres", type: "Container", parent: "net", tone: "accent", specs: [["image", "postgres@sha256:…"], ["volume", "postgres-data"]] },
+    { id: "worker", label: "worker", type: "Container", parent: "net", specs: [["reaches", "postgres:5432"]] },
+    { id: "vol", label: "postgres-data", type: "Volume · outlives the container", parent: "engine", side: true },
+  ]}
+  caption="The containers find each other by name on their network. The data lives in a Volume, so replacing the postgres container keeps it."
+/>
 
 ## Pin the image
 

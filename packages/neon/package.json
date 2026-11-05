@@ -65,6 +65,7 @@
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
+    "@distilled.cloud/s3": "workspace:*",
     "@neon/functions": "catalog:"
   },
   "devDependencies": {

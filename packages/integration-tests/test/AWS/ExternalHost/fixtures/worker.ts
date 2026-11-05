@@ -91,6 +91,14 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
                 policyType: "IDENTITY_POLICY",
               }),
             );
+          case "/identity":
+            // The Role this Worker's minted key assumes (an ARN, not a
+            // secret), so the test can check what the key may assume.
+            return yield* respond(
+              Effect.succeed({
+                roleArn: (yield* Cloudflare.WorkerEnvironment).ALCHEMY_AWS_ROLE_ARN as string,
+              }),
+            );
           default:
             return HttpServerResponse.text("ok");
         }

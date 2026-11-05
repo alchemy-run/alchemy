@@ -2,13 +2,13 @@ import type * as cf from "@cloudflare/workers-types";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
 import { trackWork } from "./internal/DurableObjectMove.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 import {
   getLoopbackEntrypoint,
   makeEntrypointExports,
+  runInBackground,
   type EntrypointExports,
 } from "./WorkerRuntime.ts";
 
@@ -92,19 +92,6 @@ export class DurableObjectState extends Context.Service<
   }
 >()("Cloudflare.DurableObjectState") {}
 
-/**
- * Told of every promise the current event hands to `waitUntil`, so the event
- * keeps its telemetry open until that work settles. Provided per event by
- * the bridge, and read from the calling fiber, so it works for state
- * captured when the object was constructed too.
- *
- * @internal
- */
-export class BackgroundWork extends Context.Service<
-  BackgroundWork,
-  (promise: Promise<unknown>) => void
->()("Cloudflare.DurableObjectState/BackgroundWork") {}
-
 export const fromDurableObjectState = (
   state: cf.DurableObjectState,
 ): DurableObjectState["Service"] => ({
@@ -115,19 +102,9 @@ export const fromDurableObjectState = (
   exports: makeEntrypointExports((name, options) =>
     getLoopbackEntrypoint(state.exports, name, options),
   ),
-  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<R>();
-      // Register the promise with workerd un-awaited — waitUntil extends the
-      // event's lifetime without blocking the caller.
-      const track = yield* Effect.serviceOption(BackgroundWork);
-      yield* Effect.sync(() => {
-        // Background work on a source being moved: its seal waits for it.
-        const promise = trackWork(state.storage, Effect.runPromiseWith(context)(effect));
-        if (Option.isSome(track)) track.value(promise);
-        state.waitUntil(promise);
-      });
-    }),
+  // Background work on a source being moved: its seal waits for it.
+  waitUntil: (effect) =>
+    runInBackground(effect, (promise) => state.waitUntil(trackWork(state.storage, promise))),
   blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();

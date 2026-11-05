@@ -236,9 +236,7 @@ const RemindWhenCappedLive = RemindWhenCapped.toLayer(
   Effect.gen(function* () {
     const counters = yield* Counter;
     return Effect.fn(function* ({ source }) {
-      yield* counters
-        .schedule(source, new Remind(), { after: "1 hour" })
-        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+      yield* counters.schedule(source, new Remind(), { after: "1 hour" });
     });
   }),
 );

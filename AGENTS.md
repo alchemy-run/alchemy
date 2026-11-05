@@ -22,6 +22,7 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Pre-Create** - an optional operation that creates a stub of a Resource before reconcile runs. Used to resolve circular dependencies — e.g. Function A and B depend on each other, so we create a stub of Function A first and then `reconcile` later wires up the real dependency.
 - **Observe** - an optional, read-only companion to Pre-Create. A cycle pre-creates on unresolved props, before Read can check ownership, so the engine first asks Observe what exists at the identity Pre-Create would claim. It returns the same shape as Read (`undefined`, attributes, or `Unowned(attrs)`), or `Unresolved` when that identity depends on props that haven't resolved yet; the engine refuses an `Unowned` result unless `--adopt` is set, and checks an `Unresolved` identity once it resolves, before Reconcile. Implement it whenever Pre-Create can write to a resource that already exists.
 - **Reconcile** - converges a Resource's actual cloud state to the desired state described by the new Input Properties. Called for both first-time provisioning and subsequent updates. The provider receives `output` (current Attributes) and `olds` (previous Props) which may both be `undefined` on a greenfield create, both defined on an update, or `output !== undefined && olds === undefined` on an adoption. See the **Reconciler doctrine** section below for the required shape.
+- **Lookup** - an optional, read-only operation that finds a resource this stack doesn't manage by the key the Resource type declares as its sixth type parameter (a Worker's `name`, a VPC service's `serviceId` or `name`), returning its Attributes or `undefined`. It backs `Resource.lookup(props)`, which resolves at plan time, binds like a declared resource, and never writes state. Opt-in today; every resource should eventually implement it.
 - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
 - **Capability** - a runtime requirement of a Function (e.g. require read access to an `R2Bucket`, or `SQS.SendMessage` on a `SQS.Queue`). A Capability is modeled as one or more `Binding.Service`s. Where the underlying API distinguishes access levels, split it into `Read` / `Write` / `ReadWrite` services (see the **Read/Write/ReadWrite binding convention** below); otherwise a single service suffices. Each service typically ships two interchangeable implementations: a native **binding** (`*Binding`) and a token-scoped **HTTP** client (`*Http`).
 - **Binding.Service** - an Effect Service that exposes a `.bind(resource)` method returning a typed runtime client. Its outer (init) Effect resolves the host Function/Worker and its environment, then registers the deploy-time binding — environment variables, IAM policy statements (AWS), or a native Cloudflare binding — by calling ``host.bind`${resource}`(data)``, guarded by `!globalThis.__ALCHEMY_RUNTIME__` so it is a no-op once running inside the deployed Function/Worker. Provided as a Layer on the **Function/Worker** Effect so it gets bundled into the Lambda/Worker. See [Binding](./packages/alchemy/src/Binding.ts).
@@ -148,7 +149,7 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 
 ## Speed doctrine: never wait on a hang
 
-- Run tests with `pnpm test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). The runner enforces per-test timeouts and prints the currently-running tests whenever nothing finishes for 10s — use that list to identify a hang, read the run's log under `.alchemy/log/test/`, find the cause (unbounded retry, infinite pagination, the engine deadlock below), and fix the root cause. Never just re-run hoping.
+- Run tests with `pnpm test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). The runner enforces per-test timeouts — to identify a hang, read the run's log under `.alchemy/log/test/`, find the cause (unbounded retry, infinite pagination, the engine deadlock below), and fix the root cause. Never just re-run hoping.
 - Per-test timeout ≤ 90–120s (`{ timeout: ... }` on the test, or `--timeout` for the whole run). A suite needing more than ~3–5 minutes total is a bug.
 - Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
 - **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
@@ -666,6 +667,24 @@ Rules:
 Why this matters: consumers can build cloud-agnostic services on top of bindings using `Layer.effect(Tag, ...)` without polluting their service interface with `WorkerEnvironment`. See [Layers concept](./website/src/content/docs/infrastructure-as-effects/layers.mdx).
 
 After implementing, re-export the contract and implementation layers from the service's `index.ts` (but keep the shared `{Cap}Binding.ts`/`{Cap}Http.ts` scaffolding un-exported).
+
+### Federated identity over keys
+
+When a binding, a runtime-to-runtime call, or a CI deploy needs credentials, look for an identity the platform already signs before minting a key. A long-lived key or shared random token is the last resort. In order of preference:
+
+1. **The host runs as the target cloud's own identity** (a Lambda's role, a Cloud Run service account): grant on that identity. No credential moves.
+2. **The host's platform issues signed identity tokens**: federate. Create a trust in the target cloud scoped to that one workload, and exchange the token at runtime.
+   - Google ID tokens from the metadata server (Cloud Run, Cloud Functions) → AWS `AssumeRoleWithWebIdentity`.
+   - An AWS role's signed `GetCallerIdentity` → GCP workload identity federation (Lambda, ECS, EC2, App Runner, Batch, EKS Pod Identity).
+   - Fly Machine OIDC tokens from `/.fly/api` → AWS (an IAM OIDC provider) and GCP (a workload identity pool).
+   - CI tokens (GitHub Actions, GitLab, Vercel) → see `alchemy/Auth/OidcToken`.
+
+   A host exposes its platform's tokens to bindings through `BaseRuntimeContext.oidcToken(audience)`, and its bundler sets `__ALCHEMY_HOST_IDENTITY__` so bindings keep only the exchange path. References: the federated branches of [AWSBindings.ts](./packages/aws/src/AWSBindings.ts) and [GCPBindings.ts](./packages/gcp/src/GCPBindings.ts), and [Fly internal/Oidc.ts](./packages/fly/src/internal/Oidc.ts).
+3. **The platform issues nothing** (Cloudflare Workers, Railway, Fly Sprites today): create a key for an identity that may do only what this one host needs, keep it `Redacted` so it deploys as a secret, and say in the binding's JSDoc why no federated path exists.
+
+The same order applies when one runtime calls another. Authorize the caller by an identity the platform signs: IAM for Lambda invokes, a Google ID token checked by Cloud Run's invoker role, Fly's signed `Fly-Src` header naming the calling App ([Fly rpc.ts](./packages/fly/src/rpc.ts)). Use a shared random token only where the platform signs nothing (Railway's private network).
+
+Scope every trust to the one workload: match the token's subject, App, or role, never just the issuer or the organization. An account-level trust anchor that many stacks share (one IAM OIDC provider per issuer per account) is declared with `RemovalPolicy.retain()`, so destroying one stack never breaks another. Before writing a key path for a new host or provider, check the platform's docs for workload identity, OIDC, or signed-request support, and record the answer in the catalog.
 
 ### Isolate scope vs request scope (runtime bridges)
 
@@ -1213,7 +1232,6 @@ Output behavior (plain mode, the default):
 - The collection phase (importing every test file, ~45s for the full suite) reports `collecting N/TOTAL test files (elapsed) <current file>` — repainted in place on a TTY, printed every 5s otherwise. A run that appears stuck before any test starts is almost always just collecting; if it really is stuck, the line names the file whose import hangs.
 - One line per test as it finishes, prefixed with a `[done/total]` progress counter so the remaining count is visible; a **failing test prints its error and captured output inline** immediately.
 - Passing tests' output is swallowed on the console — but **every** test's output (passes included) is streamed to a per-run log at **`.alchemy/log/test/{timestamp}-pid{pid}.log`** (relative to the cwd), so concurrent runs in different terminals never trample each other. The absolute path (with line/KB counts) is printed at the end of every run (`Full log: …`) — read that file when you need the complete record, e.g. a passing test's deploy output or a hang's partial log. The file is appended live, so it's readable mid-run; logs older than a week are pruned automatically (by stat mtime).
-- If nothing finishes for 10s, the runner prints the list of currently-running tests with elapsed times — the first place to look when a run seems hung.
 - Exit code is non-zero if any test failed.
 
 Runner semantics to know:

@@ -2,6 +2,7 @@
 title: Deployments
 description: Run a replicated server on any Kubernetes cluster with Kubernetes.Deployment. Covers names, namespaces, Service types and URLs, replicas, resources, labels, the pod template escape hatch, and Effect servers.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 [`Kubernetes.Deployment`](/providers/kubernetes/deployment) is a
 replicated server, running a container image or an HTTP server
@@ -11,6 +12,18 @@ written in Effect. One resource applies three Kubernetes objects:
 - a **Deployment** that keeps `replicas` copies of the container
   running, and
 - a **Service** that gives them one stable address.
+
+<Tree
+  nodes={[
+    { id: "ns", label: "default", type: "namespace" },
+    { id: "sa", label: "api", type: "ServiceAccount", parent: "ns", side: true },
+    { id: "svc", label: "api", type: "Service · selects app=api", parent: "ns", side: true },
+    { id: "dep", label: "api", type: "Deployment · replicas: 2", parent: "ns" },
+    { id: "p1", label: "api-6f9d-x2", type: "Pod · runs as api", parent: "dep", tone: "accent" },
+    { id: "p2", label: "api-6f9d-k8", type: "Pod · runs as api", parent: "dep", tone: "accent" },
+  ]}
+  caption="One Kubernetes.Deployment applies three objects. The Deployment keeps two Pods running as the ServiceAccount, and the Service sends traffic to them."
+/>
 
 ```typescript
 const web = yield* Kubernetes.Deployment("Web", {

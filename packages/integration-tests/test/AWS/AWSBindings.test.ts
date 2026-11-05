@@ -1,5 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
-import { runsAsGoogleServiceAccount, runsAsRole } from "@alchemy.run/aws/AWSBindings";
+import {
+  runsAsGoogleServiceAccount,
+  runsAsRole,
+  runsOnFlyMachines,
+} from "@alchemy.run/aws/AWSBindings";
 import * as GCP from "@alchemy.run/gcp";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -97,6 +101,17 @@ describe(
     });
   },
 );
+
+describe("AWSBindings.runsOnFlyMachines", { tags: ["unit", "provider:aws", "local"] }, () => {
+  it("accepts a Fly Service", () => {
+    expect(runsOnFlyMachines(host("Fly.Service"))).toBe(true);
+  });
+
+  it("rejects Fly Sprites and other hosts", () => {
+    expect(runsOnFlyMachines(host("Fly.Sprite"))).toBe(false);
+    expect(runsOnFlyMachines(host("Cloudflare.Worker"))).toBe(false);
+  });
+});
 
 const { test: liveTest } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), GCP.providers()),

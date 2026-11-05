@@ -4,6 +4,7 @@ import * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type { Servable } from "./Api.ts";
@@ -248,17 +249,25 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
   return rpcs;
 };
 
-/** One call an Api serves, as the HTTP and AI surfaces publish it. */
+/** One call an Api serves, as the HTTP, CLI and AI surfaces publish it. */
 export interface Operation {
-  /** The command, view, stream or aggregate it belongs to. */
+  /** The command, query, view, stream or aggregate it belongs to. */
   readonly served: Servable;
-  /** A command's tag, or a view's, stream's or aggregate's name. */
+  /** A command's tag, a query's name, or a view's, stream's or aggregate's name. */
   readonly name: string;
-  /** `send` for a command; the read's client method otherwise (`get`, `peek`, `watch`, ...). */
+  /**
+   * `send` for a command, `ask` for a query; the read's client method
+   * otherwise (`get`, `peek`, `watch`, ...).
+   */
   readonly operation: string;
   readonly rpc: Rpc.AnyWithProps;
   /** Whether the call answers with a stream of values (`watch`, `events`). */
   readonly stream: boolean;
+  /**
+   * The entry's `description` annotation, or for a command without one, its
+   * Schema `description` annotation.
+   */
+  readonly description: string | undefined;
 }
 
 /** Every call an Api serves, in the order it serves them. */
@@ -266,7 +275,16 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
   serves.flatMap((served): ReadonlyArray<Operation> => {
     if (served.kind === "Command") {
       const rpc = served.rpc as Rpc.AnyWithProps;
-      return [{ served, name: served.tag, operation: "send", rpc, stream: false }];
+      const description =
+        served.annotations.description ?? SchemaAST.resolveDescription(served.ast);
+      return [{ served, name: served.tag, operation: "send", rpc, stream: false, description }];
+    }
+    const { description } = served.annotations;
+    if (served.kind === "Query") {
+      const rpc = served.rpc as Rpc.AnyWithProps;
+      return [
+        { served, name: served.queryName, operation: "ask", rpc, stream: false, description },
+      ];
     }
     const name = nameOf(served);
     return Object.entries(readRpcs(served)).flatMap(([call, read]) => {
@@ -276,14 +294,21 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
       const operation =
         (call as keyof ReadRpcs) === "get" && served.kind === "Stream" ? "peek" : call;
       return [
-        { served, name, operation, rpc, stream: RpcSchema.isStreamSchema(rpc.successSchema) },
+        {
+          served,
+          name,
+          operation,
+          rpc,
+          stream: RpcSchema.isStreamSchema(rpc.successSchema),
+          description,
+        },
       ];
     });
   });
 
 /**
  * The name of one call of an Api's client: a command's tag (`DepositMoney`),
- * or a read as `<Name>.<operation>` (`AccountSummary.get`).
+ * a query's name (`AccountLedger`), or a read as `<Name>.<operation>` (`AccountSummary.get`).
  */
 export type CallName<Client> = {
   readonly [K in keyof Client & string]: Client[K] extends (...args: never) => unknown
@@ -311,9 +336,13 @@ export type ClientOf<A> = A extends {
   ? Client
   : never;
 
+/** Whether the client calls it as a method of its own: a command's `send` or a query's `ask`. */
+export const isMethod = (op: Operation): boolean =>
+  op.operation === "send" || op.operation === "ask";
+
 /** The {@link CallName} of an operation. */
 export const callName = (op: Operation): string =>
-  op.operation === "send" ? op.name : `${op.name}.${op.operation}`;
+  isMethod(op) ? op.name : `${op.name}.${op.operation}`;
 
 /**
  * The operations a caller listed: nothing is exposed unless it is named.
