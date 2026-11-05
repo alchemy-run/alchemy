@@ -481,11 +481,9 @@ const bakeArgs = (
   // A baked value is literal, so `$` is escaped too; a default that was
   // already there keeps its `$` references.
   const quote = (value: string, literal: boolean) =>
-    `"${[...value]
-      .map((char) =>
-        char === escape || char === '"' || (literal && char === "$") ? `${escape}${char}` : char,
-      )
-      .join("")}"`;
+    `"${Array.from(value, (char) =>
+      char === escape || char === '"' || (literal && char === "$") ? `${escape}${char}` : char,
+    ).join("")}"`;
   const bake = <I extends Instruction>(instruction: I): I => {
     if (instruction._tag !== "ARG" || !instruction.vars.some(([name]) => name in args)) {
       return instruction;
