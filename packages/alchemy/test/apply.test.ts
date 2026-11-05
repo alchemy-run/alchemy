@@ -3091,6 +3091,221 @@ describe("retain removal policy on replace", { tags: ["unit", "local"] }, () => 
   );
 });
 
+describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
+  // Scratch state is durable, and the runner's trailing destroy is refused
+  // for a protected row. Unprotect whatever an earlier run left, then drain.
+  const reset = (stack: { destroy: () => Effect.Effect<any, any, any> }) =>
+    Effect.gen(function* () {
+      const state = yield* yield* State;
+      const stk = yield* Stack;
+      for (const fqn of yield* listState()) {
+        const row = (yield* state.get({ stack: stk.name, stage: stk.stage, fqn })) as
+          | ResourceState
+          | undefined;
+        if (row?.removalPolicy === "protect") {
+          yield* state.set({
+            stack: stk.name,
+            stage: stk.stage,
+            fqn,
+            value: { ...row, removalPolicy: "destroy" },
+          });
+        }
+      }
+      yield* stack.destroy();
+    });
+
+  const refusal = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.exit(effect).pipe(
+      Effect.map((exit) =>
+        Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined,
+      ),
+    );
+
+  test.provider("refuses a replacement before anything is applied", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+
+      const replaced: string[] = [];
+      const error = yield* refusal(
+        Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2" }).pipe(RemovalPolicy.protect());
+        }).pipe(stack.deploy, hook({ create: (id) => Effect.sync(() => void replaced.push(id)) })),
+      );
+      expect(error).toBeInstanceOf(RemovalPolicy.ProtectedResource);
+      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+      expect(replaced).toEqual([]);
+      expect((yield* getState("A"))?.props).toMatchObject({ replaceString: "v1" });
+    }),
+  );
+
+  test.provider("refuses an orphan delete and destroy", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      // Removing the declaration: the persisted policy still protects it.
+      const orphaned = yield* refusal(Effect.void.pipe(stack.deploy));
+      expect(orphaned).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+      const destroyed = yield* refusal(stack.destroy());
+      expect(destroyed).toMatchObject({ _tag: "ProtectedResource" });
+      expect(yield* getState("A")).toBeDefined();
+    }),
+  );
+
+  test.provider("dropping protect() in the replacing deploy is still refused", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      const error = yield* refusal(
+        Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2" });
+        }).pipe(stack.deploy),
+      );
+      expect(error).toMatchObject({ _tag: "ProtectedResource" });
+    }),
+  );
+
+  test.provider("unprotecting with its own deploy allows the replacement", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" });
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("destroy");
+
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2" });
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.props).toMatchObject({ replaceString: "v2" });
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("protect() added while an old generation drains is persisted", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1", string: "a" });
+      }).pipe(stack.deploy);
+      // The replacement's old-generation delete is still in progress, so the
+      // row stays `replaced` for the next deploy.
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2", string: "a" });
+      }).pipe(
+        stack.deploy,
+        Effect.provideService(TestResourceHooks, {
+          delete: () => Effect.fail(new Provider.DeleteInProgress({ message: "still draining" })),
+        }),
+      );
+      expect((yield* getState("A"))?.status).toEqual("replaced");
+
+      // An in-place update of the replaced row that adds protect() must
+      // persist it, or a later destroy would delete the resource.
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2", string: "b" }).pipe(
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+      expect(yield* refusal(stack.destroy())).toMatchObject({ _tag: "ProtectedResource" });
+    }),
+  );
+
+  test.provider("protect() added while an old generation drains still lets it drain", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" });
+      }).pipe(stack.deploy);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2" });
+      }).pipe(
+        stack.deploy,
+        Effect.provideService(TestResourceHooks, {
+          delete: () => Effect.fail(new Provider.DeleteInProgress({ message: "still draining" })),
+        }),
+      );
+      expect((yield* getState("A"))?.status).toEqual("replaced");
+
+      // Same props: the plan only finishes deleting the old generation,
+      // which dependents already left. That is not a new replacement.
+      const deleted: string[] = [];
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2" }).pipe(RemovalPolicy.protect());
+      }).pipe(
+        stack.deploy,
+        Effect.provideService(TestResourceHooks, {
+          delete: (id) => Effect.sync(() => void deleted.push(id)),
+        }),
+      );
+      expect(deleted).toEqual(["A"]);
+      const row = yield* getState("A");
+      expect(row?.status).toEqual("created");
+      expect(row?.removalPolicy).toEqual("protect");
+
+      // ...and a fresh replacement is refused again.
+      const error = yield* refusal(
+        Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v3" }).pipe(RemovalPolicy.protect());
+        }).pipe(stack.deploy),
+      );
+      expect(error).toMatchObject({ _tag: "ProtectedResource" });
+    }),
+  );
+
+  test.provider("refuses an Action that takes over a protected resource's FQN", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      const A = Action("A", (input: { value: string }) => Effect.succeed(input));
+      const error = yield* refusal(
+        Effect.gen(function* () {
+          yield* A({ value: "x" });
+        }).pipe(stack.deploy),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+      expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+    }),
+  );
+
+  test.provider("protect(false) keeps the resource's default policy", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "v1" }).pipe(RemovalPolicy.protect(false));
+        yield* TestResource("B", { string: "v1" }).pipe(
+          RemovalPolicy.protect(Effect.succeed(false)),
+        );
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("destroy");
+      expect((yield* getState("B"))?.removalPolicy).toEqual("destroy");
+      yield* stack.destroy();
+    }),
+  );
+});
+
 describe("replaced generation whose delete is in progress", { tags: ["unit", "local"] }, () => {
   const inProgress = () =>
     Effect.fail(new Provider.DeleteInProgress({ message: "still draining" }));
