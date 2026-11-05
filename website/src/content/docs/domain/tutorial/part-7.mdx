@@ -166,17 +166,17 @@ Every span carries `domain.correlation_id`, the id of the first command in the f
 // src/Account.aggregate.ts
 export class Account extends Domain.Aggregate("Account", {
   // ...
-  decide: {
+  decide: (account) => ({
     // ...
-    WithdrawMoney: Effect.fn(function* (s, cmd) {
+    WithdrawMoney: Effect.fn(function* (cmd) {
 +      yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
-      const open = yield* owned(s);
+      const open = yield* owned(account);
       if (cmd.amount > open.balance) {
         return yield* new InsufficientFunds({ balance: open.balance, requested: cmd.amount });
       }
       return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: open.balance - cmd.amount })];
     }),
-  },
+  }),
   // ...
 }) {}
 ```

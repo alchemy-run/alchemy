@@ -60,6 +60,7 @@ More: [Project layout](https://alchemy.run/domain/project-layout).
 - Events carry the outcome `decide` worked out (`balanceAfter`), so `evolve` copies it instead of repeating a rule.
 - Every rejection a command can return is listed in its `rejects`. Callers handle each one with `Effect.catchTag`.
 - Serve a store a projection writes through a `Domain.Query` on an Api, never a hand-written route: its handler checks the caller and scopes the rows it reads.
+- Clients never read an aggregate. Read through a view (one key, live), a stream, or a query; a query's handler may read an aggregate's latest state with `yield* Account` then `accounts.get(ref)`.
 - Policies and projections run at least once. Make their effects idempotent: commands sent from a handler get deterministic ids, and stores key rows by `stream:seq`.
 - Don't wait for a saga in a policy. `start` it, keyed by the aggregate it's about, and react to the events its steps record.
 - A handler resolves its dependencies once in `toLayer` and requires nothing per call.

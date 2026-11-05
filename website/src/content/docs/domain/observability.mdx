@@ -83,11 +83,13 @@ Every span carries `domain.correlation_id`, the id of the first command in the f
 Nothing from a command, an event or a query's input is recorded unless a handler asks for it. Every handler runs inside the engine's span for it, already named (`Domain.decide Account.WithdrawMoney`, `Domain.query AccountLedger`, `Domain.projection Ledger`), so plain Effect annotates that span:
 
 ```typescript title="packages/domain/src/Account/Account.aggregate.ts"
-WithdrawMoney: Effect.fn(function* (s, cmd, { now }) {
-  // Recorded on this command's decide span; nothing else from it is.
-  yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
-  const o = yield* authorized(s);
-  // ...
+decide: (account, { now }) => ({
+  WithdrawMoney: Effect.fn(function* (cmd) {
+    // Recorded on this command's decide span; nothing else from it is.
+    yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
+    const o = yield* authorized(account);
+    // ...
+  }),
 }),
 ```
 

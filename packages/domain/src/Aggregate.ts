@@ -633,12 +633,12 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  *   state: Schema.Struct({ balance: Schema.Int }),
  *   initial: { balance: 0 },
  *   commands: [WithdrawMoney],
- *   decide: {
- *     WithdrawMoney: (s, cmd) =>
- *       cmd.amount > s.balance
- *         ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
- *         : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
- *   },
+ *   decide: (account) => ({
+ *     WithdrawMoney: (cmd) =>
+ *       cmd.amount > account.balance
+ *         ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+ *         : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
+ *   }),
  *   evolve: {
  *     MoneyWithdrawn: (_, e) => ({ balance: e.balanceAfter }),
  *   },
@@ -649,18 +649,34 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * ```
  *
  * ### Authorizing in decide
- * A handler can be an `Effect.fn` that reads what the command's middleware
+ * A handler can be an `Effect.fn` that reads what its command's middleware
  * provides.
  *
  * **Example:** Only the owner may withdraw
  * ```typescript
- * decide: {
- *   WithdrawMoney: Effect.fn(function* (s, cmd) {
+ * decide: (account) => ({
+ *   WithdrawMoney: Effect.fn(function* (cmd) {
  *     const actor = yield* CurrentActor;
- *     if (actor.customerId !== s.owner) return yield* new NotOwner();
- *     return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })];
+ *     if (actor.customerId !== account.owner) return yield* new NotOwner();
+ *     return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })];
  *   }),
- * },
+ * }),
+ * ```
+ *
+ * `decide` itself can be an `Effect.fn` too, for a check every command
+ * shares. It may only read what every command's middleware provides, and
+ * fail with a rejection every command declares.
+ *
+ * **Example:** One owner check for every command
+ * ```typescript
+ * decide: Effect.fn(function* (draft) {
+ *   const editor = yield* Editor;
+ *   if (draft.by !== null && draft.by !== editor) return yield* new NotYours();
+ *   return {
+ *     Write: (cmd) => [new Written({ text: cmd.text, by: editor })],
+ *     Clear: () => (draft.text === "" ? new Empty() : [new Cleared()]),
+ *   };
+ * }),
  * ```
  *
  * ### Sending and scheduling
@@ -686,7 +702,7 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  *     state: Schema.Struct({ balance: Schema.Int }),
  *     initial: { balance: 0 },
  *     commands: [DepositMoney],
- *     decide: { DepositMoney: (s, cmd) => [new MoneyDeposited({ balanceAfter: s.balance + cmd.amount })] },
+ *     decide: (account) => ({ DepositMoney: (cmd) => [new MoneyDeposited({ balanceAfter: account.balance + cmd.amount })] }),
  *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
  *   },
  *   { description: "A bank account, which keeps its own balance." },
@@ -754,10 +770,10 @@ export const commandIdFor = (
  *   state: CustomerState,
  *   initial: { _tag: "New" },
  *   commands: [Register], // declares events: [CustomerRegistered]
- *   decide: {
- *     Register: (s, cmd) =>
- *       s._tag === "Registered" ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
- *   },
+ *   decide: (customer) => ({
+ *     Register: (cmd) =>
+ *       customer._tag === "Registered" ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
+ *   }),
  *   evolve: {
  *     CustomerRegistered: (_, e) => ({ _tag: "Registered", name: e.name }),
  *   },

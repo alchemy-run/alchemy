@@ -48,10 +48,12 @@ export class DepositMoney extends Domain.Command("DepositMoney", {
 The account aggregate decides it against its current state:
 
 ```typescript title="src/Account.aggregate.ts"
-DepositMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+decide: (account) => ({
+  DepositMoney: (cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
+}),
 ```
 
 And a story tests it in memory, in the business's own words: given this history, when this command, then these events.

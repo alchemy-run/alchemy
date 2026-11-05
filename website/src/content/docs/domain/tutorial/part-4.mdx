@@ -142,41 +142,42 @@ import { InsufficientFunds, MoneyWithdrawn, WithdrawMoney } from "./WithdrawMone
 type State = typeof State.Type;
 +
 +// The open account, if the current customer owns it.
-+const owned = Effect.fn(function* (s: State) {
-+  if (s._tag !== "Open") return yield* new NotOpen();
++const owned = Effect.fn(function* (account: State) {
++  if (account._tag !== "Open") return yield* new NotOpen();
 +  const actor = yield* CurrentActor;
-+  if (actor.customerId !== s.owner) return yield* new NotOwner();
-+  return s;
++  if (actor.customerId !== account.owner) return yield* new NotOwner();
++  return account;
 +});
 // ...
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
--    DepositMoney: (s, cmd) =>
--      s._tag !== "Open"
+  decide: (account) => ({
+    OpenAccount: (cmd) =>
+      account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+-    DepositMoney: (cmd) =>
+-      account._tag !== "Open"
 -        ? new NotOpen()
--        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
--    WithdrawMoney: (s, cmd) =>
--      s._tag !== "Open"
+-        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
+-    WithdrawMoney: (cmd) =>
+-      account._tag !== "Open"
 -        ? new NotOpen()
--        : cmd.amount > s.balance
--          ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
--          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
-+    DepositMoney: Effect.fn(function* (s, cmd) {
-+      const open = yield* owned(s);
+-        : cmd.amount > account.balance
+-          ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+-          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
++    DepositMoney: Effect.fn(function* (cmd) {
++      const open = yield* owned(account);
 +      return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: open.balance + cmd.amount })];
 +    }),
-+    WithdrawMoney: Effect.fn(function* (s, cmd) {
-+      const open = yield* owned(s);
++    WithdrawMoney: Effect.fn(function* (cmd) {
++      const open = yield* owned(account);
 +      if (cmd.amount > open.balance) {
 +        return yield* new InsufficientFunds({ balance: open.balance, requested: cmd.amount });
 +      }
 +      return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: open.balance - cmd.amount })];
 +    }),
-  },
+  }),
   evolve: {
 ```
 
-`decide` can be an `Effect.fn` that reads what the middleware provides. `owned` checks the account is open and belongs to the customer asking. `OpenAccount` has no middleware: only the policy sends it.
+A handler can be an `Effect.fn` that reads what its command's middleware provides. `owned` checks the account is open and belongs to the customer asking. `OpenAccount` has no middleware: only the policy sends it.
 
 ## Refuse to register someone else
 
@@ -226,20 +227,21 @@ import { CustomerId } from "./Customer.id.ts";
 export class Customer extends Domain.Aggregate("Customer", {
   // ...
   commands: [RegisterCustomer],
-  decide: {
--    RegisterCustomer: (s, cmd) =>
--      s.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
-+    RegisterCustomer: Effect.fn(function* (s, cmd, { id }) {
+-  decide: (customer) => ({
++  decide: (customer, { id }) => ({
+-    RegisterCustomer: (cmd) =>
+-      customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
++    RegisterCustomer: Effect.fn(function* (cmd) {
 +      const actor = yield* CurrentActor;
 +      if (actor.customerId !== id) return yield* new NotYou();
-+      if (s.name !== null) return yield* new AlreadyRegistered();
++      if (customer.name !== null) return yield* new AlreadyRegistered();
 +      return [new CustomerRegistered({ name: cmd.name })];
 +    }),
-  },
+  }),
   evolve: {
 ```
 
-The third argument to `decide` holds the id of the customer being registered, so a customer can register only themselves.
+The second argument to `decide` holds the id of the customer being registered, so a customer can register only themselves.
 
 ## Guard reads of the summary
 

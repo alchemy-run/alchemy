@@ -67,23 +67,23 @@ export class Account extends Domain.Aggregate("Account", {
   state: AccountState,                    // a Schema, usually a TaggedStruct union
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],  // events derive from the commands
-  decide: {
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
-    DepositMoney: (s, cmd) => {
-      const o = openFor(s);
+  decide: (account, { now }) => ({
+    OpenAccount: (cmd) =>
+      account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+    DepositMoney: (cmd) => {
+      const o = openFor(account);
       if (o._tag !== "Open") return o;
       return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
     },
     // Effect.fn when decide reads middleware context; fail with `return yield* rejection`
-    WithdrawMoney: Effect.fn(function* (s, cmd, { now }) {
-      const o = openFor(s);
+    WithdrawMoney: Effect.fn(function* (cmd) {
+      const o = openFor(account);
       if (o._tag !== "Open") return yield* o;
       if (o.owner !== (yield* CurrentActor).customerId) return yield* new NotOwner();
       if (cmd.amount > o.balance) return yield* new InsufficientFunds({ balance: o.balance });
       return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: o.balance - cmd.amount })];
     }),
-  },
+  }),
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
     // decide already refused a closed account: keep any state the event can't follow

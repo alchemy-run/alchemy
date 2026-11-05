@@ -111,10 +111,12 @@ The caller gets a receipt with the stream and version the command committed at, 
 For a deposit into an open account, `decide` returns one `MoneyDeposited` event carrying the new balance:
 
 ```typescript title="src/Account.aggregate.ts"
-DepositMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+decide: (account) => ({
+  DepositMoney: (cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
+}),
 ```
 
 ## Consumers catch up

@@ -122,12 +122,14 @@ The target isn't part of the command's data. You pass it alongside the command w
 `input` lists the fields the caller provides, each as a schema. You create the command with them, and the aggregate reads them in `decide`.
 
 ```typescript title="src/Account.aggregate.ts"
-WithdrawMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : cmd.amount > s.balance
-      ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
-      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+decide: (account) => ({
+  WithdrawMoney: (cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : cmd.amount > account.balance
+        ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+        : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
+}),
 ```
 
 The schemas also decode the command when it arrives from a client, so `decide` only ever sees well-formed input. A command with no input, like a request to close an account, leaves `input` out.

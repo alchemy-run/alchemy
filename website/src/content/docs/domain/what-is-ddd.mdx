@@ -117,20 +117,20 @@ export class Account extends Domain.Aggregate("Account", {
   state: State,
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],
-  decide: {
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
-    DepositMoney: (s, cmd) =>
-      s._tag !== "Open"
+  decide: (account) => ({
+    OpenAccount: (cmd) =>
+      account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+    DepositMoney: (cmd) =>
+      account._tag !== "Open"
         ? new NotOpen()
-        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
-    WithdrawMoney: (s, cmd) =>
-      s._tag !== "Open"
+        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
+    WithdrawMoney: (cmd) =>
+      account._tag !== "Open"
         ? new NotOpen()
-        : cmd.amount > s.balance
-          ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
-          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
-  },
+        : cmd.amount > account.balance
+          ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
+  }),
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
     MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),

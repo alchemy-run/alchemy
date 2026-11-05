@@ -207,6 +207,33 @@ return Effect.fn(function* ({ min }, page) {
 
 Like a view, a query is a security boundary: to show another audience other rows, declare another query.
 
+## Read an aggregate's current state
+
+A client never reads an aggregate directly. A query can: its handler resolves the aggregate's client and reads an instance's state as of its latest commit, so it needs no `atLeast`. The handler checks the caller, and returns only what `success` declares:
+
+```typescript title="packages/domain/src/Account/AccountBalance.query.ts"
+export class AccountBalance extends Domain.Query("AccountBalance", {
+  input: { account: AccountId },
+  success: Schema.Struct({ balance: Cents, frozen: Schema.Boolean }),
+  middleware: [Session],
+  rejects: [NotOwner, NotOpen],
+}) {}
+
+export const AccountBalanceLive = AccountBalance.toLayer(
+  Effect.gen(function* () {
+    const accounts = yield* Account;
+    return Effect.fn(function* ({ account }) {
+      const state = yield* accounts.get(Account.ref(account));
+      if (state._tag !== "Open") return yield* new NotOpen();
+      yield* mustOwn(state.customerId);
+      return { balance: state.balance, frozen: state.frozen !== null };
+    });
+  }),
+);
+```
+
+For its history, or to follow it live, read a [view](/domain/view) of it instead.
+
 ## Read your own write
 
 A projection writes its store after the command commits, so a plain read can be a moment behind. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads:
@@ -243,6 +270,20 @@ const page = yield* bank.BranchActivity({ branch: "b-9" }, { atLeast: receipt })
 ```
 
 The deposit's one event, `MoneyDeposited { branchId: "b-9" }`, lands on `Ledger` key `a-1` and on `BranchTotals` key `b-9`, and the query waits for both. A projection that doesn't consume the receipt's aggregate has nothing to wait for.
+
+`waitsFor` takes views and streams too, for a handler that reads them. A view is waited on for the keys the command's events reach, and a stream through the projection that writes it:
+
+```typescript
+export class AccountOverview extends Domain.Query("AccountOverview", {
+  input: { account: AccountId },
+  success: Overview,
+  waitsFor: [AccountSummary, AccountCard],
+  middleware: [Session],
+  rejects: [NotOwner],
+}) {}
+```
+
+The handler then reads `summaries.get(ref)` and `cards.peek(ref)` plainly: the engine already waited. A view waits only for an aggregate it reads directly, and a stream only for the aggregates its writer reads.
 
 After commands to two aggregate instances, pass both receipts. The query waits for each, through every projection in `waitsFor`:
 
