@@ -269,7 +269,10 @@
     },
     "UpdateRevealConfiguration": {
       "operation": "updateRevealConfiguration",
-      "actions": ["macie2:UpdateRevealConfiguration"]
+      "actions": ["macie2:UpdateRevealConfiguration"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the reveal configuration names a retrieval role; not granted, so a role is never passed unasked."
+      }
     },
     "UpdateSensitivityInspectionTemplate": {
       "operation": "updateSensitivityInspectionTemplate",

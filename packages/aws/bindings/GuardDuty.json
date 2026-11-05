@@ -331,7 +331,10 @@
     "StartMalwareScan": {
       "operation": "startMalwareScan",
       "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:StartMalwareScan"]
+      "actions": ["guardduty:StartMalwareScan"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes ScanConfiguration.Role; not granted, so a role is never passed unasked."
+      }
     },
     "StartMonitoringMembers": {
       "operation": "startMonitoringMembers",

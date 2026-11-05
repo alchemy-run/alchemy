@@ -98,7 +98,10 @@
         "mode": "required"
       },
       "actions": ["textract:StartDocumentAnalysis"],
-      "note": "No resource-level IAM for this action."
+      "note": "No resource-level IAM for this action.",
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     },
     "StartDocumentTextDetection": {
       "operation": "startDocumentTextDetection",
@@ -106,7 +109,10 @@
         "mode": "required"
       },
       "actions": ["textract:StartDocumentTextDetection"],
-      "note": "No resource-level IAM for this action."
+      "note": "No resource-level IAM for this action.",
+      "reviewed": {
+        "iam:PassRole": "AWS lists it for the operation, but the Textract Bindings suite calls it successfully without it."
+      }
     },
     "StartExpenseAnalysis": {
       "operation": "startExpenseAnalysis",
@@ -114,7 +120,10 @@
         "mode": "required"
       },
       "actions": ["textract:StartExpenseAnalysis"],
-      "note": "No resource-level IAM for this action."
+      "note": "No resource-level IAM for this action.",
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     },
     "StartLendingAnalysis": {
       "operation": "startLendingAnalysis",
@@ -122,7 +131,10 @@
         "mode": "required"
       },
       "actions": ["textract:StartLendingAnalysis"],
-      "note": "No resource-level IAM for this action."
+      "note": "No resource-level IAM for this action.",
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     }
   }
 }

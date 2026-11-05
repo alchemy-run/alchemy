@@ -16,7 +16,10 @@
         "mode": "required"
       },
       "actions": ["shield:DescribeAttack"],
-      "arns": ["arn:${Partition}:shield::${Account}:attack/*"]
+      "arns": ["arn:${Partition}:shield::${Account}:attack/*"],
+      "reviewed": {
+        "shield:DescribeProtectionGroup": "AWS lists it for the operation, but the Shield Bindings suite calls it successfully without it."
+      }
     },
     "DescribeAttackStatistics": {
       "operation": "describeAttackStatistics",

@@ -79,7 +79,10 @@
         "interface": "InitiateJobRequest",
         "omit": ["accountId", "vaultName"]
       },
-      "actions": ["glacier:InitiateJob"]
+      "actions": ["glacier:InitiateJob"],
+      "reviewed": {
+        "glacier:GetJobOutput": "Reading the job's output is the separate GetJobOutput binding."
+      }
     },
     "InitiateMultipartUpload": {
       "operation": "initiateMultipartUpload",

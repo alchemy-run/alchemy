@@ -58,7 +58,7 @@ export const CreatePresignedUrlHttp = Layer.effect(
   CreatePresignedUrl,
   makeQAppHttpBinding({
     capability: "CreatePresignedUrl",
-    iamActions: ["qapps:CreatePresignedUrl"],
+    iamActions: ["qapps:CreatePresignedUrl", "qapps:ImportDocument"],
     operation: qapps.createPresignedUrl,
     injectAppId: true,
   }),

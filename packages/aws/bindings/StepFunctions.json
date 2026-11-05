@@ -104,7 +104,10 @@
         "omit": ["stateMachineArn"]
       },
       "builder": "makeStateMachineArnHttpBinding",
-      "actions": ["states:StartExecution"]
+      "actions": ["states:StartExecution"],
+      "reviewed": {
+        "states:DescribeExecution": "AWS lists it for the operation, but the StepFunctions Bindings suite calls it successfully without it."
+      }
     },
     "StopExecution": {
       "operation": "stopExecution",
@@ -124,7 +127,11 @@
         "omit": []
       },
       "builder": "makeSfnServiceHttpBinding",
-      "actions": ["states:TestState"]
+      "actions": ["states:TestState"],
+      "reviewed": {
+        "iam:PassRole": "AWS lists it for the operation, but the StepFunctions Bindings suite calls it successfully without it.",
+        "states:RevealSecrets": "AWS lists it for the operation, but the StepFunctions Bindings suite calls it successfully without it."
+      }
     },
     "UpdateMapRun": {
       "operation": "updateMapRun",

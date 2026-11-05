@@ -142,7 +142,10 @@
         "omit": ["graphIdentifier"],
         "inline": true
       },
-      "actions": ["neptune-graph:GetQueryStatus"]
+      "actions": ["neptune-graph:GetQueryStatus"],
+      "reviewed": {
+        "neptune-graph:GetQueryStatus": "Neptune Analytics authorizes GetQuery as neptune-graph:GetQueryStatus (Neptune Analytics API reference); not verified live."
+      }
     },
     "ListExportTasks": {
       "operation": "listExportTasks",

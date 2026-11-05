@@ -59,7 +59,10 @@
       "actions": ["notifications:GetManagedNotificationEvent"],
       "arns": [
         "arn:${Partition}:notifications::${Account}:managed-notification-configuration/category/*/sub-category/*/event/*"
-      ]
+      ],
+      "reviewed": {
+        "notifications:AccessSensitiveEvents": "AWS lists it for the operation, but the Notifications Bindings suite calls it successfully without it."
+      }
     },
     "GetNotificationEvent": {
       "operation": "getNotificationEvent",
@@ -99,7 +102,10 @@
         "interface": "ListManagedNotificationEventsRequest",
         "omit": []
       },
-      "actions": ["notifications:ListManagedNotificationEvents"]
+      "actions": ["notifications:ListManagedNotificationEvents"],
+      "reviewed": {
+        "notifications:AccessSensitiveEvents": "AWS lists it for the operation, but the Notifications Bindings suite calls it successfully without it."
+      }
     },
     "ListNotificationEvents": {
       "operation": "listNotificationEvents",

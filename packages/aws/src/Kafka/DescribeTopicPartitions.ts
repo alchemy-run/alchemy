@@ -50,6 +50,7 @@ export const DescribeTopicPartitionsHttp = Layer.effect(
       "kafka:DescribeTopicPartitions",
       "kafka-cluster:Connect",
       "kafka-cluster:DescribeTopic",
+      "kafka-cluster:DescribeTopicDynamicConfiguration",
     ],
     topicScoped: true,
   }),

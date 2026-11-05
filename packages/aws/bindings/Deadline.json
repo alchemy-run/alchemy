@@ -32,7 +32,8 @@
       },
       "actions": ["deadline:CreateJob"],
       "reviewed": {
-        "deadline:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "deadline:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "deadline:GetJobTemplate": "AWS lists it for the operation, but the Deadline Bindings suite calls it successfully without it."
       }
     },
     "GetJob": {

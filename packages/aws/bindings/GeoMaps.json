@@ -21,14 +21,20 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-maps:GetGlyphs"]
+      "actions": ["geo-maps:GetGlyphs"],
+      "reviewed": {
+        "geo-maps:GetGlyphs": "Not in AWS's reference; the GeoMaps Bindings suite calls the operation successfully with it."
+      }
     },
     "GetSprites": {
       "operation": "getSprites",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-maps:GetSprites"]
+      "actions": ["geo-maps:GetSprites"],
+      "reviewed": {
+        "geo-maps:GetSprites": "Not in AWS's reference; the GeoMaps Bindings suite calls the operation successfully with it."
+      }
     },
     "GetStaticMap": {
       "operation": "getStaticMap",
@@ -43,7 +49,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-maps:GetStyleDescriptor"]
+      "actions": ["geo-maps:GetStyleDescriptor"],
+      "reviewed": {
+        "geo-maps:GetStyleDescriptor": "Not in AWS's reference; the GeoMaps Bindings suite calls the operation successfully with it."
+      }
     },
     "GetTile": {
       "operation": "getTile",

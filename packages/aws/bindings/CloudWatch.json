@@ -49,6 +49,9 @@
       "withTs": {
         "identifier": "(alarm: AlarmResource) => alarm.alarmName",
         "resourceArn": "(alarm: AlarmResource) => alarm.alarmArn"
+      },
+      "reviewed": {
+        "cloudwatch:DescribeAlarmContributors": "Not in AWS's reference; the CloudWatch Bindings suite calls the operation successfully with it."
       }
     },
     "DescribeAlarmHistory": {
@@ -255,6 +258,9 @@
       },
       "imports": {
         "./binding-common.ts": ["getTaggableResourceArn"]
+      },
+      "reviewed": {
+        "oam:ListTagsForResource": "AWS lists it for the operation, but the CloudWatch Bindings suite calls it successfully without it."
       }
     },
     "PutMetricData": {

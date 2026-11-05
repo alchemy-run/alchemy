@@ -68,7 +68,10 @@
         "interface": "GetTemporaryGlueTableCredentialsRequest",
         "omit": []
       },
-      "actions": ["lakeformation:GetDataAccess"]
+      "actions": ["lakeformation:GetDataAccess"],
+      "reviewed": {
+        "lakeformation:GetDataAccess": "Lake Formation authorizes temporary table credentials as lakeformation:GetDataAccess (Lake Formation API reference); not verified live."
+      }
     },
     "ListLFTags": {
       "operation": "listLFTags",

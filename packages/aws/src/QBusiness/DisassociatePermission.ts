@@ -56,6 +56,6 @@ export const DisassociatePermissionHttp = Layer.effect(
   makeQBusinessApplicationHttpBinding({
     tag: "AWS.QBusiness.DisassociatePermission",
     operation: qbusiness.disassociatePermission,
-    actions: ["qbusiness:DisassociatePermission"],
+    actions: ["qbusiness:DisassociatePermission", "qbusiness:PutResourcePolicy"],
   }),
 );

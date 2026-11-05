@@ -249,6 +249,68 @@
       "UpdateCertificateOptions": ["acm:UpdateCertificateOptions"]
     }
   },
+  "acm-pca": {
+    "actions": {
+      "CreateCertificateAuthority": [],
+      "CreateCertificateAuthorityAuditReport": ["certificate-authority*"],
+      "CreatePermission": ["certificate-authority*"],
+      "DeleteCertificateAuthority": ["certificate-authority*"],
+      "DeletePermission": ["certificate-authority*"],
+      "DeletePolicy": ["certificate-authority*"],
+      "DescribeCertificateAuthority": ["certificate-authority*"],
+      "DescribeCertificateAuthorityAuditReport": ["certificate-authority*"],
+      "GetCertificate": ["certificate-authority*"],
+      "GetCertificateAuthorityCertificate": ["certificate-authority*"],
+      "GetCertificateAuthorityCsr": ["certificate-authority*"],
+      "GetPolicy": ["certificate-authority*"],
+      "ImportCertificateAuthorityCertificate": ["certificate-authority*"],
+      "IssueCertificate": ["certificate-authority*"],
+      "ListCertificateAuthorities": [],
+      "ListPermissions": ["certificate-authority*"],
+      "ListTags": ["certificate-authority*"],
+      "PutPolicy": ["certificate-authority*"],
+      "RestoreCertificateAuthority": ["certificate-authority*"],
+      "RevokeCertificate": ["certificate-authority*"],
+      "TagCertificateAuthority": ["certificate-authority*"],
+      "UntagCertificateAuthority": ["certificate-authority*"],
+      "UpdateCertificateAuthority": ["certificate-authority*"]
+    },
+    "resources": {
+      "certificate-authority": [
+        "arn:${Partition}:acm-pca:${Region}:${Account}:certificate-authority/${CertificateAuthorityId}"
+      ]
+    },
+    "operations": {
+      "CreateCertificateAuthority": [
+        "acm-pca:CreateCertificateAuthority",
+        "acm-pca:TagCertificateAuthority"
+      ],
+      "CreateCertificateAuthorityAuditReport": ["acm-pca:CreateCertificateAuthorityAuditReport"],
+      "CreatePermission": ["acm-pca:CreatePermission"],
+      "DeleteCertificateAuthority": ["acm-pca:DeleteCertificateAuthority"],
+      "DeletePermission": ["acm-pca:DeletePermission"],
+      "DeletePolicy": ["acm-pca:DeletePolicy"],
+      "DescribeCertificateAuthority": ["acm-pca:DescribeCertificateAuthority"],
+      "DescribeCertificateAuthorityAuditReport": [
+        "acm-pca:DescribeCertificateAuthorityAuditReport"
+      ],
+      "GetCertificate": ["acm-pca:GetCertificate"],
+      "GetCertificateAuthorityCertificate": ["acm-pca:GetCertificateAuthorityCertificate"],
+      "GetCertificateAuthorityCsr": ["acm-pca:GetCertificateAuthorityCsr"],
+      "GetPolicy": ["acm-pca:GetPolicy"],
+      "ImportCertificateAuthorityCertificate": ["acm-pca:ImportCertificateAuthorityCertificate"],
+      "IssueCertificate": ["acm-pca:IssueCertificate"],
+      "ListCertificateAuthorities": ["acm-pca:ListCertificateAuthorities"],
+      "ListPermissions": ["acm-pca:ListPermissions"],
+      "ListTags": ["acm-pca:ListTags"],
+      "PutPolicy": ["acm-pca:PutPolicy"],
+      "RestoreCertificateAuthority": ["acm-pca:RestoreCertificateAuthority"],
+      "RevokeCertificate": ["acm-pca:RevokeCertificate"],
+      "TagCertificateAuthority": ["acm-pca:TagCertificateAuthority"],
+      "UntagCertificateAuthority": ["acm-pca:UntagCertificateAuthority"],
+      "UpdateCertificateAuthority": ["acm-pca:UpdateCertificateAuthority"]
+    }
+  },
   "aiops": {
     "actions": {
       "CreateInvestigation": ["investigation-group*"],
@@ -581,6 +643,84 @@
       "UpdateSecurityConfig": ["aoss:UpdateSecurityConfig"],
       "UpdateSecurityPolicy": ["aoss:UpdateSecurityPolicy"],
       "UpdateVpcEndpoint": ["aoss:UpdateVpcEndpoint"]
+    }
+  },
+  "appflow": {
+    "actions": {
+      "CancelFlowExecutions": ["flow*"],
+      "CreateConnectorProfile": [],
+      "CreateFlow": [],
+      "DeleteConnectorProfile": ["connectorprofile*"],
+      "DeleteFlow": ["flow*"],
+      "DescribeConnector": ["connector*"],
+      "DescribeConnectorEntity": ["connectorprofile*"],
+      "DescribeConnectorFields": ["connectorprofile*"],
+      "DescribeConnectorProfiles": [],
+      "DescribeConnectors": [],
+      "DescribeFlow": ["flow*"],
+      "DescribeFlowExecution": ["flow*"],
+      "DescribeFlowExecutionRecords": ["flow*"],
+      "DescribeFlows": [],
+      "ListConnectorEntities": ["connectorprofile*"],
+      "ListConnectorFields": ["connectorprofile*"],
+      "ListConnectors": ["connector*"],
+      "ListFlows": ["flow*"],
+      "ListTagsForResource": ["flow*"],
+      "RegisterConnector": [],
+      "ResetConnectorMetadataCache": ["connectorprofile*"],
+      "RunFlow": ["flow*"],
+      "StartFlow": ["flow*"],
+      "StopFlow": ["flow*"],
+      "TagResource": ["connector", "flow"],
+      "UnRegisterConnector": ["connector*"],
+      "UntagResource": ["connector", "flow"],
+      "UpdateConnectorProfile": ["connectorprofile*"],
+      "UpdateConnectorRegistration": ["connector*"],
+      "UpdateFlow": ["flow*"],
+      "UseConnectorProfile": ["connectorprofile*"]
+    },
+    "resources": {
+      "connector": ["arn:${Partition}:appflow:${Region}:${Account}:connector/${ConnectorLabel}"],
+      "connectorprofile": [
+        "arn:${Partition}:appflow:${Region}:${Account}:connectorprofile/${ProfileName}"
+      ],
+      "flow": ["arn:${Partition}:appflow:${Region}:${Account}:flow/${FlowName}"]
+    },
+    "operations": {
+      "CancelFlowExecutions": ["appflow:CancelFlowExecutions"],
+      "CreateConnectorProfile": [
+        "appflow:CreateConnectorProfile",
+        "appflow:DescribeConnector",
+        "iam:PassRole"
+      ],
+      "CreateFlow": [
+        "appflow:CreateFlow",
+        "iam:PassRole",
+        "appflow:TagResource",
+        "appflow:UseConnectorProfile"
+      ],
+      "DeleteConnectorProfile": ["appflow:DeleteConnectorProfile"],
+      "DeleteFlow": ["appflow:DeleteFlow"],
+      "DescribeConnector": ["appflow:DescribeConnector"],
+      "DescribeConnectorEntity": ["appflow:DescribeConnectorEntity"],
+      "DescribeConnectorProfiles": ["appflow:DescribeConnectorProfiles"],
+      "DescribeConnectors": ["appflow:DescribeConnectors"],
+      "DescribeFlow": ["appflow:DescribeFlow"],
+      "DescribeFlowExecutionRecords": ["appflow:DescribeFlowExecutionRecords"],
+      "ListConnectorEntities": ["appflow:ListConnectorEntities"],
+      "ListConnectors": ["appflow:ListConnectors"],
+      "ListFlows": ["appflow:ListFlows"],
+      "ListTagsForResource": ["appflow:ListTagsForResource"],
+      "RegisterConnector": ["appflow:RegisterConnector"],
+      "ResetConnectorMetadataCache": ["appflow:ResetConnectorMetadataCache"],
+      "StartFlow": ["appflow:StartFlow"],
+      "StopFlow": ["appflow:StopFlow"],
+      "TagResource": ["appflow:TagResource"],
+      "UnregisterConnector": ["appflow:UnRegisterConnector"],
+      "UntagResource": ["appflow:UntagResource"],
+      "UpdateConnectorProfile": ["iam:PassRole", "appflow:UpdateConnectorProfile"],
+      "UpdateConnectorRegistration": ["appflow:UpdateConnectorRegistration"],
+      "UpdateFlow": ["iam:PassRole", "appflow:UpdateFlow", "appflow:UseConnectorProfile"]
     }
   },
   "application-autoscaling": {
@@ -14072,6 +14212,7 @@
       "GetJobBookmark": ["glue:GetJobBookmark"],
       "GetJobRun": ["glue:GetJobRun"],
       "GetJobRuns": ["glue:GetJobRuns"],
+      "GetJobUpgradeAnalysis": ["glue:GetJobUpgradeAnalysis"],
       "GetJobs": ["glue:GetJobs", "iam:PassRole"],
       "GetMLTaskRun": ["glue:GetMLTaskRun"],
       "GetMLTaskRuns": ["glue:GetMLTaskRuns"],
@@ -14195,6 +14336,7 @@
       "StartExportLabelsTaskRun": ["glue:StartExportLabelsTaskRun"],
       "StartImportLabelsTaskRun": ["glue:StartImportLabelsTaskRun"],
       "StartJobRun": ["glue:GetUsageProfile", "glue:StartJobRun"],
+      "StartJobUpgradeAnalysis": ["glue:StartJobUpgradeAnalysis"],
       "StartMLEvaluationTaskRun": ["glue:StartMLEvaluationTaskRun"],
       "StartMLLabelingSetGenerationTaskRun": ["glue:StartMLLabelingSetGenerationTaskRun"],
       "StartMaterializedViewRefreshTaskRun": [],
@@ -14204,6 +14346,7 @@
       "StopColumnStatisticsTaskRunSchedule": ["glue:StopColumnStatisticsTaskRunSchedule"],
       "StopCrawler": ["glue:StopCrawler"],
       "StopCrawlerSchedule": ["glue:StopCrawlerSchedule"],
+      "StopJobUpgradeAnalysis": ["glue:StopJobUpgradeAnalysis"],
       "StopMaterializedViewRefreshTaskRun": [],
       "StopSession": ["glue:StopSession"],
       "StopTrigger": ["glue:StopTrigger"],
@@ -23677,6 +23820,7 @@
         "quicksight:DescribeQuickSightQSearchConfiguration"
       ],
       "DescribeRefreshSchedule": ["quicksight:DescribeRefreshSchedule"],
+      "DescribeResourcePermissions": [],
       "DescribeRoleCustomPermission": ["quicksight:DescribeRoleCustomPermission"],
       "DescribeSelfUpgradeConfiguration": ["quicksight:DescribeSelfUpgradeConfiguration"],
       "DescribeSpace": ["quicksight:DescribeSpace"],
@@ -23853,6 +23997,7 @@
       "UpdateQPersonalizationConfiguration": ["quicksight:UpdateQPersonalizationConfiguration"],
       "UpdateQuickSightQSearchConfiguration": ["quicksight:UpdateQuickSightQSearchConfiguration"],
       "UpdateRefreshSchedule": ["quicksight:UpdateRefreshSchedule"],
+      "UpdateResourcePermissions": ["iam:PassRole", "quicksight:UpdateResourcePermissions"],
       "UpdateRoleCustomPermission": ["quicksight:UpdateRoleCustomPermission"],
       "UpdateSPICECapacityConfiguration": ["quicksight:UpdateSPICECapacityConfiguration"],
       "UpdateSelfUpgrade": ["quicksight:UpdateSelfUpgrade"],
@@ -25981,6 +26126,7 @@
       "RenewDomain": ["route53domains:RenewDomain"],
       "ResendContactReachabilityEmail": ["route53domains:ResendContactReachabilityEmail"],
       "ResendOperationAuthorization": ["route53domains:ResendOperationAuthorization"],
+      "RestoreDomain": [],
       "RetrieveDomainAuthCode": ["route53domains:RetrieveDomainAuthCode"],
       "TransferDomain": ["route53domains:TransferDomain"],
       "TransferDomainToAnotherAwsAccount": ["route53domains:TransferDomainToAnotherAwsAccount"],

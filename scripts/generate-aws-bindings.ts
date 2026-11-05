@@ -76,6 +76,11 @@ interface BuilderConfig {
   grants?: "resource" | "*";
   /** The builder takes `arns`, granting on them instead of `*`. */
   arns?: boolean;
+  /**
+   * The builder grants `<actionPrefix>:<binding name>` itself (ACM PCA's
+   * `acm-pca:${options.action}`) instead of taking `actions`. Read by the audit.
+   */
+  actionPrefix?: string;
 }
 
 interface RequestConfig {
@@ -460,7 +465,13 @@ interface Finding {
 const audit = (config: ServiceConfig, actionsTable: ActionsTable): Finding[] => {
   const findings: Finding[] = [];
   for (const [name, binding] of Object.entries(config.bindings)) {
-    const granted = binding.actions ?? [];
+    // A builder's `passRole` option adds an `iam:PassRole` statement
+    // (limited by `iam:PassedToService`).
+    const builderConfig = config.builders[binding.builder ?? config.builder];
+    const own =
+      binding.actions ??
+      (builderConfig?.actionPrefix ? [`${builderConfig.actionPrefix}:${name}`] : []);
+    const granted = [...own, ...(binding.with?.passRole === true ? ["iam:PassRole"] : [])];
     const prefixes = new Set(granted.map((a) => a.split(":")[0]!));
     const apiOperation = binding.operation[0]!.toUpperCase() + binding.operation.slice(1);
     let needed: string[] | undefined;
@@ -469,6 +480,27 @@ const audit = (config: ServiceConfig, actionsTable: ActionsTable): Finding[] => 
       const hit =
         ops && Object.keys(ops).find((k) => k.toLowerCase() === apiOperation.toLowerCase());
       if (hit) needed = ops[hit];
+    }
+    // No operation entry, but the action named after the operation exists:
+    // AWS authorizes the operation as that action.
+    if (
+      (needed === undefined || needed.length === 0) &&
+      own.some((a) => {
+        const found = lookupAction(actionsTable, a);
+        return found !== undefined && a.split(":")[1]!.toLowerCase() === apiOperation.toLowerCase();
+      })
+    ) {
+      needed = own.filter((a) => a.split(":")[1]!.toLowerCase() === apiOperation.toLowerCase());
+    }
+    const reviewedActions = new Set(
+      Object.keys(binding.reviewed ?? {}).map((x) => x.toLowerCase()),
+    );
+    if (
+      (needed === undefined || needed.length === 0) &&
+      own.length > 0 &&
+      own.every((a) => reviewedActions.has(a.toLowerCase()))
+    ) {
+      continue;
     }
     if (needed === undefined || needed.length === 0) {
       findings.push({
@@ -488,11 +520,11 @@ const audit = (config: ServiceConfig, actionsTable: ActionsTable): Finding[] => 
     if (extra.length) findings.push({ name, kind: "extra", detail: extra.join(", ") });
     const builder = config.builders[binding.builder ?? config.builder];
     if (builder?.grants === "*" && !binding.arns?.length && binding.unscoped === undefined) {
-      const scopable = granted.filter(
+      const scopable = (binding.actions ?? []).filter(
         (a) => (lookupAction(actionsTable, a)?.types.length ?? 0) > 0,
       );
       if (scopable.length) {
-        const arns = scopedArns(actionsTable, granted);
+        const arns = scopedArns(actionsTable, binding.actions ?? []);
         findings.push({
           name,
           kind: "scopable",
@@ -519,6 +551,7 @@ const refreshActions = () => {
     const config = JSON.parse(
       fs.readFileSync(path.join(bindingsDir, file), "utf8"),
     ) as ServiceConfig;
+    for (const b of Object.values(config.builders)) if (b.actionPrefix) used.add(b.actionPrefix);
     for (const b of Object.values(config.bindings))
       for (const a of b.actions ?? []) used.add(a.split(":")[0]!);
   }

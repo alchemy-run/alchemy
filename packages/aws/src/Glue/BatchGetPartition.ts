@@ -52,7 +52,7 @@ export const BatchGetPartitionHttp = Layer.effect(
   makeGlueTableHttpBinding({
     tag: "AWS.Glue.BatchGetPartition",
     operation: glue.batchGetPartition,
-    actions: ["glue:BatchGetPartition", "glue:GetPartition"],
+    actions: ["glue:BatchGetPartition"],
     tableNameKey: "TableName",
   }),
 );

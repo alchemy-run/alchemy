@@ -35,7 +35,10 @@
         "interface": "GetFunctionRequest",
         "omit": ["FunctionName"]
       },
-      "actions": ["lambda:GetFunction"]
+      "actions": ["lambda:GetFunction"],
+      "reviewed": {
+        "lambda:ListTags": "AWS lists it for the operation, but the Lambda Bindings suite calls it successfully without it."
+      }
     },
     "InvokeFunction": {
       "operation": "invoke",

@@ -63,7 +63,10 @@
         "omit": ["StackName"],
         "inline": true
       },
-      "actions": ["cloudformation:DescribeStacks"]
+      "actions": ["cloudformation:DescribeStacks"],
+      "reviewed": {
+        "cloudformation:ListStacks": "AWS lists it for the operation, but the CloudFormation Bindings suite calls it successfully without it."
+      }
     },
     "DetectStackDrift": {
       "operation": "detectStackDrift",
@@ -74,7 +77,7 @@
         "inline": true
       },
       "actions": ["cloudformation:DetectStackDrift", "cloudformation:DetectStackResourceDrift"],
-      "note": "DetectStackDrift authorizes BOTH actions on the stack \u2014 the per-stack call fans out to per-resource drift checks and AWS rejects the call with AccessDenied on cloudformation:DetectStackResourceDrift alone."
+      "note": "DetectStackDrift authorizes BOTH actions on the stack — the per-stack call fans out to per-resource drift checks and AWS rejects the call with AccessDenied on cloudformation:DetectStackResourceDrift alone."
     },
     "GetTemplate": {
       "operation": "getTemplate",

@@ -16,7 +16,8 @@
         "action": "name",
         "operation": "operation"
       },
-      "grants": "resource"
+      "grants": "resource",
+      "actionPrefix": "appflow"
     }
   },
   "bindings": {

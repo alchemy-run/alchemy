@@ -28,7 +28,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["dataexchange:AcceptDataGrant"]
+      "actions": ["dataexchange:AcceptDataGrant"],
+      "reviewed": {
+        "aws-marketplace:Subscribe": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
+      }
     },
     "CancelJob": {
       "operation": "cancelJob",
@@ -44,7 +47,11 @@
       },
       "actions": ["dataexchange:CreateDataGrant"],
       "reviewed": {
-        "dataexchange:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "dataexchange:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "dataexchange:CreateJob": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
+        "dataexchange:PublishDataSet": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
+        "dataexchange:PublishToDataGrant": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
+        "dataexchange:StartJob": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
       }
     },
     "CreateJob": {
@@ -53,7 +60,10 @@
         "mode": "required"
       },
       "actions": ["dataexchange:CreateJob"],
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:dataexchange:${Region}:${Account}:jobs/*), the call was denied live in the DataExchange Bindings suite; the grant stays on *."
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:dataexchange:${Region}:${Account}:jobs/*), the call was denied live in the DataExchange Bindings suite; the grant stays on *.",
+      "reviewed": {
+        "iam:PassRole": "Needed only for job types that pass a role; not granted, so a role is never passed unasked."
+      }
     },
     "DeleteAsset": {
       "operation": "deleteAsset",
@@ -77,7 +87,12 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["dataexchange:DeleteDataGrant"]
+      "actions": ["dataexchange:DeleteDataGrant"],
+      "reviewed": {
+        "dataexchange:CreateJob": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
+        "dataexchange:DeleteDataSet": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
+        "dataexchange:StartJob": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
+      }
     },
     "GetAsset": {
       "operation": "getAsset",
@@ -101,7 +116,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["dataexchange:GetDataGrant"]
+      "actions": ["dataexchange:GetDataGrant"],
+      "reviewed": {
+        "dataexchange:GetDataSet": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
+      }
     },
     "GetDataSet": {
       "operation": "getDataSet",
@@ -125,7 +143,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["dataexchange:GetReceivedDataGrant"]
+      "actions": ["dataexchange:GetReceivedDataGrant"],
+      "reviewed": {
+        "dataexchange:GetDataSet": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
+      }
     },
     "GetRevision": {
       "operation": "getRevision",
@@ -138,7 +159,10 @@
     },
     "ListDataGrants": {
       "operation": "listDataGrants",
-      "actions": ["dataexchange:ListDataGrants"]
+      "actions": ["dataexchange:ListDataGrants"],
+      "reviewed": {
+        "dataexchange:ListDataSets": "AWS lists it for the operation, but the DataExchange Bindings suite calls it successfully without it."
+      }
     },
     "ListDataSetRevisions": {
       "operation": "listDataSetRevisions",
@@ -165,7 +189,10 @@
     },
     "ListReceivedDataGrants": {
       "operation": "listReceivedDataGrants",
-      "actions": ["dataexchange:ListReceivedDataGrants"]
+      "actions": ["dataexchange:ListReceivedDataGrants"],
+      "reviewed": {
+        "dataexchange:ListDataSets": "AWS lists it for the operation, but the DataExchange Bindings suite calls it successfully without it."
+      }
     },
     "ListRevisionAssets": {
       "operation": "listRevisionAssets",

@@ -16,7 +16,10 @@
         "mode": "required"
       },
       "actions": ["resource-groups:CancelTagSyncTask"],
-      "arns": ["arn:${Partition}:resource-groups:${Region}:${Account}:group/*"]
+      "arns": ["arn:${Partition}:resource-groups:${Region}:${Account}:group/*"],
+      "reviewed": {
+        "resource-groups:DeleteGroup": "AWS lists it for the operation, but the ResourceGroups Bindings suite calls it successfully without it."
+      }
     },
     "GetAccountSettings": {
       "operation": "getAccountSettings",

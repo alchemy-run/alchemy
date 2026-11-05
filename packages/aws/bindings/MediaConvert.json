@@ -33,7 +33,8 @@
         "passRole": true
       },
       "reviewed": {
-        "mediaconvert:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "mediaconvert:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "iam:PassRole": "AWS lists it for the operation, but the MediaConvert Bindings suite calls it successfully without it."
       }
     },
     "GetJob": {
@@ -42,14 +43,20 @@
         "mode": "required"
       },
       "actions": ["mediaconvert:GetJob"],
-      "arns": ["arn:${Partition}:mediaconvert:${Region}:${Account}:jobs/*"]
+      "arns": ["arn:${Partition}:mediaconvert:${Region}:${Account}:jobs/*"],
+      "reviewed": {
+        "mediaconvert:ListJobs": "AWS lists it for the operation, but the MediaConvert Bindings suite calls it successfully without it."
+      }
     },
     "GetJobsQueryResults": {
       "operation": "getJobsQueryResults",
       "request": {
         "mode": "required"
       },
-      "actions": ["mediaconvert:GetJobsQueryResults"]
+      "actions": ["mediaconvert:GetJobsQueryResults"],
+      "reviewed": {
+        "mediaconvert:GetJobsQueryResults": "Not in AWS's reference; the MediaConvert Bindings suite calls the operation successfully with it."
+      }
     },
     "ListJobs": {
       "operation": "listJobs",
@@ -69,7 +76,11 @@
     "StartJobsQuery": {
       "operation": "startJobsQuery",
       "actions": ["mediaconvert:StartJobsQuery", "mediaconvert:CreateJobsQuery"],
-      "note": "The wire operation is StartJobsQuery but IAM authorizes the creation of the query object as CreateJobsQuery — grant both spellings."
+      "note": "The wire operation is StartJobsQuery but IAM authorizes the creation of the query object as CreateJobsQuery — grant both spellings.",
+      "reviewed": {
+        "mediaconvert:StartJobsQuery": "Not in AWS's reference; the MediaConvert Bindings suite calls the operation successfully with it.",
+        "mediaconvert:CreateJobsQuery": "Not in AWS's reference; the MediaConvert Bindings suite calls the operation successfully with it."
+      }
     }
   }
 }

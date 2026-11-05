@@ -50,7 +50,7 @@
         "interface": "BatchDeletePartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:BatchDeletePartition", "glue:DeletePartition"],
+      "actions": ["glue:BatchDeletePartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -63,7 +63,7 @@
         "interface": "BatchGetPartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:BatchGetPartition", "glue:GetPartition"],
+      "actions": ["glue:BatchGetPartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -87,7 +87,7 @@
         "interface": "BatchUpdatePartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:BatchUpdatePartition", "glue:UpdatePartition"],
+      "actions": ["glue:BatchUpdatePartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -201,6 +201,9 @@
       "actions": ["glue:GetTable"],
       "with": {
         "tableNameKey": "Name"
+      },
+      "reviewed": {
+        "athena:GetTable": "AWS lists it for the operation, but the Glue Bindings suite calls it successfully without it."
       }
     },
     "GetTables": {
@@ -212,7 +215,10 @@
         "omit": ["DatabaseName", "CatalogId"]
       },
       "builder": "makeGlueDatabaseHttpBinding",
-      "actions": ["glue:GetTables"]
+      "actions": ["glue:GetTables"],
+      "reviewed": {
+        "athena:GetTables": "AWS lists it for the operation, but the Glue Bindings suite calls it successfully without it."
+      }
     },
     "ResetJobBookmark": {
       "operation": "resetJobBookmark",
@@ -247,7 +253,10 @@
         "omit": ["JobName"]
       },
       "builder": "makeGlueJobHttpBinding",
-      "actions": ["glue:StartJobRun"]
+      "actions": ["glue:StartJobRun"],
+      "reviewed": {
+        "glue:GetUsageProfile": "AWS lists it for the operation, but the Glue Bindings suite calls it successfully without it."
+      }
     },
     "StopCrawler": {
       "operation": "stopCrawler",

@@ -290,35 +290,50 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["rekognition:StartCelebrityRecognition"]
+      "actions": ["rekognition:StartCelebrityRecognition"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     },
     "StartContentModeration": {
       "operation": "startContentModeration",
       "request": {
         "mode": "required"
       },
-      "actions": ["rekognition:StartContentModeration"]
+      "actions": ["rekognition:StartContentModeration"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     },
     "StartFaceDetection": {
       "operation": "startFaceDetection",
       "request": {
         "mode": "required"
       },
-      "actions": ["rekognition:StartFaceDetection"]
+      "actions": ["rekognition:StartFaceDetection"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     },
     "StartFaceSearch": {
       "operation": "startFaceSearch",
       "request": {
         "mode": "required"
       },
-      "actions": ["rekognition:StartFaceSearch"]
+      "actions": ["rekognition:StartFaceSearch"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     },
     "StartLabelDetection": {
       "operation": "startLabelDetection",
       "request": {
         "mode": "required"
       },
-      "actions": ["rekognition:StartLabelDetection"]
+      "actions": ["rekognition:StartLabelDetection"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     },
     "StartMediaAnalysisJob": {
       "operation": "startMediaAnalysisJob",
@@ -346,7 +361,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["rekognition:StartSegmentDetection"]
+      "actions": ["rekognition:StartSegmentDetection"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     },
     "StartStreamProcessor": {
       "operation": "startStreamProcessor",
@@ -360,7 +378,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["rekognition:StartTextDetection"]
+      "actions": ["rekognition:StartTextDetection"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
+      }
     },
     "StopProjectVersion": {
       "operation": "stopProjectVersion",

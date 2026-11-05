@@ -59,7 +59,8 @@
       "builder": "makeDataSyncTaskHttpBinding",
       "actions": ["datasync:StartTaskExecution"],
       "reviewed": {
-        "datasync:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "datasync:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "iam:PassRole": "AWS lists it for the operation, but the DataSync Bindings suite calls it successfully without it."
       }
     },
     "UpdateTaskExecution": {

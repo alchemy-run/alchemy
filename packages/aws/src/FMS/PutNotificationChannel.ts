@@ -48,5 +48,6 @@ export const PutNotificationChannelHttp = Layer.effect(
     capability: "PutNotificationChannel",
     iamActions: ["fms:PutNotificationChannel"],
     operation: fms.putNotificationChannel,
+    passRole: true,
   }),
 );

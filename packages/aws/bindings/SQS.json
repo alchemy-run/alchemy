@@ -23,7 +23,12 @@
       },
       "builder": "makeQueueGrantHttpBinding",
       "actions": ["sqs:CancelMessageMoveTask"],
-      "note": "The request identifies the task by `TaskHandle` only; the bound queue exists purely to scope the IAM grant to the redrive source."
+      "note": "The request identifies the task by `TaskHandle` only; the bound queue exists purely to scope the IAM grant to the redrive source.",
+      "reviewed": {
+        "sqs:DeleteMessage": "Checked when a message move task starts (it reads and deletes from the source queue), not to cancel or list one.",
+        "sqs:GetQueueAttributes": "Checked when a message move task starts (it reads and deletes from the source queue), not to cancel or list one.",
+        "sqs:ReceiveMessage": "Checked when a message move task starts (it reads and deletes from the source queue), not to cancel or list one."
+      }
     },
     "ChangeMessageVisibility": {
       "operation": "changeMessageVisibility",
@@ -96,7 +101,10 @@
         "omit": ["SourceArn"]
       },
       "builder": "makeQueueArnHttpBinding",
-      "actions": ["sqs:ListMessageMoveTasks"]
+      "actions": ["sqs:ListMessageMoveTasks"],
+      "reviewed": {
+        "sqs:GetQueueAttributes": "Checked when a message move task starts (it reads and deletes from the source queue), not to cancel or list one."
+      }
     },
     "PurgeQueue": {
       "operation": "purgeQueue",

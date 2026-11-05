@@ -37,7 +37,8 @@
       },
       "actions": ["transcribe:CreateVocabulary"],
       "reviewed": {
-        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "iam:PassRole": "Needed only when the request passes DataAccessRoleArn; not granted, so a role is never passed unasked."
       }
     },
     "CreateVocabularyFilter": {
@@ -47,7 +48,8 @@
       },
       "actions": ["transcribe:CreateVocabularyFilter"],
       "reviewed": {
-        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "iam:PassRole": "Needed only when the request passes DataAccessRoleArn; not granted, so a role is never passed unasked."
       }
     },
     "DeleteCallAnalyticsCategory": {
@@ -236,7 +238,8 @@
       },
       "actions": ["transcribe:StartTranscriptionJob"],
       "reviewed": {
-        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "iam:PassRole": "Needed only when the request passes DataAccessRoleArn; not granted, so a role is never passed unasked."
       }
     },
     "TagResource": {
@@ -272,14 +275,20 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["transcribe:UpdateVocabulary"]
+      "actions": ["transcribe:UpdateVocabulary"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes DataAccessRoleArn; not granted, so a role is never passed unasked."
+      }
     },
     "UpdateVocabularyFilter": {
       "operation": "updateVocabularyFilter",
       "request": {
         "mode": "required"
       },
-      "actions": ["transcribe:UpdateVocabularyFilter"]
+      "actions": ["transcribe:UpdateVocabularyFilter"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes DataAccessRoleArn; not granted, so a role is never passed unasked."
+      }
     }
   }
 }

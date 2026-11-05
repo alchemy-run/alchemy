@@ -211,7 +211,10 @@
         "mode": "required"
       },
       "builder": "makeAccessAnalyzerAccountHttpBinding",
-      "actions": ["access-analyzer:StartPolicyGeneration"]
+      "actions": ["access-analyzer:StartPolicyGeneration"],
+      "reviewed": {
+        "iam:PassRole": "AWS lists it for the operation, but the AccessAnalyzer Bindings suite calls it successfully without it."
+      }
     },
     "StartResourceScan": {
       "operation": "startResourceScan",

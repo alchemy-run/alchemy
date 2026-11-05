@@ -295,7 +295,10 @@
         "interface": "PutNotificationChannelRequest",
         "omit": []
       },
-      "actions": ["fms:PutNotificationChannel"]
+      "actions": ["fms:PutNotificationChannel"],
+      "with": {
+        "passRole": true
+      }
     },
     "PutPolicy": {
       "operation": "putPolicy",

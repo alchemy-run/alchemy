@@ -96,7 +96,10 @@
     "ListVersions": {
       "operation": "listVersions",
       "builder": "makeGrafanaAccountHttpBinding",
-      "actions": ["grafana:ListVersions"]
+      "actions": ["grafana:ListVersions"],
+      "reviewed": {
+        "grafana:DescribeWorkspace": "AWS lists it for the operation, but the Grafana Bindings suite calls it successfully without it."
+      }
     },
     "ListWorkspaceServiceAccountTokens": {
       "operation": "listWorkspaceServiceAccountTokens",

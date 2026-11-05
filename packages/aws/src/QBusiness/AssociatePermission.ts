@@ -57,6 +57,6 @@ export const AssociatePermissionHttp = Layer.effect(
   makeQBusinessApplicationHttpBinding({
     tag: "AWS.QBusiness.AssociatePermission",
     operation: qbusiness.associatePermission,
-    actions: ["qbusiness:AssociatePermission"],
+    actions: ["qbusiness:AssociatePermission", "qbusiness:PutResourcePolicy"],
   }),
 );

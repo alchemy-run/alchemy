@@ -93,7 +93,12 @@
         "mode": "required"
       },
       "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:EnableOrganizationAdminAccount"]
+      "actions": ["detective:EnableOrganizationAdminAccount"],
+      "reviewed": {
+        "iam:CreateServiceLinkedRole": "Needed only the first time an organization enables Detective (its service-linked role and trusted access), which the management account sets up; not granted to a runtime.",
+        "organizations:EnableAWSServiceAccess": "Needed only the first time an organization enables Detective (its service-linked role and trusted access), which the management account sets up; not granted to a runtime.",
+        "organizations:RegisterDelegatedAdministrator": "Needed only the first time an organization enables Detective (its service-linked role and trusted access), which the management account sets up; not granted to a runtime."
+      }
     },
     "GetInvestigation": {
       "operation": "getInvestigation",
@@ -163,7 +168,11 @@
     "ListOrganizationAdminAccounts": {
       "operation": "listOrganizationAdminAccounts",
       "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:ListOrganizationAdminAccounts"]
+      "actions": ["detective:ListOrganizationAdminAccounts"],
+      "reviewed": {
+        "detective:ListOrganizationAdminAccount": "AWS lists it for the operation, but the Detective Bindings suite calls it successfully without it.",
+        "detective:ListOrganizationAdminAccounts": "Not in AWS's reference (which names it ListOrganizationAdminAccount), but the Detective Bindings suite calls the operation successfully with it."
+      }
     },
     "RejectInvitation": {
       "operation": "rejectInvitation",

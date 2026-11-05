@@ -148,6 +148,9 @@
       "actions": ["comprehendmedical:StartPHIDetectionJob"],
       "with": {
         "passRole": true
+      },
+      "reviewed": {
+        "iam:PassRole": "AWS lists it for the operation, but the ComprehendMedical Bindings suite calls it successfully without it."
       }
     },
     "StartRxNormInferenceJob": {

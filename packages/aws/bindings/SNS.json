@@ -434,7 +434,8 @@
       "note": "Spend-limit updates fan out to AWS End User Messaging.",
       "reviewed": {
         "sms-voice:DescribeSpendLimits": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials.",
-        "sms-voice:SetTextMessageSpendLimitOverride": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+        "sms-voice:SetTextMessageSpendLimitOverride": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials.",
+        "iam:PassRole": "Needed only when the request sets a role ARN attribute (delivery-status logging, a Firehose subscription role); not granted, so a role is never passed unasked."
       }
     },
     "SetSubscriptionAttributes": {
@@ -449,6 +450,9 @@
       "actions": ["sns:SetSubscriptionAttributes"],
       "with": {
         "key": "SubscriptionArn"
+      },
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request sets a role ARN attribute (delivery-status logging, a Firehose subscription role); not granted, so a role is never passed unasked."
       }
     },
     "SetTopicAttributes": {
@@ -463,6 +467,9 @@
       "actions": ["sns:SetTopicAttributes"],
       "with": {
         "key": "TopicArn"
+      },
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request sets a role ARN attribute (delivery-status logging, a Firehose subscription role); not granted, so a role is never passed unasked."
       }
     },
     "Subscribe": {
@@ -477,6 +484,9 @@
       "actions": ["sns:Subscribe"],
       "with": {
         "key": "TopicArn"
+      },
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request sets a role ARN attribute (delivery-status logging, a Firehose subscription role); not granted, so a role is never passed unasked."
       }
     },
     "TagResource": {

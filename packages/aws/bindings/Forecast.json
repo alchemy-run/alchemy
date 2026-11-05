@@ -64,7 +64,8 @@
       "note": "Destination hands Forecast a role to write the export to S3.",
       "arns": ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"],
       "reviewed": {
-        "forecast:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "forecast:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "iam:PassRole": "AWS lists it for the operation, but the Forecast Bindings suite calls it successfully without it."
       }
     },
     "CreateWhatIfAnalysis": {
@@ -88,7 +89,10 @@
         "passRole": true
       },
       "note": "TimeSeriesReplacementsDataSource hands Forecast a role to read S3.",
-      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-analysis/*"]
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-analysis/*"],
+      "reviewed": {
+        "iam:PassRole": "The request can name an S3 role for its data source or destination; the builder's PassRole is limited to forecast.amazonaws.com."
+      }
     },
     "CreateWhatIfForecastExport": {
       "operation": "createWhatIfForecastExport",
@@ -100,7 +104,10 @@
         "passRole": true
       },
       "note": "Destination hands Forecast a role to write the export to S3.",
-      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast/*"]
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast/*"],
+      "reviewed": {
+        "iam:PassRole": "The request can name an S3 role for its data source or destination; the builder's PassRole is limited to forecast.amazonaws.com."
+      }
     },
     "DeleteResourceTree": {
       "operation": "deleteResourceTree",

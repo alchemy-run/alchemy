@@ -47,6 +47,7 @@ export const UpdateTopicHttp = Layer.effect(
       "kafka-cluster:Connect",
       "kafka-cluster:AlterTopic",
       "kafka-cluster:AlterTopicDynamicConfiguration",
+      "kafka-cluster:DescribeTopic",
     ],
     topicScoped: true,
   }),

@@ -77,7 +77,11 @@
       "with": {
         "resources": ["arn:aws:iotfleetwise:*:*:vehicle/*"]
       },
-      "note": "The vehicle names are runtime arguments, so the grant is the account-wide vehicle pattern."
+      "note": "The vehicle names are runtime arguments, so the grant is the account-wide vehicle pattern.",
+      "reviewed": {
+        "iotfleetwise:BatchUpdateVehicle": "BatchUpdateVehicle is authorized per vehicle as iotfleetwise:UpdateVehicle (IoT FleetWise API reference); not verified live.",
+        "iotfleetwise:UpdateVehicle": "BatchUpdateVehicle is authorized per vehicle as iotfleetwise:UpdateVehicle (IoT FleetWise API reference); not verified live."
+      }
     },
     "DisassociateVehicleFleet": {
       "operation": "disassociateVehicleFleet",

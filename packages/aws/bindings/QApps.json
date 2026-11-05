@@ -111,9 +111,12 @@
         "interface": "CreatePresignedUrlRequest",
         "omit": ["instanceId", "appId"]
       },
-      "actions": ["qapps:CreatePresignedUrl"],
+      "actions": ["qapps:CreatePresignedUrl", "qapps:ImportDocument"],
       "with": {
         "injectAppId": true
+      },
+      "reviewed": {
+        "qapps:CreatePresignedUrl": "Not in AWS's reference; kept alongside qapps:ImportDocument, which the presigned upload authorizes, since the reference is known to miss actions."
       }
     },
     "DeleteLibraryItem": {

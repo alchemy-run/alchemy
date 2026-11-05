@@ -45,7 +45,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["controltower:GetBaselineOperation"]
+      "actions": ["controltower:GetBaselineOperation"],
+      "reviewed": {
+        "controltower:DescribeRegisterOrganizationalUnitOperation": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it."
+      }
     },
     "GetControlOperation": {
       "operation": "getControlOperation",
@@ -67,6 +70,10 @@
       },
       "withTs": {
         "identifier": "(enabledBaseline: EnabledBaseline) => enabledBaseline.enabledBaselineArn"
+      },
+      "reviewed": {
+        "controltower:DescribeManagedAccount": "A legacy Control Tower action AWS lists alongside the current one; eleven other ControlTower bindings are authorized live without theirs.",
+        "controltower:DescribeManagedOrganizationalUnit": "A legacy Control Tower action AWS lists alongside the current one; eleven other ControlTower bindings are authorized live without theirs."
       }
     },
     "GetEnabledControl": {
@@ -82,6 +89,9 @@
       },
       "withTs": {
         "identifier": "(enabledControl: EnabledControl) => enabledControl.enabledControlArn"
+      },
+      "reviewed": {
+        "controltower:DescribeGuardrailForTarget": "A legacy Control Tower action AWS lists alongside the current one; eleven other ControlTower bindings are authorized live without theirs."
       }
     },
     "GetLandingZone": {
@@ -90,14 +100,23 @@
         "mode": "required"
       },
       "actions": ["controltower:GetLandingZone"],
-      "arns": ["arn:${Partition}:controltower:${Region}:${Account}:landingzone/*"]
+      "arns": ["arn:${Partition}:controltower:${Region}:${Account}:landingzone/*"],
+      "reviewed": {
+        "controltower:DescribeLandingZoneConfiguration": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it.",
+        "controltower:GetAvailableUpdates": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it.",
+        "controltower:GetLandingZoneDriftStatus": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it.",
+        "controltower:GetLandingZoneStatus": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it."
+      }
     },
     "GetLandingZoneOperation": {
       "operation": "getLandingZoneOperation",
       "request": {
         "mode": "required"
       },
-      "actions": ["controltower:GetLandingZoneOperation"]
+      "actions": ["controltower:GetLandingZoneOperation"],
+      "reviewed": {
+        "controltower:GetLandingZoneStatus": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it."
+      }
     },
     "ListBaselines": {
       "operation": "listBaselines",
@@ -109,19 +128,32 @@
     },
     "ListEnabledBaselines": {
       "operation": "listEnabledBaselines",
-      "actions": ["controltower:ListEnabledBaselines"]
+      "actions": ["controltower:ListEnabledBaselines"],
+      "reviewed": {
+        "controltower:ListManagedAccounts": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it.",
+        "controltower:ListManagedOrganizationalUnits": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it."
+      }
     },
     "ListEnabledControls": {
       "operation": "listEnabledControls",
-      "actions": ["controltower:ListEnabledControls"]
+      "actions": ["controltower:ListEnabledControls"],
+      "reviewed": {
+        "controltower:ListGuardrailsForTarget": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it."
+      }
     },
     "ListLandingZoneOperations": {
       "operation": "listLandingZoneOperations",
-      "actions": ["controltower:ListLandingZoneOperations"]
+      "actions": ["controltower:ListLandingZoneOperations"],
+      "reviewed": {
+        "controltower:GetLandingZoneStatus": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it."
+      }
     },
     "ListLandingZones": {
       "operation": "listLandingZones",
-      "actions": ["controltower:ListLandingZones"]
+      "actions": ["controltower:ListLandingZones"],
+      "reviewed": {
+        "controltower:GetHomeRegion": "AWS lists it for the operation, but the ControlTower Bindings suite calls it successfully without it."
+      }
     },
     "ResetEnabledBaseline": {
       "operation": "resetEnabledBaseline",
@@ -136,6 +168,9 @@
       },
       "withTs": {
         "identifier": "(enabledBaseline: EnabledBaseline) => enabledBaseline.enabledBaselineArn"
+      },
+      "reviewed": {
+        "controltower:ManageOrganizationalUnit": "A legacy Control Tower action AWS lists alongside the current one; eleven other ControlTower bindings are authorized live without theirs."
       }
     },
     "ResetEnabledControl": {
@@ -166,6 +201,9 @@
       },
       "withTs": {
         "identifier": "(landingZone: LandingZone) => landingZone.landingZoneArn"
+      },
+      "reviewed": {
+        "controltower:SetupLandingZone": "A legacy Control Tower action AWS lists alongside the current one; eleven other ControlTower bindings are authorized live without theirs."
       }
     }
   }

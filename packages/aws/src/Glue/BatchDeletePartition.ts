@@ -54,7 +54,7 @@ export const BatchDeletePartitionHttp = Layer.effect(
   makeGlueTableHttpBinding({
     tag: "AWS.Glue.BatchDeletePartition",
     operation: glue.batchDeletePartition,
-    actions: ["glue:BatchDeletePartition", "glue:DeletePartition"],
+    actions: ["glue:BatchDeletePartition"],
     tableNameKey: "TableName",
   }),
 );

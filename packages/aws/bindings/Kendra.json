@@ -47,7 +47,10 @@
         "interface": "BatchPutDocumentRequest",
         "omit": ["IndexId"]
       },
-      "actions": ["kendra:BatchPutDocument"]
+      "actions": ["kendra:BatchPutDocument"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes RoleArn; not granted, so a role is never passed unasked."
+      }
     },
     "ClearQuerySuggestions": {
       "operation": "clearQuerySuggestions",
@@ -195,6 +198,9 @@
       "actions": ["kendra:PutPrincipalMapping"],
       "with": {
         "subResources": ["data-source/*"]
+      },
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes RoleArn; not granted, so a role is never passed unasked."
       }
     },
     "Query": {

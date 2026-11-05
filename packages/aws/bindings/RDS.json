@@ -42,7 +42,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["rds:CopyDBSnapshot", "rds:AddTagsToResource"]
+      "actions": ["rds:CopyDBSnapshot", "rds:AddTagsToResource"],
+      "reviewed": {
+        "rds:CopyCustomDBEngineVersion": "AWS lists it for the operation, but the RDS Bindings suite calls it successfully without it."
+      }
     },
     "CreateDBClusterSnapshot": {
       "operation": "createDBClusterSnapshot",

@@ -24,7 +24,10 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:CreateGroupMembership"]
+      "actions": ["identitystore:CreateGroupMembership"],
+      "reviewed": {
+        "sso-directory:AddMemberToGroup": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "CreateUser": {
       "operation": "createUser",
@@ -34,7 +37,10 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:CreateUser"]
+      "actions": ["identitystore:CreateUser"],
+      "reviewed": {
+        "sso-directory:CreateUser": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "DeleteGroupMembership": {
       "operation": "deleteGroupMembership",
@@ -44,7 +50,10 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:DeleteGroupMembership"]
+      "actions": ["identitystore:DeleteGroupMembership"],
+      "reviewed": {
+        "sso-directory:RemoveMemberFromGroup": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "DeleteUser": {
       "operation": "deleteUser",
@@ -54,7 +63,10 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:DeleteUser"]
+      "actions": ["identitystore:DeleteUser"],
+      "reviewed": {
+        "sso-directory:DeleteUser": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "DescribeGroupMembership": {
       "operation": "describeGroupMembership",
@@ -64,7 +76,11 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:DescribeGroupMembership"]
+      "actions": ["identitystore:DescribeGroupMembership"],
+      "reviewed": {
+        "sso-directory:ListGroupsForMember": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER.",
+        "sso-directory:ListGroupsForUser": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "DescribePermissionSet": {
       "operation": "describePermissionSet",
@@ -77,7 +93,10 @@
       "builder": "makeIdentityCenterInstanceHttpBinding",
       "actions": ["sso:DescribePermissionSet"],
       "module": "sso-admin",
-      "alias": "ssoAdmin"
+      "alias": "ssoAdmin",
+      "reviewed": {
+        "sso:GetPermissionSet": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "DescribeUser": {
       "operation": "describeUser",
@@ -87,7 +106,11 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:DescribeUser"]
+      "actions": ["identitystore:DescribeUser"],
+      "reviewed": {
+        "sso-directory:DescribeUser": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER.",
+        "sso-directory:DescribeUsers": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "GetGroupId": {
       "operation": "getGroupId",
@@ -97,7 +120,10 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:GetGroupId"]
+      "actions": ["identitystore:GetGroupId"],
+      "reviewed": {
+        "sso-directory:GetGroupId": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "GetGroupMembershipId": {
       "operation": "getGroupMembershipId",
@@ -107,7 +133,11 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:GetGroupMembershipId"]
+      "actions": ["identitystore:GetGroupMembershipId"],
+      "reviewed": {
+        "sso-directory:ListGroupsForMember": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER.",
+        "sso-directory:ListGroupsForUser": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "GetUserId": {
       "operation": "getUserId",
@@ -117,7 +147,10 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:GetUserId"]
+      "actions": ["identitystore:GetUserId"],
+      "reviewed": {
+        "sso-directory:GetUserId": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "IsMemberInGroups": {
       "operation": "isMemberInGroups",
@@ -127,7 +160,11 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:IsMemberInGroups"]
+      "actions": ["identitystore:IsMemberInGroups"],
+      "reviewed": {
+        "sso-directory:IsMemberInGroup": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER.",
+        "sso-directory:IsMemberInGroups": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "ListAccountAssignments": {
       "operation": "listAccountAssignments",
@@ -140,7 +177,10 @@
       "builder": "makeIdentityCenterInstanceHttpBinding",
       "actions": ["sso:ListAccountAssignments"],
       "module": "sso-admin",
-      "alias": "ssoAdmin"
+      "alias": "ssoAdmin",
+      "reviewed": {
+        "sso:ListProfileAssociations": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "ListAccountAssignmentsForPrincipal": {
       "operation": "listAccountAssignmentsForPrincipal",
@@ -166,7 +206,11 @@
       "builder": "makeIdentityCenterInstanceHttpBinding",
       "actions": ["sso:ListAccountsForProvisionedPermissionSet"],
       "module": "sso-admin",
-      "alias": "ssoAdmin"
+      "alias": "ssoAdmin",
+      "reviewed": {
+        "sso:GetApplicationInstance": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER.",
+        "sso:ListApplicationInstances": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "ListGroupMemberships": {
       "operation": "listGroupMemberships",
@@ -176,7 +220,10 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:ListGroupMemberships"]
+      "actions": ["identitystore:ListGroupMemberships"],
+      "reviewed": {
+        "sso-directory:ListMembersInGroup": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "ListGroupMembershipsForMember": {
       "operation": "listGroupMembershipsForMember",
@@ -186,7 +233,11 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:ListGroupMembershipsForMember"]
+      "actions": ["identitystore:ListGroupMembershipsForMember"],
+      "reviewed": {
+        "sso-directory:ListGroupsForMember": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER.",
+        "sso-directory:ListGroupsForUser": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "ListGroups": {
       "operation": "listGroups",
@@ -196,7 +247,11 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:ListGroups"]
+      "actions": ["identitystore:ListGroups"],
+      "reviewed": {
+        "sso-directory:ListGroups": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER.",
+        "sso-directory:SearchGroups": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "ListPermissionSets": {
       "operation": "listPermissionSets",
@@ -219,7 +274,11 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:ListUsers"]
+      "actions": ["identitystore:ListUsers"],
+      "reviewed": {
+        "sso-directory:ListUsers": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER.",
+        "sso-directory:SearchUsers": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     },
     "UpdateUser": {
       "operation": "updateUser",
@@ -229,7 +288,11 @@
         "omit": ["IdentityStoreId"],
         "inline": true
       },
-      "actions": ["identitystore:UpdateUser"]
+      "actions": ["identitystore:UpdateUser"],
+      "reviewed": {
+        "sso-directory:UpdateUser": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER.",
+        "sso-directory:UpdateUserName": "AWS also lists Identity Center's older sso-directory/sso console actions; the Identity Store and SSO Admin APIs authorize their own identitystore:/sso: action. Not verified live: the E2E suite is gated on ALCHEMY_TEST_IDENTITY_CENTER."
+      }
     }
   }
 }

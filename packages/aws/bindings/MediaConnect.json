@@ -55,7 +55,8 @@
       },
       "note": "The IAM resource types for GrantFlowEntitlements are the flow AND the entitlement; entitlement ARNs are siblings of (not derived from) the flow ARN, so they are granted by wildcard.",
       "reviewed": {
-        "mediaconnect:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "mediaconnect:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "iam:PassRole": "AWS lists it for the operation, but the MediaConnect Bindings suite calls it successfully without it."
       }
     },
     "ListEntitlements": {

@@ -28,11 +28,17 @@
     },
     "BatchGetSecurityControls": {
       "operation": "batchGetSecurityControls",
-      "actions": ["securityhub:BatchGetSecurityControls"]
+      "actions": ["securityhub:BatchGetSecurityControls"],
+      "reviewed": {
+        "securityhub:DescribeStandardsControls": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
+      }
     },
     "BatchGetStandardsControlAssociations": {
       "operation": "batchGetStandardsControlAssociations",
-      "actions": ["securityhub:BatchGetStandardsControlAssociations"]
+      "actions": ["securityhub:BatchGetStandardsControlAssociations"],
+      "reviewed": {
+        "securityhub:DescribeStandardsControls": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
+      }
     },
     "BatchImportFindings": {
       "operation": "batchImportFindings",
@@ -45,7 +51,10 @@
     },
     "BatchUpdateStandardsControlAssociations": {
       "operation": "batchUpdateStandardsControlAssociations",
-      "actions": ["securityhub:BatchUpdateStandardsControlAssociations"]
+      "actions": ["securityhub:BatchUpdateStandardsControlAssociations"],
+      "reviewed": {
+        "securityhub:UpdateStandardsControl": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
+      }
     },
     "CreateMembers": {
       "operation": "createMembers",
@@ -186,7 +195,10 @@
     },
     "ListStandardsControlAssociations": {
       "operation": "listStandardsControlAssociations",
-      "actions": ["securityhub:ListStandardsControlAssociations"]
+      "actions": ["securityhub:ListStandardsControlAssociations"],
+      "reviewed": {
+        "securityhub:DescribeStandardsControls": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
+      }
     },
     "UpdateOrganizationConfiguration": {
       "operation": "updateOrganizationConfiguration",
@@ -194,7 +206,10 @@
     },
     "UpdateSecurityControl": {
       "operation": "updateSecurityControl",
-      "actions": ["securityhub:UpdateSecurityControl"]
+      "actions": ["securityhub:UpdateSecurityControl"],
+      "reviewed": {
+        "securityhub:UpdateStandardsControl": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
+      }
     },
     "UpdateStandardsControl": {
       "operation": "updateStandardsControl",

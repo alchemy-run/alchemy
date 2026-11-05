@@ -40,7 +40,12 @@
         "omit": ["ClusterArn"],
         "inline": true
       },
-      "actions": ["kafka:DeleteTopic", "kafka-cluster:Connect", "kafka-cluster:DeleteTopic"],
+      "actions": [
+        "kafka:DeleteTopic",
+        "kafka-cluster:Connect",
+        "kafka-cluster:DeleteTopic",
+        "kafka-cluster:DescribeTopic"
+      ],
       "with": {
         "topicScoped": true
       },
@@ -82,7 +87,8 @@
       "actions": [
         "kafka:DescribeTopicPartitions",
         "kafka-cluster:Connect",
-        "kafka-cluster:DescribeTopic"
+        "kafka-cluster:DescribeTopic",
+        "kafka-cluster:DescribeTopicDynamicConfiguration"
       ],
       "with": {
         "topicScoped": true
@@ -130,7 +136,8 @@
         "kafka:UpdateTopic",
         "kafka-cluster:Connect",
         "kafka-cluster:AlterTopic",
-        "kafka-cluster:AlterTopicDynamicConfiguration"
+        "kafka-cluster:AlterTopicDynamicConfiguration",
+        "kafka-cluster:DescribeTopic"
       ],
       "with": {
         "topicScoped": true

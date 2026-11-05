@@ -102,7 +102,11 @@
         "omit": ["workflowName"],
         "inline": true
       },
-      "actions": ["entityresolution:StartIdMappingJob"]
+      "actions": ["entityresolution:StartIdMappingJob"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the job's output passes a role; not granted, so a role is never passed unasked.",
+        "entityresolution:UseIdNamespace": "Needed only when the job reads an ID namespace; not granted unless asked."
+      }
     },
     "StartMatchingJob": {
       "operation": "startMatchingJob",

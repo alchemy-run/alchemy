@@ -36,7 +36,8 @@
         "arn:${Partition}:personalize:${Region}:${Account}:solution/*"
       ],
       "reviewed": {
-        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "iam:PassRole": "AWS lists it for the operation, but the Personalize Bindings suite calls it successfully without it."
       }
     },
     "CreateCampaign": {
@@ -67,7 +68,8 @@
         "arn:${Partition}:personalize:${Region}:${Account}:dataset/*"
       ],
       "reviewed": {
-        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
+        "iam:PassRole": "AWS lists it for the operation, but the Personalize Bindings suite calls it successfully without it."
       }
     },
     "CreateSolution": {

@@ -33,7 +33,7 @@
         "interface": "AssociatePermissionRequest",
         "omit": ["applicationId"]
       },
-      "actions": ["qbusiness:AssociatePermission"]
+      "actions": ["qbusiness:AssociatePermission", "qbusiness:PutResourcePolicy"]
     },
     "BatchDeleteDocument": {
       "operation": "batchDeleteDocument",
@@ -55,7 +55,10 @@
         "omit": ["applicationId", "indexId"]
       },
       "builder": "makeQBusinessIndexHttpBinding",
-      "actions": ["qbusiness:BatchPutDocument"]
+      "actions": ["qbusiness:BatchPutDocument"],
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes a role ARN; not granted, so a role is never passed unasked."
+      }
     },
     "CancelSubscription": {
       "operation": "cancelSubscription",
@@ -170,7 +173,7 @@
         "interface": "DisassociatePermissionRequest",
         "omit": ["applicationId"]
       },
-      "actions": ["qbusiness:DisassociatePermission"]
+      "actions": ["qbusiness:DisassociatePermission", "qbusiness:PutResourcePolicy"]
     },
     "GetChatControlsConfiguration": {
       "operation": "getChatControlsConfiguration",
@@ -335,6 +338,9 @@
       "actions": ["qbusiness:PutGroup"],
       "with": {
         "subResources": ["data-source/*"]
+      },
+      "reviewed": {
+        "iam:PassRole": "Needed only when the request passes a role ARN; not granted, so a role is never passed unasked."
       }
     },
     "SearchRelevantContent": {

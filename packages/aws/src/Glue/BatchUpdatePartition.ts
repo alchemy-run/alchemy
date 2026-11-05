@@ -62,7 +62,7 @@ export const BatchUpdatePartitionHttp = Layer.effect(
   makeGlueTableHttpBinding({
     tag: "AWS.Glue.BatchUpdatePartition",
     operation: glue.batchUpdatePartition,
-    actions: ["glue:BatchUpdatePartition", "glue:UpdatePartition"],
+    actions: ["glue:BatchUpdatePartition"],
     tableNameKey: "TableName",
   }),
 );
