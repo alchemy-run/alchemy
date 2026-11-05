@@ -3,6 +3,7 @@ import { DockerLive } from "@alchemy.run/docker/Docker";
 import { isRetryable, isThrottlingError, isTransientError } from "@distilled.cloud/aws/Category";
 import { capped, jittered, Retry, type Factory as RetryFactory } from "@distilled.cloud/aws/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
+import { CertRequest, CertRequestProvider } from "alchemy/CertRequest";
 import * as Command from "alchemy/Command";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -269,6 +270,7 @@ export const providers = () =>
     // cloud regardless.
     Effect.flatMap(
       Provider.collection([
+        CertRequest,
         KeyPair,
         Random,
         AccessAnalyzer.Analyzer,
@@ -1891,6 +1893,7 @@ export const providers = () =>
     Layer.provideMerge(
       Layer.mergeAll(
         Command.providers(),
+        CertRequestProvider(),
         KeyPairProvider(),
         RandomProvider(),
         Assets.AssetsLive,

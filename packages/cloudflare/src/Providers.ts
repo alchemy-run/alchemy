@@ -1,6 +1,7 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import { CertRequest, CertRequestProvider } from "alchemy/CertRequest";
 import * as Command from "alchemy/Command";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as Provider from "alchemy/Provider";
@@ -197,6 +198,7 @@ export const providers = () =>
       Calls.TurnKey,
       Certificate.Certificate,
       CertificateAuthorities.HostnameAssociation,
+      CertRequest,
       ClientCertificate.ClientCertificate,
       CloudConnector.Rules,
       CloudforceOne.ScanConfig,
@@ -680,6 +682,7 @@ export const providers = () =>
         LoadBalancer.MonitorGroupProvider(),
         LoadBalancer.PoolProvider(),
         Command.providers(),
+        CertRequestProvider(),
         KeyPairProvider(),
         RandomProvider(),
         // `domain.dns: Cloudflare.DNS.Adapter()` on any platform's custom domain.

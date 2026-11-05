@@ -125,6 +125,20 @@ export type OriginCaCertificate = Resource<TypeId, Props, Attributes, never, Pro
  * });
  * ```
  *
+ * **Example:** CSR from a key pair minted in the stack
+ * ```typescript
+ * const key = yield* Alchemy.KeyPair("origin-key", { algorithm: "ec" });
+ * const request = yield* Alchemy.CertRequest("origin-csr", {
+ *   privateKey: key.privateKey,
+ *   dnsNames: ["origin.example.com"],
+ * });
+ * const cert = yield* Cloudflare.OriginCaCertificate.OriginCaCertificate("origin-cert", {
+ *   csr: request.csr,
+ *   hostnames: ["origin.example.com"],
+ *   requestType: "origin-ecc",
+ * });
+ * ```
+ *
  * ### Using the certificate
  * **Example:** Install the signed PEM on your origin
  * ```typescript
