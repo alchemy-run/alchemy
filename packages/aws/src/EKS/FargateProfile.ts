@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -165,13 +166,6 @@ export const FargateProfileProvider = () =>
           ? Effect.succeed(props.fargateProfileName)
           : createPhysicalName({ id, maxLength: 63 });
 
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
-        });
-
       const readProfile = Effect.fn(function* ({
         clusterName,
         fargateProfileName,
@@ -295,6 +289,7 @@ export const FargateProfileProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
+          const random = yield* SecureRandom.SecureRandom;
           const clusterName = news.clusterName as string;
           const fargateProfileName = yield* toProfileName(id, news);
           const desiredTags = {
@@ -317,7 +312,7 @@ export const FargateProfileProvider = () =>
                 selectors: news.selectors,
                 subnets: news.subnets as string[] | undefined,
                 tags: desiredTags,
-                clientRequestToken: yield* toClientRequestToken(id, "create"),
+                clientRequestToken: yield* random.uuidV4(),
               })
               .pipe(
                 Effect.catchTag("ResourceInUseException", () =>

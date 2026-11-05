@@ -59,7 +59,7 @@ test.provider(
 // cluster supplied via AWS_TEST_EKS_CLUSTER (+ the node IAM role ARN and two
 // private subnet IDs); an entitled account with a standing cluster runs this
 // unchanged. Deploys a node group, waits for ACTIVE, updates its scaling
-// config, then tears down and asserts it is gone.
+// config twice, then tears down and asserts it is gone.
 test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
   "creates, scales, and deletes a managed node group",
   (stack) =>
@@ -100,6 +100,21 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
       );
       expect(scaled.status).toBe("ACTIVE");
       expect(scaled.scalingConfig?.desiredSize).toBe(2);
+
+      // A second config update must not reuse the first one's clientRequestToken.
+      const rescaled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Nodegroup("TestNodegroup", {
+            clusterName,
+            nodeRole,
+            subnets,
+            instanceTypes: ["t3.medium"],
+            scalingConfig: { minSize: 1, maxSize: 3, desiredSize: 1 },
+          });
+        }),
+      );
+      expect(rescaled.status).toBe("ACTIVE");
+      expect(rescaled.scalingConfig?.desiredSize).toBe(1);
 
       yield* stack.destroy();
 

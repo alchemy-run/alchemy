@@ -2,6 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { Addon } from "@alchemy.run/aws/EKS";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 
@@ -64,4 +65,36 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 600_000 },
+);
+
+// Each update must reach EKS as a new request: a second change sent with the
+// first update's clientRequestToken is answered as a retry and not applied.
+test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
+  "applies every configurationValues update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const clusterName = process.env.AWS_TEST_EKS_CLUSTER!;
+      const deploy = (replicas: number) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Addon("ConfiguredAddon", {
+              clusterName,
+              addonName: "metrics-server",
+              configurationValues: JSON.stringify({ replicas }),
+            });
+          }),
+        );
+
+      yield* deploy(1);
+      yield* deploy(2);
+      yield* deploy(3);
+
+      const { addon } = yield* eks.describeAddon({ clusterName, addonName: "metrics-server" });
+      expect(addon?.configurationValues).toBe(JSON.stringify({ replicas: 3 }));
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 1_200_000 },
 );

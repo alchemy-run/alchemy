@@ -2,10 +2,10 @@ import * as eks from "@distilled.cloud/aws/eks";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
-import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -175,13 +175,6 @@ export const AddonProvider = () =>
   Provider.effect(
     Addon,
     Effect.gen(function* () {
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
-        });
-
       return {
         stables: ["addonArn"],
         // Add-ons are keyed by (clusterName, addonName) and `listAddons`
@@ -244,6 +237,7 @@ export const AddonProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
+          const random = yield* SecureRandom.SecureRandom;
           const clusterName = news.clusterName as string;
           const addonName = news.addonName;
           const desiredTags = {
@@ -272,7 +266,7 @@ export const AddonProvider = () =>
                 podIdentityAssociations: news.podIdentityAssociations,
                 namespaceConfig: news.namespaceConfig,
                 tags: desiredTags,
-                clientRequestToken: yield* toClientRequestToken(id, "create"),
+                clientRequestToken: yield* random.uuidV4(),
               })
               .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
@@ -302,7 +296,7 @@ export const AddonProvider = () =>
               resolveConflicts: news.resolveConflicts,
               configurationValues: news.configurationValues,
               podIdentityAssociations: news.podIdentityAssociations,
-              clientRequestToken: yield* toClientRequestToken(id, "update"),
+              clientRequestToken: yield* random.uuidV4(),
             });
             state = yield* waitForAddonActive({
               clusterName,
