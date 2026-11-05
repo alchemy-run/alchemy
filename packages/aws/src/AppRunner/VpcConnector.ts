@@ -221,12 +221,8 @@ export const VpcConnectorProvider = () =>
         }),
 
         lookup: Effect.fn(function* ({ vpcConnectorName }) {
-          const name = vpcConnectorName;
-          const connector = yield* findConnector(name);
-          if (connector === undefined) return undefined;
-          const attrs = yield* toAttrs(connector);
-          const tags = yield* readAppRunnerTags(attrs.vpcConnectorArn);
-          return attrs;
+          const connector = yield* findConnector(vpcConnectorName);
+          return connector === undefined ? undefined : yield* toAttrs(connector);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

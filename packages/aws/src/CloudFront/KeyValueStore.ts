@@ -111,8 +111,7 @@ export const KeyValueStoreProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        lookup: Effect.fn(function* ({ keyValueStoreName }) {
-          const name = keyValueStoreName;
+        lookup: Effect.fn(function* ({ keyValueStoreName: name }) {
           const current = yield* cloudfront
             .describeKeyValueStore({ Name: name })
             .pipe(Effect.catchTag("EntityNotFound", () => getByName(name)));

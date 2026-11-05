@@ -191,8 +191,7 @@ export const FunctionProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        lookup: Effect.fn(function* ({ functionName }) {
-          const name = functionName;
+        lookup: Effect.fn(function* ({ functionName: name }) {
           const current = yield* getCurrent(name);
           if (!current?.FunctionSummary) {
             return undefined;

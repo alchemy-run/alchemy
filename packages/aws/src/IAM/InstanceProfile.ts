@@ -191,8 +191,7 @@ export const InstanceProfileProvider = () =>
               ),
             ),
           ),
-        lookup: Effect.fn(function* ({ instanceProfileName }) {
-          const name = instanceProfileName;
+        lookup: Effect.fn(function* ({ instanceProfileName: name }) {
           const profile = yield* readInstanceProfile(name);
           if (!profile?.Arn || !profile.InstanceProfileName) {
             return undefined;
