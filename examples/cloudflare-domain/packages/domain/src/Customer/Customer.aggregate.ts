@@ -29,20 +29,22 @@ export class Customer extends Domain.Aggregate("Customer", {
   ]),
   initial: { _tag: "New" },
   commands: [RegisterCustomer, ConfirmRegistration, RejectRegistration],
-  decide: {
-    RegisterCustomer: Effect.fn(function* (s, cmd, { id }) {
+  decide: (customer, { id }) => ({
+    RegisterCustomer: Effect.fn(function* (cmd) {
       const actor = yield* CurrentActor;
       if (actor._tag === "Customer" && actor.customerId !== id) return yield* new NotTheCustomer();
-      if (s._tag !== "New") return yield* new AlreadyRegistered();
+      if (customer._tag !== "New") return yield* new AlreadyRegistered();
       return [new RegistrationRequested({ name: cmd.name, username: cmd.username })];
     }),
-    ConfirmRegistration: (s) =>
-      s._tag === "Pending" ? [new CustomerRegistered({ name: s.name, username: s.username })] : [],
-    RejectRegistration: (s, cmd) =>
-      s._tag === "Pending"
-        ? [new RegistrationRejected({ username: s.username, reason: cmd.reason })]
+    ConfirmRegistration: () =>
+      customer._tag === "Pending"
+        ? [new CustomerRegistered({ name: customer.name, username: customer.username })]
         : [],
-  },
+    RejectRegistration: (cmd) =>
+      customer._tag === "Pending"
+        ? [new RegistrationRejected({ username: customer.username, reason: cmd.reason })]
+        : [],
+  }),
   evolve: {
     RegistrationRequested: (_, e) => ({
       _tag: "Pending" as const,

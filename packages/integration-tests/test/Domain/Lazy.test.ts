@@ -17,7 +17,7 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
-  decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
+  decide: () => ({ Deposit: (cmd) => [new Deposited({ amount: cmd.amount })] }),
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
 

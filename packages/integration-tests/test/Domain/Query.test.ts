@@ -35,11 +35,11 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
   initial: { owner: null },
   commands: [Open, Deposit],
-  decide: {
-    Open: (_, { owner }) => [new Opened({ owner })],
+  decide: () => ({
+    Open: ({ owner }) => [new Opened({ owner })],
     // One deposit per amount: a command can record many events.
-    Deposit: (_, { amounts }) => amounts.map((amount) => new Deposited({ amount })),
-  },
+    Deposit: ({ amounts }) => amounts.map((amount) => new Deposited({ amount })),
+  }),
   evolve: { Opened: (_, e) => ({ owner: e.owner }), Deposited: (s) => s },
 }) {}
 

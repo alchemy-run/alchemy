@@ -12,13 +12,13 @@ export class Notebook extends Domain.Aggregate("Notebook", {
   state: Schema.Struct({ notes: Schema.Int }),
   initial: { notes: 0 },
   commands: [WriteNote],
-  decide: {
-    WriteNote: Effect.fn(function* (_s, cmd, { id }) {
+  decide: (notebook, { id }) => ({
+    WriteNote: Effect.fn(function* (cmd) {
       const user = yield* CurrentUser;
       if (user.userId !== id) return yield* new NotYours();
       return [new NoteWritten({ text: cmd.text, author: user.name })];
     }),
-  },
+  }),
   evolve: {
     NoteWritten: (s) => ({ notes: s.notes + 1 }),
   },

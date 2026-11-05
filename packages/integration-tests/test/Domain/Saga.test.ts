@@ -52,17 +52,17 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ open: Schema.Boolean, balance: Schema.Number }),
   initial: { open: false, balance: 0 },
   commands: [Open, Close, Debit, Credit, Refund],
-  decide: {
-    Open: (_, cmd) => [new Opened({ balance: cmd.balance })],
+  decide: (wallet) => ({
+    Open: (cmd) => [new Opened({ balance: cmd.balance })],
     Close: () => [new Closed()],
-    Debit: (s, cmd) =>
-      s.balance < cmd.amount
-        ? new Insufficient({ balance: s.balance })
+    Debit: (cmd) =>
+      wallet.balance < cmd.amount
+        ? new Insufficient({ balance: wallet.balance })
         : [new Debited({ transfer: cmd.transfer, amount: cmd.amount })],
-    Credit: (s, cmd) =>
-      s.open ? [new Credited({ transfer: cmd.transfer, amount: cmd.amount })] : new NotOpen(),
-    Refund: (_, cmd) => [new Refunded({ transfer: cmd.transfer, amount: cmd.amount })],
-  },
+    Credit: (cmd) =>
+      wallet.open ? [new Credited({ transfer: cmd.transfer, amount: cmd.amount })] : new NotOpen(),
+    Refund: (cmd) => [new Refunded({ transfer: cmd.transfer, amount: cmd.amount })],
+  }),
   evolve: {
     Opened: (_, e) => ({ open: true, balance: e.balance }),
     Debited: (s, e) => ({ ...s, balance: s.balance - e.amount }),
@@ -94,9 +94,9 @@ class Transfer extends Domain.Aggregate("Transfer", {
   state: Schema.Struct({ requested: Schema.Boolean }),
   initial: { requested: false },
   commands: [RequestTransfer],
-  decide: {
-    RequestTransfer: (s, cmd) =>
-      s.requested
+  decide: (transfer) => ({
+    RequestTransfer: (cmd) =>
+      transfer.requested
         ? []
         : [
             new Requested({
@@ -106,7 +106,7 @@ class Transfer extends Domain.Aggregate("Transfer", {
               approval: cmd.approval,
             }),
           ],
-  },
+  }),
   evolve: { Requested: () => ({ requested: true }) },
 }) {}
 

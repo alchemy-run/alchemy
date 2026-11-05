@@ -94,28 +94,30 @@ export class Account extends Domain.Aggregate("Account", {
     RefundTransfer,
     RecordSettlement,
   ],
-  decide: {
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened"
+  decide: (account, { now }) => ({
+    OpenAccount: (cmd) =>
+      account._tag !== "Unopened"
         ? new AlreadyOpen()
         : [new AccountOpened({ customerId: cmd.customerId, owner: cmd.owner })],
 
-    ChangeOwner: Effect.fn(function* (s, cmd) {
-      if (s._tag !== "Open") return yield* new NotOpen();
+    ChangeOwner: Effect.fn(function* (cmd) {
+      if (account._tag !== "Open") return yield* new NotOpen();
       const actor = yield* CurrentActor;
       if (actor._tag !== "Agent") return yield* new NotPermitted();
-      return [new OwnerChanged({ previous: s.customerId, customerId: cmd.customerId, by: actor })];
+      return [
+        new OwnerChanged({ previous: account.customerId, customerId: cmd.customerId, by: actor }),
+      ];
     }),
 
-    DepositMoney: Effect.fn(function* (s, cmd) {
-      const o = yield* authorized(s);
+    DepositMoney: Effect.fn(function* (cmd) {
+      const o = yield* authorized(account);
       return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
     }),
 
-    WithdrawMoney: Effect.fn(function* (s, cmd, { now }) {
+    WithdrawMoney: Effect.fn(function* (cmd) {
       // Recorded on this command's decide span; nothing else from it is.
       yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
-      const o = yield* authorized(s);
+      const o = yield* authorized(account);
       if (o.frozen) return yield* new Frozen({ reason: o.frozen });
       if (cmd.amount > o.balance)
         return yield* new InsufficientFunds({ balance: o.balance, requested: cmd.amount });
@@ -125,20 +127,20 @@ export class Account extends Domain.Aggregate("Account", {
       return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: o.balance - cmd.amount })];
     }),
 
-    FreezeAccount: Effect.fn(function* (s, cmd) {
-      const o = yield* authorized(s);
+    FreezeAccount: Effect.fn(function* (cmd) {
+      const o = yield* authorized(account);
       const actor = yield* CurrentActor;
       return o.frozen ? [] : [new AccountFrozen({ reason: cmd.reason, by: actor })];
     }),
 
-    CloseAccount: Effect.fn(function* (s) {
-      const o = yield* authorized(s);
+    CloseAccount: Effect.fn(function* () {
+      const o = yield* authorized(account);
       if (o.balance !== 0) return yield* new BalanceNotZero({ balance: o.balance });
       return [new AccountClosed()];
     }),
 
-    DebitTransfer: (s, cmd) => {
-      const o = openFor(s, cmd.requestedBy);
+    DebitTransfer: (cmd) => {
+      const o = openFor(account, cmd.requestedBy);
       if (o._tag !== "Open") return o;
       if (o.frozen) return new Frozen({ reason: o.frozen });
       if (cmd.amount > o.balance)
@@ -152,39 +154,39 @@ export class Account extends Domain.Aggregate("Account", {
       ];
     },
 
-    CreditTransfer: (s, cmd) =>
-      s._tag !== "Open"
+    CreditTransfer: (cmd) =>
+      account._tag !== "Open"
         ? new NotOpen()
         : [
             new TransferCredited({
               transferId: cmd.transferId,
               amount: cmd.amount,
-              balanceAfter: s.balance + cmd.amount,
+              balanceAfter: account.balance + cmd.amount,
             }),
           ],
 
-    RefundTransfer: (s, cmd) =>
-      s._tag === "Open"
+    RefundTransfer: (cmd) =>
+      account._tag === "Open"
         ? [
             new TransferRefunded({
               transferId: cmd.transferId,
               amount: cmd.amount,
-              balanceAfter: s.balance + cmd.amount,
+              balanceAfter: account.balance + cmd.amount,
             }),
           ]
         : [new RefundStranded({ transferId: cmd.transferId, amount: cmd.amount })],
 
-    RecordSettlement: (s, cmd) =>
-      s._tag === "Open"
+    RecordSettlement: (cmd) =>
+      account._tag === "Open"
         ? [
             new SettlementReceived({
               settlementId: cmd.settlementId,
               amount: cmd.amount,
-              balanceAfter: s.balance + cmd.amount,
+              balanceAfter: account.balance + cmd.amount,
             }),
           ]
         : [new SettlementOnClosedAccount({ settlementId: cmd.settlementId, amount: cmd.amount })],
-  },
+  }),
 
   evolve: {
     AccountOpened: (_, e) => ({

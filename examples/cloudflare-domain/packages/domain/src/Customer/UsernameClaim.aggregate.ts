@@ -17,14 +17,14 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
   ]),
   initial: { _tag: "Free" },
   commands: [ClaimUsername],
-  decide: {
-    ClaimUsername: (s, cmd) =>
-      s._tag === "Free"
+  decide: (usernameClaim) => ({
+    ClaimUsername: (cmd) =>
+      usernameClaim._tag === "Free"
         ? [new UsernameClaimed({ customerId: cmd.customerId })]
-        : s.customerId === cmd.customerId
+        : usernameClaim.customerId === cmd.customerId
           ? []
           : new UsernameTaken(),
-  },
+  }),
   evolve: {
     UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
   },

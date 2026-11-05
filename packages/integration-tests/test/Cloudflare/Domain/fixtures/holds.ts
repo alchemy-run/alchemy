@@ -34,11 +34,11 @@ export class Hold extends Domain.Aggregate("Hold", {
   state: Schema.Struct({ status: Schema.Literals(["none", "held", "released", "expired"]) }),
   initial: { status: "none" },
   commands: [PlaceHold, ReleaseHold, ExpireHold],
-  decide: {
+  decide: () => ({
     PlaceHold: () => [new HoldPlaced()],
     ReleaseHold: () => [new HoldReleased()],
     ExpireHold: () => [new HoldExpired()],
-  },
+  }),
   evolve: {
     HoldPlaced: () => ({ status: "held" as const }),
     HoldReleased: () => ({ status: "released" as const }),

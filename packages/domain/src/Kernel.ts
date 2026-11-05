@@ -1089,17 +1089,20 @@ const build = (
           const state = codecs.state.decode(input.state ?? codecs.initial);
           const id = decodeId(input.id) as string;
           const now = DateTime.makeUnsafe(input.now);
-          let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
-            state,
-            decoded,
-            {
-              id,
-              now,
-              commandId: input.commandId,
-              stream: `${aggregate.aggregateName}/${id}`,
-              version: input.version,
-            },
-          );
+          let decision = Aggregate.decisionOf(aggregate, state, decoded, {
+            id,
+            now,
+            commandId: input.commandId,
+            stream: `${aggregate.aggregateName}/${id}`,
+            version: input.version,
+          });
+          if (decision === undefined) {
+            return yield* Effect.die(
+              new DefinitionError({
+                reason: new UnhandledCommand({ aggregate: aggregate.aggregateName, command: tag }),
+              }),
+            );
+          }
           // An effectful decision runs here, inside the decide span, with the
           // context the command was sent with (its only requirement, enforced
           // by `Aggregate.Decision`).

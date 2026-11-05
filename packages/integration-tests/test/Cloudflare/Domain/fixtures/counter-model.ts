@@ -22,9 +22,9 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Increment],
-  decide: {
-    Increment: (_, command) => [new Incremented({ by: command.by })],
-  },
+  decide: () => ({
+    Increment: (command) => [new Incremented({ by: command.by })],
+  }),
   evolve: {
     Incremented: (state, event) => ({ total: state.total + event.by }),
   },
@@ -44,9 +44,9 @@ class Echo extends Domain.Aggregate("Echo", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Mirror],
-  decide: {
-    Mirror: (_, command) => [new Mirrored({ by: command.by })],
-  },
+  decide: () => ({
+    Mirror: (command) => [new Mirrored({ by: command.by })],
+  }),
   evolve: {
     Mirrored: (state, event) => ({ total: state.total + event.by }),
   },

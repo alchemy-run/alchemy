@@ -71,12 +71,12 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: WalletState,
   initial: { owner: null, balance: 0, at: null },
   commands: [Deposit],
-  decide: {
-    Deposit: Effect.fn(function* (_, cmd) {
+  decide: () => ({
+    Deposit: Effect.fn(function* (cmd) {
       if (cmd.amount > 100) return yield* new OverLimit({ limit: 100 });
       return [new Deposited({ owner: yield* Owner, amount: cmd.amount, at: cmd.at })];
     }),
-  },
+  }),
   evolve: {
     Deposited: (s, e) => ({ owner: e.owner, balance: s.balance + e.amount, at: e.at }),
   },
@@ -139,11 +139,11 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
   initial: { owner: null },
   commands: [Sign],
-  decide: {
+  decide: () => ({
     Sign: Effect.fn(function* () {
       return [new Signed({ owner: yield* Owner })];
     }),
-  },
+  }),
   evolve: { Signed: (_, e) => ({ owner: e.owner }) },
   reply: { Sign: (s) => ({ owner: s.owner }) },
 }) {}
@@ -603,7 +603,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       state: Schema.Struct({ balance: Schema.Int }),
       initial: { balance: 0 },
       commands: [Credit],
-      decide: { Credit: () => [] },
+      decide: () => ({ Credit: () => [] }),
       evolve: { Credited: (_, e) => ({ balance: e.balance }) },
     }) {}
     class PurseBalance extends Domain.View(

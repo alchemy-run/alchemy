@@ -71,20 +71,20 @@ class Account extends Domain.Aggregate("Account", {
   state: AccountState,
   initial: { owner: "", balance: 0, frozen: false },
   commands: [Open, Deposit, Withdraw, Freeze, Stamp],
-  decide: {
-    Open: (_, { owner }, { now }) => [new Opened({ owner, at: DateTime.toEpochMillis(now) })],
-    Deposit: (_, { amount }) => [new Deposited({ amount })],
-    Withdraw: (s, { amount }) =>
-      amount > s.balance
-        ? new InsufficientFunds({ balance: s.balance, requested: amount })
+  decide: (account, { now, commandId, stream, version }) => ({
+    Open: ({ owner }) => [new Opened({ owner, at: DateTime.toEpochMillis(now) })],
+    Deposit: ({ amount }) => [new Deposited({ amount })],
+    Withdraw: ({ amount }) =>
+      amount > account.balance
+        ? new InsufficientFunds({ balance: account.balance, requested: amount })
         : [new Withdrawn({ amount })],
     Freeze: Effect.fn(function* () {
       const operator = yield* Operator;
       if (operator === "guest") return yield* new NotAnOperator();
       return [new Frozen({ by: operator })];
     }),
-    Stamp: (_, __, { commandId, stream, version }) => [new Stamped({ commandId, stream, version })],
-  },
+    Stamp: (__) => [new Stamped({ commandId, stream, version })],
+  }),
   evolve: {
     Opened: (s, e) => ({ ...s, owner: e.owner }),
     Deposited: (s, e) => ({ ...s, balance: s.balance + e.amount }),
@@ -109,7 +109,7 @@ class Transfer extends Domain.Aggregate("Transfer", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Move],
-  decide: { Move: (_, { from, to, amount }) => [new Moved({ from, to, amount })] },
+  decide: () => ({ Move: ({ from, to, amount }) => [new Moved({ from, to, amount })] }),
   evolve: { Moved: (s) => s },
 }) {}
 
@@ -168,10 +168,10 @@ class Later extends Domain.Aggregate("Later", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Wait, Stray],
-  decide: {
+  decide: () => ({
     Wait: () => Effect.promise(() => Promise.resolve([new Waited()])),
     Stray: () => [new Frozen({ by: "nobody" })] as never,
-  },
+  }),
   evolve: { Waited: (s) => s },
 }) {}
 

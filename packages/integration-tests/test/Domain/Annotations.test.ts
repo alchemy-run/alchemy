@@ -41,10 +41,12 @@ class Wallet extends Domain.Aggregate(
     state: Schema.Struct({ balance: Schema.Int }),
     initial: { balance: 0 },
     commands: [Deposit, Close],
-    decide: {
-      Deposit: (s, cmd) => [new Deposited({ amount: cmd.amount, balance: s.balance + cmd.amount })],
+    decide: (wallet) => ({
+      Deposit: (cmd) => [
+        new Deposited({ amount: cmd.amount, balance: wallet.balance + cmd.amount }),
+      ],
       Close: () => [],
-    },
+    }),
     evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
   },
   { description: "A wallet, which keeps its own balance." },

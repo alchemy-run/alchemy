@@ -111,6 +111,38 @@ export type Decision<C extends Command.Any> =
       Command.ContextOf<C>
     >;
 
+type UnionToIntersection<U> = (U extends unknown ? (u: U) => void : never) extends (
+  i: infer I,
+) => void
+  ? I
+  : never;
+
+/**
+ * What every command of an aggregate has in common: the rejections all of
+ * them declare, and the context all of their middleware provides. The part
+ * of `decide` that runs before a command's handler may only fail with, and
+ * read, these.
+ */
+export type CommonRejection<C extends ReadonlyArray<Command.Any>> =
+  UnionToIntersection<
+    { readonly [K in keyof C]: { readonly r: InstanceOf<C[K]["rejects"][number]> } }[number]
+  > extends { readonly r: infer R }
+    ? R
+    : never;
+export type CommonContext<C extends ReadonlyArray<Command.Any>> =
+  UnionToIntersection<
+    { readonly [K in keyof C]: { readonly c: Command.ContextOf<C[K]> } }[number]
+  > extends { readonly c: infer R }
+    ? R
+    : never;
+
+/** One handler per command, closed over the instance's state. */
+export type Handlers<C extends ReadonlyArray<Command.Any>> = {
+  readonly [T in C[number]["tag"]]: (
+    command: InstanceOf<ByTag<C[number], T>>,
+  ) => Decision<ByTag<C[number], T>>;
+};
+
 /** The event classes a set of commands may record. */
 export type EventsOf<C extends ReadonlyArray<Command.Any>> = C[number]["events"][number];
 
@@ -133,19 +165,22 @@ export interface Definition<
   /** Every command this aggregate handles, each declaring the events it records. */
   readonly commands: C;
   /**
-   * One handler per command: returns the events to commit (from the command's
-   * declared events), an empty array for an accepted no-op, or one of the
-   * command's declared rejections. A handler may be an Effect that reads the
-   * context its command's middleware provides (e.g. `yield* CurrentActor`)
-   * and fails with a rejection; it may require nothing else.
+   * Given the instance's current state and the decision's context, return
+   * one handler per command. Each handler returns the events to commit (from
+   * its command's declared events), an empty array for an accepted no-op, or
+   * one of its command's declared rejections. A handler may be an Effect that
+   * reads the context its command's middleware provides (e.g.
+   * `yield* CurrentActor`) and fails with a rejection; it may require nothing
+   * else.
+   *
+   * `decide` itself may be an Effect too, for work shared by every command:
+   * it may read only what every command's middleware provides, and fail
+   * only with a rejection every command declares.
    */
-  readonly decide: {
-    readonly [T in C[number]["tag"]]: (
-      state: S["Type"],
-      command: InstanceOf<ByTag<C[number], T>>,
-      ctx: DecideContext<Id["Type"]>,
-    ) => Decision<ByTag<C[number], T>>;
-  };
+  readonly decide: (
+    state: S["Type"],
+    ctx: DecideContext<Id["Type"]>,
+  ) => Handlers<C> | Effect.Effect<Handlers<C>, CommonRejection<C>, CommonContext<C>>;
   /**
    * One handler per event: folds a committed event into state. It covers
    * every state and never fails: `decide` refuses a command with a rejection
@@ -250,6 +285,7 @@ export interface SendMeta {
 }
 
 type AnyHandlers = { readonly [tag: string]: (...args: never[]) => unknown };
+type AnyDecide = (state: never, ctx: never) => unknown;
 
 /**
  * The widened shape of every {@link Definition}.
@@ -260,7 +296,7 @@ export interface AnyDefinition {
   readonly initial: unknown;
   readonly commands: ReadonlyArray<Command.Any>;
   readonly events: ReadonlyArray<Event.Any>;
-  readonly decide: AnyHandlers;
+  readonly decide: AnyDecide;
   readonly evolve: AnyHandlers;
   readonly reply?: AnyHandlers;
 }
@@ -440,6 +476,42 @@ export type Prediction<State, Ev, Rej, Id = string> =
  * rejection fails with itself, and a `decide` that suspends or dies gives
  * `Unpredictable`. `predict` never throws.
  */
+/**
+ * One decision for one command, as the kernel and `predict` run it: the
+ * instance's handlers, then the command's. It is an Effect when either part
+ * is, and `undefined` when `decide` returned no handler for the command.
+ *
+ * @internal
+ */
+export const decisionOf = (
+  aggregate: Any,
+  state: unknown,
+  command: { readonly _tag: string },
+  ctx: DecideContext<unknown>,
+): unknown => {
+  const decide = aggregate.definition.decide as unknown as (
+    state: unknown,
+    ctx: DecideContext<unknown>,
+  ) => unknown;
+  const unhandled = () =>
+    new DefinitionError({
+      reason: new UnhandledCommand({ aggregate: aggregate.aggregateName, command: command._tag }),
+    });
+  const handlerOf = (handlers: unknown) =>
+    (handlers as Record<string, ((command: unknown) => unknown) | undefined>)[command._tag];
+  const handlers = decide(state, ctx);
+  if (Effect.isEffect(handlers)) {
+    return Effect.flatMap(handlers, (resolved) => {
+      const handler = handlerOf(resolved);
+      if (!handler) return Effect.die(unhandled());
+      const decision = handler(command);
+      return Effect.isEffect(decision) ? decision : Effect.succeed(decision);
+    });
+  }
+  const handler = handlerOf(handlers);
+  return handler ? handler(command) : undefined;
+};
+
 export const predict = (
   aggregate: Any,
   state: unknown,
@@ -448,10 +520,19 @@ export const predict = (
 ): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }> => {
   const def = aggregate.definition;
   const cls = def.commands.find((c) => c.tag === command._tag);
-  const decide = def.decide[command._tag] as
-    | ((state: unknown, command: unknown, ctx: DecideContext<unknown>) => unknown)
-    | undefined;
-  if (!cls || !decide) {
+  const version = options.version ?? 0;
+  const commandId = options.commandId ?? "";
+  const stream = `${aggregate.aggregateName}/${String(options.id)}`;
+  let decision = cls
+    ? decisionOf(aggregate, state, command, {
+        id: options.id,
+        now: options.now,
+        commandId,
+        stream,
+        version,
+      })
+    : undefined;
+  if (!cls || decision === undefined) {
     return {
       _tag: "Unpredictable",
       cause: Cause.die(
@@ -464,16 +545,6 @@ export const predict = (
       ),
     };
   }
-  const version = options.version ?? 0;
-  const commandId = options.commandId ?? "";
-  const stream = `${aggregate.aggregateName}/${String(options.id)}`;
-  let decision = decide(state, command, {
-    id: options.id,
-    now: options.now,
-    commandId,
-    stream,
-    version,
-  });
   if (Effect.isEffect(decision)) {
     const settled = decision.pipe(
       Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),

@@ -39,19 +39,19 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Open, Debit],
-  decide: {
-    Open: (_, cmd) => [new Opened({ balance: cmd.balance })],
+  decide: (wallet) => ({
+    Open: (cmd) => [new Opened({ balance: cmd.balance })],
     // The handler records what it wants on the engine's span; nothing else from the payload is.
-    Debit: Effect.fn(function* (s, cmd) {
+    Debit: Effect.fn(function* (cmd) {
       yield* Effect.annotateCurrentSpan({
         "wallet.amount": cmd.amount,
-        "wallet.balance": s.balance,
+        "wallet.balance": wallet.balance,
       });
-      return s.balance < cmd.amount
-        ? yield* new Insufficient({ balance: s.balance })
+      return wallet.balance < cmd.amount
+        ? yield* new Insufficient({ balance: wallet.balance })
         : [new Debited({ amount: cmd.amount, note: cmd.note })];
     }),
-  },
+  }),
   evolve: {
     Opened: (_, e) => ({ balance: e.balance }),
     Debited: (s, e) => ({ balance: s.balance - e.amount }),
@@ -71,10 +71,10 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ audits: Schema.Number }),
   initial: { audits: 0 },
   commands: [Audit, Remind],
-  decide: {
-    Audit: (_, cmd) => [new Audited({ wallet: cmd.wallet })],
+  decide: () => ({
+    Audit: (cmd) => [new Audited({ wallet: cmd.wallet })],
     Remind: () => [new Reminded()],
-  },
+  }),
   evolve: {
     Audited: (s) => ({ audits: s.audits + 1 }),
     Reminded: (s) => s,
