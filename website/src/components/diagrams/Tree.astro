@@ -112,8 +112,10 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
     )
   ) : (
     <figure class="alc-fig not-content" data-nosnippet role="img" aria-label={caption ?? "Tree"}>
+      <div class="alc-fig__panel">
       <div class="alc-tree">
         {roots.map((r) => <Astro.self nodes={nodes} scopes={scopes} at={r.id} />)}
+      </div>
       </div>
       {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
     </figure>

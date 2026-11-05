@@ -61,6 +61,11 @@ that, and each has its own component in `website/src/components/diagrams/`
 `website/src/components/`). They share one look (`diagrams/diagram.css`), so
 mixing them on a page is fine.
 
+The caption sits under the panel, outside its border, as a note, so the
+drawing gets the whole panel. A new component wraps its drawing in
+`<div class="alc-fig__panel">` and puts the `figcaption` after it. A `DAG` grid
+starts at its first used `col` and `row`, so number them from 0.
+
 | The section answers | Component | Good example |
 | --- | --- | --- |
 | What holds what? What is the platform made of? | `DAG` with `groups` (borders) | `aws/what-is-aws`, `aws/networking` |

@@ -100,7 +100,16 @@ interface Props {
   caption?: string;
 }
 
-const { nodes, edges, groups = [], direction = "LR", caption } = Astro.props as Props;
+const { nodes: rawNodes, edges, groups = [], direction = "LR", caption } = Astro.props as Props;
+
+// A grid starts at its first used column and row, so an unused column 0 never leaves a blank strip.
+const minCol = Math.min(...rawNodes.map((n) => n.col ?? 0));
+const minRow = Math.min(...rawNodes.map((n) => n.row ?? 0));
+const nodes = rawNodes.map((n) => ({
+  ...n,
+  ...(n.col !== undefined ? { col: n.col - minCol } : {}),
+  ...(n.row !== undefined ? { row: n.row - minRow } : {}),
+}));
 
 const kindsShown = KIND_ORDER.filter((k) => nodes.some((n) => n.kind === k));
 
@@ -472,6 +481,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
 ---
 
 <figure class="alc-dag not-content" data-nosnippet>
+  <div class="alc-dag__panel">
   <svg
     class="alc-dag__svg"
     viewBox={`0 0 ${width} ${height}`}
@@ -610,12 +620,15 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
       </div>
     )
   }
+  </div>
   {caption && <figcaption class="alc-dag__caption">{caption}</figcaption>}
 </figure>
 
 <style>
   .alc-dag {
     margin: 1.5rem 0;
+  }
+  .alc-dag__panel {
     background: var(--alc-bg-elev-1);
     border: 1px solid var(--alc-hairline-2);
     border-radius: var(--alc-radius);
@@ -706,7 +719,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
   }
 
   .alc-dag__caption {
-    margin-top: 0.5rem;
+    margin-top: 0.625rem;
     font-family: var(--alc-font-sans);
     font-size: 13px;
     color: var(--alc-fg-3);

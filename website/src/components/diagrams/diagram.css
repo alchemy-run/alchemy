@@ -6,6 +6,8 @@
  */
 .alc-fig {
   margin: 1.5rem 0;
+}
+.alc-fig__panel {
   background: var(--alc-bg-elev-1);
   border: 1px solid var(--alc-hairline-2);
   border-radius: var(--alc-radius);
@@ -19,7 +21,7 @@
   margin-inline: auto;
 }
 .alc-fig__caption {
-  margin-top: 0.75rem;
+  margin-top: 0.625rem;
   font-family: var(--alc-font-sans);
   font-size: 13px;
   color: var(--alc-fg-3);
