@@ -92,7 +92,14 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
           }),
         );
         yield* serving(url, "v1");
-        yield* Effect.sleep("5 seconds");
+        // Keep writing on the new code until enough deposits have gone through.
+        yield* Effect.sync(() => log.written.length).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (count) => count > 10,
+            times: 60,
+          }),
+        );
         log.stop = true;
         yield* Fiber.join(writing);
 
@@ -138,7 +145,6 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
           console.log(`MOVE-KICK missing=${view.missing.length}`);
           yield* call(url, "POST", `/deposit/deep/${9_000_000}/1`);
           expected.push(9_000_000);
-          deepTotal += 9_000_000;
           deepTotal += 9_000_000;
           view = yield* settle;
         }
