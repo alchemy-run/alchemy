@@ -68,8 +68,18 @@ export interface JobTemplate extends Resource<
     category: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  JobTemplateLookup
 > {}
+
+/**
+ * Props for {@link JobTemplate.lookup}: find a job template this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface JobTemplateLookup {
+  /** The job template name of the existing job template. */
+  jobTemplateName: string;
+}
 
 /**
  * An AWS Elemental MediaConvert job template — a reusable, named transcode
@@ -109,6 +119,16 @@ export interface JobTemplate extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing job template
+ * `JobTemplate.lookup` references a job template Alchemy doesn't manage (created in the
+ * console or by another stack), found by `jobTemplateName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing job template
+ * ```typescript
+ * const existing = AWS.MediaConvert.JobTemplate.lookup({ jobTemplateName: "my-job-template" });
+ * ```
+ *
  * @resource
  */
 export const JobTemplate = Resource<JobTemplate>("AWS.MediaConvert.JobTemplate");
@@ -144,6 +164,14 @@ export const JobTemplateProvider = () =>
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
           if (oldName !== newName) return { action: "replace" } as const;
+        }),
+
+        lookup: Effect.fn(function* ({ jobTemplateName: name }) {
+          const template = yield* getJobTemplate(name);
+          if (template === undefined) return undefined;
+          const attrs = toAttrs(template);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

@@ -108,8 +108,18 @@ export interface Pipe extends Resource<
     currentState: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PipeLookup
 > {}
+
+/**
+ * Props for {@link Pipe.lookup}: find a pipe this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PipeLookup {
+  /** The pipe name of the existing pipe. */
+  pipeName: string;
+}
 
 /**
  * An Amazon EventBridge Pipe — point-to-point source→(filter)→(enrich)→target
@@ -175,6 +185,16 @@ export interface Pipe extends Resource<
  *   roleArn: role.roleArn,
  *   desiredState: "STOPPED",
  * });
+ * ```
+ *
+ * ### Looking up an existing pipe
+ * `Pipe.lookup` references a pipe Alchemy doesn't manage (created in the
+ * console or by another stack), found by `pipeName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing pipe
+ * ```typescript
+ * const existing = AWS.Pipes.Pipe.lookup({ pipeName: "my-pipe" });
  * ```
  *
  * @resource
@@ -478,6 +498,18 @@ export const PipeProvider = () =>
                 currentState: p.CurrentState,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ pipeName }) {
+          const described = yield* describeOrUndefined(pipeName);
+          if (!described?.Arn) return undefined;
+          const attrs = {
+            pipeName,
+            pipeArn: described.Arn,
+            currentState: described.CurrentState,
+          };
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const pipeName = output?.pipeName ?? (yield* createName(id, olds ?? {}));

@@ -103,8 +103,18 @@ export interface Group extends Resource<
     groupArn: string;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 > {}
+
+/**
+ * Props for {@link Group.lookup}: find a group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface GroupLookup {
+  /** The group name of the existing group. */
+  groupName: string;
+}
 
 /**
  * An AWS Resource Groups group — a collection of AWS resources defined by a
@@ -176,6 +186,16 @@ export interface Group extends Resource<
  *   },
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing group
+ * `Group.lookup` references a group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `groupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing group
+ * ```typescript
+ * const existing = AWS.ResourceGroups.Group.lookup({ groupName: "my-group" });
  * ```
  *
  * @resource
@@ -269,6 +289,19 @@ export const GroupProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ groupName }) {
+          const found = yield* resourcegroups.getGroup({ Group: groupName }).pipe(
+            Effect.map((r) => r.Group),
+            Effect.catchTag("NotFoundException", () => Effect.undefined),
+          );
+          if (!found) return undefined;
+          const attrs = {
+            groupName,
+            groupArn: found.GroupArn,
+          };
+
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const groupName = output?.groupName ?? (yield* createName(id, olds ?? {}));
           const found = yield* resourcegroups.getGroup({ Group: groupName }).pipe(

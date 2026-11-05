@@ -90,8 +90,18 @@ export interface ParallelData extends Resource<
     failedRecordCount: number | undefined;
   },
   never,
-  Providers
+  Providers,
+  ParallelDataLookup
 > {}
+
+/**
+ * Props for {@link ParallelData.lookup}: find a parallel data this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ParallelDataLookup {
+  /** The parallel data name of the existing parallel data. */
+  parallelDataName: string;
+}
 
 /**
  * Amazon Translate parallel data — segment-aligned translation examples
@@ -118,6 +128,16 @@ export interface ParallelData extends Resource<
  *   TargetLanguageCodes: ["es"],
  *   ParallelDataNames: [examples.parallelDataName],
  * });
+ * ```
+ *
+ * ### Looking up an existing parallel data
+ * `ParallelData.lookup` references a parallel data Alchemy doesn't manage (created in the
+ * console or by another stack), found by `parallelDataName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing parallel data
+ * ```typescript
+ * const existing = AWS.Translate.ParallelData.lookup({ parallelDataName: "my-parallel-data" });
  * ```
  *
  * @resource
@@ -180,6 +200,14 @@ export const ParallelDataProvider = () =>
           if ((yield* createName(id, olds)) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ parallelDataName: name }) {
+          const found = yield* getOne(name);
+          if (found?.ParallelDataProperties === undefined) return undefined;
+          const attrs = toAttributes(found.ParallelDataProperties);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

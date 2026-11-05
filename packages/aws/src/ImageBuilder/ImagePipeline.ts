@@ -140,8 +140,18 @@ export interface ImagePipeline extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImagePipelineLookup
 > {}
+
+/**
+ * Props for {@link ImagePipeline.lookup}: find an image pipeline this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ImagePipelineLookup {
+  /** The image pipeline arn of the existing image pipeline. */
+  imagePipelineArn: string;
+}
 
 /**
  * An EC2 Image Builder image pipeline — wires a recipe to an infrastructure
@@ -172,6 +182,16 @@ export interface ImagePipeline extends Resource<
  *       "EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing image pipeline
+ * `ImagePipeline.lookup` references an image pipeline Alchemy doesn't manage (created in the
+ * console or by another stack), found by `imagePipelineArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing image pipeline
+ * ```typescript
+ * const existing = AWS.ImageBuilder.ImagePipeline.lookup({ imagePipelineArn: "my-image-pipeline" });
  * ```
  *
  * @resource
@@ -235,6 +255,14 @@ export const ImagePipelineProvider = () =>
           if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ imagePipelineArn: arn }) {
+          const pipeline = yield* getPipeline(arn);
+          if (pipeline === undefined) return undefined;
+          const attrs = yield* toAttrs(pipeline);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

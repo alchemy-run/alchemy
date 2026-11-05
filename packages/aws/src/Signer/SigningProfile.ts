@@ -127,8 +127,18 @@ export interface SigningProfile extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  SigningProfileLookup
 > {}
+
+/**
+ * Props for {@link SigningProfile.lookup}: find a signing profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SigningProfileLookup {
+  /** The profile name of the existing signing profile. */
+  profileName: string;
+}
 
 /**
  * An AWS Signer signing profile — a code-signing template (platform +
@@ -157,6 +167,16 @@ export interface SigningProfile extends Resource<
  *   signatureValidityPeriod: { value: 12, type: "MONTHS" },
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing signing profile
+ * `SigningProfile.lookup` references a signing profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `profileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing signing profile
+ * ```typescript
+ * const existing = AWS.Signer.SigningProfile.lookup({ profileName: "my-signing-profile" });
  * ```
  *
  * @resource
@@ -238,6 +258,15 @@ export const SigningProfileProvider = () =>
               ),
             ),
           ),
+
+        lookup: Effect.fn(function* ({ profileName }) {
+          const live = yield* getProfile(profileName);
+          // Canceled and revoked profiles can no longer sign.
+          if (live === undefined || live.status !== "Active") return undefined;
+          const attrs = toAttributes(profileName, live);
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const profileName = output?.profileName ?? (yield* createName(id, olds ?? {}));

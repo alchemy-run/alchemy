@@ -68,8 +68,18 @@ export interface Endpoint extends Resource<
     endpointStatus: EndpointStatus | undefined;
   },
   never,
-  Providers
+  Providers,
+  EndpointLookup
 > {}
+
+/**
+ * Props for {@link Endpoint.lookup}: find an endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EndpointLookup {
+  /** The endpoint name of the existing endpoint. */
+  endpointName: string;
+}
 
 /**
  * An Amazon SageMaker Endpoint — the live, invocable deployment of an
@@ -102,6 +112,16 @@ export interface Endpoint extends Resource<
  *   ContentType: "application/json",
  *   Body: JSON.stringify({ instances: [[1, 2, 3, 4]] }),
  * });
+ * ```
+ *
+ * ### Looking up an existing endpoint
+ * `Endpoint.lookup` references an endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing endpoint
+ * ```typescript
+ * const existing = AWS.SageMaker.Endpoint.lookup({ endpointName: "my-endpoint" });
  * ```
  *
  * @resource
@@ -210,6 +230,19 @@ export const EndpointProvider = () =>
                 : [],
             );
           }),
+        lookup: Effect.fn(function* ({ endpointName: name }) {
+          const described = yield* describeEndpointOrUndefined(name);
+          if (!described || described.EndpointStatus === "Deleting") {
+            return undefined;
+          }
+          const attrs = {
+            endpointName: described.EndpointName,
+            endpointArn: described.EndpointArn,
+            endpointStatus: described.EndpointStatus,
+          };
+
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.endpointName ?? (yield* createEndpointName(id, olds ?? {}));
           const described = yield* describeEndpointOrUndefined(name);

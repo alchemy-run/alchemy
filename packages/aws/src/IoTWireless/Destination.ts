@@ -69,8 +69,18 @@ export interface Destination extends Resource<
     roleArn: string;
   },
   never,
-  Providers
+  Providers,
+  DestinationLookup
 > {}
+
+/**
+ * Props for {@link Destination.lookup}: find a destination this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DestinationLookup {
+  /** The destination name of the existing destination. */
+  destinationName: string;
+}
 
 /**
  * An AWS IoT Core for LoRaWAN destination — the routing rule that delivers
@@ -149,6 +159,16 @@ export interface Destination extends Resource<
  * );
  * ```
  *
+ * ### Looking up an existing destination
+ * `Destination.lookup` references a destination Alchemy doesn't manage (created in the
+ * console or by another stack), found by `destinationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing destination
+ * ```typescript
+ * const existing = AWS.IoTWireless.Destination.lookup({ destinationName: "my-destination" });
+ * ```
+ *
  * @resource
  */
 export const Destination = Resource<Destination>("AWS.IoTWireless.Destination");
@@ -205,6 +225,14 @@ export const DestinationProvider = () =>
                 ),
             ),
           ),
+
+        lookup: Effect.fn(function* ({ destinationName: name }) {
+          const destination = yield* getDestination(name);
+          if (destination === undefined) return undefined;
+          const attrs = yield* toAttrs(destination, name);
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.destinationName ?? (yield* createName(id, olds ?? {}));

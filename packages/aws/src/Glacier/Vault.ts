@@ -77,8 +77,18 @@ export interface Vault extends Resource<
     creationDate: string;
   },
   never,
-  Providers
+  Providers,
+  VaultLookup
 > {}
+
+/**
+ * Props for {@link Vault.lookup}: find a vault this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VaultLookup {
+  /** The vault name of the existing vault. */
+  vaultName: string;
+}
 
 /**
  * An Amazon S3 Glacier vault — a container for archives in the original
@@ -145,6 +155,16 @@ export interface Vault extends Resource<
  *     }],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing vault
+ * `Vault.lookup` references a vault Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vaultName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing vault
+ * ```typescript
+ * const existing = AWS.Glacier.Vault.lookup({ vaultName: "my-vault" });
  * ```
  *
  * @resource
@@ -248,6 +268,18 @@ export const VaultProvider = () =>
                   : [],
               );
           }),
+
+        lookup: Effect.fn(function* ({ vaultName }) {
+          const found = yield* describeVault(vaultName);
+          if (found?.VaultARN === undefined) return undefined;
+          const attrs = {
+            vaultName,
+            vaultArn: found.VaultARN,
+            creationDate: found.CreationDate ?? "",
+          };
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const vaultName = output?.vaultName ?? (yield* createVaultName(id, olds ?? {}));

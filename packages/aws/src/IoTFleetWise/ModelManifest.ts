@@ -74,8 +74,18 @@ export interface ModelManifest extends Resource<
     signalCatalogArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ModelManifestLookup
 > {}
+
+/**
+ * Props for {@link ModelManifest.lookup}: find a model manifest this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ModelManifestLookup {
+  /** The model manifest name of the existing model manifest. */
+  modelManifestName: string;
+}
 
 /**
  * An AWS IoT FleetWise model manifest (vehicle model) — the subset of
@@ -101,6 +111,16 @@ export interface ModelManifest extends Resource<
  *   nodes: ["Vehicle.Speed", "Vehicle.VIN"],
  *   description: "2026 sedan line",
  * });
+ * ```
+ *
+ * ### Looking up an existing model manifest
+ * `ModelManifest.lookup` references a model manifest Alchemy doesn't manage (created in the
+ * console or by another stack), found by `modelManifestName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing model manifest
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.ModelManifest.lookup({ modelManifestName: "my-model-manifest" });
  * ```
  *
  * @resource
@@ -160,6 +180,14 @@ export const ModelManifestProvider = () =>
           if (news.signalCatalogArn !== olds.signalCatalogArn) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ modelManifestName: name }) {
+          const found = yield* readManifest(name);
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

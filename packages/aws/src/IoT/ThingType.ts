@@ -44,8 +44,18 @@ export interface ThingType extends Resource<
     thingTypeArn: string;
   },
   never,
-  Providers
+  Providers,
+  ThingTypeLookup
 > {}
+
+/**
+ * Props for {@link ThingType.lookup}: find a thing type this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ThingTypeLookup {
+  /** The thing type name of the existing thing type. */
+  thingTypeName: string;
+}
 
 /**
  * An AWS IoT Thing Type — a reusable template describing a class of things.
@@ -69,6 +79,16 @@ export interface ThingType extends Resource<
  *   thingTypeName: thingType.thingTypeName,
  *   attributes: { location: "warehouse-a" },
  * });
+ * ```
+ *
+ * ### Looking up an existing thing type
+ * `ThingType.lookup` references a thing type Alchemy doesn't manage (created in the
+ * console or by another stack), found by `thingTypeName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing thing type
+ * ```typescript
+ * const existing = AWS.IoT.ThingType.lookup({ thingTypeName: "my-thing-type" });
  * ```
  *
  * @resource
@@ -104,6 +124,18 @@ export const ThingTypeProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ thingTypeName }) {
+          const found = yield* iot
+            .describeThingType({ thingTypeName })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!found) return undefined;
+          const attrs = {
+            thingTypeName,
+            thingTypeArn: found.thingTypeArn!,
+          };
+
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const thingTypeName = output?.thingTypeName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot

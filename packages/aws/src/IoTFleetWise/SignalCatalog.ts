@@ -61,8 +61,18 @@ export interface SignalCatalog extends Resource<
     signalCatalogArn: string;
   },
   never,
-  Providers
+  Providers,
+  SignalCatalogLookup
 > {}
+
+/**
+ * Props for {@link SignalCatalog.lookup}: find a signal catalog this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SignalCatalogLookup {
+  /** The signal catalog name of the existing signal catalog. */
+  signalCatalogName: string;
+}
 
 /**
  * An AWS IoT FleetWise signal catalog — the account-wide collection of
@@ -105,6 +115,16 @@ export interface SignalCatalog extends Resource<
  *   ],
  *   tags: { team: "telemetry" },
  * });
+ * ```
+ *
+ * ### Looking up an existing signal catalog
+ * `SignalCatalog.lookup` references a signal catalog Alchemy doesn't manage (created in the
+ * console or by another stack), found by `signalCatalogName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing signal catalog
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.SignalCatalog.lookup({ signalCatalogName: "my-signal-catalog" });
  * ```
  *
  * @resource
@@ -152,6 +172,17 @@ export const SignalCatalogProvider = () =>
           if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ signalCatalogName: name }) {
+          const found = yield* readCatalog(name);
+          if (found === undefined) return undefined;
+          const attrs = {
+            signalCatalogName: found.name,
+            signalCatalogArn: found.arn,
+          };
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

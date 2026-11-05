@@ -37,8 +37,18 @@ export interface EntityType extends Resource<
     arn: string;
   },
   never,
-  Providers
+  Providers,
+  EntityTypeLookup
 > {}
+
+/**
+ * Props for {@link EntityType.lookup}: find an entity type this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EntityTypeLookup {
+  /** The name of the existing entity type. */
+  name: string;
+}
 
 /**
  * An Amazon Fraud Detector entity type — the classification of who or what an
@@ -51,6 +61,16 @@ export interface EntityType extends Resource<
  * const customer = yield* FraudDetector.EntityType("customer", {
  *   description: "the buyer placing an order",
  * });
+ * ```
+ *
+ * ### Looking up an existing entity type
+ * `EntityType.lookup` references an entity type Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing entity type
+ * ```typescript
+ * const existing = AWS.FraudDetector.EntityType.lookup({ name: "my-entity-type" });
  * ```
  *
  * @resource
@@ -88,6 +108,14 @@ export const EntityTypeProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ name }) {
+          const entityType = yield* get(name);
+          if (entityType === undefined) return undefined;
+          const attrs = toAttrs(entityType);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

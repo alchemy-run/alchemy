@@ -99,8 +99,18 @@ export interface FeatureGroup extends Resource<
     eventTimeFeatureName: string;
   },
   never,
-  Providers
+  Providers,
+  FeatureGroupLookup
 > {}
+
+/**
+ * Props for {@link FeatureGroup.lookup}: find a feature group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FeatureGroupLookup {
+  /** The feature group name of the existing feature group. */
+  featureGroupName: string;
+}
 
 /**
  * An Amazon SageMaker Feature Store FeatureGroup — a typed, versioned table
@@ -144,6 +154,16 @@ export interface FeatureGroup extends Resource<
  * const { Record } = yield* getRecord({
  *   RecordIdentifierValueAsString: "user-123",
  * });
+ * ```
+ *
+ * ### Looking up an existing feature group
+ * `FeatureGroup.lookup` references a feature group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `featureGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing feature group
+ * ```typescript
+ * const existing = AWS.SageMaker.FeatureGroup.lookup({ featureGroupName: "my-feature-group" });
  * ```
  *
  * @resource
@@ -273,6 +293,15 @@ export const FeatureGroupProvider = () =>
               (attrs): attrs is FeatureGroup["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ featureGroupName: name }) {
+          const described = yield* describeFeatureGroupOrUndefined(name);
+          if (!described || described.FeatureGroupStatus === "Deleting") {
+            return undefined;
+          }
+          const attrs = toAttrs(described);
+
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.featureGroupName ?? (yield* createFeatureGroupName(id, olds ?? {}));
           const described = yield* describeFeatureGroupOrUndefined(name);

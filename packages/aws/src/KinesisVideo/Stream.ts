@@ -64,8 +64,18 @@ export interface Stream extends Resource<
     streamArn: string;
   },
   {},
-  Providers
+  Providers,
+  StreamLookup
 > {}
+
+/**
+ * Props for {@link Stream.lookup}: find a stream this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface StreamLookup {
+  /** The stream name of the existing stream. */
+  streamName: string;
+}
 
 /**
  * An Amazon Kinesis Video Stream for ingesting, storing, and consuming
@@ -117,6 +127,16 @@ export interface Stream extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing stream
+ * `Stream.lookup` references a stream Alchemy doesn't manage (created in the
+ * console or by another stack), found by `streamName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing stream
+ * ```typescript
+ * const existing = AWS.KinesisVideo.Stream.lookup({ streamName: "my-stream" });
+ * ```
+ *
  * @resource
  */
 export const Stream = Resource<Stream>("AWS.KinesisVideo.Stream");
@@ -162,6 +182,19 @@ export const StreamProvider = () =>
                 streamArn: info.StreamARN!,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ streamName }) {
+          const info = yield* observeStream(streamName);
+          if (info?.StreamARN === undefined || info.Status === "DELETING") {
+            return undefined;
+          }
+          const attrs = {
+            streamName,
+            streamArn: info.StreamARN,
+          };
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const streamName = output?.streamName ?? (yield* createName(id, olds ?? {}));

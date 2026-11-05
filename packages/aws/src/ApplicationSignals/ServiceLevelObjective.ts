@@ -85,8 +85,18 @@ export interface ServiceLevelObjective extends Resource<
     evaluationType: appsignals.EvaluationType | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceLevelObjectiveLookup
 > {}
+
+/**
+ * Props for {@link ServiceLevelObjective.lookup}: find a service level objective this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceLevelObjectiveLookup {
+  /** The slo name of the existing service level objective. */
+  sloName: string;
+}
 
 /**
  * A CloudWatch Application Signals service level objective (SLO) that tracks
@@ -162,6 +172,16 @@ export interface ServiceLevelObjective extends Resource<
  *   },
  *   goal: { AttainmentGoal: 99.9 },
  * });
+ * ```
+ *
+ * ### Looking up an existing service level objective
+ * `ServiceLevelObjective.lookup` references a service level objective Alchemy doesn't manage (created in the
+ * console or by another stack), found by `sloName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing service level objective
+ * ```typescript
+ * const existing = AWS.ApplicationSignals.ServiceLevelObjective.lookup({ sloName: "my-service-level-objective" });
  * ```
  *
  * @resource
@@ -290,6 +310,17 @@ export const ServiceLevelObjectiveProvider = () =>
               evaluationType: slo.EvaluationType,
             }));
           }),
+        lookup: Effect.fn(function* ({ sloName }) {
+          const found = yield* observeSlo(sloName);
+          if (!found) return undefined;
+          const attrs = {
+            sloName: found.Name,
+            sloArn: found.Arn,
+            evaluationType: found.EvaluationType,
+          };
+
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const sloName = output?.sloName ?? (yield* createSloName(id, olds ?? {}));
           const found = yield* observeSlo(sloName);

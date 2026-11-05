@@ -69,8 +69,18 @@ export interface Tracker extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  TrackerLookup
 > {}
+
+/**
+ * Props for {@link Tracker.lookup}: find a tracker this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TrackerLookup {
+  /** The tracker name of the existing tracker. */
+  trackerName: string;
+}
 
 /**
  * An Amazon Location Service tracker. A tracker records device positions and
@@ -92,6 +102,16 @@ export interface Tracker extends Resource<
  *   positionFiltering: "DistanceBased",
  *   eventBridgeEnabled: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing tracker
+ * `Tracker.lookup` references a tracker Alchemy doesn't manage (created in the
+ * console or by another stack), found by `trackerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing tracker
+ * ```typescript
+ * const existing = AWS.Location.Tracker.lookup({ trackerName: "my-tracker" });
  * ```
  *
  * @resource
@@ -141,6 +161,11 @@ export const TrackerProvider = () =>
             });
             return hydrated.filter((attrs): attrs is Tracker["Attributes"] => attrs !== undefined);
           }),
+        lookup: Effect.fn(function* ({ trackerName }) {
+          const state = yield* readTracker(trackerName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const trackerName = output?.trackerName ?? (yield* createTrackerName(id, olds ?? {}));
           const state = yield* readTracker(trackerName);

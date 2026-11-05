@@ -36,8 +36,18 @@ export interface Profile extends Resource<
     profileName: string;
   },
   never,
-  Providers
+  Providers,
+  ProfileLookup
 > {}
+
+/**
+ * Props for {@link Profile.lookup}: find a profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProfileLookup {
+  /** The profile id of the existing profile. */
+  profileId: string;
+}
 
 /**
  * An Amazon Route 53 Profile — a reusable container of DNS configuration
@@ -71,6 +81,16 @@ export interface Profile extends Resource<
  *   profileId: profile.profileId,
  *   resourceId: vpc.vpcId,
  * });
+ * ```
+ *
+ * ### Looking up an existing profile
+ * `Profile.lookup` references a profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `profileId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing profile
+ * ```typescript
+ * const existing = AWS.Route53Profiles.Profile.lookup({ profileId: "my-profile" });
  * ```
  *
  * @resource
@@ -200,6 +220,18 @@ export const ProfileProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ profileId }) {
+          if (profileId === undefined) return undefined;
+          const live = yield* observe(profileId);
+          if (!live) return undefined;
+          const attrs = {
+            profileId,
+            profileArn: live.Arn!,
+            profileName: live.Name!,
+          };
+
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const profileId =
             output?.profileId ??

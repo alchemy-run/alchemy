@@ -43,8 +43,18 @@ export interface OptOutList extends Resource<
     optOutListArn: string;
   },
   never,
-  Providers
+  Providers,
+  OptOutListLookup
 > {}
+
+/**
+ * Props for {@link OptOutList.lookup}: find an opt out list this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface OptOutListLookup {
+  /** The opt out list name of the existing opt out list. */
+  optOutListName: string;
+}
 
 /**
  * An AWS End User Messaging SMS (Pinpoint SMS Voice v2) opt-out list — a
@@ -68,6 +78,16 @@ export interface OptOutList extends Resource<
  *   optOutListName: "marketing-opt-outs",
  *   tags: { team: "growth" },
  * });
+ * ```
+ *
+ * ### Looking up an existing opt out list
+ * `OptOutList.lookup` references an opt out list Alchemy doesn't manage (created in the
+ * console or by another stack), found by `optOutListName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing opt out list
+ * ```typescript
+ * const existing = AWS.PinpointSMSVoiceV2.OptOutList.lookup({ optOutListName: "my-opt-out-list" });
  * ```
  *
  * @resource
@@ -106,6 +126,17 @@ export const OptOutListProvider = () =>
 
       return {
         stables: ["optOutListName", "optOutListArn"],
+
+        lookup: Effect.fn(function* ({ optOutListName: name }) {
+          const observed = yield* getByName(name);
+          if (observed === undefined) return undefined;
+          const attrs = {
+            optOutListName: observed.OptOutListName,
+            optOutListArn: observed.OptOutListArn,
+          };
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.optOutListName ?? (yield* toName(id, olds ?? {}));

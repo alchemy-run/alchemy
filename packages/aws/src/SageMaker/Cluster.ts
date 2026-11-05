@@ -182,8 +182,18 @@ export interface Cluster extends Resource<
     instanceGroups: Record<string, ClusterInstanceGroupRef>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The cluster name of the existing cluster. */
+  clusterName: string;
+}
 
 const ClusterResource = Resource<Cluster>("AWS.SageMaker.Cluster");
 
@@ -355,6 +365,16 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.SageMaker.Cluster.lookup({ clusterName: "my-cluster" });
  * ```
  *
  * @resource
@@ -590,6 +610,15 @@ export const ClusterProvider = () =>
                 : [],
             );
           }),
+        lookup: Effect.fn(function* ({ clusterName: name }) {
+          const described = yield* describeClusterOrUndefined(name);
+          if (!described || described.ClusterStatus === "Deleting") {
+            return undefined;
+          }
+          const attrs = toAttrs(described);
+
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.clusterName ?? (yield* createClusterName(id, olds ?? {}));
           const described = yield* describeClusterOrUndefined(name);
