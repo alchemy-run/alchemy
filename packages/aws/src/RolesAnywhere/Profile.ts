@@ -134,8 +134,18 @@ export interface Profile extends Resource<
     enabled: boolean;
   },
   never,
-  Providers
+  Providers,
+  ProfileLookup
 > {}
+
+/**
+ * Props for {@link Profile.lookup}: find a profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProfileLookup {
+  /** The id of the existing profile. */
+  profileId: string;
+}
 
 /**
  * An IAM Roles Anywhere profile — the list of IAM roles that the Roles
@@ -189,6 +199,16 @@ export interface Profile extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing profile
+ * `Profile.lookup` references a profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `profileId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing profile
+ * ```typescript
+ * const existing = AWS.RolesAnywhere.Profile.lookup({ profileId: "..." });
  * ```
  *
  * @resource
@@ -246,6 +266,16 @@ export const ProfileProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ profileId }) {
+          const found = yield* getById(profileId);
+
+          if (found === undefined) return undefined;
+
+          const attrs = toAttrs(found);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

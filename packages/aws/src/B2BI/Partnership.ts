@@ -66,8 +66,18 @@ export interface Partnership extends Resource<
     tradingPartnerId: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PartnershipLookup
 > {}
+
+/**
+ * Props for {@link Partnership.lookup}: find a partnership this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PartnershipLookup {
+  /** The id of the existing partnership. */
+  partnershipId: string;
+}
 
 /**
  * An AWS B2B Data Interchange (B2BI) partnership. A partnership connects a
@@ -82,6 +92,16 @@ export interface Partnership extends Resource<
  *   email: "edi@partner.example",
  *   capabilities: [capability.capabilityId],
  * });
+ * ```
+ *
+ * ### Looking up an existing partnership
+ * `Partnership.lookup` references a partnership Alchemy doesn't manage (created in the
+ * console or by another stack), found by `partnershipId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing partnership
+ * ```typescript
+ * const existing = AWS.B2BI.Partnership.lookup({ partnershipId: "..." });
  * ```
  *
  * @resource
@@ -126,6 +146,20 @@ export const PartnershipProvider = () =>
           if (olds.profileId !== undefined && olds.profileId !== news.profileId) {
             return { action: "replace", deleteFirst: true } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ partnershipId }) {
+          const found = yield* b2bi
+
+            .getPartnership({ partnershipId: partnershipId })
+
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+
+          if (found === undefined) return undefined;
+
+          const attrs = toAttrs(found);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output, previous }) {

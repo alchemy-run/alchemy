@@ -122,8 +122,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The id of the existing cluster. */
+  clusterId: string;
+}
 
 /**
  * An AWS CloudHSM cluster — a fleet of FIPS-validated, single-tenant
@@ -165,6 +175,16 @@ export interface Cluster extends Resource<
  *   clusterId: cluster.clusterId,
  *   availabilityZone: "us-west-2a",
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.CloudHSMV2.Cluster.lookup({ clusterId: "..." });
  * ```
  *
  * @resource
@@ -282,6 +302,18 @@ export const ClusterProvider = () =>
           if ((n.mode ?? undefined) !== (o.mode ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterId }) {
+          const cluster = yield* findClusterById(clusterId);
+
+          if (cluster === undefined || cluster.State === "DELETED") {
+            return undefined;
+          }
+
+          const attrs = yield* toAttrs(cluster);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {

@@ -65,8 +65,18 @@ export interface Crl extends Resource<
     enabled: boolean;
   },
   never,
-  Providers
+  Providers,
+  CrlLookup
 > {}
+
+/**
+ * Props for {@link Crl.lookup}: find a crl this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CrlLookup {
+  /** The id of the existing crl. */
+  crlId: string;
+}
 
 /**
  * An IAM Roles Anywhere certificate revocation list (CRL). A CRL is a
@@ -92,6 +102,16 @@ export interface Crl extends Resource<
  *   crlData: NEXT_CRL_PEM, // re-deploy with the CA's latest CRL
  *   trustAnchorArn: anchor.trustAnchorArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing crl
+ * `Crl.lookup` references a crl Alchemy doesn't manage (created in the
+ * console or by another stack), found by `crlId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing crl
+ * ```typescript
+ * const existing = AWS.RolesAnywhere.Crl.lookup({ crlId: "..." });
  * ```
  *
  * @resource
@@ -141,6 +161,16 @@ export const CrlProvider = () =>
           if (olds?.trustAnchorArn !== undefined && olds.trustAnchorArn !== news.trustAnchorArn) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ crlId }) {
+          const found = yield* getById(crlId);
+
+          if (found === undefined) return undefined;
+
+          const attrs = toAttrs(found);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

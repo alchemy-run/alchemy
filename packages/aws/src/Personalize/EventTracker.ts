@@ -63,8 +63,18 @@ export interface EventTracker extends Resource<
     datasetGroupArn: string;
   },
   never,
-  Providers
+  Providers,
+  EventTrackerLookup
 > {}
+
+/**
+ * Props for {@link EventTracker.lookup}: find an event tracker this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EventTrackerLookup {
+  /** The ARN of the existing event tracker. */
+  eventTrackerArn: string;
+}
 
 /**
  * An Amazon Personalize event tracker — the ingestion endpoint for streaming
@@ -92,6 +102,16 @@ export interface EventTracker extends Resource<
  *   userId: "user-1",
  *   eventList: [{ eventType: "click", itemId: "item-42", sentAt: new Date() }],
  * });
+ * ```
+ *
+ * ### Looking up an existing event tracker
+ * `EventTracker.lookup` references an event tracker Alchemy doesn't manage (created in the
+ * console or by another stack), found by `eventTrackerArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing event tracker
+ * ```typescript
+ * const existing = AWS.Personalize.EventTracker.lookup({ eventTrackerArn: "..." });
  * ```
  *
  * @resource
@@ -160,6 +180,16 @@ export const EventTrackerProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ eventTrackerArn }) {
+          const tracker = yield* describe(eventTrackerArn);
+
+          if (tracker === undefined) return undefined;
+
+          const attrs = toAttrs(tracker);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {

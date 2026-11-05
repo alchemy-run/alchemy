@@ -113,8 +113,18 @@ export interface Scraper extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  ScraperLookup
 > {}
+
+/**
+ * Props for {@link Scraper.lookup}: find a scraper this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ScraperLookup {
+  /** The id of the existing scraper. */
+  scraperId: string;
+}
 
 /**
  * An Amazon Managed Service for Prometheus scraper — a fully-managed,
@@ -154,6 +164,16 @@ export interface Scraper extends Resource<
  *   },
  *   destinationWorkspaceArn: workspace.workspaceArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing scraper
+ * `Scraper.lookup` references a scraper Alchemy doesn't manage (created in the
+ * console or by another stack), found by `scraperId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing scraper
+ * ```typescript
+ * const existing = AWS.AMP.Scraper.lookup({ scraperId: "..." });
  * ```
  *
  * @resource
@@ -252,6 +272,16 @@ export const ScraperProvider = () =>
           if (olds !== undefined && canonicalSource(olds.source) !== canonicalSource(news.source)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ scraperId }) {
+          const scraper = yield* describe(scraperId);
+
+          if (scraper === undefined) return undefined;
+
+          const attrs = toAttrs(scraper);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {

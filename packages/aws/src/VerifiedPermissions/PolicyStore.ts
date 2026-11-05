@@ -56,8 +56,18 @@ export interface PolicyStore extends Resource<
     policyStoreArn: string;
   },
   {},
-  Providers
+  Providers,
+  PolicyStoreLookup
 > {}
+
+/**
+ * Props for {@link PolicyStore.lookup}: find a policy store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PolicyStoreLookup {
+  /** The id of the existing policy store. */
+  policyStoreId: string;
+}
 
 /**
  * An Amazon Verified Permissions policy store — the container for Cedar
@@ -91,6 +101,16 @@ export interface PolicyStore extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing policy store
+ * `PolicyStore.lookup` references a policy store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `policyStoreId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing policy store
+ * ```typescript
+ * const existing = AWS.VerifiedPermissions.PolicyStore.lookup({ policyStoreId: "..." });
+ * ```
+ *
  * @resource
  */
 export const PolicyStore = Resource<PolicyStore>("AWS.VerifiedPermissions.PolicyStore");
@@ -117,6 +137,20 @@ export const PolicyStoreProvider = () =>
               policyStoreArn: item.arn,
             }));
           }),
+
+        lookup: Effect.fn(function* ({ policyStoreId }) {
+          const store = yield* observe(policyStoreId);
+
+          if (store === undefined) return undefined;
+
+          const attrs = {
+            policyStoreId: store.policyStoreId,
+
+            policyStoreArn: store.arn,
+          };
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, output }) {
           if (output?.policyStoreId === undefined) return undefined;

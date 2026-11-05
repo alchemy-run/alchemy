@@ -104,8 +104,18 @@ export interface PhoneNumber extends Resource<
     optOutListName: string;
   },
   never,
-  Providers
+  Providers,
+  PhoneNumberLookup
 > {}
+
+/**
+ * Props for {@link PhoneNumber.lookup}: find a phone number this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PhoneNumberLookup {
+  /** The id of the existing phone number. */
+  phoneNumberId: string;
+}
 
 /**
  * An AWS End User Messaging SMS (Pinpoint SMS Voice v2) origination
@@ -137,6 +147,16 @@ export interface PhoneNumber extends Resource<
  *   numberType: "TOLL_FREE",
  *   optOutListName: optOuts.optOutListName,
  * });
+ * ```
+ *
+ * ### Looking up an existing phone number
+ * `PhoneNumber.lookup` references a phone number Alchemy doesn't manage (created in the
+ * console or by another stack), found by `phoneNumberId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing phone number
+ * ```typescript
+ * const existing = AWS.PinpointSMSVoiceV2.PhoneNumber.lookup({ phoneNumberId: "..." });
  * ```
  *
  * @resource
@@ -206,6 +226,16 @@ export const PhoneNumberProvider = () =>
 
       return {
         stables: ["phoneNumberId", "phoneNumberArn", "phoneNumber", "isoCountryCode", "numberType"],
+
+        lookup: Effect.fn(function* ({ phoneNumberId }) {
+          const observed = yield* getById(phoneNumberId);
+
+          if (observed === undefined) return undefined;
+
+          const attrs = yield* toAttrs(observed);
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, output }) {
           // Phone number IDs are assigned by AWS — without a cached output

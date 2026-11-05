@@ -48,8 +48,18 @@ export interface DatasetGroup extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  DatasetGroupLookup
 > {}
+
+/**
+ * Props for {@link DatasetGroup.lookup}: find a dataset group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DatasetGroupLookup {
+  /** The ARN of the existing dataset group. */
+  datasetGroupArn: string;
+}
 
 /**
  * An Amazon Forecast dataset group — a domain-scoped container that groups the
@@ -72,6 +82,16 @@ export interface DatasetGroup extends Resource<
  *   datasetArns: [dataset.datasetArn],
  *   tags: { team: "planning" },
  * });
+ * ```
+ *
+ * ### Looking up an existing dataset group
+ * `DatasetGroup.lookup` references a dataset group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `datasetGroupArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dataset group
+ * ```typescript
+ * const existing = AWS.Forecast.DatasetGroup.lookup({ datasetGroupArn: "..." });
  * ```
  *
  * @resource
@@ -117,6 +137,16 @@ export const DatasetGroupProvider = () =>
           if (oldName !== newName || (olds.domain ?? undefined) !== (news.domain ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ datasetGroupArn }) {
+          const group = yield* describe(datasetGroupArn);
+
+          if (group === undefined) return undefined;
+
+          const attrs = toAttrs(group);
+
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {

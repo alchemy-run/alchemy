@@ -70,8 +70,18 @@ export interface Analyzer extends Resource<
     status: string;
   },
   {},
-  Providers
+  Providers,
+  AnalyzerLookup
 > {}
+
+/**
+ * Props for {@link Analyzer.lookup}: find an analyzer this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AnalyzerLookup {
+  /** The name of the existing analyzer. */
+  analyzerName: string;
+}
 
 class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
   readonly analyzerName: string;
@@ -126,6 +136,16 @@ class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
  * });
  * ```
  *
+ * ### Looking up an existing analyzer
+ * `Analyzer.lookup` references an analyzer Alchemy doesn't manage (created in the
+ * console or by another stack), found by `analyzerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing analyzer
+ * ```typescript
+ * const existing = AWS.AccessAnalyzer.Analyzer.lookup({ analyzerName: "..." });
+ * ```
+ *
  * @resource
  */
 export const Analyzer = Resource<Analyzer>("AWS.AccessAnalyzer.Analyzer");
@@ -162,6 +182,24 @@ export const AnalyzerProvider = () =>
               status: summary.status,
             }));
           }),
+
+        lookup: Effect.fn(function* ({ analyzerName: name }) {
+          const analyzer = yield* observe(name);
+
+          if (analyzer === undefined) return undefined;
+
+          const attrs = {
+            analyzerName: analyzer.name,
+
+            analyzerArn: analyzer.arn,
+
+            type: analyzer.type,
+
+            status: analyzer.status,
+          };
+
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output, previous }) {
           const name = output?.analyzerName ?? (yield* createName(id, olds ?? {}));
