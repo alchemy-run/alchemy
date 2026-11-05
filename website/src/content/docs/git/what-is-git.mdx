@@ -3,31 +3,28 @@ title: What is a git host?
 description: The concepts behind hosting git — objects, refs, packs, the smart HTTP protocol, pushes and their verification, repositories, names and pull requests — and how @alchemy.run/git builds a host from them.
 ---
 
-import Sequence from "../../../components/diagrams/Sequence.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 A git host is the server your `git clone` and `git push` talk to. It stores repositories, sends a client the objects it's missing, accepts new ones, and moves branches only when the push is valid. Around that, most hosts add names like `acme/api`, an API, and pull requests.
 
 Take one host: a Worker serving git over HTTP, with each repository in a Durable Object and its bulk bytes in R2. A client speaks git's HTTP protocol to the Worker. The Worker checks who's calling, resolves the name to a repository, and the repository stores objects and moves refs, keeping large packs in a blob store.
 
-<Sequence
-  actors={[
-    { id: "client", label: "git client", type: "git push" },
-    { id: "worker", label: "Worker", type: "smart HTTP" },
-    { id: "registry", label: "Registry", type: "names" },
-    { id: "repo", label: "Repository", type: "Durable Object", tone: "accent" },
-    { id: "blobs", label: "Blob Store", type: "R2" },
+<Tree
+  nodes={[
+    { id: "graph", label: "GitLive", type: "one Layer graph, provided once" },
+    { id: "worker", label: "your Worker", type: "your application", parent: "graph" },
+    { id: "api", label: "Git.ApiLive", type: "smart HTTP · REST · GitHub API", parent: "worker", tone: "accent" },
+    { id: "auth", label: "your middleware", type: "who may call what", parent: "worker" },
+    { id: "routes", label: "your routes", type: "next to Git's", parent: "worker" },
+    { id: "repo", label: "Repository", type: "a Durable Object per repo", parent: "graph" },
+    { id: "refs", label: "refs & objects", type: "moved one at a time", parent: "repo", tone: "accent" },
+    { id: "prs", label: "pull requests", type: "merges, jobs", parent: "repo" },
+    { id: "blocks", label: "your choices", type: "swap any one", parent: "graph", wide: true, dashed: true },
+    { id: "registry", label: "Registry", type: "owner/name → repository", parent: "blocks", specs: [["in", "Durable Object · D1"]] },
+    { id: "blobs", label: "Blob Store", type: "packs, bundles", parent: "blocks", specs: [["in", "R2 · S3 · your own"]] },
+    { id: "hasher", label: "Hasher", type: "verifies pushes", parent: "blocks", specs: [["on", "inline · Worker Loader · Lambda"]] },
   ]}
-  steps={[
-    { from: "client", to: "worker", label: "push to acme/api" },
-    { note: "checks who's calling", over: "worker" },
-    { from: "worker", to: "registry", label: "resolve acme/api" },
-    { from: "registry", to: "worker", label: "repository id", dashed: true },
-    { from: "worker", to: "repo", label: "receive pack" },
-    { from: "repo", to: "blobs", label: "store large pack" },
-    { note: "moves refs if the push is valid", over: "repo" },
-    { from: "repo", to: "client", label: "refs updated", dashed: true },
-  ]}
-  caption="One decision per box: who may call, how names resolve, where refs live, where bytes go."
+  caption="A host is one Layer graph. Git's routes live inside your own Worker, next to your routes and middleware, and each repository's refs move in its own Durable Object. The Registry, Blob Store and Hasher are choices: swap one, and only that decision changes."
 />
 
 ## Objects
