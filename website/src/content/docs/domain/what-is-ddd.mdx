@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 Domain-Driven Design (DDD) is an approach to building software in which the code is a model of the business it serves. Instead of starting from tables and endpoints, you start from the business itself: what it deals with, what can happen, who decides, and what people need to know. The code is then organized around those answers.
 
-This page introduces the concepts DDD uses to do that, along with two techniques that are often paired with it, event sourcing and CQRS. The examples come from a bank, the same one the [tutorial](/domain/tutorial/part-1) builds.
+DDD has a handful of concepts for doing that, and two techniques are often paired with it: event sourcing and CQRS. The examples come from a bank, the same one the [tutorial](/domain/tutorial/part-1) builds.
 
 ## The domain and its model
 
@@ -17,7 +17,7 @@ A **domain model** is a deliberate simplification of the domain, written as code
 
 The model is about behaviour, not storage. It says what can happen in the domain, which rules govern it, and what's remembered as a result. How that's stored is a separate concern.
 
-Here is the shape of the bank's model, which the rest of this page explains piece by piece. A customer's app sends commands; aggregates decide them and record events; views turn events into what the app reads; and policies turn events into further commands.
+Here is the shape of the bank's model. A customer's app sends commands; aggregates decide them and record events; views turn events into what the app reads; and policies turn events into further commands.
 
 <DAG
   nodes={[
@@ -372,7 +372,7 @@ DDD splits the business into **bounded contexts**: areas in which one model and 
 
 ## How @alchemy.run/domain models these concepts
 
-Each concept on this page is a building block in `@alchemy.run/domain`. A bounded context is a [`Domain.Model`](/domain/model), and its published interface is an [`Api`](/domain/api). Inside it, you declare [commands](/domain/command), [events](/domain/event), [aggregates](/domain/aggregate) with `decide` and `evolve`, [views](/domain/view), [projections](/domain/projection), [queries](/domain/query) and [policies](/domain/policy). The platform you run the model on provides the guarantees described here: one command at a time per aggregate, events and state committed together, and every event delivered to every view and policy that consumes it, in order.
+Each of these concepts is a building block in `@alchemy.run/domain`. A bounded context is a [`Domain.Model`](/domain/model), and its published interface is an [`Api`](/domain/api). Inside it, you declare [commands](/domain/command), [events](/domain/event), [aggregates](/domain/aggregate) with `decide` and `evolve`, [views](/domain/view), [projections](/domain/projection), [queries](/domain/query) and [policies](/domain/policy). The platform you run the model on provides the guarantees described here: one command at a time per aggregate, events and state committed together, and every event delivered to every view and policy that consumes it, in order.
 
 A model lists its building blocks:
 

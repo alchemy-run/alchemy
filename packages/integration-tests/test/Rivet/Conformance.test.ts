@@ -48,69 +48,103 @@ describe.skipIf(!!process.env.FAST)(
 
     conformanceTests(test, { baseUrl: () => baseUrl, kind: "local" });
 
-    test(
-      "concurrent get-then-put calls on one instance lose no updates",
+    // GET a tally route on a fresh instance; a retried attempt starts over.
+    const tally = <T>(path: string, query: string) =>
       Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
-        // A fresh instance per attempt, so a retried attempt starts from zero.
-        const { count } = (yield* Effect.suspend(() =>
-          client.get(`${baseUrl}/race/${crypto.randomUUID()}?n=50`),
+        return (yield* Effect.suspend(() =>
+          client.get(`${baseUrl}/${path}/${crypto.randomUUID()}?${query}`),
         ).pipe(
           Effect.flatMap((res) => res.json),
           Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-        )) as { count: number };
-        expect(count).toBe(50);
-      }),
-      { timeout: 120_000 },
-    );
+        )) as T;
+      });
 
-    test(
-      "a transaction keeps other calls out and rolls back on failure",
-      Effect.gen(function* () {
-        const client = yield* HttpClient.HttpClient;
-        const result = (yield* Effect.suspend(() =>
-          client.get(`${baseUrl}/transaction/${crypto.randomUUID()}?n=10`),
-        ).pipe(
-          Effect.flatMap((res) => res.json),
-          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-        )) as { count: number; aborted: boolean };
-        expect(result).toEqual({ count: 110, aborted: true });
-      }),
-      { timeout: 120_000 },
-    );
+    describe("in parallel, without an input gate", () => {
+      test(
+        "a call's storage overlaps another call's",
+        Effect.gen(function* () {
+          const { seen, n } = yield* tally<{ seen: number; n: number }>("overlap", "n=500");
+          expect(seen).toBeGreaterThan(0);
+          expect(seen).toBeLessThan(n);
+        }),
+        { timeout: 120_000 },
+      );
 
-    test(
-      "a background loop the constructor starts loses no updates to concurrent calls",
-      Effect.gen(function* () {
-        const client = yield* HttpClient.HttpClient;
-        const { count } = (yield* Effect.suspend(() =>
-          client.get(`${baseUrl}/background/${crypto.randomUUID()}?n=50`),
-        ).pipe(
-          Effect.flatMap((res) => res.json),
-          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-        )) as { count: number };
-        expect(count).toBe(100);
-      }),
-      { timeout: 120_000 },
-    );
+      test(
+        "concurrent transactional increments lose no updates",
+        Effect.gen(function* () {
+          const { count } = yield* tally<{ count: number }>("race", "n=50&tx=1");
+          expect(count).toBe(50);
+        }),
+        { timeout: 120_000 },
+      );
+    });
 
-    test(
-      "an alarm replaced while it fires leaves the new alarm set and doesn't run",
-      Effect.gen(function* () {
-        const client = yield* HttpClient.HttpClient;
-        const result = (yield* Effect.suspend(() =>
-          client.get(`${baseUrl}/alarm-replaced/${crypto.randomUUID()}`),
-        ).pipe(
-          Effect.flatMap((res) => res.json),
-          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-        )) as { fired: number; alarm: number | null };
-        expect(result.fired).toBe(0);
-        expect(result.alarm).not.toBeNull();
-      }),
-      { timeout: 120_000 },
-    );
+    describe("behind Workers.InputGate", () => {
+      test(
+        "a call's storage waits for another call's run of storage",
+        Effect.gen(function* () {
+          const { seen, n } = yield* tally<{ seen: number; n: number }>("overlap", "n=500&gated=1");
+          expect(seen).toBe(n);
+        }),
+        { timeout: 120_000 },
+      );
 
-    describe("calls that could deadlock on the input gate", () => {
+      test(
+        "concurrent get-then-put calls on one instance lose no updates",
+        Effect.gen(function* () {
+          const { count } = yield* tally<{ count: number }>("race", "n=50&gated=1");
+          expect(count).toBe(50);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a background loop the constructor starts loses no updates to concurrent calls",
+        Effect.gen(function* () {
+          const { count } = yield* tally<{ count: number }>("background", "n=50&gated=1");
+          expect(count).toBe(100);
+        }),
+        { timeout: 120_000 },
+      );
+    });
+
+    // In parallel, the increments racing the transaction are transactions
+    // too: plain ones would lose updates to each other.
+    for (const [mode, query] of [
+      ["in parallel", "gated=0&tx=1"],
+      ["behind Workers.InputGate", "gated=1"],
+    ] as const) {
+      describe(mode, () => {
+        test(
+          "a transaction keeps other calls out and rolls back on failure",
+          Effect.gen(function* () {
+            const result = yield* tally<{ count: number; aborted: boolean }>(
+              "transaction",
+              `n=10&${query}`,
+            );
+            expect(result).toEqual({ count: 110, aborted: true });
+          }),
+          { timeout: 120_000 },
+        );
+
+        test(
+          "an alarm replaced while it fires leaves the new alarm set and doesn't run",
+          Effect.gen(function* () {
+            const result = yield* tally<{ fired: number; alarm: number | null }>(
+              "alarm-replaced",
+              query,
+            );
+            expect(result.fired).toBe(0);
+            expect(result.alarm).not.toBeNull();
+          }),
+          { timeout: 120_000 },
+        );
+      });
+    }
+
+    describe("calls that could deadlock on a transaction", () => {
       interface Outcome {
         ok: boolean;
         error?: string;

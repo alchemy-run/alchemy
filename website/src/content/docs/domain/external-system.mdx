@@ -7,8 +7,6 @@ import DAG from "../../../components/DAG.astro";
 
 An external system is a service outside the model that its policies call, such as a payment processor or a fraud scorer. The model declares the calls it makes, in its own words, with their arguments and results, and nothing about the vendor behind them. A Layer supplies the vendor, so production, tests and stories can each use a different one.
 
-This chapter starts with why the model keeps outside systems at arm's length, then declares one, implements it, calls it, and turns events from outside into commands.
-
 ## Keep the outside world at the edge
 
 Every vendor has its own language. A payment processor talks about payment intents, charges, balance transactions and webhooks. A fraud vendor talks about risk signals and decision codes. None of those words belong to your model. If they leak into the model, the model starts speaking two languages, and changing vendor means rewriting rules.
@@ -55,6 +53,23 @@ Keep the arguments and results to what the model uses. The fraud check returns a
 export class FraudCheck extends Domain.ExternalSystem("FraudCheck", {
   score: { args: { accountId: AccountId, amount: Cents }, success: { risk: Schema.Number } },
 }) {}
+```
+
+## Describe it
+
+An external system's last argument is its [annotations](/domain/annotations). No client calls an external system, so its `description` is for the people and the tools that read the model, as `Payments.annotations`.
+
+```typescript title="packages/domain/src/Settlement/Payments.external.ts"
+export class Payments extends Domain.ExternalSystem(
+  "Payments",
+  {
+    refund: {
+      args: { settlementId: Schema.String, amount: Cents },
+      success: { refundId: Schema.String },
+    },
+  },
+  { description: "The payment provider that refunds settlements." },
+) {}
 ```
 
 ## Declare its errors

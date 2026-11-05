@@ -44,6 +44,7 @@ const groupStart = (i: number) => group !== undefined && i > 0 && rows[i]![group
 ---
 
 <figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
   <div class="alc-rec">
     {(title || query) && (
       <div class="alc-rec__top">
@@ -73,6 +74,7 @@ const groupStart = (i: number) => group !== undefined && i > 0 && rows[i]![group
         }
       </tbody>
     </table>
+  </div>
   </div>
   {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
 </figure>

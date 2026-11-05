@@ -108,6 +108,17 @@ Each of these was a correction. Don't relearn them.
   Center). Call out who each option is for.
 - **Node.js first, linked, then Bun.** Write "[Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)",
   using the minimum from `packages/alchemy/bin/cli.js`.
+- **Commands are package-manager neutral, pnpm first.** Every install or
+  `alchemy` command is `<PackageManagers>` tabs (pnpm, bun, npm, yarn), never a
+  raw ```sh block with one manager hard-coded, `bun alchemy` or `npx alchemy`
+  alike. `add`/`dev`/`run` cover single commands. A block that mixes in `curl`,
+  `git`, prompts or comments is `script={`…`}`, with `{run}` for an installed
+  binary (`pnpm`, `bun`, `npx`, `yarn`) and `{dlx}` for a remote package like
+  `auth@1.7.5` or `create-*` (`pnpx`, `bunx`, `npx`, `yarn dlx`). Prose writes
+  the CLI bare: `alchemy deploy`. Bun-only commands (`bun test`, `bun build`)
+  stay as written inside the tabs, and GitHub Actions workflows that set up Bun
+  themselves stay as they are. Two sweeps were needed: first for bun-first
+  blocks, then for the `npx` the first sweep hard-coded in their place.
 - **Accounts & access comes first**, right after the tutorial, on every provider.
   More: [Accounts & access](references/page-shapes.md#accounts--access).
 - **Every secrets page mentions secret providers** (Doppler, Infisical, per-stage
@@ -147,7 +158,9 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
   smaller providers once had almost none, and read as "sparse" next to AWS. A
   chapter that starts straight with code first gets a short section on the
   platform's model, then the diagram, then the code. Skip tutorials and
-  framework recipes.
+  framework recipes, and pages about a way of writing code rather than a
+  platform: "How SQL works in Alchemy" had a timeline of a deploy and three
+  request connections, and it was cut with "we don't need a diagram for sql".
 - **Draw the thing, not a request bouncing between boxes.** Ask what the
   section is about and what a reader would get wrong, then draw that: the
   queue's contents, the event's JSON against each rule, an environment over
@@ -158,8 +171,15 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
 - **Pick the component by the question**, never by habit. `DAG` and then
   `Sequence` each became "so overused". Use `Sequence` only when the order of
   messages between parties is itself the idea (receive, hide, delete; a token
-  exchange; an ACME challenge). About a dozen across the docs is plenty, so
-  count them after a batch. The best-received diagrams showed the idea itself:
+  exchange). About a dozen across the docs is plenty, so count them after a
+  batch. **Never put a `Sequence` on a What is page**: it draws the platform's
+  pieces and where they live, not a run through them. ACME's challenge flow
+  became a `Boundaries` figure: your deploy, the authority and your zone, with
+  the authority checking the TXT record in a zone only you can write to.
+- **Don't make everything a `Shell`.** Nested boxes say "runs inside". A git
+  host's Layers inside a Worker are nested. An ACME account inside its
+  authority, and a certificate inside its order, were rejected: "this makes
+  no sense". The best-received diagrams showed the idea itself:
   `Responsibility`'s staircase of who manages what, OUs as nested borders, and
   the Tunnel as an arrow through a dotted gap in the wall.
 - **Containment is a border, never an arrow.** An organization around its OUs
@@ -171,7 +191,9 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
   tokens, go inside its box (`specs`), not in boxes of their own with arrows.
 - **Draw the platform's real model, in full.** An AWS organization is a tree of
   OUs with policies flowing down, not four accounts in a box. GCP's VPC is
-  global and its subnets are regional.
+  global and its subnets are regional. An edge goes to what it really targets: a Worker binds
+  a Durable Object *namespace*, so the binding arrow ends on the namespace's
+  border (a DAG edge can target a group id), never on one object inside it.
 - **Never a table of text in boxes.** `Phases` (a grid of sentences) and `Matrix`
   (an allowed/denied truth table) were built, rejected and deleted. When a kind
   of visual is rejected, delete the component and its rows here, not just the

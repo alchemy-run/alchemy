@@ -15,6 +15,7 @@ import { listAllZones } from "../Zone/lookup.ts";
 import {
   findByName,
   findByType,
+  findFirst,
   getIdp,
   isSingletonType,
   type ObservedIdp,
@@ -505,8 +506,46 @@ export type IdentityProvider = Resource<
   IdentityProviderProps,
   IdentityProviderAttributes,
   never,
-  Providers
+  Providers,
+  IdentityProviderLookup
 >;
+
+/**
+ * Props for {@link IdentityProvider.lookup}: find an identity provider this
+ * stack doesn't manage, by its id, its display name, or its type.
+ */
+export type IdentityProviderLookup = {
+  /**
+   * Zone to search (legacy zone-level Access). When omitted, the
+   * account-level (Zero Trust organization) identity providers are searched.
+   */
+  zoneId?: string;
+} & (
+  | {
+      /**
+       * The UUID of the existing identity provider.
+       */
+      identityProviderId: string;
+    }
+  | {
+      /**
+       * The display name of the existing identity provider. Names are not
+       * unique; the first match is used. `""` matches the managed WARP IdP.
+       */
+      name: string;
+      /**
+       * Also require this type, e.g. `"okta"`.
+       */
+      type?: IdentityProviderType;
+    }
+  | {
+      /**
+       * The type of the existing identity provider, e.g. `"cloudflare"` for
+       * the managed WARP login method. The first match is used.
+       */
+      type: IdentityProviderType;
+    }
+);
 
 /**
  * A Cloudflare Zero Trust Access identity provider — the login method
@@ -594,6 +633,30 @@ export type IdentityProvider = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing identity provider
+ * `IdentityProvider.lookup` references an identity provider Alchemy doesn't
+ * manage (set up in the dashboard or by another stack), found by
+ * `identityProviderId`, display `name`, or `type`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Restrict an Access application to the managed WARP IdP
+ * ```typescript
+ * const warp = Cloudflare.Access.IdentityProvider.lookup({ type: "cloudflare" });
+ * yield* Cloudflare.Access.Application("Admin", {
+ *   domain: "admin.example.com",
+ *   allowedIdps: [warp.identityProviderId],
+ * });
+ * ```
+ *
+ * **Example:** By display name, in a Worker's `env`
+ * ```typescript
+ * const okta = Cloudflare.Access.IdentityProvider.lookup({ name: "Okta SSO" });
+ * yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: { IDP_ID: okta.identityProviderId },
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/cloudflare-one/identity/idp-integration/
  *
  * @resource
@@ -640,6 +703,21 @@ export const IdentityProviderProvider = () =>
         }
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "identityProviderId" in props
+          ? yield* getIdp(props.zoneId, accountId, props.identityProviderId)
+          : yield* findFirst(
+              props.zoneId,
+              accountId,
+              (idp) =>
+                (!("name" in props) || idp.name === props.name) &&
+                (props.type === undefined || idp.type === props.type),
+            );
+      return observed?.id ? toAttributes(observed, props.zoneId, accountId, undefined) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {

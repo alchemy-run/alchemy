@@ -3,31 +3,27 @@ title: What is a git host?
 description: The concepts behind hosting git — objects, refs, packs, the smart HTTP protocol, pushes and their verification, repositories, names and pull requests — and how @alchemy.run/git builds a host from them.
 ---
 
-import Sequence from "../../../components/diagrams/Sequence.astro";
+import Shell from "../../../components/diagrams/Shell.astro";
 
 A git host is the server your `git clone` and `git push` talk to. It stores repositories, sends a client the objects it's missing, accepts new ones, and moves branches only when the push is valid. Around that, most hosts add names like `acme/api`, an API, and pull requests.
 
 Take one host: a Worker serving git over HTTP, with each repository in a Durable Object and its bulk bytes in R2. A client speaks git's HTTP protocol to the Worker. The Worker checks who's calling, resolves the name to a repository, and the repository stores objects and moves refs, keeping large packs in a blob store.
 
-<Sequence
-  actors={[
-    { id: "client", label: "git client", type: "git push" },
-    { id: "worker", label: "Worker", type: "smart HTTP" },
-    { id: "registry", label: "Registry", type: "names" },
-    { id: "repo", label: "Repository", type: "Durable Object", tone: "accent" },
-    { id: "blobs", label: "Blob Store", type: "R2" },
-  ]}
-  steps={[
-    { from: "client", to: "worker", label: "push to acme/api" },
-    { note: "checks who's calling", over: "worker" },
-    { from: "worker", to: "registry", label: "resolve acme/api" },
-    { from: "registry", to: "worker", label: "repository id", dashed: true },
-    { from: "worker", to: "repo", label: "receive pack" },
-    { from: "repo", to: "blobs", label: "store large pack" },
-    { note: "moves refs if the push is valid", over: "repo" },
-    { from: "repo", to: "client", label: "refs updated", dashed: true },
-  ]}
-  caption="One decision per box: who may call, how names resolve, where refs live, where bytes go."
+<Shell
+  shell={{
+    label: "Worker",
+    children: [{
+      label: "Git.Api",
+      tone: "accent",
+      children: [
+        { label: "Repository", type: "Durable Object" },
+        { label: "Registry", type: "Durable Object · D1" },
+        { label: "Blob Store", type: "R2 · S3" },
+        { label: "Hasher", type: "inline · Lambda" },
+      ],
+    }],
+  }}
+  caption="Git's API runs inside your Worker, over a Repository, Registry, Blob Store and Hasher."
 />
 
 ## Objects
@@ -76,7 +72,7 @@ A host decides who may read and who may write, and what each write may do. Git i
 
 ## How @alchemy.run/git builds a host from these concepts
 
-Each decision on this page is a Layer you choose, all composed in one graph and provided once.
+Each of these decisions is a Layer you choose, all composed in one graph and provided once.
 
 `ApiLive` serves smart HTTP, a typed REST plane and a GitHub-compatible API, behind your own middleware, so who may call what is your application's code. `ReposDurableObject` gives each repository its own Durable Object, the one place its refs move. A registry resolves names, in a Durable Object or D1. A blob store keeps packs and bundles, in R2 or S3. A hasher verifies pushes, inline, in a Worker Loader isolate or on Lambda. Swap any line, and only that decision changes.
 

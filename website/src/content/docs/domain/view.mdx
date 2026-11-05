@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 A view answers a question: what's the balance of this account, what's on its statement, what does this customer hold across all their accounts. It reads events, folds them into state, and keeps that state current as new events arrive.
 
-Aggregates hold only what their rules need. Views hold everything people want to see, each shaped for one question. This chapter starts with why the two are kept apart and how to design a view from a screen, then builds views up from the simplest case.
+Aggregates hold only what their rules need. Views hold everything people want to see, each shaped for one question.
 
 ## Deciding and answering need different shapes
 
@@ -195,6 +195,28 @@ emit: {
 ```
 
 One `TransferRequested` updates both accounts: the sender's as `out` and the recipient's as `in`.
+
+## Describe it
+
+A view's last argument is its [annotations](/domain/annotations). The read tools, CLI subcommand and OpenAPI operations an [Api](/domain/api) builds for the view show its `description` after the sentence that says what the call does.
+
+```typescript title="src/AccountSummary.view.ts"
+export class AccountSummary extends Domain.View(
+  "AccountSummary",
+  {
+    from: [Account],
+    key: Account,
+    state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
+    initial: { owner: null, balance: 0 },
+    evolve: {
+      AccountOpened: (v, e) => ({ ...v, owner: e.owner }),
+      MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
+      MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
+    },
+  },
+  { description: "An account's balance and owner." },
+) {}
+```
 
 ## Read it
 

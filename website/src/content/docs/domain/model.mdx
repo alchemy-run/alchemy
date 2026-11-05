@@ -276,6 +276,22 @@ export class Bank extends Domain.Model("Bank", {
 export const BankHandlers = MainAccountProvisioningLive;
 ```
 
+## Describe it
+
+A model's last argument is its [annotations](/domain/annotations). The model lists its declarations, so tooling can walk them and read each one's annotations. See [Build on them](/domain/annotations#build-on-them).
+
+```typescript
+// src/Bank.model.ts
+import * as Domain from "@alchemy.run/domain";
+import { Account } from "./Account.aggregate.ts";
+
+export class Bank extends Domain.Model(
+  "Bank",
+  { aggregates: [Account] },
+  { description: "Accounts, transfers and the ledger of a small bank." },
+) {}
+```
+
 ## Check the declaration
 
 Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:

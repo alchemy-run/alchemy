@@ -1034,9 +1034,13 @@ const makePlan = <A>(
           continue;
         }
         const attr = row.attr as Record<string, unknown> | undefined;
+        // An optional stable (a zone id on an account-level resource) is
+        // undefined on both sides and still matches; at least one stable
+        // must be set so an empty row never matches everything.
         if (
           attr !== undefined &&
-          stables.every((key) => attr[key] !== undefined && attr[key] === attrs[key])
+          stables.some((key) => attr[key] !== undefined) &&
+          stables.every((key) => attr[key] === attrs[key])
         ) {
           return yield* Effect.die(
             new LookupOfManagedResourceError({

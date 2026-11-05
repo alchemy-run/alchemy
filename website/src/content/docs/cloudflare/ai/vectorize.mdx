@@ -5,6 +5,7 @@ sidebar:
   order: 21
 ---
 import Records from "../../../../components/diagrams/Records.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Vectorize is Cloudflare's globally distributed vector database.
 In alchemy it's three pieces: a `Vectorize.Index` resource that
@@ -197,9 +198,7 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 ## Where next
 

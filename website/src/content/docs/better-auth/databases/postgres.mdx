@@ -2,14 +2,13 @@
 title: Postgres
 description: Deploy Better Auth on Lambda with an existing PostgreSQL database and a request-scoped pg pool.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 This example serves Better Auth through a Lambda Function URL using an existing PostgreSQL database. Both the Lambda and the deploying machine must be able to reach the server over TCP.
 
 ## Install
 
-```sh
-bun add @alchemy.run/better-auth better-auth@^1.7.5 kysely pg
-```
+<PackageManagers add="@alchemy.run/better-auth better-auth@^1.7.5 kysely pg" />
 
 Configure AWS through an [Alchemy profile](/environments/profiles) and set `DATABASE_URL` in the deploying environment. The connection layer does not create the database, credentials, or network access.
 
@@ -86,9 +85,7 @@ Alchemy generates and binds the signing secret automatically. Preserve and prote
 
 ## Deploy and migrate
 
-```sh
-bunx alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Automatic migrations use the resolved URL before updating the function, so the deployer needs schema-changing permissions. The runtime pool defaults to one connection per invocation; migrations create auth tables, not the database itself.
 

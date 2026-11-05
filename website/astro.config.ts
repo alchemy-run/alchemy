@@ -378,6 +378,10 @@ export default defineConfig({
                   label: "Bindings",
                   link: "/infrastructure-as-effects/binding",
                 },
+                {
+                  label: "Identity Federation",
+                  link: "/infrastructure-as-effects/identity-federation",
+                },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Event Sources",
@@ -1141,6 +1145,7 @@ export default defineConfig({
               items: [
                 { label: "Organizations and tokens", link: "/fly/organizations-and-tokens" },
                 { label: "Secrets", link: "/fly/data/secrets" },
+                { label: "Federated identity", link: "/fly/federated-identity" },
               ],
             },
             {
@@ -1416,6 +1421,7 @@ export default defineConfig({
             {
               label: "Accounts & access",
               items: [
+                { label: "Organizations and keys", link: "/neon/organizations-and-keys" },
                 { label: "Organization governance", link: "/neon/governance" },
                 { label: "Roles", link: "/neon/data/roles" },
               ],
@@ -1661,6 +1667,7 @@ export default defineConfig({
                 { label: "Saga", link: "/domain/saga" },
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
+                { label: "Annotations", link: "/domain/annotations" },
                 { label: "Story", link: "/domain/story" },
               ],
             },

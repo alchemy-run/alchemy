@@ -4,6 +4,7 @@ description: Cloudflare Workers are the compute Runtime of every Alchemy app —
 ---
 
 import WorldMap from "../../../../components/diagrams/WorldMap.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 A Worker is a program Cloudflare runs on every machine in its network. A request goes to the city nearest the person who sent it, and a Worker there handles it. There's no region to choose, no server to size, and nothing running while nobody calls it.
 
@@ -75,9 +76,7 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Alchemy bundles the file, uploads it, enables the `workers.dev`
 subdomain, and prints the URL as a stack output.

@@ -70,6 +70,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
 ---
 
 <figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
   <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Fanout"}>
     <defs>
       <marker id="alc-fan-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -117,6 +118,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
       })
     }
   </svg>
+  </div>
   {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
 </figure>
 

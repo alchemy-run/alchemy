@@ -1,0 +1,151 @@
+---
+title: Identity Federation
+description: How a binding reaches another cloud with the identity the host's platform already signs, instead of a long-lived key, and which runtimes and clouds support it.
+---
+import Sequence from "../../../components/diagrams/Sequence.astro";
+
+A [Binding](/infrastructure-as-effects/binding) needs credentials to call
+its resource. On the resource's own cloud that's easy: a Lambda calls
+DynamoDB as its IAM role, and the binding puts the permission on that
+role. Nothing is created or stored.
+
+A binding can also cross clouds. Here a Cloud Run service sends to an
+SQS queue:
+
+```typescript
+// src/api.ts
+import * as AWS from "@alchemy.run/aws";
+import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Jobs = AWS.SQS.Queue("Jobs");
+
+export default class Api extends GCP.Run.Service<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const send = yield* AWS.SQS.SendMessage(Jobs);
+    return {
+      fetch: send({ MessageBody: "hello" }).pipe(
+        Effect.as(HttpServerResponse.text("sent")),
+        Effect.orDie,
+      ),
+    };
+  }).pipe(Effect.provide(AWS.SQS.SendMessageHttp)),
+) {}
+```
+
+The service has no AWS identity. The obvious fix is an access key stored
+as a secret. A key never expires on its own, works from anywhere, and
+has to be rotated by hand. Alchemy uses **identity federation** instead.
+
+## Trust the identity the platform signs
+
+Cloud Run already proves who a service is. Its metadata server hands the
+service an ID token, signed by Google, that names the service's account.
+AWS can be told to trust that token.
+
+So the binding creates an IAM role whose trust policy accepts Google's
+tokens for that one service account, and grants `sqs:SendMessage` on
+the role. At runtime the service trades a fresh token for the role's
+credentials:
+
+<Sequence
+  actors={[
+    { id: "api", label: "Api", type: "Cloud Run service" },
+    { id: "meta", label: "Metadata server", type: "Google" },
+    { id: "sts", label: "AWS STS" },
+    { id: "jobs", label: "Jobs", type: "SQS queue", tone: "accent" },
+  ]}
+  steps={[
+    { from: "api", to: "meta", label: "ID token" },
+    { from: "meta", to: "api", label: "signed token", dashed: true },
+    { from: "api", to: "sts", label: "AssumeRoleWithWebIdentity" },
+    { from: "sts", to: "api", label: "role credentials · 1 hour", dashed: true },
+    { from: "api", to: "jobs", label: "SendMessage" },
+  ]}
+  caption="The service proves who it is with a token its platform signed, and leaves with short-lived AWS credentials. No key exists anywhere."
+/>
+
+The credentials last an hour. Shortly before they expire the binding
+asks for a new token and assumes the role again. Nothing long-lived ever
+leaves Google.
+
+The binding code is the one you would write on a Lambda. Alchemy sees
+where the host runs and picks federation for you.
+
+## Scope the trust to one workload
+
+A trust that names only the issuer would let every service in Google
+assume the role. So the trust always names the one workload: Cloud Run's
+service account by its unique ID, a Fly App by the subject in its token,
+a Lambda by the role it runs as. Another service, even one in the same
+project or organization, can't use it.
+
+Where the target cloud needs an account-wide anchor first, such as an
+IAM OIDC provider for Fly's issuer, Alchemy creates it once and keeps it
+when a stack is destroyed, because other stacks may depend on it.
+
+## Which runtimes federate
+
+A runtime can federate when its platform signs an identity the other
+cloud can check.
+
+Into AWS, Cloud Run services, jobs and worker pools and Cloud Functions
+send Google ID tokens. Fly Services send Fly Machine OIDC tokens. See
+[AWS federated identity](/aws/security/federated-identity).
+
+Into GCP, Lambda functions, ECS tasks, EC2 instances, App Runner
+services, Batch jobs and EKS pods sign an STS `GetCallerIdentity`
+request with their role, which Google checks against AWS. Fly Services
+send Fly Machine OIDC tokens. See
+[GCP federated identity](/gcp/security/federated-identity).
+
+Fly Services do both from the same token. See
+[Fly federated identity](/fly/federated-identity).
+
+## When the platform signs nothing
+
+Cloudflare Workers, Railway services and Fly Sprites have no workload
+identity token today, and a GKE pod can't get a token AWS accepts. On
+those hosts the binding creates a key for an identity that may do only
+what that one host needs, and deploys it as a secret. A Worker's key,
+for example, can assume only the Worker's own role.
+
+You write the same binding either way.
+
+## Calls between runtimes
+
+The same rule applies when one runtime calls another. The callee checks
+an identity the platform signed, not a shared secret.
+
+A Lambda invoke is authorized by IAM. A private Cloud Run service checks
+the caller's Google ID token against its invoker role. A Fly Service
+checks the `Fly-Src` header Fly's proxy signs, which names the calling
+App, and answers only the Apps that bind it. See
+[Connect Services](/fly/compute/connecting-services#security-model).
+
+## Deploying from CI
+
+A deploy needs credentials too. CI platforms sign tokens for each run,
+so a workflow can assume a deploy role without storing a key. See
+[AWS with GitHub OIDC](/environments/ci#aws-with-github-oidc-recommended).
+
+## New grants take a few minutes
+
+A fresh trust isn't usable right away. AWS usually accepts a new role
+within seconds. A GCP grant to a federated principal can take a few
+minutes to land. Until it does, calls fail with a permission error, so
+retry the first call after a deploy.
+
+## Where next
+
+- [AWS federated identity](/aws/security/federated-identity) — Cloud Run
+  and Fly Services calling AWS.
+- [GCP federated identity](/gcp/security/federated-identity) — Lambda,
+  ECS, EC2, Batch, EKS and Fly Services calling GCP.
+- [Fly federated identity](/fly/federated-identity) — Fly Machine OIDC
+  tokens, and how Fly Services call AWS and GCP.
+- [Layers](/infrastructure-as-effects/layers) — hide bindings behind a
+  service interface.

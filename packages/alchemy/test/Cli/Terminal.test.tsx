@@ -620,6 +620,33 @@ it.effect(
   { tags: ["unit", "local"] },
 );
 
+it.effect(
+  "shows the total apply time once the session settles",
+  () =>
+    Effect.gen(function* () {
+      for (const [outcome, label] of [
+        ["success", "Stack deployed"],
+        ["failure", "Deploy failed"],
+      ] as const) {
+        const { service, stdout } = yield* makeLive();
+        const cli = sigilCli().pipe(Layer.provide(Layer.succeed(Interaction, service)));
+        yield* Effect.gen(function* () {
+          const { startApplySession } = yield* Cli;
+          const session = yield* startApplySession(
+            planWith([updateNode({ version: 1 }, { version: 2 })]),
+          );
+          expect(stripVTControlCharacters(stdout.output)).not.toContain(label);
+          yield* session.done(outcome);
+          yield* Effect.promise(() => stdout.waitFor(label));
+          expect(stripVTControlCharacters(stdout.output)).toMatch(
+            new RegExp(`${label} \\(0/1\\) \\(\\d+(ms|\\.\\ds)\\)`),
+          );
+        }).pipe(Effect.provide(cli));
+      }
+    }),
+  { tags: ["unit", "local"] },
+);
+
 // A dev generation keeps its widget mounted after apply settles and parks
 // until a reload (or Ctrl+C) closes its scope. Closing that scope must remove
 // the widget: leaving it behind stacks one stale "Dev stack ready" bar per
