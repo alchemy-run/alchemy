@@ -745,7 +745,7 @@ Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, 
 
 Effect Cluster entities, workflows, singletons and crons, on a Postgres database and a pool of runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or on Cloudflare Durable Objects, called by id from any runtime.
 
-- [Effect Cluster](https://alchemy.run/cluster) — Effect Cluster entities, workflows, singletons and crons, deployed to a pool on your own cloud and called by name from any runtime.
+- [Effect Cluster](https://alchemy.run/cluster) — Run Effect Cluster entities, workflows, singletons and crons with Alchemy — a Postgres database and a pool of runners on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or Durable Objects on Cloudflare.
 - [What is Effect Cluster?](https://alchemy.run/cluster/what-is-effect-cluster) — The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners and pools, the database, workflows, singletons and crons — and how @alchemy.run/effect-cluster deploys them.
 - [Setup](https://alchemy.run/cluster/setup) — Install the Effect Cluster provider and get Docker ready to run a cluster on your machine.
 - [Part 1: Your First Entity](https://alchemy.run/cluster/tutorial/part-1) — Run an Effect Cluster database and runners on Docker, and deploy a chat room entity that tracks who's in it.
@@ -1015,4 +1015,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~223 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~224 KB) — only fetch it when you need to locate a specific resource's reference page.

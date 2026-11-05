@@ -1989,7 +1989,7 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "cluster/tutorial" } }],
             },
             {
-              label: "Building on Effect Cluster",
+              label: "Building",
               items: [
                 { label: "Entities", link: "/cluster/entities" },
                 { label: "Calling an entity", link: "/cluster/calling" },
@@ -2001,7 +2001,7 @@ export default defineConfig({
               ],
             },
             {
-              label: "Running Effect Cluster",
+              label: "Running",
               items: [
                 { label: "Databases", link: "/cluster/databases" },
                 { label: "Pools", link: "/cluster/pools" },

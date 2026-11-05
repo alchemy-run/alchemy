@@ -48,6 +48,12 @@ export const Database = Cluster.Database.fromUrl({
 });
 ```
 
+## Credentials
+
+Each cloud's `Database` creates a random password for Postgres and keeps it in the Stack's state, so there's no password to choose or store. Every runner in a pool is given the database's full connection URL as `CLUSTER_DATABASE_URL`. Callers outside the pool are never given it: they reach the cluster through the gateway.
+
+With `fromUrl`, the URL is yours, read through `Config` like any other secret. Store it in your secrets provider, for each stage. See [Secret providers](/environments/secret-providers).
+
 ## What each cloud runs
 
 | Cloud | Database |

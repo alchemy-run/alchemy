@@ -48,7 +48,27 @@ Each cloud has its own entry point, and needs that cloud's provider package:
 | `@alchemy.run/effect-cluster/Hetzner` | `@alchemy.run/hetzner` |
 | `@alchemy.run/effect-cluster/Cloudflare` | `@alchemy.run/cloudflare` |
 
-Then follow that cloud's setup, for example [AWS setup](/aws/setup) or [Hetzner setup](/hetzner/setup).
+## Connect your cloud
+
+Effect Cluster has no account of its own: the database and the pool deploy into whichever account, project or organization your cloud's profile signs in to. Connect that cloud as its own setup describes:
+
+| Cloud | Setup | Where a deploy goes |
+|---|---|---|
+| Docker | [Docker setup](/docker/setup) | the Docker daemon on your machine |
+| AWS | [AWS setup](/aws/setup) | [Accounts and regions](/aws/accounts-and-regions) |
+| GCP | [GCP setup](/gcp/setup) | [Projects and regions](/gcp/projects-and-regions) |
+| Kubernetes | [Kubernetes setup](/kubernetes/setup) | the cluster your kubeconfig points at |
+| Fly | [Fly setup](/fly/setup) | [Organizations and tokens](/fly/organizations-and-tokens) |
+| Hetzner | [Hetzner setup](/hetzner/setup) | [Projects and tokens](/hetzner/projects-and-tokens) |
+| Cloudflare | [Cloudflare setup](/cloudflare/setup) | [Accounts and tokens](/cloudflare/accounts-and-tokens) |
+
+The stage decides what is deployed, and the profile decides where it goes, so production gets a profile of its own:
+
+<PackageManagers run="alchemy deploy --stage prod --profile prod" />
+
+In CI, the deploy reads the same credentials that cloud's provider reads in CI. Effect Cluster adds none. See [CI](/environments/ci).
+
+The database password and each pool's gateway token are created by the Stack and kept in its state, so there's nothing else to set. See [Databases](/cluster/databases#credentials) and [Calling an entity](/cluster/calling#the-gateway-token).
 
 ## Run a cluster on your machine
 
