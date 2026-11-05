@@ -8,6 +8,7 @@ import {
 } from "@alchemy.run/gcp/GCPBindings";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as batch from "@distilled.cloud/aws/batch";
 import * as lambda from "@distilled.cloud/aws/lambda";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
@@ -18,8 +19,10 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { BatchTestNetwork } from "../AWS/Batch/TestNetwork.ts";
 import { flyApi } from "../Fly/limit.ts";
 import FederatedLambdaLive, { Events, FederatedLambda } from "./fixtures/aws-host.ts";
+import FederatedBatchJob, { BATCH_MESSAGE, BatchEvents } from "./fixtures/batch-host.ts";
 import FlyFederatedService, { FlyEvents } from "./fixtures/fly-host.ts";
 
 const host = (Type: string, Props?: object) =>
@@ -77,7 +80,7 @@ describe("GCPBindings.runsAsServiceAccount", { tags: ["unit", "provider:gcp", "l
 });
 
 describe("GCPBindings.runsAsAwsRole", { tags: ["unit", "provider:gcp", "local"] }, () => {
-  it("accepts Lambda, ECS, EC2 and App Runner", () => {
+  it("accepts Lambda, ECS, EC2, App Runner and Batch", () => {
     for (const Type of [
       "AWS.Lambda.Function",
       "AWS.Lambda.WebFunction",
@@ -86,15 +89,23 @@ describe("GCPBindings.runsAsAwsRole", { tags: ["unit", "provider:gcp", "local"] 
       "AWS.EC2.Instance",
       "AWS.AutoScaling.LaunchTemplate",
       "AWS.AppRunner.Service",
+      "AWS.Batch.JobDefinition",
     ]) {
       expect(runsAsAwsRole(host(Type))).toBe(true);
     }
   });
 
-  it("rejects EKS pods and Batch jobs, which keep a key", () => {
+  it("accepts Kubernetes workloads on EKS (Pod Identity)", () => {
     const eks = { Type: "AWS.EKS.Cluster", LogicalId: "Cluster" };
-    expect(runsAsAwsRole(host("Kubernetes.Deployment", { cluster: eks }))).toBe(false);
-    expect(runsAsAwsRole(host("AWS.Batch.JobDefinition"))).toBe(false);
+    expect(runsAsAwsRole(host("Kubernetes.Deployment", { cluster: eks }))).toBe(true);
+    expect(runsAsAwsRole(host("Kubernetes.Job", { cluster: eks }))).toBe(true);
+    const ref = { auth: { kind: "aws-eks", clusterName: "c" } };
+    expect(runsAsAwsRole(host("Kubernetes.Deployment", { cluster: ref }))).toBe(true);
+  });
+
+  it("rejects Kubernetes workloads on other clusters", () => {
+    const gke = { Type: "GCP.Container.Cluster", LogicalId: "Cluster" };
+    expect(runsAsAwsRole(host("Kubernetes.Deployment", { cluster: gke }))).toBe(false);
   });
 
   it("rejects hosts outside AWS", () => {
@@ -333,6 +344,93 @@ describe(
           yield* stack.destroy();
         }),
       { timeout: 900_000 },
+    );
+  },
+);
+
+describe(
+  "GCP bindings on an AWS Batch job",
+  { tags: ["provider:aws", "provider:gcp", "provider:aws:batch", "live"] },
+  () => {
+    // Docker build + push, Fargate provisioning and the job run: skipped
+    // under --fast like the other Batch platform tests.
+    liveTest.provider.skipIf(!!process.env.FAST)(
+      "a Batch job reaches Pub/Sub through workload identity federation",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const out = yield* stack.deploy(
+            Effect.gen(function* () {
+              const network = yield* BatchTestNetwork;
+              const computeEnvironment = yield* AWS.Batch.ComputeEnvironment("FederatedCE", {
+                subnets: network.subnetIds,
+                securityGroupIds: network.securityGroupIds,
+              });
+              const queue = yield* AWS.Batch.JobQueue("FederatedQueue", {
+                computeEnvironments: [computeEnvironment.computeEnvironmentArn],
+              });
+              const job = yield* FederatedBatchJob;
+              const events = yield* BatchEvents;
+              const inbox = yield* GCP.PubSub.Subscription("BatchFederatedInbox", {
+                topic: events.name,
+              });
+              return {
+                jobQueueArn: queue.jobQueueArn,
+                jobDefinitionArn: job.jobDefinitionArn,
+                subscription: inbox.name,
+              };
+            }),
+          );
+
+          // The job definition carries the provider it federates through,
+          // and no key.
+          const described = yield* batch.describeJobDefinitions({
+            jobDefinitions: [out.jobDefinitionArn!],
+          });
+          const env = Object.fromEntries(
+            (described.jobDefinitions?.[0]?.containerProperties?.environment ?? []).map((entry) => [
+              entry.name,
+              entry.value,
+            ]),
+          );
+          expect(env.ALCHEMY_GCP_SERVICE_ACCOUNT_KEY).toBeUndefined();
+          expect(env.ALCHEMY_GCP_WORKLOAD_IDENTITY_AUDIENCE).toMatch(
+            /^\/\/iam\.googleapis\.com\/projects\/\d+\/locations\/global\/workloadIdentityPools\/[^/]+\/providers\/alchemy-aws$/,
+          );
+
+          const submitted = yield* batch.submitJob({
+            jobName: "alchemy-gcp-federation-run",
+            jobQueue: out.jobQueueArn,
+            jobDefinition: out.jobDefinitionArn!,
+          });
+          const job = yield* batch.describeJobs({ jobs: [submitted.jobId] }).pipe(
+            Effect.map((result) => result.jobs?.[0]),
+            Effect.repeat({
+              schedule: Schedule.spaced("10 seconds"),
+              until: (j): boolean => j?.status === "SUCCEEDED" || j?.status === "FAILED",
+              times: 90,
+            }),
+          );
+          expect(`${job?.status}: ${job?.statusReason ?? ""}`).toMatch(/^SUCCEEDED:/);
+
+          const pulled = yield* pubsub
+            .pullProjectsSubscriptions({
+              subscription: out.subscription,
+              body: { maxMessages: 1 },
+            })
+            .pipe(
+              Effect.repeat({
+                until: (response) => (response.receivedMessages ?? []).length > 0,
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
+            );
+          expect(atob(pulled.receivedMessages?.[0]?.message?.data ?? "")).toBe(BATCH_MESSAGE);
+
+          yield* stack.destroy();
+        }),
+      { timeout: 1_800_000 },
     );
   },
 );
