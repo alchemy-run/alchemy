@@ -349,10 +349,15 @@ export const makeRelay = <P extends Pass, Item>(work: Work<P, Item>) => {
    * level until there are at least {@link FRONTIER_SIZE} of them (or nothing
    * left to list). Many small entries let the root steer its load finely.
    */
-  const frontier = (pass: P, roots: ReadonlyArray<Entry<Item>>, until: number) =>
+  const frontier = (
+    pass: P,
+    roots: ReadonlyArray<Entry<Item>>,
+    until: number,
+    size: number = FRONTIER_SIZE,
+  ) =>
     Effect.gen(function* () {
       let level: ReadonlyArray<Entry<Item>> = roots;
-      while (level.length < FRONTIER_SIZE && level.some((entry) => "path" in entry)) {
+      while (level.length < size && level.some((entry) => "path" in entry)) {
         const next: Array<Entry<Item>> = [];
         const listings = yield* Effect.forEach(
           level,
@@ -422,7 +427,13 @@ export interface RunWork<Plan, P extends Pass, Item> {
   /** The pass for `state`, answering by `deadline`. */
   readonly pass: (target: string, state: RunState<Plan>, deadline: number) => P;
   /** What a pass starts from: listed into the frontier. */
-  readonly roots: (pass: P) => ReadonlyArray<Entry<Item>>;
+  readonly roots: (pass: P, state: RunState<Plan>) => ReadonlyArray<Entry<Item>>;
+  /**
+   * How many entries the root lists its roots into before it paces them, at
+   * least (default 512). A run whose roots are already a fine split (pages
+   * of items) sets 0, and paces them as they are.
+   */
+  readonly frontierSize?: number;
   /** Whether a run already started with `started` serves one asked for with `asked`. */
   readonly samePlan: (started: Plan, asked: Plan) => boolean;
 }
@@ -469,7 +480,12 @@ export const makeRun = <Plan, P extends Pass, Item>(
       // One try at everything: every round runs in this pass, whatever the clock says.
       const quiet = options.waitMillis <= 0;
       const pass = run.pass(target, state, deadline);
-      const entries = yield* relay.frontier(pass, run.roots(pass), deadline);
+      const entries = yield* relay.frontier(
+        pass,
+        run.roots(pass, state),
+        deadline,
+        run.frontierSize,
+      );
       const todo: Array<Entry<Item>> = [];
       for (const entry of entries ?? [])
         if ((yield* storage.get(doneKey(target, state.phase, entry))) === undefined)

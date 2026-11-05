@@ -85,10 +85,10 @@ export class MigrationStillRunning extends Data.TaggedError("MigrationStillRunni
   readonly message: string;
 }> {}
 
-/** Ids per page of the run's frontier. */
-const PAGE = 1_000;
+/** Ids per page of the run's frontier: the root paces pages, so small ones pace finely. */
+const PAGE = 100;
 /** Pages one `add` instance hands over: its params stay well under the 1 MiB limit. */
-const PAGES_PER_ADD = 5;
+const PAGES_PER_ADD = 50;
 /** Instances one bulk call starts. */
 const BULK = 100;
 const POLL = "3 seconds";

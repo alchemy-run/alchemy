@@ -94,6 +94,17 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
         yield* Fiber.join(writing);
 
         expect(log.failures).toEqual([]);
+        // The deep account's new object owns its data: it isn't being served by
+        // forwarding to the old one.
+        expect(
+          yield* json<{ phase: string }>(url, "/move/deep").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (state) => state?.phase === "owned",
+              times: 45,
+            }),
+          ),
+        ).toMatchObject({ phase: "owned" });
         expect(log.written.length).toBeGreaterThan(10);
         // Every deposit, once: the seed's and the writer's.
         let deepTotal = sum(1, DEPTH) + log.written.reduce((total, amount) => total + amount, 0);

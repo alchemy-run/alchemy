@@ -1,6 +1,7 @@
 import * as FanOut from "@alchemy.run/domain/FanOut";
 import type * as cf from "@cloudflare/workers-types";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -43,6 +44,13 @@ export const ID_KEY = "bf:id";
 
 /** How long one alarm of a new object copies before it schedules the next. */
 const COPY_BUDGET_MS = 20_000;
+
+/** An old object that doesn't know the move: it still runs the code from before the deploy. */
+const STALE = /not found on Durable Object/;
+/** How long an old object on older code is left alone: past the ~10s idle that moves it to new code. */
+const STALE_IDLE_MS = 15_000;
+/** How long a call waits, at most, for the old object to move to the deployed code. */
+const STALE_HOLD_MS = 60_000;
 
 interface Stub {
   readonly [method: string]: (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>;
@@ -284,28 +292,107 @@ const router = (
       const instance = yield* inner;
       const raw = state.raw.storage;
       const owned = () => from === undefined || Move.moveState(raw)?.phase === "owned";
-      if (owned()) return { ...instance, domainMove: () => Effect.succeed(true) };
+      if (owned())
+        return {
+          ...instance,
+          domainMove: () => Effect.succeed(true),
+          domainMoveState: () => Effect.succeed({ phase: "owned" }),
+        };
       const calls = sourceCalls(from!);
 
-      /** Copy for a while; once caught up, take over with this object's own calls held. */
-      const step = Effect.gen(function* () {
-        yield* Move.begin(raw, calls);
-        const ready = yield* Move.copyFor(raw, calls, COPY_BUDGET_MS);
-        if (ready)
-          yield* state.blockConcurrencyWhile(() => Move.takeOver(raw, calls).pipe(Effect.orDie));
-        // Not done: carry on in the next alarm.
-        else yield* Effect.promise(() => raw.setAlarm(Date.now()));
+      const name = `${parsed.route}/${parsed.key}`;
+      /** One step at a time: an alarm and the migration's call never copy at once. */
+      let driving = false;
+      let failures = 0;
+      let lastError: string | undefined;
+      /**
+       * Until when the old object is left alone: it still runs the code from
+       * before the deploy (Cloudflare moves an object to new code only once
+       * it has been idle for about ten seconds), and every call would keep it
+       * there. Calls to this key wait meanwhile, rather than keep it busy.
+       */
+      let staleUntil = 0;
+      /**
+       * Copy for up to `budget`; once caught up, take over with this object's
+       * own calls held. A failure never stops the move: it logs, and the alarm
+       * tries again later, waiting longer each time (Cloudflare's own alarm
+       * retries give up after a few).
+       */
+      const step = (budget: number) =>
+        Effect.suspend(() => {
+          if (driving || owned() || Date.now() < staleUntil) return Effect.void;
+          driving = true;
+          return Effect.gen(function* () {
+            yield* Move.begin(raw, calls);
+            const ready = yield* Move.copyFor(raw, calls, budget);
+            yield* Effect.logDebug(
+              `domain move ${name} ${JSON.stringify(Move.moveState(raw))} ready=${ready}`,
+            );
+            if (ready)
+              yield* state
+                .blockConcurrencyWhile(() => Effect.exit(Move.takeOver(raw, calls)))
+                .pipe(Effect.flatten);
+            failures = 0;
+            // Not done: carry on in the next alarm.
+            if (!owned()) yield* Effect.promise(() => raw.setAlarm(Date.now()));
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.gen(function* () {
+                failures += 1;
+                lastError = Cause.pretty(cause).slice(0, 2000);
+                if (STALE.test(lastError)) {
+                  // On older code: leave it idle long enough to move to the deployed code.
+                  staleUntil = Date.now() + STALE_IDLE_MS;
+                  yield* Effect.promise(() => raw.setAlarm(staleUntil + 100));
+                  return;
+                }
+                yield* Effect.logWarning(`domain move ${name} failed (${failures})`, cause);
+                const wait = Math.min(30_000, 250 * 2 ** Math.min(failures, 7));
+                yield* Effect.promise(() => raw.setAlarm(Date.now() + wait));
+              }),
+            ),
+            Effect.ensuring(
+              Effect.sync(() => {
+                driving = false;
+              }),
+            ),
+          );
+        });
+
+      /**
+       * While the old object is left alone, wait; then start the move here (the
+       * old object now runs the deployed code, or is left alone again). Bounded:
+       * past {@link STALE_HOLD_MS} a call goes to the old object anyway.
+       */
+      const holdWhileStale = Effect.gen(function* () {
+        const until = Date.now() + STALE_HOLD_MS;
+        while (!owned() && Date.now() < staleUntil && Date.now() < until) {
+          yield* Effect.sleep("250 millis");
+          if (Date.now() >= staleUntil) yield* step(0);
+        }
+      });
+
+      /** Make sure something drives the move: a pending alarm, or a step under way. */
+      const ensureDriven = Effect.gen(function* () {
+        if (driving || owned()) return;
+        if ((yield* Effect.promise(() => raw.getAlarm())) === null)
+          yield* Effect.promise(() => raw.setAlarm(Date.now()));
       });
 
       // Start the move as soon as the object is first used: its alarm drives it.
-      if (
-        Move.moveState(raw) === undefined &&
-        (yield* Effect.promise(() => raw.getAlarm())) === null
-      )
-        yield* Effect.promise(() => raw.setAlarm(Date.now()));
+      yield* ensureDriven;
 
       const forwarded = Effect.succeed(from);
       return dynamic((prop) => {
+        // Where the move has got to: for tests and operators.
+        if (prop === "domainMoveState")
+          return () =>
+            Effect.sync(() => ({
+              ...(owned() ? { phase: "owned" } : (Move.moveState(raw) ?? { phase: "none" })),
+              driving,
+              failures,
+              ...(lastError === undefined ? {} : { lastError }),
+            }));
         if (owned()) {
           if (prop === "domainMove") return () => Effect.succeed(true);
           return (instance as Record<string, unknown>)[prop];
@@ -314,21 +401,35 @@ const router = (
           case Move.OwnsAlarmCallbacks:
             return true;
           case "alarm":
-            return () => step.pipe(Effect.orDie);
-          // The migration's call: start the move, and answer once it's done or `waitMillis` passes.
+            return () => step(COPY_BUDGET_MS);
+          // The migration's call: move now, in this call, and answer once it's
+          // done or `waitMillis` passes. An alarm already copying carries on.
           case "domainMove":
             return (waitMillis: number) =>
               Effect.gen(function* () {
-                if ((yield* Effect.promise(() => raw.getAlarm())) === null)
-                  yield* Effect.promise(() => raw.setAlarm(Date.now()));
                 const until = (yield* Clock.currentTimeMillis) + waitMillis;
-                while (!owned() && (yield* Clock.currentTimeMillis) < until)
-                  yield* Effect.sleep("250 millis");
+                yield* step(waitMillis);
+                while (!owned() && (yield* Clock.currentTimeMillis) < until) {
+                  yield* ensureDriven;
+                  yield* Effect.sleep("100 millis");
+                }
                 return owned();
               });
-          default:
+          default: {
             // Until the move is done, the old object serves: it holds the data.
-            return LOCAL.has(prop) ? undefined : forwardTo(forwarded, prop);
+            if (LOCAL.has(prop)) return undefined;
+            const forward = forwardTo(forwarded, prop);
+            // Every call makes sure the move is driven (a stalled one restarts),
+            // and waits while the old object is left to move to the deployed code.
+            const before = Effect.andThen(ensureDriven, holdWhileStale);
+            return typeof forward === "function"
+              ? (...args: ReadonlyArray<unknown>) =>
+                  Effect.andThen(
+                    before,
+                    (forward as (...a: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(...args),
+                  )
+              : Effect.andThen(before, forward as Effect.Effect<unknown>);
+          }
         }
       });
     });
@@ -528,7 +629,10 @@ const migrationObject = (classes: Classes): ObjectImpl =>
             firstPhase: "move",
             nextPhase: () => "complete",
             pass: (target, _, deadline) => ({ target, deadline }),
-            roots: (pass) => [{ path: pass.target }],
+            // Each page is one entry: the root paces pages, and the relays spread a page's objects.
+            roots: (pass, state) =>
+              state.plan.pages.map((page) => ({ path: `${pass.target}#${page.n}` })),
+            frontierSize: 0,
             samePlan: (a, b) =>
               a.pages.map((page) => `${page.className}#${page.n}`).join(",") ===
               b.pages.map((page) => `${page.className}#${page.n}`).join(","),
