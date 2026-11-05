@@ -66,6 +66,29 @@ Add it to the model's `projections`, like a policy.
   caption="The account commits first. Shortly after, the projection writes the movement to a table outside the model."
 />
 
+## Describe it
+
+A projection's last argument is its [annotations](/domain/annotations). No client calls a projection, so its `description` is for the people and the tools that read the model, as `Ledger.annotations`.
+
+```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
+export class Ledger extends Domain.Projection(
+  "Ledger",
+  {
+    from: [Account],
+    key: Account,
+    on: [
+      MoneyDeposited,
+      MoneyWithdrawn,
+      TransferDebited,
+      TransferCredited,
+      TransferRefunded,
+      SettlementReceived,
+    ],
+  },
+  { description: "Every money movement on an account, oldest first." },
+) {}
+```
+
 ## Implement it as a Layer
 
 The handler lives in a Layer, built once with everything it needs. It always receives a batch: an array of inputs for one key, in order.

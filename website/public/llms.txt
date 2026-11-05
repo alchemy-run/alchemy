@@ -935,6 +935,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Saga](https://alchemy.run/domain/saga) — A process that spans several aggregates and takes time, run step by step as an Effect workflow, with steps that undo earlier ones when a later one fails.
 - [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls in the model's own language, implement them with Layers, and turn their events into commands.
 - [Api](https://alchemy.run/domain/api) — How an Api publishes a model to one kind of client, how it's served, and how a typed client calls it.
+- [Annotations](https://alchemy.run/domain/annotations) — Describe every declaration in an @alchemy.run/domain model, show the descriptions in MCP tools, CLI help and OpenAPI, and add keys of your own for tooling built on the model.
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
 - [Testing an Api](https://alchemy.run/domain/testing-apis) — Test what each client may do and see, in process, over HTTP, and against a real deployment.
@@ -958,4 +959,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~212 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~213 KB) — only fetch it when you need to locate a specific resource's reference page.

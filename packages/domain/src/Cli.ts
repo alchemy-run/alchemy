@@ -12,6 +12,7 @@ import * as Runtime from "effect/Runtime";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
+import type { Annotations } from "./Annotations.ts";
 import type { Servable } from "./Api.ts";
 import {
   DefinitionError,
@@ -31,6 +32,7 @@ import { exposedOf, type OnceCallName, type Operation, operationsOf } from "./Re
 /** What {@link toCli} reads from an Api class. */
 export interface Cliable {
   readonly apiName: string;
+  readonly annotations: Annotations;
   readonly serves: ReadonlyArray<Servable>;
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   readonly client: Effect.Effect<unknown, never, any>;
@@ -73,7 +75,7 @@ export interface Options<A extends Cliable, E = never, R = never> {
   readonly expose?: ReadonlyArray<Exposable<A>>;
   /** The root command: the name a person types. Default: the Api's name in kebab-case. */
   readonly name?: string;
-  /** The root command's help text. */
+  /** The root command's help text. The Api's `description` annotation by default. */
   readonly description?: string;
   /**
    * Headers sent with every call, such as a bearer token for the session
@@ -308,11 +310,11 @@ const invoke = (
 const published = (op: Operation): boolean => !op.stream;
 
 /**
- * A subcommand's help text: a command's Schema `description` annotation, or
- * what it is (`Send the Deposit command.`, `Read the Balance view.`).
+ * A subcommand's help text: the entry's `description`, or what it is
+ * (`Send the Deposit command.`, `Read the Balance view.`).
  */
 const descriptionOf = (op: Operation): string =>
-  (op.served.kind === "Command" ? SchemaAST.resolveDescription(op.served.ast) : undefined) ??
+  op.description ??
   (op.served.kind === "Command"
     ? `Send the ${op.name} command.`
     : `Read the ${op.name} ${op.served.kind.toLowerCase()}.`);
@@ -525,7 +527,7 @@ export const toCli = <A extends Cliable, E = never, R = never>(
     problems.length > 0
       ? Command.make(rootName, {}, () => problems[0]!.pipe(Effect.die))
       : Command.make(rootName).pipe(Command.withSubcommands(subcommands as never));
-  return (
-    options.description === undefined ? root : Command.withDescription(root, options.description)
-  ) as never;
+  // The Api's own description, unless the CLI is given one.
+  const description = options.description ?? api.annotations.description;
+  return (description === undefined ? root : Command.withDescription(root, description)) as never;
 };
