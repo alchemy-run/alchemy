@@ -31,14 +31,9 @@ export {
   CommandError as RedisCommandError,
   UrlMissing as RedisUrlMissing,
 } from "@alchemy.run/redis/Errors";
-// TODO(typescript>7.1.0): TypeScript 7.1 reports TS2883 in apps that bind
-// Redis (an inferred type "cannot be named without a reference to
-// 'RuntimeContext'" from @alchemy.run/redis), which 7.0 accepted. The
-// clients' runtime effects require redis's `RuntimeContext` twin, and this
-// re-export lets TypeScript name it through this package. To test, remove
-// it and check that `pnpm exec tsrs -b examples/fly-redis
-// examples/gcp-memorystore-redis examples/railway-service` passes; keep it
-// if it still helps published `.d.ts` consumers.
+// Clients' runtime effects require redis's `RuntimeContext` twin, so it shows
+// up in users' inferred types. Exporting it here lets TypeScript name it
+// through this package without users depending on @alchemy.run/redis.
 export type { RuntimeContext as RedisRuntimeContext } from "@alchemy.run/redis/RuntimeContext";
 
 export interface RedisProps {
