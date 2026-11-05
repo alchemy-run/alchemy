@@ -1,0 +1,176 @@
+{
+  "tag": "AWS.Organizations",
+  "module": "organizations",
+  "resources": {},
+  "builder": "makeOrganizationsHttpBinding",
+  "builders": {
+    "makeOrganizationsHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "AcceptHandshake": {
+      "operation": "acceptHandshake",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:AcceptHandshake"]
+    },
+    "CancelHandshake": {
+      "operation": "cancelHandshake",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:CancelHandshake"]
+    },
+    "DeclineHandshake": {
+      "operation": "declineHandshake",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:DeclineHandshake"]
+    },
+    "DescribeCreateAccountStatus": {
+      "operation": "describeCreateAccountStatus",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:DescribeCreateAccountStatus"]
+    },
+    "DescribeEffectivePolicy": {
+      "operation": "describeEffectivePolicy",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:DescribeEffectivePolicy"]
+    },
+    "DescribeHandshake": {
+      "operation": "describeHandshake",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:DescribeHandshake"]
+    },
+    "DescribeOrganization": {
+      "operation": "describeOrganization",
+      "actions": ["organizations:DescribeOrganization"]
+    },
+    "InviteAccountToOrganization": {
+      "operation": "inviteAccountToOrganization",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:InviteAccountToOrganization"]
+    },
+    "ListAWSServiceAccessForOrganization": {
+      "operation": "listAWSServiceAccessForOrganization",
+      "actions": ["organizations:ListAWSServiceAccessForOrganization"]
+    },
+    "ListAccounts": {
+      "operation": "listAccounts",
+      "actions": ["organizations:ListAccounts"]
+    },
+    "ListAccountsForParent": {
+      "operation": "listAccountsForParent",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListAccountsForParent"]
+    },
+    "ListAccountsWithInvalidEffectivePolicy": {
+      "operation": "listAccountsWithInvalidEffectivePolicy",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListAccountsWithInvalidEffectivePolicy"]
+    },
+    "ListChildren": {
+      "operation": "listChildren",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListChildren"]
+    },
+    "ListCreateAccountStatus": {
+      "operation": "listCreateAccountStatus",
+      "actions": ["organizations:ListCreateAccountStatus"]
+    },
+    "ListDelegatedAdministrators": {
+      "operation": "listDelegatedAdministrators",
+      "actions": ["organizations:ListDelegatedAdministrators"]
+    },
+    "ListDelegatedServicesForAccount": {
+      "operation": "listDelegatedServicesForAccount",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListDelegatedServicesForAccount"]
+    },
+    "ListEffectivePolicyValidationErrors": {
+      "operation": "listEffectivePolicyValidationErrors",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListEffectivePolicyValidationErrors"]
+    },
+    "ListHandshakesForAccount": {
+      "operation": "listHandshakesForAccount",
+      "actions": ["organizations:ListHandshakesForAccount"]
+    },
+    "ListHandshakesForOrganization": {
+      "operation": "listHandshakesForOrganization",
+      "actions": ["organizations:ListHandshakesForOrganization"]
+    },
+    "ListOrganizationalUnitsForParent": {
+      "operation": "listOrganizationalUnitsForParent",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListOrganizationalUnitsForParent"]
+    },
+    "ListParents": {
+      "operation": "listParents",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListParents"]
+    },
+    "ListPolicies": {
+      "operation": "listPolicies",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListPolicies"]
+    },
+    "ListPoliciesForTarget": {
+      "operation": "listPoliciesForTarget",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListPoliciesForTarget"]
+    },
+    "ListRoots": {
+      "operation": "listRoots",
+      "actions": ["organizations:ListRoots"]
+    },
+    "ListTagsForResource": {
+      "operation": "listTagsForResource",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListTagsForResource"]
+    },
+    "ListTargetsForPolicy": {
+      "operation": "listTargetsForPolicy",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["organizations:ListTargetsForPolicy"]
+    }
+  }
+}

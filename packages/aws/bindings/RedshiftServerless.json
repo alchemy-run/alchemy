@@ -1,0 +1,175 @@
+{
+  "tag": "AWS.RedshiftServerless",
+  "module": "redshift-serverless",
+  "alias": "serverless",
+  "resources": {
+    "Namespace": {
+      "file": "Namespace.ts"
+    }
+  },
+  "builder": "makeServerlessAccountHttpBinding",
+  "builders": {
+    "makeServerlessAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeServerlessNamespaceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ConvertRecoveryPointToSnapshot": {
+      "operation": "convertRecoveryPointToSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": [
+        "redshift-serverless:ConvertRecoveryPointToSnapshot",
+        "redshift-serverless:TagResource"
+      ]
+    },
+    "CreateSnapshot": {
+      "operation": "createSnapshot",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "actions": ["redshift-serverless:CreateSnapshot", "redshift-serverless:TagResource"],
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:snapshot/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "DeleteSnapshot": {
+      "operation": "deleteSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["redshift-serverless:DeleteSnapshot"]
+    },
+    "GetIdentityCenterAuthToken": {
+      "operation": "getIdentityCenterAuthToken",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["redshift-serverless:GetIdentityCenterAuthToken"]
+    },
+    "GetRecoveryPoint": {
+      "operation": "getRecoveryPoint",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["redshift-serverless:GetRecoveryPoint"]
+    },
+    "GetSnapshot": {
+      "operation": "getSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["redshift-serverless:GetSnapshot"]
+    },
+    "GetTableRestoreStatus": {
+      "operation": "getTableRestoreStatus",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["redshift-serverless:GetTableRestoreStatus"]
+    },
+    "ListRecoveryPoints": {
+      "operation": "listRecoveryPoints",
+      "actions": ["redshift-serverless:ListRecoveryPoints"]
+    },
+    "ListSnapshots": {
+      "operation": "listSnapshots",
+      "actions": ["redshift-serverless:ListSnapshots"]
+    },
+    "ListTableRestoreStatus": {
+      "operation": "listTableRestoreStatus",
+      "actions": ["redshift-serverless:ListTableRestoreStatus"]
+    },
+    "RestoreFromRecoveryPoint": {
+      "operation": "restoreFromRecoveryPoint",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "actions": ["redshift-serverless:RestoreFromRecoveryPoint"],
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:recoverypoint/*`, `${prefix}:workgroup/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "RestoreFromSnapshot": {
+      "operation": "restoreFromSnapshot",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "actions": ["redshift-serverless:RestoreFromSnapshot"],
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:snapshot/*`, `${prefix}:workgroup/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "RestoreTableFromRecoveryPoint": {
+      "operation": "restoreTableFromRecoveryPoint",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "actions": ["redshift-serverless:RestoreTableFromRecoveryPoint"],
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:recoverypoint/*`, `${prefix}:workgroup/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "RestoreTableFromSnapshot": {
+      "operation": "restoreTableFromSnapshot",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "actions": ["redshift-serverless:RestoreTableFromSnapshot"],
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:snapshot/*`, `${prefix}:workgroup/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "UpdateSnapshot": {
+      "operation": "updateSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["redshift-serverless:UpdateSnapshot"]
+    }
+  }
+}

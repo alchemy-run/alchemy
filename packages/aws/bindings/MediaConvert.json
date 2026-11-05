@@ -1,0 +1,69 @@
+{
+  "tag": "AWS.MediaConvert",
+  "module": "mediaconvert",
+  "resources": {},
+  "builder": "makeMediaConvertHttpBinding",
+  "builders": {
+    "makeMediaConvertHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "CancelJob": {
+      "operation": "cancelJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["mediaconvert:CancelJob"]
+    },
+    "CreateJob": {
+      "operation": "createJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["mediaconvert:CreateJob"],
+      "with": {
+        "passRole": true
+      }
+    },
+    "GetJob": {
+      "operation": "getJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["mediaconvert:GetJob"]
+    },
+    "GetJobsQueryResults": {
+      "operation": "getJobsQueryResults",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["mediaconvert:GetJobsQueryResults"]
+    },
+    "ListJobs": {
+      "operation": "listJobs",
+      "actions": ["mediaconvert:ListJobs"]
+    },
+    "Probe": {
+      "operation": "probe",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["mediaconvert:Probe"]
+    },
+    "SearchJobs": {
+      "operation": "searchJobs",
+      "actions": ["mediaconvert:SearchJobs"]
+    },
+    "StartJobsQuery": {
+      "operation": "startJobsQuery",
+      "actions": ["mediaconvert:StartJobsQuery", "mediaconvert:CreateJobsQuery"],
+      "note": "The wire operation is StartJobsQuery but IAM authorizes the creation of the query object as CreateJobsQuery \u2014 grant both spellings."
+    }
+  }
+}

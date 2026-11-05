@@ -1,0 +1,130 @@
+{
+  "tag": "AWS.CloudFormation",
+  "module": "cloudformation",
+  "resources": {
+    "Stack": {
+      "file": "Stack.ts"
+    }
+  },
+  "builder": "makeCloudFormationStackHttpBinding",
+  "builders": {
+    "makeCloudFormationAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeCloudFormationStackHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeStackDriftDetectionStatus": {
+      "operation": "describeStackDriftDetectionStatus",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeCloudFormationAccountHttpBinding",
+      "actions": ["cloudformation:DescribeStackDriftDetectionStatus"]
+    },
+    "DescribeStackEvents": {
+      "operation": "describeStackEvents",
+      "resource": "Stack",
+      "request": {
+        "mode": "optional",
+        "omit": ["StackName"],
+        "inline": true
+      },
+      "actions": ["cloudformation:DescribeStackEvents"]
+    },
+    "DescribeStackResourceDrifts": {
+      "operation": "describeStackResourceDrifts",
+      "resource": "Stack",
+      "request": {
+        "mode": "optional",
+        "omit": ["StackName"],
+        "inline": true
+      },
+      "actions": ["cloudformation:DescribeStackResourceDrifts"]
+    },
+    "DescribeStackResources": {
+      "operation": "describeStackResources",
+      "resource": "Stack",
+      "request": {
+        "mode": "optional",
+        "omit": ["StackName"],
+        "inline": true
+      },
+      "actions": ["cloudformation:DescribeStackResources"]
+    },
+    "DescribeStacks": {
+      "operation": "describeStacks",
+      "resource": "Stack",
+      "request": {
+        "mode": "optional",
+        "omit": ["StackName"],
+        "inline": true
+      },
+      "actions": ["cloudformation:DescribeStacks"]
+    },
+    "DetectStackDrift": {
+      "operation": "detectStackDrift",
+      "resource": "Stack",
+      "request": {
+        "mode": "optional",
+        "omit": ["StackName"],
+        "inline": true
+      },
+      "actions": ["cloudformation:DetectStackDrift", "cloudformation:DetectStackResourceDrift"],
+      "note": "DetectStackDrift authorizes BOTH actions on the stack \u2014 the per-stack call fans out to per-resource drift checks and AWS rejects the call with AccessDenied on cloudformation:DetectStackResourceDrift alone."
+    },
+    "GetTemplate": {
+      "operation": "getTemplate",
+      "resource": "Stack",
+      "request": {
+        "mode": "optional",
+        "omit": ["StackName"],
+        "inline": true
+      },
+      "actions": ["cloudformation:GetTemplate"]
+    },
+    "ListExports": {
+      "operation": "listExports",
+      "builder": "makeCloudFormationAccountHttpBinding",
+      "actions": ["cloudformation:ListExports"]
+    },
+    "ListImports": {
+      "operation": "listImports",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeCloudFormationAccountHttpBinding",
+      "actions": ["cloudformation:ListImports"]
+    },
+    "ListStackResources": {
+      "operation": "listStackResources",
+      "resource": "Stack",
+      "request": {
+        "mode": "optional",
+        "omit": ["StackName"],
+        "inline": true
+      },
+      "actions": ["cloudformation:ListStackResources"]
+    },
+    "SignalResource": {
+      "operation": "signalResource",
+      "resource": "Stack",
+      "request": {
+        "mode": "required",
+        "omit": ["StackName"],
+        "inline": true
+      },
+      "actions": ["cloudformation:SignalResource"]
+    },
+    "ValidateTemplate": {
+      "operation": "validateTemplate",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeCloudFormationAccountHttpBinding",
+      "actions": ["cloudformation:ValidateTemplate"]
+    }
+  }
+}

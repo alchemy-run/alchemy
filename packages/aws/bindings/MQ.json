@@ -1,0 +1,50 @@
+{
+  "tag": "AWS.MQ",
+  "module": "mq",
+  "resources": {
+    "Broker": {
+      "file": "Broker.ts"
+    }
+  },
+  "builder": "makeMqBrokerHttpBinding",
+  "builders": {
+    "makeMqAccountHttpBinding": {
+      "options": {
+        "capability": "name",
+        "operation": "operation",
+        "iamActions": "actions"
+      },
+      "grants": "*"
+    },
+    "makeMqBrokerHttpBinding": {
+      "options": {
+        "capability": "name",
+        "operation": "operation",
+        "iamActions": "actions"
+      }
+    }
+  },
+  "bindings": {
+    "DescribeBroker": {
+      "operation": "describeBroker",
+      "resource": "Broker",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["mq:DescribeBroker"]
+    },
+    "ListBrokers": {
+      "operation": "listBrokers",
+      "builder": "makeMqAccountHttpBinding",
+      "actions": ["mq:ListBrokers"]
+    },
+    "RebootBroker": {
+      "operation": "rebootBroker",
+      "resource": "Broker",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["mq:RebootBroker"]
+    }
+  }
+}

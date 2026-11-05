@@ -1,0 +1,145 @@
+{
+  "tag": "AWS.EC2",
+  "module": "ec2",
+  "resources": {
+    "Instance": {
+      "file": "Instance.ts"
+    },
+    "SecurityGroup": {
+      "file": "SecurityGroup.ts"
+    },
+    "Volume": {
+      "file": "Volume.ts"
+    }
+  },
+  "builder": "makeInstanceHttpBinding",
+  "builders": {
+    "makeInstanceHttpBinding": {},
+    "makeSecurityGroupHttpBinding": {
+      "grants": "resource"
+    },
+    "makeVolumeHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AuthorizeSecurityGroupIngress": {
+      "operation": "authorizeSecurityGroupIngress",
+      "resource": "SecurityGroup",
+      "param": "group",
+      "request": {
+        "mode": "required",
+        "interface": "AuthorizeSecurityGroupIngressRequest",
+        "omit": ["GroupId", "GroupName"]
+      },
+      "builder": "makeSecurityGroupHttpBinding",
+      "actions": ["ec2:AuthorizeSecurityGroupIngress"]
+    },
+    "CreateSnapshot": {
+      "operation": "createSnapshot",
+      "resource": "Volume",
+      "request": {
+        "mode": "optional",
+        "interface": "CreateSnapshotRequest",
+        "omit": ["VolumeId"]
+      },
+      "builder": "makeVolumeHttpBinding",
+      "actions": ["ec2:CreateSnapshot", "ec2:CreateTags"],
+      "with": {
+        "extraResources": ["arn:aws:ec2:*::snapshot/*"]
+      },
+      "note": "`ec2:CreateTags` covers `TagSpecifications` on the new snapshot. Snapshot creation authorizes against both the source volume and the new snapshot; snapshot ARNs carry no account id."
+    },
+    "DescribeInstanceStatus": {
+      "operation": "describeInstanceStatus",
+      "resource": "Instance",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeInstanceStatusRequest",
+        "omit": ["InstanceId", "InstanceIds"]
+      },
+      "actions": ["ec2:DescribeInstanceStatus"],
+      "with": {
+        "requestKey": "InstanceIds",
+        "resource": "*"
+      }
+    },
+    "GetConsoleOutput": {
+      "operation": "getConsoleOutput",
+      "resource": "Instance",
+      "request": {
+        "mode": "optional",
+        "interface": "GetConsoleOutputRequest",
+        "omit": ["InstanceId", "InstanceIds"]
+      },
+      "actions": ["ec2:GetConsoleOutput"],
+      "with": {
+        "requestKey": "InstanceId"
+      }
+    },
+    "GetPasswordData": {
+      "operation": "getPasswordData",
+      "resource": "Instance",
+      "request": {
+        "mode": "optional",
+        "interface": "GetPasswordDataRequest",
+        "omit": ["InstanceId", "InstanceIds"]
+      },
+      "actions": ["ec2:GetPasswordData"],
+      "with": {
+        "requestKey": "InstanceId"
+      }
+    },
+    "RebootInstance": {
+      "operation": "rebootInstances",
+      "resource": "Instance",
+      "request": {
+        "mode": "optional",
+        "interface": "RebootInstanceRequest",
+        "omit": ["InstanceId", "InstanceIds"]
+      },
+      "actions": ["ec2:RebootInstances"],
+      "with": {
+        "requestKey": "InstanceIds"
+      }
+    },
+    "RevokeSecurityGroupIngress": {
+      "operation": "revokeSecurityGroupIngress",
+      "resource": "SecurityGroup",
+      "param": "group",
+      "request": {
+        "mode": "required",
+        "interface": "RevokeSecurityGroupIngressRequest",
+        "omit": ["GroupId", "GroupName"]
+      },
+      "builder": "makeSecurityGroupHttpBinding",
+      "actions": ["ec2:RevokeSecurityGroupIngress"]
+    },
+    "StartInstance": {
+      "operation": "startInstances",
+      "resource": "Instance",
+      "request": {
+        "mode": "optional",
+        "interface": "StartInstanceRequest",
+        "omit": ["InstanceId", "InstanceIds"]
+      },
+      "actions": ["ec2:StartInstances"],
+      "with": {
+        "requestKey": "InstanceIds"
+      }
+    },
+    "StopInstance": {
+      "operation": "stopInstances",
+      "resource": "Instance",
+      "request": {
+        "mode": "optional",
+        "interface": "StopInstanceRequest",
+        "omit": ["InstanceId", "InstanceIds"]
+      },
+      "actions": ["ec2:StopInstances"],
+      "with": {
+        "requestKey": "InstanceIds"
+      }
+    }
+  }
+}

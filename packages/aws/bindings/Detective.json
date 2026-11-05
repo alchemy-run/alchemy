@@ -1,0 +1,226 @@
+{
+  "tag": "AWS.Detective",
+  "module": "detective",
+  "resources": {
+    "Graph": {
+      "file": "Graph.ts"
+    }
+  },
+  "builder": "makeDetectiveGraphHttpBinding",
+  "builders": {
+    "makeDetectiveAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeDetectiveGraphHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AcceptInvitation": {
+      "operation": "acceptInvitation",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding",
+      "actions": ["detective:AcceptInvitation"]
+    },
+    "BatchGetGraphMemberDatasources": {
+      "operation": "batchGetGraphMemberDatasources",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:BatchGetGraphMemberDatasources"]
+    },
+    "BatchGetMembershipDatasources": {
+      "operation": "batchGetMembershipDatasources",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding",
+      "actions": ["detective:BatchGetMembershipDatasources"]
+    },
+    "CreateMembers": {
+      "operation": "createMembers",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:CreateMembers"]
+    },
+    "DeleteMembers": {
+      "operation": "deleteMembers",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:DeleteMembers"]
+    },
+    "DescribeOrganizationConfiguration": {
+      "operation": "describeOrganizationConfiguration",
+      "resource": "Graph",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["detective:DescribeOrganizationConfiguration"]
+    },
+    "DisableOrganizationAdminAccount": {
+      "operation": "disableOrganizationAdminAccount",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDetectiveAccountHttpBinding",
+      "actions": ["detective:DisableOrganizationAdminAccount"]
+    },
+    "DisassociateMembership": {
+      "operation": "disassociateMembership",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding",
+      "actions": ["detective:DisassociateMembership"]
+    },
+    "EnableOrganizationAdminAccount": {
+      "operation": "enableOrganizationAdminAccount",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding",
+      "actions": ["detective:EnableOrganizationAdminAccount"]
+    },
+    "GetInvestigation": {
+      "operation": "getInvestigation",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:GetInvestigation"]
+    },
+    "GetMembers": {
+      "operation": "getMembers",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:GetMembers"]
+    },
+    "ListDatasourcePackages": {
+      "operation": "listDatasourcePackages",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:ListDatasourcePackages"]
+    },
+    "ListIndicators": {
+      "operation": "listIndicators",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:ListIndicators"]
+    },
+    "ListInvestigations": {
+      "operation": "listInvestigations",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:ListInvestigations"]
+    },
+    "ListInvitations": {
+      "operation": "listInvitations",
+      "builder": "makeDetectiveAccountHttpBinding",
+      "actions": ["detective:ListInvitations"]
+    },
+    "ListMembers": {
+      "operation": "listMembers",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:ListMembers"]
+    },
+    "ListOrganizationAdminAccounts": {
+      "operation": "listOrganizationAdminAccounts",
+      "builder": "makeDetectiveAccountHttpBinding",
+      "actions": ["detective:ListOrganizationAdminAccounts"]
+    },
+    "RejectInvitation": {
+      "operation": "rejectInvitation",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding",
+      "actions": ["detective:RejectInvitation"]
+    },
+    "StartInvestigation": {
+      "operation": "startInvestigation",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:StartInvestigation"]
+    },
+    "StartMonitoringMember": {
+      "operation": "startMonitoringMember",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:StartMonitoringMember"]
+    },
+    "UpdateDatasourcePackages": {
+      "operation": "updateDatasourcePackages",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:UpdateDatasourcePackages"]
+    },
+    "UpdateInvestigationState": {
+      "operation": "updateInvestigationState",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:UpdateInvestigationState"]
+    },
+    "UpdateOrganizationConfiguration": {
+      "operation": "updateOrganizationConfiguration",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["GraphArn"],
+        "inline": true
+      },
+      "actions": ["detective:UpdateOrganizationConfiguration"]
+    }
+  }
+}

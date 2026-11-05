@@ -1,0 +1,90 @@
+{
+  "tag": "AWS.IAM",
+  "module": "iam",
+  "resources": {},
+  "builder": "makeIamHttpBinding",
+  "builders": {
+    "makeIamHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "GenerateCredentialReport": {
+      "operation": "generateCredentialReport",
+      "actions": ["iam:GenerateCredentialReport"]
+    },
+    "GenerateServiceLastAccessedDetails": {
+      "operation": "generateServiceLastAccessedDetails",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["iam:GenerateServiceLastAccessedDetails"]
+    },
+    "GetAccountAuthorizationDetails": {
+      "operation": "getAccountAuthorizationDetails",
+      "actions": ["iam:GetAccountAuthorizationDetails"]
+    },
+    "GetAccountSummary": {
+      "operation": "getAccountSummary",
+      "actions": ["iam:GetAccountSummary"]
+    },
+    "GetContextKeysForCustomPolicy": {
+      "operation": "getContextKeysForCustomPolicy",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["iam:GetContextKeysForCustomPolicy"]
+    },
+    "GetContextKeysForPrincipalPolicy": {
+      "operation": "getContextKeysForPrincipalPolicy",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["iam:GetContextKeysForPrincipalPolicy"]
+    },
+    "GetCredentialReport": {
+      "operation": "getCredentialReport",
+      "actions": ["iam:GetCredentialReport"]
+    },
+    "GetServiceLastAccessedDetails": {
+      "operation": "getServiceLastAccessedDetails",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["iam:GetServiceLastAccessedDetails"]
+    },
+    "GetServiceLastAccessedDetailsWithEntities": {
+      "operation": "getServiceLastAccessedDetailsWithEntities",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["iam:GetServiceLastAccessedDetailsWithEntities"]
+    },
+    "ListPoliciesGrantingServiceAccess": {
+      "operation": "listPoliciesGrantingServiceAccess",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["iam:ListPoliciesGrantingServiceAccess"]
+    },
+    "SimulateCustomPolicy": {
+      "operation": "simulateCustomPolicy",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["iam:SimulateCustomPolicy"]
+    },
+    "SimulatePrincipalPolicy": {
+      "operation": "simulatePrincipalPolicy",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["iam:SimulatePrincipalPolicy"]
+    }
+  }
+}

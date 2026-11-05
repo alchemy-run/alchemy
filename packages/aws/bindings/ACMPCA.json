@@ -1,0 +1,89 @@
+{
+  "tag": "AWS.ACMPCA",
+  "module": "acm-pca",
+  "resources": {
+    "CertificateAuthority": {
+      "file": "CertificateAuthority.ts"
+    }
+  },
+  "builder": "makeACMPCAHttpBinding",
+  "builders": {
+    "makeACMPCAHttpBinding": {
+      "options": {
+        "action": "name",
+        "operation": "operation"
+      },
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreateCertificateAuthorityAuditReport": {
+      "operation": "createCertificateAuthorityAuditReport",
+      "resource": "CertificateAuthority",
+      "request": {
+        "mode": "required",
+        "interface": "CreateCertificateAuthorityAuditReportRequest",
+        "omit": ["CertificateAuthorityArn"]
+      }
+    },
+    "DescribeCertificateAuthorityAuditReport": {
+      "operation": "describeCertificateAuthorityAuditReport",
+      "resource": "CertificateAuthority",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeCertificateAuthorityAuditReportRequest",
+        "omit": ["CertificateAuthorityArn"]
+      }
+    },
+    "GetCertificate": {
+      "operation": "getCertificate",
+      "resource": "CertificateAuthority",
+      "request": {
+        "mode": "required",
+        "interface": "GetCertificateRequest",
+        "omit": ["CertificateAuthorityArn"]
+      }
+    },
+    "GetCertificateAuthorityCertificate": {
+      "operation": "getCertificateAuthorityCertificate",
+      "resource": "CertificateAuthority",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GetCertificateAuthorityCsr": {
+      "operation": "getCertificateAuthorityCsr",
+      "resource": "CertificateAuthority",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "ImportCertificateAuthorityCertificate": {
+      "operation": "importCertificateAuthorityCertificate",
+      "resource": "CertificateAuthority",
+      "request": {
+        "mode": "required",
+        "interface": "ImportCertificateAuthorityCertificateRequest",
+        "omit": ["CertificateAuthorityArn"]
+      }
+    },
+    "IssueCertificate": {
+      "operation": "issueCertificate",
+      "resource": "CertificateAuthority",
+      "request": {
+        "mode": "required",
+        "interface": "IssueCertificateRequest",
+        "omit": ["CertificateAuthorityArn"]
+      }
+    },
+    "RevokeCertificate": {
+      "operation": "revokeCertificate",
+      "resource": "CertificateAuthority",
+      "request": {
+        "mode": "required",
+        "interface": "RevokeCertificateRequest",
+        "omit": ["CertificateAuthorityArn"]
+      }
+    }
+  }
+}

@@ -11,17 +11,10 @@
 //   GetManagedEndpointSessionCredentials).
 // - tagResource/untagResource/listTagsForResource: covered by the
 //   VirtualCluster/JobTemplate providers' tag sync.
-export * from "./CancelJobRun.ts";
-export * from "./DescribeJobRun.ts";
-export * from "./DescribeJobTemplate.ts";
-export * from "./DescribeManagedEndpoint.ts";
 export * from "./DescribeVirtualCluster.ts";
 export * from "./GetManagedEndpointSessionCredentials.ts";
 export * from "./JobRunEventSource.ts";
 export * from "./JobTemplate.ts";
-export * from "./ListJobRuns.ts";
-export * from "./ListJobTemplates.ts";
-export * from "./ListManagedEndpoints.ts";
-export * from "./ListVirtualClusters.ts";
 export * from "./StartJobRun.ts";
 export * from "./VirtualCluster.ts";
+export * from "./generated.ts";

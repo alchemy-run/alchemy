@@ -1,0 +1,129 @@
+{
+  "tag": "AWS.ServiceCatalog",
+  "module": "service-catalog",
+  "resources": {},
+  "builder": "makeServiceCatalogHttpBinding",
+  "builders": {
+    "makeServiceCatalogHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "DescribeProduct": {
+      "operation": "describeProduct",
+      "actions": ["servicecatalog:DescribeProduct"]
+    },
+    "DescribeProvisionedProduct": {
+      "operation": "describeProvisionedProduct",
+      "actions": ["servicecatalog:DescribeProvisionedProduct"]
+    },
+    "DescribeProvisioningParameters": {
+      "operation": "describeProvisioningParameters",
+      "actions": ["servicecatalog:DescribeProvisioningParameters"]
+    },
+    "DescribeRecord": {
+      "operation": "describeRecord",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["servicecatalog:DescribeRecord"]
+    },
+    "DescribeServiceActionExecutionParameters": {
+      "operation": "describeServiceActionExecutionParameters",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["servicecatalog:DescribeServiceActionExecutionParameters"]
+    },
+    "ExecuteProvisionedProductServiceAction": {
+      "operation": "executeProvisionedProductServiceAction",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["servicecatalog:ExecuteProvisionedProductServiceAction"]
+    },
+    "GetProvisionedProductOutputs": {
+      "operation": "getProvisionedProductOutputs",
+      "actions": ["servicecatalog:GetProvisionedProductOutputs"]
+    },
+    "ListLaunchPaths": {
+      "operation": "listLaunchPaths",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["servicecatalog:ListLaunchPaths"]
+    },
+    "ListRecordHistory": {
+      "operation": "listRecordHistory",
+      "actions": ["servicecatalog:ListRecordHistory"]
+    },
+    "ListStackInstancesForProvisionedProduct": {
+      "operation": "listStackInstancesForProvisionedProduct",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["servicecatalog:ListStackInstancesForProvisionedProduct"]
+    },
+    "ProvisionProduct": {
+      "operation": "provisionProduct",
+      "request": {
+        "mode": "required"
+      },
+      "actions": [
+        "servicecatalog:ProvisionProduct",
+        "cloudformation:CreateStack",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:SetStackPolicy",
+        "cloudformation:ValidateTemplate",
+        "s3:GetObject"
+      ]
+    },
+    "SearchProducts": {
+      "operation": "searchProducts",
+      "actions": ["servicecatalog:SearchProducts"]
+    },
+    "SearchProvisionedProducts": {
+      "operation": "searchProvisionedProducts",
+      "actions": ["servicecatalog:SearchProvisionedProducts"]
+    },
+    "TerminateProvisionedProduct": {
+      "operation": "terminateProvisionedProduct",
+      "request": {
+        "mode": "required"
+      },
+      "actions": [
+        "servicecatalog:TerminateProvisionedProduct",
+        "cloudformation:DeleteStack",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents"
+      ]
+    },
+    "UpdateProvisionedProduct": {
+      "operation": "updateProvisionedProduct",
+      "request": {
+        "mode": "required"
+      },
+      "actions": [
+        "servicecatalog:UpdateProvisionedProduct",
+        "cloudformation:UpdateStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:SetStackPolicy",
+        "cloudformation:ValidateTemplate",
+        "s3:GetObject"
+      ]
+    }
+  }
+}

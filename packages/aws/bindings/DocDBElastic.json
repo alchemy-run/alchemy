@@ -1,0 +1,125 @@
+{
+  "tag": "AWS.DocDBElastic",
+  "module": "docdb-elastic",
+  "resources": {
+    "Cluster": {
+      "file": "Cluster.ts"
+    }
+  },
+  "builder": "makeDocDBElasticAccountHttpBinding",
+  "builders": {
+    "makeDocDBElasticAccountHttpBinding": {},
+    "makeDocDBElasticClusterHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ApplyPendingMaintenanceAction": {
+      "operation": "applyPendingMaintenanceAction",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["docdb-elastic:ApplyPendingMaintenanceAction"]
+    },
+    "CopyClusterSnapshot": {
+      "operation": "copyClusterSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": [
+        "docdb-elastic:CopyClusterSnapshot",
+        "docdb-elastic:CreateClusterSnapshot",
+        "docdb-elastic:TagResource"
+      ],
+      "note": "Copying authorizes the creation of the target snapshot as a CreateClusterSnapshot on `cluster-snapshot/*` (verified live: without it the service returns AccessDeniedException naming this action)."
+    },
+    "CreateClusterSnapshot": {
+      "operation": "createClusterSnapshot",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterArn"],
+        "inline": true
+      },
+      "builder": "makeDocDBElasticClusterHttpBinding",
+      "actions": ["docdb-elastic:CreateClusterSnapshot", "docdb-elastic:TagResource"],
+      "withTs": {
+        "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      },
+      "note": "The action authorizes against both the source cluster and the to-be-created snapshot (whose UUID-based ARN is server-generated)."
+    },
+    "DeleteClusterSnapshot": {
+      "operation": "deleteClusterSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["docdb-elastic:DeleteClusterSnapshot"]
+    },
+    "GetClusterSnapshot": {
+      "operation": "getClusterSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["docdb-elastic:GetClusterSnapshot"]
+    },
+    "GetPendingMaintenanceAction": {
+      "operation": "getPendingMaintenanceAction",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["docdb-elastic:GetPendingMaintenanceAction"]
+    },
+    "ListClusterSnapshots": {
+      "operation": "listClusterSnapshots",
+      "actions": ["docdb-elastic:ListClusterSnapshots"]
+    },
+    "ListPendingMaintenanceActions": {
+      "operation": "listPendingMaintenanceActions",
+      "actions": ["docdb-elastic:ListPendingMaintenanceActions"]
+    },
+    "RestoreClusterFromSnapshot": {
+      "operation": "restoreClusterFromSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": [
+        "docdb-elastic:RestoreClusterFromSnapshot",
+        "docdb-elastic:CreateCluster",
+        "docdb-elastic:TagResource",
+        "ec2:CreateVpcEndpoint",
+        "ec2:DescribeVpcEndpoints",
+        "ec2:DeleteVpcEndpoints",
+        "ec2:ModifyVpcEndpoint",
+        "ec2:DescribeVpcAttribute",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:DescribeAccountAttributes",
+        "ec2:DescribeSecurityGroups",
+        "ec2:CreateTags"
+      ],
+      "note": "Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action). Restoring provisions a new cluster, which attaches to the VPC via a service-managed VPC endpoint using the caller's EC2 permissions."
+    },
+    "StartCluster": {
+      "operation": "startCluster",
+      "resource": "Cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDocDBElasticClusterHttpBinding",
+      "actions": ["docdb-elastic:StartCluster"]
+    },
+    "StopCluster": {
+      "operation": "stopCluster",
+      "resource": "Cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDocDBElasticClusterHttpBinding",
+      "actions": ["docdb-elastic:StopCluster"]
+    }
+  }
+}

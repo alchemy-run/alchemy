@@ -1,0 +1,356 @@
+{
+  "tag": "AWS.EKS",
+  "module": "eks",
+  "resources": {
+    "Cluster": {
+      "file": "Cluster.ts"
+    }
+  },
+  "builder": "makeEKSClusterHttpBinding",
+  "builders": {
+    "makeEKSAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeEKSClusterHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeAccessEntry": {
+      "operation": "describeAccessEntry",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeAccessEntry"],
+      "with": {
+        "key": "clusterName",
+        "scope": "subresources"
+      }
+    },
+    "DescribeAddon": {
+      "operation": "describeAddon",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeAddon"],
+      "with": {
+        "key": "clusterName",
+        "scope": "subresources"
+      }
+    },
+    "DescribeAddonConfiguration": {
+      "operation": "describeAddonConfiguration",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeEKSAccountHttpBinding",
+      "actions": ["eks:DescribeAddonConfiguration"]
+    },
+    "DescribeAddonVersions": {
+      "operation": "describeAddonVersions",
+      "builder": "makeEKSAccountHttpBinding",
+      "actions": ["eks:DescribeAddonVersions"]
+    },
+    "DescribeCapability": {
+      "operation": "describeCapability",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeCapability"],
+      "with": {
+        "key": "clusterName",
+        "scope": "subresources"
+      }
+    },
+    "DescribeCluster": {
+      "operation": "describeCluster",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["name"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeCluster"],
+      "with": {
+        "key": "name",
+        "scope": "cluster"
+      }
+    },
+    "DescribeClusterVersions": {
+      "operation": "describeClusterVersions",
+      "builder": "makeEKSAccountHttpBinding",
+      "actions": ["eks:DescribeClusterVersions"]
+    },
+    "DescribeFargateProfile": {
+      "operation": "describeFargateProfile",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeFargateProfile"],
+      "with": {
+        "key": "clusterName",
+        "scope": "subresources"
+      }
+    },
+    "DescribeIdentityProviderConfig": {
+      "operation": "describeIdentityProviderConfig",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeIdentityProviderConfig"],
+      "with": {
+        "key": "clusterName",
+        "scope": "subresources"
+      }
+    },
+    "DescribeInsight": {
+      "operation": "describeInsight",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeInsight"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "DescribeInsightsRefresh": {
+      "operation": "describeInsightsRefresh",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeInsightsRefresh"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "DescribeNodegroup": {
+      "operation": "describeNodegroup",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeNodegroup"],
+      "with": {
+        "key": "clusterName",
+        "scope": "subresources"
+      }
+    },
+    "DescribePodIdentityAssociation": {
+      "operation": "describePodIdentityAssociation",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:DescribePodIdentityAssociation"],
+      "with": {
+        "key": "clusterName",
+        "scope": "subresources"
+      }
+    },
+    "DescribeUpdate": {
+      "operation": "describeUpdate",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["name"],
+        "inline": true
+      },
+      "actions": ["eks:DescribeUpdate"],
+      "with": {
+        "key": "name",
+        "scope": "both"
+      }
+    },
+    "ListAccessEntries": {
+      "operation": "listAccessEntries",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:ListAccessEntries"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "ListAccessPolicies": {
+      "operation": "listAccessPolicies",
+      "builder": "makeEKSAccountHttpBinding",
+      "actions": ["eks:ListAccessPolicies"]
+    },
+    "ListAddons": {
+      "operation": "listAddons",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:ListAddons"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "ListAssociatedAccessPolicies": {
+      "operation": "listAssociatedAccessPolicies",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:ListAssociatedAccessPolicies"],
+      "with": {
+        "key": "clusterName",
+        "scope": "subresources"
+      }
+    },
+    "ListCapabilities": {
+      "operation": "listCapabilities",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:ListCapabilities"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "ListClusters": {
+      "operation": "listClusters",
+      "builder": "makeEKSAccountHttpBinding",
+      "actions": ["eks:ListClusters"]
+    },
+    "ListFargateProfiles": {
+      "operation": "listFargateProfiles",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:ListFargateProfiles"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "ListIdentityProviderConfigs": {
+      "operation": "listIdentityProviderConfigs",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:ListIdentityProviderConfigs"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "ListInsights": {
+      "operation": "listInsights",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:ListInsights"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "ListNodegroups": {
+      "operation": "listNodegroups",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:ListNodegroups"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "ListPodIdentityAssociations": {
+      "operation": "listPodIdentityAssociations",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:ListPodIdentityAssociations"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    },
+    "ListUpdates": {
+      "operation": "listUpdates",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["name"],
+        "inline": true
+      },
+      "actions": ["eks:ListUpdates"],
+      "with": {
+        "key": "name",
+        "scope": "both"
+      }
+    },
+    "StartInsightsRefresh": {
+      "operation": "startInsightsRefresh",
+      "resource": "Cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["clusterName"],
+        "inline": true
+      },
+      "actions": ["eks:StartInsightsRefresh"],
+      "with": {
+        "key": "clusterName",
+        "scope": "cluster"
+      }
+    }
+  }
+}

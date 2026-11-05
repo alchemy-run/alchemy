@@ -1,0 +1,124 @@
+{
+  "tag": "AWS.Transfer",
+  "module": "transfer",
+  "resources": {
+    "Server": {
+      "file": "Server.ts"
+    },
+    "User": {
+      "file": "User.ts"
+    }
+  },
+  "builder": "makeTransferServerHttpBinding",
+  "builders": {
+    "makeTransferAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeTransferServerHttpBinding": {
+      "grants": "resource"
+    },
+    "makeTransferUserHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DeleteSshPublicKey": {
+      "operation": "deleteSshPublicKey",
+      "resource": "User",
+      "request": {
+        "mode": "required",
+        "omit": ["ServerId", "UserName"],
+        "inline": true
+      },
+      "builder": "makeTransferUserHttpBinding",
+      "actions": ["transfer:DeleteSshPublicKey"]
+    },
+    "DescribeServer": {
+      "operation": "describeServer",
+      "resource": "Server",
+      "request": {
+        "mode": "optional",
+        "omit": ["ServerId"],
+        "inline": true
+      },
+      "actions": ["transfer:DescribeServer"]
+    },
+    "DescribeUser": {
+      "operation": "describeUser",
+      "resource": "User",
+      "request": {
+        "mode": "optional",
+        "omit": ["ServerId", "UserName"],
+        "inline": true
+      },
+      "builder": "makeTransferUserHttpBinding",
+      "actions": ["transfer:DescribeUser"]
+    },
+    "ImportSshPublicKey": {
+      "operation": "importSshPublicKey",
+      "resource": "User",
+      "request": {
+        "mode": "required",
+        "omit": ["ServerId", "UserName"],
+        "inline": true
+      },
+      "builder": "makeTransferUserHttpBinding",
+      "actions": ["transfer:ImportSshPublicKey"]
+    },
+    "ListUsers": {
+      "operation": "listUsers",
+      "resource": "Server",
+      "request": {
+        "mode": "optional",
+        "omit": ["ServerId"],
+        "inline": true
+      },
+      "actions": ["transfer:ListUsers"]
+    },
+    "SendWorkflowStepState": {
+      "operation": "sendWorkflowStepState",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeTransferAccountHttpBinding",
+      "actions": ["transfer:SendWorkflowStepState"]
+    },
+    "StartServer": {
+      "operation": "startServer",
+      "resource": "Server",
+      "request": {
+        "mode": "optional",
+        "omit": ["ServerId"],
+        "inline": true
+      },
+      "actions": ["transfer:StartServer"]
+    },
+    "StopServer": {
+      "operation": "stopServer",
+      "resource": "Server",
+      "request": {
+        "mode": "optional",
+        "omit": ["ServerId"],
+        "inline": true
+      },
+      "actions": ["transfer:StopServer"]
+    },
+    "TestIdentityProvider": {
+      "operation": "testIdentityProvider",
+      "resource": "Server",
+      "request": {
+        "mode": "required",
+        "omit": ["ServerId"],
+        "inline": true
+      },
+      "actions": ["transfer:TestIdentityProvider"],
+      "withTs": {
+        "resource": "(server) => Output.map(server.arn, (arn) => `${arn.replace(\":server/\", \":user/\")}/*`)"
+      },
+      "imports": {
+        "alchemy/Output": "* as Output"
+      },
+      "note": "AWS authorizes this operation against the addressed user, despite the binding being server-scoped so it can inject ServerId. UserName arrives at runtime, so grant the operation on every user of the bound server."
+    }
+  }
+}

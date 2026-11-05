@@ -1,0 +1,330 @@
+{
+  "tag": "AWS.DataZone",
+  "module": "datazone",
+  "resources": {
+    "Domain": {
+      "file": "Domain.ts"
+    },
+    "Environment": {
+      "file": "Environment.ts"
+    }
+  },
+  "builder": "makeDataZoneDomainHttpBinding",
+  "builders": {
+    "makeDataZoneDomainHttpBinding": {
+      "grants": "resource"
+    },
+    "makeDataZoneEnvironmentHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AcceptPredictions": {
+      "operation": "acceptPredictions",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "AcceptPredictionsRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:AcceptPredictions"]
+    },
+    "AcceptSubscriptionRequest": {
+      "operation": "acceptSubscriptionRequest",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "AcceptSubscriptionRequestRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:AcceptSubscriptionRequest"]
+    },
+    "CancelSubscription": {
+      "operation": "cancelSubscription",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "CancelSubscriptionRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:CancelSubscription"]
+    },
+    "CreateAsset": {
+      "operation": "createAsset",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "CreateAssetRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:CreateAsset"]
+    },
+    "CreateAssetRevision": {
+      "operation": "createAssetRevision",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "CreateAssetRevisionRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:CreateAssetRevision"]
+    },
+    "CreateSubscriptionRequest": {
+      "operation": "createSubscriptionRequest",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "CreateSubscriptionRequestRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:CreateSubscriptionRequest"]
+    },
+    "GetAsset": {
+      "operation": "getAsset",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "GetAssetRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:GetAsset"]
+    },
+    "GetDataSourceRun": {
+      "operation": "getDataSourceRun",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "GetDataSourceRunRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:GetDataSourceRun"]
+    },
+    "GetEnvironmentCredentials": {
+      "operation": "getEnvironmentCredentials",
+      "resource": "Environment",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDataZoneEnvironmentHttpBinding",
+      "actions": ["datazone:GetEnvironmentCredentials"]
+    },
+    "GetIamPortalLoginUrl": {
+      "operation": "getIamPortalLoginUrl",
+      "resource": "Domain",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["datazone:GetIamPortalLoginUrl"]
+    },
+    "GetLineageNode": {
+      "operation": "getLineageNode",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "GetLineageNodeRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:GetLineageNode"]
+    },
+    "GetListing": {
+      "operation": "getListing",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "GetListingRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:GetListing"]
+    },
+    "GetMetadataGenerationRun": {
+      "operation": "getMetadataGenerationRun",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "GetMetadataGenerationRunRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:GetMetadataGenerationRun"]
+    },
+    "GetSubscription": {
+      "operation": "getSubscription",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "GetSubscriptionRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:GetSubscription"]
+    },
+    "GetTimeSeriesDataPoint": {
+      "operation": "getTimeSeriesDataPoint",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "GetTimeSeriesDataPointRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:GetTimeSeriesDataPoint"]
+    },
+    "GetUserProfile": {
+      "operation": "getUserProfile",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "GetUserProfileRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:GetUserProfile"]
+    },
+    "ListDataSourceRuns": {
+      "operation": "listDataSourceRuns",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "ListDataSourceRunsRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:ListDataSourceRuns"]
+    },
+    "ListNotifications": {
+      "operation": "listNotifications",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "ListNotificationsRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:ListNotifications"]
+    },
+    "ListSubscriptionRequests": {
+      "operation": "listSubscriptionRequests",
+      "resource": "Domain",
+      "request": {
+        "mode": "optional",
+        "interface": "ListSubscriptionRequestsRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:ListSubscriptionRequests"]
+    },
+    "ListSubscriptions": {
+      "operation": "listSubscriptions",
+      "resource": "Domain",
+      "request": {
+        "mode": "optional",
+        "interface": "ListSubscriptionsRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:ListSubscriptions"]
+    },
+    "ListTimeSeriesDataPoints": {
+      "operation": "listTimeSeriesDataPoints",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "ListTimeSeriesDataPointsRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:ListTimeSeriesDataPoints"]
+    },
+    "PostLineageEvent": {
+      "operation": "postLineageEvent",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "PostLineageEventRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:PostLineageEvent"]
+    },
+    "PostTimeSeriesDataPoints": {
+      "operation": "postTimeSeriesDataPoints",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "PostTimeSeriesDataPointsRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:PostTimeSeriesDataPoints"]
+    },
+    "RejectPredictions": {
+      "operation": "rejectPredictions",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "RejectPredictionsRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:RejectPredictions"]
+    },
+    "RejectSubscriptionRequest": {
+      "operation": "rejectSubscriptionRequest",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "RejectSubscriptionRequestRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:RejectSubscriptionRequest"]
+    },
+    "RevokeSubscription": {
+      "operation": "revokeSubscription",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "RevokeSubscriptionRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:RevokeSubscription"]
+    },
+    "Search": {
+      "operation": "search",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "SearchRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:Search"]
+    },
+    "SearchListings": {
+      "operation": "searchListings",
+      "resource": "Domain",
+      "request": {
+        "mode": "optional",
+        "interface": "SearchListingsRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:SearchListings"]
+    },
+    "SearchTypes": {
+      "operation": "searchTypes",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "SearchTypesRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:SearchTypes"]
+    },
+    "StartDataSourceRun": {
+      "operation": "startDataSourceRun",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "StartDataSourceRunRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:StartDataSourceRun"]
+    },
+    "StartMetadataGenerationRun": {
+      "operation": "startMetadataGenerationRun",
+      "resource": "Domain",
+      "request": {
+        "mode": "required",
+        "interface": "StartMetadataGenerationRunRequest",
+        "omit": ["domainIdentifier"]
+      },
+      "actions": ["datazone:StartMetadataGenerationRun"]
+    }
+  }
+}

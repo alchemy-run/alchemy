@@ -1,0 +1,154 @@
+{
+  "tag": "AWS.FSx",
+  "module": "fsx",
+  "resources": {
+    "FileSystem": {
+      "file": "FileSystem.ts"
+    }
+  },
+  "builder": "makeFSxAccountHttpBinding",
+  "builders": {
+    "makeFSxAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeFSxFileSystemHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CancelDataRepositoryTask": {
+      "operation": "cancelDataRepositoryTask",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fsx:CancelDataRepositoryTask"]
+    },
+    "CopyBackup": {
+      "operation": "copyBackup",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fsx:CopyBackup", "fsx:TagResource"],
+      "note": "CopyBackup tags the new backup it creates, so it needs TagResource alongside the copy itself."
+    },
+    "CopySnapshotAndUpdateVolume": {
+      "operation": "copySnapshotAndUpdateVolume",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fsx:CopySnapshotAndUpdateVolume"]
+    },
+    "CreateBackup": {
+      "operation": "createBackup",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "optional",
+        "omit": ["FileSystemId"],
+        "inline": true
+      },
+      "builder": "makeFSxFileSystemHttpBinding",
+      "actions": ["fsx:CreateBackup", "fsx:TagResource"],
+      "with": {
+        "extraResourceArns": ["arn:aws:fsx:*:*:backup/*"]
+      },
+      "note": "CreateBackup also authorizes on the new backup's own ARN, which is unknowable at deploy time."
+    },
+    "CreateDataRepositoryTask": {
+      "operation": "createDataRepositoryTask",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "required",
+        "omit": ["FileSystemId"],
+        "inline": true
+      },
+      "builder": "makeFSxFileSystemHttpBinding",
+      "actions": ["fsx:CreateDataRepositoryTask", "fsx:TagResource"],
+      "with": {
+        "extraResourceArns": ["arn:aws:fsx:*:*:task/*"]
+      },
+      "note": "The operation also authorizes on the new task's own ARN, which is unknowable at deploy time."
+    },
+    "CreateSnapshot": {
+      "operation": "createSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fsx:CreateSnapshot", "fsx:TagResource"]
+    },
+    "DeleteBackup": {
+      "operation": "deleteBackup",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fsx:DeleteBackup"]
+    },
+    "DeleteSnapshot": {
+      "operation": "deleteSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fsx:DeleteSnapshot"]
+    },
+    "DescribeBackups": {
+      "operation": "describeBackups",
+      "actions": ["fsx:DescribeBackups"]
+    },
+    "DescribeDataRepositoryAssociations": {
+      "operation": "describeDataRepositoryAssociations",
+      "actions": ["fsx:DescribeDataRepositoryAssociations"]
+    },
+    "DescribeDataRepositoryTasks": {
+      "operation": "describeDataRepositoryTasks",
+      "actions": ["fsx:DescribeDataRepositoryTasks"]
+    },
+    "DescribeFileSystem": {
+      "operation": "describeFileSystems",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeFSxFileSystemHttpBinding",
+      "actions": ["fsx:DescribeFileSystems"],
+      "with": {
+        "requestKey": "FileSystemIds"
+      }
+    },
+    "DescribeSnapshots": {
+      "operation": "describeSnapshots",
+      "actions": ["fsx:DescribeSnapshots"]
+    },
+    "DescribeStorageVirtualMachines": {
+      "operation": "describeStorageVirtualMachines",
+      "actions": ["fsx:DescribeStorageVirtualMachines"]
+    },
+    "DescribeVolumes": {
+      "operation": "describeVolumes",
+      "actions": ["fsx:DescribeVolumes"]
+    },
+    "ReleaseFileSystemNfsV3Locks": {
+      "operation": "releaseFileSystemNfsV3Locks",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "optional",
+        "omit": ["FileSystemId"],
+        "inline": true
+      },
+      "builder": "makeFSxFileSystemHttpBinding",
+      "actions": ["fsx:ReleaseFileSystemNfsV3Locks"]
+    },
+    "RestoreVolumeFromSnapshot": {
+      "operation": "restoreVolumeFromSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fsx:RestoreVolumeFromSnapshot"]
+    },
+    "UpdateSnapshot": {
+      "operation": "updateSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fsx:UpdateSnapshot"]
+    }
+  }
+}

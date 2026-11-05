@@ -1,0 +1,124 @@
+{
+  "tag": "AWS.SSMIncidents",
+  "module": "ssm-incidents",
+  "alias": "incidents",
+  "resources": {
+    "ResponsePlan": {
+      "file": "ResponsePlan.ts"
+    }
+  },
+  "builder": "makeIncidentsAccountHttpBinding",
+  "builders": {
+    "makeIncidentsAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeIncidentsResponsePlanHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchGetIncidentFindings": {
+      "operation": "batchGetIncidentFindings",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:BatchGetIncidentFindings"]
+    },
+    "CreateTimelineEvent": {
+      "operation": "createTimelineEvent",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:CreateTimelineEvent"]
+    },
+    "DeleteIncidentRecord": {
+      "operation": "deleteIncidentRecord",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:DeleteIncidentRecord"]
+    },
+    "DeleteTimelineEvent": {
+      "operation": "deleteTimelineEvent",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:DeleteTimelineEvent"]
+    },
+    "GetIncidentRecord": {
+      "operation": "getIncidentRecord",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:GetIncidentRecord"]
+    },
+    "GetTimelineEvent": {
+      "operation": "getTimelineEvent",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:GetTimelineEvent"]
+    },
+    "ListIncidentFindings": {
+      "operation": "listIncidentFindings",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:ListIncidentFindings"]
+    },
+    "ListIncidentRecords": {
+      "operation": "listIncidentRecords",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:ListIncidentRecords"]
+    },
+    "ListRelatedItems": {
+      "operation": "listRelatedItems",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:ListRelatedItems"]
+    },
+    "ListTimelineEvents": {
+      "operation": "listTimelineEvents",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:ListTimelineEvents"]
+    },
+    "StartIncident": {
+      "operation": "startIncident",
+      "resource": "ResponsePlan",
+      "param": "plan",
+      "request": {
+        "mode": "optional",
+        "omit": ["responsePlanArn"],
+        "inline": true
+      },
+      "builder": "makeIncidentsResponsePlanHttpBinding",
+      "actions": ["ssm-incidents:StartIncident"]
+    },
+    "UpdateIncidentRecord": {
+      "operation": "updateIncidentRecord",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:UpdateIncidentRecord"]
+    },
+    "UpdateRelatedItems": {
+      "operation": "updateRelatedItems",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:UpdateRelatedItems"]
+    },
+    "UpdateTimelineEvent": {
+      "operation": "updateTimelineEvent",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-incidents:UpdateTimelineEvent"]
+    }
+  }
+}

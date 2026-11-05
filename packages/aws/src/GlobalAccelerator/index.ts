@@ -20,3 +20,4 @@ export {
   type PortOverride,
 } from "./EndpointGroup.ts";
 export { Listener, ListenerProvider, type ListenerProps, type PortRange } from "./Listener.ts";
+export * from "./generated.ts";

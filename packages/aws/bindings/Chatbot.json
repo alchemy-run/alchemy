@@ -1,0 +1,65 @@
+{
+  "tag": "AWS.Chatbot",
+  "module": "chatbot",
+  "resources": {},
+  "builder": "makeChatbotAccountHttpBinding",
+  "builders": {
+    "makeChatbotAccountHttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "DeleteMicrosoftTeamsConfiguredTeam": {
+      "operation": "deleteMicrosoftTeamsConfiguredTeam",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["chatbot:DeleteMicrosoftTeamsConfiguredTeam"]
+    },
+    "DeleteMicrosoftTeamsUserIdentity": {
+      "operation": "deleteMicrosoftTeamsUserIdentity",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["chatbot:DeleteMicrosoftTeamsUserIdentity"]
+    },
+    "DeleteSlackUserIdentity": {
+      "operation": "deleteSlackUserIdentity",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["chatbot:DeleteSlackUserIdentity"]
+    },
+    "DeleteSlackWorkspaceAuthorization": {
+      "operation": "deleteSlackWorkspaceAuthorization",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["chatbot:DeleteSlackWorkspaceAuthorization"]
+    },
+    "DescribeSlackUserIdentities": {
+      "operation": "describeSlackUserIdentities",
+      "actions": ["chatbot:DescribeSlackUserIdentities"]
+    },
+    "DescribeSlackWorkspaces": {
+      "operation": "describeSlackWorkspaces",
+      "actions": ["chatbot:DescribeSlackWorkspaces"]
+    },
+    "GetAccountPreferences": {
+      "operation": "getAccountPreferences",
+      "actions": ["chatbot:GetAccountPreferences"]
+    },
+    "ListMicrosoftTeamsConfiguredTeams": {
+      "operation": "listMicrosoftTeamsConfiguredTeams",
+      "actions": ["chatbot:ListMicrosoftTeamsConfiguredTeams"]
+    },
+    "ListMicrosoftTeamsUserIdentities": {
+      "operation": "listMicrosoftTeamsUserIdentities",
+      "actions": ["chatbot:ListMicrosoftTeamsUserIdentities"]
+    },
+    "UpdateAccountPreferences": {
+      "operation": "updateAccountPreferences",
+      "actions": ["chatbot:UpdateAccountPreferences"]
+    }
+  }
+}

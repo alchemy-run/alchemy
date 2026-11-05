@@ -1,0 +1,26 @@
+{
+  "tag": "AWS.RUM",
+  "module": "rum",
+  "resources": {
+    "AppMonitor": {
+      "file": "AppMonitor.ts"
+    }
+  },
+  "builder": "makeRumAppMonitorHttpBinding",
+  "builders": {
+    "makeRumAppMonitorHttpBinding": {}
+  },
+  "bindings": {
+    "GetAppMonitorData": {
+      "operation": "getAppMonitorData",
+      "resource": "AppMonitor",
+      "param": "monitor",
+      "request": {
+        "mode": "required",
+        "interface": "GetAppMonitorDataRequest",
+        "omit": ["Name"]
+      },
+      "actions": ["rum:GetAppMonitorData"]
+    }
+  }
+}

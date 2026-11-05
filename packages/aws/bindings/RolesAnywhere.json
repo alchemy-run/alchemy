@@ -1,0 +1,29 @@
+{
+  "tag": "AWS.RolesAnywhere",
+  "module": "rolesanywhere",
+  "resources": {},
+  "builder": "makeRolesAnywhereHttpBinding",
+  "builders": {
+    "makeRolesAnywhereHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "GetSubject": {
+      "operation": "getSubject",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rolesanywhere:GetSubject"]
+    },
+    "ListSubjects": {
+      "operation": "listSubjects",
+      "actions": ["rolesanywhere:ListSubjects"]
+    }
+  }
+}

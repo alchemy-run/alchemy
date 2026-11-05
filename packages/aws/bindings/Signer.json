@@ -1,0 +1,92 @@
+{
+  "tag": "AWS.Signer",
+  "module": "signer",
+  "resources": {
+    "SigningProfile": {
+      "file": "SigningProfile.ts"
+    }
+  },
+  "builder": "makeSignerHttpBinding",
+  "builders": {
+    "makeSignerHttpBinding": {
+      "grants": "*"
+    },
+    "makeSignerProfileHttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "DescribeSigningJob": {
+      "operation": "describeSigningJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["signer:DescribeSigningJob"]
+    },
+    "GetRevocationStatus": {
+      "operation": "getRevocationStatus",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["signer:GetRevocationStatus"]
+    },
+    "GetSigningPlatform": {
+      "operation": "getSigningPlatform",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["signer:GetSigningPlatform"]
+    },
+    "ListSigningJobs": {
+      "operation": "listSigningJobs",
+      "actions": ["signer:ListSigningJobs"]
+    },
+    "ListSigningPlatforms": {
+      "operation": "listSigningPlatforms",
+      "actions": ["signer:ListSigningPlatforms"]
+    },
+    "RevokeSignature": {
+      "operation": "revokeSignature",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["signer:RevokeSignature"]
+    },
+    "RevokeSigningProfile": {
+      "operation": "revokeSigningProfile",
+      "resource": "SigningProfile",
+      "param": "profile",
+      "request": {
+        "mode": "required",
+        "omit": ["profileName"],
+        "inline": true
+      },
+      "builder": "makeSignerProfileHttpBinding",
+      "actions": ["signer:RevokeSigningProfile"]
+    },
+    "SignPayload": {
+      "operation": "signPayload",
+      "resource": "SigningProfile",
+      "param": "profile",
+      "request": {
+        "mode": "required",
+        "omit": ["profileName"],
+        "inline": true
+      },
+      "builder": "makeSignerProfileHttpBinding",
+      "actions": ["signer:SignPayload"]
+    },
+    "StartSigningJob": {
+      "operation": "startSigningJob",
+      "resource": "SigningProfile",
+      "param": "profile",
+      "request": {
+        "mode": "required",
+        "omit": ["profileName"],
+        "inline": true
+      },
+      "builder": "makeSignerProfileHttpBinding",
+      "actions": ["signer:StartSigningJob"]
+    }
+  }
+}

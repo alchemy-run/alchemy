@@ -1,0 +1,71 @@
+{
+  "tag": "AWS.GlobalAccelerator",
+  "module": "global-accelerator",
+  "alias": "ga",
+  "resources": {
+    "Accelerator": {
+      "file": "Accelerator.ts"
+    },
+    "EndpointGroup": {
+      "file": "EndpointGroup.ts"
+    }
+  },
+  "builder": "makeGaEndpointGroupHttpBinding",
+  "builders": {
+    "makeGaAcceleratorHttpBinding": {
+      "grants": "resource"
+    },
+    "makeGaEndpointGroupHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AddEndpoints": {
+      "operation": "addEndpoints",
+      "resource": "EndpointGroup",
+      "request": {
+        "mode": "required",
+        "omit": ["EndpointGroupArn"],
+        "inline": true
+      },
+      "actions": ["globalaccelerator:AddEndpoints", "globalaccelerator:UpdateEndpointGroup"],
+      "withTs": {
+        "extraStatements": "[{Effect: \"Allow\", Action: [\"ec2:DescribeAddresses\", \"ec2:DescribeInstances\", \"ec2:DescribeInternetGateways\", \"ec2:DescribeSubnets\", \"elasticloadbalancing:DescribeLoadBalancers\"], Resource: [\"*\"]}]"
+      },
+      "imports": {
+        "effect/Effect": "* as Effect"
+      },
+      "note": "Global Accelerator authorizes AddEndpoints as an update to the endpoint group (\"not authorized to perform: globalaccelerator:UpdateEndpointGroup\" when only AddEndpoints is granted), so both actions are required. Global Accelerator validates new endpoints by describing them on the caller's behalf, so adding endpoints requires read access to the underlying EC2 / ELB resources (none support resource-level scoping). https://docs.aws.amazon.com/global-accelerator/latest/dg/security_iam_service-with-iam.html"
+    },
+    "DescribeAccelerator": {
+      "operation": "describeAccelerator",
+      "resource": "Accelerator",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeGaAcceleratorHttpBinding",
+      "actions": ["globalaccelerator:DescribeAccelerator"]
+    },
+    "DescribeEndpointGroup": {
+      "operation": "describeEndpointGroup",
+      "resource": "EndpointGroup",
+      "request": {
+        "mode": "required",
+        "omit": ["EndpointGroupArn"],
+        "inline": true
+      },
+      "actions": ["globalaccelerator:DescribeEndpointGroup"]
+    },
+    "RemoveEndpoints": {
+      "operation": "removeEndpoints",
+      "resource": "EndpointGroup",
+      "request": {
+        "mode": "required",
+        "omit": ["EndpointGroupArn"],
+        "inline": true
+      },
+      "actions": ["globalaccelerator:RemoveEndpoints", "globalaccelerator:UpdateEndpointGroup"],
+      "note": "Like AddEndpoints, Global Accelerator authorizes endpoint removal as an update to the endpoint group, so both actions are required."
+    }
+  }
+}

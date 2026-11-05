@@ -1,0 +1,145 @@
+{
+  "tag": "AWS.IVSRealtime",
+  "module": "ivs-realtime",
+  "resources": {
+    "Stage": {
+      "file": "Stage.ts"
+    }
+  },
+  "builder": "makeIvsRealtimeStageHttpBinding",
+  "builders": {
+    "makeIvsRealtimeAccountHttpBinding": {},
+    "makeIvsRealtimeStageHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DisconnectParticipant": {
+      "operation": "disconnectParticipant",
+      "resource": "Stage",
+      "request": {
+        "mode": "required",
+        "interface": "DisconnectParticipantRequest",
+        "omit": ["stageArn"]
+      },
+      "actions": ["ivs:DisconnectParticipant"]
+    },
+    "GetComposition": {
+      "operation": "getComposition",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeIvsRealtimeAccountHttpBinding",
+      "actions": ["ivs:GetComposition"],
+      "withTs": {
+        "resources": "[COMPOSITION_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["COMPOSITION_ARN_WILDCARD"]
+      }
+    },
+    "GetParticipant": {
+      "operation": "getParticipant",
+      "resource": "Stage",
+      "request": {
+        "mode": "required",
+        "interface": "GetParticipantRequest",
+        "omit": ["stageArn"]
+      },
+      "actions": ["ivs:GetParticipant"]
+    },
+    "GetStageSession": {
+      "operation": "getStageSession",
+      "resource": "Stage",
+      "request": {
+        "mode": "required",
+        "interface": "GetStageSessionRequest",
+        "omit": ["stageArn"]
+      },
+      "actions": ["ivs:GetStageSession"]
+    },
+    "ListCompositions": {
+      "operation": "listCompositions",
+      "builder": "makeIvsRealtimeAccountHttpBinding",
+      "actions": ["ivs:ListCompositions"]
+    },
+    "ListParticipantEvents": {
+      "operation": "listParticipantEvents",
+      "resource": "Stage",
+      "request": {
+        "mode": "required",
+        "interface": "ListParticipantEventsRequest",
+        "omit": ["stageArn"]
+      },
+      "actions": ["ivs:ListParticipantEvents"]
+    },
+    "ListParticipantReplicas": {
+      "operation": "listParticipantReplicas",
+      "resource": "Stage",
+      "request": {
+        "mode": "required",
+        "interface": "ListParticipantReplicasRequest",
+        "omit": ["sourceStageArn"]
+      },
+      "actions": ["ivs:ListParticipantReplicas"],
+      "with": {
+        "requestKey": "sourceStageArn"
+      }
+    },
+    "ListParticipants": {
+      "operation": "listParticipants",
+      "resource": "Stage",
+      "request": {
+        "mode": "required",
+        "interface": "ListParticipantsRequest",
+        "omit": ["stageArn"]
+      },
+      "actions": ["ivs:ListParticipants"]
+    },
+    "ListStageSessions": {
+      "operation": "listStageSessions",
+      "resource": "Stage",
+      "request": {
+        "mode": "optional",
+        "interface": "ListStageSessionsRequest",
+        "omit": ["stageArn"]
+      },
+      "actions": ["ivs:ListStageSessions"]
+    },
+    "StartComposition": {
+      "operation": "startComposition",
+      "resource": "Stage",
+      "request": {
+        "mode": "required",
+        "interface": "StartCompositionRequest",
+        "omit": ["stageArn"]
+      },
+      "actions": ["ivs:StartComposition"],
+      "withTs": {
+        "extraResources": "[COMPOSITION_ARN_WILDCARD, ENCODER_CONFIGURATION_ARN_WILDCARD, STORAGE_CONFIGURATION_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": [
+          "COMPOSITION_ARN_WILDCARD",
+          "ENCODER_CONFIGURATION_ARN_WILDCARD",
+          "STORAGE_CONFIGURATION_ARN_WILDCARD"
+        ]
+      },
+      "note": "The created composition and any referenced encoder/storage configurations are runtime data."
+    },
+    "StopComposition": {
+      "operation": "stopComposition",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeIvsRealtimeAccountHttpBinding",
+      "actions": ["ivs:StopComposition"],
+      "withTs": {
+        "resources": "[COMPOSITION_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["COMPOSITION_ARN_WILDCARD"]
+      }
+    }
+  }
+}

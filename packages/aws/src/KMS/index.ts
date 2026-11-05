@@ -51,3 +51,4 @@ export { Verify, type VerifyRequest } from "./Verify.ts";
 export { VerifyHttp } from "./Verify.ts";
 export { VerifyMac, type VerifyMacRequest } from "./VerifyMac.ts";
 export { VerifyMacHttp } from "./VerifyMac.ts";
+export * from "./generated.ts";

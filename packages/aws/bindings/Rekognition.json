@@ -1,0 +1,376 @@
+{
+  "tag": "AWS.Rekognition",
+  "module": "rekognition",
+  "resources": {},
+  "builder": "makeRekognitionHttpBinding",
+  "builders": {
+    "makeRekognitionHttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "AssociateFaces": {
+      "operation": "associateFaces",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:AssociateFaces"]
+    },
+    "CompareFaces": {
+      "operation": "compareFaces",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:CompareFaces"]
+    },
+    "CreateCollection": {
+      "operation": "createCollection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:CreateCollection"]
+    },
+    "CreateFaceLivenessSession": {
+      "operation": "createFaceLivenessSession",
+      "actions": ["rekognition:CreateFaceLivenessSession"]
+    },
+    "CreateUser": {
+      "operation": "createUser",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:CreateUser"]
+    },
+    "DeleteCollection": {
+      "operation": "deleteCollection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DeleteCollection"]
+    },
+    "DeleteFaces": {
+      "operation": "deleteFaces",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DeleteFaces"]
+    },
+    "DeleteUser": {
+      "operation": "deleteUser",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DeleteUser"]
+    },
+    "DescribeCollection": {
+      "operation": "describeCollection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DescribeCollection"]
+    },
+    "DescribeProjectVersions": {
+      "operation": "describeProjectVersions",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DescribeProjectVersions"]
+    },
+    "DescribeProjects": {
+      "operation": "describeProjects",
+      "actions": ["rekognition:DescribeProjects"]
+    },
+    "DescribeStreamProcessor": {
+      "operation": "describeStreamProcessor",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DescribeStreamProcessor"]
+    },
+    "DetectCustomLabels": {
+      "operation": "detectCustomLabels",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DetectCustomLabels"]
+    },
+    "DetectFaces": {
+      "operation": "detectFaces",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DetectFaces"]
+    },
+    "DetectLabels": {
+      "operation": "detectLabels",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DetectLabels"]
+    },
+    "DetectModerationLabels": {
+      "operation": "detectModerationLabels",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DetectModerationLabels"]
+    },
+    "DetectProtectiveEquipment": {
+      "operation": "detectProtectiveEquipment",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DetectProtectiveEquipment"]
+    },
+    "DetectText": {
+      "operation": "detectText",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DetectText"]
+    },
+    "DisassociateFaces": {
+      "operation": "disassociateFaces",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:DisassociateFaces"]
+    },
+    "GetCelebrityInfo": {
+      "operation": "getCelebrityInfo",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetCelebrityInfo"]
+    },
+    "GetCelebrityRecognition": {
+      "operation": "getCelebrityRecognition",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetCelebrityRecognition"]
+    },
+    "GetContentModeration": {
+      "operation": "getContentModeration",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetContentModeration"]
+    },
+    "GetFaceDetection": {
+      "operation": "getFaceDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetFaceDetection"]
+    },
+    "GetFaceLivenessSessionResults": {
+      "operation": "getFaceLivenessSessionResults",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetFaceLivenessSessionResults"]
+    },
+    "GetFaceSearch": {
+      "operation": "getFaceSearch",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetFaceSearch"]
+    },
+    "GetLabelDetection": {
+      "operation": "getLabelDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetLabelDetection"]
+    },
+    "GetMediaAnalysisJob": {
+      "operation": "getMediaAnalysisJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetMediaAnalysisJob"]
+    },
+    "GetPersonTracking": {
+      "operation": "getPersonTracking",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetPersonTracking"]
+    },
+    "GetSegmentDetection": {
+      "operation": "getSegmentDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetSegmentDetection"]
+    },
+    "GetTextDetection": {
+      "operation": "getTextDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:GetTextDetection"]
+    },
+    "IndexFaces": {
+      "operation": "indexFaces",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:IndexFaces"]
+    },
+    "ListCollections": {
+      "operation": "listCollections",
+      "actions": ["rekognition:ListCollections"]
+    },
+    "ListFaces": {
+      "operation": "listFaces",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:ListFaces"]
+    },
+    "ListMediaAnalysisJobs": {
+      "operation": "listMediaAnalysisJobs",
+      "actions": ["rekognition:ListMediaAnalysisJobs"]
+    },
+    "ListStreamProcessors": {
+      "operation": "listStreamProcessors",
+      "actions": ["rekognition:ListStreamProcessors"]
+    },
+    "ListUsers": {
+      "operation": "listUsers",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:ListUsers"]
+    },
+    "RecognizeCelebrities": {
+      "operation": "recognizeCelebrities",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:RecognizeCelebrities"]
+    },
+    "SearchFaces": {
+      "operation": "searchFaces",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:SearchFaces"]
+    },
+    "SearchFacesByImage": {
+      "operation": "searchFacesByImage",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:SearchFacesByImage"]
+    },
+    "SearchUsers": {
+      "operation": "searchUsers",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:SearchUsers"]
+    },
+    "SearchUsersByImage": {
+      "operation": "searchUsersByImage",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:SearchUsersByImage"]
+    },
+    "StartCelebrityRecognition": {
+      "operation": "startCelebrityRecognition",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartCelebrityRecognition"]
+    },
+    "StartContentModeration": {
+      "operation": "startContentModeration",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartContentModeration"]
+    },
+    "StartFaceDetection": {
+      "operation": "startFaceDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartFaceDetection"]
+    },
+    "StartFaceSearch": {
+      "operation": "startFaceSearch",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartFaceSearch"]
+    },
+    "StartLabelDetection": {
+      "operation": "startLabelDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartLabelDetection"]
+    },
+    "StartMediaAnalysisJob": {
+      "operation": "startMediaAnalysisJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartMediaAnalysisJob"]
+    },
+    "StartPersonTracking": {
+      "operation": "startPersonTracking",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartPersonTracking"]
+    },
+    "StartProjectVersion": {
+      "operation": "startProjectVersion",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartProjectVersion"]
+    },
+    "StartSegmentDetection": {
+      "operation": "startSegmentDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartSegmentDetection"]
+    },
+    "StartStreamProcessor": {
+      "operation": "startStreamProcessor",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartStreamProcessor"]
+    },
+    "StartTextDetection": {
+      "operation": "startTextDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StartTextDetection"]
+    },
+    "StopProjectVersion": {
+      "operation": "stopProjectVersion",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StopProjectVersion"]
+    },
+    "StopStreamProcessor": {
+      "operation": "stopStreamProcessor",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rekognition:StopStreamProcessor"]
+    }
+  }
+}

@@ -1,0 +1,249 @@
+{
+  "tag": "AWS.CostExplorer",
+  "module": "cost-explorer",
+  "alias": "ce",
+  "resources": {
+    "AnomalyMonitor": {
+      "file": "AnomalyMonitor.ts"
+    }
+  },
+  "builder": "makeCostExplorerHttpBinding",
+  "builders": {
+    "makeAnomalyMonitorHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      }
+    },
+    "makeCostExplorerHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "GetAnomalies": {
+      "operation": "getAnomalies",
+      "resource": "AnomalyMonitor",
+      "param": "monitor",
+      "request": {
+        "mode": "required",
+        "interface": "GetAnomaliesRequest",
+        "omit": ["MonitorArn"]
+      },
+      "builder": "makeAnomalyMonitorHttpBinding",
+      "actions": ["ce:GetAnomalies"]
+    },
+    "GetApproximateUsageRecords": {
+      "operation": "getApproximateUsageRecords",
+      "request": {
+        "mode": "required",
+        "interface": "GetApproximateUsageRecordsRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetApproximateUsageRecords"]
+    },
+    "GetCommitmentPurchaseAnalysis": {
+      "operation": "getCommitmentPurchaseAnalysis",
+      "request": {
+        "mode": "required",
+        "interface": "GetCommitmentPurchaseAnalysisRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetCommitmentPurchaseAnalysis"]
+    },
+    "GetCostAndUsage": {
+      "operation": "getCostAndUsage",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostAndUsageRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetCostAndUsage"]
+    },
+    "GetCostAndUsageComparisons": {
+      "operation": "getCostAndUsageComparisons",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostAndUsageComparisonsRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetCostAndUsageComparisons"]
+    },
+    "GetCostAndUsageWithResources": {
+      "operation": "getCostAndUsageWithResources",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostAndUsageWithResourcesRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetCostAndUsageWithResources"]
+    },
+    "GetCostCategories": {
+      "operation": "getCostCategories",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostCategoriesRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetCostCategories"]
+    },
+    "GetCostComparisonDrivers": {
+      "operation": "getCostComparisonDrivers",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostComparisonDriversRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetCostComparisonDrivers"]
+    },
+    "GetCostForecast": {
+      "operation": "getCostForecast",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostForecastRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetCostForecast"]
+    },
+    "GetDimensionValues": {
+      "operation": "getDimensionValues",
+      "request": {
+        "mode": "required",
+        "interface": "GetDimensionValuesRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetDimensionValues"]
+    },
+    "GetReservationCoverage": {
+      "operation": "getReservationCoverage",
+      "request": {
+        "mode": "required",
+        "interface": "GetReservationCoverageRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetReservationCoverage"]
+    },
+    "GetReservationUtilization": {
+      "operation": "getReservationUtilization",
+      "request": {
+        "mode": "required",
+        "interface": "GetReservationUtilizationRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetReservationUtilization"]
+    },
+    "GetRightsizingRecommendation": {
+      "operation": "getRightsizingRecommendation",
+      "request": {
+        "mode": "required",
+        "interface": "GetRightsizingRecommendationRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetRightsizingRecommendation"]
+    },
+    "GetSavingsPlansCoverage": {
+      "operation": "getSavingsPlansCoverage",
+      "request": {
+        "mode": "required",
+        "interface": "GetSavingsPlansCoverageRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetSavingsPlansCoverage"]
+    },
+    "GetSavingsPlansUtilization": {
+      "operation": "getSavingsPlansUtilization",
+      "request": {
+        "mode": "required",
+        "interface": "GetSavingsPlansUtilizationRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetSavingsPlansUtilization"]
+    },
+    "GetSavingsPlansUtilizationDetails": {
+      "operation": "getSavingsPlansUtilizationDetails",
+      "request": {
+        "mode": "required",
+        "interface": "GetSavingsPlansUtilizationDetailsRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetSavingsPlansUtilizationDetails"]
+    },
+    "GetTags": {
+      "operation": "getTags",
+      "request": {
+        "mode": "required",
+        "interface": "GetTagsRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetTags"]
+    },
+    "GetUsageForecast": {
+      "operation": "getUsageForecast",
+      "request": {
+        "mode": "required",
+        "interface": "GetUsageForecastRequest",
+        "omit": []
+      },
+      "actions": ["ce:GetUsageForecast"]
+    },
+    "ListCommitmentPurchaseAnalyses": {
+      "operation": "listCommitmentPurchaseAnalyses",
+      "request": {
+        "mode": "optional",
+        "interface": "ListCommitmentPurchaseAnalysesRequest",
+        "omit": []
+      },
+      "actions": ["ce:ListCommitmentPurchaseAnalyses"]
+    },
+    "ListCostAllocationTags": {
+      "operation": "listCostAllocationTags",
+      "request": {
+        "mode": "optional",
+        "interface": "ListCostAllocationTagsRequest",
+        "omit": []
+      },
+      "actions": ["ce:ListCostAllocationTags"]
+    },
+    "ProvideAnomalyFeedback": {
+      "operation": "provideAnomalyFeedback",
+      "request": {
+        "mode": "required",
+        "interface": "ProvideAnomalyFeedbackRequest",
+        "omit": []
+      },
+      "actions": ["ce:ProvideAnomalyFeedback"]
+    },
+    "StartCommitmentPurchaseAnalysis": {
+      "operation": "startCommitmentPurchaseAnalysis",
+      "request": {
+        "mode": "required",
+        "interface": "StartCommitmentPurchaseAnalysisRequest",
+        "omit": []
+      },
+      "actions": ["ce:StartCommitmentPurchaseAnalysis"]
+    },
+    "StartCostAllocationTagBackfill": {
+      "operation": "startCostAllocationTagBackfill",
+      "request": {
+        "mode": "required",
+        "interface": "StartCostAllocationTagBackfillRequest",
+        "omit": []
+      },
+      "actions": ["ce:StartCostAllocationTagBackfill"]
+    },
+    "UpdateCostAllocationTagsStatus": {
+      "operation": "updateCostAllocationTagsStatus",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateCostAllocationTagsStatusRequest",
+        "omit": []
+      },
+      "actions": ["ce:UpdateCostAllocationTagsStatus"]
+    }
+  }
+}

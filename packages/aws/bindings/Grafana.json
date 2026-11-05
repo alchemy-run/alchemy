@@ -1,0 +1,151 @@
+{
+  "tag": "AWS.Grafana",
+  "module": "grafana",
+  "resources": {
+    "Workspace": {
+      "file": "Workspace.ts"
+    }
+  },
+  "builder": "makeGrafanaWorkspaceHttpBinding",
+  "builders": {
+    "makeGrafanaAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeGrafanaWorkspaceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AssociateLicense": {
+      "operation": "associateLicense",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:AssociateLicense"]
+    },
+    "CreateWorkspaceServiceAccount": {
+      "operation": "createWorkspaceServiceAccount",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:CreateWorkspaceServiceAccount"]
+    },
+    "DeleteWorkspaceServiceAccount": {
+      "operation": "deleteWorkspaceServiceAccount",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:DeleteWorkspaceServiceAccount"]
+    },
+    "DeleteWorkspaceServiceAccountToken": {
+      "operation": "deleteWorkspaceServiceAccountToken",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:DeleteWorkspaceServiceAccountToken"]
+    },
+    "DescribeWorkspaceAuthentication": {
+      "operation": "describeWorkspaceAuthentication",
+      "resource": "Workspace",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["grafana:DescribeWorkspaceAuthentication"]
+    },
+    "DescribeWorkspaceConfiguration": {
+      "operation": "describeWorkspaceConfiguration",
+      "resource": "Workspace",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["grafana:DescribeWorkspaceConfiguration"]
+    },
+    "DisassociateLicense": {
+      "operation": "disassociateLicense",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:DisassociateLicense"]
+    },
+    "ListPermissions": {
+      "operation": "listPermissions",
+      "resource": "Workspace",
+      "request": {
+        "mode": "optional",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:ListPermissions"]
+    },
+    "ListVersions": {
+      "operation": "listVersions",
+      "builder": "makeGrafanaAccountHttpBinding",
+      "actions": ["grafana:ListVersions"]
+    },
+    "ListWorkspaceServiceAccountTokens": {
+      "operation": "listWorkspaceServiceAccountTokens",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:ListWorkspaceServiceAccountTokens"]
+    },
+    "ListWorkspaceServiceAccounts": {
+      "operation": "listWorkspaceServiceAccounts",
+      "resource": "Workspace",
+      "request": {
+        "mode": "optional",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:ListWorkspaceServiceAccounts"]
+    },
+    "UpdatePermissions": {
+      "operation": "updatePermissions",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:UpdatePermissions"]
+    },
+    "UpdateWorkspaceAuthentication": {
+      "operation": "updateWorkspaceAuthentication",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:UpdateWorkspaceAuthentication"]
+    },
+    "UpdateWorkspaceConfiguration": {
+      "operation": "updateWorkspaceConfiguration",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      },
+      "actions": ["grafana:UpdateWorkspaceConfiguration"]
+    }
+  }
+}

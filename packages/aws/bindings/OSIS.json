@@ -1,0 +1,118 @@
+{
+  "tag": "AWS.OSIS",
+  "module": "osis",
+  "resources": {
+    "Pipeline": {
+      "file": "Pipeline.ts"
+    }
+  },
+  "builder": "makeOsisPipelineHttpBinding",
+  "builders": {
+    "makeOsisAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeOsisPipelineHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetPipeline": {
+      "operation": "getPipeline",
+      "resource": "Pipeline",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["osis:GetPipeline"],
+      "with": {
+        "requestKey": "PipelineName"
+      },
+      "withTs": {
+        "identifier": "(pipeline) => pipeline.pipelineName"
+      }
+    },
+    "GetPipelineBlueprint": {
+      "operation": "getPipelineBlueprint",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeOsisAccountHttpBinding",
+      "actions": ["osis:GetPipelineBlueprint"]
+    },
+    "GetPipelineChangeProgress": {
+      "operation": "getPipelineChangeProgress",
+      "resource": "Pipeline",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["osis:GetPipelineChangeProgress"],
+      "with": {
+        "requestKey": "PipelineName"
+      },
+      "withTs": {
+        "identifier": "(pipeline) => pipeline.pipelineName"
+      }
+    },
+    "ListPipelineBlueprints": {
+      "operation": "listPipelineBlueprints",
+      "builder": "makeOsisAccountHttpBinding",
+      "actions": ["osis:ListPipelineBlueprints"]
+    },
+    "ListPipelineEndpointConnections": {
+      "operation": "listPipelineEndpointConnections",
+      "builder": "makeOsisAccountHttpBinding",
+      "actions": ["osis:ListPipelineEndpointConnections"]
+    },
+    "RevokePipelineEndpointConnections": {
+      "operation": "revokePipelineEndpointConnections",
+      "resource": "Pipeline",
+      "request": {
+        "mode": "required",
+        "omit": ["PipelineArn"],
+        "inline": true
+      },
+      "actions": ["osis:RevokePipelineEndpointConnections"],
+      "with": {
+        "requestKey": "PipelineArn"
+      },
+      "withTs": {
+        "identifier": "(pipeline) => pipeline.pipelineArn"
+      }
+    },
+    "StartPipeline": {
+      "operation": "startPipeline",
+      "resource": "Pipeline",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["osis:StartPipeline"],
+      "with": {
+        "requestKey": "PipelineName"
+      },
+      "withTs": {
+        "identifier": "(pipeline) => pipeline.pipelineName"
+      }
+    },
+    "StopPipeline": {
+      "operation": "stopPipeline",
+      "resource": "Pipeline",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["osis:StopPipeline"],
+      "with": {
+        "requestKey": "PipelineName"
+      },
+      "withTs": {
+        "identifier": "(pipeline) => pipeline.pipelineName"
+      }
+    },
+    "ValidatePipeline": {
+      "operation": "validatePipeline",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeOsisAccountHttpBinding",
+      "actions": ["osis:ValidatePipeline"]
+    }
+  }
+}

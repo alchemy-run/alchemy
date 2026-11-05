@@ -1,11 +1,3 @@
-export * from "./CancelServiceSoftwareUpdate.ts";
-export * from "./DescribeDomain.ts";
-export * from "./DescribeDomainAutoTunes.ts";
-export * from "./DescribeDomainChangeProgress.ts";
-export * from "./DescribeDomainConfig.ts";
-export * from "./DescribeDomainHealth.ts";
-export * from "./DescribeDomainNodes.ts";
-export * from "./DescribeDomains.ts";
 export * from "./DataPlaneTypes.ts";
 export * from "./Domain.ts";
 export * from "./DomainEventSource.ts";
@@ -14,14 +6,4 @@ export * from "./DomainReadWrite.ts";
 export * from "./DomainWrite.ts";
 // NOTE: BindingHttp.ts and DataPlaneHttp.ts are internal scaffolding —
 // deliberately NOT exported.
-export * from "./GetCompatibleVersions.ts";
-export * from "./GetDomainMaintenanceStatus.ts";
-export * from "./GetUpgradeHistory.ts";
-export * from "./GetUpgradeStatus.ts";
-export * from "./ListDomainMaintenances.ts";
-export * from "./ListDomainNames.ts";
-export * from "./ListInstanceTypeDetails.ts";
-export * from "./ListScheduledActions.ts";
-export * from "./ListVersions.ts";
-export * from "./StartDomainMaintenance.ts";
-export * from "./StartServiceSoftwareUpdate.ts";
+export * from "./generated.ts";

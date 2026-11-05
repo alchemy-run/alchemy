@@ -1,0 +1,33 @@
+{
+  "tag": "AWS.MWAA",
+  "module": "mwaa",
+  "resources": {
+    "Environment": {
+      "file": "Environment.ts"
+    }
+  },
+  "builder": "makeMWAAEnvironmentHttpBinding",
+  "builders": {
+    "makeMWAAEnvironmentHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreateCliToken": {
+      "operation": "createCliToken",
+      "resource": "Environment",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["airflow:CreateCliToken"]
+    },
+    "GetEnvironment": {
+      "operation": "getEnvironment",
+      "resource": "Environment",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["airflow:GetEnvironment"]
+    }
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "tag": "AWS.Athena",
+  "module": "athena",
+  "resources": {
+    "DataCatalog": {
+      "file": "DataCatalog.ts"
+    },
+    "WorkGroup": {
+      "file": "WorkGroup.ts"
+    }
+  },
+  "builder": "makeWorkGroupScopedHttpBinding",
+  "builders": {
+    "makeDataCatalogScopedHttpBinding": {
+      "grants": "resource"
+    },
+    "makeWorkGroupScopedHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchGetQueryExecution": {
+      "operation": "batchGetQueryExecution",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["athena:BatchGetQueryExecution"]
+    },
+    "GetDatabase": {
+      "operation": "getDatabase",
+      "resource": "DataCatalog",
+      "param": "catalog",
+      "request": {
+        "mode": "required",
+        "omit": ["CatalogName"],
+        "inline": true
+      },
+      "builder": "makeDataCatalogScopedHttpBinding",
+      "actions": ["athena:GetDatabase"]
+    },
+    "GetQueryExecution": {
+      "operation": "getQueryExecution",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["athena:GetQueryExecution"]
+    },
+    "GetQueryResults": {
+      "operation": "getQueryResults",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["athena:GetQueryResults"]
+    },
+    "GetQueryRuntimeStatistics": {
+      "operation": "getQueryRuntimeStatistics",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["athena:GetQueryRuntimeStatistics"]
+    },
+    "GetTableMetadata": {
+      "operation": "getTableMetadata",
+      "resource": "DataCatalog",
+      "param": "catalog",
+      "request": {
+        "mode": "required",
+        "omit": ["CatalogName"],
+        "inline": true
+      },
+      "builder": "makeDataCatalogScopedHttpBinding",
+      "actions": ["athena:GetTableMetadata"]
+    },
+    "ListDatabases": {
+      "operation": "listDatabases",
+      "resource": "DataCatalog",
+      "param": "catalog",
+      "request": {
+        "mode": "required",
+        "omit": ["CatalogName"],
+        "inline": true
+      },
+      "builder": "makeDataCatalogScopedHttpBinding",
+      "actions": ["athena:ListDatabases"]
+    },
+    "ListNamedQueries": {
+      "operation": "listNamedQueries",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required",
+        "omit": ["WorkGroup"],
+        "inline": true
+      },
+      "actions": ["athena:ListNamedQueries"],
+      "with": {
+        "injectWorkGroup": true
+      }
+    },
+    "ListPreparedStatements": {
+      "operation": "listPreparedStatements",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required",
+        "omit": ["WorkGroup"],
+        "inline": true
+      },
+      "actions": ["athena:ListPreparedStatements"],
+      "with": {
+        "injectWorkGroup": true
+      }
+    },
+    "ListQueryExecutions": {
+      "operation": "listQueryExecutions",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required",
+        "omit": ["WorkGroup"],
+        "inline": true
+      },
+      "actions": ["athena:ListQueryExecutions"],
+      "with": {
+        "injectWorkGroup": true
+      }
+    },
+    "ListTableMetadata": {
+      "operation": "listTableMetadata",
+      "resource": "DataCatalog",
+      "param": "catalog",
+      "request": {
+        "mode": "required",
+        "omit": ["CatalogName"],
+        "inline": true
+      },
+      "builder": "makeDataCatalogScopedHttpBinding",
+      "actions": ["athena:ListTableMetadata"]
+    },
+    "StopQueryExecution": {
+      "operation": "stopQueryExecution",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["athena:StopQueryExecution"]
+    }
+  }
+}

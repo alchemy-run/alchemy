@@ -61,3 +61,4 @@ export { SigningCertificate, SigningCertificateProvider } from "./SigningCertifi
 export { SSHPublicKey, SSHPublicKeyProvider } from "./SSHPublicKey.ts";
 export { User, UserProvider } from "./User.ts";
 export { VirtualMFADevice, VirtualMFADeviceProvider } from "./VirtualMFADevice.ts";
+export * from "./generated.ts";

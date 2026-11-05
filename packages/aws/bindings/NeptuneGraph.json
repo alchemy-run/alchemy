@@ -1,0 +1,268 @@
+{
+  "tag": "AWS.NeptuneGraph",
+  "module": "neptune-graph",
+  "resources": {
+    "Graph": {
+      "file": "Graph.ts"
+    }
+  },
+  "builder": "makeNeptuneGraphGraphHttpBinding",
+  "builders": {
+    "makeNeptuneGraphAccountHttpBinding": {},
+    "makeNeptuneGraphGraphHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CancelExportTask": {
+      "operation": "cancelExportTask",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "actions": ["neptune-graph:CancelExportTask"],
+      "withTs": {
+        "resources": "[EXPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["EXPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "CancelImportTask": {
+      "operation": "cancelImportTask",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "actions": ["neptune-graph:CancelImportTask"],
+      "withTs": {
+        "resources": "[IMPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["IMPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "CancelQuery": {
+      "operation": "cancelQuery",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:CancelQuery"]
+    },
+    "CreateGraphSnapshot": {
+      "operation": "createGraphSnapshot",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:CreateGraphSnapshot", "neptune-graph:TagResource"],
+      "withTs": {
+        "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      }
+    },
+    "DeleteGraphSnapshot": {
+      "operation": "deleteGraphSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "actions": ["neptune-graph:DeleteGraphSnapshot"],
+      "withTs": {
+        "resources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      }
+    },
+    "GetExportTask": {
+      "operation": "getExportTask",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "actions": ["neptune-graph:GetExportTask"],
+      "withTs": {
+        "resources": "[EXPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["EXPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "GetGraphSnapshot": {
+      "operation": "getGraphSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "actions": ["neptune-graph:GetGraphSnapshot"],
+      "withTs": {
+        "resources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      }
+    },
+    "GetGraphSummary": {
+      "operation": "getGraphSummary",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:GetGraphSummary"]
+    },
+    "GetImportTask": {
+      "operation": "getImportTask",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "actions": ["neptune-graph:GetImportTask"],
+      "withTs": {
+        "resources": "[IMPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["IMPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "GetQuery": {
+      "operation": "getQuery",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:GetQueryStatus"]
+    },
+    "ListExportTasks": {
+      "operation": "listExportTasks",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:ListExportTasks"],
+      "withTs": {
+        "extraResources": "[EXPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["EXPORT_TASK_ARN_WILDCARD"]
+      },
+      "note": "ListExportTasks authorizes against the export-task resource type."
+    },
+    "ListGraphSnapshots": {
+      "operation": "listGraphSnapshots",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:ListGraphSnapshots"],
+      "withTs": {
+        "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      }
+    },
+    "ListImportTasks": {
+      "operation": "listImportTasks",
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "actions": ["neptune-graph:ListImportTasks"],
+      "withTs": {
+        "resources": "[IMPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["IMPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "ListQueries": {
+      "operation": "listQueries",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:ListQueries"]
+    },
+    "ResetGraph": {
+      "operation": "resetGraph",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:ResetGraph"]
+    },
+    "StartExportTask": {
+      "operation": "startExportTask",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:StartExportTask"],
+      "with": {
+        "passRole": true
+      },
+      "withTs": {
+        "extraResources": "[EXPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["EXPORT_TASK_ARN_WILDCARD"]
+      },
+      "note": "StartExportTask authorizes against both the graph and the (not yet existing) export-task resource types."
+    },
+    "StartGraph": {
+      "operation": "startGraph",
+      "resource": "Graph",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["neptune-graph:StartGraph"]
+    },
+    "StartImportTask": {
+      "operation": "startImportTask",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "actions": ["neptune-graph:StartImportTask"],
+      "with": {
+        "passRole": true
+      },
+      "withTs": {
+        "extraResources": "[IMPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["IMPORT_TASK_ARN_WILDCARD"]
+      },
+      "note": "StartImportTask authorizes against both the graph and the (not yet existing) import-task resource types."
+    },
+    "StopGraph": {
+      "operation": "stopGraph",
+      "resource": "Graph",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["neptune-graph:StopGraph"]
+    }
+  }
+}

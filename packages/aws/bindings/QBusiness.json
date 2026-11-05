@@ -1,0 +1,406 @@
+{
+  "tag": "AWS.QBusiness",
+  "module": "qbusiness",
+  "resources": {
+    "Application": {
+      "file": "Application.ts"
+    },
+    "DataSource": {
+      "file": "DataSource.ts"
+    },
+    "Index": {
+      "file": "SearchIndex.ts"
+    }
+  },
+  "builder": "makeQBusinessApplicationHttpBinding",
+  "builders": {
+    "makeQBusinessApplicationHttpBinding": {
+      "grants": "resource"
+    },
+    "makeQBusinessDataSourceHttpBinding": {
+      "grants": "resource"
+    },
+    "makeQBusinessIndexHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AssociatePermission": {
+      "operation": "associatePermission",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "AssociatePermissionRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:AssociatePermission"]
+    },
+    "BatchDeleteDocument": {
+      "operation": "batchDeleteDocument",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "BatchDeleteDocumentRequest",
+        "omit": ["applicationId", "indexId"]
+      },
+      "builder": "makeQBusinessIndexHttpBinding",
+      "actions": ["qbusiness:BatchDeleteDocument"]
+    },
+    "BatchPutDocument": {
+      "operation": "batchPutDocument",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "BatchPutDocumentRequest",
+        "omit": ["applicationId", "indexId"]
+      },
+      "builder": "makeQBusinessIndexHttpBinding",
+      "actions": ["qbusiness:BatchPutDocument"]
+    },
+    "CancelSubscription": {
+      "operation": "cancelSubscription",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "CancelSubscriptionRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:CancelSubscription"]
+    },
+    "ChatSync": {
+      "operation": "chatSync",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "ChatSyncRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:ChatSync"]
+    },
+    "CheckDocumentAccess": {
+      "operation": "checkDocumentAccess",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "CheckDocumentAccessRequest",
+        "omit": ["applicationId", "indexId"]
+      },
+      "builder": "makeQBusinessIndexHttpBinding",
+      "actions": ["qbusiness:CheckDocumentAccess"]
+    },
+    "CreateSubscription": {
+      "operation": "createSubscription",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "CreateSubscriptionRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:CreateSubscription"]
+    },
+    "CreateUser": {
+      "operation": "createUser",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "CreateUserRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:CreateUser"]
+    },
+    "DeleteAttachment": {
+      "operation": "deleteAttachment",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteAttachmentRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:DeleteAttachment"]
+    },
+    "DeleteChatControlsConfiguration": {
+      "operation": "deleteChatControlsConfiguration",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "DeleteChatControlsConfigurationRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:DeleteChatControlsConfiguration"]
+    },
+    "DeleteConversation": {
+      "operation": "deleteConversation",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteConversationRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:DeleteConversation"]
+    },
+    "DeleteGroup": {
+      "operation": "deleteGroup",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteGroupRequest",
+        "omit": ["applicationId", "indexId"]
+      },
+      "builder": "makeQBusinessIndexHttpBinding",
+      "actions": ["qbusiness:DeleteGroup"],
+      "with": {
+        "subResources": ["data-source/*"]
+      }
+    },
+    "DeleteUser": {
+      "operation": "deleteUser",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteUserRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:DeleteUser"]
+    },
+    "DisassociatePermission": {
+      "operation": "disassociatePermission",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "DisassociatePermissionRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:DisassociatePermission"]
+    },
+    "GetChatControlsConfiguration": {
+      "operation": "getChatControlsConfiguration",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "GetChatControlsConfigurationRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:GetChatControlsConfiguration"]
+    },
+    "GetDocumentContent": {
+      "operation": "getDocumentContent",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "GetDocumentContentRequest",
+        "omit": ["applicationId", "indexId"]
+      },
+      "builder": "makeQBusinessIndexHttpBinding",
+      "actions": ["qbusiness:GetDocumentContent"]
+    },
+    "GetGroup": {
+      "operation": "getGroup",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "GetGroupRequest",
+        "omit": ["applicationId", "indexId"]
+      },
+      "builder": "makeQBusinessIndexHttpBinding",
+      "actions": ["qbusiness:GetGroup"],
+      "with": {
+        "subResources": ["data-source/*"]
+      }
+    },
+    "GetMedia": {
+      "operation": "getMedia",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "GetMediaRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:GetMedia"]
+    },
+    "GetPolicy": {
+      "operation": "getPolicy",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "GetPolicyRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:GetPolicy"]
+    },
+    "GetUser": {
+      "operation": "getUser",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "GetUserRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:GetUser"]
+    },
+    "ListAttachments": {
+      "operation": "listAttachments",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAttachmentsRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:ListAttachments"]
+    },
+    "ListConversations": {
+      "operation": "listConversations",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "ListConversationsRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:ListConversations"]
+    },
+    "ListDataSourceSyncJobs": {
+      "operation": "listDataSourceSyncJobs",
+      "resource": "DataSource",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDataSourceSyncJobsRequest",
+        "omit": ["applicationId", "indexId", "dataSourceId"]
+      },
+      "builder": "makeQBusinessDataSourceHttpBinding",
+      "actions": ["qbusiness:ListDataSourceSyncJobs"]
+    },
+    "ListDocuments": {
+      "operation": "listDocuments",
+      "resource": "Index",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDocumentsRequest",
+        "omit": ["applicationId", "indexId"]
+      },
+      "builder": "makeQBusinessIndexHttpBinding",
+      "actions": ["qbusiness:ListDocuments"]
+    },
+    "ListGroups": {
+      "operation": "listGroups",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "ListGroupsRequest",
+        "omit": ["applicationId", "indexId"]
+      },
+      "builder": "makeQBusinessIndexHttpBinding",
+      "actions": ["qbusiness:ListGroups"],
+      "with": {
+        "subResources": ["data-source/*"]
+      }
+    },
+    "ListMessages": {
+      "operation": "listMessages",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "ListMessagesRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:ListMessages"]
+    },
+    "ListSubscriptions": {
+      "operation": "listSubscriptions",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "ListSubscriptionsRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:ListSubscriptions"]
+    },
+    "PutFeedback": {
+      "operation": "putFeedback",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "PutFeedbackRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:PutFeedback"]
+    },
+    "PutGroup": {
+      "operation": "putGroup",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "PutGroupRequest",
+        "omit": ["applicationId", "indexId"]
+      },
+      "builder": "makeQBusinessIndexHttpBinding",
+      "actions": ["qbusiness:PutGroup"],
+      "with": {
+        "subResources": ["data-source/*"]
+      }
+    },
+    "SearchRelevantContent": {
+      "operation": "searchRelevantContent",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "SearchRelevantContentRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:SearchRelevantContent"],
+      "with": {
+        "subResources": ["retriever/*"]
+      }
+    },
+    "StartDataSourceSyncJob": {
+      "operation": "startDataSourceSyncJob",
+      "resource": "DataSource",
+      "request": {
+        "mode": "optional",
+        "interface": "StartDataSourceSyncJobRequest",
+        "omit": ["applicationId", "indexId", "dataSourceId"]
+      },
+      "builder": "makeQBusinessDataSourceHttpBinding",
+      "actions": ["qbusiness:StartDataSourceSyncJob"]
+    },
+    "StopDataSourceSyncJob": {
+      "operation": "stopDataSourceSyncJob",
+      "resource": "DataSource",
+      "request": {
+        "mode": "optional",
+        "interface": "StopDataSourceSyncJobRequest",
+        "omit": ["applicationId", "indexId", "dataSourceId"]
+      },
+      "builder": "makeQBusinessDataSourceHttpBinding",
+      "actions": ["qbusiness:StopDataSourceSyncJob"]
+    },
+    "UpdateChatControlsConfiguration": {
+      "operation": "updateChatControlsConfiguration",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "UpdateChatControlsConfigurationRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:UpdateChatControlsConfiguration"]
+    },
+    "UpdateSubscription": {
+      "operation": "updateSubscription",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateSubscriptionRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:UpdateSubscription"]
+    },
+    "UpdateUser": {
+      "operation": "updateUser",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateUserRequest",
+        "omit": ["applicationId"]
+      },
+      "actions": ["qbusiness:UpdateUser"]
+    }
+  }
+}

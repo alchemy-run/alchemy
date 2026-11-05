@@ -1,0 +1,114 @@
+{
+  "tag": "AWS.EFS",
+  "module": "efs",
+  "resources": {
+    "FileSystem": {
+      "file": "FileSystem.ts"
+    }
+  },
+  "builder": "makeEfsFileSystemHttpBinding",
+  "builders": {
+    "makeEfsAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeEfsFileSystemHttpBinding": {}
+  },
+  "bindings": {
+    "CreateAccessPoint": {
+      "operation": "createAccessPoint",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "required",
+        "interface": "CreateAccessPointRequest",
+        "omit": ["FileSystemId"]
+      },
+      "actions": ["elasticfilesystem:CreateAccessPoint"],
+      "with": {
+        "wildcardActions": ["elasticfilesystem:TagResource"]
+      },
+      "note": "Tag-on-create authorizes elasticfilesystem:TagResource against the ARN of the access point being created, which is unknowable at deploy time \u2014 grant it on `*`."
+    },
+    "DeleteAccessPoint": {
+      "operation": "deleteAccessPoint",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeEfsAccountHttpBinding",
+      "actions": ["elasticfilesystem:DeleteAccessPoint"]
+    },
+    "DescribeAccessPoints": {
+      "operation": "describeAccessPoints",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeAccessPointsRequest",
+        "omit": ["FileSystemId"]
+      },
+      "actions": ["elasticfilesystem:DescribeAccessPoints"]
+    },
+    "DescribeBackupPolicy": {
+      "operation": "describeBackupPolicy",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["elasticfilesystem:DescribeBackupPolicy"]
+    },
+    "DescribeFileSystem": {
+      "operation": "describeFileSystems",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["elasticfilesystem:DescribeFileSystems"]
+    },
+    "DescribeLifecycleConfiguration": {
+      "operation": "describeLifecycleConfiguration",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["elasticfilesystem:DescribeLifecycleConfiguration"]
+    },
+    "DescribeMountTargets": {
+      "operation": "describeMountTargets",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeMountTargetsRequest",
+        "omit": ["FileSystemId"]
+      },
+      "actions": ["elasticfilesystem:DescribeMountTargets"]
+    },
+    "DescribeReplicationConfigurations": {
+      "operation": "describeReplicationConfigurations",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeReplicationConfigurationsRequest",
+        "omit": ["FileSystemId"]
+      },
+      "actions": ["elasticfilesystem:DescribeReplicationConfigurations"]
+    },
+    "PutBackupPolicy": {
+      "operation": "putBackupPolicy",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "required",
+        "interface": "PutBackupPolicyRequest",
+        "omit": ["FileSystemId"]
+      },
+      "actions": ["elasticfilesystem:PutBackupPolicy"]
+    },
+    "PutLifecycleConfiguration": {
+      "operation": "putLifecycleConfiguration",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "required",
+        "interface": "PutLifecycleConfigurationRequest",
+        "omit": ["FileSystemId"]
+      },
+      "actions": ["elasticfilesystem:PutLifecycleConfiguration"]
+    }
+  }
+}

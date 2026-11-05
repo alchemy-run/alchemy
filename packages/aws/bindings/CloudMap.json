@@ -1,0 +1,22 @@
+{
+  "tag": "AWS.CloudMap",
+  "module": "servicediscovery",
+  "alias": "SD",
+  "resources": {},
+  "builder": "makeCloudMapAccountHttpBinding",
+  "builders": {
+    "makeCloudMapAccountHttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "GetOperation": {
+      "operation": "getOperation",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["servicediscovery:GetOperation"],
+      "note": "GetOperation does not support resource-level IAM permissions."
+    }
+  }
+}

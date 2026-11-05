@@ -1,0 +1,262 @@
+{
+  "tag": "AWS.Kendra",
+  "module": "kendra",
+  "resources": {
+    "DataSource": {
+      "file": "DataSource.ts"
+    },
+    "Index": {
+      "file": "SearchIndex.ts"
+    }
+  },
+  "builder": "makeKendraIndexHttpBinding",
+  "builders": {
+    "makeKendraDataSourceHttpBinding": {
+      "grants": "resource"
+    },
+    "makeKendraIndexHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchDeleteDocument": {
+      "operation": "batchDeleteDocument",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "BatchDeleteDocumentRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:BatchDeleteDocument"]
+    },
+    "BatchGetDocumentStatus": {
+      "operation": "batchGetDocumentStatus",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "BatchGetDocumentStatusRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:BatchGetDocumentStatus"]
+    },
+    "BatchPutDocument": {
+      "operation": "batchPutDocument",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "BatchPutDocumentRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:BatchPutDocument"]
+    },
+    "ClearQuerySuggestions": {
+      "operation": "clearQuerySuggestions",
+      "resource": "Index",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["kendra:ClearQuerySuggestions"]
+    },
+    "CreateAccessControlConfiguration": {
+      "operation": "createAccessControlConfiguration",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "CreateAccessControlConfigurationRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:CreateAccessControlConfiguration"],
+      "with": {
+        "subResources": ["access-control-configuration/*"]
+      }
+    },
+    "DeleteAccessControlConfiguration": {
+      "operation": "deleteAccessControlConfiguration",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteAccessControlConfigurationRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:DeleteAccessControlConfiguration"],
+      "with": {
+        "subResources": ["access-control-configuration/*"]
+      }
+    },
+    "DeletePrincipalMapping": {
+      "operation": "deletePrincipalMapping",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "DeletePrincipalMappingRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:DeletePrincipalMapping"],
+      "with": {
+        "subResources": ["data-source/*"]
+      }
+    },
+    "DescribeAccessControlConfiguration": {
+      "operation": "describeAccessControlConfiguration",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeAccessControlConfigurationRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:DescribeAccessControlConfiguration"],
+      "with": {
+        "subResources": ["access-control-configuration/*"]
+      }
+    },
+    "DescribePrincipalMapping": {
+      "operation": "describePrincipalMapping",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "DescribePrincipalMappingRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:DescribePrincipalMapping"],
+      "with": {
+        "subResources": ["data-source/*"]
+      }
+    },
+    "DescribeQuerySuggestionsConfig": {
+      "operation": "describeQuerySuggestionsConfig",
+      "resource": "Index",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["kendra:DescribeQuerySuggestionsConfig"]
+    },
+    "GetQuerySuggestions": {
+      "operation": "getQuerySuggestions",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "GetQuerySuggestionsRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:GetQuerySuggestions"]
+    },
+    "GetSnapshots": {
+      "operation": "getSnapshots",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "GetSnapshotsRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:GetSnapshots"]
+    },
+    "ListAccessControlConfigurations": {
+      "operation": "listAccessControlConfigurations",
+      "resource": "Index",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAccessControlConfigurationsRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:ListAccessControlConfigurations"]
+    },
+    "ListDataSourceSyncJobs": {
+      "operation": "listDataSourceSyncJobs",
+      "resource": "DataSource",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDataSourceSyncJobsRequest",
+        "omit": ["Id", "IndexId"]
+      },
+      "builder": "makeKendraDataSourceHttpBinding",
+      "actions": ["kendra:ListDataSourceSyncJobs"]
+    },
+    "ListGroupsOlderThanOrderingId": {
+      "operation": "listGroupsOlderThanOrderingId",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "ListGroupsOlderThanOrderingIdRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:ListGroupsOlderThanOrderingId"],
+      "with": {
+        "subResources": ["data-source/*"]
+      }
+    },
+    "PutPrincipalMapping": {
+      "operation": "putPrincipalMapping",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "PutPrincipalMappingRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:PutPrincipalMapping"],
+      "with": {
+        "subResources": ["data-source/*"]
+      }
+    },
+    "Query": {
+      "operation": "query",
+      "resource": "Index",
+      "request": {
+        "mode": "optional",
+        "interface": "QueryRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:Query"]
+    },
+    "Retrieve": {
+      "operation": "retrieve",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "RetrieveRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:Retrieve"]
+    },
+    "StartDataSourceSyncJob": {
+      "operation": "startDataSourceSyncJob",
+      "resource": "DataSource",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeKendraDataSourceHttpBinding",
+      "actions": ["kendra:StartDataSourceSyncJob"]
+    },
+    "StopDataSourceSyncJob": {
+      "operation": "stopDataSourceSyncJob",
+      "resource": "DataSource",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeKendraDataSourceHttpBinding",
+      "actions": ["kendra:StopDataSourceSyncJob"]
+    },
+    "SubmitFeedback": {
+      "operation": "submitFeedback",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "SubmitFeedbackRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:SubmitFeedback"]
+    },
+    "UpdateAccessControlConfiguration": {
+      "operation": "updateAccessControlConfiguration",
+      "resource": "Index",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateAccessControlConfigurationRequest",
+        "omit": ["IndexId"]
+      },
+      "actions": ["kendra:UpdateAccessControlConfiguration"],
+      "with": {
+        "subResources": ["access-control-configuration/*"]
+      }
+    }
+  }
+}

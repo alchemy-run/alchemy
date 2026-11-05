@@ -1,0 +1,99 @@
+{
+  "tag": "AWS.IVS",
+  "module": "ivs",
+  "resources": {
+    "Channel": {
+      "file": "Channel.ts"
+    }
+  },
+  "builder": "makeIvsChannelHttpBinding",
+  "builders": {
+    "makeIvsAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeIvsChannelHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchStartViewerSessionRevocation": {
+      "operation": "batchStartViewerSessionRevocation",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeIvsAccountHttpBinding",
+      "actions": ["ivs:BatchStartViewerSessionRevocation"]
+    },
+    "GetStream": {
+      "operation": "getStream",
+      "resource": "Channel",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["ivs:GetStream"]
+    },
+    "GetStreamSession": {
+      "operation": "getStreamSession",
+      "resource": "Channel",
+      "request": {
+        "mode": "optional",
+        "interface": "GetStreamSessionRequest",
+        "omit": ["channelArn"]
+      },
+      "actions": ["ivs:GetStreamSession"]
+    },
+    "InsertAdBreak": {
+      "operation": "insertAdBreak",
+      "resource": "Channel",
+      "request": {
+        "mode": "required",
+        "interface": "InsertAdBreakRequest",
+        "omit": ["channelArn"]
+      },
+      "actions": ["ivs:InsertAdBreak"]
+    },
+    "ListStreamSessions": {
+      "operation": "listStreamSessions",
+      "resource": "Channel",
+      "request": {
+        "mode": "optional",
+        "interface": "ListStreamSessionsRequest",
+        "omit": ["channelArn"]
+      },
+      "actions": ["ivs:ListStreamSessions"]
+    },
+    "ListStreams": {
+      "operation": "listStreams",
+      "builder": "makeIvsAccountHttpBinding",
+      "actions": ["ivs:ListStreams"]
+    },
+    "PutMetadata": {
+      "operation": "putMetadata",
+      "resource": "Channel",
+      "request": {
+        "mode": "required",
+        "interface": "PutMetadataRequest",
+        "omit": ["channelArn"]
+      },
+      "actions": ["ivs:PutMetadata"]
+    },
+    "StartViewerSessionRevocation": {
+      "operation": "startViewerSessionRevocation",
+      "resource": "Channel",
+      "request": {
+        "mode": "required",
+        "interface": "StartViewerSessionRevocationRequest",
+        "omit": ["channelArn"]
+      },
+      "actions": ["ivs:StartViewerSessionRevocation"]
+    },
+    "StopStream": {
+      "operation": "stopStream",
+      "resource": "Channel",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["ivs:StopStream"]
+    }
+  }
+}

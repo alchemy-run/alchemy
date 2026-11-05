@@ -1,0 +1,117 @@
+{
+  "tag": "AWS.MedicalImaging",
+  "module": "medical-imaging",
+  "resources": {
+    "Datastore": {
+      "file": "Datastore.ts"
+    }
+  },
+  "builder": "makeMedicalImagingDatastoreHttpBinding",
+  "builders": {
+    "makeMedicalImagingDatastoreHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CopyImageSet": {
+      "operation": "copyImageSet",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "CopyImageSetRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:CopyImageSet"]
+    },
+    "DeleteImageSet": {
+      "operation": "deleteImageSet",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteImageSetRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:DeleteImageSet"]
+    },
+    "GetDICOMImportJob": {
+      "operation": "getDICOMImportJob",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "GetDICOMImportJobRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:GetDICOMImportJob"]
+    },
+    "GetImageFrame": {
+      "operation": "getImageFrame",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "GetImageFrameRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:GetImageFrame"]
+    },
+    "GetImageSet": {
+      "operation": "getImageSet",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "GetImageSetRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:GetImageSet"]
+    },
+    "GetImageSetMetadata": {
+      "operation": "getImageSetMetadata",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "GetImageSetMetadataRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:GetImageSetMetadata"]
+    },
+    "ListDICOMImportJobs": {
+      "operation": "listDICOMImportJobs",
+      "resource": "Datastore",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDICOMImportJobsRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:ListDICOMImportJobs"]
+    },
+    "ListImageSetVersions": {
+      "operation": "listImageSetVersions",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "ListImageSetVersionsRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:ListImageSetVersions"]
+    },
+    "SearchImageSets": {
+      "operation": "searchImageSets",
+      "resource": "Datastore",
+      "request": {
+        "mode": "optional",
+        "interface": "SearchImageSetsRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:SearchImageSets"]
+    },
+    "UpdateImageSetMetadata": {
+      "operation": "updateImageSetMetadata",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateImageSetMetadataRequest",
+        "omit": ["datastoreId"]
+      },
+      "actions": ["medical-imaging:UpdateImageSetMetadata"]
+    }
+  }
+}

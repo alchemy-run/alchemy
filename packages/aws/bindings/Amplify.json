@@ -1,0 +1,163 @@
+{
+  "tag": "AWS.Amplify",
+  "module": "amplify",
+  "resources": {
+    "App": {
+      "file": "App.ts"
+    }
+  },
+  "builder": "makeAmplifyHttpBinding",
+  "builders": {
+    "makeAmplifyHttpBinding": {
+      "options": {
+        "name": "name",
+        "operation": "operation",
+        "actions": "actions"
+      },
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreateDeployment": {
+      "operation": "createDeployment",
+      "resource": "App",
+      "request": {
+        "mode": "required",
+        "interface": "CreateDeploymentRequest",
+        "omit": ["appId"]
+      },
+      "actions": ["amplify:CreateDeployment"],
+      "withTs": {
+        "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*`]"
+      },
+      "imports": {
+        "alchemy/Output": "* as Output"
+      }
+    },
+    "DeleteJob": {
+      "operation": "deleteJob",
+      "resource": "App",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteJobRequest",
+        "omit": ["appId"]
+      },
+      "actions": ["amplify:DeleteJob"],
+      "withTs": {
+        "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
+      },
+      "imports": {
+        "alchemy/Output": "* as Output"
+      }
+    },
+    "GenerateAccessLogs": {
+      "operation": "generateAccessLogs",
+      "resource": "App",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateAccessLogsRequest",
+        "omit": ["appId"]
+      },
+      "actions": ["amplify:GenerateAccessLogs"],
+      "withTs": {
+        "resources": "(app) => [app.appArn]"
+      }
+    },
+    "GetJob": {
+      "operation": "getJob",
+      "resource": "App",
+      "request": {
+        "mode": "required",
+        "interface": "GetJobRequest",
+        "omit": ["appId"]
+      },
+      "actions": ["amplify:GetJob"],
+      "withTs": {
+        "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
+      },
+      "imports": {
+        "alchemy/Output": "* as Output"
+      }
+    },
+    "ListArtifacts": {
+      "operation": "listArtifacts",
+      "resource": "App",
+      "request": {
+        "mode": "required",
+        "interface": "ListArtifactsRequest",
+        "omit": ["appId"]
+      },
+      "actions": ["amplify:ListArtifacts"],
+      "withTs": {
+        "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
+      },
+      "imports": {
+        "alchemy/Output": "* as Output"
+      }
+    },
+    "ListJobs": {
+      "operation": "listJobs",
+      "resource": "App",
+      "request": {
+        "mode": "required",
+        "interface": "ListJobsRequest",
+        "omit": ["appId"]
+      },
+      "actions": ["amplify:ListJobs"],
+      "withTs": {
+        "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
+      },
+      "imports": {
+        "alchemy/Output": "* as Output"
+      }
+    },
+    "StartDeployment": {
+      "operation": "startDeployment",
+      "resource": "App",
+      "request": {
+        "mode": "required",
+        "interface": "StartDeploymentRequest",
+        "omit": ["appId"]
+      },
+      "actions": ["amplify:StartDeployment"],
+      "withTs": {
+        "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*`]"
+      },
+      "imports": {
+        "alchemy/Output": "* as Output"
+      }
+    },
+    "StartJob": {
+      "operation": "startJob",
+      "resource": "App",
+      "request": {
+        "mode": "required",
+        "interface": "StartJobRequest",
+        "omit": ["appId"]
+      },
+      "actions": ["amplify:StartJob"],
+      "withTs": {
+        "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
+      },
+      "imports": {
+        "alchemy/Output": "* as Output"
+      }
+    },
+    "StopJob": {
+      "operation": "stopJob",
+      "resource": "App",
+      "request": {
+        "mode": "required",
+        "interface": "StopJobRequest",
+        "omit": ["appId"]
+      },
+      "actions": ["amplify:StopJob"],
+      "withTs": {
+        "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
+      },
+      "imports": {
+        "alchemy/Output": "* as Output"
+      }
+    }
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "tag": "AWS.ApplicationSignals",
+  "module": "application-signals",
+  "alias": "appsignals",
+  "resources": {
+    "ServiceLevelObjective": {
+      "file": "ServiceLevelObjective.ts"
+    }
+  },
+  "builder": "makeApplicationSignalsAccountHttpBinding",
+  "builders": {
+    "makeApplicationSignalsAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeSloBatchHttpBinding": {},
+    "makeSloIdHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchGetServiceLevelObjectiveBudgetReport": {
+      "operation": "batchGetServiceLevelObjectiveBudgetReport",
+      "resource": "ServiceLevelObjective",
+      "param": "slo",
+      "request": {
+        "mode": "required",
+        "interface": "GetBudgetReportRequest",
+        "omit": ["SloIds"]
+      },
+      "builder": "makeSloBatchHttpBinding",
+      "actions": ["application-signals:BatchGetServiceLevelObjectiveBudgetReport"],
+      "with": {
+        "accountActions": ["cloudwatch:GetMetricData"]
+      },
+      "note": "Budget reports evaluate the SLI with the CALLER's credentials \u2014 verified live: without cloudwatch:GetMetricData the operation fails with AccessDeniedException (empty message)."
+    },
+    "BatchUpdateExclusionWindows": {
+      "operation": "batchUpdateExclusionWindows",
+      "resource": "ServiceLevelObjective",
+      "param": "slo",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateExclusionWindowsRequest",
+        "omit": ["SloIds"]
+      },
+      "builder": "makeSloBatchHttpBinding",
+      "actions": ["application-signals:BatchUpdateExclusionWindows"]
+    },
+    "GetService": {
+      "operation": "getService",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["application-signals:GetService"]
+    },
+    "GetServiceLevelObjective": {
+      "operation": "getServiceLevelObjective",
+      "resource": "ServiceLevelObjective",
+      "param": "slo",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeSloIdHttpBinding",
+      "actions": ["application-signals:GetServiceLevelObjective"]
+    },
+    "ListAuditFindings": {
+      "operation": "listAuditFindings",
+      "request": {
+        "mode": "required"
+      },
+      "actions": [
+        "application-signals:ListAuditFindings",
+        "application-signals:ListServiceLevelObjectives",
+        "cloudwatch:GetMetricData"
+      ],
+      "note": "The auditors run with the CALLER's credentials \u2014 verified live: a service-target audit fails with AccessDeniedException (empty message) unless the caller can also enumerate SLOs and read metric data. Deeper detail levels (trace/log auditors) may need further read permissions (xray/logs)."
+    },
+    "ListEntityEvents": {
+      "operation": "listEntityEvents",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["application-signals:ListEntityEvents"]
+    },
+    "ListServiceDependencies": {
+      "operation": "listServiceDependencies",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["application-signals:ListServiceDependencies"]
+    },
+    "ListServiceDependents": {
+      "operation": "listServiceDependents",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["application-signals:ListServiceDependents"]
+    },
+    "ListServiceLevelObjectiveExclusionWindows": {
+      "operation": "listServiceLevelObjectiveExclusionWindows",
+      "resource": "ServiceLevelObjective",
+      "param": "slo",
+      "request": {
+        "mode": "optional",
+        "interface": "ListExclusionWindowsRequest",
+        "omit": ["Id"]
+      },
+      "builder": "makeSloIdHttpBinding",
+      "actions": ["application-signals:ListServiceLevelObjectiveExclusionWindows"]
+    },
+    "ListServiceLevelObjectives": {
+      "operation": "listServiceLevelObjectives",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["application-signals:ListServiceLevelObjectives"]
+    },
+    "ListServiceOperations": {
+      "operation": "listServiceOperations",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["application-signals:ListServiceOperations"]
+    },
+    "ListServiceStates": {
+      "operation": "listServiceStates",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["application-signals:ListServiceStates"]
+    },
+    "ListServices": {
+      "operation": "listServices",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["application-signals:ListServices"]
+    }
+  }
+}

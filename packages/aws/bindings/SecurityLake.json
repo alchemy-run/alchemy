@@ -1,0 +1,29 @@
+{
+  "tag": "AWS.SecurityLake",
+  "module": "securitylake",
+  "resources": {
+    "DataLake": {
+      "file": "DataLake.ts"
+    }
+  },
+  "builder": "makeSecurityLakeDataLakeHttpBinding",
+  "builders": {
+    "makeSecurityLakeDataLakeHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetDataLakeSources": {
+      "operation": "getDataLakeSources",
+      "resource": "DataLake",
+      "param": "lake",
+      "actions": ["securitylake:GetDataLakeSources"]
+    },
+    "ListDataLakeExceptions": {
+      "operation": "listDataLakeExceptions",
+      "resource": "DataLake",
+      "param": "lake",
+      "actions": ["securitylake:ListDataLakeExceptions"]
+    }
+  }
+}

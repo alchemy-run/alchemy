@@ -1,0 +1,54 @@
+{
+  "tag": "AWS.GeoMaps",
+  "module": "geo-maps",
+  "alias": "geoMaps",
+  "resources": {},
+  "builder": "makeGeoMapsHttpBinding",
+  "builders": {
+    "makeGeoMapsHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "GetGlyphs": {
+      "operation": "getGlyphs",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["geo-maps:GetGlyphs"]
+    },
+    "GetSprites": {
+      "operation": "getSprites",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["geo-maps:GetSprites"]
+    },
+    "GetStaticMap": {
+      "operation": "getStaticMap",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["geo-maps:GetStaticMap"]
+    },
+    "GetStyleDescriptor": {
+      "operation": "getStyleDescriptor",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["geo-maps:GetStyleDescriptor"]
+    },
+    "GetTile": {
+      "operation": "getTile",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["geo-maps:GetTile"]
+    }
+  }
+}

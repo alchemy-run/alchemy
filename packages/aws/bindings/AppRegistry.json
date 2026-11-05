@@ -1,0 +1,110 @@
+{
+  "tag": "AWS.AppRegistry",
+  "module": "service-catalog-appregistry",
+  "alias": "appregistry",
+  "resources": {
+    "Application": {
+      "file": "Application.ts"
+    },
+    "AttributeGroup": {
+      "file": "AttributeGroup.ts"
+    }
+  },
+  "builder": "makeApplicationScopedHttpBinding",
+  "builders": {
+    "makeAppRegistryAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeApplicationScopedHttpBinding": {
+      "grants": "resource"
+    },
+    "makeAttributeGroupScopedHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetApplication": {
+      "operation": "getApplication",
+      "resource": "Application",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["servicecatalog:GetApplication"]
+    },
+    "GetAssociatedResource": {
+      "operation": "getAssociatedResource",
+      "resource": "Application",
+      "request": {
+        "mode": "required",
+        "interface": "GetAssociatedResourceRequest",
+        "omit": ["application"]
+      },
+      "actions": ["servicecatalog:GetAssociatedResource"]
+    },
+    "GetAttributeGroup": {
+      "operation": "getAttributeGroup",
+      "resource": "AttributeGroup",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeAttributeGroupScopedHttpBinding",
+      "actions": ["servicecatalog:GetAttributeGroup"]
+    },
+    "ListApplications": {
+      "operation": "listApplications",
+      "builder": "makeAppRegistryAccountHttpBinding",
+      "actions": ["servicecatalog:ListApplications"]
+    },
+    "ListAssociatedAttributeGroups": {
+      "operation": "listAssociatedAttributeGroups",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAssociatedAttributeGroupsRequest",
+        "omit": ["application"]
+      },
+      "actions": ["servicecatalog:ListAssociatedAttributeGroups"]
+    },
+    "ListAssociatedResources": {
+      "operation": "listAssociatedResources",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAssociatedResourcesRequest",
+        "omit": ["application"]
+      },
+      "actions": ["servicecatalog:ListAssociatedResources"]
+    },
+    "ListAttributeGroups": {
+      "operation": "listAttributeGroups",
+      "builder": "makeAppRegistryAccountHttpBinding",
+      "actions": ["servicecatalog:ListAttributeGroups"]
+    },
+    "ListAttributeGroupsForApplication": {
+      "operation": "listAttributeGroupsForApplication",
+      "resource": "Application",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAttributeGroupsForApplicationRequest",
+        "omit": ["application"]
+      },
+      "actions": ["servicecatalog:ListAttributeGroupsForApplication"]
+    },
+    "SyncResource": {
+      "operation": "syncResource",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAppRegistryAccountHttpBinding",
+      "actions": [
+        "servicecatalog:SyncResource",
+        "cloudformation:DescribeStacks",
+        "cloudformation:UpdateStack",
+        "tag:GetResources",
+        "tag:TagResources",
+        "tag:UntagResources"
+      ],
+      "note": "The target is an arbitrary external resource, so nothing here supports resource-level scoping. SyncResource verifies the CALLER can read and update the target resource, so the documented companion permissions (CloudFormation + resource-tagging) are granted alongside."
+    }
+  }
+}

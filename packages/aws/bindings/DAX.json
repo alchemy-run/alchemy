@@ -1,0 +1,60 @@
+{
+  "tag": "AWS.DAX",
+  "module": "dax",
+  "resources": {
+    "Cluster": {
+      "file": "Cluster.ts"
+    }
+  },
+  "builder": "makeDaxClusterHttpBinding",
+  "builders": {
+    "makeDaxAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeDaxClusterHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DecreaseReplicationFactor": {
+      "operation": "decreaseReplicationFactor",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterName"],
+        "inline": true
+      },
+      "actions": ["dax:DecreaseReplicationFactor"]
+    },
+    "DescribeClusters": {
+      "operation": "describeClusters",
+      "builder": "makeDaxAccountHttpBinding",
+      "actions": ["dax:DescribeClusters"]
+    },
+    "DescribeEvents": {
+      "operation": "describeEvents",
+      "builder": "makeDaxAccountHttpBinding",
+      "actions": ["dax:DescribeEvents"]
+    },
+    "IncreaseReplicationFactor": {
+      "operation": "increaseReplicationFactor",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterName"],
+        "inline": true
+      },
+      "actions": ["dax:IncreaseReplicationFactor"]
+    },
+    "RebootNode": {
+      "operation": "rebootNode",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterName"],
+        "inline": true
+      },
+      "actions": ["dax:RebootNode"]
+    }
+  }
+}

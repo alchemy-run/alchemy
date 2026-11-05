@@ -1,0 +1,127 @@
+{
+  "tag": "AWS.RePostSpace",
+  "module": "repostspace",
+  "resources": {
+    "Space": {
+      "file": "Space.ts"
+    }
+  },
+  "builder": "makeRePostSpaceHttpBinding",
+  "builders": {
+    "makeRePostSpaceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchAddChannelRoleToAccessors": {
+      "operation": "batchAddChannelRoleToAccessors",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "BatchAddChannelRoleToAccessorsRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:BatchAddChannelRoleToAccessors"]
+    },
+    "BatchAddRole": {
+      "operation": "batchAddRole",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "BatchAddRoleRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:BatchAddRole"]
+    },
+    "BatchRemoveChannelRoleFromAccessors": {
+      "operation": "batchRemoveChannelRoleFromAccessors",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "BatchRemoveChannelRoleFromAccessorsRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:BatchRemoveChannelRoleFromAccessors"]
+    },
+    "BatchRemoveRole": {
+      "operation": "batchRemoveRole",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "BatchRemoveRoleRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:BatchRemoveRole"]
+    },
+    "CreateChannel": {
+      "operation": "createChannel",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "CreateChannelRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:CreateChannel"]
+    },
+    "DeregisterAdmin": {
+      "operation": "deregisterAdmin",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "DeregisterAdminRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:DeregisterAdmin"]
+    },
+    "GetChannel": {
+      "operation": "getChannel",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "GetChannelRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:GetChannel"]
+    },
+    "ListChannels": {
+      "operation": "listChannels",
+      "resource": "Space",
+      "request": {
+        "mode": "optional",
+        "interface": "ListChannelsRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:ListChannels"]
+    },
+    "RegisterAdmin": {
+      "operation": "registerAdmin",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "RegisterAdminRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:RegisterAdmin"]
+    },
+    "SendInvites": {
+      "operation": "sendInvites",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "SendInvitesRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:SendInvites"]
+    },
+    "UpdateChannel": {
+      "operation": "updateChannel",
+      "resource": "Space",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateChannelRequest",
+        "omit": ["spaceId"]
+      },
+      "actions": ["repostspace:UpdateChannel"]
+    }
+  }
+}

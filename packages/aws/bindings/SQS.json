@@ -1,0 +1,141 @@
+{
+  "tag": "AWS.SQS",
+  "module": "sqs",
+  "resources": {
+    "Queue": {
+      "file": "Queue.ts"
+    }
+  },
+  "builder": "makeQueueUrlHttpBinding",
+  "builders": {
+    "makeQueueArnHttpBinding": {},
+    "makeQueueGrantHttpBinding": {},
+    "makeQueueUrlHttpBinding": {}
+  },
+  "bindings": {
+    "CancelMessageMoveTask": {
+      "operation": "cancelMessageMoveTask",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "interface": "CancelMessageMoveTaskRequest",
+        "omit": []
+      },
+      "builder": "makeQueueGrantHttpBinding",
+      "actions": ["sqs:CancelMessageMoveTask"],
+      "note": "The request identifies the task by `TaskHandle` only; the bound queue exists purely to scope the IAM grant to the redrive source."
+    },
+    "ChangeMessageVisibility": {
+      "operation": "changeMessageVisibility",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "interface": "ChangeMessageVisibilityRequest",
+        "omit": ["QueueUrl"]
+      },
+      "actions": ["sqs:ChangeMessageVisibility"]
+    },
+    "ChangeMessageVisibilityBatch": {
+      "operation": "changeMessageVisibilityBatch",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "interface": "ChangeMessageVisibilityBatchRequest",
+        "omit": ["QueueUrl"]
+      },
+      "actions": ["sqs:ChangeMessageVisibility"],
+      "note": "Batch entries are authorized by the singular action."
+    },
+    "DeleteMessage": {
+      "operation": "deleteMessage",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteMessageRequest",
+        "omit": ["QueueUrl"]
+      },
+      "actions": ["sqs:DeleteMessage"]
+    },
+    "DeleteMessageBatch": {
+      "operation": "deleteMessageBatch",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteMessageBatchRequest",
+        "omit": ["QueueUrl"]
+      },
+      "actions": ["sqs:DeleteMessage"],
+      "note": "Batch entries are authorized by the singular action."
+    },
+    "GetQueueAttributes": {
+      "operation": "getQueueAttributes",
+      "resource": "Queue",
+      "request": {
+        "mode": "optional",
+        "interface": "GetQueueAttributesRequest",
+        "omit": ["QueueUrl"]
+      },
+      "actions": ["sqs:GetQueueAttributes"]
+    },
+    "ListDeadLetterSourceQueues": {
+      "operation": "listDeadLetterSourceQueues",
+      "resource": "Queue",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDeadLetterSourceQueuesRequest",
+        "omit": ["QueueUrl"]
+      },
+      "actions": ["sqs:ListDeadLetterSourceQueues"]
+    },
+    "ListMessageMoveTasks": {
+      "operation": "listMessageMoveTasks",
+      "resource": "Queue",
+      "request": {
+        "mode": "optional",
+        "interface": "ListMessageMoveTasksRequest",
+        "omit": ["SourceArn"]
+      },
+      "builder": "makeQueueArnHttpBinding",
+      "actions": ["sqs:ListMessageMoveTasks"]
+    },
+    "PurgeQueue": {
+      "operation": "purgeQueue",
+      "resource": "Queue",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["sqs:PurgeQueue"]
+    },
+    "ReceiveMessage": {
+      "operation": "receiveMessage",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "interface": "ReceiveMessageRequest",
+        "omit": ["QueueUrl"]
+      },
+      "actions": ["sqs:ReceiveMessage"]
+    },
+    "SendMessage": {
+      "operation": "sendMessage",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "interface": "SendMessageRequest",
+        "omit": ["QueueUrl"]
+      },
+      "actions": ["sqs:SendMessage"]
+    },
+    "SendMessageBatch": {
+      "operation": "sendMessageBatch",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "interface": "SendMessageBatchRequest",
+        "omit": ["QueueUrl"]
+      },
+      "actions": ["sqs:SendMessage"],
+      "note": "Batch entries are authorized by the singular action."
+    }
+  }
+}

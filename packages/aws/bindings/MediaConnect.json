@@ -1,0 +1,98 @@
+{
+  "tag": "AWS.MediaConnect",
+  "module": "mediaconnect",
+  "resources": {
+    "Flow": {
+      "file": "Flow.ts"
+    }
+  },
+  "builder": "makeMediaConnectFlowHttpBinding",
+  "builders": {
+    "makeMediaConnectAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeMediaConnectFlowHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeFlow": {
+      "operation": "describeFlow",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["mediaconnect:DescribeFlow"]
+    },
+    "DescribeFlowSourceMetadata": {
+      "operation": "describeFlowSourceMetadata",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["mediaconnect:DescribeFlowSourceMetadata"]
+    },
+    "DescribeFlowSourceThumbnail": {
+      "operation": "describeFlowSourceThumbnail",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["mediaconnect:DescribeFlowSourceThumbnail"]
+    },
+    "GrantFlowEntitlements": {
+      "operation": "grantFlowEntitlements",
+      "resource": "Flow",
+      "request": {
+        "mode": "required",
+        "omit": ["FlowArn"],
+        "inline": true
+      },
+      "actions": ["mediaconnect:GrantFlowEntitlements"],
+      "with": {
+        "extraResources": ["arn:aws:mediaconnect:*:*:entitlement:*"]
+      },
+      "note": "The IAM resource types for GrantFlowEntitlements are the flow AND the entitlement; entitlement ARNs are siblings of (not derived from) the flow ARN, so they are granted by wildcard."
+    },
+    "ListEntitlements": {
+      "operation": "listEntitlements",
+      "builder": "makeMediaConnectAccountHttpBinding",
+      "actions": ["mediaconnect:ListEntitlements"]
+    },
+    "ListFlows": {
+      "operation": "listFlows",
+      "builder": "makeMediaConnectAccountHttpBinding",
+      "actions": ["mediaconnect:ListFlows"]
+    },
+    "RevokeFlowEntitlement": {
+      "operation": "revokeFlowEntitlement",
+      "resource": "Flow",
+      "request": {
+        "mode": "required",
+        "omit": ["FlowArn"],
+        "inline": true
+      },
+      "actions": ["mediaconnect:RevokeFlowEntitlement"],
+      "with": {
+        "extraResources": ["arn:aws:mediaconnect:*:*:entitlement:*"]
+      },
+      "note": "The IAM resource types for RevokeFlowEntitlement are the flow AND the entitlement; entitlement ARNs are siblings of (not derived from) the flow ARN, so they are granted by wildcard."
+    },
+    "StartFlow": {
+      "operation": "startFlow",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["mediaconnect:StartFlow"]
+    },
+    "StopFlow": {
+      "operation": "stopFlow",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["mediaconnect:StopFlow"]
+    }
+  }
+}

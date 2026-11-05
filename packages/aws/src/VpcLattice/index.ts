@@ -1,9 +1,6 @@
 export * from "./AccessLogSubscription.ts";
 export * from "./AuthPolicy.ts";
-export * from "./DeregisterTargets.ts";
 export * from "./Listener.ts";
-export * from "./ListTargets.ts";
-export * from "./RegisterTargets.ts";
 export * from "./ResourcePolicy.ts";
 export * from "./Rule.ts";
 export * from "./Service.ts";
@@ -11,3 +8,4 @@ export * from "./ServiceNetwork.ts";
 export * from "./ServiceNetworkServiceAssociation.ts";
 export * from "./ServiceNetworkVpcAssociation.ts";
 export * from "./TargetGroup.ts";
+export * from "./generated.ts";

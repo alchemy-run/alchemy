@@ -1,0 +1,78 @@
+{
+  "tag": "AWS.SES",
+  "module": "sesv2",
+  "resources": {},
+  "builder": "makeSESHttpBinding",
+  "builders": {
+    "makeSESHttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "BatchGetMetricData": {
+      "operation": "batchGetMetricData",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:BatchGetMetricData"]
+    },
+    "DeleteSuppressedDestination": {
+      "operation": "deleteSuppressedDestination",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:DeleteSuppressedDestination"]
+    },
+    "GetAccount": {
+      "operation": "getAccount",
+      "actions": ["ses:GetAccount"]
+    },
+    "GetBlacklistReports": {
+      "operation": "getBlacklistReports",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:GetBlacklistReports"]
+    },
+    "GetDomainStatisticsReport": {
+      "operation": "getDomainStatisticsReport",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:GetDomainStatisticsReport"]
+    },
+    "GetMessageInsights": {
+      "operation": "getMessageInsights",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:GetMessageInsights"]
+    },
+    "GetSuppressedDestination": {
+      "operation": "getSuppressedDestination",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:GetSuppressedDestination"]
+    },
+    "ListSuppressedDestinations": {
+      "operation": "listSuppressedDestinations",
+      "actions": ["ses:ListSuppressedDestinations"]
+    },
+    "PutSuppressedDestination": {
+      "operation": "putSuppressedDestination",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:PutSuppressedDestination"]
+    },
+    "SendBounce": {
+      "operation": "sendBounce",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:SendBounce"],
+      "module": "ses"
+    }
+  }
+}

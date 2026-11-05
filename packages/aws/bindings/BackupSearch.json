@@ -1,0 +1,45 @@
+{
+  "tag": "AWS.BackupSearch",
+  "module": "backupsearch",
+  "resources": {
+    "SearchJob": {
+      "file": "SearchJob.ts"
+    }
+  },
+  "builder": "makeSearchJobScopedHttpBinding",
+  "builders": {
+    "makeSearchJobScopedHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetSearchJob": {
+      "operation": "getSearchJob",
+      "resource": "SearchJob",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["backup-search:GetSearchJob"]
+    },
+    "ListSearchJobBackups": {
+      "operation": "listSearchJobBackups",
+      "resource": "SearchJob",
+      "request": {
+        "mode": "optional",
+        "interface": "ListSearchJobBackupsRequest",
+        "omit": ["SearchJobIdentifier"]
+      },
+      "actions": ["backup-search:ListSearchJobBackups"]
+    },
+    "ListSearchJobResults": {
+      "operation": "listSearchJobResults",
+      "resource": "SearchJob",
+      "request": {
+        "mode": "optional",
+        "interface": "ListSearchJobResultsRequest",
+        "omit": ["SearchJobIdentifier"]
+      },
+      "actions": ["backup-search:ListSearchJobResults"]
+    }
+  }
+}

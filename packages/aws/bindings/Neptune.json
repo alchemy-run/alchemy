@@ -1,0 +1,122 @@
+{
+  "tag": "AWS.Neptune",
+  "module": "neptune",
+  "resources": {
+    "DBCluster": {
+      "file": "DBCluster.ts"
+    },
+    "DBInstance": {
+      "file": "DBInstance.ts"
+    }
+  },
+  "builder": "makeNeptuneAccountHttpBinding",
+  "builders": {
+    "makeNeptuneAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeNeptuneClusterHttpBinding": {
+      "grants": "resource"
+    },
+    "makeNeptuneInstanceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ApplyPendingMaintenanceAction": {
+      "operation": "applyPendingMaintenanceAction",
+      "actions": ["rds:ApplyPendingMaintenanceAction"]
+    },
+    "CopyDBClusterSnapshot": {
+      "operation": "copyDBClusterSnapshot",
+      "actions": ["rds:CopyDBClusterSnapshot"]
+    },
+    "CreateDBClusterSnapshot": {
+      "operation": "createDBClusterSnapshot",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["DBClusterIdentifier"],
+        "inline": true
+      },
+      "builder": "makeNeptuneClusterHttpBinding",
+      "actions": ["rds:CreateDBClusterSnapshot", "rds:AddTagsToResource"],
+      "withTs": {
+        "extraResources": "(clusterArn) => [`${clusterArn.split(\":\").slice(0, 5).join(\":\")}:cluster-snapshot:*`]"
+      },
+      "note": "Snapshot creation authorizes against BOTH the source cluster ARN and the target snapshot ARN \u2014 widen the grant to the account's Neptune cluster-snapshot space (`arn:\u2026:rds:{region}:{account}:cluster-snapshot:*`)."
+    },
+    "DeleteDBClusterSnapshot": {
+      "operation": "deleteDBClusterSnapshot",
+      "actions": ["rds:DeleteDBClusterSnapshot"]
+    },
+    "DescribeDBClusterEndpoints": {
+      "operation": "describeDBClusterEndpoints",
+      "actions": ["rds:DescribeDBClusterEndpoints"]
+    },
+    "DescribeDBClusterSnapshots": {
+      "operation": "describeDBClusterSnapshots",
+      "actions": ["rds:DescribeDBClusterSnapshots"]
+    },
+    "DescribeDBClusters": {
+      "operation": "describeDBClusters",
+      "actions": ["rds:DescribeDBClusters"]
+    },
+    "DescribeDBInstances": {
+      "operation": "describeDBInstances",
+      "actions": ["rds:DescribeDBInstances"]
+    },
+    "DescribeEvents": {
+      "operation": "describeEvents",
+      "actions": ["rds:DescribeEvents"]
+    },
+    "DescribePendingMaintenanceActions": {
+      "operation": "describePendingMaintenanceActions",
+      "actions": ["rds:DescribePendingMaintenanceActions"]
+    },
+    "FailoverDBCluster": {
+      "operation": "failoverDBCluster",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["DBClusterIdentifier"],
+        "inline": true
+      },
+      "builder": "makeNeptuneClusterHttpBinding",
+      "actions": ["rds:FailoverDBCluster"]
+    },
+    "RebootDBInstance": {
+      "operation": "rebootDBInstance",
+      "resource": "DBInstance",
+      "param": "instance",
+      "request": {
+        "mode": "optional",
+        "omit": ["DBInstanceIdentifier"],
+        "inline": true
+      },
+      "builder": "makeNeptuneInstanceHttpBinding",
+      "actions": ["rds:RebootDBInstance"]
+    },
+    "StartDBCluster": {
+      "operation": "startDBCluster",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeNeptuneClusterHttpBinding",
+      "actions": ["rds:StartDBCluster"]
+    },
+    "StopDBCluster": {
+      "operation": "stopDBCluster",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeNeptuneClusterHttpBinding",
+      "actions": ["rds:StopDBCluster"]
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "tag": "AWS.DataSync",
+  "module": "datasync",
+  "resources": {
+    "Task": {
+      "file": "Task.ts"
+    }
+  },
+  "builder": "makeDataSyncTaskExecutionHttpBinding",
+  "builders": {
+    "makeDataSyncTaskExecutionHttpBinding": {},
+    "makeDataSyncTaskHttpBinding": {}
+  },
+  "bindings": {
+    "CancelTaskExecution": {
+      "operation": "cancelTaskExecution",
+      "resource": "Task",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["datasync:CancelTaskExecution"]
+    },
+    "DescribeTask": {
+      "operation": "describeTask",
+      "resource": "Task",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDataSyncTaskHttpBinding",
+      "actions": ["datasync:DescribeTask"]
+    },
+    "DescribeTaskExecution": {
+      "operation": "describeTaskExecution",
+      "resource": "Task",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["datasync:DescribeTaskExecution"]
+    },
+    "ListTaskExecutions": {
+      "operation": "listTaskExecutions",
+      "resource": "Task",
+      "request": {
+        "mode": "optional",
+        "omit": ["TaskArn"],
+        "inline": true
+      },
+      "builder": "makeDataSyncTaskHttpBinding",
+      "actions": ["datasync:ListTaskExecutions"]
+    },
+    "StartTaskExecution": {
+      "operation": "startTaskExecution",
+      "resource": "Task",
+      "request": {
+        "mode": "optional",
+        "omit": ["TaskArn"],
+        "inline": true
+      },
+      "builder": "makeDataSyncTaskHttpBinding",
+      "actions": ["datasync:StartTaskExecution"]
+    },
+    "UpdateTaskExecution": {
+      "operation": "updateTaskExecution",
+      "resource": "Task",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["datasync:UpdateTaskExecution"]
+    }
+  }
+}

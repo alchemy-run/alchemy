@@ -1,0 +1,61 @@
+{
+  "tag": "AWS.Synthetics",
+  "module": "synthetics",
+  "resources": {
+    "Canary": {
+      "file": "Canary.ts"
+    }
+  },
+  "builder": "makeSyntheticsCanaryHttpBinding",
+  "builders": {
+    "makeSyntheticsAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeSyntheticsCanaryHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeCanariesLastRun": {
+      "operation": "describeCanariesLastRun",
+      "builder": "makeSyntheticsAccountHttpBinding",
+      "actions": ["synthetics:DescribeCanariesLastRun"]
+    },
+    "GetCanary": {
+      "operation": "getCanary",
+      "resource": "Canary",
+      "request": {
+        "mode": "optional",
+        "interface": "GetCanaryRequest",
+        "omit": ["Name"]
+      },
+      "actions": ["synthetics:GetCanary"]
+    },
+    "GetCanaryRuns": {
+      "operation": "getCanaryRuns",
+      "resource": "Canary",
+      "request": {
+        "mode": "optional",
+        "interface": "GetCanaryRunsRequest",
+        "omit": ["Name"]
+      },
+      "actions": ["synthetics:GetCanaryRuns"]
+    },
+    "StartCanary": {
+      "operation": "startCanary",
+      "resource": "Canary",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["synthetics:StartCanary"]
+    },
+    "StopCanary": {
+      "operation": "stopCanary",
+      "resource": "Canary",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["synthetics:StopCanary"]
+    }
+  }
+}

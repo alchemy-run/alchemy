@@ -1,0 +1,529 @@
+{
+  "tag": "AWS.Omics",
+  "module": "omics",
+  "resources": {
+    "AnnotationStore": {
+      "file": "AnnotationStore.ts"
+    },
+    "ReferenceStore": {
+      "file": "ReferenceStore.ts"
+    },
+    "SequenceStore": {
+      "file": "SequenceStore.ts"
+    },
+    "VariantStore": {
+      "file": "VariantStore.ts"
+    },
+    "Workflow": {
+      "file": "Workflow.ts"
+    }
+  },
+  "builder": "makeOmicsResourceHttpBinding",
+  "builders": {
+    "makeOmicsAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeOmicsResourceHttpBinding": {}
+  },
+  "bindings": {
+    "BatchDeleteReadSet": {
+      "operation": "batchDeleteReadSet",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "BatchDeleteReadSetRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:BatchDeleteReadSet"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "CancelRun": {
+      "operation": "cancelRun",
+      "request": {
+        "mode": "optional",
+        "interface": "CancelRunRequest",
+        "omit": []
+      },
+      "builder": "makeOmicsAccountHttpBinding",
+      "actions": ["omics:CancelRun"]
+    },
+    "DeleteReference": {
+      "operation": "deleteReference",
+      "resource": "ReferenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "DeleteReferenceRequest",
+        "omit": ["referenceStoreId"]
+      },
+      "actions": ["omics:DeleteReference"],
+      "with": {
+        "key": "referenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: ReferenceStore) => store.referenceStoreId",
+        "arn": "(store: ReferenceStore) => store.referenceStoreArn"
+      }
+    },
+    "DeleteRun": {
+      "operation": "deleteRun",
+      "request": {
+        "mode": "optional",
+        "interface": "DeleteRunRequest",
+        "omit": []
+      },
+      "builder": "makeOmicsAccountHttpBinding",
+      "actions": ["omics:DeleteRun"]
+    },
+    "GetReadSet": {
+      "operation": "getReadSet",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "GetReadSetRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:GetReadSet"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "GetReadSetActivationJob": {
+      "operation": "getReadSetActivationJob",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "GetReadSetActivationJobRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:GetReadSetActivationJob"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "GetReadSetExportJob": {
+      "operation": "getReadSetExportJob",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "GetReadSetExportJobRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:GetReadSetExportJob"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "GetReadSetImportJob": {
+      "operation": "getReadSetImportJob",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "GetReadSetImportJobRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:GetReadSetImportJob"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "GetReadSetMetadata": {
+      "operation": "getReadSetMetadata",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "GetReadSetMetadataRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:GetReadSetMetadata"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "GetReference": {
+      "operation": "getReference",
+      "resource": "ReferenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "GetReferenceRequest",
+        "omit": ["referenceStoreId"]
+      },
+      "actions": ["omics:GetReference"],
+      "with": {
+        "key": "referenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: ReferenceStore) => store.referenceStoreId",
+        "arn": "(store: ReferenceStore) => store.referenceStoreArn"
+      }
+    },
+    "GetReferenceImportJob": {
+      "operation": "getReferenceImportJob",
+      "resource": "ReferenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "GetReferenceImportJobRequest",
+        "omit": ["referenceStoreId"]
+      },
+      "actions": ["omics:GetReferenceImportJob"],
+      "with": {
+        "key": "referenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: ReferenceStore) => store.referenceStoreId",
+        "arn": "(store: ReferenceStore) => store.referenceStoreArn"
+      }
+    },
+    "GetReferenceMetadata": {
+      "operation": "getReferenceMetadata",
+      "resource": "ReferenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "GetReferenceMetadataRequest",
+        "omit": ["referenceStoreId"]
+      },
+      "actions": ["omics:GetReferenceMetadata"],
+      "with": {
+        "key": "referenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: ReferenceStore) => store.referenceStoreId",
+        "arn": "(store: ReferenceStore) => store.referenceStoreArn"
+      }
+    },
+    "GetRun": {
+      "operation": "getRun",
+      "request": {
+        "mode": "optional",
+        "interface": "GetRunRequest",
+        "omit": []
+      },
+      "builder": "makeOmicsAccountHttpBinding",
+      "actions": ["omics:GetRun"]
+    },
+    "GetRunTask": {
+      "operation": "getRunTask",
+      "request": {
+        "mode": "optional",
+        "interface": "GetRunTaskRequest",
+        "omit": []
+      },
+      "builder": "makeOmicsAccountHttpBinding",
+      "actions": ["omics:GetRunTask"]
+    },
+    "ListAnnotationImportJobs": {
+      "operation": "listAnnotationImportJobs",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAnnotationImportJobsRequest",
+        "omit": []
+      },
+      "builder": "makeOmicsAccountHttpBinding",
+      "actions": ["omics:ListAnnotationImportJobs"]
+    },
+    "ListReadSetActivationJobs": {
+      "operation": "listReadSetActivationJobs",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReadSetActivationJobsRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:ListReadSetActivationJobs"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "ListReadSetExportJobs": {
+      "operation": "listReadSetExportJobs",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReadSetExportJobsRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:ListReadSetExportJobs"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "ListReadSetImportJobs": {
+      "operation": "listReadSetImportJobs",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReadSetImportJobsRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:ListReadSetImportJobs"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "ListReadSets": {
+      "operation": "listReadSets",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReadSetsRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:ListReadSets"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "ListReferenceImportJobs": {
+      "operation": "listReferenceImportJobs",
+      "resource": "ReferenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReferenceImportJobsRequest",
+        "omit": ["referenceStoreId"]
+      },
+      "actions": ["omics:ListReferenceImportJobs"],
+      "with": {
+        "key": "referenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: ReferenceStore) => store.referenceStoreId",
+        "arn": "(store: ReferenceStore) => store.referenceStoreArn"
+      }
+    },
+    "ListReferences": {
+      "operation": "listReferences",
+      "resource": "ReferenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReferencesRequest",
+        "omit": ["referenceStoreId"]
+      },
+      "actions": ["omics:ListReferences"],
+      "with": {
+        "key": "referenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: ReferenceStore) => store.referenceStoreId",
+        "arn": "(store: ReferenceStore) => store.referenceStoreArn"
+      }
+    },
+    "ListRunTasks": {
+      "operation": "listRunTasks",
+      "request": {
+        "mode": "optional",
+        "interface": "ListRunTasksRequest",
+        "omit": []
+      },
+      "builder": "makeOmicsAccountHttpBinding",
+      "actions": ["omics:ListRunTasks"]
+    },
+    "ListRuns": {
+      "operation": "listRuns",
+      "request": {
+        "mode": "optional",
+        "interface": "ListRunsRequest",
+        "omit": []
+      },
+      "builder": "makeOmicsAccountHttpBinding",
+      "actions": ["omics:ListRuns"]
+    },
+    "ListVariantImportJobs": {
+      "operation": "listVariantImportJobs",
+      "request": {
+        "mode": "optional",
+        "interface": "ListVariantImportJobsRequest",
+        "omit": []
+      },
+      "builder": "makeOmicsAccountHttpBinding",
+      "actions": ["omics:ListVariantImportJobs"]
+    },
+    "StartAnnotationImportJob": {
+      "operation": "startAnnotationImportJob",
+      "resource": "AnnotationStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "interface": "StartAnnotationImportJobRequest",
+        "omit": ["destinationName"]
+      },
+      "actions": ["omics:StartAnnotationImportJob"],
+      "with": {
+        "key": "destinationName",
+        "passRole": true
+      },
+      "withTs": {
+        "id": "(store) => store.name",
+        "arn": "(store) => store.annotationStoreArn"
+      }
+    },
+    "StartReadSetActivationJob": {
+      "operation": "startReadSetActivationJob",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "StartReadSetActivationJobRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:StartReadSetActivationJob"],
+      "with": {
+        "key": "sequenceStoreId"
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "StartReadSetExportJob": {
+      "operation": "startReadSetExportJob",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "StartReadSetExportJobRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:StartReadSetExportJob"],
+      "with": {
+        "key": "sequenceStoreId",
+        "passRole": true
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "StartReadSetImportJob": {
+      "operation": "startReadSetImportJob",
+      "resource": "SequenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "StartReadSetImportJobRequest",
+        "omit": ["sequenceStoreId"]
+      },
+      "actions": ["omics:StartReadSetImportJob"],
+      "with": {
+        "key": "sequenceStoreId",
+        "passRole": true
+      },
+      "withTs": {
+        "id": "(store: SequenceStore) => store.sequenceStoreId",
+        "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      }
+    },
+    "StartReferenceImportJob": {
+      "operation": "startReferenceImportJob",
+      "resource": "ReferenceStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "interface": "StartReferenceImportJobRequest",
+        "omit": ["referenceStoreId"]
+      },
+      "actions": ["omics:StartReferenceImportJob"],
+      "with": {
+        "key": "referenceStoreId",
+        "passRole": true
+      },
+      "withTs": {
+        "id": "(store: ReferenceStore) => store.referenceStoreId",
+        "arn": "(store: ReferenceStore) => store.referenceStoreArn"
+      }
+    },
+    "StartRun": {
+      "operation": "startRun",
+      "resource": "Workflow",
+      "request": {
+        "mode": "optional",
+        "interface": "StartRunRequest",
+        "omit": ["workflowId"]
+      },
+      "actions": ["omics:StartRun"],
+      "with": {
+        "key": "workflowId",
+        "passRole": true
+      },
+      "withTs": {
+        "id": "(workflow: Workflow) => workflow.workflowId",
+        "arn": "(workflow: Workflow) => workflow.workflowArn"
+      }
+    },
+    "StartVariantImportJob": {
+      "operation": "startVariantImportJob",
+      "resource": "VariantStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "interface": "StartVariantImportJobRequest",
+        "omit": ["destinationName"]
+      },
+      "actions": ["omics:StartVariantImportJob"],
+      "with": {
+        "key": "destinationName",
+        "passRole": true
+      },
+      "withTs": {
+        "id": "(store) => store.name",
+        "arn": "(store) => store.variantStoreArn"
+      }
+    }
+  }
+}

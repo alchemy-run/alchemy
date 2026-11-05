@@ -1,15 +1,9 @@
 export * from "./common.ts";
-export * from "./DeregisterTargets.ts";
-export * from "./DescribeCapacityReservation.ts";
-export * from "./DescribeTargetHealth.ts";
-export * from "./GetTrustStoreCaCertificatesBundle.ts";
-export * from "./GetTrustStoreRevocationContent.ts";
 export { Listener, ListenerProvider } from "./Listener.ts";
-export * from "./ModifyCapacityReservation.ts";
-export * from "./RegisterTargets.ts";
 export { ListenerCertificate, ListenerCertificateProvider } from "./ListenerCertificate.ts";
 export { ListenerRule, ListenerRuleProvider } from "./ListenerRule.ts";
 export { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
 export { TargetGroup, TargetGroupProvider } from "./TargetGroup.ts";
 export { TargetGroupAttachment, TargetGroupAttachmentProvider } from "./TargetGroupAttachment.ts";
 export { TrustStore, TrustStoreProvider } from "./TrustStore.ts";
+export * from "./generated.ts";

@@ -1,0 +1,208 @@
+{
+  "tag": "AWS.ComprehendMedical",
+  "module": "comprehendmedical",
+  "resources": {},
+  "builder": "makeComprehendMedicalHttpBinding",
+  "builders": {
+    "makeComprehendMedicalHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "DescribeEntitiesDetectionV2Job": {
+      "operation": "describeEntitiesDetectionV2Job",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:DescribeEntitiesDetectionV2Job"]
+    },
+    "DescribeICD10CMInferenceJob": {
+      "operation": "describeICD10CMInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:DescribeICD10CMInferenceJob"]
+    },
+    "DescribePHIDetectionJob": {
+      "operation": "describePHIDetectionJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:DescribePHIDetectionJob"]
+    },
+    "DescribeRxNormInferenceJob": {
+      "operation": "describeRxNormInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:DescribeRxNormInferenceJob"]
+    },
+    "DescribeSNOMEDCTInferenceJob": {
+      "operation": "describeSNOMEDCTInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:DescribeSNOMEDCTInferenceJob"]
+    },
+    "DetectEntitiesV2": {
+      "operation": "detectEntitiesV2",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:DetectEntitiesV2"]
+    },
+    "DetectPHI": {
+      "operation": "detectPHI",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:DetectPHI"]
+    },
+    "InferICD10CM": {
+      "operation": "inferICD10CM",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:InferICD10CM"]
+    },
+    "InferRxNorm": {
+      "operation": "inferRxNorm",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:InferRxNorm"]
+    },
+    "InferSNOMEDCT": {
+      "operation": "inferSNOMEDCT",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:InferSNOMEDCT"]
+    },
+    "ListEntitiesDetectionV2Jobs": {
+      "operation": "listEntitiesDetectionV2Jobs",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:ListEntitiesDetectionV2Jobs"]
+    },
+    "ListICD10CMInferenceJobs": {
+      "operation": "listICD10CMInferenceJobs",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:ListICD10CMInferenceJobs"]
+    },
+    "ListPHIDetectionJobs": {
+      "operation": "listPHIDetectionJobs",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:ListPHIDetectionJobs"]
+    },
+    "ListRxNormInferenceJobs": {
+      "operation": "listRxNormInferenceJobs",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:ListRxNormInferenceJobs"]
+    },
+    "ListSNOMEDCTInferenceJobs": {
+      "operation": "listSNOMEDCTInferenceJobs",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:ListSNOMEDCTInferenceJobs"]
+    },
+    "StartEntitiesDetectionV2Job": {
+      "operation": "startEntitiesDetectionV2Job",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StartEntitiesDetectionV2Job"],
+      "with": {
+        "passRole": true
+      }
+    },
+    "StartICD10CMInferenceJob": {
+      "operation": "startICD10CMInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StartICD10CMInferenceJob"],
+      "with": {
+        "passRole": true
+      }
+    },
+    "StartPHIDetectionJob": {
+      "operation": "startPHIDetectionJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StartPHIDetectionJob"],
+      "with": {
+        "passRole": true
+      }
+    },
+    "StartRxNormInferenceJob": {
+      "operation": "startRxNormInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StartRxNormInferenceJob"],
+      "with": {
+        "passRole": true
+      }
+    },
+    "StartSNOMEDCTInferenceJob": {
+      "operation": "startSNOMEDCTInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StartSNOMEDCTInferenceJob"],
+      "with": {
+        "passRole": true
+      }
+    },
+    "StopEntitiesDetectionV2Job": {
+      "operation": "stopEntitiesDetectionV2Job",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StopEntitiesDetectionV2Job"]
+    },
+    "StopICD10CMInferenceJob": {
+      "operation": "stopICD10CMInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StopICD10CMInferenceJob"]
+    },
+    "StopPHIDetectionJob": {
+      "operation": "stopPHIDetectionJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StopPHIDetectionJob"]
+    },
+    "StopRxNormInferenceJob": {
+      "operation": "stopRxNormInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StopRxNormInferenceJob"]
+    },
+    "StopSNOMEDCTInferenceJob": {
+      "operation": "stopSNOMEDCTInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["comprehendmedical:StopSNOMEDCTInferenceJob"]
+    }
+  }
+}

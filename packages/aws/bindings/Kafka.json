@@ -1,0 +1,125 @@
+{
+  "tag": "AWS.Kafka",
+  "module": "kafka",
+  "resources": {
+    "ServerlessCluster": {
+      "file": "ServerlessCluster.ts"
+    }
+  },
+  "builder": "makeKafkaClusterHttpBinding",
+  "builders": {
+    "makeKafkaClusterHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreateTopic": {
+      "operation": "createTopic",
+      "resource": "ServerlessCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterArn"],
+        "inline": true
+      },
+      "actions": ["kafka:CreateTopic", "kafka-cluster:Connect", "kafka-cluster:CreateTopic"],
+      "with": {
+        "topicScoped": true
+      },
+      "note": "The control-plane action authorizes against the topic ARN; the kafka-cluster analogs cover the underlying Kafka admin operation."
+    },
+    "DeleteTopic": {
+      "operation": "deleteTopic",
+      "resource": "ServerlessCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterArn"],
+        "inline": true
+      },
+      "actions": ["kafka:DeleteTopic", "kafka-cluster:Connect", "kafka-cluster:DeleteTopic"],
+      "with": {
+        "topicScoped": true
+      }
+    },
+    "DescribeTopic": {
+      "operation": "describeTopic",
+      "resource": "ServerlessCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterArn"],
+        "inline": true
+      },
+      "actions": [
+        "kafka:DescribeTopic",
+        "kafka-cluster:Connect",
+        "kafka-cluster:DescribeTopic",
+        "kafka-cluster:DescribeTopicDynamicConfiguration"
+      ],
+      "with": {
+        "topicScoped": true
+      }
+    },
+    "DescribeTopicPartitions": {
+      "operation": "describeTopicPartitions",
+      "resource": "ServerlessCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterArn"],
+        "inline": true
+      },
+      "actions": [
+        "kafka:DescribeTopicPartitions",
+        "kafka-cluster:Connect",
+        "kafka-cluster:DescribeTopic"
+      ],
+      "with": {
+        "topicScoped": true
+      }
+    },
+    "GetBootstrapBrokers": {
+      "operation": "getBootstrapBrokers",
+      "resource": "ServerlessCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["kafka:GetBootstrapBrokers"]
+    },
+    "ListTopics": {
+      "operation": "listTopics",
+      "resource": "ServerlessCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["ClusterArn"],
+        "inline": true
+      },
+      "actions": ["kafka:ListTopics", "kafka-cluster:Connect", "kafka-cluster:DescribeTopic"],
+      "with": {
+        "topicScoped": true
+      }
+    },
+    "UpdateTopic": {
+      "operation": "updateTopic",
+      "resource": "ServerlessCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterArn"],
+        "inline": true
+      },
+      "actions": [
+        "kafka:UpdateTopic",
+        "kafka-cluster:Connect",
+        "kafka-cluster:AlterTopic",
+        "kafka-cluster:AlterTopicDynamicConfiguration"
+      ],
+      "with": {
+        "topicScoped": true
+      }
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "tag": "AWS.BCMDataExports",
+  "module": "bcm-data-exports",
+  "alias": "bcm",
+  "resources": {
+    "Export": {
+      "file": "Export.ts"
+    }
+  },
+  "builder": "makeExportHttpBinding",
+  "builders": {
+    "makeDataExportsAccountHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    },
+    "makeExportHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetExecution": {
+      "operation": "getExecution",
+      "resource": "Export",
+      "param": "dataExport",
+      "request": {
+        "mode": "required",
+        "interface": "GetExecutionRequest",
+        "omit": ["ExportArn"]
+      },
+      "actions": ["bcm-data-exports:GetExecution"]
+    },
+    "GetExport": {
+      "operation": "getExport",
+      "resource": "Export",
+      "param": "dataExport",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["bcm-data-exports:GetExport"]
+    },
+    "GetTable": {
+      "operation": "getTable",
+      "request": {
+        "mode": "required",
+        "interface": "GetTableRequest",
+        "omit": []
+      },
+      "builder": "makeDataExportsAccountHttpBinding",
+      "actions": ["bcm-data-exports:GetTable"]
+    },
+    "ListExecutions": {
+      "operation": "listExecutions",
+      "resource": "Export",
+      "param": "dataExport",
+      "request": {
+        "mode": "optional",
+        "interface": "ListExecutionsRequest",
+        "omit": ["ExportArn"]
+      },
+      "actions": ["bcm-data-exports:ListExecutions"]
+    },
+    "ListExports": {
+      "operation": "listExports",
+      "request": {
+        "mode": "optional",
+        "interface": "ListExportsRequest",
+        "omit": []
+      },
+      "builder": "makeDataExportsAccountHttpBinding",
+      "actions": ["bcm-data-exports:ListExports"]
+    },
+    "ListTables": {
+      "operation": "listTables",
+      "request": {
+        "mode": "optional",
+        "interface": "ListTablesRequest",
+        "omit": []
+      },
+      "builder": "makeDataExportsAccountHttpBinding",
+      "actions": ["bcm-data-exports:ListTables"]
+    }
+  }
+}

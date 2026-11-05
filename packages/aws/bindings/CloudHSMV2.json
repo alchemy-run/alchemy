@@ -1,0 +1,76 @@
+{
+  "tag": "AWS.CloudHSMV2",
+  "module": "cloudhsm-v2",
+  "alias": "cloudhsm",
+  "resources": {},
+  "builder": "makeCloudHsmHttpBinding",
+  "builders": {
+    "makeCloudHsmHttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "CopyBackupToRegion": {
+      "operation": "copyBackupToRegion",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["cloudhsm:CopyBackupToRegion", "cloudhsm:TagResource"],
+      "note": "TagResource lets the copy carry the source backup's user tags into the destination region."
+    },
+    "DeleteBackup": {
+      "operation": "deleteBackup",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["cloudhsm:DeleteBackup"]
+    },
+    "DeleteResourcePolicy": {
+      "operation": "deleteResourcePolicy",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["cloudhsm:DeleteResourcePolicy"]
+    },
+    "DescribeBackups": {
+      "operation": "describeBackups",
+      "actions": ["cloudhsm:DescribeBackups"]
+    },
+    "DescribeClusters": {
+      "operation": "describeClusters",
+      "actions": ["cloudhsm:DescribeClusters"]
+    },
+    "GetResourcePolicy": {
+      "operation": "getResourcePolicy",
+      "actions": ["cloudhsm:GetResourcePolicy"]
+    },
+    "InitializeCluster": {
+      "operation": "initializeCluster",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["cloudhsm:InitializeCluster"]
+    },
+    "ModifyBackupAttributes": {
+      "operation": "modifyBackupAttributes",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["cloudhsm:ModifyBackupAttributes"]
+    },
+    "PutResourcePolicy": {
+      "operation": "putResourcePolicy",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["cloudhsm:PutResourcePolicy"]
+    },
+    "RestoreBackup": {
+      "operation": "restoreBackup",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["cloudhsm:RestoreBackup"]
+    }
+  }
+}

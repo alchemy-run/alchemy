@@ -1,0 +1,202 @@
+{
+  "tag": "AWS.SSMContacts",
+  "module": "ssm-contacts",
+  "alias": "ssm",
+  "resources": {
+    "Contact": {
+      "file": "Contact.ts"
+    },
+    "ContactChannel": {
+      "file": "ContactChannel.ts"
+    },
+    "Rotation": {
+      "file": "Rotation.ts"
+    }
+  },
+  "builder": "makeAccountHttpBinding",
+  "builders": {
+    "makeAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeContactChannelHttpBinding": {
+      "grants": "resource"
+    },
+    "makeContactHttpBinding": {
+      "grants": "resource"
+    },
+    "makeRotationHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AcceptPage": {
+      "operation": "acceptPage",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-contacts:AcceptPage"]
+    },
+    "ActivateContactChannel": {
+      "operation": "activateContactChannel",
+      "resource": "ContactChannel",
+      "param": "channel",
+      "request": {
+        "mode": "required",
+        "omit": ["ContactChannelId"],
+        "inline": true
+      },
+      "builder": "makeContactChannelHttpBinding",
+      "actions": ["ssm-contacts:ActivateContactChannel"]
+    },
+    "CreateRotationOverride": {
+      "operation": "createRotationOverride",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding",
+      "actions": ["ssm-contacts:CreateRotationOverride"]
+    },
+    "DeactivateContactChannel": {
+      "operation": "deactivateContactChannel",
+      "resource": "ContactChannel",
+      "param": "channel",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeContactChannelHttpBinding",
+      "actions": ["ssm-contacts:DeactivateContactChannel"]
+    },
+    "DeleteRotationOverride": {
+      "operation": "deleteRotationOverride",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding",
+      "actions": ["ssm-contacts:DeleteRotationOverride"]
+    },
+    "DescribeEngagement": {
+      "operation": "describeEngagement",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-contacts:DescribeEngagement"]
+    },
+    "DescribePage": {
+      "operation": "describePage",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-contacts:DescribePage"]
+    },
+    "GetRotationOverride": {
+      "operation": "getRotationOverride",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding",
+      "actions": ["ssm-contacts:GetRotationOverride"]
+    },
+    "ListEngagements": {
+      "operation": "listEngagements",
+      "actions": ["ssm-contacts:ListEngagements"]
+    },
+    "ListPageReceipts": {
+      "operation": "listPageReceipts",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-contacts:ListPageReceipts"]
+    },
+    "ListPageResolutions": {
+      "operation": "listPageResolutions",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-contacts:ListPageResolutions"]
+    },
+    "ListPagesByContact": {
+      "operation": "listPagesByContact",
+      "resource": "Contact",
+      "request": {
+        "mode": "optional",
+        "omit": ["ContactId"],
+        "inline": true
+      },
+      "builder": "makeContactHttpBinding",
+      "actions": ["ssm-contacts:ListPagesByContact"]
+    },
+    "ListPagesByEngagement": {
+      "operation": "listPagesByEngagement",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-contacts:ListPagesByEngagement"]
+    },
+    "ListPreviewRotationShifts": {
+      "operation": "listPreviewRotationShifts",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-contacts:ListPreviewRotationShifts"]
+    },
+    "ListRotationOverrides": {
+      "operation": "listRotationOverrides",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding",
+      "actions": ["ssm-contacts:ListRotationOverrides"]
+    },
+    "ListRotationShifts": {
+      "operation": "listRotationShifts",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding",
+      "actions": ["ssm-contacts:ListRotationShifts"]
+    },
+    "SendActivationCode": {
+      "operation": "sendActivationCode",
+      "resource": "ContactChannel",
+      "param": "channel",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeContactChannelHttpBinding",
+      "actions": ["ssm-contacts:SendActivationCode"]
+    },
+    "StartEngagement": {
+      "operation": "startEngagement",
+      "resource": "Contact",
+      "request": {
+        "mode": "required",
+        "omit": ["ContactId"],
+        "inline": true
+      },
+      "builder": "makeContactHttpBinding",
+      "actions": ["ssm-contacts:StartEngagement"]
+    },
+    "StopEngagement": {
+      "operation": "stopEngagement",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ssm-contacts:StopEngagement"]
+    }
+  }
+}

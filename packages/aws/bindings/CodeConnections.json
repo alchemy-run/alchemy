@@ -1,0 +1,130 @@
+{
+  "tag": "AWS.CodeConnections",
+  "module": "codeconnections",
+  "resources": {
+    "Connection": {
+      "file": "Connection.ts"
+    },
+    "RepositoryLink": {
+      "file": "RepositoryLink.ts"
+    },
+    "SyncConfiguration": {
+      "file": "SyncConfiguration.ts"
+    }
+  },
+  "builder": "makeRepositoryLinkScopedHttpBinding",
+  "builders": {
+    "makeCodeConnectionsAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeConnectionScopedHttpBinding": {
+      "grants": "resource"
+    },
+    "makeRepositoryLinkScopedHttpBinding": {
+      "grants": "resource"
+    },
+    "makeSyncConfigurationScopedHttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "GetConnection": {
+      "operation": "getConnection",
+      "resource": "Connection",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeConnectionScopedHttpBinding",
+      "actions": ["codeconnections:GetConnection"]
+    },
+    "GetRepositorySyncStatus": {
+      "operation": "getRepositorySyncStatus",
+      "resource": "RepositoryLink",
+      "request": {
+        "mode": "required",
+        "interface": "GetRepositorySyncStatusRequest",
+        "omit": ["RepositoryLinkId"]
+      },
+      "actions": ["codeconnections:GetRepositorySyncStatus"]
+    },
+    "GetResourceSyncStatus": {
+      "operation": "getResourceSyncStatus",
+      "resource": "SyncConfiguration",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeSyncConfigurationScopedHttpBinding",
+      "actions": ["codeconnections:GetResourceSyncStatus"]
+    },
+    "GetSyncBlockerSummary": {
+      "operation": "getSyncBlockerSummary",
+      "resource": "SyncConfiguration",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeSyncConfigurationScopedHttpBinding",
+      "actions": ["codeconnections:GetSyncBlockerSummary"]
+    },
+    "ListConnections": {
+      "operation": "listConnections",
+      "request": {
+        "mode": "optional",
+        "interface": "ListConnectionsRequest",
+        "omit": []
+      },
+      "builder": "makeCodeConnectionsAccountHttpBinding",
+      "actions": ["codeconnections:ListConnections"]
+    },
+    "ListHosts": {
+      "operation": "listHosts",
+      "request": {
+        "mode": "optional",
+        "interface": "ListHostsRequest",
+        "omit": []
+      },
+      "builder": "makeCodeConnectionsAccountHttpBinding",
+      "actions": ["codeconnections:ListHosts"]
+    },
+    "ListRepositoryLinks": {
+      "operation": "listRepositoryLinks",
+      "request": {
+        "mode": "optional",
+        "interface": "ListRepositoryLinksRequest",
+        "omit": []
+      },
+      "builder": "makeCodeConnectionsAccountHttpBinding",
+      "actions": ["codeconnections:ListRepositoryLinks"]
+    },
+    "ListRepositorySyncDefinitions": {
+      "operation": "listRepositorySyncDefinitions",
+      "resource": "RepositoryLink",
+      "request": {
+        "mode": "required",
+        "interface": "ListRepositorySyncDefinitionsRequest",
+        "omit": ["RepositoryLinkId"]
+      },
+      "actions": ["codeconnections:ListRepositorySyncDefinitions"]
+    },
+    "ListSyncConfigurations": {
+      "operation": "listSyncConfigurations",
+      "resource": "RepositoryLink",
+      "request": {
+        "mode": "required",
+        "interface": "ListSyncConfigurationsRequest",
+        "omit": ["RepositoryLinkId"]
+      },
+      "actions": ["codeconnections:ListSyncConfigurations"]
+    },
+    "UpdateSyncBlocker": {
+      "operation": "updateSyncBlocker",
+      "resource": "SyncConfiguration",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateSyncBlockerRequest",
+        "omit": ["ResourceName", "SyncType"]
+      },
+      "builder": "makeSyncConfigurationScopedHttpBinding",
+      "actions": ["codeconnections:UpdateSyncBlocker"]
+    }
+  }
+}

@@ -1,0 +1,278 @@
+{
+  "tag": "AWS.Macie2",
+  "module": "macie2",
+  "resources": {},
+  "builder": "makeMacie2HttpBinding",
+  "builders": {
+    "makeMacie2HttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "AcceptInvitation": {
+      "operation": "acceptInvitation",
+      "actions": ["macie2:AcceptInvitation"]
+    },
+    "BatchGetCustomDataIdentifiers": {
+      "operation": "batchGetCustomDataIdentifiers",
+      "actions": ["macie2:BatchGetCustomDataIdentifiers"]
+    },
+    "BatchUpdateAutomatedDiscoveryAccounts": {
+      "operation": "batchUpdateAutomatedDiscoveryAccounts",
+      "actions": ["macie2:BatchUpdateAutomatedDiscoveryAccounts"]
+    },
+    "CreateInvitations": {
+      "operation": "createInvitations",
+      "actions": ["macie2:CreateInvitations"]
+    },
+    "CreateMember": {
+      "operation": "createMember",
+      "actions": ["macie2:CreateMember"]
+    },
+    "CreateSampleFindings": {
+      "operation": "createSampleFindings",
+      "actions": ["macie2:CreateSampleFindings"]
+    },
+    "DeclineInvitations": {
+      "operation": "declineInvitations",
+      "actions": ["macie2:DeclineInvitations"]
+    },
+    "DeleteInvitations": {
+      "operation": "deleteInvitations",
+      "actions": ["macie2:DeleteInvitations"]
+    },
+    "DeleteMember": {
+      "operation": "deleteMember",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:DeleteMember"]
+    },
+    "DescribeBuckets": {
+      "operation": "describeBuckets",
+      "actions": ["macie2:DescribeBuckets"]
+    },
+    "DescribeOrganizationConfiguration": {
+      "operation": "describeOrganizationConfiguration",
+      "actions": ["macie2:DescribeOrganizationConfiguration"]
+    },
+    "DisableOrganizationAdminAccount": {
+      "operation": "disableOrganizationAdminAccount",
+      "actions": ["macie2:DisableOrganizationAdminAccount"]
+    },
+    "DisassociateFromAdministratorAccount": {
+      "operation": "disassociateFromAdministratorAccount",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:DisassociateFromAdministratorAccount"]
+    },
+    "DisassociateMember": {
+      "operation": "disassociateMember",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:DisassociateMember"]
+    },
+    "EnableOrganizationAdminAccount": {
+      "operation": "enableOrganizationAdminAccount",
+      "actions": ["macie2:EnableOrganizationAdminAccount"]
+    },
+    "GetAdministratorAccount": {
+      "operation": "getAdministratorAccount",
+      "actions": ["macie2:GetAdministratorAccount"]
+    },
+    "GetAutomatedDiscoveryConfiguration": {
+      "operation": "getAutomatedDiscoveryConfiguration",
+      "actions": ["macie2:GetAutomatedDiscoveryConfiguration"]
+    },
+    "GetBucketStatistics": {
+      "operation": "getBucketStatistics",
+      "actions": ["macie2:GetBucketStatistics"]
+    },
+    "GetClassificationExportConfiguration": {
+      "operation": "getClassificationExportConfiguration",
+      "actions": ["macie2:GetClassificationExportConfiguration"]
+    },
+    "GetClassificationScope": {
+      "operation": "getClassificationScope",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:GetClassificationScope"]
+    },
+    "GetFindingStatistics": {
+      "operation": "getFindingStatistics",
+      "actions": ["macie2:GetFindingStatistics"]
+    },
+    "GetFindings": {
+      "operation": "getFindings",
+      "actions": ["macie2:GetFindings"]
+    },
+    "GetFindingsPublicationConfiguration": {
+      "operation": "getFindingsPublicationConfiguration",
+      "actions": ["macie2:GetFindingsPublicationConfiguration"]
+    },
+    "GetInvitationsCount": {
+      "operation": "getInvitationsCount",
+      "actions": ["macie2:GetInvitationsCount"]
+    },
+    "GetMember": {
+      "operation": "getMember",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:GetMember"]
+    },
+    "GetResourceProfile": {
+      "operation": "getResourceProfile",
+      "actions": ["macie2:GetResourceProfile"]
+    },
+    "GetRevealConfiguration": {
+      "operation": "getRevealConfiguration",
+      "actions": ["macie2:GetRevealConfiguration"]
+    },
+    "GetSensitiveDataOccurrences": {
+      "operation": "getSensitiveDataOccurrences",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:GetSensitiveDataOccurrences"]
+    },
+    "GetSensitiveDataOccurrencesAvailability": {
+      "operation": "getSensitiveDataOccurrencesAvailability",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:GetSensitiveDataOccurrencesAvailability"]
+    },
+    "GetSensitivityInspectionTemplate": {
+      "operation": "getSensitivityInspectionTemplate",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:GetSensitivityInspectionTemplate"]
+    },
+    "GetUsageStatistics": {
+      "operation": "getUsageStatistics",
+      "actions": ["macie2:GetUsageStatistics"]
+    },
+    "GetUsageTotals": {
+      "operation": "getUsageTotals",
+      "actions": ["macie2:GetUsageTotals"]
+    },
+    "ListAllowLists": {
+      "operation": "listAllowLists",
+      "actions": ["macie2:ListAllowLists"]
+    },
+    "ListAutomatedDiscoveryAccounts": {
+      "operation": "listAutomatedDiscoveryAccounts",
+      "actions": ["macie2:ListAutomatedDiscoveryAccounts"]
+    },
+    "ListClassificationJobs": {
+      "operation": "listClassificationJobs",
+      "actions": ["macie2:ListClassificationJobs"]
+    },
+    "ListClassificationScopes": {
+      "operation": "listClassificationScopes",
+      "actions": ["macie2:ListClassificationScopes"]
+    },
+    "ListCustomDataIdentifiers": {
+      "operation": "listCustomDataIdentifiers",
+      "actions": ["macie2:ListCustomDataIdentifiers"]
+    },
+    "ListFindings": {
+      "operation": "listFindings",
+      "actions": ["macie2:ListFindings"]
+    },
+    "ListFindingsFilters": {
+      "operation": "listFindingsFilters",
+      "actions": ["macie2:ListFindingsFilters"]
+    },
+    "ListInvitations": {
+      "operation": "listInvitations",
+      "actions": ["macie2:ListInvitations"]
+    },
+    "ListManagedDataIdentifiers": {
+      "operation": "listManagedDataIdentifiers",
+      "actions": ["macie2:ListManagedDataIdentifiers"]
+    },
+    "ListMembers": {
+      "operation": "listMembers",
+      "actions": ["macie2:ListMembers"]
+    },
+    "ListOrganizationAdminAccounts": {
+      "operation": "listOrganizationAdminAccounts",
+      "actions": ["macie2:ListOrganizationAdminAccounts"]
+    },
+    "ListResourceProfileArtifacts": {
+      "operation": "listResourceProfileArtifacts",
+      "actions": ["macie2:ListResourceProfileArtifacts"]
+    },
+    "ListResourceProfileDetections": {
+      "operation": "listResourceProfileDetections",
+      "actions": ["macie2:ListResourceProfileDetections"]
+    },
+    "ListSensitivityInspectionTemplates": {
+      "operation": "listSensitivityInspectionTemplates",
+      "actions": ["macie2:ListSensitivityInspectionTemplates"]
+    },
+    "PutClassificationExportConfiguration": {
+      "operation": "putClassificationExportConfiguration",
+      "actions": ["macie2:PutClassificationExportConfiguration"]
+    },
+    "PutFindingsPublicationConfiguration": {
+      "operation": "putFindingsPublicationConfiguration",
+      "actions": ["macie2:PutFindingsPublicationConfiguration"]
+    },
+    "SearchResources": {
+      "operation": "searchResources",
+      "actions": ["macie2:SearchResources"]
+    },
+    "TestCustomDataIdentifier": {
+      "operation": "testCustomDataIdentifier",
+      "actions": ["macie2:TestCustomDataIdentifier"]
+    },
+    "UpdateAutomatedDiscoveryConfiguration": {
+      "operation": "updateAutomatedDiscoveryConfiguration",
+      "actions": ["macie2:UpdateAutomatedDiscoveryConfiguration"]
+    },
+    "UpdateClassificationScope": {
+      "operation": "updateClassificationScope",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:UpdateClassificationScope"]
+    },
+    "UpdateMemberSession": {
+      "operation": "updateMemberSession",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:UpdateMemberSession"]
+    },
+    "UpdateOrganizationConfiguration": {
+      "operation": "updateOrganizationConfiguration",
+      "actions": ["macie2:UpdateOrganizationConfiguration"]
+    },
+    "UpdateResourceProfile": {
+      "operation": "updateResourceProfile",
+      "actions": ["macie2:UpdateResourceProfile"]
+    },
+    "UpdateResourceProfileDetections": {
+      "operation": "updateResourceProfileDetections",
+      "actions": ["macie2:UpdateResourceProfileDetections"]
+    },
+    "UpdateRevealConfiguration": {
+      "operation": "updateRevealConfiguration",
+      "actions": ["macie2:UpdateRevealConfiguration"]
+    },
+    "UpdateSensitivityInspectionTemplate": {
+      "operation": "updateSensitivityInspectionTemplate",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["macie2:UpdateSensitivityInspectionTemplate"]
+    }
+  }
+}

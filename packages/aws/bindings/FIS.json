@@ -1,0 +1,130 @@
+{
+  "tag": "AWS.FIS",
+  "module": "fis",
+  "resources": {
+    "ExperimentTemplate": {
+      "file": "ExperimentTemplate.ts"
+    }
+  },
+  "builder": "makeFisAccountHttpBinding",
+  "builders": {
+    "makeFisAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeFisTemplateHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetAction": {
+      "operation": "getAction",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fis:GetAction"]
+    },
+    "GetExperiment": {
+      "operation": "getExperiment",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fis:GetExperiment"]
+    },
+    "GetExperimentTargetAccountConfiguration": {
+      "operation": "getExperimentTargetAccountConfiguration",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fis:GetExperimentTargetAccountConfiguration"]
+    },
+    "GetExperimentTemplate": {
+      "operation": "getExperimentTemplate",
+      "resource": "ExperimentTemplate",
+      "param": "template",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeFisTemplateHttpBinding",
+      "actions": ["fis:GetExperimentTemplate"],
+      "with": {
+        "requestKey": "id"
+      }
+    },
+    "GetSafetyLever": {
+      "operation": "getSafetyLever",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fis:GetSafetyLever"]
+    },
+    "GetTargetResourceType": {
+      "operation": "getTargetResourceType",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fis:GetTargetResourceType"]
+    },
+    "ListActions": {
+      "operation": "listActions",
+      "actions": ["fis:ListActions"]
+    },
+    "ListExperimentResolvedTargets": {
+      "operation": "listExperimentResolvedTargets",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fis:ListExperimentResolvedTargets"]
+    },
+    "ListExperimentTargetAccountConfigurations": {
+      "operation": "listExperimentTargetAccountConfigurations",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fis:ListExperimentTargetAccountConfigurations"]
+    },
+    "ListExperimentTemplates": {
+      "operation": "listExperimentTemplates",
+      "actions": ["fis:ListExperimentTemplates"]
+    },
+    "ListExperiments": {
+      "operation": "listExperiments",
+      "actions": ["fis:ListExperiments"]
+    },
+    "ListTargetResourceTypes": {
+      "operation": "listTargetResourceTypes",
+      "actions": ["fis:ListTargetResourceTypes"]
+    },
+    "StartExperiment": {
+      "operation": "startExperiment",
+      "resource": "ExperimentTemplate",
+      "param": "template",
+      "request": {
+        "mode": "optional",
+        "omit": ["experimentTemplateId", "clientToken"],
+        "inline": true
+      },
+      "builder": "makeFisTemplateHttpBinding",
+      "actions": ["fis:StartExperiment", "fis:TagResource"],
+      "with": {
+        "requestKey": "experimentTemplateId",
+        "grantExperimentWildcard": true,
+        "grantServiceLinkedRole": true
+      },
+      "note": "Starting also tags the created experiment (internal or caller-supplied tags), which FIS authorizes as fis:TagResource on the experiment ARN. The first StartExperiment in an account creates AWSServiceRoleForFIS."
+    },
+    "StopExperiment": {
+      "operation": "stopExperiment",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fis:StopExperiment"]
+    },
+    "UpdateSafetyLeverState": {
+      "operation": "updateSafetyLeverState",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["fis:UpdateSafetyLeverState"]
+    }
+  }
+}

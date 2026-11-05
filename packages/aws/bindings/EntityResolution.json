@@ -1,0 +1,119 @@
+{
+  "tag": "AWS.EntityResolution",
+  "module": "entityresolution",
+  "resources": {
+    "IdMappingWorkflow": {
+      "file": "IdMappingWorkflow.ts"
+    },
+    "MatchingWorkflow": {
+      "file": "MatchingWorkflow.ts"
+    }
+  },
+  "builder": "makeWorkflowHttpBinding",
+  "builders": {
+    "makeWorkflowHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchDeleteUniqueId": {
+      "operation": "batchDeleteUniqueId",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      },
+      "actions": ["entityresolution:BatchDeleteUniqueId"]
+    },
+    "GenerateMatchId": {
+      "operation": "generateMatchId",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      },
+      "actions": ["entityresolution:GenerateMatchId"]
+    },
+    "GetIdMappingJob": {
+      "operation": "getIdMappingJob",
+      "resource": "IdMappingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      },
+      "actions": ["entityresolution:GetIdMappingJob"]
+    },
+    "GetMatchId": {
+      "operation": "getMatchId",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      },
+      "actions": ["entityresolution:GetMatchId"]
+    },
+    "GetMatchingJob": {
+      "operation": "getMatchingJob",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      },
+      "actions": ["entityresolution:GetMatchingJob"]
+    },
+    "ListIdMappingJobs": {
+      "operation": "listIdMappingJobs",
+      "resource": "IdMappingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      },
+      "actions": ["entityresolution:ListIdMappingJobs"]
+    },
+    "ListMatchingJobs": {
+      "operation": "listMatchingJobs",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      },
+      "actions": ["entityresolution:ListMatchingJobs"]
+    },
+    "StartIdMappingJob": {
+      "operation": "startIdMappingJob",
+      "resource": "IdMappingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      },
+      "actions": ["entityresolution:StartIdMappingJob"]
+    },
+    "StartMatchingJob": {
+      "operation": "startMatchingJob",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      },
+      "actions": ["entityresolution:StartMatchingJob"]
+    }
+  }
+}

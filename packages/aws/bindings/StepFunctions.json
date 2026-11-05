@@ -1,0 +1,152 @@
+{
+  "tag": "AWS.StepFunctions",
+  "module": "sfn",
+  "resources": {
+    "Activity": {
+      "file": "Activity.ts"
+    },
+    "StateMachine": {
+      "file": "StateMachine.ts"
+    }
+  },
+  "builder": "makeExecutionScopedHttpBinding",
+  "builders": {
+    "makeActivityArnHttpBinding": {},
+    "makeExecutionScopedHttpBinding": {},
+    "makeSfnServiceHttpBinding": {
+      "grants": "*"
+    },
+    "makeStateMachineArnHttpBinding": {}
+  },
+  "bindings": {
+    "DescribeExecution": {
+      "operation": "describeExecution",
+      "resource": "StateMachine",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeExecutionRequest",
+        "omit": []
+      },
+      "actions": ["states:DescribeExecution"]
+    },
+    "DescribeMapRun": {
+      "operation": "describeMapRun",
+      "resource": "StateMachine",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeMapRunRequest",
+        "omit": []
+      },
+      "actions": ["states:DescribeMapRun"],
+      "with": {
+        "scope": "mapRun"
+      }
+    },
+    "GetActivityTask": {
+      "operation": "getActivityTask",
+      "resource": "Activity",
+      "request": {
+        "mode": "optional",
+        "interface": "GetActivityTaskRequest",
+        "omit": ["activityArn"]
+      },
+      "builder": "makeActivityArnHttpBinding",
+      "actions": ["states:GetActivityTask"]
+    },
+    "GetExecutionHistory": {
+      "operation": "getExecutionHistory",
+      "resource": "StateMachine",
+      "request": {
+        "mode": "required",
+        "interface": "GetExecutionHistoryRequest",
+        "omit": []
+      },
+      "actions": ["states:GetExecutionHistory"]
+    },
+    "ListExecutions": {
+      "operation": "listExecutions",
+      "resource": "StateMachine",
+      "request": {
+        "mode": "optional",
+        "interface": "ListExecutionsRequest",
+        "omit": ["stateMachineArn"]
+      },
+      "builder": "makeStateMachineArnHttpBinding",
+      "actions": ["states:ListExecutions"]
+    },
+    "ListMapRuns": {
+      "operation": "listMapRuns",
+      "resource": "StateMachine",
+      "request": {
+        "mode": "required",
+        "interface": "ListMapRunsRequest",
+        "omit": []
+      },
+      "actions": ["states:ListMapRuns"]
+    },
+    "RedriveExecution": {
+      "operation": "redriveExecution",
+      "resource": "StateMachine",
+      "request": {
+        "mode": "required",
+        "interface": "RedriveExecutionRequest",
+        "omit": []
+      },
+      "actions": ["states:RedriveExecution"]
+    },
+    "StartExecution": {
+      "operation": "startExecution",
+      "resource": "StateMachine",
+      "request": {
+        "mode": "optional",
+        "interface": "StartExecutionRequest",
+        "omit": ["stateMachineArn"]
+      },
+      "builder": "makeStateMachineArnHttpBinding",
+      "actions": ["states:StartExecution"]
+    },
+    "StopExecution": {
+      "operation": "stopExecution",
+      "resource": "StateMachine",
+      "request": {
+        "mode": "required",
+        "interface": "StopExecutionRequest",
+        "omit": []
+      },
+      "actions": ["states:StopExecution"]
+    },
+    "TestState": {
+      "operation": "testState",
+      "request": {
+        "mode": "required",
+        "interface": "TestStateRequest",
+        "omit": []
+      },
+      "builder": "makeSfnServiceHttpBinding",
+      "actions": ["states:TestState"]
+    },
+    "UpdateMapRun": {
+      "operation": "updateMapRun",
+      "resource": "StateMachine",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateMapRunRequest",
+        "omit": []
+      },
+      "actions": ["states:UpdateMapRun"],
+      "with": {
+        "scope": "mapRun"
+      }
+    },
+    "ValidateStateMachineDefinition": {
+      "operation": "validateStateMachineDefinition",
+      "request": {
+        "mode": "required",
+        "interface": "ValidateStateMachineDefinitionRequest",
+        "omit": []
+      },
+      "builder": "makeSfnServiceHttpBinding",
+      "actions": ["states:ValidateStateMachineDefinition"]
+    }
+  }
+}

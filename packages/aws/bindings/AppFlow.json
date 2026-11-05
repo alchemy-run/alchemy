@@ -1,0 +1,137 @@
+{
+  "tag": "AWS.AppFlow",
+  "module": "appflow",
+  "resources": {
+    "ConnectorProfile": {
+      "file": "ConnectorProfile.ts"
+    },
+    "Flow": {
+      "file": "Flow.ts"
+    }
+  },
+  "builder": "makeAppFlowHttpBinding",
+  "builders": {
+    "makeAppFlowHttpBinding": {
+      "options": {
+        "action": "name",
+        "operation": "operation"
+      },
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CancelFlowExecutions": {
+      "operation": "cancelFlowExecutions",
+      "resource": "Flow",
+      "request": {
+        "mode": "optional",
+        "interface": "CancelFlowExecutionsRequest",
+        "omit": ["flowName"]
+      },
+      "with": {
+        "requestKey": "flowName"
+      },
+      "withTs": {
+        "identifier": "(flow: Flow) => flow.flowName",
+        "resources": "(flow: Flow) => [flow.flowArn]"
+      }
+    },
+    "DescribeConnectorEntity": {
+      "operation": "describeConnectorEntity",
+      "resource": "ConnectorProfile",
+      "param": "profile",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeConnectorEntityRequest",
+        "omit": ["connectorProfileName"]
+      },
+      "with": {
+        "requestKey": "connectorProfileName"
+      },
+      "withTs": {
+        "identifier": "(profile: ConnectorProfile) => profile.connectorProfileName",
+        "resources": "(profile: ConnectorProfile) => [profile.connectorProfileArn]"
+      }
+    },
+    "DescribeFlowExecutionRecords": {
+      "operation": "describeFlowExecutionRecords",
+      "resource": "Flow",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeFlowExecutionRecordsRequest",
+        "omit": ["flowName"]
+      },
+      "with": {
+        "requestKey": "flowName"
+      },
+      "withTs": {
+        "identifier": "(flow: Flow) => flow.flowName",
+        "resources": "(flow: Flow) => [flow.flowArn]"
+      }
+    },
+    "ListConnectorEntities": {
+      "operation": "listConnectorEntities",
+      "resource": "ConnectorProfile",
+      "param": "profile",
+      "request": {
+        "mode": "optional",
+        "interface": "ListConnectorEntitiesRequest",
+        "omit": ["connectorProfileName"]
+      },
+      "with": {
+        "requestKey": "connectorProfileName"
+      },
+      "withTs": {
+        "identifier": "(profile: ConnectorProfile) => profile.connectorProfileName",
+        "resources": "(profile: ConnectorProfile) => [profile.connectorProfileArn]"
+      }
+    },
+    "ResetConnectorMetadataCache": {
+      "operation": "resetConnectorMetadataCache",
+      "resource": "ConnectorProfile",
+      "param": "profile",
+      "request": {
+        "mode": "optional",
+        "interface": "ResetConnectorMetadataCacheRequest",
+        "omit": ["connectorProfileName"]
+      },
+      "with": {
+        "requestKey": "connectorProfileName"
+      },
+      "withTs": {
+        "identifier": "(profile: ConnectorProfile) => profile.connectorProfileName",
+        "resources": "(profile: ConnectorProfile) => [profile.connectorProfileArn]"
+      }
+    },
+    "StartFlow": {
+      "operation": "startFlow",
+      "resource": "Flow",
+      "request": {
+        "mode": "optional",
+        "interface": "StartFlowRequest",
+        "omit": ["flowName"]
+      },
+      "with": {
+        "requestKey": "flowName"
+      },
+      "withTs": {
+        "identifier": "(flow: Flow) => flow.flowName",
+        "resources": "(flow: Flow) => [flow.flowArn]"
+      }
+    },
+    "StopFlow": {
+      "operation": "stopFlow",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      },
+      "with": {
+        "requestKey": "flowName"
+      },
+      "withTs": {
+        "identifier": "(flow: Flow) => flow.flowName",
+        "resources": "(flow: Flow) => [flow.flowArn]"
+      }
+    }
+  }
+}

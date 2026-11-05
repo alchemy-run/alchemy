@@ -1,0 +1,115 @@
+{
+  "tag": "AWS.RAM",
+  "module": "ram",
+  "resources": {},
+  "builder": "makeRAMHttpBinding",
+  "builders": {
+    "makeRAMHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "AcceptResourceShareInvitation": {
+      "operation": "acceptResourceShareInvitation",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:AcceptResourceShareInvitation"]
+    },
+    "GetPermission": {
+      "operation": "getPermission",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:GetPermission"]
+    },
+    "GetResourcePolicies": {
+      "operation": "getResourcePolicies",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:GetResourcePolicies"]
+    },
+    "GetResourceShareAssociations": {
+      "operation": "getResourceShareAssociations",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:GetResourceShareAssociations"]
+    },
+    "GetResourceShareInvitations": {
+      "operation": "getResourceShareInvitations",
+      "actions": ["ram:GetResourceShareInvitations"]
+    },
+    "GetResourceShares": {
+      "operation": "getResourceShares",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:GetResourceShares"]
+    },
+    "ListPendingInvitationResources": {
+      "operation": "listPendingInvitationResources",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:ListPendingInvitationResources"]
+    },
+    "ListPermissionAssociations": {
+      "operation": "listPermissionAssociations",
+      "actions": ["ram:ListPermissionAssociations"]
+    },
+    "ListPermissionVersions": {
+      "operation": "listPermissionVersions",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:ListPermissionVersions"]
+    },
+    "ListPermissions": {
+      "operation": "listPermissions",
+      "actions": ["ram:ListPermissions"]
+    },
+    "ListPrincipals": {
+      "operation": "listPrincipals",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:ListPrincipals"]
+    },
+    "ListResourceSharePermissions": {
+      "operation": "listResourceSharePermissions",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:ListResourceSharePermissions"]
+    },
+    "ListResourceTypes": {
+      "operation": "listResourceTypes",
+      "actions": ["ram:ListResourceTypes"]
+    },
+    "ListResources": {
+      "operation": "listResources",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:ListResources"]
+    },
+    "ListSourceAssociations": {
+      "operation": "listSourceAssociations",
+      "actions": ["ram:ListSourceAssociations"]
+    },
+    "RejectResourceShareInvitation": {
+      "operation": "rejectResourceShareInvitation",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ram:RejectResourceShareInvitation"]
+    }
+  }
+}

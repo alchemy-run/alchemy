@@ -1,0 +1,174 @@
+{
+  "tag": "AWS.KMS",
+  "module": "kms",
+  "resources": {
+    "AliasName": {
+      "file": "Alias.ts"
+    },
+    "Key": {
+      "file": "Key.ts"
+    }
+  },
+  "builder": "makeKmsKeyHttpBinding",
+  "builders": {
+    "makeKmsAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeKmsKeyHttpBinding": {}
+  },
+  "bindings": {
+    "Decrypt": {
+      "operation": "decrypt",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "DecryptRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:Decrypt"]
+    },
+    "DeriveSharedSecret": {
+      "operation": "deriveSharedSecret",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "DeriveSharedSecretRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:DeriveSharedSecret"]
+    },
+    "DescribeKey": {
+      "operation": "describeKey",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeKeyRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:DescribeKey"]
+    },
+    "Encrypt": {
+      "operation": "encrypt",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "EncryptRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:Encrypt"]
+    },
+    "GenerateDataKey": {
+      "operation": "generateDataKey",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateDataKeyRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:GenerateDataKey"]
+    },
+    "GenerateDataKeyPair": {
+      "operation": "generateDataKeyPair",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateDataKeyPairRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:GenerateDataKeyPair"]
+    },
+    "GenerateDataKeyPairWithoutPlaintext": {
+      "operation": "generateDataKeyPairWithoutPlaintext",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateDataKeyPairWithoutPlaintextRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:GenerateDataKeyPairWithoutPlaintext"]
+    },
+    "GenerateDataKeyWithoutPlaintext": {
+      "operation": "generateDataKeyWithoutPlaintext",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateDataKeyWithoutPlaintextRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:GenerateDataKeyWithoutPlaintext"]
+    },
+    "GenerateMac": {
+      "operation": "generateMac",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateMacRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:GenerateMac"]
+    },
+    "GenerateRandom": {
+      "operation": "generateRandom",
+      "request": {
+        "mode": "optional",
+        "interface": "GenerateRandomRequest",
+        "omit": []
+      },
+      "builder": "makeKmsAccountHttpBinding",
+      "actions": ["kms:GenerateRandom"]
+    },
+    "GetPublicKey": {
+      "operation": "getPublicKey",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "optional",
+        "interface": "GetPublicKeyRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:GetPublicKey"]
+    },
+    "Sign": {
+      "operation": "sign",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "SignRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:Sign"]
+    },
+    "Verify": {
+      "operation": "verify",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "VerifyRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:Verify"]
+    },
+    "VerifyMac": {
+      "operation": "verifyMac",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "VerifyMacRequest",
+        "omit": ["KeyId"]
+      },
+      "actions": ["kms:VerifyMac"]
+    }
+  }
+}

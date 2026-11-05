@@ -1,0 +1,154 @@
+{
+  "tag": "AWS.Backup",
+  "module": "backup",
+  "resources": {
+    "BackupVault": {
+      "file": "BackupVault.ts"
+    }
+  },
+  "builder": "makeBackupAccountHttpBinding",
+  "builders": {
+    "makeBackupAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeBackupVaultHttpBinding": {}
+  },
+  "bindings": {
+    "DeleteRecoveryPoint": {
+      "operation": "deleteRecoveryPoint",
+      "resource": "BackupVault",
+      "param": "vault",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteRecoveryPointRequest",
+        "omit": ["BackupVaultName"]
+      },
+      "builder": "makeBackupVaultHttpBinding",
+      "actions": ["backup:DeleteRecoveryPoint"],
+      "with": {
+        "wildcardIam": true
+      },
+      "note": "Recovery-point actions authorize on the recovery point ARN (the underlying resource's snapshot ARN), not the vault ARN."
+    },
+    "DescribeBackupJob": {
+      "operation": "describeBackupJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["backup:DescribeBackupJob"]
+    },
+    "DescribeCopyJob": {
+      "operation": "describeCopyJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["backup:DescribeCopyJob"]
+    },
+    "DescribeProtectedResource": {
+      "operation": "describeProtectedResource",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["backup:DescribeProtectedResource"]
+    },
+    "DescribeRecoveryPoint": {
+      "operation": "describeRecoveryPoint",
+      "resource": "BackupVault",
+      "param": "vault",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeRecoveryPointRequest",
+        "omit": ["BackupVaultName"]
+      },
+      "builder": "makeBackupVaultHttpBinding",
+      "actions": ["backup:DescribeRecoveryPoint"],
+      "with": {
+        "wildcardIam": true
+      },
+      "note": "Recovery-point actions authorize on the recovery point ARN (the underlying resource's snapshot ARN), not the vault ARN."
+    },
+    "DescribeRestoreJob": {
+      "operation": "describeRestoreJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["backup:DescribeRestoreJob"]
+    },
+    "GetRecoveryPointRestoreMetadata": {
+      "operation": "getRecoveryPointRestoreMetadata",
+      "resource": "BackupVault",
+      "param": "vault",
+      "request": {
+        "mode": "required",
+        "interface": "GetRecoveryPointRestoreMetadataRequest",
+        "omit": ["BackupVaultName"]
+      },
+      "builder": "makeBackupVaultHttpBinding",
+      "actions": ["backup:GetRecoveryPointRestoreMetadata"],
+      "with": {
+        "wildcardIam": true
+      },
+      "note": "Recovery-point actions authorize on the recovery point ARN (the underlying resource's snapshot ARN), not the vault ARN."
+    },
+    "GetRestoreJobMetadata": {
+      "operation": "getRestoreJobMetadata",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["backup:GetRestoreJobMetadata"]
+    },
+    "GetSupportedResourceTypes": {
+      "operation": "getSupportedResourceTypes",
+      "actions": ["backup:GetSupportedResourceTypes"]
+    },
+    "ListBackupJobs": {
+      "operation": "listBackupJobs",
+      "actions": ["backup:ListBackupJobs"]
+    },
+    "ListCopyJobs": {
+      "operation": "listCopyJobs",
+      "actions": ["backup:ListCopyJobs"]
+    },
+    "ListProtectedResources": {
+      "operation": "listProtectedResources",
+      "actions": ["backup:ListProtectedResources"]
+    },
+    "ListRecoveryPointsByBackupVault": {
+      "operation": "listRecoveryPointsByBackupVault",
+      "resource": "BackupVault",
+      "param": "vault",
+      "request": {
+        "mode": "optional",
+        "interface": "ListRecoveryPointsByBackupVaultRequest",
+        "omit": ["BackupVaultName"]
+      },
+      "builder": "makeBackupVaultHttpBinding",
+      "actions": ["backup:ListRecoveryPointsByBackupVault"]
+    },
+    "ListRecoveryPointsByResource": {
+      "operation": "listRecoveryPointsByResource",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["backup:ListRecoveryPointsByResource"]
+    },
+    "ListRestoreJobs": {
+      "operation": "listRestoreJobs",
+      "actions": ["backup:ListRestoreJobs"]
+    },
+    "PutRestoreValidationResult": {
+      "operation": "putRestoreValidationResult",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["backup:PutRestoreValidationResult"]
+    },
+    "StopBackupJob": {
+      "operation": "stopBackupJob",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["backup:StopBackupJob"]
+    }
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "tag": "AWS.Route53",
+  "module": "route-53",
+  "resources": {
+    "HealthCheck": {
+      "file": "HealthCheck.ts"
+    },
+    "HostedZone": {
+      "file": "HostedZone.ts"
+    }
+  },
+  "builder": "makeRoute53ZoneHttpBinding",
+  "builders": {
+    "makeRoute53AccountHttpBinding": {},
+    "makeRoute53HealthCheckHttpBinding": {
+      "grants": "resource"
+    },
+    "makeRoute53ZoneHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ChangeResourceRecordSets": {
+      "operation": "changeResourceRecordSets",
+      "resource": "HostedZone",
+      "param": "zone",
+      "request": {
+        "mode": "required",
+        "interface": "ChangeResourceRecordSetsRequest",
+        "omit": ["HostedZoneId"]
+      },
+      "actions": ["route53:ChangeResourceRecordSets"]
+    },
+    "GetChange": {
+      "operation": "getChange",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeRoute53AccountHttpBinding",
+      "actions": ["route53:GetChange"],
+      "with": {
+        "resources": ["arn:aws:route53:::change/*"]
+      },
+      "note": "Change ids are minted at runtime by ChangeResourceRecordSets and unknowable at deploy time."
+    },
+    "GetHealthCheckLastFailureReason": {
+      "operation": "getHealthCheckLastFailureReason",
+      "resource": "HealthCheck",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRoute53HealthCheckHttpBinding",
+      "actions": ["route53:GetHealthCheckLastFailureReason"]
+    },
+    "GetHealthCheckStatus": {
+      "operation": "getHealthCheckStatus",
+      "resource": "HealthCheck",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRoute53HealthCheckHttpBinding",
+      "actions": ["route53:GetHealthCheckStatus"]
+    },
+    "GetHostedZone": {
+      "operation": "getHostedZone",
+      "resource": "HostedZone",
+      "param": "zone",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["route53:GetHostedZone"],
+      "with": {
+        "requestKey": "Id"
+      },
+      "note": "getHostedZone addresses the zone as `Id`, not `HostedZoneId`."
+    },
+    "ListHostedZones": {
+      "operation": "listHostedZones",
+      "builder": "makeRoute53AccountHttpBinding",
+      "actions": ["route53:ListHostedZones"]
+    },
+    "ListHostedZonesByName": {
+      "operation": "listHostedZonesByName",
+      "builder": "makeRoute53AccountHttpBinding",
+      "actions": ["route53:ListHostedZonesByName"]
+    },
+    "ListHostedZonesByVPC": {
+      "operation": "listHostedZonesByVPC",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeRoute53AccountHttpBinding",
+      "actions": ["route53:ListHostedZonesByVPC", "ec2:DescribeVpcs"],
+      "note": "Route 53 verifies the VPC on the caller's behalf via ec2:DescribeVpcs \u2014 without that grant every call fails with AccessDeniedException (\"Failed to verify the given VPC by calling ec2:DescribeVpcs\")."
+    },
+    "ListResourceRecordSets": {
+      "operation": "listResourceRecordSets",
+      "resource": "HostedZone",
+      "param": "zone",
+      "request": {
+        "mode": "optional",
+        "interface": "ListResourceRecordSetsRequest",
+        "omit": ["HostedZoneId"]
+      },
+      "actions": ["route53:ListResourceRecordSets"]
+    },
+    "TestDNSAnswer": {
+      "operation": "testDNSAnswer",
+      "resource": "HostedZone",
+      "param": "zone",
+      "request": {
+        "mode": "required",
+        "interface": "TestDNSAnswerRequest",
+        "omit": ["HostedZoneId"]
+      },
+      "actions": ["route53:TestDNSAnswer"],
+      "with": {
+        "wildcardIam": true
+      },
+      "note": "route53:TestDNSAnswer does not support resource-level permissions."
+    }
+  }
+}

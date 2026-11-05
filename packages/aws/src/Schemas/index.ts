@@ -10,5 +10,4 @@ export * from "./Registry.ts";
 export * from "./Schema.ts";
 export * from "./SchemaEventSource.ts";
 export * from "./SearchSchemas.ts";
-export * from "./StartDiscoverer.ts";
-export * from "./StopDiscoverer.ts";
+export * from "./generated.ts";

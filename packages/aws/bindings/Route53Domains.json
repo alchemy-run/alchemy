@@ -1,0 +1,127 @@
+{
+  "tag": "AWS.Route53Domains",
+  "module": "route-53-domains",
+  "resources": {},
+  "builder": "makeRoute53DomainsHttpBinding",
+  "builders": {
+    "makeRoute53DomainsHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "CheckDomainAvailability": {
+      "operation": "checkDomainAvailability",
+      "request": {
+        "mode": "required",
+        "interface": "CheckDomainAvailabilityRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:CheckDomainAvailability"]
+    },
+    "CheckDomainTransferability": {
+      "operation": "checkDomainTransferability",
+      "request": {
+        "mode": "required",
+        "interface": "CheckDomainTransferabilityRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:CheckDomainTransferability"]
+    },
+    "GetDomainDetail": {
+      "operation": "getDomainDetail",
+      "request": {
+        "mode": "required",
+        "interface": "GetDomainDetailRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:GetDomainDetail"]
+    },
+    "GetDomainSuggestions": {
+      "operation": "getDomainSuggestions",
+      "request": {
+        "mode": "required",
+        "interface": "GetDomainSuggestionsRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:GetDomainSuggestions"]
+    },
+    "GetOperationDetail": {
+      "operation": "getOperationDetail",
+      "request": {
+        "mode": "required",
+        "interface": "GetOperationDetailRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:GetOperationDetail"]
+    },
+    "ListDomains": {
+      "operation": "listDomains",
+      "request": {
+        "mode": "required",
+        "interface": "ListDomainsRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:ListDomains"]
+    },
+    "ListOperations": {
+      "operation": "listOperations",
+      "request": {
+        "mode": "required",
+        "interface": "ListOperationsRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:ListOperations"]
+    },
+    "ListPrices": {
+      "operation": "listPrices",
+      "request": {
+        "mode": "required",
+        "interface": "ListPricesRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:ListPrices"]
+    },
+    "RegisterDomain": {
+      "operation": "registerDomain",
+      "request": {
+        "mode": "required",
+        "interface": "RegisterDomainRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:RegisterDomain", "route53:CreateHostedZone"],
+      "note": "RegisterDomain pre-validates that the caller can create the hosted zone Route 53 auto-creates during registration \u2014 without route53:CreateHostedZone the API rejects the call with AccessDeniedException (\"not authorized to perform: route53:CreateHostedZone\") before even validating the TLD."
+    },
+    "RenewDomain": {
+      "operation": "renewDomain",
+      "request": {
+        "mode": "required",
+        "interface": "RenewDomainRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:RenewDomain"]
+    },
+    "RetrieveDomainAuthCode": {
+      "operation": "retrieveDomainAuthCode",
+      "request": {
+        "mode": "required",
+        "interface": "RetrieveDomainAuthCodeRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:RetrieveDomainAuthCode"]
+    },
+    "UpdateDomainNameservers": {
+      "operation": "updateDomainNameservers",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateDomainNameserversRequest",
+        "omit": []
+      },
+      "actions": ["route53domains:UpdateDomainNameservers"]
+    }
+  }
+}

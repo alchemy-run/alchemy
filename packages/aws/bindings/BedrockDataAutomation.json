@@ -1,0 +1,137 @@
+{
+  "tag": "AWS.BedrockDataAutomation",
+  "module": "bedrock-data-automation",
+  "alias": "bda",
+  "resources": {
+    "Blueprint": {
+      "file": "Blueprint.ts"
+    },
+    "DataAutomationLibrary": {
+      "file": "DataAutomationLibrary.ts"
+    },
+    "DataAutomationProject": {
+      "file": "DataAutomationProject.ts"
+    }
+  },
+  "builder": "makeBdaBlueprintHttpBinding",
+  "builders": {
+    "makeBdaAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeBdaBlueprintHttpBinding": {
+      "grants": "resource"
+    },
+    "makeBdaBlueprintOptimizationHttpBinding": {
+      "grants": "resource"
+    },
+    "makeBdaLibraryHttpBinding": {
+      "grants": "resource"
+    },
+    "makeBdaProjectHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CopyBlueprintStage": {
+      "operation": "copyBlueprintStage",
+      "resource": "Blueprint",
+      "request": {
+        "mode": "required",
+        "interface": "CopyBlueprintStageRequest",
+        "omit": ["blueprintArn"]
+      },
+      "actions": ["bedrock:CopyBlueprintStage"]
+    },
+    "CreateBlueprintVersion": {
+      "operation": "createBlueprintVersion",
+      "resource": "Blueprint",
+      "request": {
+        "mode": "required",
+        "interface": "CreateBlueprintVersionRequest",
+        "omit": ["blueprintArn"]
+      },
+      "actions": ["bedrock:CreateBlueprintVersion"]
+    },
+    "GetBlueprintOptimizationStatus": {
+      "operation": "getBlueprintOptimizationStatus",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeBdaAccountHttpBinding",
+      "actions": ["bedrock:GetBlueprintOptimizationStatus"]
+    },
+    "GetDataAutomationLibraryEntity": {
+      "operation": "getDataAutomationLibraryEntity",
+      "resource": "DataAutomationLibrary",
+      "param": "library",
+      "request": {
+        "mode": "required",
+        "interface": "GetDataAutomationLibraryEntityRequest",
+        "omit": ["libraryArn"]
+      },
+      "builder": "makeBdaLibraryHttpBinding",
+      "actions": ["bedrock:GetDataAutomationLibraryEntity"]
+    },
+    "GetDataAutomationStatus": {
+      "operation": "getDataAutomationStatus",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeBdaAccountHttpBinding",
+      "actions": ["bedrock:GetDataAutomationStatus"],
+      "module": "bedrock-data-automation-runtime",
+      "alias": "bdar"
+    },
+    "InvokeBlueprintOptimizationAsync": {
+      "operation": "invokeBlueprintOptimizationAsync",
+      "resource": "Blueprint",
+      "request": {
+        "mode": "required",
+        "interface": "InvokeBlueprintOptimizationAsyncRequest",
+        "omit": ["blueprint"]
+      },
+      "builder": "makeBdaBlueprintOptimizationHttpBinding",
+      "actions": ["bedrock:InvokeBlueprintOptimizationAsync"]
+    },
+    "InvokeDataAutomation": {
+      "operation": "invokeDataAutomation",
+      "resource": "DataAutomationProject",
+      "param": "project",
+      "request": {
+        "mode": "required",
+        "interface": "InvokeDataAutomationRequest",
+        "omit": ["dataAutomationConfiguration"]
+      },
+      "builder": "makeBdaProjectHttpBinding",
+      "actions": ["bedrock:InvokeDataAutomation"],
+      "module": "bedrock-data-automation-runtime",
+      "alias": "bdar"
+    },
+    "InvokeDataAutomationAsync": {
+      "operation": "invokeDataAutomationAsync",
+      "resource": "DataAutomationProject",
+      "param": "project",
+      "request": {
+        "mode": "required",
+        "interface": "InvokeDataAutomationAsyncRequest",
+        "omit": ["dataAutomationConfiguration"]
+      },
+      "builder": "makeBdaProjectHttpBinding",
+      "actions": ["bedrock:InvokeDataAutomationAsync"],
+      "module": "bedrock-data-automation-runtime",
+      "alias": "bdar"
+    },
+    "ListDataAutomationLibraryEntities": {
+      "operation": "listDataAutomationLibraryEntities",
+      "resource": "DataAutomationLibrary",
+      "param": "library",
+      "request": {
+        "mode": "required",
+        "interface": "ListDataAutomationLibraryEntitiesRequest",
+        "omit": ["libraryArn"]
+      },
+      "builder": "makeBdaLibraryHttpBinding",
+      "actions": ["bedrock:ListDataAutomationLibraryEntities"]
+    }
+  }
+}

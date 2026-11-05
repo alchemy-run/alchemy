@@ -1,0 +1,224 @@
+{
+  "tag": "AWS.MailManager",
+  "module": "mailmanager",
+  "alias": "mm",
+  "resources": {
+    "AddressList": {
+      "file": "AddressList.ts"
+    },
+    "Archive": {
+      "file": "Archive.ts"
+    }
+  },
+  "builder": "makeArchiveTaskHttpBinding",
+  "builders": {
+    "makeAddressListHttpBinding": {},
+    "makeAddressListJobHttpBinding": {},
+    "makeArchiveHttpBinding": {},
+    "makeArchiveTaskHttpBinding": {}
+  },
+  "bindings": {
+    "CreateAddressListImportJob": {
+      "operation": "createAddressListImportJob",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding",
+      "actions": ["ses:CreateAddressListImportJob"]
+    },
+    "DeregisterMemberFromAddressList": {
+      "operation": "deregisterMemberFromAddressList",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding",
+      "actions": ["ses:DeregisterMemberFromAddressList"]
+    },
+    "GetAddressListImportJob": {
+      "operation": "getAddressListImportJob",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAddressListJobHttpBinding",
+      "actions": ["ses:GetAddressListImportJob"]
+    },
+    "GetArchiveExport": {
+      "operation": "getArchiveExport",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:GetArchiveExport"]
+    },
+    "GetArchiveMessage": {
+      "operation": "getArchiveMessage",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:GetArchiveMessage"]
+    },
+    "GetArchiveMessageContent": {
+      "operation": "getArchiveMessageContent",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:GetArchiveMessageContent"]
+    },
+    "GetArchiveSearch": {
+      "operation": "getArchiveSearch",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:GetArchiveSearch"]
+    },
+    "GetArchiveSearchResults": {
+      "operation": "getArchiveSearchResults",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:GetArchiveSearchResults"]
+    },
+    "GetMemberOfAddressList": {
+      "operation": "getMemberOfAddressList",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding",
+      "actions": ["ses:GetMemberOfAddressList"]
+    },
+    "ListAddressListImportJobs": {
+      "operation": "listAddressListImportJobs",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding",
+      "actions": ["ses:ListAddressListImportJobs"]
+    },
+    "ListArchiveExports": {
+      "operation": "listArchiveExports",
+      "resource": "Archive",
+      "request": {
+        "mode": "required",
+        "omit": ["ArchiveId"],
+        "inline": true
+      },
+      "builder": "makeArchiveHttpBinding",
+      "actions": ["ses:ListArchiveExports"]
+    },
+    "ListArchiveSearches": {
+      "operation": "listArchiveSearches",
+      "resource": "Archive",
+      "request": {
+        "mode": "required",
+        "omit": ["ArchiveId"],
+        "inline": true
+      },
+      "builder": "makeArchiveHttpBinding",
+      "actions": ["ses:ListArchiveSearches"]
+    },
+    "ListMembersOfAddressList": {
+      "operation": "listMembersOfAddressList",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding",
+      "actions": ["ses:ListMembersOfAddressList"]
+    },
+    "RegisterMemberToAddressList": {
+      "operation": "registerMemberToAddressList",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding",
+      "actions": ["ses:RegisterMemberToAddressList"]
+    },
+    "StartAddressListImportJob": {
+      "operation": "startAddressListImportJob",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAddressListJobHttpBinding",
+      "actions": ["ses:StartAddressListImportJob"]
+    },
+    "StartArchiveExport": {
+      "operation": "startArchiveExport",
+      "resource": "Archive",
+      "request": {
+        "mode": "required",
+        "omit": ["ArchiveId"],
+        "inline": true
+      },
+      "builder": "makeArchiveHttpBinding",
+      "actions": ["ses:StartArchiveExport"]
+    },
+    "StartArchiveSearch": {
+      "operation": "startArchiveSearch",
+      "resource": "Archive",
+      "request": {
+        "mode": "required",
+        "omit": ["ArchiveId"],
+        "inline": true
+      },
+      "builder": "makeArchiveHttpBinding",
+      "actions": ["ses:StartArchiveSearch"]
+    },
+    "StopAddressListImportJob": {
+      "operation": "stopAddressListImportJob",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAddressListJobHttpBinding",
+      "actions": ["ses:StopAddressListImportJob"]
+    },
+    "StopArchiveExport": {
+      "operation": "stopArchiveExport",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:StopArchiveExport"]
+    },
+    "StopArchiveSearch": {
+      "operation": "stopArchiveSearch",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["ses:StopArchiveSearch"]
+    }
+  }
+}

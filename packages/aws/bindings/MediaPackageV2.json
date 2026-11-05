@@ -1,0 +1,101 @@
+{
+  "tag": "AWS.MediaPackageV2",
+  "module": "mediapackagev2",
+  "resources": {
+    "Channel": {
+      "file": "Channel.ts"
+    },
+    "ChannelGroup": {
+      "file": "ChannelGroup.ts"
+    },
+    "OriginEndpoint": {
+      "file": "OriginEndpoint.ts"
+    }
+  },
+  "builder": "makeMediaPackageV2OriginEndpointHttpBinding",
+  "builders": {
+    "makeMediaPackageV2ChannelGroupHttpBinding": {
+      "grants": "resource"
+    },
+    "makeMediaPackageV2ChannelHttpBinding": {
+      "grants": "resource"
+    },
+    "makeMediaPackageV2OriginEndpointHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CancelHarvestJob": {
+      "operation": "cancelHarvestJob",
+      "resource": "OriginEndpoint",
+      "param": "endpoint",
+      "request": {
+        "mode": "required",
+        "omit": ["ChannelGroupName", "ChannelName", "OriginEndpointName"],
+        "inline": true
+      },
+      "actions": ["mediapackagev2:CancelHarvestJob"],
+      "with": {
+        "harvestJobScoped": true
+      }
+    },
+    "CreateHarvestJob": {
+      "operation": "createHarvestJob",
+      "resource": "OriginEndpoint",
+      "param": "endpoint",
+      "request": {
+        "mode": "required",
+        "omit": ["ChannelGroupName", "ChannelName", "OriginEndpointName"],
+        "inline": true
+      },
+      "actions": ["mediapackagev2:CreateHarvestJob"],
+      "with": {
+        "harvestJobScoped": true
+      }
+    },
+    "GetHarvestJob": {
+      "operation": "getHarvestJob",
+      "resource": "OriginEndpoint",
+      "param": "endpoint",
+      "request": {
+        "mode": "required",
+        "omit": ["ChannelGroupName", "ChannelName", "OriginEndpointName"],
+        "inline": true
+      },
+      "actions": ["mediapackagev2:GetHarvestJob"],
+      "with": {
+        "harvestJobScoped": true
+      }
+    },
+    "ListHarvestJobs": {
+      "operation": "listHarvestJobs",
+      "resource": "ChannelGroup",
+      "param": "group",
+      "request": {
+        "mode": "optional",
+        "omit": ["ChannelGroupName"],
+        "inline": true
+      },
+      "builder": "makeMediaPackageV2ChannelGroupHttpBinding",
+      "actions": ["mediapackagev2:ListHarvestJobs"]
+    },
+    "ResetChannelState": {
+      "operation": "resetChannelState",
+      "resource": "Channel",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeMediaPackageV2ChannelHttpBinding",
+      "actions": ["mediapackagev2:ResetChannelState"]
+    },
+    "ResetOriginEndpointState": {
+      "operation": "resetOriginEndpointState",
+      "resource": "OriginEndpoint",
+      "param": "endpoint",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["mediapackagev2:ResetOriginEndpointState"]
+    }
+  }
+}

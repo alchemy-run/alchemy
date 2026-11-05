@@ -1,0 +1,127 @@
+{
+  "tag": "AWS.Textract",
+  "module": "textract",
+  "resources": {},
+  "builder": "makeTextractHttpBinding",
+  "builders": {
+    "makeTextractHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "AnalyzeDocument": {
+      "operation": "analyzeDocument",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:AnalyzeDocument"],
+      "note": "No resource-level IAM for this action."
+    },
+    "AnalyzeExpense": {
+      "operation": "analyzeExpense",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:AnalyzeExpense"],
+      "note": "No resource-level IAM for this action."
+    },
+    "AnalyzeID": {
+      "operation": "analyzeID",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:AnalyzeID"],
+      "note": "No resource-level IAM for this action."
+    },
+    "DetectDocumentText": {
+      "operation": "detectDocumentText",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:DetectDocumentText"],
+      "note": "textract:DetectDocumentText has no resource-level IAM."
+    },
+    "GetDocumentAnalysis": {
+      "operation": "getDocumentAnalysis",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:GetDocumentAnalysis"],
+      "note": "No resource-level IAM for this action."
+    },
+    "GetDocumentTextDetection": {
+      "operation": "getDocumentTextDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:GetDocumentTextDetection"],
+      "note": "No resource-level IAM for this action."
+    },
+    "GetExpenseAnalysis": {
+      "operation": "getExpenseAnalysis",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:GetExpenseAnalysis"],
+      "note": "No resource-level IAM for this action."
+    },
+    "GetLendingAnalysis": {
+      "operation": "getLendingAnalysis",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:GetLendingAnalysis"],
+      "note": "No resource-level IAM for this action."
+    },
+    "GetLendingAnalysisSummary": {
+      "operation": "getLendingAnalysisSummary",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:GetLendingAnalysisSummary"],
+      "note": "No resource-level IAM for this action."
+    },
+    "ListAdapters": {
+      "operation": "listAdapters",
+      "actions": ["textract:ListAdapters"],
+      "note": "No resource-level IAM for this action."
+    },
+    "StartDocumentAnalysis": {
+      "operation": "startDocumentAnalysis",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:StartDocumentAnalysis"],
+      "note": "No resource-level IAM for this action."
+    },
+    "StartDocumentTextDetection": {
+      "operation": "startDocumentTextDetection",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:StartDocumentTextDetection"],
+      "note": "No resource-level IAM for this action."
+    },
+    "StartExpenseAnalysis": {
+      "operation": "startExpenseAnalysis",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:StartExpenseAnalysis"],
+      "note": "No resource-level IAM for this action."
+    },
+    "StartLendingAnalysis": {
+      "operation": "startLendingAnalysis",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["textract:StartLendingAnalysis"],
+      "note": "No resource-level IAM for this action."
+    }
+  }
+}

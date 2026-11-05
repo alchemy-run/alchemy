@@ -1,0 +1,127 @@
+{
+  "tag": "AWS.DocDB",
+  "module": "docdb",
+  "resources": {
+    "DBCluster": {
+      "file": "DBCluster.ts"
+    },
+    "DBInstance": {
+      "file": "DBInstance.ts"
+    }
+  },
+  "builder": "makeDocDBAccountHttpBinding",
+  "builders": {
+    "makeDocDBAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeDocDBClusterHttpBinding": {
+      "grants": "resource"
+    },
+    "makeDocDBInstanceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ApplyPendingMaintenanceAction": {
+      "operation": "applyPendingMaintenanceAction",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rds:ApplyPendingMaintenanceAction"]
+    },
+    "CopyDBClusterSnapshot": {
+      "operation": "copyDBClusterSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rds:CopyDBClusterSnapshot"]
+    },
+    "CreateDBClusterSnapshot": {
+      "operation": "createDBClusterSnapshot",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["DBClusterIdentifier"],
+        "inline": true
+      },
+      "builder": "makeDocDBClusterHttpBinding",
+      "actions": ["rds:CreateDBClusterSnapshot", "rds:AddTagsToResource"],
+      "withTs": {
+        "extraResources": "(clusterArn) => [`${clusterArn.split(\":\").slice(0, 5).join(\":\")}:cluster-snapshot:*`]"
+      },
+      "note": "Snapshot creation authorizes against BOTH the source cluster ARN and the target snapshot ARN \u2014 widen the grant to the account's DocumentDB cluster-snapshot space (`arn:\u2026:rds:{region}:{account}:cluster-snapshot:*`)."
+    },
+    "DeleteDBClusterSnapshot": {
+      "operation": "deleteDBClusterSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["rds:DeleteDBClusterSnapshot"]
+    },
+    "DescribeDBClusterSnapshots": {
+      "operation": "describeDBClusterSnapshots",
+      "actions": ["rds:DescribeDBClusterSnapshots"]
+    },
+    "DescribeDBClusters": {
+      "operation": "describeDBClusters",
+      "actions": ["rds:DescribeDBClusters"]
+    },
+    "DescribeDBInstances": {
+      "operation": "describeDBInstances",
+      "actions": ["rds:DescribeDBInstances"]
+    },
+    "DescribeEvents": {
+      "operation": "describeEvents",
+      "actions": ["rds:DescribeEvents"]
+    },
+    "DescribePendingMaintenanceActions": {
+      "operation": "describePendingMaintenanceActions",
+      "actions": ["rds:DescribePendingMaintenanceActions"]
+    },
+    "FailoverDBCluster": {
+      "operation": "failoverDBCluster",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["DBClusterIdentifier"],
+        "inline": true
+      },
+      "builder": "makeDocDBClusterHttpBinding",
+      "actions": ["rds:FailoverDBCluster"]
+    },
+    "RebootDBInstance": {
+      "operation": "rebootDBInstance",
+      "resource": "DBInstance",
+      "param": "instance",
+      "request": {
+        "mode": "optional",
+        "omit": ["DBInstanceIdentifier"],
+        "inline": true
+      },
+      "builder": "makeDocDBInstanceHttpBinding",
+      "actions": ["rds:RebootDBInstance"]
+    },
+    "StartDBCluster": {
+      "operation": "startDBCluster",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDocDBClusterHttpBinding",
+      "actions": ["rds:StartDBCluster"]
+    },
+    "StopDBCluster": {
+      "operation": "stopDBCluster",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDocDBClusterHttpBinding",
+      "actions": ["rds:StopDBCluster"]
+    }
+  }
+}

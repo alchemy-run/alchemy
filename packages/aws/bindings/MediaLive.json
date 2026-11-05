@@ -1,0 +1,127 @@
+{
+  "tag": "AWS.MediaLive",
+  "module": "medialive",
+  "resources": {
+    "Channel": {
+      "file": "Channel.ts"
+    },
+    "Input": {
+      "file": "Input.ts"
+    }
+  },
+  "builder": "makeMediaLiveChannelHttpBinding",
+  "builders": {
+    "makeMediaLiveAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeMediaLiveChannelHttpBinding": {
+      "grants": "resource"
+    },
+    "makeMediaLiveInputHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchUpdateSchedule": {
+      "operation": "batchUpdateSchedule",
+      "resource": "Channel",
+      "request": {
+        "mode": "optional",
+        "omit": ["ChannelId"],
+        "inline": true
+      },
+      "actions": ["medialive:BatchUpdateSchedule"]
+    },
+    "DeleteSchedule": {
+      "operation": "deleteSchedule",
+      "resource": "Channel",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["medialive:DeleteSchedule"]
+    },
+    "DescribeChannel": {
+      "operation": "describeChannel",
+      "resource": "Channel",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["medialive:DescribeChannel"]
+    },
+    "DescribeInput": {
+      "operation": "describeInput",
+      "resource": "Input",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeMediaLiveInputHttpBinding",
+      "actions": ["medialive:DescribeInput"]
+    },
+    "DescribeSchedule": {
+      "operation": "describeSchedule",
+      "resource": "Channel",
+      "request": {
+        "mode": "optional",
+        "omit": ["ChannelId"],
+        "inline": true
+      },
+      "actions": ["medialive:DescribeSchedule"]
+    },
+    "DescribeThumbnails": {
+      "operation": "describeThumbnails",
+      "resource": "Channel",
+      "request": {
+        "mode": "optional",
+        "omit": ["ChannelId"],
+        "inline": true
+      },
+      "actions": ["medialive:DescribeThumbnails"]
+    },
+    "ListAlerts": {
+      "operation": "listAlerts",
+      "resource": "Channel",
+      "request": {
+        "mode": "optional",
+        "omit": ["ChannelId"],
+        "inline": true
+      },
+      "actions": ["medialive:ListAlerts"]
+    },
+    "ListChannels": {
+      "operation": "listChannels",
+      "builder": "makeMediaLiveAccountHttpBinding",
+      "actions": ["medialive:ListChannels"]
+    },
+    "ListInputs": {
+      "operation": "listInputs",
+      "builder": "makeMediaLiveAccountHttpBinding",
+      "actions": ["medialive:ListInputs"]
+    },
+    "RestartChannelPipelines": {
+      "operation": "restartChannelPipelines",
+      "resource": "Channel",
+      "request": {
+        "mode": "optional",
+        "omit": ["ChannelId"],
+        "inline": true
+      },
+      "actions": ["medialive:RestartChannelPipelines"]
+    },
+    "StartChannel": {
+      "operation": "startChannel",
+      "resource": "Channel",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["medialive:StartChannel"]
+    },
+    "StopChannel": {
+      "operation": "stopChannel",
+      "resource": "Channel",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["medialive:StopChannel"]
+    }
+  }
+}

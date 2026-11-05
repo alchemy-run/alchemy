@@ -1,0 +1,35 @@
+{
+  "tag": "AWS.ObservabilityAdmin",
+  "module": "observabilityadmin",
+  "alias": "obs",
+  "resources": {},
+  "builder": "makeObservabilityAdminHttpBinding",
+  "builders": {
+    "makeObservabilityAdminHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "GetTelemetryEnrichmentStatus": {
+      "operation": "getTelemetryEnrichmentStatus",
+      "actions": ["observabilityadmin:GetTelemetryEnrichmentStatus"]
+    },
+    "GetTelemetryEvaluationStatus": {
+      "operation": "getTelemetryEvaluationStatus",
+      "actions": ["observabilityadmin:GetTelemetryEvaluationStatus"]
+    },
+    "ListResourceTelemetry": {
+      "operation": "listResourceTelemetry",
+      "actions": ["observabilityadmin:ListResourceTelemetry"]
+    },
+    "ListTelemetryRules": {
+      "operation": "listTelemetryRules",
+      "actions": ["observabilityadmin:ListTelemetryRules"]
+    }
+  }
+}

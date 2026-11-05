@@ -1,0 +1,109 @@
+{
+  "tag": "AWS.LakeFormation",
+  "module": "lakeformation",
+  "alias": "lf",
+  "resources": {},
+  "builder": "makeLakeFormationHttpBinding",
+  "builders": {
+    "makeLakeFormationHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "GetDataLakePrincipal": {
+      "operation": "getDataLakePrincipal",
+      "request": {
+        "mode": "optional",
+        "interface": "GetDataLakePrincipalRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:GetDataLakePrincipal"]
+    },
+    "GetEffectivePermissionsForPath": {
+      "operation": "getEffectivePermissionsForPath",
+      "request": {
+        "mode": "required",
+        "interface": "GetEffectivePermissionsForPathRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:GetEffectivePermissionsForPath"]
+    },
+    "GetLFTag": {
+      "operation": "getLFTag",
+      "request": {
+        "mode": "required",
+        "interface": "GetLFTagRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:GetLFTag"]
+    },
+    "GetResourceLFTags": {
+      "operation": "getResourceLFTags",
+      "request": {
+        "mode": "required",
+        "interface": "GetResourceLFTagsRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:GetResourceLFTags"]
+    },
+    "GetTemporaryDataLocationCredentials": {
+      "operation": "getTemporaryDataLocationCredentials",
+      "request": {
+        "mode": "required",
+        "interface": "GetTemporaryDataLocationCredentialsRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:GetDataAccess"]
+    },
+    "GetTemporaryGlueTableCredentials": {
+      "operation": "getTemporaryGlueTableCredentials",
+      "request": {
+        "mode": "required",
+        "interface": "GetTemporaryGlueTableCredentialsRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:GetDataAccess"]
+    },
+    "ListLFTags": {
+      "operation": "listLFTags",
+      "request": {
+        "mode": "optional",
+        "interface": "ListLFTagsRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:ListLFTags"]
+    },
+    "ListPermissions": {
+      "operation": "listPermissions",
+      "request": {
+        "mode": "optional",
+        "interface": "ListPermissionsRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:ListPermissions"]
+    },
+    "SearchDatabasesByLFTags": {
+      "operation": "searchDatabasesByLFTags",
+      "request": {
+        "mode": "required",
+        "interface": "SearchDatabasesByLFTagsRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:SearchDatabasesByLFTags"]
+    },
+    "SearchTablesByLFTags": {
+      "operation": "searchTablesByLFTags",
+      "request": {
+        "mode": "required",
+        "interface": "SearchTablesByLFTagsRequest",
+        "omit": []
+      },
+      "actions": ["lakeformation:SearchTablesByLFTags"]
+    }
+  }
+}

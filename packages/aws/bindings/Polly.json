@@ -1,0 +1,51 @@
+{
+  "tag": "AWS.Polly",
+  "module": "polly",
+  "resources": {},
+  "builder": "makePollyHttpBinding",
+  "builders": {
+    "makePollyHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "DescribeVoices": {
+      "operation": "describeVoices",
+      "actions": ["polly:DescribeVoices"]
+    },
+    "GetSpeechSynthesisTask": {
+      "operation": "getSpeechSynthesisTask",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["polly:GetSpeechSynthesisTask"]
+    },
+    "ListLexicons": {
+      "operation": "listLexicons",
+      "actions": ["polly:ListLexicons"]
+    },
+    "ListSpeechSynthesisTasks": {
+      "operation": "listSpeechSynthesisTasks",
+      "actions": ["polly:ListSpeechSynthesisTasks"]
+    },
+    "StartSpeechSynthesisStream": {
+      "operation": "startSpeechSynthesisStream",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["polly:StartSpeechSynthesisStream"]
+    },
+    "StartSpeechSynthesisTask": {
+      "operation": "startSpeechSynthesisTask",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["polly:StartSpeechSynthesisTask"]
+    }
+  }
+}

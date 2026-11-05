@@ -1,0 +1,78 @@
+{
+  "tag": "AWS.Lambda",
+  "module": "lambda",
+  "alias": "Lambda",
+  "resources": {
+    "Function": {
+      "file": "Function.ts"
+    }
+  },
+  "builder": "makeFunctionHttpBinding",
+  "builders": {
+    "makeFunctionHttpBinding": {
+      "grants": "resource"
+    },
+    "makeLambdaAccountHttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "GetAccountSettings": {
+      "operation": "getAccountSettings",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeLambdaAccountHttpBinding",
+      "actions": ["lambda:GetAccountSettings"]
+    },
+    "GetFunction": {
+      "operation": "getFunction",
+      "resource": "Function",
+      "param": "func",
+      "request": {
+        "mode": "optional",
+        "interface": "GetFunctionRequest",
+        "omit": ["FunctionName"]
+      },
+      "actions": ["lambda:GetFunction"]
+    },
+    "InvokeFunction": {
+      "operation": "invoke",
+      "resource": "Function",
+      "param": "func",
+      "request": {
+        "mode": "required",
+        "interface": "InvokeFunctionRequest",
+        "omit": ["FunctionName"]
+      },
+      "actions": ["lambda:InvokeFunction"],
+      "with": {
+        "qualified": true
+      }
+    },
+    "InvokeWithResponseStream": {
+      "operation": "invokeWithResponseStream",
+      "resource": "Function",
+      "param": "func",
+      "request": {
+        "mode": "optional",
+        "interface": "InvokeWithResponseStreamRequest",
+        "omit": ["FunctionName"]
+      },
+      "actions": ["lambda:InvokeFunction"],
+      "with": {
+        "qualified": true
+      }
+    },
+    "ListFunctions": {
+      "operation": "listFunctions",
+      "request": {
+        "mode": "optional",
+        "interface": "ListFunctionsRequest",
+        "omit": []
+      },
+      "builder": "makeLambdaAccountHttpBinding",
+      "actions": ["lambda:ListFunctions"]
+    }
+  }
+}

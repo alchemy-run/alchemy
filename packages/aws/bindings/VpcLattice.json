@@ -1,0 +1,47 @@
+{
+  "tag": "AWS.VpcLattice",
+  "module": "vpc-lattice",
+  "resources": {
+    "TargetGroup": {
+      "file": "TargetGroup.ts"
+    }
+  },
+  "builder": "makeVpcLatticeTargetGroupHttpBinding",
+  "builders": {
+    "makeVpcLatticeTargetGroupHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DeregisterTargets": {
+      "operation": "deregisterTargets",
+      "resource": "TargetGroup",
+      "request": {
+        "mode": "required",
+        "interface": "DeregisterTargetsRequest",
+        "omit": ["targetGroupIdentifier"]
+      },
+      "actions": ["vpc-lattice:DeregisterTargets"]
+    },
+    "ListTargets": {
+      "operation": "listTargets",
+      "resource": "TargetGroup",
+      "request": {
+        "mode": "required",
+        "interface": "ListTargetsRequest",
+        "omit": ["targetGroupIdentifier"]
+      },
+      "actions": ["vpc-lattice:ListTargets"]
+    },
+    "RegisterTargets": {
+      "operation": "registerTargets",
+      "resource": "TargetGroup",
+      "request": {
+        "mode": "required",
+        "interface": "RegisterTargetsRequest",
+        "omit": ["targetGroupIdentifier"]
+      },
+      "actions": ["vpc-lattice:RegisterTargets"]
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "tag": "AWS.S3Control",
+  "module": "s3-control",
+  "resources": {
+    "AccessPoint": {
+      "file": "AccessPoint.ts"
+    },
+    "MultiRegionAccessPoint": {
+      "file": "MultiRegionAccessPoint.ts"
+    }
+  },
+  "builder": "makeS3ControlAccessPointHttpBinding",
+  "builders": {
+    "makeS3ControlAccessPointHttpBinding": {
+      "grants": "resource"
+    },
+    "makeS3ControlAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeS3ControlMrapHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetAccessPoint": {
+      "operation": "getAccessPoint",
+      "resource": "AccessPoint",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["s3:GetAccessPoint"]
+    },
+    "GetAccessPointPolicy": {
+      "operation": "getAccessPointPolicy",
+      "resource": "AccessPoint",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["s3:GetAccessPointPolicy"]
+    },
+    "GetAccessPointPolicyStatus": {
+      "operation": "getAccessPointPolicyStatus",
+      "resource": "AccessPoint",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["s3:GetAccessPointPolicyStatus"]
+    },
+    "GetMultiRegionAccessPointRoutes": {
+      "operation": "getMultiRegionAccessPointRoutes",
+      "resource": "MultiRegionAccessPoint",
+      "param": "mrap",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeS3ControlMrapHttpBinding",
+      "actions": ["s3:GetMultiRegionAccessPointRoutes"]
+    },
+    "ListAccessPoints": {
+      "operation": "listAccessPoints",
+      "request": {
+        "mode": "optional",
+        "omit": ["AccountId"],
+        "inline": true
+      },
+      "builder": "makeS3ControlAccountHttpBinding",
+      "actions": ["s3:ListAccessPoints"]
+    },
+    "SubmitMultiRegionAccessPointRoutes": {
+      "operation": "submitMultiRegionAccessPointRoutes",
+      "resource": "MultiRegionAccessPoint",
+      "param": "mrap",
+      "request": {
+        "mode": "required",
+        "omit": ["AccountId", "Mrap"],
+        "inline": true
+      },
+      "builder": "makeS3ControlMrapHttpBinding",
+      "actions": ["s3:SubmitMultiRegionAccessPointRoutes"]
+    }
+  }
+}

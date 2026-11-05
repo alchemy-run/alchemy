@@ -1,0 +1,235 @@
+{
+  "tag": "AWS.IdentityCenter",
+  "module": "identitystore",
+  "resources": {
+    "Instance": {
+      "file": "Instance.ts"
+    }
+  },
+  "builder": "makeIdentityStoreHttpBinding",
+  "builders": {
+    "makeIdentityCenterInstanceHttpBinding": {
+      "grants": "resource"
+    },
+    "makeIdentityStoreHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreateGroupMembership": {
+      "operation": "createGroupMembership",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:CreateGroupMembership"]
+    },
+    "CreateUser": {
+      "operation": "createUser",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:CreateUser"]
+    },
+    "DeleteGroupMembership": {
+      "operation": "deleteGroupMembership",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:DeleteGroupMembership"]
+    },
+    "DeleteUser": {
+      "operation": "deleteUser",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:DeleteUser"]
+    },
+    "DescribeGroupMembership": {
+      "operation": "describeGroupMembership",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:DescribeGroupMembership"]
+    },
+    "DescribePermissionSet": {
+      "operation": "describePermissionSet",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["InstanceArn"],
+        "inline": true
+      },
+      "builder": "makeIdentityCenterInstanceHttpBinding",
+      "actions": ["sso:DescribePermissionSet"],
+      "module": "sso-admin",
+      "alias": "ssoAdmin"
+    },
+    "DescribeUser": {
+      "operation": "describeUser",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:DescribeUser"]
+    },
+    "GetGroupId": {
+      "operation": "getGroupId",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:GetGroupId"]
+    },
+    "GetGroupMembershipId": {
+      "operation": "getGroupMembershipId",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:GetGroupMembershipId"]
+    },
+    "GetUserId": {
+      "operation": "getUserId",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:GetUserId"]
+    },
+    "IsMemberInGroups": {
+      "operation": "isMemberInGroups",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:IsMemberInGroups"]
+    },
+    "ListAccountAssignments": {
+      "operation": "listAccountAssignments",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["InstanceArn"],
+        "inline": true
+      },
+      "builder": "makeIdentityCenterInstanceHttpBinding",
+      "actions": ["sso:ListAccountAssignments"],
+      "module": "sso-admin",
+      "alias": "ssoAdmin"
+    },
+    "ListAccountAssignmentsForPrincipal": {
+      "operation": "listAccountAssignmentsForPrincipal",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["InstanceArn"],
+        "inline": true
+      },
+      "builder": "makeIdentityCenterInstanceHttpBinding",
+      "actions": ["sso:ListAccountAssignmentsForPrincipal"],
+      "module": "sso-admin",
+      "alias": "ssoAdmin"
+    },
+    "ListAccountsForProvisionedPermissionSet": {
+      "operation": "listAccountsForProvisionedPermissionSet",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["InstanceArn"],
+        "inline": true
+      },
+      "builder": "makeIdentityCenterInstanceHttpBinding",
+      "actions": ["sso:ListAccountsForProvisionedPermissionSet"],
+      "module": "sso-admin",
+      "alias": "ssoAdmin"
+    },
+    "ListGroupMemberships": {
+      "operation": "listGroupMemberships",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:ListGroupMemberships"]
+    },
+    "ListGroupMembershipsForMember": {
+      "operation": "listGroupMembershipsForMember",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:ListGroupMembershipsForMember"]
+    },
+    "ListGroups": {
+      "operation": "listGroups",
+      "resource": "Instance",
+      "request": {
+        "mode": "optional",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:ListGroups"]
+    },
+    "ListPermissionSets": {
+      "operation": "listPermissionSets",
+      "resource": "Instance",
+      "request": {
+        "mode": "optional",
+        "omit": ["InstanceArn"],
+        "inline": true
+      },
+      "builder": "makeIdentityCenterInstanceHttpBinding",
+      "actions": ["sso:ListPermissionSets"],
+      "module": "sso-admin",
+      "alias": "ssoAdmin"
+    },
+    "ListUsers": {
+      "operation": "listUsers",
+      "resource": "Instance",
+      "request": {
+        "mode": "optional",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:ListUsers"]
+    },
+    "UpdateUser": {
+      "operation": "updateUser",
+      "resource": "Instance",
+      "request": {
+        "mode": "required",
+        "omit": ["IdentityStoreId"],
+        "inline": true
+      },
+      "actions": ["identitystore:UpdateUser"]
+    }
+  }
+}

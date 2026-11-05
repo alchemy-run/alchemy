@@ -1,0 +1,205 @@
+{
+  "tag": "AWS.SecurityHub",
+  "module": "securityhub",
+  "resources": {},
+  "builder": "makeSecurityHubHttpBinding",
+  "builders": {
+    "makeSecurityHubHttpBinding": {
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "AcceptAdministratorInvitation": {
+      "operation": "acceptAdministratorInvitation",
+      "actions": ["securityhub:AcceptAdministratorInvitation"]
+    },
+    "BatchDisableStandards": {
+      "operation": "batchDisableStandards",
+      "actions": ["securityhub:BatchDisableStandards"]
+    },
+    "BatchEnableStandards": {
+      "operation": "batchEnableStandards",
+      "actions": ["securityhub:BatchEnableStandards"]
+    },
+    "BatchGetAutomationRules": {
+      "operation": "batchGetAutomationRules",
+      "actions": ["securityhub:BatchGetAutomationRules"]
+    },
+    "BatchGetSecurityControls": {
+      "operation": "batchGetSecurityControls",
+      "actions": ["securityhub:BatchGetSecurityControls"]
+    },
+    "BatchGetStandardsControlAssociations": {
+      "operation": "batchGetStandardsControlAssociations",
+      "actions": ["securityhub:BatchGetStandardsControlAssociations"]
+    },
+    "BatchImportFindings": {
+      "operation": "batchImportFindings",
+      "actions": ["securityhub:BatchImportFindings"]
+    },
+    "BatchUpdateFindings": {
+      "operation": "batchUpdateFindings",
+      "actions": ["securityhub:BatchUpdateFindings"]
+    },
+    "BatchUpdateStandardsControlAssociations": {
+      "operation": "batchUpdateStandardsControlAssociations",
+      "actions": ["securityhub:BatchUpdateStandardsControlAssociations"]
+    },
+    "CreateMembers": {
+      "operation": "createMembers",
+      "actions": ["securityhub:CreateMembers"]
+    },
+    "DeclineInvitations": {
+      "operation": "declineInvitations",
+      "actions": ["securityhub:DeclineInvitations"]
+    },
+    "DeleteInvitations": {
+      "operation": "deleteInvitations",
+      "actions": ["securityhub:DeleteInvitations"]
+    },
+    "DeleteMembers": {
+      "operation": "deleteMembers",
+      "actions": ["securityhub:DeleteMembers"]
+    },
+    "DescribeActionTargets": {
+      "operation": "describeActionTargets",
+      "actions": ["securityhub:DescribeActionTargets"]
+    },
+    "DescribeOrganizationConfiguration": {
+      "operation": "describeOrganizationConfiguration",
+      "actions": ["securityhub:DescribeOrganizationConfiguration"]
+    },
+    "DescribeProducts": {
+      "operation": "describeProducts",
+      "actions": ["securityhub:DescribeProducts"]
+    },
+    "DescribeStandards": {
+      "operation": "describeStandards",
+      "actions": ["securityhub:DescribeStandards"]
+    },
+    "DescribeStandardsControls": {
+      "operation": "describeStandardsControls",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["securityhub:DescribeStandardsControls"]
+    },
+    "DisableImportFindingsForProduct": {
+      "operation": "disableImportFindingsForProduct",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["securityhub:DisableImportFindingsForProduct"]
+    },
+    "DisableOrganizationAdminAccount": {
+      "operation": "disableOrganizationAdminAccount",
+      "actions": ["securityhub:DisableOrganizationAdminAccount"]
+    },
+    "DisassociateFromAdministratorAccount": {
+      "operation": "disassociateFromAdministratorAccount",
+      "actions": ["securityhub:DisassociateFromAdministratorAccount"]
+    },
+    "DisassociateMembers": {
+      "operation": "disassociateMembers",
+      "actions": ["securityhub:DisassociateMembers"]
+    },
+    "EnableImportFindingsForProduct": {
+      "operation": "enableImportFindingsForProduct",
+      "actions": ["securityhub:EnableImportFindingsForProduct"]
+    },
+    "EnableOrganizationAdminAccount": {
+      "operation": "enableOrganizationAdminAccount",
+      "actions": ["securityhub:EnableOrganizationAdminAccount"]
+    },
+    "GetAdministratorAccount": {
+      "operation": "getAdministratorAccount",
+      "actions": ["securityhub:GetAdministratorAccount"]
+    },
+    "GetEnabledStandards": {
+      "operation": "getEnabledStandards",
+      "actions": ["securityhub:GetEnabledStandards"]
+    },
+    "GetFindingHistory": {
+      "operation": "getFindingHistory",
+      "actions": ["securityhub:GetFindingHistory"]
+    },
+    "GetFindings": {
+      "operation": "getFindings",
+      "actions": ["securityhub:GetFindings"]
+    },
+    "GetInsightResults": {
+      "operation": "getInsightResults",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["securityhub:GetInsightResults"]
+    },
+    "GetInsights": {
+      "operation": "getInsights",
+      "actions": ["securityhub:GetInsights"]
+    },
+    "GetInvitationsCount": {
+      "operation": "getInvitationsCount",
+      "actions": ["securityhub:GetInvitationsCount"]
+    },
+    "GetMembers": {
+      "operation": "getMembers",
+      "actions": ["securityhub:GetMembers"]
+    },
+    "GetSecurityControlDefinition": {
+      "operation": "getSecurityControlDefinition",
+      "actions": ["securityhub:GetSecurityControlDefinition"]
+    },
+    "InviteMembers": {
+      "operation": "inviteMembers",
+      "actions": ["securityhub:InviteMembers"]
+    },
+    "ListAutomationRules": {
+      "operation": "listAutomationRules",
+      "actions": ["securityhub:ListAutomationRules"]
+    },
+    "ListEnabledProductsForImport": {
+      "operation": "listEnabledProductsForImport",
+      "actions": ["securityhub:ListEnabledProductsForImport"]
+    },
+    "ListFindingAggregators": {
+      "operation": "listFindingAggregators",
+      "actions": ["securityhub:ListFindingAggregators"]
+    },
+    "ListInvitations": {
+      "operation": "listInvitations",
+      "actions": ["securityhub:ListInvitations"]
+    },
+    "ListMembers": {
+      "operation": "listMembers",
+      "actions": ["securityhub:ListMembers"]
+    },
+    "ListOrganizationAdminAccounts": {
+      "operation": "listOrganizationAdminAccounts",
+      "actions": ["securityhub:ListOrganizationAdminAccounts"]
+    },
+    "ListSecurityControlDefinitions": {
+      "operation": "listSecurityControlDefinitions",
+      "actions": ["securityhub:ListSecurityControlDefinitions"]
+    },
+    "ListStandardsControlAssociations": {
+      "operation": "listStandardsControlAssociations",
+      "actions": ["securityhub:ListStandardsControlAssociations"]
+    },
+    "UpdateOrganizationConfiguration": {
+      "operation": "updateOrganizationConfiguration",
+      "actions": ["securityhub:UpdateOrganizationConfiguration"]
+    },
+    "UpdateSecurityControl": {
+      "operation": "updateSecurityControl",
+      "actions": ["securityhub:UpdateSecurityControl"]
+    },
+    "UpdateStandardsControl": {
+      "operation": "updateStandardsControl",
+      "request": {
+        "mode": "required"
+      },
+      "actions": ["securityhub:UpdateStandardsControl"]
+    }
+  }
+}

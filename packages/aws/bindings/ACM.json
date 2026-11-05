@@ -1,0 +1,114 @@
+{
+  "tag": "AWS.ACM",
+  "module": "acm",
+  "resources": {
+    "Certificate": {
+      "file": "Certificate.ts"
+    }
+  },
+  "builder": "makeAcmCertificateHttpBinding",
+  "builders": {
+    "makeAcmAccountHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    },
+    "makeAcmCertificateHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      }
+    }
+  },
+  "bindings": {
+    "DescribeCertificate": {
+      "operation": "describeCertificate",
+      "resource": "Certificate",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["acm:DescribeCertificate"]
+    },
+    "ExportCertificate": {
+      "operation": "exportCertificate",
+      "resource": "Certificate",
+      "request": {
+        "mode": "required",
+        "interface": "ExportCertificateRequest",
+        "omit": ["CertificateArn"]
+      },
+      "actions": ["acm:ExportCertificate"]
+    },
+    "GetCertificate": {
+      "operation": "getCertificate",
+      "resource": "Certificate",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["acm:GetCertificate"]
+    },
+    "ImportCertificate": {
+      "operation": "importCertificate",
+      "request": {
+        "mode": "required",
+        "interface": "ImportCertificateRequest",
+        "omit": []
+      },
+      "builder": "makeAcmAccountHttpBinding",
+      "actions": ["acm:ImportCertificate", "acm:AddTagsToCertificate"],
+      "note": "Importing with `Tags` additionally requires `acm:AddTagsToCertificate`, which ACM checks alongside the import itself."
+    },
+    "ListCertificates": {
+      "operation": "listCertificates",
+      "request": {
+        "mode": "optional",
+        "interface": "ListCertificatesRequest",
+        "omit": []
+      },
+      "builder": "makeAcmAccountHttpBinding",
+      "actions": ["acm:ListCertificates"]
+    },
+    "RenewCertificate": {
+      "operation": "renewCertificate",
+      "resource": "Certificate",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["acm:RenewCertificate"]
+    },
+    "ResendValidationEmail": {
+      "operation": "resendValidationEmail",
+      "resource": "Certificate",
+      "request": {
+        "mode": "required",
+        "interface": "ResendValidationEmailRequest",
+        "omit": ["CertificateArn"]
+      },
+      "actions": ["acm:ResendValidationEmail"]
+    },
+    "RevokeCertificate": {
+      "operation": "revokeCertificate",
+      "resource": "Certificate",
+      "request": {
+        "mode": "required",
+        "interface": "RevokeCertificateRequest",
+        "omit": ["CertificateArn"]
+      },
+      "actions": ["acm:RevokeCertificate"]
+    },
+    "SearchCertificates": {
+      "operation": "searchCertificates",
+      "request": {
+        "mode": "optional",
+        "interface": "SearchCertificatesRequest",
+        "omit": []
+      },
+      "builder": "makeAcmAccountHttpBinding",
+      "actions": ["acm:SearchCertificates"]
+    }
+  }
+}

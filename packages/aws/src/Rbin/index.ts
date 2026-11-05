@@ -1,3 +1,2 @@
-export * from "./GetRule.ts";
-export * from "./ListRules.ts";
 export * from "./Rule.ts";
+export * from "./generated.ts";

@@ -1,0 +1,286 @@
+{
+  "tag": "AWS.LicenseManager",
+  "module": "license-manager",
+  "resources": {
+    "LicenseConfiguration": {
+      "file": "LicenseConfiguration.ts"
+    }
+  },
+  "builder": "makeLicenseManagerHttpBinding",
+  "builders": {
+    "makeLicenseConfigurationHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "resource"
+    },
+    "makeLicenseManagerHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "AcceptGrant": {
+      "operation": "acceptGrant",
+      "request": {
+        "mode": "required",
+        "interface": "AcceptGrantRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:AcceptGrant"]
+    },
+    "CheckInLicense": {
+      "operation": "checkInLicense",
+      "request": {
+        "mode": "required",
+        "interface": "CheckInLicenseRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:CheckInLicense"]
+    },
+    "CheckoutBorrowLicense": {
+      "operation": "checkoutBorrowLicense",
+      "request": {
+        "mode": "required",
+        "interface": "CheckoutBorrowLicenseRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:CheckoutBorrowLicense"]
+    },
+    "CheckoutLicense": {
+      "operation": "checkoutLicense",
+      "request": {
+        "mode": "required",
+        "interface": "CheckoutLicenseRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:CheckoutLicense"]
+    },
+    "CreateGrant": {
+      "operation": "createGrant",
+      "request": {
+        "mode": "required",
+        "interface": "CreateGrantRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:CreateGrant"]
+    },
+    "CreateGrantVersion": {
+      "operation": "createGrantVersion",
+      "request": {
+        "mode": "required",
+        "interface": "CreateGrantVersionRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:CreateGrantVersion"]
+    },
+    "CreateLicense": {
+      "operation": "createLicense",
+      "request": {
+        "mode": "required",
+        "interface": "CreateLicenseRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:CreateLicense"]
+    },
+    "CreateLicenseVersion": {
+      "operation": "createLicenseVersion",
+      "request": {
+        "mode": "required",
+        "interface": "CreateLicenseVersionRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:CreateLicenseVersion"]
+    },
+    "CreateToken": {
+      "operation": "createToken",
+      "request": {
+        "mode": "required",
+        "interface": "CreateTokenRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:CreateToken"]
+    },
+    "DeleteGrant": {
+      "operation": "deleteGrant",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteGrantRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:DeleteGrant"]
+    },
+    "DeleteLicense": {
+      "operation": "deleteLicense",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteLicenseRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:DeleteLicense"]
+    },
+    "DeleteToken": {
+      "operation": "deleteToken",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteTokenRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:DeleteToken"]
+    },
+    "ExtendLicenseConsumption": {
+      "operation": "extendLicenseConsumption",
+      "request": {
+        "mode": "required",
+        "interface": "ExtendLicenseConsumptionRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:ExtendLicenseConsumption"]
+    },
+    "GetAccessToken": {
+      "operation": "getAccessToken",
+      "request": {
+        "mode": "required",
+        "interface": "GetAccessTokenRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:GetAccessToken"]
+    },
+    "GetGrant": {
+      "operation": "getGrant",
+      "request": {
+        "mode": "required",
+        "interface": "GetGrantRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:GetGrant"]
+    },
+    "GetLicense": {
+      "operation": "getLicense",
+      "request": {
+        "mode": "required",
+        "interface": "GetLicenseRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:GetLicense"]
+    },
+    "GetLicenseConfiguration": {
+      "operation": "getLicenseConfiguration",
+      "resource": "LicenseConfiguration",
+      "param": "configuration",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeLicenseConfigurationHttpBinding",
+      "actions": ["license-manager:GetLicenseConfiguration"]
+    },
+    "GetLicenseUsage": {
+      "operation": "getLicenseUsage",
+      "request": {
+        "mode": "required",
+        "interface": "GetLicenseUsageRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:GetLicenseUsage"]
+    },
+    "GetServiceSettings": {
+      "operation": "getServiceSettings",
+      "request": {
+        "mode": "optional",
+        "interface": "GetServiceSettingsRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:GetServiceSettings"]
+    },
+    "ListDistributedGrants": {
+      "operation": "listDistributedGrants",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDistributedGrantsRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:ListDistributedGrants"]
+    },
+    "ListLicenseVersions": {
+      "operation": "listLicenseVersions",
+      "request": {
+        "mode": "required",
+        "interface": "ListLicenseVersionsRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:ListLicenseVersions"]
+    },
+    "ListLicenses": {
+      "operation": "listLicenses",
+      "request": {
+        "mode": "optional",
+        "interface": "ListLicensesRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:ListLicenses"]
+    },
+    "ListReceivedGrants": {
+      "operation": "listReceivedGrants",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReceivedGrantsRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:ListReceivedGrants"]
+    },
+    "ListReceivedLicenses": {
+      "operation": "listReceivedLicenses",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReceivedLicensesRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:ListReceivedLicenses"]
+    },
+    "ListResourceInventory": {
+      "operation": "listResourceInventory",
+      "request": {
+        "mode": "optional",
+        "interface": "ListResourceInventoryRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:ListResourceInventory"]
+    },
+    "ListTokens": {
+      "operation": "listTokens",
+      "request": {
+        "mode": "optional",
+        "interface": "ListTokensRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:ListTokens"]
+    },
+    "ListUsageForLicenseConfiguration": {
+      "operation": "listUsageForLicenseConfiguration",
+      "resource": "LicenseConfiguration",
+      "param": "configuration",
+      "request": {
+        "mode": "optional",
+        "interface": "ListUsageForLicenseConfigurationRequest",
+        "omit": ["LicenseConfigurationArn"]
+      },
+      "builder": "makeLicenseConfigurationHttpBinding",
+      "actions": ["license-manager:ListUsageForLicenseConfiguration"]
+    },
+    "RejectGrant": {
+      "operation": "rejectGrant",
+      "request": {
+        "mode": "required",
+        "interface": "RejectGrantRequest",
+        "omit": []
+      },
+      "actions": ["license-manager:RejectGrant"]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "tag": "AWS.Rbin",
+  "module": "rbin",
+  "resources": {
+    "Rule": {
+      "file": "Rule.ts"
+    }
+  },
+  "builder": "makeRbinRuleHttpBinding",
+  "builders": {
+    "makeRbinAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeRbinRuleHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetRule": {
+      "operation": "getRule",
+      "resource": "Rule",
+      "request": {
+        "mode": "none"
+      },
+      "actions": ["rbin:GetRule"]
+    },
+    "ListRules": {
+      "operation": "listRules",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeRbinAccountHttpBinding",
+      "actions": ["rbin:ListRules"]
+    }
+  }
+}

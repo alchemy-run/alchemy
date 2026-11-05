@@ -1,0 +1,63 @@
+{
+  "tag": "AWS.Pricing",
+  "module": "pricing",
+  "resources": {},
+  "builder": "makePricingHttpBinding",
+  "builders": {
+    "makePricingHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    }
+  },
+  "bindings": {
+    "DescribeServices": {
+      "operation": "describeServices",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeServicesRequest",
+        "omit": []
+      },
+      "actions": ["pricing:DescribeServices"]
+    },
+    "GetAttributeValues": {
+      "operation": "getAttributeValues",
+      "request": {
+        "mode": "required",
+        "interface": "GetAttributeValuesRequest",
+        "omit": []
+      },
+      "actions": ["pricing:GetAttributeValues"]
+    },
+    "GetPriceListFileUrl": {
+      "operation": "getPriceListFileUrl",
+      "request": {
+        "mode": "required",
+        "interface": "GetPriceListFileUrlRequest",
+        "omit": []
+      },
+      "actions": ["pricing:GetPriceListFileUrl"]
+    },
+    "GetProducts": {
+      "operation": "getProducts",
+      "request": {
+        "mode": "required",
+        "interface": "GetProductsRequest",
+        "omit": []
+      },
+      "actions": ["pricing:GetProducts"]
+    },
+    "ListPriceLists": {
+      "operation": "listPriceLists",
+      "request": {
+        "mode": "required",
+        "interface": "ListPriceListsRequest",
+        "omit": []
+      },
+      "actions": ["pricing:ListPriceLists"]
+    }
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "tag": "AWS.CloudTrail",
+  "module": "cloudtrail",
+  "resources": {
+    "EventDataStore": {
+      "file": "EventDataStore.ts"
+    }
+  },
+  "builder": "makeCloudTrailEventDataStoreHttpBinding",
+  "builders": {
+    "makeCloudTrailAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeCloudTrailEventDataStoreHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CancelQuery": {
+      "operation": "cancelQuery",
+      "resource": "EventDataStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "omit": ["EventDataStore"],
+        "inline": true
+      },
+      "actions": ["cloudtrail:CancelQuery"]
+    },
+    "DescribeQuery": {
+      "operation": "describeQuery",
+      "resource": "EventDataStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "omit": ["EventDataStore"],
+        "inline": true
+      },
+      "actions": ["cloudtrail:DescribeQuery"]
+    },
+    "GenerateQuery": {
+      "operation": "generateQuery",
+      "resource": "EventDataStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "omit": ["EventDataStores"],
+        "inline": true
+      },
+      "actions": ["cloudtrail:GenerateQuery"],
+      "with": {
+        "injectEventDataStores": true
+      }
+    },
+    "GetQueryResults": {
+      "operation": "getQueryResults",
+      "resource": "EventDataStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "omit": ["EventDataStore"],
+        "inline": true
+      },
+      "actions": ["cloudtrail:GetQueryResults"]
+    },
+    "ListInsightsData": {
+      "operation": "listInsightsData",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeCloudTrailAccountHttpBinding",
+      "actions": ["cloudtrail:ListInsightsData"]
+    },
+    "ListInsightsMetricData": {
+      "operation": "listInsightsMetricData",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeCloudTrailAccountHttpBinding",
+      "actions": ["cloudtrail:ListInsightsMetricData"]
+    },
+    "ListPublicKeys": {
+      "operation": "listPublicKeys",
+      "builder": "makeCloudTrailAccountHttpBinding",
+      "actions": ["cloudtrail:ListPublicKeys"]
+    },
+    "ListQueries": {
+      "operation": "listQueries",
+      "resource": "EventDataStore",
+      "param": "store",
+      "request": {
+        "mode": "optional",
+        "omit": ["EventDataStore"],
+        "inline": true
+      },
+      "actions": ["cloudtrail:ListQueries"],
+      "with": {
+        "injectEventDataStore": true
+      }
+    },
+    "LookupEvents": {
+      "operation": "lookupEvents",
+      "builder": "makeCloudTrailAccountHttpBinding",
+      "actions": ["cloudtrail:LookupEvents"]
+    }
+  }
+}

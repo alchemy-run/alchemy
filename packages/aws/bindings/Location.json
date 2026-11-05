@@ -1,0 +1,285 @@
+{
+  "tag": "AWS.Location",
+  "module": "location",
+  "resources": {
+    "GeofenceCollection": {
+      "file": "GeofenceCollection.ts"
+    },
+    "PlaceIndex": {
+      "file": "PlaceIndex.ts"
+    },
+    "RouteCalculator": {
+      "file": "RouteCalculator.ts"
+    },
+    "Tracker": {
+      "file": "Tracker.ts"
+    }
+  },
+  "builder": "makeLocationTrackerHttpBinding",
+  "builders": {
+    "makeLocationAccountHttpBinding": {
+      "grants": "*"
+    },
+    "makeLocationCalculatorHttpBinding": {
+      "grants": "resource"
+    },
+    "makeLocationCollectionHttpBinding": {
+      "grants": "resource"
+    },
+    "makeLocationPlaceIndexHttpBinding": {
+      "grants": "resource"
+    },
+    "makeLocationTrackerHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchDeleteDevicePositionHistory": {
+      "operation": "batchDeleteDevicePositionHistory",
+      "resource": "Tracker",
+      "request": {
+        "mode": "required",
+        "interface": "BatchDeleteDevicePositionHistoryRequest",
+        "omit": ["TrackerName"]
+      },
+      "actions": ["geo:BatchDeleteDevicePositionHistory"]
+    },
+    "BatchDeleteGeofence": {
+      "operation": "batchDeleteGeofence",
+      "resource": "GeofenceCollection",
+      "param": "collection",
+      "request": {
+        "mode": "required",
+        "interface": "BatchDeleteGeofenceRequest",
+        "omit": ["CollectionName"]
+      },
+      "builder": "makeLocationCollectionHttpBinding",
+      "actions": ["geo:BatchDeleteGeofence"]
+    },
+    "BatchEvaluateGeofences": {
+      "operation": "batchEvaluateGeofences",
+      "resource": "GeofenceCollection",
+      "param": "collection",
+      "request": {
+        "mode": "required",
+        "interface": "BatchEvaluateGeofencesRequest",
+        "omit": ["CollectionName"]
+      },
+      "builder": "makeLocationCollectionHttpBinding",
+      "actions": ["geo:BatchEvaluateGeofences"]
+    },
+    "BatchGetDevicePosition": {
+      "operation": "batchGetDevicePosition",
+      "resource": "Tracker",
+      "request": {
+        "mode": "required",
+        "interface": "BatchGetDevicePositionRequest",
+        "omit": ["TrackerName"]
+      },
+      "actions": ["geo:BatchGetDevicePosition"]
+    },
+    "BatchPutGeofence": {
+      "operation": "batchPutGeofence",
+      "resource": "GeofenceCollection",
+      "param": "collection",
+      "request": {
+        "mode": "required",
+        "interface": "BatchPutGeofenceRequest",
+        "omit": ["CollectionName"]
+      },
+      "builder": "makeLocationCollectionHttpBinding",
+      "actions": ["geo:BatchPutGeofence"]
+    },
+    "BatchUpdateDevicePosition": {
+      "operation": "batchUpdateDevicePosition",
+      "resource": "Tracker",
+      "request": {
+        "mode": "required",
+        "interface": "BatchUpdateDevicePositionRequest",
+        "omit": ["TrackerName"]
+      },
+      "actions": ["geo:BatchUpdateDevicePosition"]
+    },
+    "CalculateRoute": {
+      "operation": "calculateRoute",
+      "resource": "RouteCalculator",
+      "param": "calculator",
+      "request": {
+        "mode": "required",
+        "interface": "CalculateRouteRequest",
+        "omit": ["CalculatorName"]
+      },
+      "builder": "makeLocationCalculatorHttpBinding",
+      "actions": ["geo:CalculateRoute"]
+    },
+    "CalculateRouteMatrix": {
+      "operation": "calculateRouteMatrix",
+      "resource": "RouteCalculator",
+      "param": "calculator",
+      "request": {
+        "mode": "required",
+        "interface": "CalculateRouteMatrixRequest",
+        "omit": ["CalculatorName"]
+      },
+      "builder": "makeLocationCalculatorHttpBinding",
+      "actions": ["geo:CalculateRouteMatrix"]
+    },
+    "CancelJob": {
+      "operation": "cancelJob",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeLocationAccountHttpBinding",
+      "actions": ["geo:CancelJob"]
+    },
+    "ForecastGeofenceEvents": {
+      "operation": "forecastGeofenceEvents",
+      "resource": "GeofenceCollection",
+      "param": "collection",
+      "request": {
+        "mode": "required",
+        "interface": "ForecastGeofenceEventsRequest",
+        "omit": ["CollectionName"]
+      },
+      "builder": "makeLocationCollectionHttpBinding",
+      "actions": ["geo:ForecastGeofenceEvents"]
+    },
+    "GetDevicePosition": {
+      "operation": "getDevicePosition",
+      "resource": "Tracker",
+      "request": {
+        "mode": "required",
+        "interface": "GetDevicePositionRequest",
+        "omit": ["TrackerName"]
+      },
+      "actions": ["geo:GetDevicePosition"]
+    },
+    "GetDevicePositionHistory": {
+      "operation": "getDevicePositionHistory",
+      "resource": "Tracker",
+      "request": {
+        "mode": "required",
+        "interface": "GetDevicePositionHistoryRequest",
+        "omit": ["TrackerName"]
+      },
+      "actions": ["geo:GetDevicePositionHistory"]
+    },
+    "GetGeofence": {
+      "operation": "getGeofence",
+      "resource": "GeofenceCollection",
+      "param": "collection",
+      "request": {
+        "mode": "required",
+        "interface": "GetGeofenceRequest",
+        "omit": ["CollectionName"]
+      },
+      "builder": "makeLocationCollectionHttpBinding",
+      "actions": ["geo:GetGeofence"]
+    },
+    "GetJob": {
+      "operation": "getJob",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeLocationAccountHttpBinding",
+      "actions": ["geo:GetJob"]
+    },
+    "GetPlace": {
+      "operation": "getPlace",
+      "resource": "PlaceIndex",
+      "param": "index",
+      "request": {
+        "mode": "required",
+        "interface": "GetPlaceRequest",
+        "omit": ["IndexName"]
+      },
+      "builder": "makeLocationPlaceIndexHttpBinding",
+      "actions": ["geo:GetPlace"]
+    },
+    "ListDevicePositions": {
+      "operation": "listDevicePositions",
+      "resource": "Tracker",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDevicePositionsRequest",
+        "omit": ["TrackerName"]
+      },
+      "actions": ["geo:ListDevicePositions"]
+    },
+    "ListGeofences": {
+      "operation": "listGeofences",
+      "resource": "GeofenceCollection",
+      "param": "collection",
+      "request": {
+        "mode": "optional",
+        "interface": "ListGeofencesRequest",
+        "omit": ["CollectionName"]
+      },
+      "builder": "makeLocationCollectionHttpBinding",
+      "actions": ["geo:ListGeofences"]
+    },
+    "ListJobs": {
+      "operation": "listJobs",
+      "builder": "makeLocationAccountHttpBinding",
+      "actions": ["geo:ListJobs"]
+    },
+    "PutGeofence": {
+      "operation": "putGeofence",
+      "resource": "GeofenceCollection",
+      "param": "collection",
+      "request": {
+        "mode": "required",
+        "interface": "PutGeofenceRequest",
+        "omit": ["CollectionName"]
+      },
+      "builder": "makeLocationCollectionHttpBinding",
+      "actions": ["geo:PutGeofence"]
+    },
+    "SearchPlaceIndexForPosition": {
+      "operation": "searchPlaceIndexForPosition",
+      "resource": "PlaceIndex",
+      "param": "index",
+      "request": {
+        "mode": "required",
+        "interface": "SearchPlaceIndexForPositionRequest",
+        "omit": ["IndexName"]
+      },
+      "builder": "makeLocationPlaceIndexHttpBinding",
+      "actions": ["geo:SearchPlaceIndexForPosition"]
+    },
+    "SearchPlaceIndexForSuggestions": {
+      "operation": "searchPlaceIndexForSuggestions",
+      "resource": "PlaceIndex",
+      "param": "index",
+      "request": {
+        "mode": "required",
+        "interface": "SearchPlaceIndexForSuggestionsRequest",
+        "omit": ["IndexName"]
+      },
+      "builder": "makeLocationPlaceIndexHttpBinding",
+      "actions": ["geo:SearchPlaceIndexForSuggestions"]
+    },
+    "SearchPlaceIndexForText": {
+      "operation": "searchPlaceIndexForText",
+      "resource": "PlaceIndex",
+      "param": "index",
+      "request": {
+        "mode": "required",
+        "interface": "SearchPlaceIndexForTextRequest",
+        "omit": ["IndexName"]
+      },
+      "builder": "makeLocationPlaceIndexHttpBinding",
+      "actions": ["geo:SearchPlaceIndexForText"]
+    },
+    "VerifyDevicePosition": {
+      "operation": "verifyDevicePosition",
+      "resource": "Tracker",
+      "request": {
+        "mode": "required",
+        "interface": "VerifyDevicePositionRequest",
+        "omit": ["TrackerName"]
+      },
+      "actions": ["geo:VerifyDevicePosition"]
+    }
+  }
+}

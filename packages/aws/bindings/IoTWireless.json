@@ -1,0 +1,180 @@
+{
+  "tag": "AWS.IoTWireless",
+  "module": "iot-wireless",
+  "alias": "iotw",
+  "resources": {
+    "WirelessDevice": {
+      "file": "WirelessDevice.ts"
+    },
+    "WirelessGateway": {
+      "file": "WirelessGateway.ts"
+    }
+  },
+  "builder": "makeIotWirelessDeviceHttpBinding",
+  "builders": {
+    "makeIotWirelessAccountHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*"
+    },
+    "makeIotWirelessDeviceHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      }
+    },
+    "makeIotWirelessGatewayHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      }
+    }
+  },
+  "bindings": {
+    "DeleteQueuedMessages": {
+      "operation": "deleteQueuedMessages",
+      "resource": "WirelessDevice",
+      "param": "device",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteQueuedMessagesRequest",
+        "omit": ["Id"]
+      },
+      "actions": ["iotwireless:DeleteQueuedMessages"],
+      "withTs": {
+        "prepare": "(request: DeleteQueuedMessagesRequest, wirelessDeviceId) => ({...request, Id: wirelessDeviceId})"
+      }
+    },
+    "GetPositionEstimate": {
+      "operation": "getPositionEstimate",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeIotWirelessAccountHttpBinding",
+      "actions": ["iotwireless:GetPositionEstimate"],
+      "withTs": {
+        "prepare": "(request: iotw.GetPositionEstimateRequest) => request"
+      }
+    },
+    "GetResourcePosition": {
+      "operation": "getResourcePosition",
+      "resource": "WirelessDevice",
+      "param": "device",
+      "request": {
+        "mode": "optional",
+        "interface": "GetResourcePositionRequest",
+        "omit": ["ResourceIdentifier", "ResourceType"]
+      },
+      "actions": ["iotwireless:GetResourcePosition"],
+      "with": {
+        "resourceScope": "any"
+      },
+      "withTs": {
+        "prepare": "(request: GetResourcePositionRequest | undefined, wirelessDeviceId) => ({...request, ResourceIdentifier: wirelessDeviceId, ResourceType: \"WirelessDevice\" as const})"
+      },
+      "note": "IoT Wireless authorizes the position APIs against a type-level ARN (\u2026:WirelessDevice/WirelessDevice) \u2014 the device ARN never matches."
+    },
+    "GetServiceEndpoint": {
+      "operation": "getServiceEndpoint",
+      "builder": "makeIotWirelessAccountHttpBinding",
+      "actions": ["iotwireless:GetServiceEndpoint"],
+      "withTs": {
+        "prepare": "(request: iotw.GetServiceEndpointRequest | undefined) => request ?? {}"
+      }
+    },
+    "GetWirelessDeviceStatistics": {
+      "operation": "getWirelessDeviceStatistics",
+      "resource": "WirelessDevice",
+      "param": "device",
+      "request": {
+        "mode": "optional",
+        "interface": "GetWirelessDeviceStatisticsRequest",
+        "omit": ["WirelessDeviceId"]
+      },
+      "actions": ["iotwireless:GetWirelessDeviceStatistics"],
+      "withTs": {
+        "prepare": "(request: GetWirelessDeviceStatisticsRequest | undefined, wirelessDeviceId) => ({...request, WirelessDeviceId: wirelessDeviceId})"
+      }
+    },
+    "GetWirelessGatewayStatistics": {
+      "operation": "getWirelessGatewayStatistics",
+      "resource": "WirelessGateway",
+      "param": "gateway",
+      "request": {
+        "mode": "optional",
+        "interface": "GetWirelessGatewayStatisticsRequest",
+        "omit": ["WirelessGatewayId"]
+      },
+      "builder": "makeIotWirelessGatewayHttpBinding",
+      "actions": ["iotwireless:GetWirelessGatewayStatistics"],
+      "withTs": {
+        "prepare": "(request: GetWirelessGatewayStatisticsRequest | undefined, wirelessGatewayId) => ({...request, WirelessGatewayId: wirelessGatewayId})"
+      }
+    },
+    "ListQueuedMessages": {
+      "operation": "listQueuedMessages",
+      "resource": "WirelessDevice",
+      "param": "device",
+      "request": {
+        "mode": "optional",
+        "interface": "ListQueuedMessagesRequest",
+        "omit": ["Id"]
+      },
+      "actions": ["iotwireless:ListQueuedMessages"],
+      "withTs": {
+        "prepare": "(request: ListQueuedMessagesRequest | undefined, wirelessDeviceId) => ({...request, Id: wirelessDeviceId})"
+      }
+    },
+    "SendDataToWirelessDevice": {
+      "operation": "sendDataToWirelessDevice",
+      "resource": "WirelessDevice",
+      "param": "device",
+      "request": {
+        "mode": "required",
+        "interface": "SendDataToWirelessDeviceRequest",
+        "omit": ["Id"]
+      },
+      "actions": ["iotwireless:SendDataToWirelessDevice"],
+      "withTs": {
+        "prepare": "(request: SendDataToWirelessDeviceRequest, wirelessDeviceId) => ({...request, Id: wirelessDeviceId})"
+      }
+    },
+    "TestWirelessDevice": {
+      "operation": "testWirelessDevice",
+      "resource": "WirelessDevice",
+      "param": "device",
+      "request": {
+        "mode": "optional",
+        "interface": "TestWirelessDeviceRequest",
+        "omit": ["Id"]
+      },
+      "actions": ["iotwireless:TestWirelessDevice"],
+      "withTs": {
+        "prepare": "(request: TestWirelessDeviceRequest | undefined, wirelessDeviceId) => ({...request, Id: wirelessDeviceId})"
+      }
+    },
+    "UpdateResourcePosition": {
+      "operation": "updateResourcePosition",
+      "resource": "WirelessDevice",
+      "param": "device",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateResourcePositionRequest",
+        "omit": ["ResourceIdentifier", "ResourceType"]
+      },
+      "actions": ["iotwireless:UpdateResourcePosition"],
+      "with": {
+        "resourceScope": "any"
+      },
+      "withTs": {
+        "prepare": "(request: UpdateResourcePositionRequest, wirelessDeviceId) => ({...request, ResourceIdentifier: wirelessDeviceId, ResourceType: \"WirelessDevice\" as const})"
+      },
+      "note": "IoT Wireless authorizes the position APIs against a type-level ARN (\u2026:WirelessDevice/WirelessDevice) \u2014 the device ARN never matches."
+    }
+  }
+}

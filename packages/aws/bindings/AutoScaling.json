@@ -1,0 +1,84 @@
+{
+  "tag": "AWS.AutoScaling",
+  "module": "auto-scaling",
+  "resources": {
+    "AutoScalingGroup": {
+      "file": "AutoScalingGroup.ts"
+    }
+  },
+  "builder": "makeGroupHttpBinding",
+  "builders": {
+    "makeGroupHttpBinding": {}
+  },
+  "bindings": {
+    "DescribeScalingActivities": {
+      "operation": "describeScalingActivities",
+      "resource": "AutoScalingGroup",
+      "param": "group",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeScalingActivitiesRequest",
+        "omit": ["AutoScalingGroupName"]
+      },
+      "actions": ["autoscaling:DescribeScalingActivities"],
+      "with": {
+        "resource": "*"
+      }
+    },
+    "ExecutePolicy": {
+      "operation": "executePolicy",
+      "resource": "AutoScalingGroup",
+      "param": "group",
+      "request": {
+        "mode": "required",
+        "interface": "ExecutePolicyRequest",
+        "omit": ["AutoScalingGroupName"]
+      },
+      "actions": ["autoscaling:ExecutePolicy"]
+    },
+    "SetDesiredCapacity": {
+      "operation": "setDesiredCapacity",
+      "resource": "AutoScalingGroup",
+      "param": "group",
+      "request": {
+        "mode": "required",
+        "interface": "SetDesiredCapacityRequest",
+        "omit": ["AutoScalingGroupName"]
+      },
+      "actions": ["autoscaling:SetDesiredCapacity"]
+    },
+    "SetInstanceHealth": {
+      "operation": "setInstanceHealth",
+      "resource": "AutoScalingGroup",
+      "param": "group",
+      "request": {
+        "mode": "required",
+        "interface": "SetInstanceHealthRequest",
+        "omit": []
+      },
+      "actions": ["autoscaling:SetInstanceHealth"]
+    },
+    "SetInstanceProtection": {
+      "operation": "setInstanceProtection",
+      "resource": "AutoScalingGroup",
+      "param": "group",
+      "request": {
+        "mode": "required",
+        "interface": "SetInstanceProtectionRequest",
+        "omit": ["AutoScalingGroupName"]
+      },
+      "actions": ["autoscaling:SetInstanceProtection"]
+    },
+    "TerminateInstanceInAutoScalingGroup": {
+      "operation": "terminateInstanceInAutoScalingGroup",
+      "resource": "AutoScalingGroup",
+      "param": "group",
+      "request": {
+        "mode": "required",
+        "interface": "TerminateInstanceRequest",
+        "omit": []
+      },
+      "actions": ["autoscaling:TerminateInstanceInAutoScalingGroup"]
+    }
+  }
+}
