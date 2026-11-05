@@ -503,7 +503,6 @@ export const BrokerProvider = () =>
             "brokerId" in props
               ? yield* readBroker(props.brokerId)
               : yield* findByName(props.brokerName);
-
           return broker === undefined ? undefined : toAttrs(broker);
         }),
 

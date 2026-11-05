@@ -241,7 +241,6 @@ export const ConfigurationProvider = () =>
             "configurationId" in props
               ? yield* readConfiguration(props.configurationId)
               : yield* findByName(props.configurationName);
-
           return config === undefined ? undefined : toAttrs(config);
         }),
 

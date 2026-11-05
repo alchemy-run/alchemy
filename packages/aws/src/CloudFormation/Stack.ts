@@ -346,11 +346,8 @@ export const StackProvider = () =>
 
         lookup: Effect.fn(function* ({ stackId }) {
           const stack = yield* describe(stackId);
-
           if (stack === undefined) return undefined;
-
           const attrs = toAttrs(stack);
-
           return attrs;
         }),
 

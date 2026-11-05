@@ -227,7 +227,6 @@ export const CollectionGroupProvider = () =>
             return undefined;
           }
           const attrs = toAttributes(detail);
-
           return attrs;
         }),
 

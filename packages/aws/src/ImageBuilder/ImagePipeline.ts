@@ -261,7 +261,6 @@ export const ImagePipelineProvider = () =>
           const pipeline = yield* getPipeline(arn);
           if (pipeline === undefined) return undefined;
           const attrs = yield* toAttrs(pipeline);
-
           return attrs;
         }),
 

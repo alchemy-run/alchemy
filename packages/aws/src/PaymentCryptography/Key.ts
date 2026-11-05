@@ -336,7 +336,6 @@ export const KeyProvider = () =>
           const key = yield* observeKey(keyArn);
           if (key === undefined) return undefined;
           const attrs = toAttrs(key);
-
           return attrs;
         }),
         read: Effect.fn(function* ({ id, output }) {

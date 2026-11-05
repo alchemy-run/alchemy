@@ -147,7 +147,6 @@ export const VariableProvider = () =>
           const variable = yield* get(name);
           if (variable === undefined) return undefined;
           const attrs = toAttrs(variable);
-
           return attrs;
         }),
 

@@ -172,18 +172,12 @@ export const DatabaseProvider = () =>
 
         lookup: Effect.fn(function* ({ databaseName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const db = yield* observe(databaseName, accountId);
-
           if (db === undefined) return undefined;
-
           return {
             databaseName: db.Name,
-
             databaseArn: databaseArn(region, db.CatalogId ?? accountId, db.Name),
-
             catalogId: db.CatalogId ?? accountId,
-
             configuration: observeDatabaseConfiguration(db),
           };
         }),

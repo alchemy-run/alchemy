@@ -414,29 +414,21 @@ export const SubnetProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const found = yield* ec2
-
             .describeSubnets(
               "subnetId" in props
                 ? { SubnetIds: [props.subnetId] }
                 : { Filters: [nameTagFilter(props.name)] },
             )
-
             .pipe(
               Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.succeed({ Subnets: [] })),
             );
-
           const match = yield* single(
             "AWS.EC2.Subnet",
-
             "subnetId" in props ? props.subnetId : `Name=${props.name}`,
-
             found.Subnets ?? [],
-
             (x) => x.SubnetId,
           );
-
           if (!match?.SubnetId) return undefined;
-
           return toSubnetAttributes(match);
         }),
 

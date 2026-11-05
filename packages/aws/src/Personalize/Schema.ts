@@ -159,16 +159,11 @@ export const SchemaProvider = () =>
 
         lookup: Effect.fn(function* ({ schemaArn }) {
           const schema = yield* describe(schemaArn);
-
           if (schema === undefined) return undefined;
-
           return {
             schemaArn: schema.schemaArn!,
-
             name: schema.name!,
-
             schema: schema.schema!,
-
             domain: schema.domain,
           };
         }),

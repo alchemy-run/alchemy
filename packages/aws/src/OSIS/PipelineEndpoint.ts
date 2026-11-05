@@ -196,9 +196,7 @@ export const PipelineEndpointProvider = () =>
 
         lookup: Effect.fn(function* ({ endpointId }) {
           const endpoint = yield* findEndpoint(endpointId);
-
           if (endpoint === undefined) return undefined;
-
           return yield* toAttrs(endpoint);
         }),
 

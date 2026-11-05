@@ -166,7 +166,6 @@ export const FlowProvider = () =>
             flowArn: flow.flowArn,
             flowStatus: flow.flowStatus,
           };
-
           return attrs;
         }),
 

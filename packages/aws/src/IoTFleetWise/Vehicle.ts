@@ -200,7 +200,6 @@ export const VehicleProvider = () =>
           const found = yield* readVehicle(name);
           if (found?.arn === undefined) return undefined;
           const attrs = yield* toAttrs(found);
-
           return attrs;
         }),
 

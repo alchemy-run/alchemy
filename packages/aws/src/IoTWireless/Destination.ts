@@ -230,7 +230,6 @@ export const DestinationProvider = () =>
           const destination = yield* getDestination(name);
           if (destination === undefined) return undefined;
           const attrs = yield* toAttrs(destination, name);
-
           return attrs;
         }),
 

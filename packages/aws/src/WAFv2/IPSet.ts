@@ -284,7 +284,6 @@ export const IPSetProvider = () =>
 
         lookup: Effect.fn(function* ({ ipSetName, scope = defaultScope }) {
           const found = yield* findIPSet(scope, ipSetName, undefined);
-
           return found?.IPSet ? toAttrs(found.IPSet, scope) : undefined;
         }),
 

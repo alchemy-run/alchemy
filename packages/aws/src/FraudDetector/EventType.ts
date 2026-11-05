@@ -139,7 +139,6 @@ export const EventTypeProvider = () =>
           const eventType = yield* get(name);
           if (eventType === undefined) return undefined;
           const attrs = toAttrs(eventType);
-
           return attrs;
         }),
 

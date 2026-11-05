@@ -154,7 +154,6 @@ export const PublicDnsNamespaceProvider = () =>
 
         lookup: Effect.fn(function* ({ namespaceName }) {
           const namespace = yield* observeNamespace("DNS_PUBLIC", namespaceName, undefined);
-
           return namespace?.Id === undefined ? undefined : toAttributes(namespace);
         }),
 

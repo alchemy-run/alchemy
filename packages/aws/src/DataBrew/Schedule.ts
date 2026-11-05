@@ -133,15 +133,10 @@ export const ScheduleProvider = () =>
 
         lookup: Effect.fn(function* ({ scheduleName: name }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const schedule = yield* observe(name);
-
           if (schedule === undefined) return undefined;
-
           const arn = schedule.ResourceArn ?? databrewArn(region, accountId, "schedule", name);
-
           const attrs = { scheduleName: name, scheduleArn: arn };
-
           return attrs;
         }),
 

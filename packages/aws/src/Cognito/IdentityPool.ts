@@ -289,27 +289,19 @@ export const IdentityPoolProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const pool =
             "identityPoolId" in props
               ? yield* describePool(props.identityPoolId)
               : yield* single(
                   "AWS.Cognito.IdentityPool",
-
                   props.identityPoolName,
-
                   yield* findPoolsByName(props.identityPoolName),
-
                   (pool) => pool.IdentityPoolId,
                 );
-
           if (pool === undefined) return undefined;
-
           return {
             identityPoolId: pool.IdentityPoolId,
-
             identityPoolArn: identityPoolArnOf(region, accountId, pool.IdentityPoolId),
-
             identityPoolName: pool.IdentityPoolName,
           };
         }),

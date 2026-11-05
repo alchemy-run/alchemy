@@ -170,7 +170,6 @@ export const JobTemplateProvider = () =>
           const template = yield* getJobTemplate(name);
           if (template === undefined) return undefined;
           const attrs = toAttrs(template);
-
           return attrs;
         }),
 

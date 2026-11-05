@@ -153,11 +153,8 @@ export const EmailTemplateProvider = () =>
 
         lookup: Effect.fn(function* ({ templateName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* getTemplate(templateName);
-
           if (!found) return undefined;
-
           return { templateName, templateArn: templateArnOf(region, accountId, templateName) };
         }),
 

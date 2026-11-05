@@ -306,13 +306,10 @@ export const ClusterProvider = () =>
 
         lookup: Effect.fn(function* ({ clusterId }) {
           const cluster = yield* findClusterById(clusterId);
-
           if (cluster === undefined || cluster.State === "DELETED") {
             return undefined;
           }
-
           const attrs = yield* toAttrs(cluster);
-
           return attrs;
         }),
 

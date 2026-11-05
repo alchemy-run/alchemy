@@ -199,21 +199,14 @@ export const RulesetProvider = () =>
 
         lookup: Effect.fn(function* ({ rulesetName: name }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const ruleset = yield* observe(name);
-
           if (ruleset === undefined) return undefined;
-
           const arn = ruleset.ResourceArn ?? databrewArn(region, accountId, "ruleset", name);
-
           const attrs = {
             rulesetName: name,
-
             rulesetArn: arn,
-
             targetArn: ruleset.TargetArn ?? "",
           };
-
           return attrs;
         }),
 

@@ -276,11 +276,8 @@ export const ScraperProvider = () =>
 
         lookup: Effect.fn(function* ({ scraperId }) {
           const scraper = yield* describe(scraperId);
-
           if (scraper === undefined) return undefined;
-
           const attrs = toAttrs(scraper);
-
           return attrs;
         }),
 

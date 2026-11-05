@@ -198,9 +198,7 @@ export const SnapshotProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* ec2
-
             .describeSnapshots(
               "snapshotId" in props
                 ? { SnapshotIds: [props.snapshotId] }
@@ -208,23 +206,16 @@ export const SnapshotProvider = () =>
                     Filters: [nameTagFilter(props.name), { Name: "owner-id", Values: [accountId] }],
                   },
             )
-
             .pipe(
               Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.succeed({ Snapshots: [] })),
             );
-
           const match = yield* single(
             "AWS.EC2.Snapshot",
-
             "snapshotId" in props ? props.snapshotId : `Name=${props.name}`,
-
             found.Snapshots ?? [],
-
             (x) => x.SnapshotId,
           );
-
           if (!match?.SnapshotId) return undefined;
-
           return toSnapshotAttributes(match, region, accountId);
         }),
 

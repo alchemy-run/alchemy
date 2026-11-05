@@ -192,7 +192,6 @@ export const StreamProvider = () =>
             streamName,
             streamArn: info.StreamARN,
           };
-
           return attrs;
         }),
 

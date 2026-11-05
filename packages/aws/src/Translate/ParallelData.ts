@@ -206,7 +206,6 @@ export const ParallelDataProvider = () =>
           const found = yield* getOne(name);
           if (found?.ParallelDataProperties === undefined) return undefined;
           const attrs = toAttributes(found.ParallelDataProperties);
-
           return attrs;
         }),
 

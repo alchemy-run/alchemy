@@ -258,18 +258,12 @@ export const FileSystemProvider = () =>
 
         lookup: Effect.fn(function* ({ fileSystemId }) {
           const fs = yield* findById(fileSystemId);
-
           if (fs === undefined || fs.Lifecycle === "DELETING") return undefined;
-
           return {
             fileSystemId: fs.FileSystemId!,
-
             fileSystemArn: fs.ResourceARN ?? (yield* fileSystemArnOf(fs.FileSystemId!)),
-
             fileSystemType: fs.FileSystemType ?? "LUSTRE",
-
             dnsName: fs.DNSName,
-
             vpcId: fs.VpcId,
           };
         }),

@@ -278,11 +278,8 @@ export const RoomProvider = () =>
 
         lookup: Effect.fn(function* ({ roomArn }) {
           const room = yield* getByIdentifier(roomArn);
-
           if (room === undefined) return undefined;
-
           const attrs = yield* toAttrs(room);
-
           return attrs;
         }),
 

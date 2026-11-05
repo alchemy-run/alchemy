@@ -249,33 +249,24 @@ export const NetworkInterfaceProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* ec2
-
             .describeNetworkInterfaces(
               "networkInterfaceId" in props
                 ? { NetworkInterfaceIds: [props.networkInterfaceId] }
                 : { Filters: [nameTagFilter(props.name)] },
             )
-
             .pipe(
               Effect.catchTag("InvalidNetworkInterfaceID.NotFound", () =>
                 Effect.succeed({ NetworkInterfaces: [] }),
               ),
             );
-
           const match = yield* single(
             "AWS.EC2.NetworkInterface",
-
             "networkInterfaceId" in props ? props.networkInterfaceId : `Name=${props.name}`,
-
             found.NetworkInterfaces ?? [],
-
             (x) => x.NetworkInterfaceId,
           );
-
           if (!match?.NetworkInterfaceId) return undefined;
-
           return toNetworkInterfaceAttributes(match, region, accountId);
         }),
 

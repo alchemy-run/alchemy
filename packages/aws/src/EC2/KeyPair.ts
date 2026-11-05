@@ -176,28 +176,20 @@ export const KeyPairProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const info = yield* ec2
-
             .describeKeyPairs(
               "keyName" in props
                 ? { KeyNames: [props.keyName] }
                 : { KeyPairIds: [props.keyPairId] },
             )
-
             .pipe(
               Effect.catchTag("InvalidKeyPair.NotFound", () => Effect.succeed({ KeyPairs: [] })),
-
               Effect.map((r) => r.KeyPairs?.[0]),
             );
-
           if (!info?.KeyPairId || !info.KeyName) return undefined;
-
           return {
             keyPairId: info.KeyPairId as KeyPairId,
-
             keyName: info.KeyName,
-
             keyFingerprint: info.KeyFingerprint ?? "",
-
             keyType: (info.KeyType ?? "rsa") as KeyPairType,
           };
         }),

@@ -163,7 +163,6 @@ export const ListProvider = () =>
           const list = yield* get(name);
           if (list === undefined) return undefined;
           const attrs = toAttrs(list);
-
           return attrs;
         }),
 

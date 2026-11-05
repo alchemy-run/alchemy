@@ -294,7 +294,6 @@ export const RegexPatternSetProvider = () =>
 
         lookup: Effect.fn(function* ({ regexPatternSetName, scope = defaultScope }) {
           const found = yield* findSet(scope, regexPatternSetName, undefined);
-
           return found?.RegexPatternSet ? toAttrs(found.RegexPatternSet, scope) : undefined;
         }),
 

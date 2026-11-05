@@ -320,46 +320,30 @@ export const ParameterProvider = () =>
 
         lookup: Effect.fn(function* ({ parameterName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* ssm.getParameter({ Name: parameterName }).pipe(
             Effect.map((r) => r.Parameter),
-
             Effect.catchTag("ParameterNotFound", () => Effect.undefined),
           );
-
           if (!found) return undefined;
-
           const type = (found.Type ?? "String") as ParameterType;
-
           const meta = yield* describeByName(parameterName).pipe(
             Effect.orElseSucceed(() => undefined),
           );
-
           const keyArn =
             type === "SecureString"
               ? yield* resolveKeyArn(meta?.KeyId).pipe(Effect.orElseSucceed(() => undefined))
               : undefined;
-
           return {
             parameterName,
-
             parameterArn: found.ARN ?? parameterArnOf(region, accountId, parameterName),
-
             type,
-
             version: found.Version ?? 1,
-
             keyArn,
-
             configuration: {
               description: meta?.Description,
-
               tier: meta?.Tier,
-
               allowedPattern: meta?.AllowedPattern,
-
               dataType: meta?.DataType ?? "text",
-
               tags: {},
             },
           };

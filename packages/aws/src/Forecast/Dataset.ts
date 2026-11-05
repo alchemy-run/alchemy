@@ -179,11 +179,8 @@ export const DatasetProvider = () =>
 
         lookup: Effect.fn(function* ({ datasetArn }) {
           const dataset = yield* describe(datasetArn);
-
           if (dataset === undefined) return undefined;
-
           const attrs = toAttrs(dataset);
-
           return attrs;
         }),
 

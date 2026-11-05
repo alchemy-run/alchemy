@@ -263,11 +263,8 @@ export const TrustAnchorProvider = () =>
 
         lookup: Effect.fn(function* ({ trustAnchorId }) {
           const found = yield* getById(trustAnchorId);
-
           if (found === undefined) return undefined;
-
           const attrs = toAttrs(found);
-
           return attrs;
         }),
 

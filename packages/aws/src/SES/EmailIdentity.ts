@@ -313,14 +313,10 @@ export const EmailIdentityProvider = () =>
 
         lookup: Effect.fn(function* ({ emailIdentity }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* getIdentity(emailIdentity);
-
           if (!found) return undefined;
-
           return {
             ...toAttributes(emailIdentity, identityArnOf(region, accountId, emailIdentity), found),
-
             configuration: observeIdentityConfiguration(found, undefined, toTagRecord(found.Tags)),
           };
         }),

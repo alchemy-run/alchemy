@@ -329,29 +329,20 @@ export const VolumeProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* ec2
-
             .describeVolumes(
               "volumeId" in props
                 ? { VolumeIds: [props.volumeId] }
                 : { Filters: [nameTagFilter(props.name)] },
             )
-
             .pipe(Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })));
-
           const match = yield* single(
             "AWS.EC2.Volume",
-
             "volumeId" in props ? props.volumeId : `Name=${props.name}`,
-
             (found.Volumes ?? []).filter((x) => x.State !== "deleted" && x.State !== "deleting"),
-
             (x) => x.VolumeId,
           );
-
           if (!match?.VolumeId) return undefined;
-
           return toVolumeAttributes(match, region, accountId);
         }),
 

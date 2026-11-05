@@ -277,7 +277,6 @@ export const VaultProvider = () =>
             vaultArn: found.VaultARN,
             creationDate: found.CreationDate ?? "",
           };
-
           return attrs;
         }),
 

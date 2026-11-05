@@ -166,7 +166,6 @@ export const QueueProvider = () =>
           const queue = yield* getQueue(name);
           if (queue === undefined) return undefined;
           const attrs = toAttrs(queue);
-
           return attrs;
         }),
 

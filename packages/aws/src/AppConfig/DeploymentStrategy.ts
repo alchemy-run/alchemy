@@ -161,21 +161,14 @@ export const DeploymentStrategyProvider = () =>
 
         lookup: Effect.fn(function* ({ deploymentStrategyId }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const strategy = yield* readStrategy(deploymentStrategyId);
-
           if (strategy?.Id === undefined) return undefined;
-
           const arn = deploymentStrategyArn(region, accountId, strategy.Id);
-
           const attrs = {
             deploymentStrategyId: strategy.Id,
-
             deploymentStrategyName: strategy.Name!,
-
             deploymentStrategyArn: arn,
           };
-
           return attrs;
         }),
 

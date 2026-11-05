@@ -340,7 +340,6 @@ export const ServiceProvider = () =>
 
         lookup: Effect.fn(function* ({ namespaceId, serviceName }) {
           const service = yield* observeService(namespaceId, serviceName, undefined);
-
           if (
             service?.Id === undefined ||
             service.Arn === undefined ||
@@ -348,16 +347,11 @@ export const ServiceProvider = () =>
           ) {
             return undefined;
           }
-
           return {
             serviceId: service.Id,
-
             serviceArn: service.Arn,
-
             serviceName: service.Name ?? serviceName,
-
             namespaceId: service.NamespaceId,
-
             namespaceName: yield* resolveNamespaceName(service.NamespaceId).pipe(
               Effect.catchTag("NamespaceNotFound", () => Effect.succeed("")),
             ),

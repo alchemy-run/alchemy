@@ -202,18 +202,12 @@ export const ConnectionProvider = () =>
 
         lookup: Effect.fn(function* ({ connectionName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const connection = yield* observe(connectionName, accountId);
-
           if (connection?.Name === undefined) return undefined;
-
           return {
             connectionName: connection.Name,
-
             connectionArn: connectionArn(region, accountId, connection.Name),
-
             connectionType: connection.ConnectionType ?? "",
-
             catalogId: accountId,
           };
         }),

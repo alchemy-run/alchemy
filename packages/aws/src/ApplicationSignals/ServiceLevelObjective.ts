@@ -318,7 +318,6 @@ export const ServiceLevelObjectiveProvider = () =>
             sloArn: found.Arn,
             evaluationType: found.EvaluationType,
           };
-
           return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

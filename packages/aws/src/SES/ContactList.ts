@@ -215,11 +215,8 @@ export const ContactListProvider = () =>
 
         lookup: Effect.fn(function* ({ contactListName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* getList(contactListName);
-
           if (!found) return undefined;
-
           return {
             contactListName,
             contactListArn: contactListArnOf(region, accountId, contactListName),

@@ -291,25 +291,16 @@ export const CrawlerProvider = () =>
 
         lookup: Effect.fn(function* ({ crawlerName: name }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const crawler = yield* observe(name);
-
           if (crawler?.Name === undefined) return undefined;
-
           const arn = crawlerArn(region, accountId, crawler.Name);
-
           const attrs = {
             crawlerName: crawler.Name,
-
             crawlerArn: arn,
-
             role: crawler.Role ?? "",
-
             databaseName: crawler.DatabaseName,
-
             state: crawler.State,
           };
-
           return attrs;
         }),
 

@@ -185,19 +185,13 @@ export const AnalyzerProvider = () =>
 
         lookup: Effect.fn(function* ({ analyzerName: name }) {
           const analyzer = yield* observe(name);
-
           if (analyzer === undefined) return undefined;
-
           const attrs = {
             analyzerName: analyzer.name,
-
             analyzerArn: analyzer.arn,
-
             type: analyzer.type,
-
             status: analyzer.status,
           };
-
           return attrs;
         }),
 

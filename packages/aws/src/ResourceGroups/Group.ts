@@ -299,7 +299,6 @@ export const GroupProvider = () =>
             groupName,
             groupArn: found.GroupArn,
           };
-
           return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

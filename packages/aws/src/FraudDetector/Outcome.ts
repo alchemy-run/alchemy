@@ -114,7 +114,6 @@ export const OutcomeProvider = () =>
           const outcome = yield* get(name);
           if (outcome === undefined) return undefined;
           const attrs = toAttrs(outcome);
-
           return attrs;
         }),
 

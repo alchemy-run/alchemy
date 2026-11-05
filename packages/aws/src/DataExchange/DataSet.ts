@@ -183,11 +183,8 @@ export const DataSetProvider = () =>
 
         lookup: Effect.fn(function* ({ dataSetId }) {
           const dataSet = yield* getById(dataSetId);
-
           if (dataSet === undefined) return undefined;
-
           const attrs = toAttrs(dataSet);
-
           return attrs;
         }),
 

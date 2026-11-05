@@ -304,31 +304,23 @@ export const PrefixListProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const found = yield* ec2
-
             .describeManagedPrefixLists(
               "prefixListId" in props
                 ? { PrefixListIds: [props.prefixListId] }
                 : { Filters: [{ Name: "prefix-list-name", Values: [props.prefixListName] }] },
             )
-
             .pipe(
               Effect.catchTag("InvalidPrefixListID.NotFound", () =>
                 Effect.succeed({ PrefixLists: [] }),
               ),
             );
-
           const match = yield* single(
             "AWS.EC2.PrefixList",
-
             "prefixListId" in props ? props.prefixListId : props.prefixListName,
-
             found.PrefixLists ?? [],
-
             (x) => x.PrefixListId,
           );
-
           if (!match?.PrefixListId) return undefined;
-
           return yield* toAttrs(match);
         }),
 

@@ -181,7 +181,6 @@ export const SignalCatalogProvider = () =>
             signalCatalogName: found.name,
             signalCatalogArn: found.arn,
           };
-
           return attrs;
         }),
 

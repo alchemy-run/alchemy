@@ -470,29 +470,21 @@ export const NatGatewayProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const found = yield* ec2
-
             .describeNatGateways(
               "natGatewayId" in props
                 ? { NatGatewayIds: [props.natGatewayId] }
                 : { Filter: [nameTagFilter(props.name)] },
             )
-
             .pipe(Effect.catchTag("NatGatewayNotFound", () => Effect.succeed({ NatGateways: [] })));
-
           const match = yield* single(
             "AWS.EC2.NatGateway",
-
             "natGatewayId" in props ? props.natGatewayId : `Name=${props.name}`,
-
             (found.NatGateways ?? []).filter(
               (x) => x.State !== "deleted" && x.State !== "deleting" && x.State !== "failed",
             ),
-
             (x) => x.NatGatewayId,
           );
-
           if (!match?.NatGatewayId) return undefined;
-
           return yield* toAttrs(match);
         }),
 

@@ -233,11 +233,8 @@ export const ChannelProvider = () =>
 
         lookup: Effect.fn(function* ({ channelArn }) {
           const channel = yield* getByArn(channelArn);
-
           if (channel === undefined) return undefined;
-
           const attrs = yield* toAttrs(channel);
-
           return attrs;
         }),
 

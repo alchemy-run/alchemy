@@ -334,7 +334,6 @@ export const PipelineProvider = () =>
             pipelineArn: found.metadata.pipelineArn,
             pipelineVersion: found.pipeline?.version ?? 1,
           };
-
           return attrs;
         }),
 

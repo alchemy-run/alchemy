@@ -158,7 +158,6 @@ export const ConfigurationSetProvider = () =>
             configurationSetName: observed.ConfigurationSetName,
             configurationSetArn: observed.ConfigurationSetArn,
           };
-
           return attrs;
         }),
 

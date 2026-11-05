@@ -466,7 +466,6 @@ export const CampaignProvider = () =>
           const found = yield* readCampaign(name);
           if (found?.arn === undefined) return undefined;
           const attrs = yield* toAttrs(found);
-
           return attrs;
         }),
 

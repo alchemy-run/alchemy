@@ -240,7 +240,6 @@ export const EndpointProvider = () =>
             endpointArn: described.EndpointArn,
             endpointStatus: described.EndpointStatus,
           };
-
           return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

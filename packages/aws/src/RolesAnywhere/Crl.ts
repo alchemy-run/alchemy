@@ -165,11 +165,8 @@ export const CrlProvider = () =>
 
         lookup: Effect.fn(function* ({ crlId }) {
           const found = yield* getById(crlId);
-
           if (found === undefined) return undefined;
-
           const attrs = toAttrs(found);
-
           return attrs;
         }),
 

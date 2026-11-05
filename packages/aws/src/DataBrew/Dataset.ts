@@ -367,15 +367,10 @@ export const DatasetProvider = () =>
 
         lookup: Effect.fn(function* ({ datasetName: name }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const dataset = yield* observe(name);
-
           if (dataset === undefined) return undefined;
-
           const arn = dataset.ResourceArn ?? databrewArn(region, accountId, "dataset", name);
-
           const attrs = { datasetName: name, datasetArn: arn };
-
           return attrs;
         }),
 

@@ -264,7 +264,6 @@ export const SigningProfileProvider = () =>
           // Canceled and revoked profiles can no longer sign.
           if (live === undefined || live.status !== "Active") return undefined;
           const attrs = toAttributes(profileName, live);
-
           return attrs;
         }),
 

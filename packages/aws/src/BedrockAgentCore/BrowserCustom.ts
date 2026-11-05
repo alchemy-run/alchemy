@@ -180,11 +180,8 @@ export const BrowserCustomProvider = () =>
 
         lookup: Effect.fn(function* ({ browserId }) {
           const browser = yield* getLiveOrUndefined(browserId);
-
           if (browser === undefined) return undefined;
-
           const attrs = toAttributes(browser);
-
           return attrs;
         }),
 

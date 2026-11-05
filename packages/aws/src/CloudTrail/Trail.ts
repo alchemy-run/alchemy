@@ -433,7 +433,6 @@ export const TrailProvider = () =>
           const trail = yield* readTrail(name);
           if (trail === undefined) return undefined;
           const attrs = yield* toAttributes(trail);
-
           return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

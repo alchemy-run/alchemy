@@ -130,19 +130,14 @@ export const ApplicationProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const app =
             "applicationId" in props
               ? yield* readApplication(props.applicationId)
               : yield* findByName(props.applicationName);
-
           if (app?.Id === undefined) return undefined;
-
           return {
             applicationId: app.Id,
-
             applicationName: app.Name!,
-
             applicationArn: applicationArn(region, accountId, app.Id),
           };
         }),

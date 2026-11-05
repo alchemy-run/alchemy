@@ -235,7 +235,6 @@ export const TenantProvider = () =>
             tenantId: found.TenantId,
             tenantArn: found.TenantArn,
           };
-
           return attrs;
         }),
 

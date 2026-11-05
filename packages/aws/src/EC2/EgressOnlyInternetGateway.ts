@@ -253,33 +253,25 @@ export const EgressOnlyInternetGatewayProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const found = yield* ec2
-
             .describeEgressOnlyInternetGateways(
               "egressOnlyInternetGatewayId" in props
                 ? { EgressOnlyInternetGatewayIds: [props.egressOnlyInternetGatewayId] }
                 : { Filters: [nameTagFilter(props.name)] },
             )
-
             .pipe(
               Effect.catchTag("InvalidEgressOnlyInternetGatewayId.NotFound", () =>
                 Effect.succeed({ EgressOnlyInternetGateways: [] }),
               ),
             );
-
           const match = yield* single(
             "AWS.EC2.EgressOnlyInternetGateway",
-
             "egressOnlyInternetGatewayId" in props
               ? props.egressOnlyInternetGatewayId
               : `Name=${props.name}`,
-
             found.EgressOnlyInternetGateways ?? [],
-
             (x) => x.EgressOnlyInternetGatewayId,
           );
-
           if (!match?.EgressOnlyInternetGatewayId) return undefined;
-
           return yield* toAttrs(match);
         }),
 

@@ -114,7 +114,6 @@ export const EntityTypeProvider = () =>
           const entityType = yield* get(name);
           if (entityType === undefined) return undefined;
           const attrs = toAttrs(entityType);
-
           return attrs;
         }),
 

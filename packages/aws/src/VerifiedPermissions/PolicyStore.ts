@@ -140,15 +140,11 @@ export const PolicyStoreProvider = () =>
 
         lookup: Effect.fn(function* ({ policyStoreId }) {
           const store = yield* observe(policyStoreId);
-
           if (store === undefined) return undefined;
-
           const attrs = {
             policyStoreId: store.policyStoreId,
-
             policyStoreArn: store.arn,
           };
-
           return attrs;
         }),
 

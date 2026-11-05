@@ -200,11 +200,8 @@ export const CodeInterpreterProvider = () =>
 
         lookup: Effect.fn(function* ({ codeInterpreterId }) {
           const ci = yield* getLiveOrUndefined(codeInterpreterId);
-
           if (ci === undefined) return undefined;
-
           const attrs = toAttributes(ci);
-
           return attrs;
         }),
 

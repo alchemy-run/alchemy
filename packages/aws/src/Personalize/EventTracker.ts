@@ -184,11 +184,8 @@ export const EventTrackerProvider = () =>
 
         lookup: Effect.fn(function* ({ eventTrackerArn }) {
           const tracker = yield* describe(eventTrackerArn);
-
           if (tracker === undefined) return undefined;
-
           const attrs = toAttrs(tracker);
-
           return attrs;
         }),
 

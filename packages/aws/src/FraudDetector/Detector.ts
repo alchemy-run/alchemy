@@ -165,7 +165,6 @@ export const DetectorProvider = () =>
           const detector = yield* get(detectorId);
           if (detector === undefined) return undefined;
           const attrs = toAttrs(detector);
-
           return attrs;
         }),
 

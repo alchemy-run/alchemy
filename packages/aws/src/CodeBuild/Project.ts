@@ -474,7 +474,6 @@ export const ProjectProvider = () =>
             projectName: project.name ?? name,
             projectArn: project.arn,
           };
-
           return attrs;
         }),
 

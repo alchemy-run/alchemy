@@ -165,20 +165,13 @@ export const EnvironmentProvider = () =>
 
         lookup: Effect.fn(function* ({ applicationId, environmentName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const env = yield* findByName(applicationId, environmentName);
-
           if (env?.Id === undefined) return undefined;
-
           return {
             environmentId: env.Id,
-
             environmentName: env.Name!,
-
             applicationId,
-
             environmentArn: environmentArn(region, accountId, applicationId, env.Id),
-
             state: env.State ?? "",
           };
         }),

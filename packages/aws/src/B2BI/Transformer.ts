@@ -194,15 +194,10 @@ export const TransformerProvider = () =>
 
         lookup: Effect.fn(function* ({ transformerId }) {
           const found = yield* b2bi
-
             .getTransformer({ transformerId: transformerId })
-
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-
           if (found === undefined) return undefined;
-
           const attrs = toAttrs(found);
-
           return attrs;
         }),
 

@@ -162,7 +162,6 @@ export const DBSubnetGroupProvider = () =>
           if (!group?.DBSubnetGroupName) {
             return undefined;
           }
-
           return {
             dbSubnetGroupName: group.DBSubnetGroupName,
             dbSubnetGroupArn: group.DBSubnetGroupArn,

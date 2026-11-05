@@ -252,11 +252,8 @@ export const ExtensionProvider = () =>
 
         lookup: Effect.fn(function* ({ extensionId }) {
           const extension = yield* readExtension(extensionId);
-
           if (extension?.Id === undefined) return undefined;
-
           const attrs = toAttrs(extension);
-
           return attrs;
         }),
 

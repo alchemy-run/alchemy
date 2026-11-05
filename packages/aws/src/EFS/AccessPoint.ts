@@ -264,14 +264,10 @@ export const AccessPointProvider = () =>
 
         lookup: Effect.fn(function* ({ accessPointId }) {
           const ap = yield* findById(accessPointId);
-
           if (ap?.AccessPointId === undefined || ap.LifeCycleState === "deleted") return undefined;
-
           return {
             accessPointId: ap.AccessPointId,
-
             accessPointArn: ap.AccessPointArn!,
-
             fileSystemId: ap.FileSystemId!,
           };
         }),

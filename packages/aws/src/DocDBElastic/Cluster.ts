@@ -332,7 +332,6 @@ export const ClusterProvider = () =>
 
         lookup: Effect.fn(function* ({ clusterName }) {
           const cluster = yield* readCluster(clusterName, undefined);
-
           return cluster === undefined ? undefined : yield* toAttrs(cluster);
         }),
 

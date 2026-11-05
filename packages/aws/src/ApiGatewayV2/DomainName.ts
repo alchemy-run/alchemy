@@ -146,7 +146,6 @@ export const DomainNameProvider = () =>
 
         lookup: Effect.fn(function* ({ domainName }) {
           const domain = yield* getDomainSafe(domainName);
-
           return domain?.DomainName ? snapshotFromDomain(domain) : undefined;
         }),
 

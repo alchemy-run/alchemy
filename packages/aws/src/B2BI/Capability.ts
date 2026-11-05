@@ -137,15 +137,10 @@ export const CapabilityProvider = () =>
 
         lookup: Effect.fn(function* ({ capabilityId }) {
           const found = yield* b2bi
-
             .getCapability({ capabilityId: capabilityId })
-
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-
           if (found === undefined) return undefined;
-
           const attrs = toAttrs(found);
-
           return attrs;
         }),
 

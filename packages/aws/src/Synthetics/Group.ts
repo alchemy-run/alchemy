@@ -160,7 +160,6 @@ export const GroupProvider = () =>
           const group = yield* getGroupOrUndefined(groupName);
           if (group === undefined) return undefined;
           const attrs = toAttributes(groupName, group);
-
           return attrs;
         }),
 

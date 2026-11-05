@@ -186,7 +186,6 @@ export const DataAutomationLibraryProvider = () =>
           const found = yield* observeLibrary(libraryArn);
           if (found === undefined) return undefined;
           const attrs = toAttributes(found);
-
           return attrs;
         }),
 

@@ -170,7 +170,6 @@ export const GroupProvider = () =>
           const found = yield* observeGroup(groupName);
           if (!found?.GroupARN) return undefined;
           const attrs = { groupName, groupArn: found.GroupARN };
-
           return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

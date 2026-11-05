@@ -134,7 +134,6 @@ export const OptOutListProvider = () =>
             optOutListName: observed.OptOutListName,
             optOutListArn: observed.OptOutListArn,
           };
-
           return attrs;
         }),
 

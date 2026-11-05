@@ -507,7 +507,6 @@ export const PipeProvider = () =>
             pipeArn: described.Arn,
             currentState: described.CurrentState,
           };
-
           return attrs;
         }),
 

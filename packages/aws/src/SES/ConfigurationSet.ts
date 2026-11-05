@@ -315,16 +315,11 @@ export const ConfigurationSetProvider = () =>
 
         lookup: Effect.fn(function* ({ configurationSetName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* getConfigurationSet(configurationSetName);
-
           if (!found) return undefined;
-
           return {
             configurationSetName,
-
             configurationSetArn: configurationSetArnOf(region, accountId, configurationSetName),
-
             configuration: observeConfigurationSetOptions(found, undefined),
           };
         }),

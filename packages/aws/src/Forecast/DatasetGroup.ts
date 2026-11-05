@@ -141,11 +141,8 @@ export const DatasetGroupProvider = () =>
 
         lookup: Effect.fn(function* ({ datasetGroupArn }) {
           const group = yield* describe(datasetGroupArn);
-
           if (group === undefined) return undefined;
-
           const attrs = toAttrs(group);
-
           return attrs;
         }),
 

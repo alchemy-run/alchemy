@@ -988,20 +988,14 @@ export const UserPoolProvider = () =>
         lookup: Effect.fn(function* (props) {
           if ("userPoolId" in props) {
             const pool = yield* describePool(props.userPoolId);
-
             return pool === undefined ? undefined : attributesOf(pool);
           }
-
           const pool = yield* single(
             "AWS.Cognito.UserPool",
-
             props.userPoolName,
-
             yield* findPoolsByName(props.userPoolName),
-
             (pool) => pool.Id,
           );
-
           return pool === undefined ? undefined : attributesOf(pool);
         }),
 

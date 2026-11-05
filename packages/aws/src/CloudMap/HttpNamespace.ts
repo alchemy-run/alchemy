@@ -150,7 +150,6 @@ export const HttpNamespaceProvider = () =>
 
         lookup: Effect.fn(function* ({ namespaceName }) {
           const namespace = yield* observeNamespace("HTTP", namespaceName, undefined);
-
           return namespace?.Id === undefined ? undefined : toAttributes(namespace);
         }),
 

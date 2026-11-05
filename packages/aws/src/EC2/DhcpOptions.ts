@@ -280,32 +280,24 @@ export const DhcpOptionsProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const found = yield* ec2
-
             .describeDhcpOptions(
               "dhcpOptionsId" in props
                 ? { DhcpOptionsIds: [props.dhcpOptionsId] }
                 : { Filters: [nameTagFilter(props.name)] },
             )
-
             .pipe(
               Effect.catchTags({
                 "InvalidDhcpOptionID.NotFound": () => Effect.succeed({ DhcpOptions: [] }),
                 "InvalidDhcpOptionsID.NotFound": () => Effect.succeed({ DhcpOptions: [] }),
               }),
             );
-
           const match = yield* single(
             "AWS.EC2.DhcpOptions",
-
             "dhcpOptionsId" in props ? props.dhcpOptionsId : `Name=${props.name}`,
-
             found.DhcpOptions ?? [],
-
             (x) => x.DhcpOptionsId,
           );
-
           if (!match?.DhcpOptionsId) return undefined;
-
           return yield* toAttrs(match, yield* findAssociatedVpc(match.DhcpOptionsId));
         }),
 

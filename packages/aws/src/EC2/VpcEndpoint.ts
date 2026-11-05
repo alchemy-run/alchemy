@@ -426,7 +426,6 @@ export const VpcEndpointProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const found = yield* ec2
-
             .describeVpcEndpoints(
               "vpcEndpointId" in props
                 ? { VpcEndpointIds: [props.vpcEndpointId] }
@@ -435,36 +434,28 @@ export const VpcEndpointProvider = () =>
                   : {
                       Filters: [
                         { Name: "vpc-id", Values: [props.vpcId] },
-
                         { Name: "service-name", Values: [props.serviceName] },
                       ],
                     },
             )
-
             .pipe(
               Effect.catchTag("InvalidVpcEndpointId.NotFound", () =>
                 Effect.succeed({ VpcEndpoints: [] }),
               ),
             );
-
           const match = yield* single(
             "AWS.EC2.VpcEndpoint",
-
             "vpcEndpointId" in props
               ? props.vpcEndpointId
               : "name" in props
                 ? `Name=${props.name}`
                 : `${props.vpcId}/${props.serviceName}`,
-
             (found.VpcEndpoints ?? []).filter(
               (x) => x.State !== "deleted" && x.State !== "deleting",
             ),
-
             (x) => x.VpcEndpointId,
           );
-
           if (!match?.VpcEndpointId) return undefined;
-
           return yield* toAttrs(match);
         }),
 

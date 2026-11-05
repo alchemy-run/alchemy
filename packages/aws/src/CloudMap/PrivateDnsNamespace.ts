@@ -185,7 +185,6 @@ export const PrivateDnsNamespaceProvider = () =>
 
         lookup: Effect.fn(function* ({ namespaceName }) {
           const namespace = yield* observeNamespace("DNS_PRIVATE", namespaceName, undefined);
-
           return namespace?.Id === undefined ? undefined : toAttributes(namespace);
         }),
 

@@ -229,7 +229,6 @@ export const ProfileProvider = () =>
             profileArn: live.Arn!,
             profileName: live.Name!,
           };
-
           return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

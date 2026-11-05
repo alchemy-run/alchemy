@@ -174,7 +174,6 @@ export const TerminologyProvider = () =>
           const found = yield* getOne(name);
           if (found?.TerminologyProperties === undefined) return undefined;
           const attrs = toAttributes(found.TerminologyProperties);
-
           return attrs;
         }),
 

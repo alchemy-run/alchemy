@@ -114,7 +114,6 @@ export const LabelProvider = () =>
           const label = yield* get(name);
           if (label === undefined) return undefined;
           const attrs = toAttrs(label);
-
           return attrs;
         }),
 

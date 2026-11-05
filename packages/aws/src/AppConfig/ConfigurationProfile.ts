@@ -213,20 +213,13 @@ export const ConfigurationProfileProvider = () =>
 
         lookup: Effect.fn(function* ({ applicationId, configurationProfileName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const profile = yield* findByName(applicationId, configurationProfileName);
-
           if (profile?.Id === undefined) return undefined;
-
           return {
             configurationProfileId: profile.Id,
-
             configurationProfileName: profile.Name!,
-
             applicationId,
-
             locationUri: profile.LocationUri ?? "hosted",
-
             configurationProfileArn: configurationProfileArn(
               region,
               accountId,

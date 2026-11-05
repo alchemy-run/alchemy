@@ -272,7 +272,6 @@ export const ServerlessClusterProvider = () =>
             "clusterArn" in props
               ? yield* describeByArn(props.clusterArn)
               : yield* findByName(props.clusterName);
-
           return cluster?.ClusterArn ? yield* toAttrs(cluster) : undefined;
         }),
 

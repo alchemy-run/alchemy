@@ -167,11 +167,8 @@ export const PlaybackKeyPairProvider = () =>
 
         lookup: Effect.fn(function* ({ playbackKeyPairArn }) {
           const keyPair = yield* getByArn(playbackKeyPairArn);
-
           if (keyPair === undefined) return undefined;
-
           const attrs = yield* toAttrs(keyPair);
-
           return attrs;
         }),
 

@@ -170,11 +170,8 @@ export const ActivityProvider = () =>
 
         lookup: Effect.fn(function* ({ activityName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* describeOrUndefined(activityArnOf(region, accountId, activityName));
-
           if (!found) return undefined;
-
           return { activityName: found.name, activityArn: found.activityArn };
         }),
 

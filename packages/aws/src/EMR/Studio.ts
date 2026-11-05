@@ -325,11 +325,8 @@ export const StudioProvider = () =>
 
         lookup: Effect.fn(function* ({ studioId }) {
           const studio = yield* readStudio(studioId);
-
           if (!studio) return undefined;
-
           const attrs = yield* toAttrs(studio);
-
           return attrs;
         }),
 

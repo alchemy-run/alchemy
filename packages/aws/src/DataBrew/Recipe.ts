@@ -226,23 +226,15 @@ export const RecipeProvider = () =>
 
         lookup: Effect.fn(function* ({ recipeName: name }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const recipe = yield* observeWorking(name);
-
           if (recipe === undefined) return undefined;
-
           const arn = recipe.ResourceArn ?? databrewArn(region, accountId, "recipe", name);
-
           const versions = yield* publishedVersions(name);
-
           const attrs = {
             recipeName: name,
-
             recipeArn: arn,
-
             recipeVersion: latestPublished(versions) ?? "LATEST_WORKING",
           };
-
           return attrs;
         }),
 

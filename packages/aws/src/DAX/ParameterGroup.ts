@@ -166,9 +166,7 @@ export const ParameterGroupProvider = () =>
 
         lookup: Effect.fn(function* ({ parameterGroupName }) {
           const group = yield* readGroup(parameterGroupName);
-
           if (group?.ParameterGroupName === undefined) return undefined;
-
           return toAttrs(group, yield* readParameters(parameterGroupName), undefined);
         }),
 

@@ -253,13 +253,10 @@ export const MemoryProvider = () =>
 
         lookup: Effect.fn(function* ({ memoryId }) {
           const memory = yield* getMemoryOrUndefined(memoryId);
-
           if (memory === undefined || memory.status === "DELETING") {
             return undefined;
           }
-
           const attrs = toAttributes(memory);
-
           return attrs;
         }),
 

@@ -248,7 +248,6 @@ export const ImageRecipeProvider = () =>
           const recipe = yield* getRecipe(arn);
           if (recipe === undefined) return undefined;
           const attrs = yield* toAttrs(recipe);
-
           return attrs;
         }),
 

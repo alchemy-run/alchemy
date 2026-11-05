@@ -158,15 +158,10 @@ export const ProjectProvider = () =>
 
         lookup: Effect.fn(function* ({ projectName: name }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const project = yield* observe(name);
-
           if (project === undefined) return undefined;
-
           const arn = project.ResourceArn ?? databrewArn(region, accountId, "project", name);
-
           const attrs = { projectName: name, projectArn: arn };
-
           return attrs;
         }),
 

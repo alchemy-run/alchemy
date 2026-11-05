@@ -217,10 +217,8 @@ export const ApiProvider = () =>
         lookup: Effect.fn(function* (props) {
           if ("apiId" in props) {
             const api = yield* getApiSafe(props.apiId);
-
             return api?.ApiId ? snapshotFromApi(api) : undefined;
           }
-
           const apis: agw2.Api[] = [];
           let nextToken: string | undefined;
           do {
@@ -230,14 +228,10 @@ export const ApiProvider = () =>
           } while (nextToken);
           const api = yield* single(
             "AWS.ApiGatewayV2.Api",
-
             props.name,
-
             apis.filter((api) => api.Name === props.name),
-
             (api) => api.ApiId,
           );
-
           return api?.ApiId ? snapshotFromApi(api) : undefined;
         }),
 

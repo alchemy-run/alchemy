@@ -376,7 +376,6 @@ export const UserPoolClientProvider = () =>
             "clientId" in props
               ? yield* describeClient(props.userPoolId, props.clientId)
               : yield* findClientByName(props.userPoolId, props.clientName);
-
           return observed === undefined ? undefined : attributesOf(observed);
         }),
 

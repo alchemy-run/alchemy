@@ -309,22 +309,14 @@ export const TableProvider = () =>
 
         lookup: Effect.fn(function* ({ databaseName, tableName }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const table = yield* observe(databaseName, tableName, accountId);
-
           if (table === undefined) return undefined;
-
           const catalogId = table.CatalogId ?? accountId;
-
           const database = table.DatabaseName ?? databaseName;
-
           return {
             tableName: table.Name,
-
             databaseName: database,
-
             tableArn: tableArn(region, catalogId, database, table.Name),
-
             catalogId,
           };
         }),

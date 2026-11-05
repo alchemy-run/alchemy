@@ -252,7 +252,6 @@ export const FirewallProvider = () =>
           const found = yield* describe(name);
           if (found?.Firewall === undefined) return undefined;
           const attrs = toAttrs(found.Firewall, found.FirewallStatus);
-
           return attrs;
         }),
 

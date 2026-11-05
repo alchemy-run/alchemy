@@ -592,18 +592,12 @@ export const GraphqlApiProvider = () =>
               ? yield* getApiSafe(props.apiId)
               : yield* single(
                   "AWS.AppSync.GraphqlApi",
-
                   props.name,
-
                   Array.from(yield* appsync.listGraphqlApis.pages({}).pipe(Stream.runCollect))
-
                     .flatMap((page) => page.graphqlApis ?? [])
-
                     .filter((api) => api.name === props.name),
-
                   (api) => api.apiId,
                 );
-
           return api?.apiId == null ? undefined : toAttributes(api);
         }),
 

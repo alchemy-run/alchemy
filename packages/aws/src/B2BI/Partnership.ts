@@ -150,15 +150,10 @@ export const PartnershipProvider = () =>
 
         lookup: Effect.fn(function* ({ partnershipId }) {
           const found = yield* b2bi
-
             .getPartnership({ partnershipId: partnershipId })
-
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-
           if (found === undefined) return undefined;
-
           const attrs = toAttrs(found);
-
           return attrs;
         }),
 

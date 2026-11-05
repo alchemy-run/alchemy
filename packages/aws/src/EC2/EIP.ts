@@ -248,9 +248,7 @@ export const EIPProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const { region, accountId } = yield* AWSEnvironment.current;
-
           const found = yield* ec2
-
             .describeAddresses(
               "allocationId" in props
                 ? { AllocationIds: [props.allocationId] }
@@ -258,47 +256,32 @@ export const EIPProvider = () =>
                   ? { PublicIps: [props.publicIp] }
                   : { Filters: [nameTagFilter(props.name)] },
             )
-
             .pipe(
               Effect.catchTag(["InvalidAllocationID.NotFound", "InvalidAddress.NotFound"], () =>
                 Effect.succeed({ Addresses: [] }),
               ),
             );
-
           const address = yield* single(
             "AWS.EC2.EIP",
-
             "allocationId" in props
               ? props.allocationId
               : "publicIp" in props
                 ? props.publicIp
                 : `Name=${props.name}`,
-
             found.Addresses ?? [],
-
             (x) => x.AllocationId,
           );
-
           if (!address?.AllocationId || !address.PublicIp) return undefined;
-
           return {
             allocationId: address.AllocationId as AllocationId,
-
             eipArn:
               `arn:aws:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
-
             publicIp: address.PublicIp,
-
             publicIpv4Pool: address.PublicIpv4Pool,
-
             domain: (address.Domain as "vpc" | "standard") ?? "vpc",
-
             networkBorderGroup: address.NetworkBorderGroup,
-
             customerOwnedIp: address.CustomerOwnedIp,
-
             customerOwnedIpv4Pool: address.CustomerOwnedIpv4Pool,
-
             carrierIp: address.CarrierIp,
           } satisfies EIP["Attributes"];
         }),

@@ -397,16 +397,12 @@ export const WebACLProvider = () =>
 
         lookup: Effect.fn(function* ({ webAclName, scope = defaultScope }) {
           const found = yield* findWebACL(scope, webAclName, undefined);
-
           return found?.WebACL
             ? {
                 ...toAttrs(found.WebACL, scope),
-
                 configuration: observeWebACLConfiguration(
                   found.WebACL,
-
                   undefined,
-
                   yield* fetchWafTags(scope, found.WebACL.ARN),
                 ),
               }

@@ -192,13 +192,9 @@ export const WorkspaceProvider = () =>
 
         lookup: Effect.fn(function* ({ workspaceId }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const ws = yield* describe(workspaceId);
-
           if (ws === undefined) return undefined;
-
           const attrs = toAttrs(accountId, region, ws);
-
           return attrs;
         }),
 

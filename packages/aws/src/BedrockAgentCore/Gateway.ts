@@ -230,13 +230,10 @@ export const GatewayProvider = () =>
 
         lookup: Effect.fn(function* ({ gatewayId }) {
           const gateway = yield* getGatewayOrUndefined(gatewayId);
-
           if (gateway === undefined || gateway.status === "DELETING") {
             return undefined;
           }
-
           const attrs = toAttributes(gateway);
-
           return attrs;
         }),
 

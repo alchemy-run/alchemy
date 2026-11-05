@@ -229,11 +229,8 @@ export const PhoneNumberProvider = () =>
 
         lookup: Effect.fn(function* ({ phoneNumberId }) {
           const observed = yield* getById(phoneNumberId);
-
           if (observed === undefined) return undefined;
-
           const attrs = yield* toAttrs(observed);
-
           return attrs;
         }),
 

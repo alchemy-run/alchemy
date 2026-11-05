@@ -139,7 +139,6 @@ export const FleetProvider = () =>
           const found = yield* readFleet(fleetId);
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
-
           return attrs;
         }),
 

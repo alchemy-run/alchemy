@@ -226,7 +226,6 @@ export const RepositoryProvider = () =>
 
         lookup: Effect.fn(function* ({ domainName, repositoryName }) {
           const repository = yield* getRepository(domainName, undefined, repositoryName);
-
           return repository?.arn === undefined
             ? undefined
             : toAttrs(repository, repositoryName, domainName);

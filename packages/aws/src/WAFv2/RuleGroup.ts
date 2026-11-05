@@ -323,7 +323,6 @@ export const RuleGroupProvider = () =>
 
         lookup: Effect.fn(function* ({ ruleGroupName, scope = defaultScope }) {
           const found = yield* findRuleGroup(scope, ruleGroupName, undefined);
-
           return found?.RuleGroup ? toAttrs(found.RuleGroup, scope) : undefined;
         }),
 

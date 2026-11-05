@@ -266,21 +266,14 @@ export const JobProvider = () =>
 
         lookup: Effect.fn(function* ({ jobName: name }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const job = yield* observe(name);
-
           if (job?.Name === undefined) return undefined;
-
           const arn = jobArn(region, accountId, job.Name);
-
           const attrs = {
             jobName: job.Name,
-
             jobArn: arn,
-
             role: job.Role ?? "",
           };
-
           return attrs;
         }),
 

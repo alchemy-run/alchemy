@@ -747,7 +747,6 @@ export const SecurityGroupProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const found = yield* ec2
-
             .describeSecurityGroups(
               "groupId" in props
                 ? { GroupIds: [props.groupId] }
@@ -756,34 +755,26 @@ export const SecurityGroupProvider = () =>
                   : {
                       Filters: [
                         { Name: "vpc-id", Values: [props.vpcId] },
-
                         { Name: "group-name", Values: [props.groupName] },
                       ],
                     },
             )
-
             .pipe(
               Effect.catchTag("InvalidGroup.NotFound", () =>
                 Effect.succeed({ SecurityGroups: [] }),
               ),
             );
-
           const match = yield* single(
             "AWS.EC2.SecurityGroup",
-
             "groupId" in props
               ? props.groupId
               : "name" in props
                 ? `Name=${props.name}`
                 : `${props.vpcId}/${props.groupName}`,
-
             found.SecurityGroups ?? [],
-
             (x) => x.GroupId,
           );
-
           if (!match?.GroupId) return undefined;
-
           return yield* toAttrs(match, yield* describeSecurityGroupRules(match.GroupId));
         }),
 

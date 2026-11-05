@@ -186,7 +186,6 @@ export const ModelManifestProvider = () =>
           const found = yield* readManifest(name);
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
-
           return attrs;
         }),
 

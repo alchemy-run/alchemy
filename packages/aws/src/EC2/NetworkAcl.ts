@@ -261,7 +261,6 @@ export const NetworkAclProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const found = yield* ec2
-
             .describeNetworkAcls(
               "networkAclId" in props
                 ? { NetworkAclIds: [props.networkAclId] }
@@ -270,34 +269,26 @@ export const NetworkAclProvider = () =>
                   : {
                       Filters: [
                         { Name: "vpc-id", Values: [props.vpcId] },
-
                         { Name: "default", Values: ["true"] },
                       ],
                     },
             )
-
             .pipe(
               Effect.catchTag("InvalidNetworkAclID.NotFound", () =>
                 Effect.succeed({ NetworkAcls: [] }),
               ),
             );
-
           const match = yield* single(
             "AWS.EC2.NetworkAcl",
-
             "networkAclId" in props
               ? props.networkAclId
               : "name" in props
                 ? `Name=${props.name}`
                 : `default ACL of ${props.vpcId}`,
-
             found.NetworkAcls ?? [],
-
             (x) => x.NetworkAclId,
           );
-
           if (!match?.NetworkAclId) return undefined;
-
           return yield* toAttrs(match);
         }),
 

@@ -795,26 +795,18 @@ export const StateMachineProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const found = yield* describeOrUndefined(
             "stateMachineArn" in props
               ? props.stateMachineArn
               : stateMachineArnOf(region, accountId, props.stateMachineName),
           );
-
           if (!found || found.status === "DELETING") return undefined;
-
           return {
             stateMachineName: found.name,
-
             stateMachineArn: found.stateMachineArn,
-
             type: found.type as StateMachineType,
-
             roleArn: found.roleArn,
-
             roleName: undefined,
-
             configuration: yield* observeStateMachineConfiguration("", found, undefined),
           };
         }),

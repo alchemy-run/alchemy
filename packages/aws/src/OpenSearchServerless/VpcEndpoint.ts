@@ -153,9 +153,7 @@ export const VpcEndpointProvider = () =>
 
         lookup: Effect.fn(function* ({ endpointName }) {
           const detail = yield* observe(endpointName, undefined);
-
           if (detail?.id === undefined) return undefined;
-
           return { vpcEndpointId: detail.id, endpointName: detail.name!, status: detail.status };
         }),
 

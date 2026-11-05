@@ -248,11 +248,8 @@ export const StageProvider = () =>
 
         lookup: Effect.fn(function* ({ stageArn }) {
           const stage = yield* getByArn(stageArn);
-
           if (stage === undefined) return undefined;
-
           const attrs = yield* toAttrs(stage);
-
           return attrs;
         }),
 

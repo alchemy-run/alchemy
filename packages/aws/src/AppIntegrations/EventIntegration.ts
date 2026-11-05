@@ -178,7 +178,6 @@ export const EventIntegrationProvider = () =>
           const live = yield* observe(name);
           if (live === undefined) return undefined;
           const attrs = yield* toAttrs(live);
-
           return attrs;
         }),
 

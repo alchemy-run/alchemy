@@ -314,7 +314,6 @@ export const ServerProvider = () =>
 
         lookup: Effect.fn(function* ({ serverId }) {
           const server = yield* describe(serverId);
-
           return server?.ServerId ? yield* toAttrs(server) : undefined;
         }),
 

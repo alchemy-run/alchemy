@@ -133,7 +133,6 @@ export const ThingTypeProvider = () =>
             thingTypeName,
             thingTypeArn: found.thingTypeArn!,
           };
-
           return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

@@ -158,12 +158,9 @@ export const LocationEfsProvider = () =>
 
         lookup: Effect.fn(function* ({ locationArn }) {
           const loc = yield* describe(locationArn);
-
           if (loc === undefined) return undefined;
-
           return {
             locationArn: loc.LocationArn!,
-
             locationUri: loc.LocationUri!,
           };
         }),

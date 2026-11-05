@@ -145,9 +145,7 @@ export const VpcLinkProvider = () =>
 
         lookup: Effect.fn(function* ({ vpcLinkId }) {
           const link = yield* getVpcLinkSafe(vpcLinkId);
-
           if (!link?.VpcLinkId) return undefined;
-
           return snapshotFromVpcLink(link);
         }),
 

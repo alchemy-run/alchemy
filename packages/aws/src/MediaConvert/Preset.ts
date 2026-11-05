@@ -147,7 +147,6 @@ export const PresetProvider = () =>
           const preset = yield* getPreset(name);
           if (preset === undefined) return undefined;
           const attrs = toAttrs(preset);
-
           return attrs;
         }),
 

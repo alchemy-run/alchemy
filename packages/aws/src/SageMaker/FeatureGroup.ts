@@ -299,7 +299,6 @@ export const FeatureGroupProvider = () =>
             return undefined;
           }
           const attrs = toAttrs(described);
-
           return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

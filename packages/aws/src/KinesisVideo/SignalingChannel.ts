@@ -164,7 +164,6 @@ export const SignalingChannelProvider = () =>
             channelName,
             channelArn: info.ChannelARN,
           };
-
           return attrs;
         }),
 

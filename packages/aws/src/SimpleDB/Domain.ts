@@ -123,16 +123,12 @@ export const DomainProvider = () =>
 
         lookup: Effect.fn(function* ({ domainName: name }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-
           const metadata = yield* observeDomain(name);
-
           if (metadata === undefined) {
             return undefined;
           }
-
           return {
             domainName: name,
-
             domainArn: domainArn(region, accountId, name),
           };
         }),

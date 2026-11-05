@@ -252,7 +252,6 @@ export const ComponentProvider = () =>
           const component = yield* getComponent(arn);
           if (component === undefined) return undefined;
           const attrs = yield* toAttrs(component);
-
           return attrs;
         }),
 

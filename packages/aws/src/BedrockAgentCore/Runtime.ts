@@ -245,13 +245,10 @@ export const RuntimeProvider = () =>
 
         lookup: Effect.fn(function* ({ agentRuntimeId }) {
           const runtime = yield* getRuntimeOrUndefined(agentRuntimeId);
-
           if (runtime === undefined || runtime.status === "DELETING") {
             return undefined;
           }
-
           const attrs = toAttributes(runtime);
-
           return attrs;
         }),
 

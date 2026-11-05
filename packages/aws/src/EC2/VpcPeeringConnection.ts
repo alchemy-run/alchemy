@@ -269,13 +269,11 @@ export const VpcPeeringConnectionProvider = () =>
 
         lookup: Effect.fn(function* (props) {
           const found = yield* ec2
-
             .describeVpcPeeringConnections(
               "vpcPeeringConnectionId" in props
                 ? { VpcPeeringConnectionIds: [props.vpcPeeringConnectionId] }
                 : { Filters: [nameTagFilter(props.name)] },
             )
-
             .pipe(
               Effect.catchTags({
                 "InvalidVpcPeeringConnectionID.NotFound": () =>
@@ -284,21 +282,15 @@ export const VpcPeeringConnectionProvider = () =>
                   Effect.succeed({ VpcPeeringConnections: [] }),
               }),
             );
-
           const match = yield* single(
             "AWS.EC2.VpcPeeringConnection",
-
             "vpcPeeringConnectionId" in props ? props.vpcPeeringConnectionId : `Name=${props.name}`,
-
             (found.VpcPeeringConnections ?? []).filter(
               (x) => !DEAD_STATES.has(x.Status?.Code ?? ""),
             ),
-
             (x) => x.VpcPeeringConnectionId,
           );
-
           if (!match?.VpcPeeringConnectionId) return undefined;
-
           return toAttrs(match);
         }),
 

@@ -270,11 +270,8 @@ export const ProfileProvider = () =>
 
         lookup: Effect.fn(function* ({ profileId }) {
           const found = yield* getById(profileId);
-
           if (found === undefined) return undefined;
-
           const attrs = toAttrs(found);
-
           return attrs;
         }),
 

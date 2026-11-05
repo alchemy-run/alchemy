@@ -125,11 +125,9 @@ export const ScheduleGroupProvider = () =>
               Name: scheduleGroupName,
             })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-
           if (!described?.Arn || !described.Name) {
             return undefined;
           }
-
           const { Tags } = yield* scheduler
             .listTagsForResource({ ResourceArn: described.Arn })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ Tags: [] })));

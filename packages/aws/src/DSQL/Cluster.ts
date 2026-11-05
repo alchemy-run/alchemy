@@ -265,11 +265,8 @@ export const ClusterProvider = () =>
 
         lookup: Effect.fn(function* ({ clusterId }) {
           const { region } = yield* AWSEnvironment.current;
-
           const cluster = yield* readCluster(clusterId);
-
           if (cluster === undefined || cluster.status === "DELETED") return undefined;
-
           return { ...toAttrs(cluster, region), migrationsHashes: {} };
         }),
 

@@ -426,27 +426,19 @@ export const FileSystemProvider = () =>
               ? yield* findById(props.fileSystemId)
               : yield* single(
                   "AWS.EFS.FileSystem",
-
                   `Name=${props.name}`,
-
                   yield* efs.describeFileSystems.items({}).pipe(
                     Stream.filter(
                       (fs) => fs.Name === props.name && fs.LifeCycleState !== "deleted",
                     ),
-
                     Stream.runCollect,
-
                     Effect.map((chunk) => Array.from(chunk)),
                   ),
-
                   (fs) => fs.FileSystemId,
                 );
-
           if (fs === undefined || fs.LifeCycleState === "deleted") return undefined;
-
           return {
             fileSystemId: fs.FileSystemId,
-
             fileSystemArn: fs.FileSystemArn ?? (yield* fileSystemArnOf(fs.FileSystemId)),
           };
         }),
