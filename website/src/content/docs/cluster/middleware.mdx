@@ -3,7 +3,26 @@ title: RPC middleware
 description: Authenticate and enrich every message to an entity with Effect RPC middleware — a server side that runs on the pool and a client side that runs in the caller.
 ---
 
+import Boundaries from "../../../components/diagrams/Boundaries.astro";
+
 RPC middleware wraps every message to an RPC. Its server side runs on the runner, before the handler: it can reject the message, or provide a service the handler uses. Its client side runs in the caller, and usually adds headers.
+
+<Boundaries
+  nodes={[
+    { id: "client", label: "AuthClient", type: "sets x-caller-token", col: 0, row: 0 },
+    { id: "auth", label: "Auth", type: "reads the header", col: 1, row: 0, tone: "accent" },
+    { id: "room", label: "Room handler", type: "yield* CurrentUser", col: 1, row: 1 },
+  ]}
+  zones={[
+    { id: "api", label: "Api", type: "caller", nodes: ["client"] },
+    { id: "pool", label: "Default", type: "pool", nodes: ["auth", "room"] },
+  ]}
+  links={[
+    { from: "client", to: "auth", label: "header" },
+    { from: "auth", to: "room", label: "CurrentUser" },
+  ]}
+  caption="The client side runs in the caller and adds the header. The server side runs on the runner, before the handler, and provides CurrentUser."
+/>
 
 ## Declare it
 

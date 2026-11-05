@@ -3,7 +3,23 @@ title: Existing programs
 description: Deploy an Effect Cluster program you already have, unchanged, on a pool of its own, and call its entities from any runtime.
 ---
 
+import Tree from "../../../components/diagrams/Tree.astro";
+
 An Effect Cluster program you already have deploys as it is. Alchemy bundles it, runs it on a pool of its own, and serves its entities through a gateway, so any runtime calls them like an entity declared with Alchemy.
+
+Your program runs on a pool of its own, beside the pools Alchemy builds, on the same database, so the two are one cluster:
+
+<Tree
+  nodes={[
+    { id: "swarm", label: "Docker swarm", type: "your cloud" },
+    { id: "default", label: "Default", type: "pool", parent: "swarm" },
+    { id: "room", label: "Room", type: "Cluster.Entity", parent: "default" },
+    { id: "legacy", label: "Legacy", type: "pool", parent: "swarm" },
+    { id: "program", label: "runner.ts", type: "your program", parent: "legacy", specs: [["entity", "Tally"]] },
+    { id: "db", label: "Database", type: "Postgres", parent: "swarm", side: true },
+  ]}
+  caption="The Legacy pool runs your program unchanged, as its own shard group. Its runners and the Default pool's share one database."
+/>
 
 ## Your program
 

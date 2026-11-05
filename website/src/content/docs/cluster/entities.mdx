@@ -3,7 +3,25 @@ title: Entities
 description: How an Effect Cluster entity is written in Alchemy — its declaration, its two-phase implementation, its instances, and where its code lives.
 ---
 
+import Queue from "../../../components/diagrams/Queue.astro";
+
 An entity is a class with one instance per id. Every instance runs the same code against its own state, and handles its messages one at a time.
+
+Each instance has a mailbox. Messages to one id queue in the order they arrive, and the instance takes the next only when it has finished the last. Two instances never wait on each other:
+
+<Queue
+  title="Room · two instances"
+  producer={{ label: "callers", send: "getByName" }}
+  consumers={[
+    { id: "lobby", label: "lobby", type: "Room instance" },
+    { id: "kitchen", label: "kitchen", type: "Room instance" },
+  ]}
+  groups={[
+    { label: "lobby", messages: [{ label: "Join sam", to: "lobby" }, { label: "Join ada" }, { label: "Members" }] },
+    { label: "kitchen", messages: [{ label: "Join kim", to: "kitchen" }] },
+  ]}
+  caption="The lobby handles Join sam while Join ada and Members wait behind it. The kitchen handles its own message at the same time."
+/>
 
 ## Declare and implement it
 
