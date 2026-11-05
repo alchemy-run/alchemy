@@ -6,7 +6,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { hetznerPrimaryIps } from "./limit.ts";
+import { hetznerLoadBalancers, hetznerPrimaryIps } from "./limit.ts";
 
 const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
@@ -221,6 +221,7 @@ test.provider(
       "live",
     ],
     timeout: 180_000,
+    exclusive: hetznerLoadBalancers,
   },
 );
 
@@ -271,5 +272,6 @@ test.provider(
   {
     tags: ["provider:hetzner", "provider:hetzner:loadbalancer", "provider:hetzner:service", "live"],
     timeout: 180_000,
+    exclusive: hetznerLoadBalancers,
   },
 );
