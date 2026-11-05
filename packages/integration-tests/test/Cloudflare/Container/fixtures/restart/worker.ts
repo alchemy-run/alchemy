@@ -11,6 +11,7 @@ import { RestartObject } from "./object.ts";
  *  - `GET /running` → `{ running }`
  *  - `GET /stop`    → destroy the container (SIGKILL)
  *  - `GET /crash`   → make the container process exit non-zero
+ *  - `GET /idle`    → arm the inactivity timeout (`?ms=`)
  */
 export default Cloudflare.Worker(
   "RestartWorker",
@@ -38,6 +39,10 @@ export default Cloudflare.Worker(
         if (url.pathname === "/stop") {
           yield* object.stop();
           return HttpServerResponse.text("stopped");
+        }
+        if (url.pathname === "/idle") {
+          yield* object.idle(Number(url.searchParams.get("ms")));
+          return HttpServerResponse.text("armed");
         }
         if (url.pathname === "/crash") {
           const result = yield* object.crash();

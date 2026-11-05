@@ -10,6 +10,7 @@ import { RestartContainer } from "./container.ts";
  *  - `running` — the raw `container.running` flag
  *  - `stop`    — hard stop from the DO side (`destroy` = SIGKILL)
  *  - `crash`   — make the container process exit on its own (non-zero)
+ *  - `idle`    — arm the container's inactivity timeout
  */
 export class RestartObject extends Cloudflare.DurableObject<RestartObject>()(
   "RestartObject",
@@ -27,7 +28,7 @@ export class RestartObject extends Cloudflare.DurableObject<RestartObject>()(
         // started again by the next request" path.
         stop: () => container.destroy(),
         // Crash from inside the container process. Exercises the
-        // monitor-observed-exit restart path.
+        // exited-on-its-own restart path.
         crash: () =>
           Effect.gen(function* () {
             yield* start;
@@ -35,6 +36,7 @@ export class RestartObject extends Cloudflare.DurableObject<RestartObject>()(
             const response = yield* fetch(HttpClientRequest.get("http://container/exit"));
             return yield* response.text;
           }).pipe(Effect.orDie),
+        idle: (ms: number) => start.pipe(Effect.andThen(container.setInactivityTimeout(ms))),
       };
     });
   }),

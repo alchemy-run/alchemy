@@ -391,14 +391,6 @@ export const fromContainer = (
               times: RATE_LIMIT_RETRIES,
             }),
           );
-          // Once the process exits (stopped, crashed, slept) its ports stop
-          // listening: forget them so the next request re-probes.
-          yield* Effect.forkDetach(
-            Effect.tryPromise({ try: () => container.monitor(), catch: containerError }).pipe(
-              Effect.ignore,
-              Effect.ensuring(Effect.sync(() => readyPorts.clear())),
-            ),
-          );
         }),
       );
     }).pipe(
@@ -434,12 +426,17 @@ export const fromContainer = (
     Effect.gen(function* () {
       const container = yield* attached;
       const { readyPorts } = coordinationFor(container);
-      if (readyPorts.has(port)) return container;
+      // A pending `monitor()` would keep the Durable Object active and defeat
+      // `setInactivityTimeout`, so exits are noticed here instead: ports
+      // confirmed before the container stopped (stopped, crashed, slept) are
+      // re-probed after the next start.
       if (!container.running) {
+        readyPorts.clear();
         return yield* new ContainerNotRunningError({
           message: `Container is not running; call start() before using port ${port}.`,
         });
       }
+      if (readyPorts.has(port)) return container;
       yield* probePort(container, port).pipe(
         Effect.retry({
           while: (e) => e._tag === "ContainerError",

@@ -6,7 +6,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 /**
  * Minimal effectful container for exercising stop/crash → auto-restart. `ping`
  * proves the container is up; the `/exit` route makes the container process
- * kill itself (non-zero exit) so we can drive the monitor-observed-crash path.
+ * kill itself (non-zero exit) so we can drive the crash → restart path.
  */
 export class RestartContainer extends Cloudflare.Container<
   RestartContainer,
@@ -29,8 +29,7 @@ export default RestartContainer.make(
         if (url.pathname === "/exit") {
           // Simulate a crash: kill the container process with a non-zero exit
           // code shortly after replying, so the response flushes first. The
-          // Durable Object's monitor observes the exit; the next request must
-          // transparently restart the container.
+          // next request must transparently restart the container.
           yield* Effect.sync(() => {
             setTimeout(() => process.exit(1), 50);
           });

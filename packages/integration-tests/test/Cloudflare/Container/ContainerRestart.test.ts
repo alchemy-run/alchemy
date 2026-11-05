@@ -22,6 +22,10 @@ const TEST_TIMEOUT = 300_000;
 
 const DEPLOY_PLACEHOLDER = "Alchemy worker is being deployed...";
 
+// The runtime stops an idle container within a minute of a 10s timeout.
+const INACTIVITY_TIMEOUT_MS = 10_000;
+const INACTIVITY_WAIT = "90 seconds";
+
 // Force `Connection: close` so each attempt opens a fresh connection and can
 // land on an edge that already has the new deploy / restarted container.
 const freshConn = HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"));
@@ -132,14 +136,33 @@ describe(
 
         expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain("pong");
 
-        // Make the container process exit on its own, then wait for the monitor
-        // to observe the exit (running === false).
+        // Make the container process exit on its own, then wait for the
+        // runtime to report the exit (running === false).
         yield* hit(`${url}/crash?name=${name}`);
         yield* waitRunning(url, name, false);
 
         // Next request transparently restarts it.
         expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain("pong");
         expect(yield* waitRunning(url, name, true)).toBe(true);
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    // Regression coverage for `start()` leaving a `container.monitor()` pending:
+    // it kept the Durable Object active, so `setInactivityTimeout` never fired.
+    test.skipIf(!!process.env.FAST)(
+      "stops the container once its inactivity timeout elapses",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const name = "idle";
+
+        expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain("pong");
+        yield* hit(`${url}/idle?name=${name}&ms=${INACTIVITY_TIMEOUT_MS}`);
+
+        // Every request to the Durable Object counts as activity, so stay away
+        // until the timeout has had time to fire, then read the state.
+        yield* Effect.sleep(INACTIVITY_WAIT);
+        expect(yield* waitRunning(url, name, false)).toBe(false);
       }).pipe(logLevel),
       { timeout: TEST_TIMEOUT },
     );
