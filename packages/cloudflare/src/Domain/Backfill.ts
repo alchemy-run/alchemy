@@ -136,7 +136,7 @@ const RESTART_DELAY = "2 seconds";
  * its entrypoint, or the consumer's class) stays on the code it started with:
  * a new instance runs the deployed code.
  */
-const startedTooSoon = (message: string) =>
+export const startedTooSoon = (message: string) =>
   /entrypoint name .* was not found|^Worker not found|isn't in the code this runs yet/.test(
     message,
   );

@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { progressOf } from "./Backfill.ts";
+import { progressOf, startedTooSoon } from "./Backfill.ts";
 import { passMarker } from "./Version.ts";
 
 export interface MigrationProps {
@@ -92,6 +92,9 @@ const PAGES_PER_ADD = 50;
 /** Instances one bulk call starts. */
 const BULK = 100;
 const POLL = "3 seconds";
+/** How many times an instance that started before the Worker reached its edge is started again, and how soon. */
+const MAX_RESTARTS = 30;
+const RESTART_DELAY = "2 seconds";
 
 /** Workflows answers for a Workflow uploaded moments before with an internal error for a while. */
 const retryInternal = {
@@ -228,39 +231,55 @@ const MigrationLive = () =>
       }));
       yield* create(adds);
       for (const add of adds) {
-        const done = yield* instance(add.id).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("1 second"),
-            until: (status) => status.status !== "queued" && status.status !== "running",
-            times: 120,
-          }),
-        );
-        if (done.status !== "complete")
-          return yield* ended(add.id, done.status, done.error?.message ?? undefined);
+        for (let attempt = 0, id = add.id; ; attempt++) {
+          const done = yield* instance(id).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (status) => status.status !== "queued" && status.status !== "running",
+              times: 120,
+            }),
+          );
+          if (done.status === "complete") break;
+          // Started on an edge that doesn't have the uploaded Worker yet: start it again.
+          if (startedTooSoon(done.error?.message ?? "") && attempt < MAX_RESTARTS) {
+            yield* Effect.sleep(RESTART_DELAY);
+            id = `${add.id}-${attempt + 1}`;
+            yield* create([{ id, params: add.params }]);
+            continue;
+          }
+          return yield* ended(id, done.status, done.error?.message ?? undefined);
+        }
       }
 
       // Start the run and wait for it: each check step's output is its progress.
-      const runId = `mg-run-${target}`;
-      yield* create([
-        {
-          id: runId,
-          params: {
-            op: "run",
-            target,
-            plan: {
-              pages: pages.map(({ n, className, ids }) => ({ n, className, size: ids.length })),
-            },
-          },
+      const runParams = {
+        op: "run",
+        target,
+        plan: {
+          pages: pages.map(({ n, className, ids }) => ({ n, className, size: ids.length })),
         },
-      ]);
+      };
+      let runId = `mg-run-${target}`;
+      let restarts = 0;
+      yield* create([{ id: runId, params: runParams }]);
       let progress: (Progress & { readonly skipped?: Record<string, number> }) | undefined;
       while (true) {
         const status = yield* instance(runId);
         const latest = progressOf(status.steps ?? [])?.[0];
         if (latest !== undefined) progress = latest as typeof progress;
         if (status.status === "complete") break;
-        if (status.status === "errored" || status.status === "terminated")
+        if (status.status === "errored" || status.status === "terminated") {
+          // Started on an edge that doesn't have the uploaded Worker yet: start it again.
+          // The run itself is in Durable Objects: a new instance waits on the same run.
+          if (startedTooSoon(status.error?.message ?? "") && restarts < MAX_RESTARTS) {
+            restarts += 1;
+            yield* Effect.sleep(RESTART_DELAY);
+            runId = `mg-run-${target}-${restarts}`;
+            yield* create([{ id: runId, params: runParams }]);
+            continue;
+          }
           return yield* ended(runId, status.status, status.error?.message ?? undefined);
+        }
         const elapsed = (yield* Clock.currentTimeMillis) - started;
         const where =
           progress === undefined
