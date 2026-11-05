@@ -89,10 +89,10 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
 
       yield* deploy(1);
       yield* deploy(2);
-      yield* deploy(3);
+      yield* deploy(1);
 
       const { addon } = yield* eks.describeAddon({ clusterName, addonName: "metrics-server" });
-      expect(addon?.configurationValues).toBe(JSON.stringify({ replicas: 3 }));
+      expect(addon?.configurationValues).toBe(JSON.stringify({ replicas: 1 }));
 
       yield* stack.destroy();
     }),
