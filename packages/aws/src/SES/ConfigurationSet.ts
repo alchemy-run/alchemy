@@ -134,8 +134,18 @@ export interface ConfigurationSet extends Resource<
     configuration?: Record<string, unknown>;
   },
   never,
-  Providers
+  Providers,
+  ConfigurationSetLookup
 > {}
+
+/**
+ * Props for {@link ConfigurationSet.lookup}: find a configuration set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ConfigurationSetLookup {
+  /** The name of the existing configuration set. */
+  configurationSetName: string;
+}
 
 /**
  * An Amazon SES v2 configuration set — a named group of sending options
@@ -202,6 +212,17 @@ export interface ConfigurationSet extends Resource<
  *   matchingEventTypes: ["SEND", "DELIVERY", "BOUNCE", "COMPLAINT"],
  *   snsDestination: { topicArn: topic.topicArn },
  * });
+ * ```
+ *
+ * ### Looking up an existing configuration set
+ * `ConfigurationSet.lookup` references a configuration set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `configurationSetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Send through an existing configuration set
+ * ```typescript
+ * const tracked = AWS.SES.ConfigurationSet.lookup({ configurationSetName: "tracked" });
+ * const configurationSetName = tracked.configurationSetName;
  * ```
  *
  * @resource
@@ -291,6 +312,22 @@ export const ConfigurationSetProvider = () =>
                 configurationSetArn: configurationSetArnOf(region, accountId, name),
               }));
           }),
+
+        lookup: Effect.fn(function* ({ configurationSetName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+
+          const found = yield* getConfigurationSet(configurationSetName);
+
+          if (!found) return undefined;
+
+          return {
+            configurationSetName,
+
+            configurationSetArn: configurationSetArnOf(region, accountId, configurationSetName),
+
+            configuration: observeConfigurationSetOptions(found, undefined),
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

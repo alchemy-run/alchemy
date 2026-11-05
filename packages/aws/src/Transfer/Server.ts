@@ -137,8 +137,18 @@ export interface Server extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ServerLookup
 > {}
+
+/**
+ * Props for {@link Server.lookup}: find a server this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServerLookup {
+  /** The id of the existing server, e.g. `s-01234567890abcdef`. */
+  serverId: string;
+}
 
 /**
  * An AWS Transfer Family server — a managed SFTP/FTPS/FTP/AS2 endpoint in
@@ -195,6 +205,21 @@ export interface Server extends Resource<
  *   role: role.roleArn,
  *   homeDirectory: Output.interpolate`/${bucket.bucketName}/alice`,
  *   sshPublicKeyBody: "ssh-ed25519 AAAA...",
+ * });
+ * ```
+ *
+ * ### Looking up an existing server
+ * `Server.lookup` references a server Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serverId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a user to an existing server
+ * ```typescript
+ * const sftp = AWS.Transfer.Server.lookup({ serverId: "s-01234567890abcdef" });
+ *
+ * yield* AWS.Transfer.User("Partner", {
+ *   serverId: sftp.serverId,
+ *   role: partnerRole.roleArn,
  * });
  * ```
  *
@@ -285,6 +310,12 @@ export const ServerProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ serverId }) {
+          const server = yield* describe(serverId);
+
+          return server?.ServerId ? yield* toAttrs(server) : undefined;
         }),
 
         read: Effect.fn(function* ({ id, output }) {

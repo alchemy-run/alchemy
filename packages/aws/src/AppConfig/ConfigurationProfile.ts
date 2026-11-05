@@ -85,8 +85,20 @@ export interface ConfigurationProfile extends Resource<
     configurationProfileArn: string;
   },
   never,
-  Providers
+  Providers,
+  ConfigurationProfileLookup
 > {}
+
+/**
+ * Props for {@link ConfigurationProfile.lookup}: find a configuration profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ConfigurationProfileLookup {
+  /** The application the profile belongs to. */
+  applicationId: string;
+  /** The name of the existing profile. */
+  configurationProfileName: string;
+}
 
 /**
  * An AWS AppConfig configuration profile — describes where the configuration
@@ -109,6 +121,20 @@ export interface ConfigurationProfile extends Resource<
  *   locationUri: "s3://my-bucket/config.json",
  *   retrievalRoleArn: role.roleArn,
  *   validators: [{ type: "JSON_SCHEMA", content: schemaJson }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing configuration profile
+ * `ConfigurationProfile.lookup` references a configuration profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` and
+`configurationProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Read an existing profile from a function
+ * ```typescript
+ * const flags = AWS.AppConfig.ConfigurationProfile.lookup({
+ *   applicationId,
+ *   configurationProfileName: "flags",
  * });
  * ```
  *
@@ -183,6 +209,31 @@ export const ConfigurationProfileProvider = () =>
           if ((olds?.type ?? "AWS.Freeform") !== (news?.type ?? "AWS.Freeform")) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ applicationId, configurationProfileName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+
+          const profile = yield* findByName(applicationId, configurationProfileName);
+
+          if (profile?.Id === undefined) return undefined;
+
+          return {
+            configurationProfileId: profile.Id,
+
+            configurationProfileName: profile.Name!,
+
+            applicationId,
+
+            locationUri: profile.LocationUri ?? "hosted",
+
+            configurationProfileArn: configurationProfileArn(
+              region,
+              accountId,
+              applicationId,
+              profile.Id,
+            ),
+          };
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
