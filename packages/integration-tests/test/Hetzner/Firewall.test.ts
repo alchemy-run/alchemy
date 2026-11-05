@@ -11,8 +11,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const sshRule: Hetzner.FirewallRule = {
   direction: "in",
   protocol: "tcp",
@@ -40,7 +38,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update rules and labels, and delete a firewall",
   (stack) =>
     Effect.gen(function* () {
@@ -129,7 +127,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed firewall",
   (stack) =>
     Effect.gen(function* () {

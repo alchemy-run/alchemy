@@ -113,6 +113,7 @@ export const runVinextBuild = (options: {
       }),
       () =>
         Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
           yield* Effect.tryPromise(() =>
             runWithPreviewBuildCredentials(async () => {
               const buildConfig = await vite.loadConfigFromFile(
@@ -151,7 +152,7 @@ export const runVinextBuild = (options: {
               );
               const pagesClientAssetsModule = await fs.readFileString(pagesClientAssetsPath).pipe(
                 Effect.orElseSucceed(() => null),
-                Effect.runPromise,
+                Effect.runPromiseWith(context),
               );
               // Mirrors vinext's own hybrid Pages build (build/lifecycle.js): keep the
               // user's config and transforms, drop App Router internals.

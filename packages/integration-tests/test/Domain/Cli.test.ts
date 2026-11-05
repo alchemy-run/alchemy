@@ -85,7 +85,38 @@ class Balance extends Domain.View("Balance", {
   evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
 }) {}
 
-class Wallets extends Domain.Model("Wallets", { aggregates: [Wallet], views: [Balance] }) {}
+class UnknownBase extends Domain.Rejection("UnknownBase", { base: Schema.String }) {}
+
+/** Exchange rates: a paged query over rows outside the model. */
+class Rates extends Domain.Query("Rates", {
+  input: { base: Schema.String.annotate({ description: "The currency rates are quoted in" }) },
+  success: Schema.Struct({ currency: Schema.String, rate: Schema.Number }),
+  paged: true,
+  middleware: [Session],
+  rejects: [UnknownBase],
+}) {}
+const rates = [
+  { currency: "EUR", rate: 0.9 },
+  { currency: "GBP", rate: 0.8 },
+  { currency: "JPY", rate: 150 },
+];
+const RatesLive = Rates.toLayer(
+  Effect.succeed(({ base }, { after, take }) => {
+    if (base !== "USD") return Effect.fail(new UnknownBase({ base }));
+    const rest = rates.filter((row) => after === undefined || row.currency > after);
+    const entries = rest.slice(0, take);
+    return Effect.succeed({
+      entries,
+      cursor: rest.length > take ? entries.at(-1)!.currency : null,
+    });
+  }),
+);
+
+class Wallets extends Domain.Model("Wallets", {
+  aggregates: [Wallet],
+  views: [Balance],
+  queries: [Rates],
+}) {}
 
 class WalletApi extends Domain.Api("WalletApi", { model: Wallets, aggregates: ["Wallet"] }) {}
 
@@ -158,7 +189,7 @@ const cliOver = Effect.gen(function* () {
     });
 });
 
-const WalletsLive = Layer.mergeAll(Wallets.layer(Layer.empty), SessionLive).pipe(
+const WalletsLive = Layer.mergeAll(Wallets.layer(RatesLive), SessionLive).pipe(
   Layer.provide(InMemory),
 );
 const hosted = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -171,6 +202,7 @@ const expose = [
   "Balance.list",
   "Balance.snapshot",
   "Wallet.get",
+  "Rates",
 ] as const;
 
 const asSam = toCli(WalletApi, {
@@ -225,6 +257,35 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           entries: [{ event: { _tag: "Deposited", amount: 40, note: "rent" } }],
           cursor: null,
         });
+      }),
+    ),
+  );
+
+  it.live("asks a query from its input's flags, a page at a time", () =>
+    hosted(
+      Effect.gen(function* () {
+        const run = yield* cliOver;
+        const first = yield* run(asSam, ["rates", "--base", "USD", "--take", "2"]);
+        expect(first.code).toBe(0);
+        expect(first.stderr).toBe("");
+        expect(json(first.stdout)).toEqual({
+          entries: [
+            { currency: "EUR", rate: 0.9 },
+            { currency: "GBP", rate: 0.8 },
+          ],
+          cursor: "GBP",
+        });
+        const next = yield* run(asSam, ["rates", "--json", '{"base":"USD","after":"GBP"}']);
+        expect(json(next.stdout)).toEqual({
+          entries: [{ currency: "JPY", rate: 150 }],
+          cursor: null,
+        });
+        const unknown = yield* run(asSam, ["rates", "--base", "XYZ"]);
+        expect(unknown.code).toBe(1);
+        expect(json(unknown.stderr)).toEqual({ _tag: "UnknownBase", base: "XYZ" });
+        const help = yield* run(asSam, ["rates", "--help"]);
+        expect(help.stdout).toContain("Ask the Rates query.");
+        expect(help.stdout).toContain("The currency rates are quoted in.");
       }),
     ),
   );

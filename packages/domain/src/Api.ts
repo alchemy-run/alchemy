@@ -345,8 +345,11 @@ export type QueryError<Q extends Query.Any> =
 export type QueryClient<Q extends Query.Any> = (
   input: Query.InputOf<Q>,
   options?: CallOptions & {
-    /** Wait until the query's projections have handled this write (a command's `stream` and `version`). */
-    readonly atLeast?: { readonly stream: string; readonly version: number };
+    /**
+     * Wait until the query's projections have handled this write (a
+     * command's receipt), or each of these writes, one receipt per command.
+     */
+    readonly atLeast?: Query.AtLeastInput;
     /** The cursor of the previous page, for a paged query. */
     readonly after?: string;
     /** Rows per page, for a paged query; capped by the query Layer's `take.max`. */

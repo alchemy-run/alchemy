@@ -19,6 +19,8 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -491,15 +493,25 @@ export const NetworkProvider = () =>
         news.ipRange !== output.ipRange &&
         !cidrContains(news.ipRange, output.ipRange)
       ) {
-        return { action: "replace" } as const;
+        return { action: "replace", deleteFirst: keepsName(news, output) } as const;
       }
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createNetworkName(id, olds?.name ?? output?.name);
       const observed = yield* observe(output?.networkId, name, id);
       if (observed === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.networkId,
+          foundId: observed.id,
+          claimedName: olds?.name,
+          foundName: observed.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(observed);
       return (yield* hasAlchemyLabels(id, tagRecord(observed.labels))) ? attrs : Unowned(attrs);
     }),
