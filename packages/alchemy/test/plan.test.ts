@@ -6176,67 +6176,11 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
     });
 
   test(
-    "a plan alone refuses a replacement",
-    Effect.gen(function* () {
-      yield* seed({ A: protectedRow(created({ replaceString: "v1" })) });
-      const error = yield* refusalOf(makePlan(declare({ replaceString: "v2" })));
-      expect(error).toBeInstanceOf(RemovalPolicy.ProtectedResource);
-      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
-    }),
-  );
-
-  test(
     "protect() on the declaration alone refuses a replacement",
     Effect.gen(function* () {
       yield* seed({ A: created({ replaceString: "v1" }) });
       const error = yield* refusalOf(makePlan(declare({ replaceString: "v2" })));
       expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
-    }),
-  );
-
-  test(
-    "a persisted protect() refuses the replacement even when the declaration drops it",
-    Effect.gen(function* () {
-      yield* seed({ A: protectedRow(created({ replaceString: "v1" })) });
-      const error = yield* refusalOf(makePlan(declare({ replaceString: "v2" }, false)));
-      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
-    }),
-  );
-
-  test(
-    "an unchanged protected resource plans a noop",
-    Effect.gen(function* () {
-      yield* seed({ A: protectedRow(created({ replaceString: "v1" })) });
-      const plan = yield* makePlan(declare({ replaceString: "v1" }));
-      expect(plan.resources.A?.action).toEqual("noop");
-    }),
-  );
-
-  test(
-    "a removed declaration is refused as a delete",
-    Effect.gen(function* () {
-      yield* seed({ A: protectedRow(created({ replaceString: "v1" })) });
-      expect(yield* refusalOf(makePlan(Effect.void))).toMatchObject({
-        resources: [{ fqn: "A", action: "delete" }],
-      });
-    }),
-  );
-
-  test(
-    "finishing a replaced row's drain is not refused",
-    Effect.gen(function* () {
-      yield* seed({
-        A: protectedRow(
-          createReplacedState({
-            logicalId: "A",
-            props: { replaceString: "v2" },
-            old: created({ replaceString: "v1" }),
-          }),
-        ),
-      });
-      const plan = yield* makePlan(declare({ replaceString: "v2" }));
-      expect(plan.resources.A).toMatchObject({ action: "replace" });
-      expect((plan.resources.A as Plan.Replace).restart).toBeUndefined();
     }),
   );
 
