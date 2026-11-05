@@ -614,7 +614,9 @@ export const serveRpc = <Req = never>(
       return yield* fallback;
     }
 
-    const method = shape[name];
+    // A name like `constructor`, `toString` or `__proto__` must not reach
+    // `Object.prototype`.
+    const method = name in Object.prototype ? undefined : shape[name];
     if (typeof method !== "function") {
       return HttpServerResponse.text(`Unknown RPC method "${name}"`, {
         status: 404,

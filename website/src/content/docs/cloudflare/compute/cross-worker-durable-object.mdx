@@ -4,6 +4,8 @@ description: Share a Durable Object across multiple Workers — one Worker hosts
 sidebar:
   order: 9
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 A Durable Object is _hosted_ by exactly one Worker, but any
 number of **other** Workers can bind to the same DO. This is how
@@ -14,6 +16,18 @@ stub.
 By the end of this part you'll have two Workers, `WorkerA` and
 `WorkerB`, sharing a single `Counter` Durable Object. Writes
 through either Worker are visible from the other.
+
+<Tree
+  nodes={[
+    { id: "acct", label: "my-company", type: "account" },
+    { id: "a", label: "WorkerA", type: "Worker · hosts Counter", parent: "acct" },
+    { id: "ns", label: "Counter", type: "Durable Object namespace", parent: "a", dashed: true },
+    { id: "alice", label: '"alice"', type: "object · count 3", parent: "ns", tone: "accent" },
+    { id: "bob", label: '"bob"', type: "object · count 1", parent: "ns", tone: "accent" },
+    { id: "b", label: "WorkerB", type: "Worker", parent: "acct", side: true, specs: [["binds", "Counter"], ["scriptName", "WorkerA"]] },
+  ]}
+  caption="The objects live in WorkerA's namespace. WorkerB holds only a binding to it, so getByName('alice') from either Worker reaches the same object and the same count."
+/>
 
 ## Move the DO into its own module
 
@@ -458,6 +472,22 @@ namespace and every stored object to `WorkerB`'s script, and
 for a class that moved away). Every counter keeps its count. Afterwards the
 `transferredFrom` declaration is inert — on fresh stages and on
 every later deploy it does nothing — so leave it in place.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "a", label: "WorkerA" },
+    { id: "b", label: "WorkerB" },
+  ]}
+  bars={[
+    { lane: "a", start: 0, end: 4.6, label: "hosts Counter · alice = 3" },
+    { lane: "a", start: 4.6, end: 10, label: "binds Counter from WorkerB", tone: "default" },
+    { lane: "b", start: 0, end: 4.6, label: "binds Counter from WorkerA", tone: "default" },
+    { lane: "b", start: 4.6, end: 10, label: "hosts Counter · alice = 3" },
+  ]}
+  marks={[{ at: 4.6, label: "deploy: WorkerB first, transferredFrom WorkerA" }]}
+  caption="One deploy moves the namespace and every stored object to WorkerB. The count is the same before and after, and both Workers keep reaching it."
+/>
 
 :::caution[Undeclared moves fail loudly]
 If you move the host without declaring `transferredFrom`, the former

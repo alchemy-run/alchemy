@@ -3,6 +3,8 @@ title: Containers
 description: Cloudflare Containers run long-lived processes beside a Durable Object — declare a typed container class, implement its runtime in a separate file, and alchemy builds the image, pushes it, and wires the DO pairing.
 ---
 
+import Tree from "../../../../components/diagrams/Tree.astro";
+
 A Cloudflare Container is a long-lived process running next to a
 [Durable Object](/cloudflare/compute/durable-objects): the DO owns the
 container's lifecycle, and callers reach the container through it.
@@ -17,6 +19,25 @@ can't compile to wasm, an HTTP server listening on a port, a
 runtime Workers doesn't offer. If you only need per-entity state
 and coordination, a plain Durable Object is lighter; if you only
 need request/response compute, a Worker is.
+
+## How a Container runs
+
+A Container is a Docker image Cloudflare runs on its network, one instance per Durable Object. The Durable Object starts its container on demand, sends it requests, and stops it after a period of inactivity. Callers never reach the container directly. They call the Durable Object by name, which makes each container addressable the same way: one sandbox per user, one build runner per project.
+
+<Tree
+  nodes={[
+    { id: "ns", label: "Sandbox", type: "Durable Object class" },
+    { id: "a", label: "user-42", type: "Durable Object", parent: "ns" },
+    { id: "ca", label: "container", type: "your image · running", parent: "a", tone: "accent" },
+    { id: "b", label: "user-7", type: "Durable Object", parent: "ns" },
+    { id: "cb", label: "container", type: "stopped while idle", parent: "b", tone: "muted" },
+    { id: "c", label: "user-9", type: "Durable Object", parent: "ns" },
+    { id: "cc", label: "container", type: "your image · running", parent: "c", tone: "accent" },
+  ]}
+  caption="Each Durable Object owns one container. A Worker reaches one by name, like user-42, and that object starts its container when it's needed and lets it stop when idle."
+/>
+
+A container's filesystem lasts only as long as it runs. Keep what must survive in the Durable Object's storage, or in R2.
 
 ## Declare the container class
 

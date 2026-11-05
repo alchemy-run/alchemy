@@ -116,10 +116,55 @@ import { state } from "./State.ts";
 export const stateStore: StateStoreImpl = { layer: state };
 ```
 
-`state` takes `{ name }` and returns a `State` layer. A missing `name` is the
-account's default store, and any other name is a separate store. With
-the store contributed, `alchemy state list --backend stripe --name team-a`
-opens it from the profile alone.
+`state` returns a `State` layer from the store's own options interface.
+For the ones a profile alone can't tell it, contribute an effect CLI flag,
+and `alchemy state` takes it with `--backend`:
+
+```diff lang="typescript"
++import * as Flag from "effect/cli/Flag";
+
+   stripe: {
+     description: "State in the profile's Stripe account",
++    flags: {
++      name: Flag.String("name").pipe(
++        Flag.withDescription("A store other than the account's default, by name"),
++      ),
++    },
+     load: Contributions.lazy(
+```
+
+Each flag parses into the store's options under its key, and the store
+types those options itself. `Contributions.make` checks the two agree: every
+flag must set an option the store declares, with a value it accepts, under a
+key the options aren't spread next to (`type`, `backend`, `profile`,
+`envFile`, `force`, `limit` or `since`).
+
+```typescript
+export interface StripeStateStoreOptions {
+  readonly name?: string;
+}
+
+export const stateStore: StateStoreImpl<StripeStateStoreOptions> = { layer: state };
+```
+
+The CLI makes every store flag optional, so a flag that isn't given is
+`undefined`, and the store falls back to its own default. Here a
+missing `name` is the account's default store, and any other name is a
+separate store. With the store contributed,
+`alchemy state list --backend stripe --name team-a` opens it from the profile
+alone, and an option the store has no flag for is an error.
+
+Stores that set the same option with the same flag, parsed the same way,
+share it on the command line, and its help lists each store's description. A
+flag is left out, with a warning, when it:
+
+- is optional, or has a default or an alias,
+- conflicts with another store's: its name sets a different option there, the
+  same option uses a different flag, or the shared flag parses differently,
+- or clashes with one of `alchemy state`'s own, such as `--profile`.
+
+The CLI then refuses that option for the store, rather than handing it a
+value another store's flag parsed.
 
 ## Add a store lifecycle
 
@@ -127,8 +172,8 @@ A store that needs provisioning adds a `lifecycle`. Each operation is
 optional, and `alchemy state` reports the ones a store doesn't have:
 
 ```diff lang="typescript"
--export const stateStore: StateStoreImpl = { layer: state };
-+export const stateStore: StateStoreImpl = {
+-export const stateStore: StateStoreImpl<StripeStateStoreOptions> = { layer: state };
++export const stateStore: StateStoreImpl<StripeStateStoreOptions> = {
 +  layer: state,
 +  lifecycle: { bootstrap, teardown },
 +};
@@ -141,10 +186,11 @@ optional, and `alchemy state` reports the ones a store doesn't have:
 | `logs`      | `alchemy state logs`         |
 | `tailLogs`  | `alchemy state logs --tail`  |
 
-Each operation receives the store's `name`, and Alchemy provides the
+Each operation receives the store's options spread into its input, as in
+`bootstrap: ({ name, force }) => ...`, and Alchemy provides the
 profile's config and the provider's `auth`. The built-in stores are
 the reference:
-[`AWS/Alchemist/StateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/AWS/Alchemist/StateStore.ts)
+[`AWS/Alchemist/StateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/aws/src/Alchemist/StateStore.ts)
 and
 [`Cloudflare/Alchemist/StateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/cloudflare/src/Alchemist/StateStore.ts).
 

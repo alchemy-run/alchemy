@@ -2,21 +2,24 @@
 title: Connect Services
 description: Build several Fly Services that call each other's methods over a private network, behind one public entry point.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 Each [Service](/fly/compute/services) is its own Fly App. One Service
 calls another by **binding** it: `Fly.bindService(Users)` returns a
 typed client for the methods `Users` returns, and the calls travel over
 Fly's private network to `Users`'s `privateUrl`.
 
-Two things decide who can call a Service:
+Two things decide who can call a Service. The first is the **network**. Every App in the organization joins Fly's default private network unless told otherwise. Set `network: yield* Fly.stackNetwork` on each Service to put a stack's Services on a network of their own, unique to the stack and stage, which Apps on any other network can't resolve. The second is the **binding**. Each Service has a caller token, and only Services that bind it receive the token, so only they can call its methods.
 
-- **The network.** Every App in the organization joins Fly's default
-  private network unless told otherwise. Set
-  `network: yield* Fly.stackNetwork` on each Service to put a stack's
-  Services on a network unique to its stack and stage. Apps on any
-  other network cannot resolve them.
-- **The binding.** Each Service has a caller token. Only Services that
-  bind it receive the token, so only they can call its methods.
+<Tree
+  nodes={[
+    { id: "net", label: "my-app-prod", type: "stack network · private" },
+    { id: "gw", label: "Gateway", type: "public · gateway.fly.dev", parent: "net", tone: "accent", specs: [["binds", "Users, Orders"]] },
+    { id: "orders", label: "Orders", type: "private · Flycast", parent: "net", specs: [["binds", "Users"]] },
+    { id: "users", label: "Users", type: "private · Flycast", parent: "net", specs: [["binds", "nothing"]] },
+  ]}
+  caption="All three Services sit on the stack's own network. Only the Gateway has a public address, and a Service can call another only if it binds it and so holds its caller token."
+/>
 
 This guide builds the
 [fly-microservices example](https://github.com/alchemy-run/alchemy/tree/main/examples/fly-microservices):
@@ -322,24 +325,13 @@ for you.
 
 ## Security model
 
-A method call from `Orders` to `Users` is accepted only when all of
-these hold:
+A method call from `Orders` to `Users` is accepted only when three checks pass.
 
-- **Same network.** `Users` is on the stack's network, so only Apps on
-  that network can resolve `{users-app}.flycast`. Binding a Service on
-  another network fails the caller's deploy with
-  `Fly.ServiceUnreachable`, before the caller's App is created.
-- **Caller token.** Each Service has its own caller token, generated
-  by Alchemy. A Service receives the token only for the Services it
-  binds, and sends it with every method call. A Service on the same
-  network that did not bind `Users` gets `401` from its methods.
-- **Fly-Src signature.** Fly's proxy signs every request that arrives
-  over Flycast with an ed25519 `Fly-Src` header naming the calling App
-  and organization. `Users` verifies the signature with Fly's public
-  key and checks the caller is in the same organization. A request
-  from the internet carries no valid signature, so a public Service's
-  methods answer `401` to it, and the extra `bindingPort` answers only
-  private-network requests.
+The caller must be on the **same network**. `Users` is on the stack's network, so only Apps on that network can resolve `{users-app}.flycast`. Binding a Service on another network fails the caller's deploy with `Fly.ServiceUnreachable`, before the caller's App is created.
+
+The caller must send the **caller token**. Alchemy generates one per Service, and a Service receives the token only for the Services it binds, sending it with every call. A Service on the same network that didn't bind `Users` gets `401` from its methods.
+
+The request must carry a valid **Fly-Src signature**. Fly's proxy signs every request that arrives over Flycast with an ed25519 `Fly-Src` header naming the calling App and organization. `Users` checks the signature with Fly's public key, and that the caller is in the same organization. A request from the internet carries no valid signature, so a public Service's methods answer `401` to it, and the extra `bindingPort` answers only private-network requests.
 
 Fly issues no certificate for `.flycast`, so calls are plain HTTP.
 They travel inside Fly's private network, which Fly encrypts with

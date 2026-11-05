@@ -4,6 +4,7 @@ description: Run Worker code on a schedule — declare a cron expression with an
 sidebar:
   order: 17
 ---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Cron Triggers invoke a Worker on a schedule — nightly cleanups,
 periodic syncs, heartbeats. In alchemy, a single call declares both
@@ -65,6 +66,26 @@ of its own expression:
 yield* Cloudflare.Workers.cron("*/5 * * * *", () => syncFeeds);
 yield* Cloudflare.Workers.cron("0 0 * * *", () => purgeExpired);
 ```
+
+<Timeline
+  end={12}
+  lanes={[
+    { id: "a", label: "*/5 * * * *", type: "syncFeeds" },
+    { id: "b", label: "0 0 * * *", type: "purgeExpired" },
+  ]}
+  bars={[
+    { lane: "a", start: 0.2, end: 1.2, label: "run" },
+    { lane: "a", start: 2.2, end: 3.2, label: "run" },
+    { lane: "a", start: 4.2, end: 5.2, label: "run" },
+    { lane: "a", start: 6.2, end: 7.2, label: "run" },
+    { lane: "a", start: 8.2, end: 9.2, label: "run" },
+    { lane: "a", start: 10.2, end: 11.2, label: "run" },
+    { lane: "b", start: 6.2, end: 9.6, label: "purgeExpired" },
+  ]}
+  marks={[{ at: 6.2, label: "00:00 UTC" }]}
+  ticks={[{ at: 0.2, label: "23:50" }, { at: 6.2, label: "00:00" }, { at: 12, label: "00:10" }]}
+  caption="Both expressions fire the same Worker's scheduled handler. At midnight both fire, and each fire runs only the handler registered for its expression."
+/>
 
 The listener checks `controller.cron` against the expression it was
 registered with, so a fire of `0 0 * * *` never runs the `*/5`

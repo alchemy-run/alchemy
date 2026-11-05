@@ -1,0 +1,246 @@
+---
+/**
+ * `<Tree />` — a hierarchy drawn as nested borders, and what applies to each
+ * part of it. A node with children is a container around them; a node without
+ * is a box inside its container. Use it when things nest to any depth and rules
+ * flow down: an AWS organization's root, OUs and accounts with service control
+ * policies, a folder tree with inherited IAM roles.
+ *
+ *   <Tree
+ *     nodes={[
+ *       { id: "root", label: "Root", type: "organization" },
+ *       { id: "workloads", label: "Workloads", type: "OU", parent: "root" },
+ *       { id: "prod", label: "prod", type: "account", parent: "workloads" },
+ *     ]}
+ *     scopes={[{ on: "workloads", label: "SCP DenyOtherRegions" }]}
+ *   />
+ *
+ * A scope tags a container and tints its border, so a policy attached to an
+ * OU visibly covers everything inside it. `dashed` draws a softer border (a
+ * subnet, a security group, a node), `wide` gives a node its own full row,
+ * `specs` lists [key, value] lines inside a box (an instance's type and image),
+ * `tone: "muted"` greys out something finished or idle, and `side` stacks a
+ * node in a column beside its siblings (small branches next to a big one, so
+ * a short branch doesn't get a whole empty row).
+ */
+import "./diagram.css";
+
+interface TreeNode {
+  id: string;
+  label: string;
+  type?: string;
+  parent?: string;
+  tone?: "default" | "accent" | "muted";
+  dashed?: boolean;
+  wide?: boolean;
+  specs?: [string, string][];
+  side?: boolean;
+}
+interface Props {
+  nodes: TreeNode[];
+  scopes?: { on: string; label: string }[];
+  caption?: string;
+  /** Internal: the node this (recursive) instance renders. */
+  at?: string;
+}
+
+const { nodes, scopes = [], caption, at } = Astro.props as Props;
+const kids = (id: string) => nodes.filter((n) => n.parent === id);
+const scopeOf = (id: string) => scopes.filter((s) => s.on === id);
+const roots = nodes.filter((n) => !n.parent);
+const node = at ? nodes.find((n) => n.id === at)! : undefined;
+---
+
+{
+  node ? (
+    kids(node.id).length === 0 ? (
+      <div
+        class:list={[
+          "alc-tree__leaf",
+          node.tone === "accent" && "alc-tree__leaf--accent",
+          node.tone === "muted" && "alc-tree__leaf--muted",
+          node.wide && "alc-tree__wide",
+          node.specs && "alc-tree__leaf--specs",
+        ]}
+      >
+        <span class="alc-tree__label">{node.label}</span>
+        {node.type && <span class="alc-tree__type">{node.type}</span>}
+        {node.specs && (
+          <dl class="alc-tree__specs">
+            {node.specs.map(([k, v]) => (
+              <>
+                <dt>{k}</dt>
+                <dd>{v}</dd>
+              </>
+            ))}
+          </dl>
+        )}
+      </div>
+    ) : (
+      <div
+        class:list={[
+          "alc-tree__box",
+          node.dashed && "alc-tree__box--dashed",
+          node.wide && "alc-tree__wide",
+          scopeOf(node.id).length > 0 && "alc-tree__box--scoped",
+        ]}
+      >
+        <div class="alc-tree__head">
+          <span class="alc-tree__label">{node.label}</span>
+          {node.type && <span class="alc-tree__type">{node.type}</span>}
+          {scopeOf(node.id).map((s) => <span class="alc-tree__scope">{s.label}</span>)}
+        </div>
+        {kids(node.id).some((k) => k.side) ? (
+          <div class="alc-tree__split">
+            <div class="alc-tree__side">
+              {kids(node.id)
+                .filter((k) => k.side)
+                .map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+            </div>
+            <div class="alc-tree__kids">
+              {kids(node.id)
+                .filter((k) => !k.side)
+                .map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+            </div>
+          </div>
+        ) : (
+          <div class="alc-tree__kids">
+            {kids(node.id).map((k) => <Astro.self nodes={nodes} scopes={scopes} at={k.id} />)}
+          </div>
+        )}
+      </div>
+    )
+  ) : (
+    <figure class="alc-fig not-content" data-nosnippet role="img" aria-label={caption ?? "Tree"}>
+      <div class="alc-tree">
+        {roots.map((r) => <Astro.self nodes={nodes} scopes={scopes} at={r.id} />)}
+      </div>
+      {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+    </figure>
+  )
+}
+
+<style>
+  .alc-tree {
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
+    font-family: var(--alc-font-mono);
+  }
+  .alc-tree__box {
+    flex: 1 1 auto;
+    border: 1.5px solid var(--alc-accent-40);
+    border-radius: 10px;
+    padding: 0.5rem 0.625rem 0.625rem;
+  }
+  .alc-tree__box--dashed {
+    border-style: dashed;
+    border-color: var(--alc-hairline-3);
+  }
+  .alc-tree__wide {
+    flex-basis: 100%;
+  }
+  .alc-tree__box--scoped {
+    border: 1.5px dashed color-mix(in srgb, var(--alc-warn) 70%, transparent);
+    background: color-mix(in srgb, var(--alc-warn) 8%, transparent);
+  }
+  .alc-tree__split {
+    display: flex;
+    gap: 0.625rem;
+    align-items: stretch;
+  }
+  .alc-tree__split > .alc-tree__kids {
+    flex: 1 1 auto;
+  }
+  .alc-tree__side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+  }
+  .alc-tree__side > .alc-tree__leaf {
+    align-self: stretch;
+  }
+  .alc-tree__side > .alc-tree__box {
+    flex: 1 1 auto;
+  }
+  @media (max-width: 40rem) {
+    .alc-tree__split {
+      flex-direction: column;
+    }
+  }
+  .alc-tree__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .alc-tree__kids {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.625rem;
+  }
+  .alc-tree__leaf {
+    flex: 0 1 auto;
+    align-self: flex-start;
+    min-width: 6.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0.875rem;
+    border: 1.5px solid var(--alc-accent-40);
+    border-radius: 8px;
+    background: var(--alc-bg-elev-2);
+  }
+  .alc-tree__leaf--accent {
+    border-color: var(--alc-accent);
+    background: color-mix(in srgb, var(--alc-accent-soft) 60%, var(--alc-bg-elev-2));
+  }
+  .alc-tree__leaf--muted {
+    border-style: dashed;
+    border-color: var(--alc-hairline-3);
+    background: transparent;
+    opacity: 0.75;
+  }
+  .alc-tree__leaf--specs {
+    align-items: stretch;
+    text-align: center;
+  }
+  .alc-tree__specs {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 0.75rem;
+    margin: 0.5rem 0 0;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--alc-hairline-2);
+    font-size: 11px;
+    text-align: left;
+  }
+  .alc-tree__specs dt {
+    color: var(--alc-fg-3);
+  }
+  .alc-tree__specs dd {
+    margin: 0;
+    color: var(--alc-fg-1);
+  }
+  .alc-tree__label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--alc-fg-1);
+  }
+  .alc-tree__type {
+    font-size: 10.5px;
+    color: var(--alc-fg-3);
+  }
+  .alc-tree__scope {
+    margin-left: auto;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 0.0625rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--alc-warn) 70%, transparent);
+    color: var(--alc-fg-2);
+  }
+</style>
