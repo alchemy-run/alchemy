@@ -262,7 +262,8 @@ yield* Cloudflare.DNS.Record("AdminCname", {
 ```
 
 DNS records get the same adoption safety as routes: if a record with
-the same name, type and `content` already exists in the zone, Alchemy
+the same name, type and `content` (and `priority`, for MX and URI)
+already exists in the zone, Alchemy
 reports it as unowned and requires `adopt(true)` to take it over. A
 record with different content is left alone, and a new one is created
 beside it; only a CNAME, which a name holds just one of, is adopted

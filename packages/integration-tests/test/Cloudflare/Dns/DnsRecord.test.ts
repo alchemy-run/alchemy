@@ -35,7 +35,6 @@ const NAME_ADOPT_RELATIVE = testName("alchemy-dnsrecord-relative-adopt");
 const NAME_ADOPT_RELATIVE_FQDN = `${NAME_ADOPT_RELATIVE}.${zoneName}`;
 const NAME_LIST = `${testName("alchemy-dnsrecord-list")}.${zoneName}`;
 const NAME_MX = `${testName("alchemy-dnsrecord-mx")}.${zoneName}`;
-const NAME_MX_AMBIG = `${testName("alchemy-dnsrecord-mx-ambig")}.${zoneName}`;
 const NAME_MX_PRIORITY = `${testName("alchemy-dnsrecord-mx-priority")}.${zoneName}`;
 const NAME_SVCB = `_alchemy-dnsrecord._tcp.${zoneName}`;
 const NAME_SVCB_ADOPT = `_alchemy-dnsrecord-adopt._tcp.${zoneName}`;
@@ -831,68 +830,6 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
-// When multiple candidates survive the content/priority filter, adoption must
-// fail with an actionable error instead of picking one arbitrarily.
-test.provider(
-  "adoption fails with an actionable error when the match stays ambiguous",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
-
-      yield* stack.destroy();
-      yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");
-
-      // Same content on both records — only priority differs. A declaration
-      // without a priority cannot select one.
-      yield* dns
-        .createRecord({
-          zoneId,
-          name: NAME_MX_AMBIG,
-          type: "MX",
-          content: `${testName("mx")}.${zoneName}`,
-          priority: 1,
-          ttl: 1,
-        })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-        );
-      yield* dns.createRecord({
-        zoneId,
-        name: NAME_MX_AMBIG,
-        type: "MX",
-        content: `${testName("mx")}.${zoneName}`,
-        priority: 10,
-        ttl: 1,
-      });
-
-      const error = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.DNS.Record("AmbiguousMx", {
-              zoneId,
-              name: NAME_MX_AMBIG,
-              type: "MX",
-              content: `${testName("mx")}.${zoneName}`,
-            }).pipe(adopt(true));
-          }),
-        )
-        .pipe(
-          Effect.as(undefined),
-          Effect.catchCause((cause) => Effect.succeed(findError(cause))),
-        );
-      expect(error).toBeInstanceOf(Cloudflare.DNS.AmbiguousDnsRecordError);
-      expect(String(error)).toContain("Multiple DNS records");
-
-      yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
-);
-
 // Canonical `list()` test (zone-scoped collection): `list()` enumerates every
 // zone via `listAllZones`, exhaustively paginates each zone's DNS records, and
 // hydrates them into the `read` Attributes shape. Deploy a record and assert it
@@ -931,21 +868,6 @@ test.provider(
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
-
-/**
- * Pull the first failure/defect value out of a Cause regardless of whether
- * the engine raised it as a typed failure or a defect.
- */
-const findError = (cause: Cause.Cause<unknown>): unknown =>
-  cause.reasons
-    .map((reason) =>
-      Cause.isFailReason(reason)
-        ? reason.error
-        : Cause.isDieReason(reason)
-          ? reason.defect
-          : undefined,
-    )
-    .find((value) => value !== undefined);
 
 /**
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
@@ -1012,3 +934,13 @@ test.provider(
     timeout: 120000,
   },
 );
+
+// Type-level: Cloudflare rejects MX and URI records without a priority, so
+// the props type requires one. Checked by the type-checker, never run.
+export const _priorityIsRequired = (zoneId: string): Cloudflare.DNS.RecordProps[] => [
+  // @ts-expect-error MX needs a priority
+  { zoneId, name: "mx", type: "MX", content: "mail.example.com" },
+  // @ts-expect-error URI needs a priority
+  { zoneId, name: "uri", type: "URI", content: '10 1 "https://example.com"' },
+  { zoneId, name: "mx", type: "MX", content: "mail.example.com", priority: 10 },
+];

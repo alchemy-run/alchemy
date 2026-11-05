@@ -1,6 +1,7 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import { Unowned } from "alchemy/AdoptPolicy";
+import { havePropsChanged } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { arrayEqualsUnordered } from "alchemy/Util/equal";
@@ -16,10 +17,8 @@ export class RecordUnexpectedResponse extends Data.TaggedError("RecordUnexpected
   readonly cause?: unknown;
 }> {}
 
-/**
- * DNS record type literal — every value Cloudflare recognises.
- */
-export type RecordType =
+/** Every DNS record type Cloudflare recognises. */
+export type KnownRecordType =
   | "A"
   | "AAAA"
   | "CNAME"
@@ -40,8 +39,10 @@ export type RecordType =
   | "SSHFP"
   | "SVCB"
   | "TLSA"
-  | "URI"
-  | (string & {});
+  | "URI";
+
+/** DNS record type literal — a known type, or any other string. */
+export type RecordType = KnownRecordType | (string & {});
 
 /**
  * Cloudflare's structured DNS record components, keyed by record type.
@@ -104,7 +105,9 @@ export interface RecordCommonProps {
   tags?: ReadonlyArray<string>;
 }
 
-type StringRecordType = Exclude<RecordType, keyof RecordDataByType | "MX">;
+// Built from the known types: a `string` fallback here would also accept
+// "MX" or "URI" and let them skip their required `priority`.
+type StringRecordType = Exclude<KnownRecordType, keyof RecordDataByType | "MX">;
 
 type StringRecordProps = {
   /** Record type. Changing it updates the record in place. */
@@ -307,6 +310,19 @@ export const RecordProvider = () =>
       if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
+      // An unchanged name or type stays known to dependents during the
+      // update (e.g. a FallbackOrigin pointing at `record.name`).
+      if (havePropsChanged(olds, news)) {
+        return {
+          action: "update",
+          stables: [
+            "recordId",
+            "zoneId",
+            ...(o.name === n.name ? ["name"] : []),
+            ...(o.type === n.type ? ["type"] : []),
+          ],
+        } as const;
+      }
     }),
 
     reconcile: Effect.fn(function* ({ fqn, news, output }) {
@@ -370,7 +386,9 @@ export const RecordProvider = () =>
                       new RecordUnexpectedResponse({
                         message:
                           `Cloudflare reported an identical DNS record for ` +
-                          `(${news.name}, ${news.type}) but it could not be found`,
+                          `(${news.name}, ${news.type}), but none matches the declared ` +
+                          `content. Cloudflare may store it in another form (e.g. ` +
+                          `lowercased); declare \`content\` exactly as the existing record shows it.`,
                       }),
                     ),
               ),
