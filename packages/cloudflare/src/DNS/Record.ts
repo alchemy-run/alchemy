@@ -119,8 +119,11 @@ interface MxRecordProps {
   type: "MX";
   /** Mail server hostname. Mutable — patched in place. */
   content: string;
-  /** Mail server priority; lower values are preferred. */
-  priority?: number;
+  /**
+   * Mail server priority; lower values are preferred. Required by
+   * Cloudflare, and part of what identifies the record for adoption.
+   */
+  priority: number;
 }
 
 type StructuredRecordProps = {
@@ -132,12 +135,18 @@ type StructuredRecordProps = {
      * Mutable — patched in place.
      */
     content: string | RecordDataByType[Type];
-    /**
-     * Top-level priority, used by URI records. SRV, SVCB, and HTTPS put their
-     * priority inside structured `content`.
-     */
-    priority?: Type extends "URI" ? number : never;
-  };
+  } & (Type extends "URI"
+    ? {
+        /**
+         * URI priority. Required by Cloudflare, and part of what identifies
+         * the record for adoption.
+         */
+        priority: number;
+      }
+    : {
+        /** SRV, SVCB, and HTTPS put their priority inside structured `content`. */
+        priority?: never;
+      });
 }[keyof RecordDataByType];
 
 /** Input properties for a Cloudflare DNS record. */

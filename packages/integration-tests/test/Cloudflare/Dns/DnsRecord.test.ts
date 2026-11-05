@@ -36,6 +36,7 @@ const NAME_ADOPT_RELATIVE_FQDN = `${NAME_ADOPT_RELATIVE}.${zoneName}`;
 const NAME_LIST = `${testName("alchemy-dnsrecord-list")}.${zoneName}`;
 const NAME_MX = `${testName("alchemy-dnsrecord-mx")}.${zoneName}`;
 const NAME_MX_AMBIG = `${testName("alchemy-dnsrecord-mx-ambig")}.${zoneName}`;
+const NAME_MX_PRIORITY = `${testName("alchemy-dnsrecord-mx-priority")}.${zoneName}`;
 const NAME_SVCB = `_alchemy-dnsrecord._tcp.${zoneName}`;
 const NAME_SVCB_ADOPT = `_alchemy-dnsrecord-adopt._tcp.${zoneName}`;
 const NAME_HTTPS = `${testName("alchemy-dnsrecord-https")}.${zoneName}`;
@@ -780,6 +781,52 @@ test.provider(
 
       const leftovers = yield* listByNameType(zoneId, NAME_MX, "MX");
       expect(leftovers).toEqual([]);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
+);
+
+// Priority is part of an MX record's identity: the same host at another
+// priority is a sibling, not this record.
+test.provider(
+  "an MX record with the same host at another priority is not adopted",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRecords(zoneId, NAME_MX_PRIORITY, "MX");
+
+      const host = `${testName("mx-priority")}.${zoneName}`;
+      const pre = yield* dns.createRecord({
+        zoneId,
+        name: NAME_MX_PRIORITY,
+        type: "MX",
+        content: host,
+        priority: 10,
+        ttl: 1,
+      });
+
+      const record = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("PriorityMx", {
+            zoneId,
+            name: NAME_MX_PRIORITY,
+            type: "MX",
+            content: host,
+            priority: 20,
+          });
+        }),
+      );
+
+      expect(record.recordId).not.toEqual(pre.id);
+      const preLive = yield* getRecord(zoneId, pre.id!);
+      expect("priority" in preLive ? preLive.priority : undefined).toEqual(10);
+
+      yield* stack.destroy();
+
+      const leftovers = yield* listByNameType(zoneId, NAME_MX_PRIORITY, "MX");
+      expect(leftovers.map((r) => r.id)).toEqual([pre.id]);
+      yield* purgeRecords(zoneId, NAME_MX_PRIORITY, "MX");
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
