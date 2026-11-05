@@ -48,6 +48,7 @@ import {
   type ProviderService,
 } from "./Provider.ts";
 import { defaultProviderMode, stampedMode, type ProviderMode } from "./ProviderMode.ts";
+import { ProtectedResource } from "./RemovalPolicy.ts";
 import {
   isResource,
   LookupOfManagedResourceError,
@@ -2369,6 +2370,51 @@ const makePlan = <A>(
           dependencies,
         });
       }
+    }
+
+    // `RemovalPolicy.protect()`: refuse the whole plan, before anything is
+    // applied, when it would start replacing or delete a protected resource. Both
+    // the declaration and the persisted row count, so dropping `protect()`
+    // in the same deploy as the replacement is refused too.
+    const refused = [
+      ...Object.entries(resourceGraph).flatMap(([fqn, node]) =>
+        node.action === "replace" &&
+        // Finishing a `replaced` row's drain only deletes an old generation
+        // the dependents already left; the current one is untouched.
+        !(node.state.status === "replaced" && !node.restart) &&
+        (node.resource.RemovalPolicy === "protect" || node.state.removalPolicy === "protect")
+          ? [{ fqn, action: "replace" as const }]
+          : [],
+      ),
+      ...Object.entries(deletions).flatMap(([fqn, node]) =>
+        node?.state.removalPolicy === "protect" ? [{ fqn, action: "delete" as const }] : [],
+      ),
+      // An Action declared at a protected resource's FQN would overwrite its
+      // row without ever planning a delete, abandoning the resource.
+      ...(yield* Effect.forEach(
+        persistedFqns.filter((fqn) => newActionFqns.has(fqn) && !newResourceFqns.has(fqn)),
+        (fqn) =>
+          state
+            .get({ stack: stackName, stage, fqn })
+            .pipe(
+              Effect.map((persisted) =>
+                !isActionState(persisted) &&
+                (persisted as ResourceState | undefined)?.removalPolicy === "protect"
+                  ? [{ fqn, action: "delete" as const }]
+                  : [],
+              ),
+            ),
+        { concurrency: "unbounded" },
+      )).flat(),
+    ];
+    if (refused.length > 0) {
+      return yield* new ProtectedResource({
+        message:
+          `Refusing to ${refused.map((r) => `${r.action} '${r.fqn}'`).join(", ")}: ` +
+          "protected by RemovalPolicy.protect(). Deploy it without protect() first " +
+          "to replace or delete it deliberately.",
+        resources: refused,
+      });
     }
 
     return {
