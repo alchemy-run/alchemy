@@ -148,6 +148,56 @@ test.provider(
 );
 
 test.provider(
+  "replace an explicitly named volume when format changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Hetzner volume names are unique per project, so the replacement
+      // must not keep the previous volume under the same name.
+      const name = `${stack.stage}-named-data`.replaceAll("_", "-").slice(0, 60);
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Volume("NamedData", {
+            name,
+            size: 10,
+            format: "ext4",
+            location: "nbg1",
+          });
+        }),
+      );
+      expect(created.name).toEqual(name);
+      expect(created.format).toEqual("ext4");
+
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Volume("NamedData", {
+            name,
+            size: 10,
+            format: "xfs",
+            location: "nbg1",
+          });
+        }),
+      );
+
+      expect(replaced.id).not.toEqual(created.id);
+      expect(replaced.name).toEqual(name);
+      expect(replaced.format).toEqual("xfs");
+      const fetched = yield* volumes.getVolume({ id: replaced.id });
+      expect(fetched.volume.format).toEqual("xfs");
+      expect(yield* waitUntilGone(created.id)).toEqual("gone");
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(replaced.id)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:volume", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
   "list enumerates the deployed volume",
   (stack) =>
     Effect.gen(function* () {

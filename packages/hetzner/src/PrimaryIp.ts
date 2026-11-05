@@ -19,6 +19,7 @@ import {
   diffLabels,
   hasAlchemyLabels,
   isReplacedGeneration,
+  keepsName,
   stripInternalLabels,
   toLabels,
 } from "./Labels.ts";
@@ -318,10 +319,10 @@ export const PrimaryIpProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.type !== output.type) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!samePlacement(news, output)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;

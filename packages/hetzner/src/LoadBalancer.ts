@@ -23,6 +23,7 @@ import {
   diffLabels,
   hasAlchemyLabels,
   isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -1331,10 +1332,10 @@ export const LoadBalancerProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.location !== undefined && news.location !== output.location) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (news.networkZone !== undefined && news.networkZone !== output.networkZone) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;

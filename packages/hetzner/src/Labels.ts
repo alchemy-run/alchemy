@@ -105,3 +105,13 @@ export const isReplacedGeneration = (args: {
   args.previousId !== undefined &&
   args.previousId === args.foundId &&
   (args.claimedName === undefined || args.claimedName !== args.foundName);
+
+/**
+ * Whether a replacement keeps the explicit name of the generation it
+ * replaces. Hetzner names are unique per project, so such a replacement
+ * can't be created next to the old generation: it deletes it first.
+ */
+export const keepsName = (
+  news: { readonly name?: string | undefined },
+  output: { readonly name: string },
+): boolean => news.name !== undefined && news.name === output.name;

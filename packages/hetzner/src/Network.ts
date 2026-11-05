@@ -20,6 +20,7 @@ import {
   stripInternalLabels,
   toLabels,
   isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -492,7 +493,7 @@ export const NetworkProvider = () =>
         news.ipRange !== output.ipRange &&
         !cidrContains(news.ipRange, output.ipRange)
       ) {
-        return { action: "replace" } as const;
+        return { action: "replace", deleteFirst: keepsName(news, output) } as const;
       }
       return undefined;
     }),

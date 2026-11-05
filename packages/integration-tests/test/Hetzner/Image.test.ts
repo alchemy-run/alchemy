@@ -111,3 +111,55 @@ test.provider(
     timeout: 180_000,
   },
 );
+
+test.provider(
+  "replace when the source server changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Both servers stay deployed across the replacement, so the image
+      // replacement never runs alongside removing its old dependency.
+      const program = (source: "First" | "Second") =>
+        Effect.gen(function* () {
+          const first = yield* Hetzner.Server("First", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+          });
+          const second = yield* Hetzner.Server("Second", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+          });
+          const image = yield* Hetzner.Image("Snapshot", {
+            server: source === "First" ? first : second,
+          });
+          return { first, second, image };
+        });
+
+      const created = yield* stack.deploy(program("First"));
+      expect(created.image.createdFromId).toEqual(created.first.id);
+
+      const replaced = yield* stack.deploy(program("Second"));
+      expect(replaced.image.id).not.toEqual(created.image.id);
+      expect(replaced.image.createdFromId).toEqual(replaced.second.id);
+
+      const fetched = yield* images.getImage({ id: replaced.image.id });
+      expect(fetched.image?.created_from?.id).toEqual(replaced.second.id);
+      expect(yield* waitUntilGone(created.image.id)).toEqual("gone");
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(replaced.image.id)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:image",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "live",
+    ],
+    timeout: 240_000,
+  },
+);

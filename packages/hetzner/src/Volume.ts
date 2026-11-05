@@ -21,6 +21,7 @@ import {
   diffLabels,
   hasAlchemyLabels,
   isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -323,13 +324,13 @@ export const VolumeProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.location !== undefined && news.location !== output.location) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (news.format !== undefined && news.format !== output.format) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (news.size < output.size) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;

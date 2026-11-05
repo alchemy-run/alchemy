@@ -20,6 +20,7 @@ import {
   stripInternalLabels,
   toLabels,
   isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -201,7 +202,7 @@ export const PlacementGroupProvider = () =>
       if (!isResolved(news)) return undefined;
       const nextType = news.type ?? DEFAULT_TYPE;
       if (output !== undefined && nextType !== output.type) {
-        return { action: "replace" } as const;
+        return { action: "replace", deleteFirst: keepsName(news, output) } as const;
       }
       return undefined;
     }),

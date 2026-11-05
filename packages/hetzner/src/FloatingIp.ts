@@ -19,6 +19,7 @@ import {
   diffLabels,
   hasAlchemyLabels,
   isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -289,10 +290,10 @@ export const FloatingIpProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.type !== output.type) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!sameHomeLocation(news.homeLocation, output)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;

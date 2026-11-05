@@ -25,6 +25,7 @@ import {
   stripInternalLabels,
   toLabels,
   isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -873,14 +874,14 @@ export const ServerProvider = () =>
         // Cloud-init runs once, on first boot — a changed init script can
         // only take effect on a freshly provisioned Server.
         if (news.userData !== olds?.userData) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const location = news.location ?? DEFAULT_LOCATION;
         if (!sameRef(location, output.location, output.locationId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!sameRef(news.serverType, output.serverType, output.serverTypeId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const imageId = output.imageId;
         const imageMatches =
@@ -888,7 +889,7 @@ export const ServerProvider = () =>
             ? true
             : imageId !== undefined && news.image === String(imageId);
         if (!imageMatches) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
