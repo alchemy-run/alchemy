@@ -72,8 +72,23 @@ export interface HostedZone extends Resource<
     comment: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  HostedZoneLookup
 > {}
+
+/**
+ * Props for {@link HostedZone.lookup}: find a hosted zone this stack doesn't
+ * manage, by its id or its domain name.
+ */
+export type HostedZoneLookup =
+  | {
+      /** The zone's id, with or without the `/hostedzone/` prefix. */
+      id: string;
+    }
+  | {
+      /** The zone's domain name, with or without its trailing dot. */
+      name: string;
+    };
 
 /**
  * A Route 53 hosted zone.
@@ -96,6 +111,24 @@ export interface HostedZone extends Resource<
  * const zone = yield* HostedZone("MyZone", {
  *   name: "example.com",
  *   forceDestroy: true, // delete leftover records on destroy
+ * });
+ * ```
+ *
+ * ### Looking up an existing hosted zone
+ * `HostedZone.lookup` references a hosted zone Alchemy doesn't manage (created in the
+ * console or by another stack), found by `id` or its domain `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a record to an existing zone
+ * ```typescript
+ * const zone = AWS.Route53.HostedZone.lookup({ name: "example.com" });
+ *
+ * yield* AWS.Route53.Record("Api", {
+ *   hostedZoneId: zone.id,
+ *   name: "api.example.com",
+ *   type: "CNAME",
+ *   ttl: "5 minutes",
+ *   records: ["api.internal.example.com"],
  * });
  * ```
  *
@@ -257,6 +290,18 @@ export const HostedZoneProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const zoneId = "id" in props ? props.id : (yield* findByName(props.name))?.Id;
+          if (zoneId === undefined) return undefined;
+          const detail = yield* observe(zoneId);
+          if (!detail) return undefined;
+          return {
+            id: normalizeId(detail.HostedZone.Id),
+            name: detail.HostedZone.Name,
+            nameServers: detail.DelegationSet?.NameServers ?? [],
+            comment: detail.HostedZone.Config?.Comment,
+          };
         }),
         read: Effect.fn(function* ({ olds, output }) {
           // Resolve the zone id: prefer the stored output, else look up by name

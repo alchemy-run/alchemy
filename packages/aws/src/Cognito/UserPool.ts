@@ -10,6 +10,7 @@ import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -387,8 +388,23 @@ export interface UserPool extends Resource<
     userPoolName: string;
   },
   UserPoolBinding,
-  Providers
+  Providers,
+  UserPoolLookup
 > {}
+
+/**
+ * Props for {@link UserPool.lookup}: find a user pool this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type UserPoolLookup =
+  | {
+      /** The pool's id, e.g. `us-west-2_aBcDeFgHi`. */
+      userPoolId: string;
+    }
+  | {
+      /** The pool's name; fails when several pools share it. */
+      userPoolName: string;
+    };
 
 /**
  * An Amazon Cognito user pool — a managed user directory that handles
@@ -493,6 +509,20 @@ export interface UserPool extends Resource<
  * const client = yield* Cognito.UserPoolClient("Web", {
  *   userPoolId: pool.userPoolId,
  *   explicitAuthFlows: ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
+ * });
+ * ```
+ *
+ * ### Looking up an existing user pool
+ * `UserPool.lookup` references an user pool Alchemy doesn't manage (created in the
+ * console or by another stack), found by `userPoolId` or `userPoolName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a client to an existing user pool
+ * ```typescript
+ * const users = AWS.Cognito.UserPool.lookup({ userPoolName: "customers" });
+ *
+ * const client = yield* AWS.Cognito.UserPoolClient("Web", {
+ *   userPoolId: users.userPoolId,
  * });
  * ```
  *
@@ -954,6 +984,26 @@ export const UserPoolProvider = () =>
             );
             return pools.filter((pool) => pool !== undefined).map((pool) => attributesOf(pool));
           }),
+
+        lookup: Effect.fn(function* (props) {
+          if ("userPoolId" in props) {
+            const pool = yield* describePool(props.userPoolId);
+
+            return pool === undefined ? undefined : attributesOf(pool);
+          }
+
+          const pool = yield* single(
+            "AWS.Cognito.UserPool",
+
+            props.userPoolName,
+
+            yield* findPoolsByName(props.userPoolName),
+
+            (pool) => pool.Id,
+          );
+
+          return pool === undefined ? undefined : attributesOf(pool);
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.userPoolId !== undefined) {
