@@ -109,6 +109,7 @@ const SECTIONS: Section[] = [
       slugs: [
         "infrastructure-as-effects/runtime",
         "infrastructure-as-effects/binding",
+        "infrastructure-as-effects/identity-federation",
         "infrastructure-as-effects/layers",
         "infrastructure-as-effects/event-sources",
         "infrastructure-as-effects/sinks",
@@ -398,6 +399,7 @@ const SECTIONS: Section[] = [
         "fly/index",
         "fly/what-is-fly",
         "fly/organizations-and-tokens",
+        "fly/federated-identity",
         "fly/setup",
         "fly/networking",
       ],
