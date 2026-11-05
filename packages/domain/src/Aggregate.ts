@@ -9,12 +9,25 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Command from "./Command.ts";
-import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
+import {
+  CommandInNoPhase,
+  DefinitionError,
+  ImpossibleMove,
+  IncompletePhases,
+  MissingWrongPhase,
+  type Reason,
+  UndeclaredMove,
+  UnhandledCommand,
+  UnknownPhase,
+  UnknownPhaseEvent,
+  UnknownWhenCommand,
+  UnreachablePhase,
+} from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
 import { judge, settle, targetId as internalTargetId } from "./internal.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
-import type * as Rejection from "./Rejection.ts";
+import * as Rejection from "./Rejection.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as Telemetry from "./Telemetry.ts";
 
@@ -127,6 +140,7 @@ export interface Definition<
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
   E extends Event.Any = EventsOf<C>,
+  P extends string = never,
 > {
   /** Schema of the aggregate id (a string or branded string). */
   readonly id: Id;
@@ -180,6 +194,31 @@ export interface Definition<
    * which judges each read against the instance's current state.
    */
   readonly read?: Read.Contract<{ readonly id: Id["Type"] }, S["Type"], Ms, Rejects>;
+  /**
+   * Every phase this aggregate can be in, each with the moves its events make.
+   * Declare it with `phaseOf` and `when`. See {@link Phase}.
+   */
+  readonly phases?: { readonly [K in P]: Phase<NoInfer<P>, E["tag"]> };
+  /** The phase a state is in. The state stays the only thing that is stored. */
+  readonly phaseOf?: (state: S["Type"]) => NoInfer<P>;
+  /**
+   * The phases in which each command may run, or `"*"` for all of them. See
+   * {@link WrongPhase} for what happens to a command outside its phases.
+   */
+  readonly when?: { readonly [T in C[number]["tag"]]: ReadonlyArray<NoInfer<P>> | "*" };
+}
+
+/**
+ * One phase of an aggregate's life, such as `draft` or `approved`. Phases are
+ * data, so `Domain.verify`, a client and a diagram read the same rule.
+ */
+export interface Phase<P extends string = string, Tag extends string = string> {
+  /**
+   * The phases an event may move an instance to from this one. An event that
+   * has no entry leaves the instance in this phase. An instance that moves in
+   * any other way is a defect, and nothing commits.
+   */
+  readonly on?: { readonly [T in Tag]?: P | ReadonlyArray<P> };
 }
 
 /**
@@ -274,6 +313,9 @@ export interface AnyDefinition {
   readonly evolve: AnyHandlers;
   readonly reply?: AnyHandlers;
   readonly read?: Read.AnyContract;
+  readonly phases?: { readonly [phase: string]: Phase };
+  readonly phaseOf?: (state: never) => string;
+  readonly when?: { readonly [tag: string]: ReadonlyArray<string> | "*" };
 }
 
 /** An aggregate instance to address: its id, or a ref carrying it. */
@@ -397,6 +439,154 @@ export type EventOf<A extends Any> = InstanceOf<A["definition"]["events"][number
 export type CommandOf<A extends Any> = InstanceOf<A["definition"]["commands"][number]>;
 /** The requirement identifier of an aggregate class. */
 export type Identifier<A extends Any> = A extends Context.Key<infer I, unknown> ? I : never;
+/** The phases of an aggregate class; `never` when it declares none. */
+export type PhaseOf<A extends Any> = Extract<keyof NonNullable<A["definition"]["phases"]>, string>;
+
+/** The phase of a state, or `undefined` for an aggregate with no phases. */
+export const phaseIn = (aggregate: Any, state: unknown): string | undefined =>
+  (aggregate.definition.phaseOf as ((state: unknown) => string) | undefined)?.(state);
+
+/**
+ * The tags of the commands that may run in a state. Every command, for an
+ * aggregate with no phases. `decide` still has the last word on each one.
+ */
+export const nextCommands = (aggregate: Any, state: unknown): ReadonlyArray<string> => {
+  const def = aggregate.definition;
+  const phase = phaseIn(aggregate, state);
+  return def.commands
+    .filter((command) => {
+      const allowed = def.when?.[command.tag];
+      return phase === undefined || allowed === "*" || allowed?.includes(phase);
+    })
+    .map((command) => command.tag);
+};
+
+/**
+ * What a command gets without `decide`, when it runs outside its phases: a
+ * {@link WrongPhase}, or no events for a command that declares no rejections.
+ * `undefined` when `decide` should run.
+ *
+ * @internal
+ */
+export const refusal = (aggregate: Any, command: Command.Any, state: unknown): unknown => {
+  const allowed = aggregate.definition.when?.[command.tag];
+  const phase = phaseIn(aggregate, state);
+  if (phase === undefined || allowed === undefined || allowed === "*") return undefined;
+  if (allowed.includes(phase)) return undefined;
+  return command.rejects.length === 0
+    ? []
+    : Rejection.WrongPhase.make({ command: command.tag, phase, allowed });
+};
+
+const targetsOf = (phase: Phase, tag: string): ReadonlyArray<string> =>
+  [
+    (phase.on as Readonly<Record<string, string | ReadonlyArray<string>>> | undefined)?.[tag] ?? [],
+  ].flat();
+
+/**
+ * The {@link DefinitionError} for an event that moved an instance in a way
+ * `phases` does not declare, if it did.
+ *
+ * @internal
+ */
+export const undeclaredMove = (
+  aggregate: Any,
+  event: string,
+  before: unknown,
+  after: unknown,
+): DefinitionError | undefined => {
+  const from = phaseIn(aggregate, before);
+  const to = phaseIn(aggregate, after);
+  if (from === undefined || to === undefined || from === to) return undefined;
+  const phase = aggregate.definition.phases?.[from];
+  return phase && targetsOf(phase, event).includes(to)
+    ? undefined
+    : new DefinitionError({
+        reason: new UndeclaredMove({ aggregate: aggregate.aggregateName, event, from, to }),
+      });
+};
+
+/**
+ * Every problem in an aggregate's phases: a table that is not complete, a
+ * phase nothing can reach, a command that can never run, and a move no event
+ * can make. Empty for an aggregate with no phases.
+ *
+ * @internal
+ */
+export const phaseProblems = (aggregate: Any): ReadonlyArray<Reason> => {
+  const { aggregateName: name, definition: def } = aggregate;
+  const { phases, phaseOf, when } = def;
+  if (phases === undefined && phaseOf === undefined && when === undefined) return [];
+  if (phases === undefined || phaseOf === undefined || when === undefined) {
+    return [new IncompletePhases({ aggregate: name })];
+  }
+  const problems: Array<Reason> = [];
+  const known = (phase: string) => Object.hasOwn(phases, phase);
+  const eventTags = new Set(def.events.map((event) => event.tag));
+  const commandTags = new Set(def.commands.map((command) => command.tag));
+  const allowedIn = (command: Command.Any, phase: string) => {
+    const allowed = when[command.tag];
+    return allowed === "*" || (allowed?.includes(phase) ?? false);
+  };
+
+  for (const tag of Object.keys(when)) {
+    if (!commandTags.has(tag))
+      problems.push(new UnknownWhenCommand({ aggregate: name, command: tag }));
+  }
+  for (const command of def.commands) {
+    const allowed = when[command.tag];
+    if (allowed === undefined || allowed.length === 0) {
+      problems.push(new CommandInNoPhase({ aggregate: name, command: command.tag }));
+      continue;
+    }
+    if (allowed === "*") continue;
+    for (const phase of allowed) {
+      if (!known(phase)) {
+        problems.push(new UnknownPhase({ aggregate: name, at: `when.${command.tag}`, phase }));
+      }
+    }
+    if (command.rejects.length > 0 && !command.rejects.includes(Rejection.WrongPhase)) {
+      problems.push(new MissingWrongPhase({ aggregate: name, command: command.tag }));
+    }
+  }
+
+  const moves = new Map<string, ReadonlyArray<string>>();
+  for (const [from, phase] of Object.entries(phases)) {
+    const reached: Array<string> = [];
+    for (const tag of Object.keys(phase.on ?? {})) {
+      const targets = targetsOf(phase, tag);
+      for (const to of targets) {
+        if (!known(to)) {
+          problems.push(
+            new UnknownPhase({ aggregate: name, at: `phases.${from}.on.${tag}`, phase: to }),
+          );
+        }
+      }
+      if (!eventTags.has(tag)) {
+        problems.push(new UnknownPhaseEvent({ aggregate: name, phase: from, event: tag }));
+        continue;
+      }
+      const made = def.commands.some(
+        (command) => allowedIn(command, from) && command.events.some((e) => e.tag === tag),
+      );
+      if (made) reached.push(...targets);
+      else problems.push(new ImpossibleMove({ aggregate: name, phase: from, event: tag }));
+    }
+    moves.set(from, reached);
+  }
+
+  const initial = (phaseOf as (state: unknown) => string)(def.initial);
+  if (!known(initial)) {
+    problems.push(new UnknownPhase({ aggregate: name, at: "phaseOf(initial)", phase: initial }));
+    return problems;
+  }
+  const reachable = new Set([initial]);
+  for (const from of reachable) for (const to of moves.get(from) ?? []) reachable.add(to);
+  for (const phase of Object.keys(phases)) {
+    if (!reachable.has(phase)) problems.push(new UnreachablePhase({ aggregate: name, phase }));
+  }
+  return problems;
+};
 
 /**
  * Options for {@link predict}: what the server would give `decide`. A command
@@ -477,13 +667,15 @@ export const predict = (
   const version = options.version ?? 0;
   const commandId = options.commandId ?? "";
   const stream = `${aggregate.aggregateName}/${String(options.id)}`;
-  let decision = decide(state, command, {
-    id: options.id,
-    now: options.now,
-    commandId,
-    stream,
-    version,
-  });
+  let decision =
+    refusal(aggregate, cls, state) ??
+    decide(state, command, {
+      id: options.id,
+      now: options.now,
+      commandId,
+      stream,
+      version,
+    });
   if (Effect.isEffect(decision)) {
     const settled = decision.pipe(
       Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),
@@ -499,6 +691,7 @@ export const predict = (
   if (judged._tag === "Rejected") return judged;
   const envelopes: Array<Envelope> = [];
   let next = state;
+  let undeclared: DefinitionError | undefined;
   judged.events.forEach((event, index) => {
     const envelope: Envelope = {
       id: options.id,
@@ -509,12 +702,15 @@ export const predict = (
       correlationId: options.correlationId ?? commandId,
     };
     envelopes.push(envelope);
+    const before = next;
     next = (def.evolve[event._tag] as (s: unknown, e: unknown, env: unknown) => unknown)(
       next,
       event,
       envelope,
     );
+    undeclared ??= undeclaredMove(aggregate, event._tag, before, next);
   });
+  if (undeclared) return { _tag: "Unpredictable", cause: Cause.die(undeclared) };
   return { _tag: "Accepted", events: judged.events, envelopes, state: next };
 };
 
@@ -624,6 +820,27 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * yield* accounts.unschedule(accountId, "statement"); // cancel it while it is pending
  * ```
  *
+ * ### Declaring phases
+ * `phases`, `phaseOf` and `when` state the lifecycle as data. They are
+ * optional. The host refuses a command outside its phases before `decide`
+ * runs, `Domain.verify` checks the table, and `nextCommands` tells a client
+ * what it may send.
+ *
+ * **Example:** An order that goes from draft to approved
+ * ```typescript
+ * export class Order extends Domain.Aggregate("Order", {
+ *   id: OrderId,
+ *   state: Schema.Struct({ status: Schema.Literals(["draft", "approved"]) }),
+ *   initial: { status: "draft" },
+ *   commands: [Approve],
+ *   decide: { Approve: () => [new Approved()] },
+ *   evolve: { Approved: () => ({ status: "approved" }) },
+ *   phases: { draft: { on: { Approved: "approved" } }, approved: {} },
+ *   phaseOf: (s) => s.status,
+ *   when: { Approve: ["draft"] },
+ * }) {}
+ * ```
+ *
  * @primitive
  */
 export const makeRef = <A extends Any>(aggregate: A, id: IdOf<A>): Ref<A> => {
@@ -708,11 +925,13 @@ export const make = <
   // The declared `read`, inferred apart from `Definition` so the type records it.
   // Its constraint carries no members, so it never narrows how `read` is typed.
   const R extends object | undefined = object | undefined,
+  const P extends string = never,
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C> & { readonly read?: R },
-): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>> => {
-  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>>()(
+  definition: Definition<Id, S, C, Ms, Rejects, EventsOf<C>, P> &
+    TargetsMatch<Id, C> & { readonly read?: R },
+): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>, P>> => {
+  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects, ReadOf<R>, P>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
   // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
@@ -722,10 +941,10 @@ export const make = <
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
     static readonly aggregateName: Name = name;
-    static readonly definition: Resolved<Id, S, C, Ms, Rejects, ReadOf<R>> = {
+    static readonly definition: Resolved<Id, S, C, Ms, Rejects, ReadOf<R>, P> = {
       ...definition,
       events: [...new Set(definition.commands.flatMap((command) => command.events))],
-    } as unknown as Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>;
+    } as unknown as Resolved<Id, S, C, Ms, Rejects, ReadOf<R>, P>;
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
@@ -739,7 +958,15 @@ export const make = <
     ) {
       return predict(this, state, command, options);
     }
-  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>;
+    /** The phase of a state. See {@link phaseIn}. */
+    static phase(this: Any, state: unknown) {
+      return phaseIn(this, state);
+    }
+    /** The commands that may run in a state. See {@link nextCommands}. */
+    static nextCommands(this: Any, state: unknown) {
+      return nextCommands(this, state);
+    }
+  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>, P>>;
 };
 
 /**
@@ -783,7 +1010,8 @@ export type Resolved<
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
   R extends Read.AnyContract | undefined = Read.AnyContract | undefined,
-> = Definition<Id, S, C, Ms, Rejects> & {
+  P extends string = never,
+> = Definition<Id, S, C, Ms, Rejects, EventsOf<C>, P> & {
   readonly events: ReadonlyArray<EventsOf<C>>;
   readonly read: R;
 };
@@ -826,4 +1054,23 @@ export interface AggregateClass<
     InstanceOf<CommandClassOf<Self["definition"], Cmd>["rejects"][number]>,
     IdOf<Self>
   >;
+  /** The phase of a state; `undefined` for an aggregate with no phases. */
+  phase<Self extends Any>(
+    this: Self,
+    state: StateOf<Self>,
+  ): [PhaseOf<Self>] extends [never] ? undefined : PhaseOf<Self>;
+  /**
+   * The tags of the commands that may run in a state, from `when`: every
+   * command for an aggregate with no phases. A client reads it to enable its
+   * buttons, with no second copy of the rule. `decide` still has the last word.
+   *
+   * **Example:** Enable a button
+   * ```typescript
+   * const canApprove = Order.nextCommands(state).includes("Approve");
+   * ```
+   */
+  nextCommands<Self extends Any>(
+    this: Self,
+    state: StateOf<Self>,
+  ): ReadonlyArray<Self["definition"]["commands"][number]["tag"]>;
 }

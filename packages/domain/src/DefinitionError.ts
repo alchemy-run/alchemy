@@ -141,6 +141,93 @@ export class WriterKeyMismatch extends Data.TaggedError("WriterKeyMismatch")<{
   }
 }
 
+// ---------------------------------------------------------------- phases
+
+/** An aggregate declares some of `phases`, `phaseOf` and `when`, but not all three. */
+export class IncompletePhases extends Data.TaggedError("IncompletePhases")<{
+  readonly aggregate: string;
+}> {
+  override get message() {
+    return `${this.aggregate} must declare phases, phaseOf and when together`;
+  }
+}
+
+/** `when` names a command the aggregate does not list. */
+export class UnknownWhenCommand extends Data.TaggedError("UnknownWhenCommand")<{
+  readonly aggregate: string;
+  readonly command: string;
+}> {
+  override get message() {
+    return `${this.aggregate}.when.${this.command} is not a command of ${this.aggregate}`;
+  }
+}
+
+/** A command that `when` lets run in no phase. */
+export class CommandInNoPhase extends Data.TaggedError("CommandInNoPhase")<{
+  readonly aggregate: string;
+  readonly command: string;
+}> {
+  override get message() {
+    return `${this.aggregate}: ${this.command} runs in no phase: add it to when`;
+  }
+}
+
+/** `when`, `phases` or `phaseOf(initial)` names a phase that `phases` does not declare. */
+export class UnknownPhase extends Data.TaggedError("UnknownPhase")<{
+  readonly aggregate: string;
+  /** Where the phase is named: `when.<command>`, `phases.<from>.on.<event>` or `phaseOf(initial)`. */
+  readonly at: string;
+  readonly phase: string;
+}> {
+  override get message() {
+    return this.at === "phaseOf(initial)"
+      ? `${this.aggregate}.phaseOf(initial) is '${this.phase}', which is not in phases`
+      : `${this.aggregate}.${this.at} names unknown phase '${this.phase}'`;
+  }
+}
+
+/** A command with rejections can run outside its phases but does not declare `WrongPhase`. */
+export class MissingWrongPhase extends Data.TaggedError("MissingWrongPhase")<{
+  readonly aggregate: string;
+  readonly command: string;
+}> {
+  override get message() {
+    return `${this.aggregate}: ${this.command} can run outside its phases, so it must declare Domain.WrongPhase in rejects (or declare no rejections, and record nothing there)`;
+  }
+}
+
+/** `phases.<from>.on` names an event the aggregate does not record. */
+export class UnknownPhaseEvent extends Data.TaggedError("UnknownPhaseEvent")<{
+  readonly aggregate: string;
+  readonly phase: string;
+  readonly event: string;
+}> {
+  override get message() {
+    return `${this.aggregate}.phases.${this.phase}.on.${this.event} is not an event of ${this.aggregate}`;
+  }
+}
+
+/** A declared move whose event no command that runs in its phase records. */
+export class ImpossibleMove extends Data.TaggedError("ImpossibleMove")<{
+  readonly aggregate: string;
+  readonly phase: string;
+  readonly event: string;
+}> {
+  override get message() {
+    return `${this.aggregate}: no command that runs in '${this.phase}' records '${this.event}', so that move can never happen`;
+  }
+}
+
+/** A phase no move reaches from the initial phase. */
+export class UnreachablePhase extends Data.TaggedError("UnreachablePhase")<{
+  readonly aggregate: string;
+  readonly phase: string;
+}> {
+  override get message() {
+    return `${this.aggregate}: no move reaches phase '${this.phase}'`;
+  }
+}
+
 // ---------------------------------------------------------------- runtime
 
 /** An aggregate receives a command it does not list. */
@@ -150,6 +237,18 @@ export class UnhandledCommand extends Data.TaggedError("UnhandledCommand")<{
 }> {
   override get message() {
     return `${this.aggregate} does not handle '${this.command}'`;
+  }
+}
+
+/** An event moved an instance between phases in a way its `phases` do not declare. */
+export class UndeclaredMove extends Data.TaggedError("UndeclaredMove")<{
+  readonly aggregate: string;
+  readonly event: string;
+  readonly from: string;
+  readonly to: string;
+}> {
+  override get message() {
+    return `${this.aggregate}: '${this.event}' moved an instance from '${this.from}' to '${this.to}', which phases.${this.from}.on does not declare`;
   }
 }
 
@@ -396,7 +495,16 @@ export type Reason =
   | UnknownStream
   | TwoWriters
   | WriterKeyMismatch
+  | IncompletePhases
+  | UnknownWhenCommand
+  | CommandInNoPhase
+  | UnknownPhase
+  | MissingWrongPhase
+  | UnknownPhaseEvent
+  | ImpossibleMove
+  | UnreachablePhase
   | UnhandledCommand
+  | UndeclaredMove
   | UnroutedCommand
   | UndeclaredDecision
   | UndeclaredEvent
