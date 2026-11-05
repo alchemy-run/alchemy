@@ -38,7 +38,7 @@ The noun graph and its semantics: Stacks of Resources and Actions, data flow via
 - [Resources](https://alchemy.run/infrastructure-as-code/resource) — Resources are named cloud entities with input properties and output attributes.
 - [Actions](https://alchemy.run/infrastructure-as-code/action) — A node in the dependency graph that runs an Effect during apply when its inputs change.
 - [Inputs & Outputs](https://alchemy.run/infrastructure-as-code/outputs) — Output<T> is alchemy's lazy reference type — the lazy values that flow between resources, get composed with .pipe, mapped, interpolated, and resolved during deploy.
-- [References](https://alchemy.run/infrastructure-as-code/references) — Read an already-deployed Resource or Stack at plan time — Resource.ref by Logical ID with optional stack/stage props, or import a Stack tag and depend on its outputs.
+- [References](https://alchemy.run/infrastructure-as-code/references) — Read an already-deployed Resource or Stack at plan time — Resource.ref by Logical ID with optional stack/stage props, Resource.lookup for resources Alchemy doesn't manage, or import a Stack tag and depend on its outputs.
 - [Resource Lifecycle](https://alchemy.run/infrastructure-as-code/resource-lifecycle) — How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
 - [Renaming Resources](https://alchemy.run/infrastructure-as-code/renaming) — Migrate a resource's state across a logical ID change instead of replacing it.
 - [Providers](https://alchemy.run/infrastructure-as-code/provider) — Providers implement the lifecycle operations for a resource type — reconcile, delete, diff, read, and more.
@@ -53,6 +53,7 @@ How app code and infrastructure compose: Runtime, Bindings, the Construction and
 
 - [Runtime](https://alchemy.run/infrastructure-as-effects/runtime) — A Runtime is a Resource that carries the code it runs — a Worker, Lambda Function, Container, or Server declared with the Effectful Constructor pattern. Bind what you need, return what you expose.
 - [Bindings](https://alchemy.run/infrastructure-as-effects/binding) — A Binding connects a Resource to a Worker or Lambda. One line declares the capability and generates the permissions, the configuration, and a typed client.
+- [Identity Federation](https://alchemy.run/infrastructure-as-effects/identity-federation) — How a binding reaches another cloud with the identity the host's platform already signs, instead of a long-lived key, and which runtimes and clouds support it.
 - [Layers](https://alchemy.run/infrastructure-as-effects/layers) — A Layer defines a service contract with swappable implementations. In Alchemy, a Layer can encapsulate Resources and Bindings, so shared services carry their own infrastructure and permissions.
 - [Event Sources](https://alchemy.run/infrastructure-as-effects/event-sources) — An event source is a binding that runs your Function when something happens on a resource — one call wires the event-source mapping, the permissions, and a typed handler.
 - [Sinks](https://alchemy.run/infrastructure-as-effects/sinks) — A Sink is the write-side dual of an Event Source — a Binding that exposes a resource as an Effect Sink, batching writes into the batch API with least-privilege IAM.
@@ -376,7 +377,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 ## AWS — Security & secrets
 
-- [Federated identity](https://alchemy.run/aws/security/federated-identity) — How a Cloud Run service reaches AWS, and a Lambda reaches GCP, through workload identity federation instead of long-lived keys.
+- [Federated identity](https://alchemy.run/aws/security/federated-identity) — How Cloud Run services and Fly Services reach AWS, and a Lambda reaches GCP, through workload identity federation instead of long-lived keys.
 - [Secrets & env](https://alchemy.run/aws/security/secrets-env) — How configuration and secrets reach a runtime on AWS, as environment variables from effect/Config or as Secrets Manager secrets read through a binding, and when to use each.
 
 ## AWS — Observability
@@ -461,7 +462,7 @@ Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/
 
 ## GCP — Security & secrets
 
-- [Federated identity](https://alchemy.run/gcp/security/federated-identity) — How a Lambda reaches GCP, and a Cloud Run service reaches AWS, through workload identity federation instead of long-lived keys.
+- [Federated identity](https://alchemy.run/gcp/security/federated-identity) — How a Lambda or Fly Service reaches GCP, and a Cloud Run service reaches AWS, through workload identity federation instead of long-lived keys.
 - [IAM & bindings](https://alchemy.run/gcp/security/iam) — What a GCP binding does — the per-runtime service account, the role it grants, where the grant lands, and how removing a binding revokes it.
 - [Secret Manager & KMS](https://alchemy.run/gcp/security/secrets-kms) — Keep API keys in Secret Manager and read them per request, encrypt data with Cloud KMS, and pass plain config through env.
 
@@ -481,6 +482,7 @@ The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the
 - [Fly](https://alchemy.run/fly) — Run Effect programs on Fly.io with Alchemy. Declare Services, Machines, Volumes, Postgres, Redis and Tigris in TypeScript, in the regions near your users.
 - [What is Fly?](https://alchemy.run/fly/what-is-fly) — The concepts behind Fly.io — organizations, Apps, Machines, regions, the Fly proxy, private networking, Volumes, managed data, secrets and certificates — and how @alchemy.run/fly models each of them.
 - [Organizations and tokens](https://alchemy.run/fly/organizations-and-tokens) — How a Fly organization holds your Apps and billing, how an organization token decides where Alchemy deploys, and how to keep production in its own organization.
+- [Federated identity](https://alchemy.run/fly/federated-identity) — How a Fly Service reaches AWS and GCP with the OIDC tokens its Machines sign, instead of a stored access key or service account key.
 - [Setup](https://alchemy.run/fly/setup) — Create a Fly org, generate an API token, and store it in a profile.
 - [IPs & certificates](https://alchemy.run/fly/networking) — Public and private Fly Services, App addresses, and certificates for your own hostname.
 
@@ -655,6 +657,7 @@ Neon backend resources: Postgres branches, Functions, private object storage, ma
 - [Neon](https://alchemy.run/neon) — Declare Neon Postgres projects, branches and roles, plus Functions, storage, Auth, the Data API and AI Gateway, in an Alchemy Stack, with a branch per preview stage.
 - [What is Neon?](https://alchemy.run/neon/what-is-neon) — The concepts behind Neon — organizations, projects, branches, computes, roles, connections, migrations, and the Functions, storage, Auth, Data API and AI Gateway around them — and how @alchemy.run/neon models each of them.
 - [Setup](https://alchemy.run/neon/setup) — Prepare Neon credentials, service access, regions, and external dependencies before deploying with Alchemy.
+- [Organizations and keys](https://alchemy.run/neon/organizations-and-keys) — How a Neon organization holds your projects and their branches, how an API key and orgId decide where Alchemy deploys, and why apps connect with their own credentials.
 - [Functions](https://alchemy.run/neon/functions) — How Neon Functions run Node.js Fetch handlers next to a branch's database, in native or Effect form, how they subscribe to uploads and schedules, and why every handler authenticates its callers.
 - [Storage](https://alchemy.run/neon/storage) — How Neon Buckets store files on a branch through an S3-compatible API, how typed Objects hold configuration as values, and how Functions read and write them through bindings.
 - [Organization governance](https://alchemy.run/neon/governance) — Manage existing Neon organization access, billing alerts, and private-network associations with explicit ownership and restoration.
@@ -955,4 +958,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~211 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~212 KB) — only fetch it when you need to locate a specific resource's reference page.

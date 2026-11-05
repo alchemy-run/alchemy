@@ -376,6 +376,10 @@ export default defineConfig({
                   label: "Bindings",
                   link: "/infrastructure-as-effects/binding",
                 },
+                {
+                  label: "Identity Federation",
+                  link: "/infrastructure-as-effects/identity-federation",
+                },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Event Sources",
@@ -1139,6 +1143,7 @@ export default defineConfig({
               items: [
                 { label: "Organizations and tokens", link: "/fly/organizations-and-tokens" },
                 { label: "Secrets", link: "/fly/data/secrets" },
+                { label: "Federated identity", link: "/fly/federated-identity" },
               ],
             },
             {
