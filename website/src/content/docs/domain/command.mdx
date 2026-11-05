@@ -61,6 +61,24 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 
 The first argument is the command's name. It's how the command is identified on the wire and in the aggregate's handlers, so it must be unique within a model.
 
+## Describe it
+
+A command's last argument is its [annotations](/domain/annotations). Its `description` is what a person or an agent reads before sending it: the [MCP](/domain/mcp) tool's description, the [CLI](/domain/cli) subcommand's help, and the operation's description in the [OpenAPI document](/domain/http-api).
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class WithdrawMoney extends Domain.Command(
+  "WithdrawMoney",
+  {
+    target: AccountId,
+    input: { amount: Schema.Int },
+    events: [MoneyWithdrawn],
+    rejects: [NotOpen, InsufficientFunds],
+    reply: { balance: Schema.Int },
+  },
+  { description: "Take money out of an account. The amount is in cents." },
+) {}
+```
+
 ## Keep it with its events and rejections
 
 A command, the events it records and the rejections it returns are one unit: you read them together, and change them together. Put them in one file named after the command, with a `.command.ts` suffix, like `WithdrawMoney.command.ts`. See [Project layout](/domain/project-layout).
@@ -144,6 +162,8 @@ export class NotOwner extends Domain.Rejection(
   { httpApiStatus: 403, description: "Only the account's owner may do this." },
 ) {}
 ```
+
+These are the rejection's [annotations](/domain/annotations) too, so `NotOwner.annotations.description` reads the description back.
 
 `rejects` takes any tagged error class, so a `Schema.TaggedError` of your own, or one of Effect's `HttpApiError` classes, works as a rejection too:
 

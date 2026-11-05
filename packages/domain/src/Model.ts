@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
 import {
@@ -112,6 +113,7 @@ export interface ModelClass<
 > {
   new (_: never): {};
   readonly kind: "Model";
+  readonly annotations: Annotations;
   readonly modelName: Name;
   /** The model's aggregates, in order. */
   readonly aggregates: Parts["aggregates"];
@@ -145,6 +147,7 @@ export interface ModelClass<
  */
 export interface Any extends Servable {
   readonly kind: "Model";
+  readonly annotations: Annotations;
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
 }
@@ -252,6 +255,25 @@ type HandledBy<
  * );
  * ```
  *
+ * ### Annotating models
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * A model lists its declarations, so tooling can walk them and read each
+ * one's annotations.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Bank extends Domain.Model(
+ *   "Bank",
+ *   { aggregates: [Account], views: [AccountSummary] },
+ *   { description: "Accounts and their balances." },
+ * ) {}
+ *
+ * const glossary = Bank.commands.map((command) => `${command.tag}: ${command.annotations.description}`);
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -266,6 +288,7 @@ export const make = <
 >(
   name: Name,
   members: Members<A, V, P, J, S, G, Q>,
+  annotations: Annotations = {},
 ): ModelClass<
   Name,
   ProvidedBy<A, V, J, S, G>,
@@ -283,6 +306,7 @@ export const make = <
   };
   return class {
     static readonly kind = "Model" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];

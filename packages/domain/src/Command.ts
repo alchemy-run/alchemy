@@ -1,5 +1,6 @@
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type { Data, Fields } from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
@@ -19,6 +20,7 @@ export type TargetSchema = Schema.Top & { readonly Type: string; readonly Encode
  */
 export interface Any extends Schema.Top {
   readonly kind: "Command";
+  readonly annotations: Annotations;
   readonly tag: string;
   readonly target: TargetSchema;
   readonly events: ReadonlyArray<Event.Any>;
@@ -84,6 +86,7 @@ export interface CommandClass<
   R extends Rpc.Any,
 > extends Schema.Class<Instance<Tag, F>, Schema.TaggedStruct<Tag, F>, {}> {
   readonly kind: "Command";
+  readonly annotations: Annotations;
   readonly tag: Tag;
   readonly target: Target;
   readonly events: Events;
@@ -107,7 +110,7 @@ interface Options {
   readonly attributes?: Telemetry.Attributes<any>;
 }
 
-const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
+const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotations): unknown => {
   // The base type is conditional on `Self`, so it is not a constructor until `make` returns.
   const Base = Schema.TaggedClass<{ readonly _tag: string }>(tag)(
     tag,
@@ -115,6 +118,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
   ) as unknown as new (input: object) => object;
   return class extends Base {
     static readonly kind = "Command" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly tag = tag;
     static readonly target = options.target;
     static readonly events = options.events ?? [];
@@ -188,6 +192,23 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
  * const receipt = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId });
  * ```
  *
+ * ### Annotating commands
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's MCP tools, CLI help and OpenAPI document show its `description`,
+ * in place of the sentence they would generate.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class WithdrawMoney extends Domain.Command(
+ *   "WithdrawMoney",
+ *   { target: AccountId, input: { amount: Schema.Int }, events: [MoneyWithdrawn] },
+ *   { description: "Take money out of an account. The amount is in cents." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -223,6 +244,7 @@ export const make = <
      */
     readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
   },
+  annotations: Annotations = {},
 ): CommandClass<
   Tag,
   Target,
@@ -247,7 +269,12 @@ export const make = <
     }),
     error: rejects.length === 0 ? Schema.Never : Schema.Union(rejects),
   });
-  return build(tag, options, Middleware.apply(rpc, options.middleware ?? [])) as CommandClass<
+  return build(
+    tag,
+    options,
+    Middleware.apply(rpc, options.middleware ?? []),
+    annotations,
+  ) as CommandClass<
     Tag,
     Target,
     F,

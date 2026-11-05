@@ -1,5 +1,6 @@
 import type * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
+import type { Annotations as DomainAnnotations } from "./Annotations.ts";
 import type { Data, Fields } from "./Event.ts";
 import type * as Telemetry from "./Telemetry.ts";
 
@@ -18,21 +19,19 @@ export interface Any extends Schema.Top {
 }
 
 /**
- * What a Rejection takes after its fields: every annotation
- * `Schema.TaggedError` takes (`description`, `httpApiStatus`, ...), plus the
+ * What a Rejection takes after its fields: its `Domain.Annotations`,
+ * every annotation `Schema.TaggedError` takes (`httpApiStatus`, ...), and the
  * span `attributes` it records.
  */
-export type Annotations<Tag extends string, F extends Fields> = Schema.Annotations.Declaration<
-  Instance<Tag, F>,
-  readonly [Schema.TaggedStruct<Tag, F>]
-> & {
-  /**
-   * Span attributes to record for this rejection, on every span it passes
-   * through. Nothing from it is recorded unless you return it here, and a
-   * `Redacted` value is recorded as `<redacted>`.
-   */
-  readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
-};
+export type Annotations<Tag extends string, F extends Fields> = DomainAnnotations &
+  Schema.Annotations.Declaration<Instance<Tag, F>, readonly [Schema.TaggedStruct<Tag, F>]> & {
+    /**
+     * Span attributes to record for this rejection, on every span it passes
+     * through. Nothing from it is recorded unless you return it here, and a
+     * `Redacted` value is recorded as `<redacted>`.
+     */
+    readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
+  };
 
 /**
  * A typed reason a command or read was refused. Nothing is recorded when a
@@ -57,16 +56,16 @@ export type Annotations<Tag extends string, F extends Fields> = Schema.Annotatio
  * ```
  *
  * ### Annotating rejections
- * The third argument takes the annotations of `Schema.TaggedError`. An HTTP
- * API reads `httpApiStatus` from it, as it does for any Effect error.
+ * The third argument is its annotations, which are the rejection Schema's
+ * annotations too, so it takes any annotation `Schema.TaggedError` does. An
+ * HTTP API reads `httpApiStatus` from them, as it does for any Effect error.
  *
  * **Example:** A status and a description
  * ```typescript
- * export class NotOwner extends Domain.Rejection(
- *   "NotOwner",
- *   {},
- *   { httpApiStatus: 403, description: "Only the account's owner may do this." },
- * ) {}
+ * export class NotOwner extends Domain.Rejection("NotOwner", {}, {
+ *   httpApiStatus: 403,
+ *   description: "Only the account's owner may do this.",
+ * }) {}
  * ```
  *
  * @primitive
@@ -87,6 +86,7 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
     static readonly kind = "Rejection" as const;
     static readonly tag: Tag = tag;
     static readonly attributes = attributes;
+    static readonly annotations: DomainAnnotations = schemaAnnotations;
   } as unknown as RejectionClass<Tag, F>;
 };
 
@@ -99,6 +99,7 @@ export interface RejectionClass<Tag extends string, F extends Fields> extends Sc
   Cause.YieldableError
 > {
   readonly kind: "Rejection";
+  readonly annotations: DomainAnnotations;
   readonly tag: Tag;
   /** Span attributes the rejection adds, if it declares any. */
   readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;

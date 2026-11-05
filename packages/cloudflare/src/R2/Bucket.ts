@@ -730,7 +730,7 @@ export const ProviderLive = () =>
           .items({
             accountId,
             bucketName,
-            cfR2Jurisdiction: jurisdiction,
+            jurisdiction,
             perPage: 1000,
           })
           .pipe(
@@ -742,7 +742,7 @@ export const ProviderLive = () =>
               r2.deleteObjects({
                 accountId,
                 bucketName,
-                cfR2Jurisdiction: jurisdiction,
+                jurisdiction,
                 body: [...chunk],
               }),
             ),

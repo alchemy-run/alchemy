@@ -196,6 +196,28 @@ emit: {
 
 One `TransferRequested` updates both accounts: the sender's as `out` and the recipient's as `in`.
 
+## Describe it
+
+A view's last argument is its [annotations](/domain/annotations). The read tools, CLI subcommand and OpenAPI operations an [Api](/domain/api) builds for the view show its `description` after the sentence that says what the call does.
+
+```typescript title="src/AccountSummary.view.ts"
+export class AccountSummary extends Domain.View(
+  "AccountSummary",
+  {
+    from: [Account],
+    key: Account,
+    state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
+    initial: { owner: null, balance: 0 },
+    evolve: {
+      AccountOpened: (v, e) => ({ ...v, owner: e.owner }),
+      MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
+      MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
+    },
+  },
+  { description: "An account's balance and owner." },
+) {}
+```
+
 ## Read it
 
 Through an [Api](/domain/api), a view offers these reads for one key. `get` returns its current state, or `null` if nothing has happened to that key yet. `list` returns a page of its emitted events. `watch` streams the state now and after every change, each with its cursor. `events` streams its emitted events: history first, then a `CaughtUp` frame, then new ones as they're recorded. `snapshot` returns the state with the cursor it is valid at.

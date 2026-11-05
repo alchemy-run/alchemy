@@ -73,6 +73,30 @@ sagas: [ExecuteTransfer],
 queries: [AccountLedger],
 ```
 
+## Describe it
+
+A query's last argument is its [annotations](/domain/annotations). The MCP, CLI and OpenAPI surfaces don't serve queries yet, so for now its `description` is for the people and the tools that read the model, as `AccountLedger.annotations`.
+
+```typescript title="packages/domain/src/Ledger/AccountLedger.query.ts"
+export class AccountLedger extends Domain.Query(
+  "AccountLedger",
+  {
+    input: { account: AccountId },
+    success: LedgerRow,
+    paged: true,
+    waitsFor: [Ledger],
+    middleware: [Session],
+    rejects: [NotOwner],
+    validate: Effect.fn(function* ({ account }) {
+      const summaries = yield* AccountSummary;
+      const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
+      yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
+    }),
+  },
+  { description: "One account's ledger, a page at a time." },
+) {}
+```
+
 ## Implement it as a Layer
 
 The handler lives in a Layer, built once with everything it needs. It receives the input and, for a paged query, the page asked for: `after`, the cursor of the previous page, and `take`, already capped by the Layer's `take.max`.

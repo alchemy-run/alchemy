@@ -79,6 +79,28 @@ export class ExecuteTransfer extends Domain.Saga("ExecuteTransfer", {
 }) {}
 ```
 
+## Describe it
+
+A saga's last argument is its [annotations](/domain/annotations). Its `description` is for the people and the tools that read the model, as `ExecuteTransfer.annotations`.
+
+```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
+export class ExecuteTransfer extends Domain.Saga(
+  "ExecuteTransfer",
+  {
+    key: TransferId,
+    input: {
+      from: AccountId,
+      to: AccountId,
+      amount: Cents,
+      requestedBy: Actor,
+      needsApproval: Schema.Boolean,
+    },
+    rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DestinationClosed],
+  },
+  { description: "Debits one account, credits another, and refunds the debit if the credit fails." },
+) {}
+```
+
 ## Run its steps
 
 Its Layer resolves the clients its steps use, then returns what each run does. Each step is an `Activity`: a named Effect whose result is stored. When the run replays, a finished step returns its stored result instead of running again.

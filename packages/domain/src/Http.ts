@@ -5,6 +5,7 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
+import * as OpenApi from "effect/http-api/OpenApi";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
@@ -16,6 +17,7 @@ import * as SchemaAST from "effect/SchemaAST";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import type { Annotations } from "./Annotations.ts";
 import type { Servable } from "./Api.ts";
 import { DefinitionError, MissingGroup } from "./DefinitionError.ts";
 import {
@@ -34,6 +36,7 @@ import {
  */
 export interface Publishable {
   readonly apiName: string;
+  readonly annotations: Annotations;
   readonly serves: ReadonlyArray<Servable>;
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   readonly clientInProcess: Effect.Effect<unknown, never, any>;
@@ -278,7 +281,15 @@ const endpointOf = (
                 error,
               },
             );
-  return endpoint as unknown as HttpApiEndpoint.Top;
+  // The entry's description, for the OpenAPI document.
+  const described =
+    operation.description === undefined
+      ? endpoint
+      : (endpoint as unknown as HttpApiEndpoint.Top).annotate(
+          OpenApi.Description,
+          operation.description,
+        );
+  return described as unknown as HttpApiEndpoint.Top;
 };
 
 /**
@@ -396,7 +407,12 @@ export const toHttpApi = <A extends Publishable>(
     });
   };
 
-  const httpApi = HttpApi.make(name).add(group as never);
+  // The Api's description describes its group and the OpenAPI document.
+  const { description } = api.annotations;
+  if (description !== undefined) group = group.annotate(OpenApi.Description, description);
+  const made = HttpApi.make(name).add(group as never);
+  const httpApi =
+    description === undefined ? made : made.annotate(OpenApi.Description, description);
   return {
     group,
     api: httpApi,
