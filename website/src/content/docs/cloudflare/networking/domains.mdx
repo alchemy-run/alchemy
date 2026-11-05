@@ -111,18 +111,22 @@ yield* Cloudflare.DNS.Record("AppCname", {
 });
 ```
 
-Cloudflare treats `(name, type)` as a record's identity: changing
-`content`, `ttl`, `proxied`, or `comment` patches the record in
-place, while changing `name` or `type` replaces it (a new record
-is created, then the old one deleted).
+A record is tracked by its Cloudflare record id, so changing its
+`name`, `type`, `content`, `ttl`, `proxied`, or `comment` updates it
+in place. Only moving it to another zone replaces it. Unless you set
+`comment`, Alchemy labels each record `Managed by Alchemy (<FQN>)` in
+the dashboard.
 
-Records get the same adoption safety as zones. If a record with
-the same `(name, type)` already exists in the zone — a
+Records get the same adoption safety as zones. If a record with the
+same name, type and `content` already exists in the zone — a
 hand-edited apex `A` record, an email DKIM/SPF entry — the deploy
-refuses to take it over unless you pipe `adopt(true)`. This is
-deliberate: DNS is where "already configured in the dashboard"
-lives, and overwriting it silently would be the worst possible
-default.
+refuses to take it over unless you pipe `adopt(true)`. A record with
+different content is left alone and a new one is created beside it,
+so adding a second TXT or MX record never overwrites the first. To
+adopt a record and then change it, declare its current `content`
+first, then change it in a later deploy. A CNAME is the exception: a
+name holds only one, so `adopt(true)` takes over an existing CNAME
+whatever it points at.
 
 ## Worker custom domains
 

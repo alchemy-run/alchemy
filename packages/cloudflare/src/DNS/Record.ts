@@ -17,9 +17,7 @@ export class RecordUnexpectedResponse extends Data.TaggedError("RecordUnexpected
 }> {}
 
 /**
- * DNS record type literal — every value Cloudflare recognises. Stable
- * across reconciles; changing it triggers a replacement because record
- * type is part of a record's identity.
+ * DNS record type literal — every value Cloudflare recognises.
  */
 export type RecordType =
   | "A"
@@ -69,18 +67,14 @@ export type RecordData = RecordDataByType[keyof RecordDataByType];
 
 export interface RecordCommonProps {
   /**
-   * Zone the record lives in. Stable — changing the zone triggers
-   * replacement.
+   * Zone the record lives in. Changing the zone triggers replacement.
    */
   zoneId: string;
   /**
    * Fully-qualified or zone-relative record name (e.g.
    * `cluster-admin.microtrack.ai`, `_dmarc`, or `@` for the zone apex).
    * Cloudflare normalizes relative names to their fully-qualified form.
-   *
-   * Stable — Cloudflare treats `(name, type)` as the record's identity,
-   * so a rename is a delete + create. Declared as plain `string` (not
-   * `string`) so it is statically knowable inside `diff`.
+   * Renaming updates the record in place.
    */
   name: string;
   /**
@@ -100,6 +94,8 @@ export interface RecordCommonProps {
   proxied?: boolean;
   /**
    * Free-form comment shown in the dashboard. No effect on DNS responses.
+   *
+   * @default "Managed by Alchemy (<FQN>)"
    */
   comment?: string;
   /**
@@ -111,7 +107,7 @@ export interface RecordCommonProps {
 type StringRecordType = Exclude<RecordType, keyof RecordDataByType | "MX">;
 
 type StringRecordProps = {
-  /** Record type. Stable — changing triggers replacement. */
+  /** Record type. Changing it updates the record in place. */
   type: StringRecordType;
   /** Formatted record value. Mutable — patched in place. */
   content: string;
@@ -119,7 +115,7 @@ type StringRecordProps = {
 };
 
 interface MxRecordProps {
-  /** Record type. Stable — changing triggers replacement. */
+  /** Record type. Changing it updates the record in place. */
   type: "MX";
   /** Mail server hostname. Mutable — patched in place. */
   content: string;
@@ -129,7 +125,7 @@ interface MxRecordProps {
 
 type StructuredRecordProps = {
   [Type in keyof RecordDataByType]: {
-    /** Record type. Stable — changing triggers replacement. */
+    /** Record type. Changing it updates the record in place. */
     type: Type;
     /**
      * Record value as formatted DNS content or typed Cloudflare components.
@@ -182,22 +178,19 @@ export type Record = Resource<
 /**
  * A single DNS record on a Cloudflare-managed zone.
  *
- * Safety: when there is no prior state, `read` scans the zone for an
- * existing `(name, type)` match. DNS records carry no ownership markers
- * we can inspect, so an existing match is reported as `Unowned` and the
- * engine refuses to take it over unless `--adopt` (or `adopt(true)`) is
- * set. This protects hand-edited records (especially the apex `A`/`AAAA`
- * and email DKIM/SPF records that the dashboard often manages) from
- * being clobbered.
+ * Once created or adopted, the record is tracked by its Cloudflare record
+ * id: changing its name, type or content updates it in place.
  *
- * Several records may legitimately share `(name, type)` — MX fallbacks,
- * multiple TXT records, round-robin A records. When the scan finds more
- * than one candidate, the declared `content` (and `priority`) must match
- * exactly one record; a record with no exact match is treated as missing
- * (a new sibling record is created), and a still-ambiguous match fails
- * with an error listing the candidates. To adopt one record out of such
- * a set, declare its current `content`/`priority` verbatim first, then
- * change them in a follow-up deploy.
+ * Safety: when there is no prior state, `read` looks for an existing record
+ * with the same name, type and `content` (and `priority`). Only an exact
+ * match is this record. It is reported as `Unowned`, and the engine refuses
+ * to take it over unless `--adopt` (or `adopt(true)`) is set. Any other
+ * record at the same name is left alone and a new record is created beside
+ * it, so a second TXT, MX or A record never takes over an existing one. To
+ * adopt a record and then change it, declare its current `content`/`priority`
+ * verbatim first, then change them in a follow-up deploy. A CNAME is the
+ * exception: a name holds only one, so an existing CNAME is adopted whatever
+ * it points at.
  * ### Proxied CNAME pointing at a tunnel
  * **Example:** Route a subdomain through a Cloudflare Tunnel
  * ```typescript
@@ -262,7 +255,7 @@ export const Record = Resource<Record>("Cloudflare.DNS.Record", {
 
 export const RecordProvider = () =>
   Provider.succeed(Record, {
-    stables: ["recordId", "zoneId", "type", "name"],
+    stables: ["recordId", "zoneId"],
 
     // Zone-scoped collection: DNS records live under `/zones/{id}/dns_records`
     // with no account-wide enumeration API. Fan out over every zone in the
@@ -299,23 +292,18 @@ export const RecordProvider = () =>
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as RecordProps;
       const n = news as RecordProps;
-      if (o.type !== undefined && o.type !== n.type) {
-        return { action: "replace" } as const;
-      }
-      if (o.name !== undefined && o.name !== n.name) {
-        return { action: "replace" } as const;
-      }
-      // zoneId is Input<string>; by reconcile time both sides are
+      // A record id belongs to its zone; name, type and content update in
+      // place. zoneId is Input<string>; by reconcile time both sides are
       // concrete strings.
       if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ fqn, news, output }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
-      const body = buildMutableBody(news);
+      const body = buildMutableBody(news, fqn);
 
       // 1. Observe by cached id first.
       let observed: ObservedRecord | undefined;
@@ -327,24 +315,16 @@ export const RecordProvider = () =>
       //    Ownership has already been verified upstream — `read` reports
       //    existing records as `Unowned` and the engine gates takeover
       //    behind the adopt policy before reconcile ever runs.
-      //    Adoption already arrives with `output` set, so a scan hit here
-      //    is a leftover or a sibling: only an exact match is this record.
-      //    A lone non-matching NS/TXT/A/... is a sibling of a multi-value
-      //    set (e.g. four NS records created together) and must not be
-      //    overwritten. A CNAME is exclusive at its name, so any hit is it.
+      //    Only an exact match is this record; any other record at the
+      //    name is a sibling and must not be overwritten. A CNAME is
+      //    exclusive at its name, so the one there is this record.
       let foundByScan = false;
       if (!observed) {
-        const existing = yield* findByNameType(
-          zoneId,
-          news.name,
-          news.type,
-          {
-            content: body.content,
-            data: body.data,
-            priority: news.priority,
-          },
-          { exact: news.type !== "CNAME" },
-        );
+        const existing = yield* findByNameType(zoneId, news.name, news.type, {
+          content: body.content,
+          data: body.data,
+          priority: news.priority,
+        });
         if (existing) {
           foundByScan = true;
           observed = existing;
@@ -403,7 +383,12 @@ export const RecordProvider = () =>
           message: "Cloudflare did not return a record id for DNS record",
         });
       }
-      if (!bodyEqualsObserved(body, observed)) {
+      // Cloudflare returns FQDNs, so compare a relative name in its
+      // zone-qualified form.
+      const sameName =
+        observed.name === body.name ||
+        observed.name === normalizeRecordName(body.name, (yield* zones.getZone({ zoneId })).name);
+      if (!sameName || observed.type !== body.type || !bodyEqualsObserved(body, observed)) {
         // Suppress noise when we just created the record above — the
         // server echo already matches and any diff is a CF-side
         // normalisation we shouldn't fight on the very first reconcile.
@@ -463,10 +448,9 @@ export const RecordProvider = () =>
       // `(zoneId, name, type)` may already exist. DNS records carry no
       // ownership markers we can inspect, so we cannot prove we created
       // it — brand it `Unowned` so the engine refuses to take over
-      // unless `adopt` is set. Several records may legitimately share
-      // `(name, type)` (MX fallbacks, multiple TXT/A records) — the
-      // declared `content`/`priority` disambiguate which one this
-      // resource corresponds to.
+      // unless `adopt` is set. Only a record whose `content`/`priority`
+      // match the declaration is this one; any other is a sibling. A
+      // CNAME is exclusive at its name, so the one there is this record.
       const zoneId = output?.zoneId ?? olds?.zoneId;
       const name = output?.name ?? olds?.name;
       const type = output?.type ?? olds?.type;
@@ -533,19 +517,12 @@ export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecor
 // and to surface a conflict when the caller hasn't opted into adoption.
 //
 // `(name, type)` alone is NOT a unique identity — several records may share
-// it. A single candidate is returned as-is (preserving the adopt-then-modify
-// flow where the desired content differs from the live record). With multiple
-// candidates, the desired record value/priority must select exactly one:
+// it, so the desired record value/priority must select the record (a CNAME,
+// exclusive at its name, matches whatever its content):
 //   - exactly one exact match -> that record
 //   - no exact match          -> `undefined` (a new sibling record is created)
 //   - several exact matches   -> fail with an actionable error
-const findByNameType = (
-  zoneId: string,
-  name: string,
-  type: RecordType,
-  match: RecordMatch,
-  options?: { readonly exact?: boolean },
-) =>
+const findByNameType = (zoneId: string, name: string, type: RecordType, match: RecordMatch) =>
   listExactByNameType(zoneId, name, type).pipe(
     Effect.flatMap((found) => {
       if (found.length > 0) return Effect.succeed(found);
@@ -562,7 +539,9 @@ const findByNameType = (
     Effect.flatMap(
       Effect.fn(function* (candidates) {
         if (candidates.length === 0) return undefined;
-        if (candidates.length === 1 && !options?.exact) return candidates[0];
+        // A CNAME is exclusive at its name, so the one there is this record
+        // whatever it points at.
+        if (candidates.length === 1 && type === "CNAME") return candidates[0];
         const narrowed = candidates.filter(
           (r) =>
             (match.content === undefined || r.content === match.content) &&
@@ -712,7 +691,10 @@ interface RecordMutableBodyCommon {
 type RecordMutableBody = RecordMutableBodyCommon &
   ({ content: string; data?: never } | { content?: never; data: RecordData });
 
-const buildMutableBody = (news: RecordProps): RecordMutableBody => {
+// Cloudflare caps comments at 100 characters on the Free plan.
+const defaultComment = (fqn: string) => `Managed by Alchemy (${fqn})`.slice(0, 100);
+
+const buildMutableBody = (news: RecordProps, fqn: string): RecordMutableBody => {
   const common: RecordMutableBodyCommon = {
     name: news.name,
     type: news.type,
@@ -720,7 +702,7 @@ const buildMutableBody = (news: RecordProps): RecordMutableBody => {
     // it as `number | "1"`; the API wants numeric 1 for "automatic".
     ttl: news.ttl === undefined ? 1 : news.ttl === ("1" as unknown) ? 1 : (news.ttl as number),
     proxied: news.proxied,
-    comment: news.comment,
+    comment: news.comment ?? defaultComment(fqn),
     tags: news.tags === undefined ? undefined : Array.from(news.tags),
     priority: news.priority,
   };
