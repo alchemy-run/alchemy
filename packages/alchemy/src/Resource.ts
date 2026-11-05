@@ -620,7 +620,14 @@ export function Resource<R extends ResourceLike>(
               Layer.mergeAll(Layer.succeed(Self, Resource), Layer.succeed(Self(type), Resource)),
             ),
           )
-        : props;
+        : // A plain resource declared without props (every prop optional)
+          // reaches its provider as `{}`. Only a platform tag keeps
+          // `undefined`: it marks a forward reference whose `.make` Layer
+          // supplies the props (see `Plan.make`'s missing-implementation
+          // check).
+          props === undefined && !options?.requiresImplementation
+          ? ({} as Props)
+          : props;
       return Resource;
     });
 
