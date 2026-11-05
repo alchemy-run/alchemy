@@ -20,6 +20,12 @@ export const Bank = DomainFoldkit.make(CustomerApi);
 
 A success carries `reply` and `receipt: { stream, version }`. Pass the receipt to a read's `atLeast` option when that read must include the write.
 
+To enable a button, ask the aggregate. If it declares [phases](/domain/aggregate#declare-its-phases), `Order.nextCommands(state)` gives the commands that may run in that state, so the view has no second copy of the rule:
+
+```typescript
+const canApprove = Order.nextCommands(model.order).includes("Approve");
+```
+
 ## Name each send
 
 ```typescript
