@@ -9,7 +9,6 @@ import * as Schedule from "effect/Schedule";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { Bucket } from "./Bucket.ts";
-import { inJurisdiction } from "./internal/Jurisdiction.ts";
 
 const TypeId = "Cloudflare.R2.BucketEventNotification" as const;
 type TypeId = typeof TypeId;
@@ -253,114 +252,112 @@ export const BucketEventNotificationProvider = () =>
       return output ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(
-      function* ({ news, output }) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const acct = output?.accountId ?? accountId;
-        // Inputs have been resolved to concrete strings by Plan.
-        const bucketName = news.bucketName as string;
-        const queueId = news.queueId as string;
-        const jurisdiction = news.jurisdiction ?? "default";
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      // Inputs have been resolved to concrete strings by Plan.
+      const bucketName = news.bucketName as string;
+      const queueId = news.queueId as string;
+      const jurisdiction = news.jurisdiction ?? "default";
 
-        // 1. Observe — the configuration may or may not exist; `output` is
-        //    only a cache of the identity, never proof of existence.
-        const observed = yield* getConfiguration(acct, bucketName, queueId, jurisdiction);
+      // 1. Observe — the configuration may or may not exist; `output` is
+      //    only a cache of the identity, never proof of existence.
+      const observed = yield* getConfiguration(acct, bucketName, queueId, jurisdiction);
 
-        // 2/3. Ensure + sync — skip the API entirely when the observed rules
-        //    already match the desired set.
-        if (!observed || !sameRules(observed.rules ?? [], news.rules)) {
-          // The PUT *appends* rules to the queue's configuration (it is not
-          // a full replace — verified against the live API), so on drift
-          // the existing configuration must be cleared first. The brief gap
-          // is unavoidable; each step is independently idempotent.
-          if (observed) {
-            yield* r2
-              .deleteBucketEventNotification({
-                accountId: acct,
-                bucketName,
-                queueId,
-              })
-              .pipe(
-                Effect.catchTag(
-                  ["EventNotificationConfigNotFound", "BucketNotFound", "QueueNotFound"],
-                  () => Effect.void,
-                ),
-              );
-          }
+      // 2/3. Ensure + sync — skip the API entirely when the observed rules
+      //    already match the desired set.
+      if (!observed || !sameRules(observed.rules ?? [], news.rules)) {
+        // The PUT *appends* rules to the queue's configuration (it is not
+        // a full replace — verified against the live API), so on drift
+        // the existing configuration must be cleared first. The brief gap
+        // is unavoidable; each step is independently idempotent.
+        if (observed) {
           yield* r2
-            .putBucketEventNotification({
+            .deleteBucketEventNotification({
               accountId: acct,
               bucketName,
               queueId,
-              rules: news.rules.map((rule) => ({
-                actions: [...rule.actions],
-                prefix: rule.prefix,
-                suffix: rule.suffix,
-                description: rule.description,
-              })),
+              jurisdiction,
             })
             .pipe(
-              // A freshly-created bucket or queue can briefly 404 on the
-              // event-notification endpoint — ride out the consistency lag.
-              Effect.retry({
-                while: (e) => e._tag === "BucketNotFound" || e._tag === "QueueNotFound",
-                schedule: r2EventNotificationConsistencySchedule,
-              }),
+              Effect.catchTag(
+                ["EventNotificationConfigNotFound", "BucketNotFound", "QueueNotFound"],
+                () => Effect.void,
+              ),
             );
         }
-
-        // 4. Return — re-read so the attributes carry the server-assigned
-        //    per-rule IDs. The read can lag the PUT briefly.
-        if (news.rules.length === 0) {
-          // An empty rule set reads back as "no configuration".
-          return toAttributes(
-            { queueId, queueName: undefined, rules: [] },
-            acct,
-            bucketName,
-            queueId,
-            jurisdiction,
-          );
-        }
-        const final = yield* r2
-          .getBucketEventNotification({
+        yield* r2
+          .putBucketEventNotification({
             accountId: acct,
             bucketName,
             queueId,
+            jurisdiction,
+            rules: news.rules.map((rule) => ({
+              actions: [...rule.actions],
+              prefix: rule.prefix,
+              suffix: rule.suffix,
+              description: rule.description,
+            })),
           })
           .pipe(
+            // A freshly-created bucket or queue can briefly 404 on the
+            // event-notification endpoint — ride out the consistency lag.
             Effect.retry({
-              while: (e) =>
-                e._tag === "NoEventNotificationConfig" ||
-                e._tag === "EventNotificationConfigNotFound" ||
-                e._tag === "BucketNotFound" ||
-                e._tag === "QueueNotFound",
+              while: (e) => e._tag === "BucketNotFound" || e._tag === "QueueNotFound",
               schedule: r2EventNotificationConsistencySchedule,
             }),
           );
-        return toAttributes(final, acct, bucketName, queueId, jurisdiction);
-      },
-      (effect, { news }) => inJurisdiction(news.jurisdiction)(effect),
-    ),
+      }
 
-    delete: Effect.fn(
-      function* ({ output }) {
-        // Idempotent — the configuration, bucket, or queue may already be
-        // gone (all typed not-found variants in the operation's union).
-        yield* r2
-          .deleteBucketEventNotification({
-            accountId: output.accountId,
-            bucketName: output.bucketName,
-            queueId: output.queueId,
-          })
-          .pipe(
-            Effect.catchTag(
-              ["EventNotificationConfigNotFound", "BucketNotFound", "QueueNotFound"],
-              () => Effect.void,
-            ),
-          );
-      },
-      (effect, { output }) => inJurisdiction(output.jurisdiction)(effect),
-    ),
+      // 4. Return — re-read so the attributes carry the server-assigned
+      //    per-rule IDs. The read can lag the PUT briefly.
+      if (news.rules.length === 0) {
+        // An empty rule set reads back as "no configuration".
+        return toAttributes(
+          { queueId, queueName: undefined, rules: [] },
+          acct,
+          bucketName,
+          queueId,
+          jurisdiction,
+        );
+      }
+      const final = yield* r2
+        .getBucketEventNotification({
+          accountId: acct,
+          bucketName,
+          queueId,
+          jurisdiction,
+        })
+        .pipe(
+          Effect.retry({
+            while: (e) =>
+              e._tag === "NoEventNotificationConfig" ||
+              e._tag === "EventNotificationConfigNotFound" ||
+              e._tag === "BucketNotFound" ||
+              e._tag === "QueueNotFound",
+            schedule: r2EventNotificationConsistencySchedule,
+          }),
+        );
+      return toAttributes(final, acct, bucketName, queueId, jurisdiction);
+    }),
+
+    delete: Effect.fn(function* ({ output }) {
+      // Idempotent — the configuration, bucket, or queue may already be
+      // gone (all typed not-found variants in the operation's union).
+      yield* r2
+        .deleteBucketEventNotification({
+          accountId: output.accountId,
+          bucketName: output.bucketName,
+          queueId: output.queueId,
+          jurisdiction: output.jurisdiction,
+        })
+        .pipe(
+          Effect.catchTag(
+            ["EventNotificationConfigNotFound", "BucketNotFound", "QueueNotFound"],
+            () => Effect.void,
+          ),
+        );
+    }),
 
     // Parent fan-out: a notification configuration is keyed by (bucket,
     // queue) and there is no account-wide enumeration. Enumerate every R2
@@ -381,6 +378,7 @@ export const BucketEventNotificationProvider = () =>
             .listBucketEventNotifications({
               accountId,
               bucketName,
+              jurisdiction,
             })
             .pipe(
               Effect.map((res) =>
@@ -410,7 +408,6 @@ export const BucketEventNotificationProvider = () =>
                 ],
                 () => Effect.succeed([] as BucketEventNotificationAttributes[]),
               ),
-              inJurisdiction(jurisdiction),
             );
         },
         { concurrency: 10 },
@@ -463,6 +460,7 @@ const getConfiguration = (
       accountId,
       bucketName,
       queueId,
+      jurisdiction,
     })
     .pipe(
       Effect.map((config): r2.GetBucketEventNotificationResponse | undefined => config),
@@ -479,7 +477,6 @@ const getConfiguration = (
         ],
         () => Effect.undefined,
       ),
-      inJurisdiction(jurisdiction),
     );
 
 type ObservedRule = NonNullable<r2.GetBucketEventNotificationResponse["rules"]>[number];

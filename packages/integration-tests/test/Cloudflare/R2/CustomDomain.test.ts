@@ -49,6 +49,7 @@ test.provider(
         accountId,
         bucketName: bucket.bucketName,
         domain: domain!,
+        jurisdiction: bucket.jurisdiction,
       });
       expect(actual.domain).toEqual(domain);
 
@@ -70,6 +71,7 @@ test.provider(
           accountId,
           bucketName: bucket.bucketName,
           domain: domain!,
+          jurisdiction: bucket.jurisdiction,
         })
         .pipe(
           Effect.map(() => false),
@@ -110,6 +112,7 @@ test.provider(
           accountId,
           bucketName: bucket.bucketName,
           domain: name,
+          jurisdiction: bucket.jurisdiction,
         });
         expect(actual.domain).toEqual(name);
       }
@@ -144,6 +147,7 @@ test.provider(
           accountId,
           bucketName: bucket.bucketName,
           domain: domain3!,
+          jurisdiction: bucket.jurisdiction,
         })
         .pipe(
           Effect.map(() => false),
@@ -159,6 +163,7 @@ test.provider(
             accountId,
             bucketName: bucket.bucketName,
             domain: name,
+            jurisdiction: bucket.jurisdiction,
           })
           .pipe(
             Effect.map(() => false),

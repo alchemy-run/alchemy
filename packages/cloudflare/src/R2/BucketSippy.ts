@@ -9,7 +9,6 @@ import * as Redacted from "effect/Redacted";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { Bucket } from "./Bucket.ts";
-import { inJurisdiction } from "./internal/Jurisdiction.ts";
 
 const TypeId = "Cloudflare.R2.BucketSippy" as const;
 type TypeId = typeof TypeId;
@@ -258,11 +257,10 @@ export const BucketSippyProvider = () =>
       if (bucketName === undefined) return undefined;
       const jurisdiction = output?.jurisdiction ?? olds?.jurisdiction ?? "default";
 
-      const observed = yield* r2.getBucketSippy({ accountId: acct, bucketName }).pipe(
+      const observed = yield* r2.getBucketSippy({ accountId: acct, bucketName, jurisdiction }).pipe(
         Effect.map((config): r2.GetBucketSippyResponse | undefined => config),
         // The bucket itself is gone — so is its Sippy configuration.
         Effect.catchTag("NoSuchBucket", () => Effect.undefined),
-        inJurisdiction(jurisdiction),
       );
       // A bucket with Sippy never configured (or disabled) reads back as
       // `{ enabled: false }` — that is "absent" for this resource.
@@ -275,49 +273,45 @@ export const BucketSippyProvider = () =>
       return output ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(
-      function* ({ news, output }) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const acct = output?.accountId ?? accountId;
-        // Inputs have been resolved to concrete strings by Plan.
-        const bucketName = news.bucketName as string;
-        const jurisdiction = news.jurisdiction ?? "default";
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      // Inputs have been resolved to concrete strings by Plan.
+      const bucketName = news.bucketName as string;
+      const jurisdiction = news.jurisdiction ?? "default";
 
-        // The PUT is a full upsert of the bucket's single Sippy
-        // configuration — enabling when absent and re-configuring when
-        // present — so observe/ensure/sync collapse into one idempotent
-        // call. Source/destination secrets are write-only, so an observed
-        // config can never be diffed against the desired one anyway.
-        const synced = yield* r2.putBucketSippy({
-          accountId: acct,
-          bucketName,
-          source: toRequestSource(news.source),
-          destination: {
-            provider: "r2",
-            accessKeyId: Redacted.value(news.destination.accessKeyId),
-            secretAccessKey: Redacted.value(news.destination.secretAccessKey),
-          },
-        });
+      // The PUT is a full upsert of the bucket's single Sippy
+      // configuration — enabling when absent and re-configuring when
+      // present — so observe/ensure/sync collapse into one idempotent
+      // call. Source/destination secrets are write-only, so an observed
+      // config can never be diffed against the desired one anyway.
+      const synced = yield* r2.putBucketSippy({
+        accountId: acct,
+        bucketName,
+        jurisdiction,
+        source: toRequestSource(news.source),
+        destination: {
+          provider: "r2",
+          accessKeyId: Redacted.value(news.destination.accessKeyId),
+          secretAccessKey: Redacted.value(news.destination.secretAccessKey),
+        },
+      });
 
-        return toAttributes(synced, acct, bucketName, jurisdiction);
-      },
-      (effect, { news }) => inJurisdiction(news.jurisdiction)(effect),
-    ),
+      return toAttributes(synced, acct, bucketName, jurisdiction);
+    }),
 
-    delete: Effect.fn(
-      function* ({ output }) {
-        // Disabling Sippy on a bucket where it is already disabled is a
-        // success (`{ enabled: false }`); a missing bucket means there is
-        // nothing left to disable — both make delete idempotent.
-        yield* r2
-          .deleteBucketSippy({
-            accountId: output.accountId,
-            bucketName: output.bucketName,
-          })
-          .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
-      },
-      (effect, { output }) => inJurisdiction(output.jurisdiction)(effect),
-    ),
+    delete: Effect.fn(function* ({ output }) {
+      // Disabling Sippy on a bucket where it is already disabled is a
+      // success (`{ enabled: false }`); a missing bucket means there is
+      // nothing left to disable — both make delete idempotent.
+      yield* r2
+        .deleteBucketSippy({
+          accountId: output.accountId,
+          bucketName: output.bucketName,
+          jurisdiction: output.jurisdiction,
+        })
+        .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
+    }),
 
     // Sippy is a per-bucket singleton with no account-wide enumeration
     // API, so fan out from the parent: enumerate every R2 bucket, read its
@@ -335,7 +329,7 @@ export const BucketSippyProvider = () =>
             return Effect.succeed([] as BucketSippyAttributes[]);
           }
           const jurisdiction = (bucket.jurisdiction ?? "default") as Bucket.Jurisdiction;
-          return r2.getBucketSippy({ accountId, bucketName }).pipe(
+          return r2.getBucketSippy({ accountId, bucketName, jurisdiction }).pipe(
             Effect.map((config) =>
               config.enabled === true
                 ? [toAttributes(config, accountId, bucketName, jurisdiction)]
@@ -346,7 +340,6 @@ export const BucketSippyProvider = () =>
             Effect.catchTag(["NoSuchBucket", "InvalidRoute", "Forbidden"], () =>
               Effect.succeed([] as BucketSippyAttributes[]),
             ),
-            inJurisdiction(jurisdiction),
           );
         },
         { concurrency: 10 },
