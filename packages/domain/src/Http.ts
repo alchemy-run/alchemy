@@ -220,12 +220,31 @@ const live = Effect.fn(function* (
 });
 
 /**
- * Every answer is for one caller (middleware reads its session, a query's
- * `visible` filters its rows) and is stale after the next write, so no cache
- * may keep it, shared or private.
+ * An answer is for one caller (middleware reads its session, a query's
+ * `visible` filters its rows) and is stale after the next write, so by
+ * default no cache may keep it, shared or private.
  */
-const noStore: HttpEffect.PreResponseHandler = (_request, response) =>
-  Effect.succeed(HttpServerResponse.setHeader(response, "cache-control", "private, no-store"));
+const NO_STORE = "private, no-store";
+
+/**
+ * The `cache-control` of a call's responses: its declaration's
+ * `httpApiCacheControl` on a successful answer from a query or a read that
+ * answers once, `private, no-store` on everything else.
+ */
+const cacheControlOf = (operation: Operation): HttpEffect.PreResponseHandler => {
+  const annotated =
+    operation.operation === "send" || operation.stream
+      ? undefined
+      : operation.served.annotations.httpApiCacheControl;
+  return (_request, response) =>
+    Effect.succeed(
+      HttpServerResponse.setHeader(
+        response,
+        "cache-control",
+        annotated !== undefined && response.status < 300 ? annotated : NO_STORE,
+      ),
+    );
+};
 
 /** A call that answers once, through a client that lives for the request. */
 const once = Effect.fn(function* (
@@ -348,7 +367,9 @@ const endpointOf = (
  * `data` is the typed failure.
  *
  * Every response carries `cache-control: private, no-store`: it is for one
- * caller, and stale after the next write.
+ * caller, and stale after the next write. A query's or a read's declaration
+ * can loosen that for its successful answers with the `httpApiCacheControl`
+ * annotation (`{ httpApiCacheControl: "public, max-age=60" }`).
  *
  * Every call goes through the Api's own handlers in process, with the HTTP
  * request's headers, so its middleware, its checks and its rejections run as
@@ -425,6 +446,7 @@ export const toHttpApi = <A extends Publishable>(
         // Only the endpoint's declared failures are public; anything else is a defect.
         const declaredOnly = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
           Effect.catchIf(effect, (error) => !isDeclared(error), Effect.die);
+        const cacheControl = cacheControlOf(operation);
         handlers = handlers.handle(operation.rpc._tag, (request: DecodedRequest) =>
           (operation.stream
             ? live(client, operation, request).pipe(
@@ -432,7 +454,7 @@ export const toHttpApi = <A extends Publishable>(
                 Effect.map(Stream.catchIf((error) => !isDeclared(error), Stream.die)),
               )
             : once(client, operation, request).pipe(declaredOnly, Effect.scoped)
-          ).pipe(HttpEffect.withPreResponseHandler(noStore)),
+          ).pipe(HttpEffect.withPreResponseHandler(cacheControl)),
         );
       }
       return handlers;

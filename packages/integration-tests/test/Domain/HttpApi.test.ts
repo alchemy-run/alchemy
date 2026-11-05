@@ -85,18 +85,22 @@ class Wallet extends Domain.Aggregate("Wallet", {
 }) {}
 
 /** Only the wallet's owner reads its balance. */
-class Balance extends Domain.View("Balance", {
-  from: [Wallet],
-  key: Wallet,
-  middleware: [Session],
-  rejects: [NotOwner],
-  state: Schema.Struct({ owner: Schema.String, balance: Schema.Int }),
-  initial: { owner: "", balance: 0 },
-  evolve: { Deposited: (s, e) => ({ owner: e.owner, balance: s.balance + e.amount }) },
-  validate: Effect.fn(function* (_request, s) {
-    if (s !== null && s.owner !== (yield* Owner)) return yield* new NotOwner();
-  }),
-}) {}
+class Balance extends Domain.View(
+  "Balance",
+  {
+    from: [Wallet],
+    key: Wallet,
+    middleware: [Session],
+    rejects: [NotOwner],
+    state: Schema.Struct({ owner: Schema.String, balance: Schema.Int }),
+    initial: { owner: "", balance: 0 },
+    evolve: { Deposited: (s, e) => ({ owner: e.owner, balance: s.balance + e.amount }) },
+    validate: Effect.fn(function* (_request, s) {
+      if (s !== null && s.owner !== (yield* Owner)) return yield* new NotOwner();
+    }),
+  },
+  { httpApiCacheControl: "private, max-age=5" },
+) {}
 
 // ---------------------------------------------------------------- the HTTP surface
 
@@ -141,13 +145,17 @@ class Ledger extends Domain.Aggregate("Ledger", {
 class UnknownBase extends Domain.Rejection("UnknownBase", { base: Schema.String }) {}
 
 /** Exchange rates: a paged query over rows outside the model. */
-class Rates extends Domain.Query("Rates", {
-  input: { base: Schema.String },
-  success: Schema.Struct({ currency: Schema.String, rate: Schema.Number }),
-  paged: true,
-  middleware: [Session],
-  rejects: [UnknownBase],
-}) {}
+class Rates extends Domain.Query(
+  "Rates",
+  {
+    input: { base: Schema.String },
+    success: Schema.Struct({ currency: Schema.String, rate: Schema.Number }),
+    paged: true,
+    middleware: [Session],
+    rejects: [UnknownBase],
+  },
+  { httpApiCacheControl: "public, max-age=60" },
+) {}
 const rates = [
   { currency: "EUR", rate: 0.9 },
   { currency: "GBP", rate: 0.8 },
@@ -340,7 +348,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
   );
 
   it.live(
-    "no cache may keep an answer: every response, success or failure, is private and no-store",
+    "a successful answer carries its declaration's httpApiCacheControl; everything else is private, no-store",
     () =>
       Effect.gen(function* () {
         const responses = [
@@ -353,15 +361,28 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
           yield* execute("QUERY", "/Rates", { body: { input: { base: "USD" } } }),
           yield* execute("GET", "/Balance/w-cache", { owner: "sam" }),
           yield* execute("GET", "/Balance/w-cache/watch", { owner: "sam" }),
+          yield* execute("GET", "/Balance/w-cache", { owner: "kim" }),
+          yield* execute("GET", "/Wallet/w-cache", { owner: "sam" }),
         ];
         // Read the watch's first event, so its stream closes before the server stops.
         yield* responses[5]!.stream.pipe(Stream.take(1), Stream.runDrain);
         expect(responses.map((response) => response.status)).toEqual([
-          200, 200, 422, 401, 200, 200,
+          200, 200, 422, 401, 200, 200, 403, 200,
         ]);
-        for (const response of responses) {
-          expect(response.headers["cache-control"]).toBe("private, no-store");
-        }
+        expect(responses.map((response) => response.headers["cache-control"])).toEqual([
+          // A command's receipt.
+          "private, no-store",
+          // The query's answer, then its rejection and its middleware's error.
+          "public, max-age=60",
+          "private, no-store",
+          "private, no-store",
+          // The view's read, its live read, and its rejection.
+          "private, max-age=5",
+          "private, no-store",
+          "private, no-store",
+          // An aggregate without the annotation.
+          "private, no-store",
+        ]);
       }).pipe(Effect.provide(Served)),
   );
 

@@ -82,6 +82,17 @@ A command's body is the same JSON as its RPC payload, and every answer is the sa
 
 Every answer carries `cache-control: private, no-store`. It is for one caller, since middleware reads their session and a query's `visible` filters its rows, and it is stale after the next write, so neither a CDN nor the browser keeps it.
 
+A query or a read whose answer may be kept says so with the `httpApiCacheControl` [annotation](/domain/annotations). Its successful answers carry that header; its failures, live reads and every command keep `private, no-store`:
+
+```typescript title="src/Rates.query.ts"
+export class Rates extends Domain.Query("Rates", {
+  input: { base: Schema.String },
+  success: Rate,
+}, { httpApiCacheControl: "public, max-age=60" }) {}
+```
+
+Use `public` only when the answer is the same for every caller. A shared cache does not know the middleware read a session, so it would hand one caller's answer to the next. `private, max-age=5` lets each caller's browser keep its own answer.
+
 ```shellsession
 $ curl -X POST https://bank.example.com/DepositMoney \
     -H 'content-type: application/json' -H 'cookie: session=…' \
