@@ -77,8 +77,18 @@ export interface AccessPoint extends Resource<
     fileSystemId: string;
   },
   {},
-  Providers
+  Providers,
+  AccessPointLookup
 > {}
+
+/**
+ * Props for {@link AccessPoint.lookup}: find an access point this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AccessPointLookup {
+  /** The id of the existing access point. */
+  accessPointId: string;
+}
 
 /**
  * An Amazon EFS access point — an application-specific entry point into a
@@ -114,6 +124,17 @@ export interface AccessPoint extends Resource<
  *     { arn: accessPoint.accessPointArn, localMountPath: "/mnt/files" },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing access point
+ * `AccessPoint.lookup` references an access point Alchemy doesn't manage (created in the
+ * console or by another stack), found by `accessPointId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Mount an existing access point
+ * ```typescript
+ * const ap = AWS.EFS.AccessPoint.lookup({ accessPointId: "fsap-0123456789abcdef0" });
+ * const accessPointArn = ap.accessPointArn;
  * ```
  *
  * @resource
@@ -240,6 +261,20 @@ export const AccessPointProvider = () =>
             );
             return perSystem.flat();
           }),
+
+        lookup: Effect.fn(function* ({ accessPointId }) {
+          const ap = yield* findById(accessPointId);
+
+          if (ap?.AccessPointId === undefined || ap.LifeCycleState === "deleted") return undefined;
+
+          return {
+            accessPointId: ap.AccessPointId,
+
+            accessPointArn: ap.AccessPointArn!,
+
+            fileSystemId: ap.FileSystemId!,
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const ap = output?.accessPointId

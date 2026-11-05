@@ -141,8 +141,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find an elastic cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The cluster name of the existing elastic cluster. */
+  clusterName: string;
+}
 
 /**
  * An Amazon DocumentDB elastic cluster — a MongoDB-compatible, sharded
@@ -174,6 +184,16 @@ export interface Cluster extends Resource<
  *   vpcSecurityGroupIds: [securityGroup.securityGroupId],
  *   backupRetentionPeriod: "1 day",
  * });
+ * ```
+ *
+ * ### Looking up an existing elastic cluster
+ * `Cluster.lookup` references an elastic cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing elastic cluster
+ * ```typescript
+ * const existing = AWS.DocDBElastic.Cluster.lookup({ clusterName: "my-elastic-cluster" });
  * ```
  *
  * @resource
@@ -308,6 +328,12 @@ export const ClusterProvider = () =>
           if ((n.kmsKeyId ?? undefined) !== (o.kmsKeyId ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterName }) {
+          const cluster = yield* readCluster(clusterName, undefined);
+
+          return cluster === undefined ? undefined : yield* toAttrs(cluster);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

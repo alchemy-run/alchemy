@@ -46,8 +46,18 @@ export interface ParameterGroup extends Resource<
     parameters: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ParameterGroupLookup
 > {}
+
+/**
+ * Props for {@link ParameterGroup.lookup}: find a parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ParameterGroupLookup {
+  /** The parameter group name of the existing parameter group. */
+  parameterGroupName: string;
+}
 
 /**
  * A DAX parameter group — a named set of DAX engine parameters (item and
@@ -77,6 +87,16 @@ export interface ParameterGroup extends Resource<
  *   iamRoleArn: role.roleArn,
  *   parameterGroupName: params.parameterGroupName,
  * });
+ * ```
+ *
+ * ### Looking up an existing parameter group
+ * `ParameterGroup.lookup` references a parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `parameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing parameter group
+ * ```typescript
+ * const existing = AWS.DAX.ParameterGroup.lookup({ parameterGroupName: "my-parameter-group" });
  * ```
  *
  * @resource
@@ -142,6 +162,14 @@ export const ParameterGroupProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ parameterGroupName }) {
+          const group = yield* readGroup(parameterGroupName);
+
+          if (group?.ParameterGroupName === undefined) return undefined;
+
+          return toAttrs(group, yield* readParameters(parameterGroupName), undefined);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

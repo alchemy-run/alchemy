@@ -227,8 +227,18 @@ export interface JobDefinition extends Resource<
     /** IAM policy statements attached to the managed job role. */
     policyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  JobDefinitionLookup
 > {}
+
+/**
+ * Props for {@link JobDefinition.lookup}: find a job definition this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface JobDefinitionLookup {
+  /** The job definition name of the existing job definition. */
+  jobDefinitionName: string;
+}
 
 export type JobDefinitionServices = Credentials | Region | ServerHost | AWSEnvironment;
 
@@ -365,6 +375,16 @@ const createJobDefinitionRuntimeContext = (id: string): JobDefinitionRuntimeCont
  *   main: import.meta.url,
  *   build: { pure: false },
  * }
+ * ```
+ *
+ * ### Looking up an existing job definition
+ * `JobDefinition.lookup` references a job definition Alchemy doesn't manage (created in the
+ * console or by another stack), found by `jobDefinitionName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing job definition
+ * ```typescript
+ * const existing = AWS.Batch.JobDefinition.lookup({ jobDefinitionName: "my-job-definition" });
  * ```
  *
  * @resource
@@ -1002,6 +1022,11 @@ await bootstrap(entrypoint);
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ jobDefinitionName }) {
+          const latest = yield* latestRevision(jobDefinitionName);
+          if (!latest?.jobDefinitionArn) return undefined;
+          return toAttributes(latest, observedTagsOf(latest), emptyPlatformAttributes);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.jobDefinitionName ?? (yield* toName(id, olds ?? {}));

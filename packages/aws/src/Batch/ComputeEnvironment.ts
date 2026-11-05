@@ -117,8 +117,18 @@ export interface ComputeEnvironment extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ComputeEnvironmentLookup
 > {}
+
+/**
+ * Props for {@link ComputeEnvironment.lookup}: find a compute environment this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ComputeEnvironmentLookup {
+  /** The compute environment name of the existing compute environment. */
+  computeEnvironmentName: string;
+}
 
 /**
  * An AWS Batch managed compute environment backed by Fargate (or Fargate
@@ -157,6 +167,16 @@ export interface ComputeEnvironment extends Resource<
  * const queue = yield* Batch.JobQueue("JobsQueue", {
  *   computeEnvironments: [ce.computeEnvironmentArn],
  * });
+ * ```
+ *
+ * ### Looking up an existing compute environment
+ * `ComputeEnvironment.lookup` references a compute environment Alchemy doesn't manage (created in the
+ * console or by another stack), found by `computeEnvironmentName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing compute environment
+ * ```typescript
+ * const existing = AWS.Batch.ComputeEnvironment.lookup({ computeEnvironmentName: "my-compute-environment" });
  * ```
  *
  * @resource
@@ -450,6 +470,13 @@ export const ComputeEnvironmentProvider = () =>
           if ((olds?.managementType ?? "MANAGED") !== (news?.managementType ?? "MANAGED")) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ computeEnvironmentName: name }) {
+          const ce = yield* describeOne(name);
+          if (!ce?.computeEnvironmentArn || ce.status === "DELETED") {
+            return undefined;
+          }
+          return toAttributes(ce, observedTagsOf(ce));
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.computeEnvironmentName ?? (yield* toName(id, olds ?? {}));
