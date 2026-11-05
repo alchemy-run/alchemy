@@ -148,7 +148,8 @@ export const makeWorkerBridge = (
           return (...args: unknown[]) =>
             processEvent(
               (built) => {
-                const dispatcher = built.shape()?.[prop];
+                // Never `Object.prototype` members (`constructor`, `__proto__`, ...).
+                const dispatcher = prop in Object.prototype ? undefined : built.shape()?.[prop];
                 if (typeof dispatcher !== "function") {
                   return [
                     Effect.die(
