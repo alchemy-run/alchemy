@@ -9,8 +9,11 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-/** How many models the Worker hosts, as in the report of #2976. */
-export const MODELS = 8;
+/**
+ * How many models the Worker hosts: enough that renaming their classes from
+ * before Domain versions would pass Cloudflare's limit of 100 exports (#2976).
+ */
+export const MODELS = 10;
 
 /**
  * One model's definitions, named after it, so no two models share a class:

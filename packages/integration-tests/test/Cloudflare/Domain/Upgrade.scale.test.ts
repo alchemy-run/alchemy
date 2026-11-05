@@ -10,10 +10,11 @@ import { MODELS } from "./fixtures/scale.ts";
 import { backdatePasses, doBindings, movedBy, namespacesOf, tagsOf, untilListed } from "./move.ts";
 
 /**
- * #2976: a Worker with eight models deployed before Domain versions existed
- * has 49 classes. Upgrading it by renaming each class would list 108 exports,
- * over Cloudflare's limit of 100. Upgraded straight to the shared class, it
- * keeps each class under its own name while its objects move: 59 exports.
+ * #2976: a Worker with ten models deployed before Domain versions existed has
+ * 61 classes. Upgrading it by renaming each class would list 123 exports (the
+ * classes under their new names, and a rename entry for each old one), over
+ * Cloudflare's limit of 100. Upgraded straight to the shared class, it keeps
+ * each class under its own name while its objects move: 62 exports.
  */
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -60,7 +61,7 @@ const everyAccountReads = (url: string) =>
   );
 
 test.provider(
-  "upgrading eight models deployed before Domain versions stays under Cloudflare's export limit",
+  "upgrading ten models deployed before Domain versions stays under Cloudflare's export limit",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
