@@ -30,9 +30,9 @@ export class AccountCard extends Domain.Stream("AccountCard", {
 
 /** Judged on the latest card: only its owner (or an agent) may read it. */
 export const AccountCardLive = AccountCard.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, latest) {
+  Effect.succeed(
+    Effect.fn(function* (_request, latest) {
       yield* mustOwn(latest?.event.customerId ?? null);
     }),
-  }),
+  ),
 );

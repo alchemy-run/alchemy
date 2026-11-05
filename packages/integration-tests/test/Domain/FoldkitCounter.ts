@@ -51,10 +51,9 @@ export class Total extends Domain.View("Total", {
 
 /** Who may read each key of Total. */
 export const TotalLive = Total.toLayer(
-  Effect.succeed({
-    validate: (_, state) =>
-      state && state.total > 5 ? Effect.fail(new Limit({ amount: state.total })) : Effect.void,
-  }),
+  Effect.succeed((_, state) =>
+    state && state.total > 5 ? Effect.fail(new Limit({ amount: state.total })) : Effect.void,
+  ),
 );
 export class Outputs extends Domain.Stream("Outputs", { key: Counter, entries: [Incremented] }) {}
 export class Counters extends Domain.Model("Counters", {

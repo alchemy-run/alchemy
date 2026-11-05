@@ -51,9 +51,9 @@ export class AccountTransfers extends Domain.View("AccountTransfers", {
 
 /** Who may read each key of AccountTransfers. */
 export const AccountTransfersLive = AccountTransfers.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, transfers) {
+  Effect.succeed(
+    Effect.fn(function* (_request, transfers) {
       yield* mustOwn(transfers?.customerId ?? null);
     }),
-  }),
+  ),
 );

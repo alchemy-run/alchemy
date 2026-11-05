@@ -21,8 +21,8 @@ export class AccountActivity extends Domain.View("AccountActivity", {
 
 /** Who may read each key of AccountActivity. */
 export const AccountActivityLive = AccountActivity.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (request) {
+  Effect.succeed(
+    Effect.fn(function* (request) {
       const actor = yield* CurrentActor;
       if (actor._tag !== "Agent") {
         return yield* new Forbidden({
@@ -30,5 +30,5 @@ export const AccountActivityLive = AccountActivity.toLayer(
         });
       }
     }),
-  }),
+  ),
 );

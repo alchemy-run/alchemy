@@ -458,7 +458,7 @@ export interface ViewKey<Name extends string> {
  *
  * ### Validating reads
  * The declaration lists the middleware that guards reads and the rejections
- * they may fail with. Its Layer's `validate` judges each read: on every
+ * they may fail with. Its Layer, one `validate` function, judges each read: on every
  * `get`, `snapshot` and `list`, and on every change while a client watches.
  * A view that declares either needs its Layer.
  *
@@ -475,12 +475,12 @@ export interface ViewKey<Name extends string> {
  * }) {}
  *
  * export const AccountSummaryLive = AccountSummary.toLayer(
- *   Effect.succeed({
- *     validate: Effect.fn(function* (_request, summary) {
+ *   Effect.succeed(
+ *     Effect.fn(function* (_request, summary) {
  *       const actor = yield* CurrentActor;
  *       if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
  *     }),
- *   }),
+ *   ),
  * );
  * ```
  *
@@ -539,10 +539,10 @@ export const make = <
   );
   return class extends Tag {
     static readonly Validator = Validator;
-    static toLayer<E, R>(build: Effect.Effect<Read.Implementation<any>, E, R>) {
+    static toLayer<E, R>(build: Effect.Effect<Read.AnyValidate, E, R>) {
       return Layer.effect(
         Validator,
-        Effect.map(build, (implementation): Read.Implementation => implementation),
+        Effect.map(build, (validate): Read.Implementation => ({ validate })),
       );
     }
     static readonly kind = "View" as const;
@@ -613,21 +613,14 @@ export interface ViewClass<
   /** The key of its Layer, which provides its `validate`. */
   readonly Validator: Context.Key<Read.ValidatorKey<Name>, Read.Implementation>;
   /**
-   * Provide the view's `validate`: who may read each key. The construction
+   * Provide the view's `validate`, one function: who may read each key. The construction
    * Effect runs once and may resolve services; `validate` itself may only
    * need what the view's middleware provides. Required when the view
    * declares `middleware` or `rejects`.
    */
   toLayer<E, R>(
     build: Effect.Effect<
-      {
-        readonly validate: Read.Validate<
-          Key.RefOf<Key>,
-          St | null,
-          Read.MiddlewareOf<Def>,
-          Read.RejectsOf<Def>
-        >;
-      },
+      Read.Validate<Key.RefOf<Key>, St | null, Read.MiddlewareOf<Def>, Read.RejectsOf<Def>>,
       E,
       R
     >,

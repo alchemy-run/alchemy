@@ -100,11 +100,11 @@ class Balance extends Domain.View(
 
 /** Who may read each key of Balance. */
 const BalanceLive = Balance.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, s) {
+  Effect.succeed(
+    Effect.fn(function* (_request, s) {
       if (s !== null && s.owner !== (yield* Owner)) return yield* new NotOwner();
     }),
-  }),
+  ),
 );
 
 // ---------------------------------------------------------------- the HTTP surface

@@ -82,8 +82,8 @@ export class TransferStatus extends Domain.View("TransferStatus", {
 
 /** Who may read each key of TransferStatus. */
 export const TransferStatusLive = TransferStatus.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, status) {
+  Effect.succeed(
+    Effect.fn(function* (_request, status) {
       const actor = yield* CurrentActor;
       // Nothing to protect until the transfer is projected; agents may read any.
       if (actor._tag === "Agent" || status === null || status.requestedBy === null) return;
@@ -96,5 +96,5 @@ export const TransferStatusLive = TransferStatus.toLayer(
         return yield* new NotOwner();
       }
     }),
-  }),
+  ),
 );

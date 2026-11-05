@@ -279,16 +279,16 @@ import { Session } from "./Session.middleware.ts";
 // ...
 +
 +export const AccountSummaryLive = AccountSummary.toLayer(
-+  Effect.succeed({
-+    validate: Effect.fn(function* (_request, summary) {
++  Effect.succeed(
++    Effect.fn(function* (_request, summary) {
 +      const actor = yield* CurrentActor;
 +      if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
 +    }),
-+  }),
++  ),
 +);
 ```
 
-`validate` lives on the view's Layer. It runs on every read, and again on every change while a client watches. A summary that has no owner yet reads as empty, so a new customer can watch for their account to appear.
+The view's Layer is its `validate`: one function, like every other Layer's handler. It runs on every read, and again on every change while a client watches. A summary that has no owner yet reads as empty, so a new customer can watch for their account to appear.
 
 ## Provide the summary's Layer
 

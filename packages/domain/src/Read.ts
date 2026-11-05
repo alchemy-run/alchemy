@@ -102,11 +102,9 @@ export type Validate<
   Middleware.Provides<Ms> | RuntimeContext
 >;
 
-/** What a View's or Stream's Layer provides: its `validate`. */
-export interface Implementation<
-  V = (request: never, state: never) => Effect.Effect<void, unknown, unknown>,
-> {
-  readonly validate: V;
+/** What a View's or Stream's Layer provides: its `validate`. @internal */
+export interface Implementation {
+  readonly validate: AnyValidate;
 }
 
 /** Type-level identity of a View's or Stream's Layer in an Effect's requirements. */

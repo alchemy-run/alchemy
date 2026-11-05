@@ -159,11 +159,11 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 
 // judged on every get, list, and every change while watched; required when the view declares middleware or rejects
 export const AccountSummaryLive = AccountSummary.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, summary) {
+  Effect.succeed(
+    Effect.fn(function* (_request, summary) {
       yield* mustOwn(summary?.customerId ?? null);
     }),
-  }),
+  ),
 );
 ```
 
@@ -327,7 +327,7 @@ export class AccountCard extends Domain.Stream("AccountCard", {
 }) {}
 
 export const AccountCardLive = AccountCard.toLayer(
-  Effect.succeed({ validate: Effect.fn(function* (_request, latest) { /* authorize on the latest entry */ }) }),
+  Effect.succeed(Effect.fn(function* (_request, latest) { /* authorize on the latest entry */ })),
 );
 ```
 

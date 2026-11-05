@@ -62,13 +62,13 @@ export class CustomerDashboard extends Domain.View("CustomerDashboard", {
 
 /** Keyed by customer, so the key alone decides who may read it. */
 export const CustomerDashboardLive = CustomerDashboard.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (request) {
+  Effect.succeed(
+    Effect.fn(function* (request) {
       const actor = yield* CurrentActor;
       if (actor._tag === "Agent") return;
       if (actor._tag !== "Customer" || request.key.id !== actor.customerId) {
         return yield* new Forbidden({ reason: "that is not your dashboard" });
       }
     }),
-  }),
+  ),
 );

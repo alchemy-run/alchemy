@@ -85,7 +85,7 @@ class Balance extends Domain.View("Balance", {
 }) {}
 
 /** Anyone with a session may read any wallet's balance. */
-const BalanceLive = Balance.toLayer(Effect.succeed({ validate: () => Effect.void }));
+const BalanceLive = Balance.toLayer(Effect.succeed(() => Effect.void));
 
 class UnknownBase extends Domain.Rejection("UnknownBase", { base: Schema.String }) {}
 

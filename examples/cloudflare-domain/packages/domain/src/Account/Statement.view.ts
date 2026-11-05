@@ -55,9 +55,9 @@ export class Statement extends Domain.View("Statement", {
 
 /** Who may read each key of Statement. */
 export const StatementLive = Statement.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, statement) {
+  Effect.succeed(
+    Effect.fn(function* (_request, statement) {
       yield* mustOwn(statement?.customerId ?? null);
     }),
-  }),
+  ),
 );

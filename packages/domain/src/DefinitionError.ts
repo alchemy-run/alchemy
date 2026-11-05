@@ -236,7 +236,7 @@ export class UnvalidatedRead extends Data.TaggedError("UnvalidatedRead")<{
   readonly entity: string;
 }> {
   override get message() {
-    return `${this.entity} declares middleware or rejects, so it needs its Layer: provide ${this.entity}.toLayer({ validate }) to the model`;
+    return `${this.entity} declares middleware or rejects, so it needs its Layer: provide ${this.entity}.toLayer(validate) to the model`;
   }
 }
 

@@ -155,11 +155,11 @@ class WalletCard extends Domain.Stream("WalletCard", {
 /** Who may read each key of WalletCard. */
 
 const WalletCardLive = WalletCard.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, latest) {
+  Effect.succeed(
+    Effect.fn(function* (_request, latest) {
       if (latest && latest.event.owner !== (yield* Viewer)) return yield* new NotYours();
     }),
-  }),
+  ),
 );
 
 class WalletCards extends Domain.Projection("WalletCards", {

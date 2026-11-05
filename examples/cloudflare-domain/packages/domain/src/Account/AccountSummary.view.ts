@@ -49,9 +49,9 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 
 /** Re-run on every change while watched: a reassigned account ends the watch with NotOwner. */
 export const AccountSummaryLive = AccountSummary.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, summary) {
+  Effect.succeed(
+    Effect.fn(function* (_request, summary) {
       yield* mustOwn(summary?.customerId ?? null);
     }),
-  }),
+  ),
 );

@@ -155,11 +155,11 @@ The declaration lists the `middleware` and `rejects` of its reads. Its Layer's `
 
 ```typescript title="packages/domain/src/Account/AccountCard.stream.ts"
 export const AccountCardLive = AccountCard.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, latest) {
+  Effect.succeed(
+    Effect.fn(function* (_request, latest) {
       yield* mustOwn(latest?.event.customerId ?? null);
     }),
-  }),
+  ),
 );
 ```
 

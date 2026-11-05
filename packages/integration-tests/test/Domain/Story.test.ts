@@ -118,11 +118,7 @@ class Totals extends Domain.View("Totals", {
 
 /** Who may read each key of Totals. */
 
-const TotalsLive = Totals.toLayer(
-  Effect.succeed({
-    validate: () => notGuest(),
-  }),
-);
+const TotalsLive = Totals.toLayer(Effect.succeed(() => notGuest()));
 
 class Logged extends Domain.Event("Logged", { by: Schema.Number }) {}
 

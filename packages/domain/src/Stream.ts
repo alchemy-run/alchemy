@@ -176,12 +176,12 @@ export interface StreamKey<Name extends string> {
  * **Example:** Only the card's owner reads it
  * ```typescript
  * export const AccountCardLive = AccountCard.toLayer(
- *   Effect.succeed({
- *     validate: Effect.fn(function* (_request, latest) {
+ *   Effect.succeed(
+ *     Effect.fn(function* (_request, latest) {
  *       const actor = yield* CurrentActor;
  *       if (latest && latest.event.owner !== actor.customerId) return yield* new NotOwner();
  *     }),
- *   }),
+ *   ),
  * );
  * ```
  *
@@ -237,10 +237,10 @@ export const make = <
   );
   return class extends Tag {
     static readonly Validator = Validator;
-    static toLayer<E, R>(build: Effect.Effect<Read.Implementation<any>, E, R>) {
+    static toLayer<E, R>(build: Effect.Effect<Read.AnyValidate, E, R>) {
       return Layer.effect(
         Validator,
-        Effect.map(build, (implementation): Read.Implementation => implementation),
+        Effect.map(build, (validate): Read.Implementation => ({ validate })),
       );
     }
     static readonly kind = "Stream" as const;
@@ -278,14 +278,12 @@ export interface StreamClass<
    */
   toLayer<E2, R>(
     build: Effect.Effect<
-      {
-        readonly validate: Read.Validate<
-          Key.RefOf<Key>,
-          Entry<E, Key.IdOf<Key>> | null,
-          Read.MiddlewareOf<Def>,
-          Read.RejectsOf<Def>
-        >;
-      },
+      Read.Validate<
+        Key.RefOf<Key>,
+        Entry<E, Key.IdOf<Key>> | null,
+        Read.MiddlewareOf<Def>,
+        Read.RejectsOf<Def>
+      >,
       E2,
       R
     >,

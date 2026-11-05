@@ -274,11 +274,11 @@ A view that's exposed through an Api declares `middleware` to identify the calle
 
 ```typescript title="packages/domain/src/Account/AccountSummary.view.ts"
 export const AccountSummaryLive = AccountSummary.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, summary) {
+  Effect.succeed(
+    Effect.fn(function* (_request, summary) {
       yield* mustOwn(summary?.customerId ?? null);
     }),
-  }),
+  ),
 );
 ```
 

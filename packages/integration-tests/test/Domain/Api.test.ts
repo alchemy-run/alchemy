@@ -334,11 +334,11 @@ class NoteView extends Domain.View("NoteView", {
 
 /** Who may read each key of NoteView. */
 const NoteViewLive = NoteView.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* (_request, s) {
+  Effect.succeed(
+    Effect.fn(function* (_request, s) {
       if (s !== null && s.by !== null && s.by !== (yield* Author)) return yield* new NotYours();
     }),
-  }),
+  ),
 );
 
 class Notes extends Domain.Model("Notes", { aggregates: [Note], views: [NoteView] }) {}
@@ -447,12 +447,10 @@ class NoteText extends Domain.View("NoteText", {
 const NoteTextLive = NoteText.toLayer(
   Effect.gen(function* () {
     const suspended = yield* Suspended;
-    return {
-      validate: Effect.fn(function* (_request, s) {
-        yield* Author;
-        if (s?.by && suspended.has(s.by)) return yield* new NotYours();
-      }),
-    };
+    return Effect.fn(function* (_request, s) {
+      yield* Author;
+      if (s?.by && suspended.has(s.by)) return yield* new NotYours();
+    });
   }),
 );
 class Texts extends Domain.Model("Texts", { aggregates: [Note], views: [NoteText] }) {}

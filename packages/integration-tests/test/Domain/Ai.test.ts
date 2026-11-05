@@ -74,11 +74,11 @@ class Balance extends Domain.View("Balance", {
 
 /** Who may read each key of Balance. */
 const BalanceLive = Balance.toLayer(
-  Effect.succeed({
-    validate: Effect.fn(function* ({ key }) {
+  Effect.succeed(
+    Effect.fn(function* ({ key }) {
       if (`${yield* Owner}-wallet` !== key.id) return yield* new NotOwner();
     }),
-  }),
+  ),
 );
 
 class UnknownBase extends Domain.Rejection("UnknownBase", { base: Schema.String }) {}
