@@ -158,7 +158,9 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
   smaller providers once had almost none, and read as "sparse" next to AWS. A
   chapter that starts straight with code first gets a short section on the
   platform's model, then the diagram, then the code. Skip tutorials and
-  framework recipes.
+  framework recipes, and pages about a way of writing code rather than a
+  platform: "How SQL works in Alchemy" had a timeline of a deploy and three
+  request connections, and it was cut with "we don't need a diagram for sql".
 - **Draw the thing, not a request bouncing between boxes.** Ask what the
   section is about and what a reader would get wrong, then draw that: the
   queue's contents, the event's JSON against each rule, an environment over
