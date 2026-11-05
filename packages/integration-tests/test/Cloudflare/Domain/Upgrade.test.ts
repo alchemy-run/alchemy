@@ -342,7 +342,15 @@ test.provider(
         }),
       );
       yield* waitForVersion(url, 1);
-      yield* Effect.sleep("5 seconds");
+      // Keep reading a while on the new code (a quick deploy leaves few answers so far).
+      const seen = answers.length;
+      yield* Effect.sync(() => answers.length).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (count) => count > seen + 10,
+          times: 60,
+        }),
+      );
       yield* Fiber.interrupt(watcher);
       expect(answers.length).toBeGreaterThan(10);
       expect(answers.filter((answer) => answer.status !== 200)).toEqual([]);
