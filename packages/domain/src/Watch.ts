@@ -4,14 +4,12 @@ import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
-import type * as Aggregate from "./Aggregate.ts";
 import { type Filter, matches } from "./Filter.ts";
-import { decodeEnvelope, type Kernel } from "./Kernel.ts";
+import type { Kernel } from "./Kernel.ts";
 import * as Key from "./Key.ts";
 import type {
   Json,
   Push,
-  StoredEvent,
   StreamEntry,
   StreamMeta,
   Subscription,
@@ -19,7 +17,7 @@ import type {
   ViewSnapshot,
 } from "./Platform.ts";
 import type * as Read from "./Read.ts";
-import { nameOf, readRpcs } from "./ReadRpcs.ts";
+import { readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";

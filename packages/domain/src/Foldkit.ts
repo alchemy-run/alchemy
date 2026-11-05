@@ -411,7 +411,7 @@ export function make(api: Api.Any): unknown {
   return definitions;
 }
 
-const keySchemaOf = (entry: ReadEntry) => Schema.toType(Key.idSchemaOf(entry.definition.key));
+const keySchemaOf = (entry: ReadEntry) => entry.definition.key.pipe(Key.idSchemaOf, Schema.toType);
 
 /** A watch Snapshot with explicit absence for Foldkit Models. */
 export type Snapshot<State> = Readonly<{
