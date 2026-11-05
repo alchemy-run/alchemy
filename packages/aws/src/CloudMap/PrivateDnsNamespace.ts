@@ -72,8 +72,18 @@ export interface PrivateDnsNamespace extends Resource<
     hostedZoneId: string | undefined;
   },
   {},
-  Providers
+  Providers,
+  PrivateDnsNamespaceLookup
 > {}
+
+/**
+ * Props for {@link PrivateDnsNamespace.lookup}: find a namespace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PrivateDnsNamespaceLookup {
+  /** The name of the existing namespace. */
+  namespaceName: string;
+}
 
 /**
  * An AWS Cloud Map private DNS namespace — the DNS-based service registry
@@ -114,6 +124,20 @@ export interface PrivateDnsNamespace extends Resource<
  *   namespaceId: namespace.namespaceId,
  *   dnsRecords: [{ type: "A", ttl: "10 seconds" }],
  *   routingPolicy: "MULTIVALUE",
+ * });
+ * ```
+ *
+ * ### Looking up an existing namespace
+ * `PrivateDnsNamespace.lookup` references a namespace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `namespaceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Register a service in an existing namespace
+ * ```typescript
+ * const ns = AWS.CloudMap.PrivateDnsNamespace.lookup({ namespaceName: "internal" });
+ *
+ * yield* AWS.CloudMap.Service("Api", {
+ *   namespaceId: ns.namespaceId,
  * });
  * ```
  *
@@ -158,6 +182,12 @@ export const PrivateDnsNamespaceProvider = () =>
                 hostedZoneId: n.Properties?.DnsProperties?.HostedZoneId,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ namespaceName }) {
+          const namespace = yield* observeNamespace("DNS_PRIVATE", namespaceName, undefined);
+
+          return namespace?.Id === undefined ? undefined : toAttributes(namespace);
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.namespaceName ?? (yield* createName(id, olds ?? {}));

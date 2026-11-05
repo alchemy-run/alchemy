@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment } from "../Environment.ts";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { apiArn, collectAllPages, retryOnTooManyRequests, syncTags, tagRecord } from "./common.ts";
 
@@ -91,8 +92,23 @@ export interface Api extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ApiLookup
 > {}
+
+/**
+ * Props for {@link Api.lookup}: find a HTTP or WebSocket API this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ApiLookup =
+  | {
+      /** The id of the existing API. */
+      apiId: string;
+    }
+  | {
+      /** The API's name; fails when several APIs share it. */
+      name: string;
+    };
 
 /**
  * An Amazon API Gateway v2 API — the root of an HTTP API or WebSocket API.
@@ -142,6 +158,17 @@ export interface Api extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing API
+ * `Api.lookup` references a API Alchemy doesn't manage (created in the
+ * console or by another stack), found by `apiId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a route to an existing HTTP API
+ * ```typescript
+ * const api = AWS.ApiGatewayV2.Api.lookup({ name: "public" });
+ * const apiId = api.apiId;
+ * ```
+ *
  * @resource
  */
 export const Api = Resource<Api>("AWS.ApiGatewayV2.Api");
@@ -186,6 +213,33 @@ export const ApiProvider = () =>
             const items = yield* collectAllPages((NextToken) => agw2.getApis({ NextToken }));
             return items.filter((api) => api.ApiId != null).map((api) => snapshotFromApi(api));
           }),
+
+        lookup: Effect.fn(function* (props) {
+          if ("apiId" in props) {
+            const api = yield* getApiSafe(props.apiId);
+
+            return api?.ApiId ? snapshotFromApi(api) : undefined;
+          }
+
+          const apis: agw2.Api[] = [];
+          let nextToken: string | undefined;
+          do {
+            const response = yield* agw2.getApis({ NextToken: nextToken });
+            apis.push(...(response.Items ?? []));
+            nextToken = response.NextToken;
+          } while (nextToken);
+          const api = yield* single(
+            "AWS.ApiGatewayV2.Api",
+
+            props.name,
+
+            apis.filter((api) => api.Name === props.name),
+
+            (api) => api.ApiId,
+          );
+
+          return api?.ApiId ? snapshotFromApi(api) : undefined;
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.apiId) return undefined;

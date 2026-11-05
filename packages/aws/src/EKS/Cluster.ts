@@ -164,8 +164,18 @@ export interface Cluster extends Resource<
     managedNodeRoleName: string | undefined;
   },
   KubernetesObjectBinding,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The name of the existing cluster. */
+  clusterName: string;
+}
 
 /**
  * An Amazon EKS cluster with support for EKS Auto Mode settings.
@@ -226,6 +236,22 @@ export interface Cluster extends Resource<
  * const metricsServer = yield* AWS.EKS.Addon("MetricsServer", {
  *   clusterName: cluster.clusterName,
  *   addonName: "metrics-server",
+ * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a node group to an existing cluster
+ * ```typescript
+ * const cluster = AWS.EKS.Cluster.lookup({ clusterName: "platform" });
+ *
+ * yield* AWS.EKS.Nodegroup("Workers", {
+ *   clusterName: cluster.clusterName,
+ *   nodeRole: nodeRole.roleArn,
+ *   subnets: subnetIds,
  * });
  * ```
  *
@@ -856,6 +882,7 @@ export const ClusterProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: ({ clusterName }) => readCluster({ clusterName }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterName = output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
           const state = yield* readCluster({
