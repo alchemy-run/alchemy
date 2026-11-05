@@ -433,7 +433,7 @@ describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
       const run = yield* debits.start("t-1", { from: "alice", amount: 40 });
       yield* run.result;
       // Debited once: the retry's send had the same command id.
-      expect((yield* wallets.state(alice)).balance).toBe(60);
+      expect((yield* wallets.get(alice)).balance).toBe(60);
     }).pipe(Effect.provide(Retries.layer(DebitTwiceLive).pipe(Layer.provide(InMemory)))),
   );
 
@@ -449,7 +449,7 @@ describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
       const second = yield* transfers.start("t-9", input);
       expect(second.executionId).toBe(first.executionId);
       expect(yield* first.result).toEqual({ approvedBy: null });
-      expect((yield* wallets.state(alice)).balance).toBe(60);
+      expect((yield* wallets.get(alice)).balance).toBe(60);
     }).pipe(Effect.provide(Bank.layer(Handlers).pipe(Layer.provide(InMemory)))),
   );
 });

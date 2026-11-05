@@ -30,7 +30,7 @@ export const AccountLedgerLive = AccountLedger.toLayer(
     const summaries = yield* AccountSummary;
     return Effect.fn(function* ({ account }, page) {
       yield* Effect.annotateCurrentSpan("bank.account", account);
-      const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
+      const summary = yield* summaries.get(Account.ref(account)).pipe(Effect.orDie);
       yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
       return yield* store.forAccount(account, page);
     });

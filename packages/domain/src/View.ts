@@ -322,7 +322,7 @@ export interface Host<S, Key extends Key.Any, E> {
    */
   readonly history: Effect.Effect<History>;
   /** Read the current state of a key. `none` if it does not exist. */
-  readonly query: (
+  readonly get: (
     key: Key.RefOf<Key>,
     options?: {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */

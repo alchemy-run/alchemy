@@ -814,7 +814,7 @@ const aggregateClient = (
           attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },
         }),
       ),
-    state: (target) =>
+    get: (target) =>
       store
         .state(Aggregate.targetId(target))
         .pipe(Effect.map(({ state }) => kernel.decodeState(aggregate, state))),
@@ -910,7 +910,7 @@ const viewHost = (
   };
   return {
     history,
-    query: (key, options) =>
+    get: (key, options) =>
       readAtLeast(Aggregate.targetId(key), options).pipe(
         Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
       ),

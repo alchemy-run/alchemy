@@ -237,7 +237,7 @@ describe("Domain keyed by a schema", { tags: ["unit", "local"] }, () => {
       const first = yield* tours.send("t-1", new BookTour({ orgId: acme, unit: "1A" }));
       const second = yield* tours.send("t-2", new BookTour({ orgId: acme, unit: "2B" }));
       expect(yield* Fiber.join(watched)).toEqual([1, 2]);
-      const state = yield* schedules.query(acme, {
+      const state = yield* schedules.get(acme, {
         atLeast: { stream: second.stream, version: second.version },
       });
       expect(Option.getOrNull(state)).toEqual({ org: "acme", tours: { "t-1": "1A", "t-2": "2B" } });

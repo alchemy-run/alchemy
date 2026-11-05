@@ -124,7 +124,7 @@ Every command, event and reaction is traced automatically:
 - `Domain.policy` and `Domain.view` spans that continue the trace of the commit they react to.
 - `Domain.saga` and `Domain.projection` spans that start their own trace and link back to their cause.
 - `Domain.external` spans for external system calls.
-- `Domain.query` spans in the Worker, with `domain.outcome`, `domain.query.rows` and `domain.query.hidden`, and a `Domain.caughtUp` child when it waits for the caller's write.
+- `Domain.query` spans in the Worker, with `domain.outcome` and `domain.query.rows`, and a `Domain.caughtUp` child when it waits for the caller's write.
 
 All of them carry `domain.correlation_id`, the first command of the flow, which finds a whole flow across traces. Export to an OpenTelemetry backend to see each flow as one connected trace: declare an `Axiom.Dataset` per signal and an `Axiom.ApiToken` that may ingest into them, and add `Axiom.Telemetry({ token, traces, logs })` to the Worker's single `Effect.provide` (or `Alchemy.Telemetry.layerOtlp` for any OTLP endpoint). Name datasets per stage. `Cloudflare.Telemetry()` shows spans in Cloudflare's dashboard instead, but Cloudflare starts a new trace per Worker or Durable Object event, so flows don't connect and browser spans can't be added.
 

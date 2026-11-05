@@ -370,8 +370,11 @@ export interface Client<Def extends AnyDefinition> {
     target: Target<Def>,
     commandId: string,
   ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
-  /** Read the current state of an instance. */
-  readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
+  /**
+   * Read the current state of an instance, as of its latest commit: `initial`
+   * for one that has never committed.
+   */
+  readonly get: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
 }
 
 /** The commands of a definition that never reject, so can be scheduled. */
@@ -400,7 +403,7 @@ export interface ClientImpl {
     target: unknown,
     commandId: string,
   ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
-  readonly state: (target: unknown) => Effect.Effect<unknown>;
+  readonly get: (target: unknown) => Effect.Effect<unknown>;
 }
 
 /**

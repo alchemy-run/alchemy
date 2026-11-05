@@ -672,7 +672,7 @@ const handlersOf = (
         const visible = (state: unknown, where: unknown) =>
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
         handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>
-          host.query(refOf(id), { atLeast }).pipe(
+          host.get(refOf(id), { atLeast }).pipe(
             Effect.flatMap((found) => {
               const state = Option.getOrNull(found);
               return check("get", refOf(id))(state).pipe(Effect.as(visible(state, where)));
@@ -729,7 +729,7 @@ const handlersOf = (
         handlers[`${name}.list`] = effect(
           rpcs.list!,
           ({ key: id, atLeast, where, order, take, after }) =>
-            host.query(refOf(id), { atLeast }).pipe(
+            host.get(refOf(id), { atLeast }).pipe(
               Effect.flatMap((found) => found.pipe(Option.getOrNull, check("list", refOf(id)))),
               Effect.andThen(
                 host.list(refOf(id), {

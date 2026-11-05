@@ -236,7 +236,7 @@ export interface Definition<
  *     const summaries = yield* AccountSummary;
  *     return Effect.fn(function* ({ account }, page) {
  *       const actor = yield* CurrentActor;
- *       const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
+ *       const summary = yield* summaries.get(Account.ref(account)).pipe(Effect.orDie);
  *       const owner = Option.getOrNull(summary)?.customerId;
  *       if (owner && owner !== actor.customerId) return yield* new NotOwner();
  *       return yield* store.forAccount(account, page);

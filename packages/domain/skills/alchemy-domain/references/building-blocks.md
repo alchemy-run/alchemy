@@ -356,7 +356,7 @@ export const AccountLedgerLive = AccountLedger.toLayer(
     const store = yield* LedgerStore;           // resolved once
     const summaries = yield* AccountSummary;    // model members too
     return Effect.fn(function* ({ account }, page) {   // page: { after, take }
-      const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
+      const summary = yield* summaries.get(Account.ref(account)).pipe(Effect.orDie);
       yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);   // fail with a declared rejection
       return yield* store.forAccount(account, page);
     });

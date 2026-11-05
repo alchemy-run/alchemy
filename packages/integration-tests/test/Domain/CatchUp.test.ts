@@ -215,7 +215,7 @@ const deposit = (id: string, amount: number) =>
 const amounts = (id: string) =>
   Effect.gen(function* () {
     const view = yield* Deposits;
-    return Option.getOrUndefined(yield* view.query(Account.ref(id)))?.amounts;
+    return Option.getOrUndefined(yield* view.get(Account.ref(id)))?.amounts;
   });
 
 describe("Domain catch-up", { tags: ["unit", "local"] }, () => {
@@ -247,7 +247,7 @@ describe("Domain catch-up", { tags: ["unit", "local"] }, () => {
           Effect.gen(function* () {
             yield* bank.settle;
             const view = yield* WideActivityV1;
-            return Option.getOrUndefined(yield* view.query("all"))?.entries;
+            return Option.getOrUndefined(yield* view.get("all"))?.entries;
           }),
         );
         expect([...(entries ?? [])].sort()).toEqual(["deposit 10", "log opened"]);
@@ -325,7 +325,7 @@ describe("Domain catch-up", { tags: ["unit", "local"] }, () => {
           Effect.andThen(
             Effect.gen(function* () {
               const view = yield* DepositsV1;
-              return Option.getOrUndefined(yield* view.query(Account.ref("a-1")))?.amounts;
+              return Option.getOrUndefined(yield* view.get(Account.ref("a-1")))?.amounts;
             }),
           ),
         ),
@@ -447,7 +447,7 @@ describe("Domain catch-up", { tags: ["unit", "local"] }, () => {
       const doubled = (id: string) =>
         Effect.gen(function* () {
           const view = yield* DoubledDeposits;
-          return Option.getOrUndefined(yield* view.query(Account.ref(id)))?.amounts;
+          return Option.getOrUndefined(yield* view.get(Account.ref(id)))?.amounts;
         });
       // Redefined but not rebuilt: only new deposits are doubled, after the old state.
       const stale = yield* bank.deploy(
@@ -464,11 +464,11 @@ describe("Domain catch-up", { tags: ["unit", "local"] }, () => {
         Effect.gen(function* () {
           const view = yield* DoubledDepositsV1;
           expect((yield* view.history).complete).toBe(true);
-          const first = Option.getOrUndefined(yield* view.query(Account.ref("a-1")))?.amounts;
+          const first = Option.getOrUndefined(yield* view.get(Account.ref("a-1")))?.amounts;
           expect(first).toEqual([2, 4, 6]);
           yield* deposit("a-1", 4);
           yield* bank.settle;
-          return Option.getOrUndefined(yield* view.query(Account.ref("a-1")))?.amounts;
+          return Option.getOrUndefined(yield* view.get(Account.ref("a-1")))?.amounts;
         }),
       );
       expect(rebuilt).toEqual([2, 4, 6, 8]);

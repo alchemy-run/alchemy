@@ -158,7 +158,7 @@ const WalletMovementsLive = WalletMovements.toLayer(
     const owners = yield* WalletOwner;
     return Effect.fn(function* ({ wallet }, page) {
       const viewer = yield* Viewer;
-      const owner = Option.getOrNull(yield* owners.query(Wallet.ref(wallet)).pipe(Effect.orDie));
+      const owner = Option.getOrNull(yield* owners.get(Wallet.ref(wallet)).pipe(Effect.orDie));
       if (owner && owner.owner !== viewer) return yield* new NotYours({ wallet });
       return yield* movements.page((row) => row.wallet === wallet, page);
     });
@@ -641,7 +641,7 @@ describe("Domain Query through Foldkit", { tags: ["unit", "local"] }, () => {
       const opened = yield* wallets.send(sam, new Open({ owner: "sam" }));
       // The handler reads this view: wait for it so the refusal is certain.
       const owners = yield* WalletOwner;
-      yield* owners.query(sam, { atLeast: opened }).pipe(Effect.orDie);
+      yield* owners.get(sam, { atLeast: opened }).pipe(Effect.orDie);
       const rejected = yield* Wallets$.WalletMovements({
         input: { wallet: "sam-1" },
         requestId: "q:3",

@@ -243,7 +243,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
 
         // The write reached the domain: the aggregate and the view read it back.
         const wallets = yield* Wallet;
-        expect((yield* wallets.state(Wallet.ref("w-1"))).balance).toBe(40);
+        expect((yield* wallets.get(Wallet.ref("w-1"))).balance).toBe(40);
         const get = yield* run(asSam, [
           "balance",
           "get",
@@ -328,7 +328,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
         expect(missing.code).toBe(1);
         expect(missing.stderr).toContain("target");
         const wallets = yield* Wallet;
-        expect((yield* wallets.state(Wallet.ref("w-1"))).balance).toBe(0);
+        expect((yield* wallets.get(Wallet.ref("w-1"))).balance).toBe(0);
       }),
     ),
   );
