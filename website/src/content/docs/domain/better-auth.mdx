@@ -2,16 +2,15 @@
 title: Sign in with better-auth
 description: Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
 ---
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 [better-auth](https://better-auth.com) signs users in with GitHub, Google and many other providers, and keeps their sessions in your database. A Domain Api reads that session in middleware, so every command and view knows who is asking.
 
-This page builds a small notes app on Cloudflare, with a [foldkit](https://foldkit.dev) UI: users sign in with GitHub or Google and write notes only they can read. The whole app is in [`examples/cloudflare-domain-better-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth).
+Take a small notes app on Cloudflare, with a [foldkit](https://foldkit.dev) UI: users sign in with GitHub or Google and write notes only they can read. The whole app is in [`examples/cloudflare-domain-better-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth).
 
 ## Install
 
-```sh
-bun add @alchemy.run/domain @alchemy.run/better-auth @alchemy.run/cloudflare better-auth
-```
+<PackageManagers add="@alchemy.run/domain @alchemy.run/better-auth @alchemy.run/cloudflare better-auth" />
 
 ## Declare who is asking
 
@@ -330,10 +329,7 @@ The Notes Worker serves better-auth's routes under `/api/auth` and the NotesApi 
 
 ## Install foldkit
 
-```sh
-bun add foldkit @effect/platform-browser
-bun add -d vite @foldkit/vite-plugin
-```
+<PackageManagers add="foldkit @effect/platform-browser" dev="vite @foldkit/vite-plugin" />
 
 ## Configure Vite
 
@@ -676,9 +672,7 @@ Keep `.env` out of source control. For production, register the deployed app's c
 
 ## Run it
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 Open the app's URL, sign in with GitHub or Google, and write a note.
 

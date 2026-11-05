@@ -9,7 +9,7 @@ A policy is one of the business's standing rules about what to do when something
 
 The name comes from business policy, and that's the point: a policy doesn't just react, it decides. It's triggered by an event, works out whether and how to act, and acts by sending commands to aggregates or calling systems outside the model.
 
-That's a different kind of rule from an aggregate's. An aggregate enforces invariants, which must hold the instant a command commits and can refuse it. A policy applies a procedure, which runs after the event and decides what happens next. This chapter covers how to find the policies in a business, how to declare and implement one, and the one property every policy must have, which is that running it twice does no harm.
+That's a different kind of rule from an aggregate's. An aggregate enforces invariants, which must hold the instant a command commits and can refuse it. A policy applies a procedure, which runs after the event and decides what happens next. Every policy must have one property: running it twice does no harm.
 
 ## Find the policies in your business
 

@@ -2,6 +2,7 @@
 title: Cloudflare Durable Objects
 description: Host a domain model on Durable Objects behind a Worker, with live reads over WebSockets.
 ---
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 Host your model on Cloudflare, and every aggregate instance, view key and policy gets its own Durable Object. You declare none of them yourself.
 
@@ -125,11 +126,9 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
-`bun alchemy dev` runs the same Worker and Durable Objects on your machine.
+`alchemy dev` runs the same Worker and Durable Objects on your machine.
 
 ## Know what runs where
 

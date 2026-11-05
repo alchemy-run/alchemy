@@ -23,13 +23,13 @@ class CaptureStream extends PassThrough {
   }
 }
 
-const nonInteractive = (stdout: CaptureStream) =>
-  layerNonInteractive({ stdout: stdout as unknown as NodeJS.WriteStream });
+const nonInteractive = (stderr: CaptureStream) =>
+  layerNonInteractive({ stderr: stderr as unknown as NodeJS.WriteStream });
 
 it(
   "prints plain status lines and fails prompts typed",
   () => {
-    const stdout = new CaptureStream();
+    const stderr = new CaptureStream();
     return Effect.gen(function* () {
       const interaction = yield* Interaction;
       yield* interaction.output.info({ message: "plain info", detail: "extra" });
@@ -38,11 +38,11 @@ it(
       expect(failure._tag).toBe("NonInteractiveTerminal");
       const selection = yield* Effect.flip(select({ message: "pick", options: [] }));
       expect(selection._tag).toBe("NonInteractiveTerminal");
-      const lines = stdout.output.split("\n");
+      const lines = stderr.output.split("\n");
       expect(lines[0]).toContain("plain info");
       expect(lines[0]).toContain("· extra");
       expect(lines[1]).toContain("plain success");
-    }).pipe(Effect.provide(nonInteractive(stdout)));
+    }).pipe(Effect.provide(nonInteractive(stderr)));
   },
   { tags: ["unit", "local"] },
 );
@@ -50,7 +50,7 @@ it(
 it(
   "task prints a start line and settles with a status line",
   () => {
-    const stdout = new CaptureStream();
+    const stderr = new CaptureStream();
     return Effect.gen(function* () {
       const interaction = yield* Interaction;
       yield* interaction.task({ label: "working", detail: "step" }, Effect.void);
@@ -58,13 +58,13 @@ it(
         interaction.task({ label: "breaking" }, Effect.fail("boom")),
       );
       expect(failed._tag).toBe("Failure");
-      const lines = stdout.output.trimEnd().split("\n");
+      const lines = stderr.output.trimEnd().split("\n");
       expect(lines[0]).toContain("working");
       expect(lines[0]).toContain("· step");
       expect(lines[1]).toContain("working");
       expect(lines[2]).toContain("breaking");
       expect(lines[3]).toContain("breaking");
-    }).pipe(Effect.provide(nonInteractive(stdout)));
+    }).pipe(Effect.provide(nonInteractive(stderr)));
   },
   { tags: ["unit", "local"] },
 );

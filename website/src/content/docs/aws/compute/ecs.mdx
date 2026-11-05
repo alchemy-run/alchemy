@@ -1,185 +1,47 @@
 ---
 title: ECS
-description: Run containers on AWS with ECS and Fargate — Task definitions that run to completion, Services that keep containers running behind a load balancer, with images bundled from an Effect program, built from your Dockerfile, or mirrored from a registry.
+description: How ECS runs containers on Fargate through clusters, task definitions, tasks and services, and how to run a server, a one-off job or a scheduled job from an image, a Dockerfile or an Effect program.
 ---
 
-**ECS** (Elastic Container Service) is AWS's managed container
-orchestrator: you describe a container — image, CPU, memory — and
-ECS runs it. With **Fargate**, AWS also provides the machines, so
-there are no servers to manage.
+import DAG from "../../../../components/DAG.astro";
 
-ECS has four primitives:
+ECS runs containers. You describe a container, its image, CPU and memory, and ECS keeps it running. With **Fargate**, AWS also provides the machines underneath, so there are no servers to patch or scale.
 
-- A **Cluster** is the space your containers run in.
-- A **Task Definition** is the blueprint: which image, how much
-  CPU and memory, which IAM roles, which ports.
-- A **Task** is a running container launched from a Task
-  Definition. It runs until its process exits.
-- A **Service** keeps a set number of Tasks running — restarting
-  ones that stop, optionally routing traffic to them through a
-  load balancer.
+A container is a whole process, so it fits work that doesn't fit an invocation: a server that holds WebSockets or database connections open, a worker that loops forever, a job that runs for hours, a program that already ships as an image.
 
-Alchemy models these directly:
-[`Cluster`](/providers/aws/ecs/cluster),
-[`Task`](/providers/aws/ecs/task) — a task definition plus
-everything needed to build and publish its image — and
-[`Service`](/providers/aws/ecs/service). Each can run a plain
-container image, or an Effect program that Alchemy bundles into
-one.
+## Clusters, task definitions, tasks and services
 
-## Run a Task
+A **task definition** is a blueprint: which image, how much CPU and memory, which ports, which IAM role. A **task** is a running container started from it, and it runs until its process exits. A **service** keeps a number of tasks running, replaces any that stop, and optionally puts a load balancer in front of them. All of them run in a **cluster**.
 
-The simplest `Task` runs a pre-built registry image — no Effect
-runtime in the container:
+<DAG
+  nodes={[
+    { id: "def", label: "task definition", type: "image · cpu · role", col: 0, row: 0 },
+    { id: "t1", label: "task", type: "running", tone: "accent", col: 1, row: 0 },
+    { id: "t2", label: "task", type: "running", tone: "accent", col: 1, row: 1 },
+    { id: "alb", label: "load balancer", type: "HTTP", col: 2, row: 0 },
+  ]}
+  groups={[
+    { id: "cluster", label: "Cluster", nodes: [] },
+    { id: "svc", label: "Service · desiredCount: 2", parent: "cluster", nodes: ["t1", "t2"], dashed: true },
+  ]}
+  edges={[
+    { from: "def", to: "svc", label: "runs" },
+    { from: "alb", to: "t1" },
+    { from: "alb", to: "t2" },
+  ]}
+  caption="A Service in a cluster keeps tasks running from a task definition. The load balancer spreads requests across them."
+/>
 
-```typescript
-// alchemy.run.ts
-import * as AWS from "@alchemy.run/aws";
+In Alchemy, `AWS.ECS.Task` is a task definition together with everything that builds its image, and `AWS.ECS.Service` keeps tasks running, with or without a Task of its own.
 
-const migrate = yield* AWS.ECS.Task("DbMigrate", {
-  image: "public.ecr.aws/docker/library/busybox:stable",
-  command: ["sh", "-c", "echo done"],
-  cpu: 256,
-  memory: 512,
-});
-```
+## Run a server from an image
 
-Deploying a `Task` automates the container supply chain:
-Alchemy provisions the **task and execution IAM roles**, a
-**CloudWatch log group**, and a **generated ECR repository**
-holding the image, then registers a Fargate task definition. Each
-deploy registers a new immutable revision.
+Declare a cluster, then a Service that runs an image. `loadBalancer: true` puts a public Application Load Balancer in front of it:
 
-The log group keeps events forever by default. Set
-`logging: { retention: "2 weeks" }` on a `Task` or `Service` to
-expire them; the duration is rounded up to the nearest value
-CloudWatch Logs supports, and `"forever"` clears an existing policy.
-
-## Three image sources
-
-The image comes from exactly one of three sources, flat on the
-props:
-
-- `image` — run a pre-built registry reference, mirrored into ECR
-  (pull → tag → push, content-addressed).
-- `context` — build your own Dockerfile with your
-  [local Docker](/docker/setup). `dockerfile` is always a **path**,
-  defaulting to `${context}/Dockerfile`:
-
-  ```typescript
-  const render = yield* AWS.ECS.Task("RenderJob", {
-    context: "./render",
-    dockerfile: "./render/Dockerfile.gpu",
-    cpu: 1024,
-    memory: 4096,
-  });
-  ```
-
-- `main` — bundle an inline Effect program into a generated image.
-  Compose with `image` to pick the environment base (default
-  `oven/bun:1`), or with an inline `dockerfile`
-  (`Dockerfile.inline`) when the environment needs extra build
-  steps.
-
-:::tip
-`runtimePlatform.cpuArchitecture` picks the architecture the task
-runs on in Fargate (default `X86_64`). Alchemy builds or mirrors
-the image for whatever the task definition declares, regardless of
-the machine you build on. Declaring `"ARM64"` runs the task on
-Graviton — cheaper per vCPU, and image builds happen to be native
-(no emulation) on Apple Silicon machines.
-:::
-
-## Run an Effect program in a Task
-
-Pass `main: import.meta.url` and a constructor Effect whose impl
-returns `{ run }` — the program runs to completion when the
-container starts, then the container exits. Bindings work exactly
-as on Lambda, attaching environment variables and IAM policy
-statements to the task:
-
-```typescript
-const drainer = yield* AWS.ECS.Task(
-  "QueueDrainer",
-  { main: import.meta.url, image: "oven/bun:1", cpu: 256, memory: 512 },
-  Effect.gen(function* () {
-    const receive = yield* AWS.SQS.ReceiveMessage(queue);
-    return {
-      run: Effect.gen(function* () {
-        // runs to completion, then the container exits
-        const batch = yield* receive({ MaxNumberOfMessages: 10 });
-      }),
-    };
-  }),
-);
-```
-
-The tagged form
-(`class Reindexer extends AWS.ECS.Task<Reindexer, Shape>()("Reindexer") {}`
-+ `Reindexer.make(props, impl)`) works exactly as it does on
-Lambda and Cloudflare Workers.
-
-## Invoke and schedule Tasks
-
-A `Task` is the target of the ECS control-plane bindings. From a
-Lambda function, a Service, or any other host, bind
-[`RunTask`](/providers/aws/ecs/runtask) in the **Construction phase** —
-this grants the host `ecs:RunTask` plus `iam:PassRole` on the
-task's roles — then call it from a handler at **runtime**, where
-the cluster and task definition ARNs are injected automatically:
-
-```typescript
-const api = yield* AWS.Lambda.Function(
-  "Api",
-  { main: import.meta.url, functionUrl: true },
-  Effect.gen(function* () {
-    // Construction: bind the launch (IAM grants happen here)
-    const runTask = yield* AWS.ECS.RunTask(cluster, task);
-
-    return {
-      fetch: Effect.gen(function* () {
-        // runtime: launch a task per request
-        const response = yield* runTask({
-          launchType: "FARGATE",
-          networkConfiguration: {
-            awsvpcConfiguration: { subnets: [subnetId] },
-          },
-        });
-        return yield* HttpServerResponse.json({
-          taskArn: response.tasks?.[0]?.taskArn,
-        });
-      }),
-    };
-  }),
-);
-```
-
-For cron-style execution, `AWS.ECS.every` provisions an
-EventBridge rule (plus the invoke role) that runs the task on a
-schedule — plain-English durations normalize to `rate(...)`, and
-`cron(...)` expressions pass through as-is:
-
-```typescript
-yield* AWS.ECS.every("NightlyJob", "cron(0 3 * * ? *)", {
-  cluster,
-  task: nightlyTask,
-  subnets: [privateSubnet1.subnetId, privateSubnet2.subnetId],
-  securityGroups: [jobSecurityGroup.groupId],
-});
-```
-
-## Keep a server running with a Service
-
-A `Service` keeps `desiredCount` copies of a container alive.
-It takes the same three image sources as `Task` — synthesizing
-its own task definition — and `loadBalancer: true` provisions a
-public **Application Load Balancer**, target group, and listener
-in front of it:
-
-```typescript
+```typescript title="alchemy.run.ts"
 const cluster = yield* AWS.ECS.Cluster("AppCluster", {});
 
-const nginx = yield* AWS.ECS.Service("Edge", {
+const web = yield* AWS.ECS.Service("Web", {
   cluster,
   image: "public.ecr.aws/nginx/nginx:1.27",
   port: 80,
@@ -187,135 +49,112 @@ const nginx = yield* AWS.ECS.Service("Edge", {
   loadBalancer: true,
 });
 
-return { url: nginx.url }; // http://<alb-dns-name>
+return { url: web.url };
 ```
 
-Networking is optional to start: when `vpcId`/`subnets` are
-omitted the account's **default VPC** (and its per-AZ subnets) is
-used, and when `securityGroups` is omitted with
-`loadBalancer: true`, Alchemy provisions a security group that
-admits the listener port. For a real deployment, build a
-dedicated VPC with the [`Network`](/providers/aws/ec2/network)
-helper and pass `vpcId` + `subnets` — see
-[VPC & networking](/aws/networking).
+Deploy copies the image into a repository in your account, creates the task's roles and log group, registers the task definition, and starts two tasks behind the load balancer. Without `vpcId` and `subnets`, the tasks run in your account's default VPC. Give them a network of your own for production. See [VPC & networking](/aws/networking).
 
-An effectful `Service` is the server counterpart: where a `Task`
-impl returns `{ run }`, a `Service` impl returns `{ fetch }`:
+## Run your own program
 
-```typescript
+Give the Service `main` and an Effect, and Alchemy builds an image from your program. The program returns a `fetch` handler, and binds what it uses exactly as a Lambda Function does:
+
+```typescript title="alchemy.run.ts"
 const api = yield* AWS.ECS.Service(
   "Api",
-  { cluster, main: import.meta.url, port: 3000, desiredCount: 2, cpu: 256, memory: 512 },
+  { cluster, main: import.meta.url, port: 3000, desiredCount: 2, cpu: 256, memory: 512, loadBalancer: true },
   Effect.gen(function* () {
-    const putItem = yield* AWS.DynamoDB.PutItem(table);
+    const putItem = yield* AWS.DynamoDB.PutItem(Items);
     return {
-      fetch: Effect.gen(function* () {
-        return yield* HttpServerResponse.json({ ok: true });
-      }),
+      fetch: Effect.succeed(HttpServerResponse.json({ ok: true })),
     };
   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
 );
 ```
 
-## Reuse a Task's definition
+Each binding adds its statement to the **task role**, the role the container runs as, and its environment variables to the container.
 
-A `Service` can also deploy an existing `Task`'s definition
-instead of owning an image — shared image, roles, and config; the
-Service adds `desiredCount`, load balancing, and deployment
-configuration:
+The image comes from one of three places: `image`, an image from any registry, copied into your account; `context`, your own Dockerfile, built with your local Docker; or `main`, your Effect program, bundled into a base image, `oven/bun:1` unless you set `image`. Images are built for the architecture the task runs on. Set `runtimePlatform: { cpuArchitecture: "ARM64" }` to run on Graviton, which costs less per vCPU.
 
-```typescript
-const api = yield* AWS.ECS.Service("Api", {
-  cluster,
-  task: apiTask,
-  desiredCount: 2,
-  loadBalancer: true,
+## Run a job to completion
+
+A Task on its own runs until its process exits. Give it a `run` Effect instead of `fetch`:
+
+```typescript title="alchemy.run.ts"
+const reindex = yield* AWS.ECS.Task(
+  "Reindex",
+  { main: import.meta.url, cpu: 1024, memory: 2048 },
+  Effect.gen(function* () {
+    const scan = yield* AWS.DynamoDB.Scan(Items);
+    return {
+      run: Effect.gen(function* () {
+        const page = yield* scan({});
+        yield* Effect.log(`reindexing ${page.Count} items`);
+      }),
+    };
+  }).pipe(Effect.provide(AWS.DynamoDB.ScanHttp)),
+);
+```
+
+Start it from another runtime by binding `ECS.RunTask`, which grants permission to run that task and pass its roles:
+
+```typescript title="src/api.ts"
+const runTask = yield* AWS.ECS.RunTask(cluster, reindex);
+yield* runTask({
+  launchType: "FARGATE",
+  networkConfiguration: { awsvpcConfiguration: { subnets: network.privateSubnetIds } },
 });
 ```
 
-Most service configuration — desired count, task definition
-revision, network config, deployment settings, load balancers —
-updates **in place** as a rolling deployment; only truly
-immutable aspects (service name, cluster, scheduling strategy,
-deployment controller type, switching between `launchType` and
-`capacityProviderStrategy`) replace the service. For
-cost-sensitive workers, swap `launchType` (default `"FARGATE"`)
-for a `capacityProviderStrategy` mixing `FARGATE_SPOT` and
-`FARGATE` — see the
-[`Service` reference](/providers/aws/ecs/service) for the
-placement, deployment, and Service Connect knobs.
+## Run a job on a schedule
 
-## Run background work
+`ECS.every` runs a Task on a rate or a cron expression, with the role the schedule needs to start it:
 
-Containers are always-on, so an effectful container can do more
-than answer requests. Yield `ServerHost` and register
-long-running loops with `host.run` — they execute alongside the
-HTTP handler for the life of the container:
-
-```diff lang="typescript"
-import * as AWS from "@alchemy.run/aws";
-+import { ServerHost } from "alchemy/Runtime/Process";
-import * as Effect from "effect/Effect";
-+import * as Schedule from "effect/Schedule";
-
-  Effect.gen(function* () {
-+    const host = yield* ServerHost;
-+
-+    yield* host.run(
-+      Effect.log("heartbeat").pipe(
-+        Effect.repeat(Schedule.spaced("30 seconds")),
-+        Effect.asVoid,
-+      ),
-+    );
-+
-    return {
-      fetch: Effect.gen(function* () {
-        // ...
-      }),
-    };
-  }),
+```typescript title="alchemy.run.ts"
+yield* AWS.ECS.every("NightlyReindex", "cron(0 3 * * ? *)", {
+  cluster,
+  task: reindex,
+  subnets: network.privateSubnetIds,
+  securityGroups: [jobs.groupId],
+});
 ```
 
-Use this for polling loops, queue drainers, or connections that
-stay open across requests.
+See [EventBridge & Scheduler](/aws/messaging/eventbridge#schedule-containers).
 
-## Process scope vs request scope
+## Do work in the background
 
-An ECS container is a **real process**, and its instance scope
-reflects that: the bundled program runs under a root scope that
-closes when the process shuts down gracefully, so resources
-acquired in the constructor — the connection a `host.run` loop holds open, a
-warm pool shared across requests — are genuinely released on exit.
-Serverless runtimes only approximate this: workerd never closes
-its instance scope at all, and Lambda gets a best-effort 500 ms
-SIGTERM window; a server gets a real graceful shutdown (a hard
-kill still skips finalizers, as in any process).
+A container is always running, so it can do more than answer requests. Register a loop with `ServerHost`, and it runs alongside the `fetch` handler for the life of the container:
 
-Each HTTP request still gets its own request `Scope`, released when
-the response settles — the same per-event contract as every other
-runtime. See
-[Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope)
-for the model across all runtimes.
+```typescript title="alchemy.run.ts"
+Effect.gen(function* () {
+  const host = yield* ServerHost;
+  yield* host.run(Effect.log("heartbeat").pipe(Effect.repeat(Schedule.spaced("30 seconds")), Effect.asVoid));
+  return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+});
+```
 
-## Bindings
+Use it for polling, draining a queue, or a connection that stays open across requests.
 
-`Task` and `Service` declare the same binding contract as a
-Lambda `Function`: bindings attach **environment variables and
-IAM policy statements**, which Alchemy folds into the container
-environment and the task role. The ECS control-plane bindings
-(`RunTask`, `StopTask`, `ListTasks`, `DescribeTasks`) work from
-Lambda functions and from other containers — useful for a
-function that fans work out to containers.
+## Process scope and request scope
 
-## Where next
+A container is a real process. What Construction acquires, a pool or a connection, lives until the process shuts down, and its finalizers run when ECS stops the task gracefully. Each request still gets its own `Scope`, closed when the response is sent.
 
-- [Choosing a runtime](/aws/compute/choosing-a-runtime) — when Lambda,
-  EKS, or EC2 fits better than ECS.
-- [VPC & networking](/aws/networking) — what the `Network`
-  helper creates, and the primitives underneath it.
-- [EKS](/aws/compute/eks) — the same platform model on managed
-  Kubernetes.
-- [`Task` reference](/providers/aws/ecs/task),
-  [`Service` reference](/providers/aws/ecs/service),
-  [`Cluster` reference](/providers/aws/ecs/cluster) — every prop
-  and attribute.
+This is the main difference from Lambda, where an environment can be frozen between invocations and its finalizers only get a moment at shutdown. See [Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope).
+
+## Deploy changes
+
+Each deploy registers a new revision of the task definition. The Service then replaces its tasks with ones from the new revision, a few at a time, so it keeps serving. Changes to the count, the network, the load balancer and deployment settings apply the same way.
+
+A few changes can't be applied to a running service, like its name or its cluster. Those replace the Service.
+
+## Pay less for workers
+
+Tasks cost the same whether busy or idle. For work that can be interrupted, run on **Fargate Spot**, AWS's spare capacity at a steep discount, with a share on regular Fargate so the service never disappears entirely:
+
+```typescript title="alchemy.run.ts"
+capacityProviderStrategy: [
+  { capacityProvider: "FARGATE_SPOT", weight: 3 },
+  { capacityProvider: "FARGATE", weight: 1, base: 1 },
+],
+```
+
+A Spot task gets two minutes' notice before it's stopped, so keep its work resumable.

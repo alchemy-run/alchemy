@@ -92,7 +92,8 @@ export const serveRailwayRpc = <Req = never>(
     if (queryAt !== -1) name = name.slice(0, queryAt);
     name = decodeURIComponent(name);
 
-    const method = shape[name];
+    // Never `Object.prototype` members (`constructor`, `__proto__`, ...).
+    const method = name in Object.prototype ? undefined : shape[name];
     if (typeof method !== "function") {
       return HttpServerResponse.text(`Unknown RPC method "${name}"`, {
         status: 404,

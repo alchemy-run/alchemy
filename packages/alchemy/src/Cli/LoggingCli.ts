@@ -259,7 +259,7 @@ export const LoggingCli = Layer.effect(
           const notes = new Map<string, string>();
           const statusNotes = new Map<string, string>();
           return {
-            setOutput: (value: unknown) => present(inspect(value, { colors: false })),
+            setOutput: (value: unknown) => present(inspect(value, { colors: false, depth: null })),
             // Presents the apply events (which are already log records) as
             // lines shaped like log lines, so the plain output reads as one
             // stream.

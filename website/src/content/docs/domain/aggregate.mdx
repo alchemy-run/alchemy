@@ -7,8 +7,6 @@ import DAG from "../../../components/DAG.astro";
 
 An aggregate is the part of a model that makes decisions. Each instance, one bank account for example, holds the state its rules need, takes one command at a time, and answers with events or a refusal.
 
-This chapter starts with what an aggregate is for and how to find one, then builds the account from the [tutorial](/domain/tutorial/part-1) piece by piece: its state, how it decides, how it applies what it decided, and what makes it safe under concurrent use. It ends with how to draw an aggregate's boundary.
-
 ## What an aggregate protects
 
 Every business has rules that must never be broken, not even for a moment. An account's balance never goes below zero. A username belongs to at most one customer. A transfer is either approved or expired, never both. DDD calls these **invariants**, and an aggregate is the thing that keeps one true.
