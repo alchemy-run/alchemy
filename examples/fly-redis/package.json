@@ -18,7 +18,6 @@
   },
   "dependencies": {
     "@alchemy.run/fly": "workspace:*",
-    "@alchemy.run/redis": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",

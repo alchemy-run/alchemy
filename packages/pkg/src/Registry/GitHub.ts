@@ -312,12 +312,6 @@ const make = Effect.gen(function* () {
   };
 });
 
-// TODO(typescript>7.1.0): TypeScript 7.1 reports TS2883 here (the inferred
-// type "cannot be named without a reference to 'InvalidInput'" from
-// @distilled.cloud/core) unless this package depends on @distilled.cloud/core
-// directly, so it was added to package.json. To revert, remove that
-// dependency, `pnpm install`, and check that `pnpm exec tsrs -b` passes this
-// file.
 export class GitHubApp extends Context.Service<GitHubApp, Effect.Success<typeof make>>()(
   "@alchemy.run/pkg/GitHubApp",
 ) {}

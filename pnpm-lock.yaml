@@ -4252,9 +4252,6 @@ importers:
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../../packages/fly
-      '@alchemy.run/redis':
-        specifier: workspace:*
-        version: link:../../packages/redis
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -5120,9 +5117,6 @@ importers:
       '@alchemy.run/gcp':
         specifier: workspace:*
         version: link:../../packages/gcp
-      '@alchemy.run/redis':
-        specifier: workspace:*
-        version: link:../../packages/redis
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -7772,9 +7766,6 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:../../packages/railway
-      '@alchemy.run/redis':
-        specifier: workspace:*
-        version: link:../../packages/redis
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -10661,9 +10652,6 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/core
       '@distilled.cloud/github':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/github

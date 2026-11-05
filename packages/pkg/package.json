@@ -77,7 +77,6 @@
   },
   "dependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
-    "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/github": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
