@@ -29,7 +29,7 @@ Take one small app: a Worker that stores uploads in R2, counts visits in a Durab
     { from: "profile", to: "account", label: "deploy" },
     { from: "domain", to: "worker", label: "routes to" },
     { from: "worker", to: "r2", label: "binding" },
-    { from: "worker", to: "roomA", label: "binding" },
+    { from: "worker", to: "rooms", label: "binding" },
     { from: "worker", to: "queue", label: "binding" },
     { from: "queue", to: "consumer", dashed: true },
   ]}

@@ -372,6 +372,12 @@ const groupEdge = (e: EdgeIn, box: Box): Edge => {
   }
   const y = a.y + a.h / 2;
   const [x1, x2] = box.x > a.x ? [a.x + NODE_W, box.x - TIP] : [a.x, box.x + box.w + TIP];
+  if (y < box.y || y > box.y + box.h) {
+    // Beside the group but above or below it: an elbow down or up, then across into its side.
+    const by = box.y + box.h / 2;
+    const y1 = by > y ? a.y + a.h : a.y;
+    return { d: `M ${x} ${y1} L ${x} ${by} L ${x2} ${by}`, midX: (x + x2) / 2, midY: by, label: e.label, dashed: e.dashed };
+  }
   return { d: `M ${x1} ${y} L ${x2} ${y}`, midX: (x1 + x2) / 2, midY: y, label: e.label, dashed: e.dashed };
 };
 

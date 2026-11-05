@@ -191,7 +191,9 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
   tokens, go inside its box (`specs`), not in boxes of their own with arrows.
 - **Draw the platform's real model, in full.** An AWS organization is a tree of
   OUs with policies flowing down, not four accounts in a box. GCP's VPC is
-  global and its subnets are regional.
+  global and its subnets are regional. An edge goes to what it really targets: a Worker binds
+  a Durable Object *namespace*, so the binding arrow ends on the namespace's
+  border (a DAG edge can target a group id), never on one object inside it.
 - **Never a table of text in boxes.** `Phases` (a grid of sentences) and `Matrix`
   (an allowed/denied truth table) were built, rejected and deleted. When a kind
   of visual is rejected, delete the component and its rows here, not just the
