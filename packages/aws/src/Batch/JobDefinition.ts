@@ -12,7 +12,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
@@ -394,7 +394,8 @@ export const JobDefinition: Platform<
   JobDefinitionServices,
   JobDefinitionShape,
   JobDefinitionRuntimeContext
-> = Platform("AWS.Batch.JobDefinition", {
+> &
+  LookupMethod<JobDefinition> = Platform("AWS.Batch.JobDefinition", {
   createRuntimeContext: createJobDefinitionRuntimeContext,
 });
 

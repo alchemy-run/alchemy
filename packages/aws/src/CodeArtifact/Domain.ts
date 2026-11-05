@@ -113,7 +113,7 @@ export const DomainProvider = () =>
       const toName = (id: string, props: Partial<DomainProps>) =>
         props.domainName
           ? Effect.succeed(props.domainName)
-          : createPhysicalName({ id, maxLength: 50 });
+          : createPhysicalName({ id, maxLength: 50, lowercase: true });
 
       const getDomain = Effect.fn(function* (name: string) {
         const response = yield* codeartifact
