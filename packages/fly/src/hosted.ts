@@ -206,9 +206,12 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
   const buckets: { name: string; id?: string; values?: Record<string, string> }[] = [];
   const postgres: { clusterId: string; variableName?: string }[] = [];
   const targets: BoundTarget[] = [];
+  const callers = new Set<string>();
   for (const binding of active) {
     const target = binding?.data?.target;
     if (target !== undefined) targets.push(target);
+    const caller = coerceBindingName(binding?.data?.caller?.appName);
+    if (caller !== undefined) callers.add(caller);
     for (const mount of binding?.data?.mounts ?? []) {
       if (seen.has(mount.path)) continue;
       seen.add(mount.path);
@@ -262,7 +265,7 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
       });
     }
   }
-  return { env, mounts, redis, buckets, postgres, targets };
+  return { env, mounts, redis, buckets, postgres, targets, callers: [...callers].sort() };
 };
 
 /**
