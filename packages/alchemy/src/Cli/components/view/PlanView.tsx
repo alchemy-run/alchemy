@@ -108,7 +108,7 @@ export function Plan(props: PlanProps): JSX.Element {
   const keyGlyphs = useKeyGlyphs();
   const borderStyle = useBorderStyle();
   const state = usePlanTree(tree);
-  const { tasks, label, viewport, busy } = state;
+  const { tasks, label, viewport, busy, elapsedMs } = state;
   const {
     progress: { completed, total: workRows },
     collapsed,
@@ -150,6 +150,7 @@ export function Plan(props: PlanProps): JSX.Element {
         ) : null}
         <SectionHeading>{label}</SectionHeading>
         <Text tone="muted">{workRows === 0 ? "" : ` (${completed}/${workRows})`}</Text>
+        {elapsedMs === undefined ? null : <Text tone="muted"> ({formatElapsed(elapsedMs)})</Text>}
       </>
     ) : null;
   const planSummary =
