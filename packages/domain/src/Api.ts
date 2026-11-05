@@ -39,7 +39,7 @@ import * as Model from "./Model.ts";
 import { captureContext, type StreamStore, type Subscription, type ViewStore } from "./Platform.ts";
 import type * as Query from "./Query.ts";
 import type * as Read from "./Read.ts";
-import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
+import { nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
@@ -586,17 +586,14 @@ const handlersOf = (
           );
         }
         const declared = declaredOnly(entry.rpc);
-        // Runs inside the query's middleware, so `validate`, `visible` and the
-        // handler read the context it provides.
+        // Runs inside the query's middleware, so the handler reads the context it provides.
         handlers[entry.queryName] = ({ input, after, take, atLeast }: QueryPayload) =>
           declared.effect(query.run(input, { after, take, atLeast }));
         continue;
       }
       const name = nameOf(entry);
       const rpcs = readRpcs(entry);
-      const validate = contractOf(entry).validate as
-        | ((request: Read.Request<unknown>, state: unknown) => Effect.Effect<void, unknown>)
-        | undefined;
+      const validate = internals.validators.get(name);
       const check = (mode: Read.Mode, key: unknown) => (state: unknown) =>
         validate ? validate({ mode, key }, state) : Effect.void;
       const effect =

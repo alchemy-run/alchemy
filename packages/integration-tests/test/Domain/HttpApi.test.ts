@@ -94,12 +94,18 @@ class Balance extends Domain.View(
     state: Schema.Struct({ owner: Schema.String, balance: Schema.Int }),
     initial: { owner: "", balance: 0 },
     evolve: { Deposited: (s, e) => ({ owner: e.owner, balance: s.balance + e.amount }) },
-    validate: Effect.fn(function* (_request, s) {
-      if (s !== null && s.owner !== (yield* Owner)) return yield* new NotOwner();
-    }),
   },
   { httpApiCacheControl: "private, max-age=5" },
 ) {}
+
+/** Who may read each key of Balance. */
+const BalanceLive = Balance.toLayer(
+  Effect.succeed({
+    validate: Effect.fn(function* (_request, s) {
+      if (s !== null && s.owner !== (yield* Owner)) return yield* new NotOwner();
+    }),
+  }),
+);
 
 // ---------------------------------------------------------------- the HTTP surface
 
@@ -205,7 +211,7 @@ const Hosted = Layer.mergeAll(
   SessionLive,
   SignedSessionLive,
   ServerCredential,
-  Wallets.layer(RatesLive),
+  Wallets.layer(Layer.merge(RatesLive, BalanceLive)),
 ).pipe(Layer.provide(InMemory), Layer.provideMerge(BunHttpServer.layerTest));
 
 const serve = <Id extends string, Groups extends HttpApiGroup.Constraint>(

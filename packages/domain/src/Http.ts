@@ -221,7 +221,7 @@ const live = Effect.fn(function* (
 
 /**
  * An answer is for one caller (middleware reads its session, a query's
- * `visible` filters its rows) and is stale after the next write, so by
+ * handler scopes its rows) and is stale after the next write, so by
  * default no cache may keep it, shared or private.
  */
 const NO_STORE = "private, no-store";

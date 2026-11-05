@@ -68,13 +68,13 @@ More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-proces
 
 ## Queries
 
-A query has no key, so no Durable Object owns it: it runs in the Worker, inside the Api, where the store it reads (D1) is bound. Its `validate` reads views from their Durable Objects; `atLeast` reads the command's events from the aggregate's object, then polls the projection's objects for their checkpoints.
+A query has no key, so no Durable Object owns it: it runs in the Worker, inside the Api, where the store it reads (D1) is bound. Its handler reads views from their Durable Objects; `atLeast` reads the command's events from the aggregate's object, then polls the projection's objects for their checkpoints.
 
 More: [Query](https://alchemy.run/domain/query), [Cloudflare](https://alchemy.run/domain/cloudflare).
 
 ## Live reads
 
-Clients that `watch` or read `events` open a WebSocket per read, with `Domain.protocolWebSocket`. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. That object pushes each committed change, judged by `validate` again, and hibernates in between. Commands go over HTTP.
+Clients that `watch` or read `events` open a WebSocket per read, with `Domain.protocolWebSocket`. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. That object pushes each committed change, judged by the view's `validate` again, and hibernates in between. Commands go over HTTP.
 
 More: [Cloudflare: Watch without polling](https://alchemy.run/domain/cloudflare#watch-without-polling).
 
@@ -144,7 +144,7 @@ More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#k
 
 ## Conveniences for internal tools
 
-`toHttpApi`, `toMcp` and `toCli` publish the calls their `expose` option lists, and nothing else: a command or a query by its name (`"DepositMoney"`, `"AccountLedger"`), a read as `<Name>.<operation>` (`"AccountSummary.get"`). A name the Api does not serve is a type error. They use the domain's own payloads, replies and state as the wire format. That is quick for internal tooling (scripts, admin consoles, an agent working on your own data), but what each call returns is decided elsewhere (the aggregate, view or command), so a reply or view that later gains a private field is published without anyone touching `expose`. Don't reach for them by default, and don't use them for a public or partner surface: write that API yourself (see [Public and partner APIs](#public-and-partner-apis)).
+`toHttpApi`, `toMcp` and `toCli` publish the calls their `expose` option lists, and nothing else: a command or a query by its name (`"DepositMoney"`, `"AccountLedger"`), a read as `<Name>.<operation>` (`"AccountSummary.get"`). A name the Api does not serve is a type error. They use the domain's own payloads, replies and state as the wire format. That is quick for internal tooling (scripts, admin consoles, an agent working on your own data), but what each call returns is decided elsewhere (the command, view or query), so a reply or view that later gains a private field is published without anyone touching `expose`. Don't reach for them by default, and don't use them for a public or partner surface: write that API yourself (see [Public and partner APIs](#public-and-partner-apis)).
 
 ### Plain HTTP and OpenAPI
 

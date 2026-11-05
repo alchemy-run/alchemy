@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import type * as Duration from "effect/Duration";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type * as Option from "effect/Option";
 import type * as EffectStream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
@@ -33,6 +34,8 @@ export interface Any extends Context.Key<unknown, unknown> {
     readonly key: Key.Any;
     readonly entries: ReadonlyArray<Event.Any>;
   } & Read.AnyContract;
+  /** The key of its Layer, which provides its `validate`. */
+  readonly Validator: Context.Key<unknown, Read.Implementation>;
   /** Type-level only: the entry events. */
   readonly "~event": unknown;
 }
@@ -50,12 +53,7 @@ export interface Definition<
   Entries extends ReadonlyArray<Event.Any>,
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-> extends Read.Contract<
-  Key.RefOf<Key>,
-  Entry<Aggregate.InstanceOf<Entries[number]>, Key.IdOf<Key>> | null,
-  Ms,
-  Rejects
-> {
+> extends Read.Contract<Ms, Rejects> {
   /**
    * What keys this stream, one ordered log per key: an aggregate, whose refs
    * are its keys, or a string Schema, whose values are.
@@ -122,8 +120,9 @@ export interface StreamKey<Name extends string> {
 
 /**
  * A keyed, append-only log: one ordered list of entries per key, kept and
- * replayable. A projection writes it; clients read it through an Api with the
- * same middleware and `validate` as a view. Its latest entry is its current
+ * replayable. A projection writes it; clients read it through an Api, guarded
+ * like a view: middleware and rejections on the declaration, `validate` on
+ * its Layer. Its latest entry is its current
  * value, so a stream of snapshots serves both "what is it now?" (`peek`) and
  * "tell me every change" (`watch`, `events`).
  *
@@ -166,6 +165,22 @@ export interface StreamKey<Name extends string> {
  *         yield* cards.append(input, new CardChanged({ owner: input.state.owner, balance: input.state.balance }));
  *       }
  *     });
+ *   }),
+ * );
+ * ```
+ *
+ * ### Validating reads
+ * `validate` judges the key's latest entry, on its Layer. A stream that
+ * declares `middleware` or `rejects` needs it.
+ *
+ * **Example:** Only the card's owner reads it
+ * ```typescript
+ * export const AccountCardLive = AccountCard.toLayer(
+ *   Effect.succeed({
+ *     validate: Effect.fn(function* (_request, latest) {
+ *       const actor = yield* CurrentActor;
+ *       if (latest && latest.event.owner !== actor.customerId) return yield* new NotOwner();
+ *     }),
  *   }),
  * );
  * ```
@@ -217,7 +232,17 @@ export const make = <
   const Tag = Context.Service<StreamKey<Name>, Host<Key, Aggregate.InstanceOf<Entries[number]>>>()(
     `alchemy/Domain/Stream/${name}`,
   );
+  const Validator = Context.Service<Read.ValidatorKey<Name>, Read.Implementation>()(
+    `alchemy/Domain/Stream/${name}/Validator`,
+  );
   return class extends Tag {
+    static readonly Validator = Validator;
+    static toLayer<E, R>(build: Effect.Effect<Read.Implementation<any>, E, R>) {
+      return Layer.effect(
+        Validator,
+        Effect.map(build, (implementation): Read.Implementation => implementation),
+      );
+    }
     static readonly kind = "Stream" as const;
     static readonly annotations: Annotations = annotations;
     static readonly streamName: Name = name;
@@ -243,5 +268,27 @@ export interface StreamClass<
   readonly annotations: Annotations;
   readonly streamName: Name;
   readonly definition: Def;
+  /** The key of its Layer, which provides its `validate`. */
+  readonly Validator: Context.Key<Read.ValidatorKey<Name>, Read.Implementation>;
+  /**
+   * Provide the stream's `validate`, judged on the key's latest entry. The
+   * construction Effect runs once and may resolve services; `validate`
+   * itself may only need what the stream's middleware provides. Required
+   * when the stream declares `middleware` or `rejects`.
+   */
+  toLayer<E2, R>(
+    build: Effect.Effect<
+      {
+        readonly validate: Read.Validate<
+          Key.RefOf<Key>,
+          Entry<E, Key.IdOf<Key>> | null,
+          Read.MiddlewareOf<Def>,
+          Read.RejectsOf<Def>
+        >;
+      },
+      E2,
+      R
+    >,
+  ): Layer.Layer<Read.ValidatorKey<Name>, E2, R>;
   readonly "~event": E;
 }

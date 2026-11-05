@@ -36,7 +36,7 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - Something outside the model you call (fraud scoring, payments): an **External System**.
 - Writes to a store outside the model (a ledger table): a **Projection**. An ordered, readable log per key (account cards): a **Stream** that a projection appends to.
 - A question across keys, answered from that store (an account's ledger, paged; large withdrawals across all accounts, largest first): a **Query**. Never a hand-written route.
-- Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block's `decide` or `validate` authorizing.
+- Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block authorizing itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
 A rule that spans aggregates never becomes a cross-aggregate transaction. Give the invariant its own aggregate, keyed by what it protects (`UsernameClaim` keyed by username). Or reserve first and commit after, in a policy or saga, with a deadline for anything that waits.
 
@@ -59,13 +59,13 @@ More: [Project layout](https://alchemy.run/domain/project-layout).
 - `evolve` only applies an event to state. It never decides anything. It and `reply` are total: they cover every state and never fail, because `decide` already refused what can't happen. Keep a state the event can't follow (`s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`), never a guard that throws.
 - Events carry the outcome `decide` worked out (`balanceAfter`), so `evolve` copies it instead of repeating a rule.
 - Every rejection a command can return is listed in its `rejects`. Callers handle each one with `Effect.catchTag`.
-- Serve a store a projection writes through a `Domain.Query` on an Api, never a hand-written route: authorize it per request with `validate`, and per row with `visible`.
+- Serve a store a projection writes through a `Domain.Query` on an Api, never a hand-written route: its handler checks the caller and scopes the rows it reads.
 - Policies and projections run at least once. Make their effects idempotent: commands sent from a handler get deterministic ids, and stores key rows by `stream:seq`.
 - Don't wait for a saga in a policy. `start` it, keyed by the aggregate it's about, and react to the events its steps record.
 - A handler resolves its dependencies once in `toLayer` and requires nothing per call.
 - Build one Layer and provide it once (`Layer.mergeAll`, `Layer.provide`). Never chain `Effect.provide`.
 - Never `throw`. Fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`).
-- Tracing is automatic. Record payload values only through a declaration's `attributes`, or with `Effect.annotateCurrentSpan` in an effectful handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
+- Tracing is automatic. Record payload values only with `Effect.annotateCurrentSpan` in a handler: it lands on the engine's span for that handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
 - Test what the model does, through stories: events, replies, rejections, views and saga outcomes. Don't test a saga's internal steps.
 
 More: [Domain Model: The aggregate decides, and everything commits at once](https://alchemy.run/domain/model#the-aggregate-decides-and-everything-commits-at-once), [Cloudflare: Count on these guarantees](https://alchemy.run/domain/cloudflare#count-on-these-guarantees).

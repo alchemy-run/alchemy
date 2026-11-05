@@ -66,19 +66,6 @@ export class TransferStatus extends Domain.View("TransferStatus", {
     TransferCompleted: (v, _, { at }) => ({ ...v, completedAt: at }),
     TransferFailed: (v, e) => ({ ...v, awaitingApproval: false, failedReason: e.reason }),
   },
-  validate: Effect.fn(function* (_request, status) {
-    const actor = yield* CurrentActor;
-    // Nothing to protect until the transfer is projected; agents may read any.
-    if (actor._tag === "Agent" || status === null || status.requestedBy === null) return;
-    const requester = status.requestedBy;
-    if (
-      actor._tag !== "Customer" ||
-      requester._tag !== "Customer" ||
-      requester.customerId !== actor.customerId
-    ) {
-      return yield* new NotOwner();
-    }
-  }),
   computed: {
     status: (v): "completed" | "failed" | "in-flight" | "awaiting-approval" | "pending" =>
       v.completedAt
@@ -92,3 +79,22 @@ export class TransferStatus extends Domain.View("TransferStatus", {
               : "pending",
   },
 }) {}
+
+/** Who may read each key of TransferStatus. */
+export const TransferStatusLive = TransferStatus.toLayer(
+  Effect.succeed({
+    validate: Effect.fn(function* (_request, status) {
+      const actor = yield* CurrentActor;
+      // Nothing to protect until the transfer is projected; agents may read any.
+      if (actor._tag === "Agent" || status === null || status.requestedBy === null) return;
+      const requester = status.requestedBy;
+      if (
+        actor._tag !== "Customer" ||
+        requester._tag !== "Customer" ||
+        requester.customerId !== actor.customerId
+      ) {
+        return yield* new NotOwner();
+      }
+    }),
+  }),
+);

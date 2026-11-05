@@ -84,6 +84,9 @@ class Balance extends Domain.View("Balance", {
   evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
 }) {}
 
+/** Anyone with a session may read any wallet's balance. */
+const BalanceLive = Balance.toLayer(Effect.succeed({ validate: () => Effect.void }));
+
 class UnknownBase extends Domain.Rejection("UnknownBase", { base: Schema.String }) {}
 
 /** Exchange rates: a paged query over rows outside the model. */
@@ -188,9 +191,10 @@ const cliOver = Effect.gen(function* () {
     });
 });
 
-const WalletsLive = Layer.mergeAll(Wallets.layer(RatesLive), SessionLive).pipe(
-  Layer.provide(InMemory),
-);
+const WalletsLive = Layer.mergeAll(
+  Wallets.layer(Layer.merge(RatesLive, BalanceLive)),
+  SessionLive,
+).pipe(Layer.provide(InMemory));
 const hosted = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provide(WalletsLive)) as Effect.Effect<A, E>;
 

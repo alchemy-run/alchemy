@@ -2,6 +2,7 @@ import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpApi from "effect/http-api/HttpApi";
@@ -14,6 +15,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Withdrawn extends Domain.Event("Withdrawn", { amount: Schema.Number }) {}
@@ -328,10 +330,16 @@ class NoteView extends Domain.View("NoteView", {
   state: Schema.Struct({ text: Schema.String, by: Schema.NullOr(Schema.String) }),
   initial: { text: "", by: null },
   evolve: { Written: (_, e) => ({ text: e.text, by: e.by }) },
-  validate: Effect.fn(function* (_request, s) {
-    if (s !== null && s.by !== null && s.by !== (yield* Author)) return yield* new NotYours();
-  }),
 }) {}
+
+/** Who may read each key of NoteView. */
+const NoteViewLive = NoteView.toLayer(
+  Effect.succeed({
+    validate: Effect.fn(function* (_request, s) {
+      if (s !== null && s.by !== null && s.by !== (yield* Author)) return yield* new NotYours();
+    }),
+  }),
+);
 
 class Notes extends Domain.Model("Notes", { aggregates: [Note], views: [NoteView] }) {}
 class NotesApi extends Domain.Api("NotesApi", {
@@ -340,7 +348,7 @@ class NotesApi extends Domain.Api("NotesApi", {
   views: ["NoteView"],
 }) {}
 
-const World = Notes.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
+const World = Notes.layer(NoteViewLive).pipe(Layer.provideMerge(InMemory));
 
 describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
   it.live("clientInProcess calls an Api in process, through every entry's middleware", () =>
@@ -417,5 +425,93 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
         ),
       ),
     ),
+  );
+});
+
+// ---------------------------------------------------------------- a view's Layer
+
+/** Authors an editor has suspended: kept outside the model. */
+class Suspended extends Context.Service<Suspended, ReadonlySet<string>>()("Test/Suspended") {}
+
+/** A note's text: anyone with a session reads it, unless its author is suspended. */
+class NoteText extends Domain.View("NoteText", {
+  from: [Note],
+  key: Note,
+  middleware: [AuthorSession],
+  rejects: [NotYours],
+  state: Schema.Struct({ text: Schema.String, by: Schema.NullOr(Schema.String) }),
+  initial: { text: "", by: null },
+  evolve: { Written: (_, e) => ({ text: e.text, by: e.by }) },
+}) {}
+// The Layer resolves what `validate` reads once; `validate` itself needs only the session.
+const NoteTextLive = NoteText.toLayer(
+  Effect.gen(function* () {
+    const suspended = yield* Suspended;
+    return {
+      validate: Effect.fn(function* (_request, s) {
+        yield* Author;
+        if (s?.by && suspended.has(s.by)) return yield* new NotYours();
+      }),
+    };
+  }),
+);
+class Texts extends Domain.Model("Texts", { aggregates: [Note], views: [NoteText] }) {}
+class TextsApi extends Domain.Api("TextsApi", {
+  model: Texts,
+  commands: ["Write"],
+  views: ["NoteText"],
+}) {}
+const TextsWorld = Layer.mergeAll(
+  Texts.layer(NoteTextLive).pipe(Layer.provide(Layer.succeed(Suspended, new Set(["kim"])))),
+  AuthorSessionLive,
+).pipe(Layer.provideMerge(InMemory));
+
+describe("Domain View validate on its Layer", { tags: ["unit", "local"] }, () => {
+  it.live("validate reads a service its Layer resolved, traced as Domain.validate", () =>
+    Effect.gen(function* () {
+      const spans: Array<Tracer.NativeSpan> = [];
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          spans.push(span);
+          return span;
+        },
+      });
+      const texts = yield* TextsApi.clientInProcess;
+      const asSam = { headers: { "x-author": "sam" } };
+      const asKim = { headers: { "x-author": "kim" } };
+      const fromSam = yield* texts.Write("t-1", { text: "hi" }, asSam);
+      const fromKim = yield* texts.Write("t-2", { text: "spam" }, asKim);
+
+      expect(
+        yield* texts.NoteText.get("t-1", { ...asKim, atLeast: fromSam }).pipe(
+          Effect.withTracer(tracer),
+        ),
+      ).toEqual({ text: "hi", by: "sam" });
+      const suspended = yield* texts.NoteText.get("t-2", { ...asSam, atLeast: fromKim }).pipe(
+        Effect.flip,
+      );
+      expect(suspended._tag).toBe("NotYours");
+
+      const [validated] = spans.filter((span) => span.name === "Domain.validate NoteText");
+      expect(validated!.attributes.get("domain.mode")).toBe("get");
+    }).pipe(Effect.scoped, Effect.provide(TextsWorld)),
+  );
+
+  it.live(
+    "a view that guards its reads needs its Layer: a type error, then a DefinitionError",
+    () =>
+      Effect.gen(function* () {
+        // @ts-expect-error NoteText declares middleware and rejects, so the model needs NoteText's Layer
+        Texts.layer(Layer.empty);
+        const exit = yield* Layer.build(Texts.layer(Layer.empty as never)).pipe(
+          Effect.provide(InMemory),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+          _tag: "DefinitionError",
+          reason: { _tag: "UnvalidatedRead", entity: "NoteText" },
+        });
+      }).pipe(Effect.scoped),
   );
 });

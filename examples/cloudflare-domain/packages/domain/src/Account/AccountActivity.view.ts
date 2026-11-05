@@ -16,11 +16,19 @@ export class AccountActivity extends Domain.View("AccountActivity", {
   key: Account,
   middleware: [Session],
   rejects: [Forbidden],
-  validate: Effect.fn(function* (request) {
-    const actor = yield* CurrentActor;
-    if (actor._tag !== "Agent") {
-      return yield* new Forbidden({ reason: `${request.mode} of account activity is for agents` });
-    }
-  }),
   events: [AccountFrozen, AccountClosed, OwnerChanged, RefundStranded, SettlementOnClosedAccount],
 }) {}
+
+/** Who may read each key of AccountActivity. */
+export const AccountActivityLive = AccountActivity.toLayer(
+  Effect.succeed({
+    validate: Effect.fn(function* (request) {
+      const actor = yield* CurrentActor;
+      if (actor._tag !== "Agent") {
+        return yield* new Forbidden({
+          reason: `${request.mode} of account activity is for agents`,
+        });
+      }
+    }),
+  }),
+);

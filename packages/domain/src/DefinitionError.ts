@@ -231,6 +231,15 @@ export class MissingWorkflowEngine extends Data.TaggedError("MissingWorkflowEngi
   }
 }
 
+/** A view or stream guards its reads, but no Layer provides its `validate`. */
+export class UnvalidatedRead extends Data.TaggedError("UnvalidatedRead")<{
+  readonly entity: string;
+}> {
+  override get message() {
+    return `${this.entity} declares middleware or rejects, so it needs its Layer: provide ${this.entity}.toLayer({ validate }) to the model`;
+  }
+}
+
 /** Something other than the stream's writer, handling its input, appends to it. */
 export class ForeignAppend extends Data.TaggedError("ForeignAppend")<{
   readonly stream: string;
@@ -399,7 +408,8 @@ export type Reason =
   | ModelHostedTwice
   | LazyViewNeedsOneSource
   | PagedWithoutSuccess
-  | UnknownWait;
+  | UnknownWait
+  | UnvalidatedRead;
 
 /**
  * A domain definition error, found while the kernel is built or when a

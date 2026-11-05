@@ -19,6 +19,7 @@ import {
   ForeignAppend,
   LazyViewNeedsOneSource,
   MissingWorkflowEngine,
+  UnvalidatedRead,
 } from "./DefinitionError.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
@@ -41,6 +42,7 @@ import {
 import type * as Policy from "./Policy.ts";
 import * as Projection from "./Projection.ts";
 import * as Query from "./Query.ts";
+import * as Read from "./Read.ts";
 import * as RequestContext from "./RequestContext.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -71,6 +73,8 @@ export class Internals extends Context.Service<
     readonly streamHosts: ReadonlyMap<string, DomainStream.Host<Key.Any, unknown>>;
     /** Each query, hosted, by query name. */
     readonly queries: ReadonlyMap<string, Query.Host>;
+    /** Each guarded view's and stream's `validate`, from its Layer, by name. */
+    readonly validators: ReadonlyMap<string, Read.AnyValidate>;
   }
 >()("alchemy/Domain/ModelInternals") {}
 
@@ -216,16 +220,33 @@ export interface LayerOptions<Views extends string = string> {
 }
 
 /** Every implementation a model's `layer` requires: its policies, projections, sagas and queries. */
+/** A guarded view's or stream's Layer, which provides its `validate`. */
+type ValidatorOf<X> = X extends {
+  readonly Validator: Context.Key<infer I, unknown>;
+  readonly definition: infer D;
+}
+  ? // A widened view (`View.Any`) names no Layer: serving it checks at run time.
+    unknown extends I
+    ? never
+    : Read.Guarded<D> extends true
+      ? I
+      : never
+  : never;
+
 type HandledBy<
   P extends ReadonlyArray<Policy.Any>,
   J extends ReadonlyArray<Projection.Any>,
   G extends ReadonlyArray<Saga.Any>,
   Q extends ReadonlyArray<Query.Any> = readonly [],
+  V extends ReadonlyArray<View.Any> = readonly [],
+  S extends ReadonlyArray<DomainStream.Any> = readonly [],
 > =
   | Identifier<P[number]>
   | Identifier<J[number]>
   | Saga.ImplementationIdentifier<G[number]>
-  | Query.Identifier<Q[number]>;
+  | Query.Identifier<Q[number]>
+  | ValidatorOf<V[number]>
+  | ValidatorOf<S[number]>;
 
 /**
  * The aggregates, views and policies you host together. `layer(policies)`
@@ -287,7 +308,12 @@ export const make = <
   name: Name,
   members: Members<A, V, P, J, S, G, Q>,
   annotations: Annotations = {},
-): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G, Q>, ServableBy<A, V, S, Q>> => {
+): ModelClass<
+  Name,
+  ProvidedBy<A, V, J, S, G>,
+  HandledBy<P, J, G, Q, V, S>,
+  ServableBy<A, V, S, Q>
+> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
@@ -309,7 +335,10 @@ export const make = <
     static readonly views = definitions.views;
     static readonly streams = definitions.streams;
     static readonly queries: ReadonlyArray<Query.Any> = members.queries ?? [];
-    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G, Q>, E, R>, options?: LayerOptions) {
+    static layer<E, R>(
+      handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S>, E, R>,
+      options?: LayerOptions,
+    ) {
       return Layer.effectContext(
         build(
           name,
@@ -326,7 +355,7 @@ export const make = <
   } as unknown as ModelClass<
     Name,
     ProvidedBy<A, V, J, S, G>,
-    HandledBy<P, J, G, Q>,
+    HandledBy<P, J, G, Q, V, S>,
     ServableBy<A, V, S, Q>
   >;
 };
@@ -427,6 +456,9 @@ const build = <A, E, R>(
     const policyStores = new Map<string, PolicyStore>();
     const projectionStores = new Map<string, ProjectionStore>();
     const streamStores = new Map<string, StreamStore>();
+    // Filled once the handlers' Layer is built; pushes read it when they run.
+    const validators = new Map<string, Read.AnyValidate>();
+    const validatorOf = (name: string) => validators.get(name);
 
     const deliver = (delivery: Delivery): Effect.Effect<void> =>
       Effect.suspend(() => {
@@ -475,7 +507,7 @@ const build = <A, E, R>(
         yield* platform.view(
           view,
           Object.assign(kernel.viewKit(view, deliver), {
-            push: Watch.viewPush(kernel, view),
+            push: Watch.viewPush(kernel, view, validatorOf),
             ...(source === undefined ? {} : { catchUp: { source } }),
           }),
         ),
@@ -487,7 +519,7 @@ const build = <A, E, R>(
         stream.streamName,
         yield* platform.stream(stream, {
           name: stream.streamName,
-          push: Watch.streamPush(kernel, stream),
+          push: Watch.streamPush(kernel, stream, validatorOf),
         }),
       );
     }
@@ -562,6 +594,32 @@ const build = <A, E, R>(
 
     // Policies, projections and sagas are built with the clients available, then hosted.
     const implementations = yield* Layer.build(policies).pipe(Effect.provide(hosts));
+    // Each guarded view's and stream's `validate`, traced as `Domain.validate <Name>`.
+    for (const [name, entry] of [
+      ...definitions.views.map((view) => [view.viewName, view] as const),
+      ...definitions.streams.map((stream) => [stream.streamName, stream] as const),
+    ]) {
+      const implementation = Context.getOption(
+        implementations as Context.Context<unknown>,
+        entry.Validator as Context.Key<unknown, Read.Implementation>,
+      );
+      if (Option.isNone(implementation)) {
+        if (Read.isGuarded(entry.definition)) {
+          return yield* Effect.die(
+            new DefinitionError({ reason: new UnvalidatedRead({ entity: name }) }),
+          );
+        }
+        continue;
+      }
+      const validate = implementation.value.validate as Read.AnyValidate;
+      validators.set(name, (request, state) =>
+        validate(request, state).pipe(
+          Effect.withSpan(`Domain.validate ${name}`, {
+            attributes: { "domain.read": name, "domain.mode": request.mode },
+          }),
+        ),
+      );
+    }
     const implementationOf = (projection: Projection.Any) =>
       Context.getUnsafe(
         implementations as Context.Context<unknown>,
@@ -656,6 +714,7 @@ const build = <A, E, R>(
       viewHosts,
       streamHosts,
       queries: queryHosts,
+      validators,
     });
   });
 

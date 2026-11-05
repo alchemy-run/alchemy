@@ -241,15 +241,13 @@ export class Customer extends Domain.Aggregate("Customer", {
 
 The third argument to `decide` holds the id of the customer being registered, so a customer can register only themselves.
 
-## Let only the owner read the summary
+## Guard reads of the summary
 
 ```diff lang="typescript"
 // src/AccountSummary.view.ts
 import * as Domain from "@alchemy.run/domain";
-+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { Account } from "./Account.aggregate.ts";
-+import { CurrentActor } from "./CurrentActor.context.ts";
 +import { NotOwner } from "./NotOwner.rejection.ts";
 +import { Session } from "./Session.middleware.ts";
 
@@ -260,17 +258,54 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 +  rejects: [NotOwner],
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
   initial: { owner: null, balance: 0 },
-    // ...
-    MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
-  },
-+  validate: Effect.fn(function* (_request, summary) {
-+    const actor = yield* CurrentActor;
-+    if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
-+  }),
+  // ...
 }) {}
 ```
 
-A view guards its reads the same way. `validate` runs on every read, and again on every change while a client watches. A summary that has no owner yet reads as empty, so a new customer can watch for their account to appear.
+A view guards its reads the same way a command does: `Session` says who is asking, and `NotOwner` is how a read can be refused.
+
+## Let only the owner read the summary
+
+```diff lang="typescript"
+// src/AccountSummary.view.ts
+import * as Domain from "@alchemy.run/domain";
++import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Account } from "./Account.aggregate.ts";
++import { CurrentActor } from "./CurrentActor.context.ts";
+import { NotOwner } from "./NotOwner.rejection.ts";
+import { Session } from "./Session.middleware.ts";
+
+// ...
++
++export const AccountSummaryLive = AccountSummary.toLayer(
++  Effect.succeed({
++    validate: Effect.fn(function* (_request, summary) {
++      const actor = yield* CurrentActor;
++      if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
++    }),
++  }),
++);
+```
+
+`validate` lives on the view's Layer. It runs on every read, and again on every change while a client watches. A summary that has no owner yet reads as empty, so a new customer can watch for their account to appear.
+
+## Provide the summary's Layer
+
+```diff lang="typescript"
+// src/Bank.model.ts
+import * as Domain from "@alchemy.run/domain";
++import * as Layer from "effect/Layer";
+import { Account } from "./Account.aggregate.ts";
+-import { AccountSummary } from "./AccountSummary.view.ts";
++import { AccountSummary, AccountSummaryLive } from "./AccountSummary.view.ts";
+// ...
+
+-export const BankHandlers = MainAccountProvisioningLive;
++export const BankHandlers = Layer.merge(MainAccountProvisioningLive, AccountSummaryLive);
+```
+
+A view that declares `middleware` or `rejects` needs its Layer, so `Bank.layer` is a type error until `BankHandlers` includes it. Every story and Worker that hosts the model gets it from there.
 
 ## Act as a customer in stories
 

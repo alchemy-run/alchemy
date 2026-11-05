@@ -150,10 +150,17 @@ class WalletCard extends Domain.Stream("WalletCard", {
   entries: [BalanceChanged],
   middleware: [ViewerSession],
   rejects: [NotYours],
-  validate: Effect.fn(function* (_request, latest) {
-    if (latest && latest.event.owner !== (yield* Viewer)) return yield* new NotYours();
-  }),
 }) {}
+
+/** Who may read each key of WalletCard. */
+
+const WalletCardLive = WalletCard.toLayer(
+  Effect.succeed({
+    validate: Effect.fn(function* (_request, latest) {
+      if (latest && latest.event.owner !== (yield* Viewer)) return yield* new NotYours();
+    }),
+  }),
+);
 
 class WalletCards extends Domain.Projection("WalletCards", {
   from: [Wallet],
@@ -229,7 +236,7 @@ class WalletApi extends Domain.Api("WalletApi", {
 }) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
-  Layer.mergeAll(walletLedgerLayer(options), WalletCardsLive, LargeMovementsLive);
+  Layer.mergeAll(walletLedgerLayer(options), WalletCardsLive, LargeMovementsLive, WalletCardLive);
 
 const story = Story.make(Wallets, { layer: handlers() });
 const sam = Wallet.ref("sam-1");
@@ -363,7 +370,11 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
     const exit = Effect.runSyncExit(
       Layer.build(
         Broken.layer(
-          Layer.mergeAll(WalletCardsLive, AlsoCards.toLayer(Effect.succeed(() => Effect.void))),
+          Layer.mergeAll(
+            WalletCardsLive,
+            WalletCardLive,
+            AlsoCards.toLayer(Effect.succeed(() => Effect.void)),
+          ),
         ),
       ).pipe(Effect.scoped, Effect.provide(InMemory)) as Effect.Effect<unknown>,
     );

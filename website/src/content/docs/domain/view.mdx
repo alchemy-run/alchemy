@@ -270,15 +270,19 @@ A server can read the snapshot while it renders a page and send it with the page
 
 ## Decide who may read it
 
-A view that's exposed through an Api declares `middleware` to identify the caller, and `validate` to judge each read against the view's state.
+A view that's exposed through an Api declares `middleware` to identify the caller and the `rejects` a read may fail with. Its Layer's `validate` judges each read against the view's state.
 
 ```typescript title="packages/domain/src/Account/AccountSummary.view.ts"
-validate: Effect.fn(function* (_request, summary) {
-  yield* mustOwn(summary?.customerId ?? null);
-}),
+export const AccountSummaryLive = AccountSummary.toLayer(
+  Effect.succeed({
+    validate: Effect.fn(function* (_request, summary) {
+      yield* mustOwn(summary?.customerId ?? null);
+    }),
+  }),
+);
 ```
 
-`validate` runs on every read, and again on every change while a client watches. If an account changes owner, the previous owner's watch ends with `NotOwner`. See [Views as security boundaries](/domain/view-security).
+A view that declares either needs its Layer, provided with the model's handlers. `validate` runs on every read, and again on every change while a client watches. If an account changes owner, the previous owner's watch ends with `NotOwner`. See [Views as security boundaries](/domain/view-security).
 
 Every key keeps an input log: each delivery it applied, in order, kept for good. A view's state is a fold of that log.
 

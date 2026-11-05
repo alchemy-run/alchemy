@@ -47,9 +47,15 @@ export class Total extends Domain.View("Total", {
   evolve: { Incremented: (state, { amount }) => ({ total: state.total + amount }) },
   events: [Incremented],
   rejects: [Limit],
-  validate: (_, state) =>
-    state && state.total > 5 ? Effect.fail(new Limit({ amount: state.total })) : Effect.void,
 }) {}
+
+/** Who may read each key of Total. */
+export const TotalLive = Total.toLayer(
+  Effect.succeed({
+    validate: (_, state) =>
+      state && state.total > 5 ? Effect.fail(new Limit({ amount: state.total })) : Effect.void,
+  }),
+);
 export class Outputs extends Domain.Stream("Outputs", { key: Counter, entries: [Incremented] }) {}
 export class Counters extends Domain.Model("Counters", {
   aggregates: [Counter],
@@ -62,7 +68,7 @@ export class CounterApi extends Domain.Api("CounterApi", {
   views: ["Total"],
   streams: ["Outputs"],
 }) {}
-export const Hosted = Counters.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory));
+export const Hosted = Counters.layer(TotalLive).pipe(Layer.provide(Domain.InMemory));
 export const Client = CounterApi.layerClientInProcess.pipe(
   Layer.provide(
     Layer.merge(

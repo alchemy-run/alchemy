@@ -45,8 +45,13 @@ export class AccountSummary extends Domain.View("AccountSummary", {
     AccountFrozen: (v) => ({ ...v, frozen: true }),
     AccountClosed: (v) => ({ ...v, closed: true }),
   },
-  // Re-run on every change while watched: a reassigned account ends the watch with NotOwner.
-  validate: Effect.fn(function* (_request, summary) {
-    yield* mustOwn(summary?.customerId ?? null);
-  }),
 }) {}
+
+/** Re-run on every change while watched: a reassigned account ends the watch with NotOwner. */
+export const AccountSummaryLive = AccountSummary.toLayer(
+  Effect.succeed({
+    validate: Effect.fn(function* (_request, summary) {
+      yield* mustOwn(summary?.customerId ?? null);
+    }),
+  }),
+);

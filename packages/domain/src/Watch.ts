@@ -19,7 +19,7 @@ import type {
   ViewSnapshot,
 } from "./Platform.ts";
 import type * as Read from "./Read.ts";
-import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
+import { nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
@@ -81,6 +81,7 @@ interface Item {
  * values, then, if `validate` rejected an item, the `Exit` that ends the read.
  */
 const encode = (
+  validate: Validate | undefined,
   entry: View.Any | DomainStream.Any,
   subscription: Subscription,
   ref: unknown,
@@ -91,7 +92,6 @@ const encode = (
     const rpcs = readRpcs(entry);
     const rpc = subscription.mode === "watch" ? rpcs.watch : rpcs.events;
     const codecs = codecsOf(rpc);
-    const validate = contractOf(entry).validate as Validate | undefined;
     const context = yield* RequestContext.restore(subscription.context);
     const values: Array<unknown> = [];
     let rejection: Option.Option<unknown> = Option.none();
@@ -153,7 +153,7 @@ const where = (subscription: Subscription) => subscription.where as Filter<unkno
 
 /** What a view key's subscriber receives after a commit (or when it connects). */
 export const viewPush =
-  (kernel: Kernel, view: View.Any) =>
+  (kernel: Kernel, view: View.Any, validatorOf: (name: string) => Validate | undefined) =>
   (
     key: string,
     subscription: Subscription,
@@ -169,6 +169,7 @@ export const viewPush =
         const state = snapshot.state === null ? null : kernel.decodeViewState(view, snapshot.state);
         const visible = state !== null && matches(where(subscription), state) ? state : null;
         return yield* encode(
+          validatorOf(view.viewName),
           view,
           subscription,
           ref,
@@ -185,12 +186,19 @@ export const viewPush =
       );
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
       const marked = markCaughtUp(subscription, items, cursor);
-      return yield* encode(view, marked.subscription, ref, marked.items, cursor);
+      return yield* encode(
+        validatorOf(view.viewName),
+        view,
+        marked.subscription,
+        ref,
+        marked.items,
+        cursor,
+      );
     });
 
 /** What a stream key's subscriber receives after an append (or when it connects). */
 export const streamPush =
-  (kernel: Kernel, stream: DomainStream.Any) =>
+  (kernel: Kernel, stream: DomainStream.Any, validatorOf: (name: string) => Validate | undefined) =>
   (
     key: string,
     subscription: Subscription,
@@ -206,6 +214,7 @@ export const streamPush =
         }
         const decoded = latest ? yield* kernel.decodeStreamEntry(latest) : null;
         return yield* encode(
+          validatorOf(stream.streamName),
           stream,
           subscription,
           ref,
@@ -223,5 +232,12 @@ export const streamPush =
       );
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
       const marked = markCaughtUp(subscription, items, cursor);
-      return yield* encode(stream, marked.subscription, ref, marked.items, cursor);
+      return yield* encode(
+        validatorOf(stream.streamName),
+        stream,
+        marked.subscription,
+        ref,
+        marked.items,
+        cursor,
+      );
     });

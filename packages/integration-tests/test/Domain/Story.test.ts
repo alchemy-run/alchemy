@@ -114,8 +114,15 @@ class Totals extends Domain.View("Totals", {
     Incremented: (_, e) => ({ total: e.total }),
     WasReset: () => ({ total: 0 }),
   },
-  validate: () => notGuest(),
 }) {}
+
+/** Who may read each key of Totals. */
+
+const TotalsLive = Totals.toLayer(
+  Effect.succeed({
+    validate: () => notGuest(),
+  }),
+);
 
 class Logged extends Domain.Event("Logged", { by: Schema.Number }) {}
 
@@ -243,7 +250,7 @@ class Counters extends Domain.Model("Counters", {
 }) {}
 
 const story = Story.make(Counters, {
-  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive, TotalsLive),
   stub: [Approval],
 });
 
@@ -262,7 +269,7 @@ const ApprovalAdapter = Approval.toLayer(
   }),
 );
 const unstubbed = Story.make(Counters, {
-  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive, TotalsLive),
 });
 const real = (...steps: ReadonlyArray<Step>) =>
   unstubbed(...steps).pipe(Effect.provide(ApprovalAdapter));
@@ -674,7 +681,12 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
         Layer.mergeAll(
           OperatorSessionLive,
           Counters.layer(
-            Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+            Layer.mergeAll(
+              CapWhenLargeLive,
+              CapWhenOverdrawnLive,
+              RemindWhenCappedLive,
+              TotalsLive,
+            ),
           ),
         ).pipe(
           Layer.provide(
@@ -764,7 +776,12 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
         Layer.mergeAll(
           OperatorSessionLive,
           Counters.layer(
-            Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+            Layer.mergeAll(
+              CapWhenLargeLive,
+              CapWhenOverdrawnLive,
+              RemindWhenCappedLive,
+              TotalsLive,
+            ),
           ),
         ).pipe(
           Layer.provide(

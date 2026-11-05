@@ -67,13 +67,19 @@ class Balance extends Domain.View("Balance", {
   key: Wallet,
   middleware: [Session],
   rejects: [NotOwner],
-  validate: Effect.fn(function* ({ key }) {
-    if (`${yield* Owner}-wallet` !== key.id) return yield* new NotOwner();
-  }),
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
 }) {}
+
+/** Who may read each key of Balance. */
+const BalanceLive = Balance.toLayer(
+  Effect.succeed({
+    validate: Effect.fn(function* ({ key }) {
+      if (`${yield* Owner}-wallet` !== key.id) return yield* new NotOwner();
+    }),
+  }),
+);
 
 class UnknownBase extends Domain.Rejection("UnknownBase", { base: Schema.String }) {}
 
@@ -110,9 +116,10 @@ class Wallets extends Domain.Model("Wallets", {
 
 class WalletApi extends Domain.Api("WalletApi", { model: Wallets }) {}
 
-const WalletsLive = Layer.mergeAll(Wallets.layer(RatesLive), SessionLive).pipe(
-  Layer.provide(InMemory),
-);
+const WalletsLive = Layer.mergeAll(
+  Wallets.layer(Layer.merge(RatesLive, BalanceLive)),
+  SessionLive,
+).pipe(Layer.provide(InMemory));
 
 /** Who the agent acts for, in this test: the owner its calls carry. */
 const ActingFor = Context.Reference<string | undefined>("Test/ActingFor", {

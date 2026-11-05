@@ -37,9 +37,6 @@ export class AccountTransfers extends Domain.View("AccountTransfers", {
     AccountOpened: (_, e) => ({ customerId: e.customerId }),
     OwnerChanged: (_, e) => ({ customerId: e.customerId }),
   },
-  validate: Effect.fn(function* (_request, transfers) {
-    yield* mustOwn(transfers?.customerId ?? null);
-  }),
   keyOf: {
     TransferRequested: {
       out: ({ event }) => Account.ref(event.from),
@@ -51,3 +48,12 @@ export class AccountTransfers extends Domain.View("AccountTransfers", {
     TransferRequested: { out: moved("out"), in: moved("in") },
   },
 }) {}
+
+/** Who may read each key of AccountTransfers. */
+export const AccountTransfersLive = AccountTransfers.toLayer(
+  Effect.succeed({
+    validate: Effect.fn(function* (_request, transfers) {
+      yield* mustOwn(transfers?.customerId ?? null);
+    }),
+  }),
+);

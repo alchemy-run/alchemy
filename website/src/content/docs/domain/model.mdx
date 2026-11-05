@@ -218,13 +218,13 @@ That gives a precise guarantee. Within a key, events from one source arrive in t
 
 All three consumers receive the same events. They differ in what they do with them.
 
-A [view](/domain/view) folds events into state that the model stores and serves: `get`, `watch`, `events`, with `validate` and read-your-own-write. Reach for it first when clients need to read something.
+A [view](/domain/view) folds events into state that the model stores and serves: `get`, `watch`, `events`, with a `validate` on its Layer and read-your-own-write. Reach for it first when clients need to read something.
 
 A [projection](/domain/projection) writes events into a store you own, such as a database or a search index, or into a [stream](/domain/stream) the model serves. It never sends commands, so it can always be replayed.
 
 A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
 
-A [query](/domain/query) is not a consumer: it serves what a projection wrote to clients, across keys, with the same middleware, rejections and `validate` as the model's other reads.
+A [query](/domain/query) is not a consumer: it serves what a projection wrote to clients, across keys, guarded by middleware and rejections like the model's other reads, with a handler that checks the caller.
 
 ## Declare the model
 
