@@ -41,7 +41,7 @@ export default class Front extends Docker.Service<Front>()(
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://front");
         const [group, name] = url.pathname.split("/").filter((segment) => segment.length > 0);
-        // `?gated=1` sends a tally route to the class given `Rivet.InputGate`.
+        // `?gated=1` sends a tally route to the class given the `InputGate` Layer.
         const tallies = url.searchParams.get("gated") === "1" ? gatedTallies : parallelTallies;
         if (group === "greet" && name !== undefined) {
           const greeting = yield* greeters.getByName("front").greet(name);

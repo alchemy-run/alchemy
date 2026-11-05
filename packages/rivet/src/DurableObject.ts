@@ -203,8 +203,6 @@ export interface HostedDurableObject {
   readonly instance: Effect.Effect<DurableObjectShape & Record<string, unknown>, never, any>;
   readonly context: Context.Context<never>;
   readonly runtime: DurableObjectRuntimeContext;
-  /** Whether its instances run their storage through an input gate. */
-  readonly inputGate: boolean;
 }
 
 /** Declares the pool resources for one Durable Object, given its collected env. @internal */
@@ -219,12 +217,6 @@ export interface DurableObjectRuntimeContext extends HostRuntimeContext {
    * @internal
    */
   readonly registerPool: (deploy: DeployToPool) => Effect.Effect<void>;
-  /**
-   * Called by the `Rivet.InputGate` Layer while the class phase runs: each
-   * instance gets an input gate.
-   * @internal
-   */
-  readonly useInputGate: () => Effect.Effect<void>;
   /** At runtime, the built class, once its class phase has run. @internal */
   readonly hosted: () => HostedDurableObject | undefined;
 }
@@ -233,7 +225,6 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
   const base = createHostRuntimeContext(DurableObjectTypeId)(id);
   let deploy: DeployToPool | undefined;
   let hosted: HostedDurableObject | undefined;
-  let inputGate = false;
 
   const ctx: DurableObjectRuntimeContext = {
     ...base,
@@ -244,10 +235,6 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
     registerPool: (next) =>
       Effect.sync(() => {
         deploy = next;
-      }),
-    useInputGate: () =>
-      Effect.sync(() => {
-        inputGate = true;
       }),
     hosted: () => hosted,
     serve: (_handler, options) =>
@@ -260,7 +247,6 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
             instance,
             context: yield* Effect.context<never>(),
             runtime: ctx,
-            inputGate,
           };
           return;
         }
@@ -307,8 +293,9 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  *
  * An instance's calls run in parallel, storage included: unlike Cloudflare,
  * there is no input gate. Make a read-then-write atomic with
- * `state.storage.transaction(...)`, or provide `Rivet.InputGate` to run
- * code written for Cloudflare's gate unchanged.
+ * `state.storage.transaction(...)`, or provide the `InputGate` Layer from
+ * `alchemy/Workers/InputGate` to run code written for Cloudflare's gate
+ * unchanged.
  *
  * ### Declaring a Durable Object
  * **Example:** A counter on a local pool

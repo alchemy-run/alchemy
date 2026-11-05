@@ -12,7 +12,6 @@ import {
   type DurableObjectInstance,
 } from "alchemy/Workers/DurableObjectBridge";
 import { EventLifetime } from "alchemy/Workers/EventLifetime";
-import { InputGateLive } from "alchemy/Workers/InputGate";
 import type { WorkerBuild } from "alchemy/Workers/Worker";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -20,7 +19,6 @@ import * as Exit from "effect/Exit";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { HostedDurableObject } from "../DurableObject.ts";
@@ -119,7 +117,6 @@ const handleRequest = (
 export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObject>) =>
   Effect.gen(function* () {
     if (durableObjects.length === 0) return yield* Effect.never;
-    const context = yield* Effect.context<never>();
     const { actor, setup } = yield* Effect.promise(() => import("rivetkit"));
     const { db } = yield* Effect.promise(() => import("rivetkit/db"));
 
@@ -150,14 +147,9 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           instance = makeDurableObjectInstance({
             build: () => Promise.resolve(build),
             // RivetKit runs an actor's calls concurrently over async
-            // storage. A class given `Rivet.InputGate` gets a gate per
-            // instance, so one call's storage doesn't interleave with
-            // another's; without it, calls run fully in parallel.
-            services: (hosted.inputGate
-              ? Effect.runSyncWith(context)(InputGateLive.pipe(Layer.build, Effect.scoped))
-              : Context.empty()
-            ).pipe(
-              Context.add(DurableObjectState, makeDurableObjectState(c, activation)),
+            // storage; a class given the `InputGate` Layer gets a gate per
+            // instance from the bridge.
+            services: Context.make(DurableObjectState, makeDurableObjectState(c, activation)).pipe(
               // Construction runs under the activation's construction
               // section; each call replaces it with what it was sent.
               Context.add(Awaiting, {

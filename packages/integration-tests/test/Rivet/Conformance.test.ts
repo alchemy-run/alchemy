@@ -81,7 +81,7 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
-    describe("behind Rivet.InputGate", () => {
+    describe("behind the InputGate Layer", () => {
       test(
         "a call's storage waits for another call's run of storage",
         Effect.gen(function* () {
@@ -114,7 +114,7 @@ describe.skipIf(!!process.env.FAST)(
     // too: plain ones would lose updates to each other.
     for (const [mode, query] of [
       ["in parallel", "gated=0&tx=1"],
-      ["behind Rivet.InputGate", "gated=1"],
+      ["behind the InputGate Layer", "gated=1"],
     ] as const) {
       describe(mode, () => {
         test(
