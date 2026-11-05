@@ -1,0 +1,95 @@
+---
+title: What is Docker?
+description: The concepts behind Docker — the engine and contexts, images and Dockerfiles, registries, containers, networks, volumes and Swarm — and how @alchemy.run/docker models each of them.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+Docker packages a program with everything it needs to run, its runtime, libraries and files, into an **image**, and runs images as isolated **containers**. The same image runs the same way on your laptop, in CI and on a server, which is why most cloud platforms take images as the unit of deployment.
+
+Take one small setup: Postgres in a container, with its data on a volume, reachable by name on a network. A context points at an engine, which holds everything else. The engine runs images as containers, which reach each other by name on a network and keep their data on a volume.
+
+<DAG
+  nodes={[
+    { id: "ctx", label: "context", type: "local or ssh://vps", col: 0, row: 1 },
+    { id: "pgImage", label: "postgres:18", type: "image", col: 1, row: 0 },
+    { id: "apiImage", label: "api", type: "image · built", col: 2, row: 0 },
+    { id: "pg", label: "postgres", type: "container", tone: "accent", col: 1, row: 1 },
+    { id: "api", label: "api", type: "container", col: 2, row: 1 },
+    { id: "vol", label: "postgres-data", type: "volume", col: 1, row: 2 },
+  ]}
+  groups={[
+    { id: "engine", label: "Engine dockerd", nodes: ["pgImage", "apiImage", "vol"] },
+    { id: "net", label: "Network app-network", parent: "engine", nodes: ["pg", "api"], dashed: true },
+  ]}
+  edges={[
+    { from: "ctx", to: "engine", label: "points at" },
+    { from: "pgImage", to: "pg", label: "runs as" },
+    { from: "apiImage", to: "api", label: "runs as" },
+    { from: "api", to: "pg", label: "postgres:5432" },
+    { from: "pg", to: "vol", label: "mounts" },
+  ]}
+  caption="An engine holds images, containers, networks and volumes. Containers run from images, reach each other by name on a shared network, and keep their data on volumes."
+/>
+
+## The engine and contexts
+
+The **Docker engine** is the background service that builds images and runs containers. The `docker` command talks to an engine, and a **context** says which one: Docker Desktop on your machine, a remote server over SSH, or the daemon in a CI job.
+
+Alchemy drives Docker through the `docker` command and its active context. It has no credentials of its own, so whatever `docker` can reach, Alchemy can manage. See [Setup](/docker/setup).
+
+## Images and Dockerfiles
+
+An **image** is a read-only snapshot of a filesystem, plus the command to run. It's built in **layers**, one per step of a **Dockerfile**, and unchanged layers are reused from the last build, so rebuilding after a small change is quick.
+
+An image is named by a repository and a **tag**, like `postgres:18-alpine`. In Alchemy, build one from a Dockerfile, or pull one that already exists:
+
+```typescript title="alchemy.run.ts"
+const image = yield* Docker.Image("app", { name: "my-app", tag: "latest", build: { context: "./app" } });
+const postgres = yield* Docker.RemoteImage("postgres-image", { name: "postgres", tag: "18-alpine" });
+```
+
+See [Build & push images](/docker/build-and-push).
+
+## Registries
+
+A **registry** stores images so other machines can pull them: Docker Hub, GitHub's registry, or a cloud's, like ECR. Pushing an image to a registry is how it leaves your machine for a server or a cloud platform.
+
+## Containers
+
+A **container** is a running image: a process with its own filesystem, network and limits, isolated from everything else on the machine. Anything it writes to its own filesystem is lost when it's removed.
+
+```typescript title="alchemy.run.ts"
+const db = yield* Docker.Container("postgres", {
+  image: postgres,
+  environment: { POSTGRES_PASSWORD: password },
+  ports: [{ external: 15432, internal: 5432 }],
+  start: true,
+});
+```
+
+A container **publishes** a port to make it reachable from the machine, here `localhost:15432`.
+
+See [Run local services](/docker/local-services).
+
+## Networks
+
+Containers on the same **network** reach each other by name. Give Postgres the alias `postgres`, and an app container on the network connects to `postgres:5432`, with no published port at all.
+
+## Volumes
+
+A **volume** is storage the engine keeps outside any container. Mount one into a container, and its data survives the container being replaced, as a database's must.
+
+## Swarm
+
+**Swarm** is the orchestrator built into Docker. It joins engines into a cluster and runs **services**: a number of replicas of a container, replaced when they fail and updated a few at a time. It's a small step up from single containers, without running Kubernetes.
+
+See [Docker Swarm](/docker/swarm).
+
+## How @alchemy.run/docker models these concepts
+
+Each of these concepts is something your Stack declares.
+
+The active context picks the engine, and `Docker.providers()` drives it. Images, containers, networks and volumes are resources, labelled so Alchemy knows which ones are its own, and named in the same Stack as your cloud resources. Swarm services are resources too. Cloud runtimes that run images, like [ECS](/aws/compute/ecs) and [Cloudflare Containers](/cloudflare/compute/containers), build theirs with the same local Docker.
+
+Next, read the concepts in depth, starting with [Run local services](/docker/local-services).

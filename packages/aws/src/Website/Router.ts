@@ -340,6 +340,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
               // is pinned.
               dns.alias(`AliasRecord${index + 1}`, {
                 name,
+                ipv6: true,
                 target: aliasTarget,
               }),
             { concurrency: "unbounded" },
@@ -352,7 +353,9 @@ export const Router = Effect.fn("AWS.Website.Router")(
     // `WebsiteRouterBindTargets`). The set infers its zone from the first
     // bound hostname when none is pinned.
     const siteRecords =
-      domain && dns ? yield* dns.aliasSet("SiteAliasRecords", { target: aliasTarget }) : undefined;
+      domain && dns
+        ? yield* dns.aliasSet("SiteAliasRecords", { target: aliasTarget, ipv6: true })
+        : undefined;
 
     const invalidation =
       props.invalidation === false || !props.invalidation

@@ -2,6 +2,7 @@
 title: Migrations
 description: Run SQL migrations and seed files on every deploy.
 ---
+import Records from "../../../components/diagrams/Records.astro";
 
 Point `migrations` at a folder of `.sql` files. Each deploy runs the new ones, in order.
 
@@ -22,6 +23,18 @@ CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
 If any statement in a file fails, none of that file's changes are kept and the deploy fails.
 
 Alchemy keeps track of which files ran in the `__alchemy_migrations` table.
+
+<Records
+  title="./migrations · against __alchemy_migrations"
+  columns={["file", "in __alchemy_migrations"]}
+  rows={[
+    ["0001_init.sql", "applied · hash a41f…"],
+    ["0002_orders.sql", "applied · hash 9c07…"],
+    ["0003_refunds.sql", "new"],
+  ]}
+  query={{ label: "this deploy runs", rows: [2] }}
+  caption="Each deploy compares the folder with the tracking table and runs only the new files. Editing an applied file fails the deploy instead of running it again."
+/>
 
 ## Make migrations with Drizzle
 

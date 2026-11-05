@@ -174,16 +174,19 @@ const renderStatic = (
   options?: { columns?: number; colors?: boolean; unicode?: boolean },
 ) => Effect.sync(() => formatStatic(view, options));
 
-/** The plain renderer over a captured stdout. */
+/** The plain renderer over a captured stdout and stderr. */
 const makeStatic = () => {
   const stdout = new CaptureStream();
+  const stderr = new CaptureStream();
   const service = makeNonInteractive({
     // SAFETY: CaptureStream implements the writable stream surface consumed here.
     stdout: stdout as unknown as NodeJS.WriteStream,
+    // SAFETY: CaptureStream implements the writable stream surface consumed here.
+    stderr: stderr as unknown as NodeJS.WriteStream,
     colors: false,
     unicode: true,
   });
-  return { service, stdout };
+  return { service, stdout, stderr };
 };
 
 const makeExplorerSource = () => {
@@ -318,6 +321,20 @@ it(
     expect(output).toBe(
       `{\n  apiUrl: '${apiUrl}',\n  metadata: { region: 'us-east-1', replicas: 2 }\n}`,
     );
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "prints deeply nested stack outputs in full",
+  () => {
+    const output = formatStatic(
+      stackOutputsView({ api: { worker: { bindings: { kv: { id: "ns-1" } } } } }),
+      { columns: 120 },
+    );
+
+    expect(output).not.toContain("[Object]");
+    expect(output).toContain("kv: { id: 'ns-1' }");
   },
   { tags: ["unit", "local"] },
 );
@@ -981,6 +998,8 @@ const makeLive = (
     const service = makeNonInteractive({
       // SAFETY: CaptureStream implements the writable stream surface consumed here.
       stdout: stdout as unknown as NodeJS.WriteStream,
+      // SAFETY: CaptureStream implements the writable stream surface consumed here.
+      stderr: stderr as unknown as NodeJS.WriteStream,
       colors: overrides.colors ?? false,
       unicode: overrides.unicode ?? true,
     });
@@ -1227,15 +1246,15 @@ it.effect(
   "progress handles are updateable and settle only once",
   () =>
     Effect.gen(function* () {
-      const { service, stdout } = makeStatic();
+      const { service, stderr } = makeStatic();
       const progress = yield* service.progress({ label: "Deploying" });
       yield* progress.update({ label: "Uploading", detail: "2/3" });
       yield* progress.succeed("Deployed");
       yield* progress.fail("must not print");
 
-      expect(stdout.output).toContain("Deploying");
-      expect(stdout.output).toContain("Deployed");
-      expect(stdout.output).not.toContain("must not print");
+      expect(stderr.output).toContain("Deploying");
+      expect(stderr.output).toContain("Deployed");
+      expect(stderr.output).not.toContain("must not print");
     }),
   { tags: ["unit", "local"] },
 );
@@ -1389,7 +1408,7 @@ it.effect(
   "progress settles into success and failure status output",
   () =>
     Effect.gen(function* () {
-      const { service, stdout } = makeStatic();
+      const { service, stderr } = makeStatic();
       yield* Effect.scoped(
         Effect.gen(function* () {
           const first = yield* service.progress({ label: "Resolve credentials" });
@@ -1399,10 +1418,10 @@ it.effect(
         }),
       );
 
-      expect(stdout.output).toContain("Resolve credentials");
-      expect(stdout.output).toContain("Apply resource");
-      expect(stdout.output).toContain("✓");
-      expect(stdout.output).toContain("×");
+      expect(stderr.output).toContain("Resolve credentials");
+      expect(stderr.output).toContain("Apply resource");
+      expect(stderr.output).toContain("✓");
+      expect(stderr.output).toContain("×");
     }),
   { tags: ["unit", "local"] },
 );
@@ -1411,14 +1430,14 @@ it.effect(
   "task collapses success and failure into status output",
   () =>
     Effect.gen(function* () {
-      const { service, stdout } = makeStatic();
+      const { service, stderr } = makeStatic();
       yield* service.task({ label: "Resolve credentials" }, Effect.succeed("credentials"));
       yield* service.task({ label: "Apply resource" }, Effect.fail("nope")).pipe(Effect.ignore);
 
-      expect(stdout.output).toContain("Resolve credentials");
-      expect(stdout.output).toContain("Apply resource");
-      expect(stdout.output).toContain("✓");
-      expect(stdout.output).toContain("×");
+      expect(stderr.output).toContain("Resolve credentials");
+      expect(stderr.output).toContain("Apply resource");
+      expect(stderr.output).toContain("✓");
+      expect(stderr.output).toContain("×");
     }),
   { tags: ["unit", "local"] },
 );
@@ -2255,6 +2274,7 @@ it.effect(
   "uses append-only progress when input is disabled on a TTY",
   () => {
     const stdout = new CaptureStream(true);
+    const stderr = new CaptureStream(true);
     return Effect.gen(function* () {
       const cli = yield* Interaction;
       const progress = yield* cli.progress({ label: "Deploying" });
@@ -2262,14 +2282,15 @@ it.effect(
       yield* progress.succeed("Deployed");
 
       expect(cli.terminal.input).toBe(false);
-      expect(stdout.output).toContain("Deploying\n");
-      expect(stdout.output).toContain("Deployed\n");
-      expect(stdout.output).not.toContain("\u001B[");
+      expect(stderr.output).toContain("Deploying\n");
+      expect(stderr.output).toContain("Deployed\n");
+      expect(stderr.output).not.toContain("\u001B[");
     }).pipe(
       Effect.provide(
         interactionLayer({
           input: false,
           stdout: stdout as unknown as NodeJS.WriteStream,
+          stderr: stderr as unknown as NodeJS.WriteStream,
           captureConsole: false,
         }),
       ),
@@ -2282,7 +2303,7 @@ it.effect(
   "renders the same semantic and component output without terminal input",
   () =>
     Effect.gen(function* () {
-      const { service, stdout } = yield* makeLive({ input: false, unicode: false });
+      const { service, stdout, stderr } = yield* makeLive({ input: false, unicode: false });
 
       yield* service.output.info("Resolving credentials");
       yield* service.output.success({ message: "Authenticated", detail: "cloudflare" });
@@ -2295,14 +2316,18 @@ it.effect(
       );
       yield* service.output.print(<Status>React output</Status>);
 
-      expect(stdout.output).toContain("Resolving credentials\n");
-      expect(stdout.output).toContain("Authenticated");
-      expect(stdout.output).toContain("cloudflare");
-      expect(stdout.output).toContain("Token expires soon");
-      expect(stdout.output).toContain("Authentication failed");
+      expect(stderr.output).toContain("Resolving credentials\n");
+      expect(stderr.output).toContain("Authenticated");
+      expect(stderr.output).toContain("cloudflare");
+      expect(stderr.output).toContain("Token expires soon");
+      expect(stderr.output).toContain("Authentication failed");
       expect(stdout.output).toContain("Attention");
       expect(stdout.output).toContain("Manual action required");
       expect(stdout.output).toContain("React output");
+      // Status lines are progress, views are results: piping stdout carries
+      // only the results.
+      expect(stdout.output).not.toContain("Resolving credentials");
+      expect(stderr.output).not.toContain("React output");
     }),
   { tags: ["unit", "local"] },
 );
