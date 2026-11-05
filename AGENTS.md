@@ -149,7 +149,7 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 
 ## Speed doctrine: never wait on a hang
 
-- Run tests with `pnpm test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). The runner enforces per-test timeouts and prints the currently-running tests whenever nothing finishes for 10s — use that list to identify a hang, read the run's log under `.alchemy/log/test/`, find the cause (unbounded retry, infinite pagination, the engine deadlock below), and fix the root cause. Never just re-run hoping.
+- Run tests with `pnpm test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). The runner enforces per-test timeouts — to identify a hang, read the run's log under `.alchemy/log/test/`, find the cause (unbounded retry, infinite pagination, the engine deadlock below), and fix the root cause. Never just re-run hoping.
 - Per-test timeout ≤ 90–120s (`{ timeout: ... }` on the test, or `--timeout` for the whole run). A suite needing more than ~3–5 minutes total is a bug.
 - Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
 - **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
@@ -1232,7 +1232,6 @@ Output behavior (plain mode, the default):
 - The collection phase (importing every test file, ~45s for the full suite) reports `collecting N/TOTAL test files (elapsed) <current file>` — repainted in place on a TTY, printed every 5s otherwise. A run that appears stuck before any test starts is almost always just collecting; if it really is stuck, the line names the file whose import hangs.
 - One line per test as it finishes, prefixed with a `[done/total]` progress counter so the remaining count is visible; a **failing test prints its error and captured output inline** immediately.
 - Passing tests' output is swallowed on the console — but **every** test's output (passes included) is streamed to a per-run log at **`.alchemy/log/test/{timestamp}-pid{pid}.log`** (relative to the cwd), so concurrent runs in different terminals never trample each other. The absolute path (with line/KB counts) is printed at the end of every run (`Full log: …`) — read that file when you need the complete record, e.g. a passing test's deploy output or a hang's partial log. The file is appended live, so it's readable mid-run; logs older than a week are pruned automatically (by stat mtime).
-- If nothing finishes for 10s, the runner prints the list of currently-running tests with elapsed times — the first place to look when a run seems hung.
 - Exit code is non-zero if any test failed.
 
 Runner semantics to know:
