@@ -28,7 +28,7 @@ export interface Any extends Schema.Top {
 }
 
 /**
- * What an Event takes after its fields: its {@link DomainAnnotations}, every
+ * What an Event takes after its fields: its `Domain.Annotations`, every
  * annotation `Schema.TaggedClass` takes, and the span `attributes` it records.
  */
 export type Annotations<Tag extends string, F extends Fields> = DomainAnnotations &

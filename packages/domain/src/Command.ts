@@ -192,6 +192,23 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  * const receipt = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId });
  * ```
  *
+ * ### Annotating commands
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's MCP tools, CLI help and OpenAPI document show its `description`,
+ * in place of the sentence they would generate.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class WithdrawMoney extends Domain.Command(
+ *   "WithdrawMoney",
+ *   { target: AccountId, input: { amount: Schema.Int }, events: [MoneyWithdrawn] },
+ *   { description: "Take money out of an account. The amount is in cents." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <

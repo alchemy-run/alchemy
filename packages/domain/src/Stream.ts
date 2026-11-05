@@ -179,6 +179,23 @@ export interface StreamKey<Name extends string> {
  * );
  * ```
  *
+ * ### Annotating streams
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's read tools, CLI help and OpenAPI document show its `description`
+ * after the sentence for each call.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class AccountCard extends Domain.Stream(
+ *   "AccountCard",
+ *   { key: Account, entries: [CardChanged] },
+ *   { description: "An account's card, with an entry each time it changes." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <

@@ -626,6 +626,30 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * yield* accounts.unschedule(accountId, "statement"); // cancel it while it is pending
  * ```
  *
+ * ### Annotating aggregates
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's read tools, CLI help and OpenAPI document show its `description`
+ * after the sentence for each call.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Account extends Domain.Aggregate(
+ *   "Account",
+ *   {
+ *     id: AccountId,
+ *     state: Schema.Struct({ balance: Schema.Int }),
+ *     initial: { balance: 0 },
+ *     commands: [DepositMoney],
+ *     decide: { DepositMoney: (s, cmd) => [new MoneyDeposited({ balanceAfter: s.balance + cmd.amount })] },
+ *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
+ *   },
+ *   { description: "A bank account, which keeps its own balance." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const makeRef = <A extends Any>(aggregate: A, id: IdOf<A>): Ref<A> => {

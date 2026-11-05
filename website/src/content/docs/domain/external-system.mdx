@@ -55,6 +55,23 @@ export class FraudCheck extends Domain.ExternalSystem("FraudCheck", {
 }) {}
 ```
 
+## Describe it
+
+An external system's last argument is its [annotations](/domain/annotations). No client calls an external system, so its `description` is for the people and the tools that read the model, as `Payments.annotations`.
+
+```typescript title="packages/domain/src/Settlement/Payments.external.ts"
+export class Payments extends Domain.ExternalSystem(
+  "Payments",
+  {
+    refund: {
+      args: { settlementId: Schema.String, amount: Cents },
+      success: { refundId: Schema.String },
+    },
+  },
+  { description: "The payment provider that refunds settlements." },
+) {}
+```
+
 ## Declare its errors
 
 When the vendor can refuse, declare the error with `error:`. The call's Effect then fails with that type, so a policy handles it like any typed error.

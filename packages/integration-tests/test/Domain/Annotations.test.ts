@@ -163,6 +163,16 @@ describe("Domain annotations", { tags: ["unit"] }, () => {
     expect(SchemaAST.resolveAt<number>("httpApiStatus")(NoFunds.ast)).toBe(402);
   });
 
+  it("tooling can walk a model and read each declaration's annotations", () => {
+    const glossary = Wallets.commands.map(
+      (command) => `${command.tag}: ${command.annotations.description ?? "Undocumented."}`,
+    );
+    expect(glossary).toEqual([
+      "Deposit: Put money into a wallet. The amount is in cents.",
+      "Close: Undocumented.",
+    ]);
+  });
+
   it("a declaration without annotations has none", () => {
     expect(Close.annotations).toEqual({});
     expect(BalanceChanged.annotations).toEqual({});

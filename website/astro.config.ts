@@ -1665,6 +1665,7 @@ export default defineConfig({
                 { label: "Saga", link: "/domain/saga" },
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
+                { label: "Annotations", link: "/domain/annotations" },
                 { label: "Story", link: "/domain/story" },
               ],
             },

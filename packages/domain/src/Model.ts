@@ -255,6 +255,25 @@ type HandledBy<
  * );
  * ```
  *
+ * ### Annotating models
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * A model lists its declarations, so tooling can walk them and read each
+ * one's annotations.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Bank extends Domain.Model(
+ *   "Bank",
+ *   { aggregates: [Account], views: [AccountSummary] },
+ *   { description: "Accounts and their balances." },
+ * ) {}
+ *
+ * const glossary = Bank.commands.map((command) => `${command.tag}: ${command.annotations.description}`);
+ * ```
+ *
  * @primitive
  */
 export const make = <

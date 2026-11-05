@@ -19,7 +19,7 @@ export interface Any extends Schema.Top {
 }
 
 /**
- * What a Rejection takes after its fields: its {@link DomainAnnotations},
+ * What a Rejection takes after its fields: its `Domain.Annotations`,
  * every annotation `Schema.TaggedError` takes (`httpApiStatus`, ...), and the
  * span `attributes` it records.
  */

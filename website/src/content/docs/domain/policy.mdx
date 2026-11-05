@@ -53,6 +53,18 @@ The declaration is all the model needs to deliver the right events. Add it to th
 
 `from` can also list several sources. Each source's events still arrive in that source's order, but there is no order between them: see [Partition it by key](#partition-it-by-key).
 
+## Describe it
+
+A policy's last argument is its [annotations](/domain/annotations). No client calls a policy, so its `description` is for the people and the tools that read the model, as `MainAccountProvisioning.annotations`.
+
+```typescript title="src/MainAccountProvisioning.policy.ts"
+export class MainAccountProvisioning extends Domain.Policy(
+  "MainAccountProvisioning",
+  { from: Customer, on: [CustomerRegistered] },
+  { description: "Opens a main account for every new customer." },
+) {}
+```
+
 ## Implement it as a Layer
 
 The implementation is separate from the declaration, because it usually depends on things outside the model's definition: a client for another aggregate, a payment provider, a fraud service. `toLayer` takes an Effect that resolves those once, and returns the handler that runs for each event.

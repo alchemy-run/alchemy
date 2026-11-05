@@ -219,6 +219,23 @@ export interface Definition<
  * yield* Ledger.caughtUp(receipt);
  * ```
  *
+ * ### Annotating projections
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Nothing a client calls shows it; it is for the people and the tools that
+ * read the model, as `X.annotations`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Ledger extends Domain.Projection(
+ *   "Ledger",
+ *   { from: [Account], key: Account, on: [MoneyDeposited, MoneyWithdrawn] },
+ *   { description: "Every money movement on an account, oldest first." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <

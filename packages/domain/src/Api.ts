@@ -1263,6 +1263,23 @@ const build = (
  * yield* bank.DepositMoney(accountId, { amount: 1_000 });
  * ```
  *
+ * ### Annotating Apis
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Its `description` heads the CLI's root help and is the OpenAPI document's
+ * `info.description`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class CustomerApi extends Domain.Api(
+ *   "CustomerApi",
+ *   { model: Bank, commands: ["DepositMoney"], views: ["AccountSummary"] },
+ *   { description: "The bank, as a customer reaches it." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <

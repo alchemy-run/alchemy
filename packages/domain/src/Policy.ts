@@ -179,6 +179,23 @@ export interface PolicyKey<Name extends string> {
  * );
  * ```
  *
+ * ### Annotating policies
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Nothing a client calls shows it; it is for the people and the tools that
+ * read the model, as `X.annotations`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class MainAccountProvisioning extends Domain.Policy(
+ *   "MainAccountProvisioning",
+ *   { from: Customer, on: [CustomerRegistered] },
+ *   { description: "Opens a main account for every new customer." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <

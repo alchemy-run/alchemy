@@ -247,6 +247,23 @@ export interface ImplementationKey<Name extends string> {
  * );
  * ```
  *
+ * ### Annotating sagas
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Nothing a client calls shows it; it is for the people and the tools that
+ * read the model, as `X.annotations`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class ExecuteTransfer extends Domain.Saga(
+ *   "ExecuteTransfer",
+ *   { key: TransferId, input: { from: AccountId, to: AccountId, amount: Cents } },
+ *   { description: "Debits one account, credits another, and refunds the debit if the credit fails." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <

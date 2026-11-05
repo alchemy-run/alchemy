@@ -139,28 +139,16 @@ Leaving something out is how you keep it internal. `OpenAccount` isn't listed, b
 
 ## Describe what it serves
 
-Every declaration takes annotations as its last argument. Their `description` says what the entry does, and everything built from an Api shows it: an MCP tool for an agent, CLI help, and the OpenAPI document of `toHttpApi`. An Api's own description heads the CLI help and the OpenAPI document.
+Everything built from an Api shows the descriptions of what it serves: an agent's [MCP](/domain/mcp) tools, the [CLI](/domain/cli)'s help, and the OpenAPI document of [`toHttpApi`](/domain/http-api). Each comes from the [annotations](/domain/annotations) of the declaration, so describe each command, view, stream and aggregate where you declare it.
 
-```typescript title="src/WithdrawMoney.command.ts"
-export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
-  input: { amount: Schema.Int },
-  events: [MoneyWithdrawn],
-}, { description: "Take money out of an account. The amount is in cents." }) {}
-```
+An Api's own last argument is its annotations too. Its `description` heads the CLI's root help and is the OpenAPI document's `info.description`:
 
-A view, a stream and an aggregate take annotations the same way. Their read tools follow the call with the description: "Get the current AccountSummary of a key. An account's balance and owner."
-
-Add your own keys by augmenting `Domain.Annotations`, then read them back as `X.annotations` from any declaration to build your own docs, diagrams or code:
-
-```typescript
-declare module "@alchemy.run/domain" {
-  interface Annotations {
-    readonly examples?: ReadonlyArray<unknown>;
-  }
-}
-
-WithdrawMoney.annotations.examples;
+```typescript title="src/BankApi.ts"
+export class BankApi extends Domain.Api(
+  "BankApi",
+  { model: Bank, commands: ["WithdrawMoney"], views: ["AccountSummary"] },
+  { description: "What a customer of the bank reaches." },
+) {}
 ```
 
 ## Give each kind of client its own Api

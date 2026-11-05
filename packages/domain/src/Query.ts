@@ -302,6 +302,23 @@ export interface Definition<
  * const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
  * ```
  *
+ * ### Annotating queries
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * The MCP, CLI and OpenAPI surfaces don't serve queries yet, so it is for
+ * the people and the tools that read the model, as `X.annotations`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class AccountLedger extends Domain.Query(
+ *   "AccountLedger",
+ *   { input: { account: AccountId }, success: LedgerRow, paged: true },
+ *   { description: "One account's ledger, a page at a time." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <

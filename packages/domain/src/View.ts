@@ -464,6 +464,29 @@ export interface ViewKey<Name extends string> {
  * }),
  * ```
  *
+ * ### Annotating views
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's read tools, CLI help and OpenAPI document show its `description`
+ * after the sentence for each call.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class AccountSummary extends Domain.View(
+ *   "AccountSummary",
+ *   {
+ *     from: [Account],
+ *     key: Account,
+ *     state: Schema.Struct({ balance: Schema.Int }),
+ *     initial: { balance: 0 },
+ *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
+ *   },
+ *   { description: "An account's balance." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <

@@ -306,6 +306,24 @@ const reserved = new Set<string>(RESERVED);
  * );
  * ```
  *
+ * ### Annotating external systems
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Nothing a client calls shows it; it is for the people and the tools that
+ * read the model, as `X.annotations`. `annotations` is the class's own
+ * static, so no operation may take that name.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Payments extends Domain.ExternalSystem(
+ *   "Payments",
+ *   { refund: { args: { settlementId: Schema.String, amount: Cents }, success: { refundId: Schema.String } } },
+ *   { description: "The payment provider that refunds settlements." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <const Name extends string, const Ops extends Record<string, OpSpec>>(
