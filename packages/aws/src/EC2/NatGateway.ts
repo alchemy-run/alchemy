@@ -16,6 +16,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { AllocationId } from "./EIP.ts";
@@ -244,8 +245,23 @@ export interface NatGateway extends Resource<
     deleteTime?: string;
   },
   never,
-  Providers
+  Providers,
+  NatGatewayLookup
 > {}
+
+/**
+ * Props for {@link NatGateway.lookup}: find a NAT gateway this stack
+ * doesn't manage, in the ambient account and region.
+ */
+export type NatGatewayLookup =
+  | {
+      /** The gateway's id. */
+      natGatewayId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 /**
  * A NAT gateway that lets instances in a private subnet reach the internet
  * (and other AWS services) while preventing unsolicited inbound connections.
@@ -350,6 +366,23 @@ export interface NatGateway extends Resource<
  * from the private subnet's route table through the gateway so private instances
  * can reach the internet.
  *
+ * ### Looking up an existing NAT gateway
+ * `NatGateway.lookup` references a NAT gateway Alchemy doesn't manage (created in the
+ * console or by another stack), found by `natGatewayId` or its `Name` tag. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Route private subnets through an existing NAT gateway
+ * ```typescript
+ * const nat = AWS.EC2.NatGateway.lookup({ name: "shared-nat" });
+ *
+ * yield* AWS.EC2.Route("Egress", {
+ *   routeTableId: privateTable.routeTableId,
+ *   destinationCidrBlock: "0.0.0.0/0",
+ *   natGatewayId: nat.natGatewayId,
+ * });
+ * ```
+ *
  * @resource
  */
 export const NatGateway = Resource<NatGateway>("AWS.EC2.NatGateway");
@@ -434,6 +467,34 @@ export const NatGatewayProvider = () =>
 
       return {
         stables: ["natGatewayId", "natGatewayArn", "vpcId"],
+
+        lookup: Effect.fn(function* (props) {
+          const found = yield* ec2
+
+            .describeNatGateways(
+              "natGatewayId" in props
+                ? { NatGatewayIds: [props.natGatewayId] }
+                : { Filter: [nameTagFilter(props.name)] },
+            )
+
+            .pipe(Effect.catchTag("NatGatewayNotFound", () => Effect.succeed({ NatGateways: [] })));
+
+          const match = yield* single(
+            "AWS.EC2.NatGateway",
+
+            "natGatewayId" in props ? props.natGatewayId : `Name=${props.name}`,
+
+            (found.NatGateways ?? []).filter(
+              (x) => x.State !== "deleted" && x.State !== "deleting" && x.State !== "failed",
+            ),
+
+            (x) => x.NatGatewayId,
+          );
+
+          if (!match?.NatGatewayId) return undefined;
+
+          return yield* toAttrs(match);
+        }),
 
         read: Effect.fn(function* ({ id, output }) {
           if (output) {
