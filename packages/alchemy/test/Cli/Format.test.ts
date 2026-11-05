@@ -15,13 +15,15 @@ describe("formatElapsed", { tags: ["unit", "local"] }, () => {
   });
 
   test("uses minutes and seconds under an hour", () => {
-    expect(formatElapsed(59_950)).toBe("1m 0s");
-    expect(formatElapsed(60_000)).toBe("1m 0s");
+    expect(formatElapsed(59_950)).toBe("1m");
+    expect(formatElapsed(60_000)).toBe("1m");
     expect(formatElapsed(754_300)).toBe("12m 34s");
   });
 
   test("uses hours from an hour up", () => {
-    expect(formatElapsed(3_599_600)).toBe("1h 0m 0s");
+    expect(formatElapsed(3_599_600)).toBe("1h");
+    expect(formatElapsed(3_663_000)).toBe("1h 1m 3s");
+    expect(formatElapsed(3_603_000)).toBe("1h 3s");
     expect(formatElapsed(3_723_000)).toBe("1h 2m 3s");
   });
 });

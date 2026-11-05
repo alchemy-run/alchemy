@@ -1,15 +1,12 @@
+import * as Duration from "effect/Duration";
 import { theme } from "../Util/Theme.ts";
 
-/** `450ms`, `1.2s`, `12m 34s` or `1h 2m 3s`, by size — shared by every renderer. */
+/** `450ms`, `1.2s`, `12m 34s` or `1h 3s`, by size — shared by every renderer. */
 export const formatElapsed = (ms: number): string => {
   if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
   // 59.95s and up would round to a misleading `60.0s`.
   if (ms < 59_950) return `${(ms / 1000).toFixed(1)}s`;
-  const total = Math.round(ms / 1000);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  return hours > 0 ? `${hours}h ${minutes}m ${seconds}s` : `${minutes}m ${seconds}s`;
+  return Duration.format(Duration.seconds(Math.round(ms / 1000)));
 };
 
 /** Per-resource colors for `alchemy logs`, assigned in order of appearance. */
