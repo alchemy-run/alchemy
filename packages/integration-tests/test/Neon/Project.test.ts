@@ -162,7 +162,7 @@ test.provider(
         fqn: "ObservedProject",
         instanceId: "observed-project",
         bindings: [],
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
       };
       const news = {
         name: initial.projectName,
@@ -247,7 +247,7 @@ test.provider(
           olds: undefined,
           output: undefined,
           bindings: [],
-          session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+          session: { note: () => Effect.void },
         })
         .pipe(Effect.result);
       expect(Result.isFailure(recovery)).toBe(true);
@@ -308,7 +308,7 @@ test.provider(
         fqn: "LateProject",
         instanceId: "late-project",
         bindings: [],
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
       };
       const late = yield* provider
         .reconcile({ ...context, news: { name }, olds: undefined, output: undefined })

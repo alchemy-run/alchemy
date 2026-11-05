@@ -34,6 +34,13 @@ export interface ClusterProps {
    * CREATE INDEX is adapted to ASYNC and awaited. Explicit transaction
    * control and serial columns are rejected. Use UUIDs or bigint identity
    * columns with an explicit CACHE. Applied migration files are immutable.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**

@@ -21,7 +21,7 @@ const WAKU_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/waku/source";
 
 export interface WakuProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
 > {
   /**
    * Overrides the module that becomes the deployed Worker entry. Relative

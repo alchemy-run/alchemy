@@ -44,4 +44,14 @@ export class SocketRpcs extends RpcGroup.make(
   Rpc.make("invalidateSocketSerialization", { success: Schema.Number }),
   Rpc.make("abort", { success: Schema.Void }),
   Rpc.make("stats", { success: SocketStats }),
+  Rpc.make("holdLater", { payload: { label: Schema.String }, success: Schema.String }),
+  Rpc.make("streamWaitUntil", {
+    payload: { label: Schema.String },
+    success: Schema.String,
+    stream: true,
+  }),
+  Rpc.make("journal", {
+    payload: { label: Schema.String },
+    success: Schema.Array(Schema.String),
+  }),
 ) {}

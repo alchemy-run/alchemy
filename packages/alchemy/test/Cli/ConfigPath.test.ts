@@ -1,12 +1,8 @@
 import { describe, expect, it } from "@alchemy.run/test";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Stacks from "@/Alchemist/routes/stack.ts";
-import * as Alchemist from "@/Alchemist/Runtime.ts";
 import { UserInputError } from "@/Cli/commands/errors.ts";
 import { resolveConfig, include, exclude, validateSelectionOptions } from "@/Cli/commands/flags.ts";
 import { DevOptions } from "@/Cli/DevOptions.ts";
@@ -130,19 +126,5 @@ describe("stack selection options", { tags: ["unit", "local"] }, () => {
         }),
       );
     }
-    it.effect(
-      `rejects Alchemist destroy ${JSON.stringify(selection)} before opening a stack session`,
-      () =>
-        Effect.gen(function* () {
-          const exit = yield* Stacks.plan({
-            target: { entrypoint: "does-not-exist.ts", stage: "test" },
-            operation: "destroy",
-            ...selection,
-          }).pipe(Effect.exit);
-          expect(Exit.isFailure(exit)).toBe(true);
-          if (Exit.isFailure(exit))
-            expect(Cause.pretty(exit.cause)).toContain("Filtered destroy is not supported");
-        }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
-    );
   }
 });

@@ -1,15 +1,18 @@
 import { CurrentActivity } from "alchemy/WorkflowEncoding";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import type { Annotations } from "./Annotations.ts";
 import type * as Command from "./Command.ts";
+import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
-import { DefinitionError, judge, settle, targetId as internalTargetId } from "./internal.ts";
+import { judge, settle, targetId as internalTargetId } from "./internal.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -78,7 +81,7 @@ export interface Receipt<Ev = unknown, Reply = unknown> {
 }
 
 /**
- * What {@link Client.schedule} returns: the pending command's id, to
+ * What {@link Client.schedule} returns: the scheduled command's id, to
  * `unschedule` it by, and when it is due.
  */
 export interface ScheduleReceipt {
@@ -196,9 +199,8 @@ export interface SendOptions {
 }
 
 /**
- * The instance already handled a command with this id, so it can no longer
- * be scheduled or cancelled: a deadline that fired before it was cancelled,
- * or a command id that was already sent.
+ * The command scheduled with this id already ran, so it can no longer be
+ * cancelled: a deadline that fired before it was cancelled.
  */
 export class AlreadyExecuted extends Data.TaggedError("AlreadyExecuted")<{
   readonly aggregate: string;
@@ -221,13 +223,21 @@ export class NotScheduled extends Data.TaggedError("NotScheduled")<{
 }> {}
 
 /**
- * Options for {@link Client.schedule}: when to send, absolutely or after a delay.
+ * Options for {@link Client.schedule}: when to send, absolutely or after a
+ * delay, and the command id that names it.
  */
-export type ScheduleOptions = SendOptions &
-  (
-    | { readonly at: DateTime.Utc; readonly after?: never }
-    | { readonly after: Duration.Input; readonly at?: never }
-  );
+export type ScheduleOptions = {
+  /**
+   * Names the scheduled command on its instance, to replace or `unschedule`
+   * it by, e.g. `stall:<ticketId>`. Scheduling under the same id replaces
+   * the earlier command, pending or already run. Defaults to an id derived
+   * like a send's.
+   */
+  readonly commandId?: string;
+} & (
+  | { readonly at: DateTime.Utc; readonly after?: never }
+  | { readonly after: Duration.Input; readonly at?: never }
+);
 
 /**
  * When a scheduled command is due: an epoch-millisecond time, or a delay the
@@ -315,15 +325,16 @@ export interface Client<Def extends AnyDefinition> {
    * that never reject can be scheduled, since nobody is waiting to handle a
    * rejection when it fires; such a command reports a fact ("the approval
    * window closed") and records nothing when it no longer applies.
-   * Scheduling again with the same command id replaces the earlier one.
-   * Returns the command id to `unschedule` it by, and when it is due. Fails with `AlreadyExecuted` when the instance already handled a command
-   * with that id.
+   * Scheduling again with the same command id replaces the earlier one,
+   * pending or already run, so a deadline can be armed again. A policy or
+   * saga step that runs again for the same trigger schedules nothing new.
+   * Returns the command id to `unschedule` it by, and when it is due.
    */
   readonly schedule: <Cmd extends InstanceOf<Schedulable<Def>>>(
     target: Target<Def>,
     command: Cmd,
     options: ScheduleOptions,
-  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  ) => Effect.Effect<ScheduleReceipt, never, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
   /**
    * Cancel a pending scheduled command by the command id it was scheduled
    * with. Once it succeeds, the command never runs. Fails with
@@ -360,7 +371,7 @@ export interface ClientImpl {
     target: unknown,
     command: { readonly _tag: string },
     options: ScheduleOptions,
-  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted>;
+  ) => Effect.Effect<ScheduleReceipt>;
   readonly unschedule: (
     target: unknown,
     commandId: string,
@@ -373,6 +384,7 @@ export interface ClientImpl {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Aggregate";
+  readonly annotations: Annotations;
   readonly aggregateName: string;
   readonly definition: AnyDefinition;
 }
@@ -455,7 +467,12 @@ export const predict = (
     return {
       _tag: "Unpredictable",
       cause: Cause.die(
-        new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`),
+        new DefinitionError({
+          reason: new UnhandledCommand({
+            aggregate: aggregate.aggregateName,
+            command: command._tag,
+          }),
+        }),
       ),
     };
   }
@@ -609,6 +626,30 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * yield* accounts.unschedule(accountId, "statement"); // cancel it while it is pending
  * ```
  *
+ * ### Annotating aggregates
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's read tools, CLI help and OpenAPI document show its `description`
+ * after the sentence for each call.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Account extends Domain.Aggregate(
+ *   "Account",
+ *   {
+ *     id: AccountId,
+ *     state: Schema.Struct({ balance: Schema.Int }),
+ *     initial: { balance: 0 },
+ *     commands: [DepositMoney],
+ *     decide: { DepositMoney: (s, cmd) => [new MoneyDeposited({ balanceAfter: s.balance + cmd.amount })] },
+ *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
+ *   },
+ *   { description: "A bank account, which keeps its own balance." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const makeRef = <A extends Any>(aggregate: A, id: IdOf<A>): Ref<A> => {
@@ -641,7 +682,10 @@ export class PolicyRun extends Context.Service<PolicyRun, { readonly next: () =>
  *
  * @internal
  */
-export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<string> =>
+export const commandIdFor = (
+  options: SendOptions | undefined,
+  random: SecureRandom.SecureRandom["Service"],
+): Effect.Effect<string> =>
   options?.commandId !== undefined
     ? Effect.succeed(options.commandId)
     : Effect.gen(function* () {
@@ -650,7 +694,7 @@ export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<st
         if (Option.isSome(step)) return step.value.next();
         const policy = yield* Effect.serviceOption(PolicyRun);
         if (Option.isSome(policy)) return policy.value.next();
-        return yield* Effect.sync(() => crypto.randomUUID());
+        return yield* random.uuidV4();
       });
 
 /**
@@ -687,11 +731,15 @@ export const make = <
   const C extends ReadonlyArray<Command.Any>,
   const Ms extends Middleware.List = readonly [],
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
+  // The declared `read`, inferred apart from `Definition` so the type records it.
+  // Its constraint carries no members, so it never narrows how `read` is typed.
+  const R extends object | undefined = object | undefined,
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C>,
-): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>> => {
-  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
+  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C> & { readonly read?: R },
+  annotations: Annotations = {},
+): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>> => {
+  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
   // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
@@ -700,11 +748,12 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly aggregateName: Name = name;
-    static readonly definition: Resolved<Id, S, C, Ms, Rejects> = {
+    static readonly definition: Resolved<Id, S, C, Ms, Rejects, ReadOf<R>> = {
       ...definition,
       events: [...new Set(definition.commands.flatMap((command) => command.events))],
-    } as unknown as Resolved<Id, S, C, Ms, Rejects>;
+    } as unknown as Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>;
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
@@ -718,7 +767,7 @@ export const make = <
     ) {
       return predict(this, state, command, options);
     }
-  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
+  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>;
 };
 
 /**
@@ -742,14 +791,30 @@ export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.An
   readonly commands: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
 };
 
-/** A definition with its events collected from its commands. */
+/**
+ * The `read` an aggregate declared, or `undefined`. With none declared, `R`
+ * is left at its default, which includes `undefined`; a declared contract
+ * never does.
+ */
+type ReadOf<R> = undefined extends R ? undefined : R;
+
+/**
+ * A definition with its events collected from its commands. `R` is the
+ * `read` it declared, or `undefined`: an aggregate that declares one has a
+ * required `read` in its type, so an Api can tell which aggregates it may
+ * serve.
+ */
 export type Resolved<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-> = Definition<Id, S, C, Ms, Rejects> & { readonly events: ReadonlyArray<EventsOf<C>> };
+  R extends Read.AnyContract | undefined = Read.AnyContract | undefined,
+> = Definition<Id, S, C, Ms, Rejects> & {
+  readonly events: ReadonlyArray<EventsOf<C>>;
+  readonly read: R;
+};
 
 /**
  * The class type returned by {@link make}.
@@ -759,6 +824,7 @@ export interface AggregateClass<
   Def extends AnyDefinition,
 > extends Context.ServiceClass<Key<Name>, string, Client<Def>> {
   readonly kind: "Aggregate";
+  readonly annotations: Annotations;
   readonly aggregateName: Name;
   readonly definition: Def;
   /** Address one instance of this aggregate. */

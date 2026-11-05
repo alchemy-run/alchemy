@@ -4,7 +4,7 @@ import { expect, it } from "@alchemy.run/test";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AlchemyContext } from "alchemy/AlchemyContext";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { AuthProvidersLive } from "alchemy/Auth/AuthProvider";
 import * as Interaction from "alchemy/Interaction";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
@@ -34,7 +34,7 @@ it.live(
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          Layer.succeed(AuthProviders, {}),
+          AuthProvidersLive,
           Layer.succeed(Stage, "test"),
           Layer.succeed(Stack, {
             name: "test",

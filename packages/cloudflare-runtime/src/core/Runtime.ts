@@ -259,12 +259,15 @@ export const RuntimeLive = Layer.effect(
                 ...config.services,
               ],
               extensions: config.extensions,
+              v8Flags: worker.workerd?.v8Flags,
             },
             {
               "debug-port": `127.0.0.1:${pinned?.[SOCKET_DEBUG_PORT] ?? 0}`,
               ...(worker.logging?.verbose ? { verbose: true } : undefined),
             },
             {
+              bin: worker.workerd?.path,
+              env: worker.workerd?.env,
               onOutput: worker.logging?.onOutput,
               onExit: (exit) => {
                 Queue.offerUnsafe(exits, exit);

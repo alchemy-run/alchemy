@@ -7,6 +7,7 @@ import type * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
 import { evolveView, type LocalViewInput } from "./internal.ts";
@@ -24,8 +25,9 @@ export class WaitTimeout extends Data.TaggedError("WaitTimeout")<{
 }> {}
 
 /**
- * Raised by a read with `atLeast` when the view has not applied that write
- * before the timeout. A client receives it like a rejection.
+ * Raised by a read `atLeast` a write when the view, stream or projection
+ * (named in `view`) has not handled the write's events before the timeout. A
+ * client receives it like a rejection.
  */
 export class ConsistencyTimeout extends Schema.TaggedError<ConsistencyTimeout>()(
   "ConsistencyTimeout",
@@ -50,6 +52,7 @@ type Handlers = {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "View";
+  readonly annotations: Annotations;
   readonly viewName: string;
   readonly definition: {
     readonly from: ReadonlyArray<Aggregate.Any | Any>;
@@ -61,6 +64,7 @@ export interface Any extends Context.Key<unknown, unknown> {
     readonly events?: ReadonlyArray<Event.Any>;
     readonly emit?: Handlers;
     readonly computed?: { readonly [name: string]: ((state: never) => unknown) | undefined };
+    readonly version?: number;
   } & Read.AnyContract;
   /** Type-level only: the view's state. */
   readonly "~state": unknown;
@@ -245,6 +249,20 @@ export interface Definition<
   };
   /** Values derived from state when read. */
   readonly computed?: ComputedFns<StateType<S>, Computed>;
+  /**
+   * Bump it whenever you change what the view computes (`evolve`, `emit`,
+   * `keyOf`, `state`, the events or sources it reads): every key is computed
+   * again from the history, and so is every view and projection that reads
+   * this one. Only ever increase it.
+   *
+   * A view keyed by the one aggregate it reads is rebuilt in place: the deploy
+   * waits for nothing, and each key re-reads its own instance's events the
+   * first time it is touched. Any other view is rebuilt from the history
+   * before the deploy finishes.
+   *
+   * @default 0
+   */
+  readonly version?: number;
 }
 
 /** Derived-value functions of a view. */
@@ -281,9 +299,25 @@ export interface WatchOptions<S> {
 }
 
 /**
+ * How much of the history recorded before a view or projection (or before its
+ * current version) has reached it. A consumer added to a model that already
+ * has events, or rebuilt by bumping its version, receives that history first.
+ */
+export interface History {
+  /** Every event recorded before it has reached it: its answers cover the whole history. */
+  readonly complete: boolean;
+}
+
+/**
  * The read API of a view, obtained with `yield* MyView`.
  */
 export interface Host<S, Key extends Key.Any, E> {
+  /**
+   * Whether the history recorded before this view, or before its current
+   * version, has reached it. Until it has, its answers cover only part of
+   * the history: a screen can say so, or hold its reads until it is complete.
+   */
+  readonly history: Effect.Effect<History>;
   /** Read the current state of a key. `none` if it does not exist. */
   readonly query: (
     key: Key.RefOf<Key>,
@@ -430,6 +464,29 @@ export interface ViewKey<Name extends string> {
  * }),
  * ```
  *
+ * ### Annotating views
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's read tools, CLI help and OpenAPI document show its `description`
+ * after the sentence for each call.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class AccountSummary extends Domain.View(
+ *   "AccountSummary",
+ *   {
+ *     from: [Account],
+ *     key: Account,
+ *     state: Schema.Struct({ balance: Schema.Int }),
+ *     initial: { balance: 0 },
+ *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
+ *   },
+ *   { description: "An account's balance." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -444,6 +501,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<From, Key, S, Events, Computed, Ms, Rejects>,
+  annotations: Annotations = {},
 ): ViewClass<
   Name,
   Definition<From, Key, S, Events, Computed, Ms, Rejects>,
@@ -458,6 +516,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "View" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly viewName: Name = name;
     static readonly definition: Definition<From, Key, S, Events, Computed, Ms, Rejects> =
       definition;
@@ -514,6 +573,7 @@ export interface ViewClass<
   Out,
 > extends Context.ServiceClass<ViewKey<Name>, string, Host<St, Key, Out>> {
   readonly kind: "View";
+  readonly annotations: Annotations;
   readonly viewName: Name;
   readonly definition: Def;
   /** The view's state schema. */

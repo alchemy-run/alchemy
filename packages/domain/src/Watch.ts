@@ -92,7 +92,7 @@ const encode = (
     const rpc = subscription.mode === "watch" ? rpcs.watch : rpcs.events;
     const codecs = codecsOf(rpc);
     const validate = contractOf(entry).validate as Validate | undefined;
-    const context = RequestContext.restore(subscription.context);
+    const context = yield* RequestContext.restore(subscription.context);
     const values: Array<unknown> = [];
     let rejection: Option.Option<unknown> = Option.none();
     for (const item of items) {
@@ -160,15 +160,15 @@ export const viewPush =
     snapshot: ViewSnapshot,
     entries: ReadonlyArray<ViewEntry>,
   ): Effect.Effect<Push> =>
-    Effect.suspend(() => {
+    Effect.gen(function* () {
       const ref = Key.refOf(view.definition.key, key);
       if (subscription.mode === "watch") {
         if (snapshot.version <= subscription.cursor) {
-          return Effect.succeed({ messages: [], subscription, done: false });
+          return { messages: [], subscription, done: false };
         }
         const state = snapshot.state === null ? null : kernel.decodeViewState(view, snapshot.state);
         const visible = state !== null && matches(where(subscription), state) ? state : null;
-        return encode(
+        return yield* encode(
           view,
           subscription,
           ref,
@@ -177,16 +177,15 @@ export const viewPush =
         );
       }
       const fresh = entries.filter((entry) => entry.seq > subscription.cursor);
-      const items = fresh.map((stored): Item => {
-        const decoded = kernel.decodeViewEntry(view, stored);
-        return {
+      const items = yield* Effect.forEach(fresh, (stored) =>
+        Effect.map(kernel.decodeViewEntry(view, stored), (decoded): Item => ({
           state: decoded.state,
           value: matches(where(subscription), decoded.event) ? Option.some(decoded) : Option.none(),
-        };
-      });
+        })),
+      );
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
       const marked = markCaughtUp(subscription, items, cursor);
-      return encode(view, marked.subscription, ref, marked.items, cursor);
+      return yield* encode(view, marked.subscription, ref, marked.items, cursor);
     });
 
 /** What an aggregate instance's subscriber receives after a commit (or when it connects). */
@@ -198,14 +197,14 @@ export const aggregatePush =
     current: { readonly state: Json; readonly version: number },
     events: ReadonlyArray<StoredEvent>,
   ): Effect.Effect<Push> =>
-    Effect.suspend(() => {
+    Effect.gen(function* () {
       const ref = { aggregate: nameOf(aggregate), id } as Aggregate.Ref;
       const state = kernel.decodeState(aggregate, current.state);
       if (subscription.mode === "watch") {
         if (current.version <= subscription.cursor) {
-          return Effect.succeed({ messages: [], subscription, done: false });
+          return { messages: [], subscription, done: false };
         }
-        return encode(
+        return yield* encode(
           aggregate,
           subscription,
           ref,
@@ -215,16 +214,15 @@ export const aggregatePush =
       }
       const fresh = events.filter((stored) => stored.envelope.seq > subscription.cursor);
       // Judged against the instance's state now, since events carry no state.
-      const items = fresh.map((stored): Item => ({
-        state,
-        value: Option.some({
-          event: kernel.decodeEvent(stored.event),
-          envelope: decodeEnvelope(stored.envelope),
-        }),
-      }));
+      const items = yield* Effect.forEach(fresh, (stored) =>
+        Effect.map(kernel.decodeEvent(stored.event), (event): Item => ({
+          state,
+          value: Option.some({ event, envelope: decodeEnvelope(stored.envelope) }),
+        })),
+      );
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.envelope.seq : subscription.cursor;
       const marked = markCaughtUp(subscription, items, cursor);
-      return encode(aggregate, marked.subscription, ref, marked.items, cursor);
+      return yield* encode(aggregate, marked.subscription, ref, marked.items, cursor);
     });
 
 /** What a stream key's subscriber receives after an append (or when it connects). */
@@ -237,14 +235,14 @@ export const streamPush =
     entries: ReadonlyArray<StreamEntry>,
     latest: StreamEntry | undefined,
   ): Effect.Effect<Push> =>
-    Effect.suspend(() => {
+    Effect.gen(function* () {
       const ref = Key.refOf(stream.definition.key, key);
       if (subscription.mode === "watch") {
         if (meta.seq <= subscription.cursor) {
-          return Effect.succeed({ messages: [], subscription, done: false });
+          return { messages: [], subscription, done: false };
         }
-        const decoded = latest ? kernel.decodeStreamEntry(latest) : null;
-        return encode(
+        const decoded = latest ? yield* kernel.decodeStreamEntry(latest) : null;
+        return yield* encode(
           stream,
           subscription,
           ref,
@@ -254,14 +252,13 @@ export const streamPush =
       }
       const fresh = entries.filter((entry) => entry.seq > subscription.cursor);
       // Each entry is judged as the key's latest entry at that point.
-      const items = fresh.map((stored): Item => {
-        const decoded = kernel.decodeStreamEntry(stored);
-        return {
+      const items = yield* Effect.forEach(fresh, (stored) =>
+        Effect.map(kernel.decodeStreamEntry(stored), (decoded): Item => ({
           state: decoded,
           value: matches(where(subscription), decoded.event) ? Option.some(decoded) : Option.none(),
-        };
-      });
+        })),
+      );
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
       const marked = markCaughtUp(subscription, items, cursor);
-      return encode(stream, marked.subscription, ref, marked.items, cursor);
+      return yield* encode(stream, marked.subscription, ref, marked.items, cursor);
     });

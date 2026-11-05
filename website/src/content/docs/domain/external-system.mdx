@@ -7,8 +7,6 @@ import DAG from "../../../components/DAG.astro";
 
 An external system is a service outside the model that its policies call, such as a payment processor or a fraud scorer. The model declares the calls it makes, in its own words, with their arguments and results, and nothing about the vendor behind them. A Layer supplies the vendor, so production, tests and stories can each use a different one.
 
-This chapter starts with why the model keeps outside systems at arm's length, then declares one, implements it, calls it, and turns events from outside into commands.
-
 ## Keep the outside world at the edge
 
 Every vendor has its own language. A payment processor talks about payment intents, charges, balance transactions and webhooks. A fraud vendor talks about risk signals and decision codes. None of those words belong to your model. If they leak into the model, the model starts speaking two languages, and changing vendor means rewriting rules.
@@ -57,6 +55,23 @@ export class FraudCheck extends Domain.ExternalSystem("FraudCheck", {
 }) {}
 ```
 
+## Describe it
+
+An external system's last argument is its [annotations](/domain/annotations). No client calls an external system, so its `description` is for the people and the tools that read the model, as `Payments.annotations`.
+
+```typescript title="packages/domain/src/Settlement/Payments.external.ts"
+export class Payments extends Domain.ExternalSystem(
+  "Payments",
+  {
+    refund: {
+      args: { settlementId: Schema.String, amount: Cents },
+      success: { refundId: Schema.String },
+    },
+  },
+  { description: "The payment provider that refunds settlements." },
+) {}
+```
+
 ## Declare its errors
 
 When the vendor can refuse, declare the error with `error:`. The call's Effect then fails with that type, so a policy handles it like any typed error.
@@ -93,7 +108,7 @@ Declare the refusals the model has an answer for, in its own words. A declined r
 
 ## Implement it with a Layer
 
-An adapter is a Layer that implements every call. It's the only code that knows the vendor, so swapping vendor, or using a fake, never touches the model.
+An adapter is a Layer that implements every call. It's the only code that knows the vendor, so swapping vendor, or using a fake, never touches the model. To prove a fake answers like the vendor, [run the same tests against both](/domain/testing-models#run-the-same-tests-against-every-adapter).
 
 ```typescript title="packages/server/src/Settlement/StripePayments.ts"
 export const StripePayments = Payments.toLayer(

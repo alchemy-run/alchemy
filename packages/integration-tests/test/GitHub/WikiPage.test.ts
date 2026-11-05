@@ -330,7 +330,7 @@ describe("WikiPage Git fixtures", (it) => {
             fqn: "Page",
             instanceId: "fixture",
             bindings: [],
-            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+            session: { note: () => Effect.void },
           };
           const created = yield* provider.reconcile({
             ...context,

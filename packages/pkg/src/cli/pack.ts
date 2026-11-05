@@ -2,7 +2,6 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { exec } from "alchemy/Util/exec";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
-import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -608,7 +607,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   let packages = yield* discover(options.cwd, options.groups);
   const implied = yield* discoverWorkspaceDependencies(options.cwd, root, packages);
   if (implied.length > 0) {
-    yield* Console.log(
+    yield* Effect.logInfo(
       `Including ${implied.length} workspace dependenc${implied.length === 1 ? "y" : "ies"} not listed by --group: ${implied.map((pkg) => pkg.name).join(", ")}`,
     );
     packages = [...packages, ...implied];
@@ -660,7 +659,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
     for (const name of dependencies.keys()) {
       if (!names.has(name)) dependencies.delete(name);
     }
-    yield* Console.log(
+    yield* Effect.logInfo(
       `Selected ${packages.length} package(s) changed since ${since}, including dependents and dependencies.`,
     );
   }
@@ -695,7 +694,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
           `${pkg.name}@${pkg.version} ${packed.sha256.slice(0, 12)} ${packed.size} bytes`,
           ...packed.rewrites.map((r) => `  ${r.section}.${r.name} -> ${r.url}`),
         ];
-        yield* Console.log(lines.join("\n"));
+        yield* Effect.logInfo(lines.join("\n"));
         return {
           name: pkg.name,
           version: pkg.version,
@@ -737,7 +736,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   };
   const manifestText = `${yield* Schema.encodeEffect(ManifestJson)(manifest)}\n`;
   yield* fs.writeFileString(path.join(outDir, MANIFEST_FILE), manifestText);
-  yield* Console.log(
+  yield* Effect.logInfo(
     `Packed ${entries.length} package(s) into ${path.relative(options.cwd, outDir) || "."}`,
   );
 
@@ -756,6 +755,6 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
       },
     );
   }
-  yield* Console.log(`Manifest artifact name: ${artifact}`);
+  yield* Effect.logInfo(`Manifest artifact name: ${artifact}`);
   return manifest;
 });

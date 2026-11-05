@@ -4,6 +4,7 @@ import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
 import type * as EffectStream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
 import type * as Key from "./Key.ts";
@@ -26,6 +27,7 @@ export interface Entry<E, Id = string> {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Stream";
+  readonly annotations: Annotations;
   readonly streamName: string;
   readonly definition: {
     readonly key: Key.Any;
@@ -177,6 +179,23 @@ export interface StreamKey<Name extends string> {
  * );
  * ```
  *
+ * ### Annotating streams
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's read tools, CLI help and OpenAPI document show its `description`
+ * after the sentence for each call.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class AccountCard extends Domain.Stream(
+ *   "AccountCard",
+ *   { key: Account, entries: [CardChanged] },
+ *   { description: "An account's card, with an entry each time it changes." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -188,6 +207,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<Key, Entries, Ms, Rejects>,
+  annotations: Annotations = {},
 ): StreamClass<
   Name,
   Definition<Key, Entries, Ms, Rejects>,
@@ -199,6 +219,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Stream" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly streamName: Name = name;
     static readonly definition = definition;
   } as unknown as StreamClass<
@@ -219,6 +240,7 @@ export interface StreamClass<
   E,
 > extends Context.ServiceClass<StreamKey<Name>, string, Host<Key, E>> {
   readonly kind: "Stream";
+  readonly annotations: Annotations;
   readonly streamName: Name;
   readonly definition: Def;
   readonly "~event": E;

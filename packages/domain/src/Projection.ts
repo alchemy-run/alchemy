@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type * as Key from "./Key.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -48,6 +49,13 @@ export interface Options {
    * time, as soon as it arrives.
    */
   readonly batch?: { readonly size: number; readonly wait?: Duration.Input };
+  /**
+   * Bump it to run the projection again over the whole history, for example
+   * after its store was lost or emptied, or once its handler writes a new
+   * shape. Clear or migrate your store first if a replayed write would not
+   * overwrite the old one. 0 when omitted.
+   */
+  readonly version?: number;
 }
 
 /** A projection's implementation, as its Layer provides it. @internal */
@@ -63,6 +71,7 @@ type Sources<From extends ReadonlyArray<View.Source>> = From[number];
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Projection";
+  readonly annotations: Annotations;
   readonly projectionName: string;
   readonly definition: {
     readonly from: ReadonlyArray<View.Source>;
@@ -97,14 +106,21 @@ export type ProgressIdentifier<P extends Any> = P extends Any
  */
 export interface Progress {
   /**
+   * Whether the history recorded before this projection, or before its
+   * current version, has reached it (been accepted into its keys' logs).
+   */
+  readonly history: Effect.Effect<View.History>;
+  /**
    * Wait until the projection has handled every event of a command that it
-   * consumes, so a read of your store sees that write.
+   * consumes, so a read of your store sees that write. Without `events` (a
+   * client's receipt carries only `stream` and `version`), the command's
+   * events are read from its aggregate.
    */
   readonly caughtUp: (
     receipt: {
       readonly stream: string;
       readonly version: number;
-      readonly events: ReadonlyArray<unknown>;
+      readonly events?: ReadonlyArray<unknown>;
     },
     options?: { readonly timeout?: Duration.Input },
   ) => Effect.Effect<void, View.ConsistencyTimeout>;
@@ -203,6 +219,23 @@ export interface Definition<
  * yield* Ledger.caughtUp(receipt);
  * ```
  *
+ * ### Annotating projections
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Nothing a client calls shows it; it is for the people and the tools that
+ * read the model, as `X.annotations`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Ledger extends Domain.Projection(
+ *   "Ledger",
+ *   { from: [Account], key: Account, on: [MoneyDeposited, MoneyWithdrawn] },
+ *   { description: "Every money movement on an account, oldest first." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -214,6 +247,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<From, Key, On, Writes>,
+  annotations: Annotations = {},
 ): ProjectionClass<Name, From, Key, On, Writes> => {
   type I = Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>;
   const Tag = Context.Service<ProjectionKey<Name>, Implementation<I>>()(
@@ -224,6 +258,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Projection" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly projectionName: Name = name;
     static readonly definition = definition;
     static readonly Progress = Progress;
@@ -260,6 +295,7 @@ export interface ProjectionClass<
   Implementation<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>
 > {
   readonly kind: "Projection";
+  readonly annotations: Annotations;
   readonly projectionName: Name;
   readonly definition: Definition<From, Key, On, Writes>;
   readonly Progress: Context.Service<ProgressKey<Name>, Progress>;

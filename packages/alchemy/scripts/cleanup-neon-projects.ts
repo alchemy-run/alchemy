@@ -13,6 +13,7 @@
  *   CONCURRENCY    Parallel deletes (default 4).
  */
 import { CredentialsFromEnv, deleteProject, listProjects, Retry } from "@distilled.cloud/neon";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -33,12 +34,12 @@ let ok = 0;
 let fail = 0;
 
 const program = listProjects.pages({ limit: 400 }).pipe(
-  Stream.tap((page) => Effect.sync(() => console.log(`→ page: ${page.projects.length} projects`))),
+  Stream.tap((page) => Console.log(`→ page: ${page.projects.length} projects`)),
   Stream.flatMap((page) => Stream.fromIterable(page.projects)),
   Stream.tap((p: { id: string; name: string }) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       total += 1;
-      console.log(`   - ${p.name} (${p.id})`);
+      yield* Console.log(`   - ${p.name} (${p.id})`);
     }),
   ),
   Stream.mapEffect(
@@ -47,30 +48,28 @@ const program = listProjects.pages({ limit: 400 }).pipe(
         ? Effect.void
         : deleteProject({ project_id: p.id }).pipe(
             Effect.tap(() =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
                 ok += 1;
-                console.log(`✓ deleted ${p.name} (${ok})`);
+                yield* Console.log(`✓ deleted ${p.name} (${ok})`);
               }),
             ),
             Effect.catchTag("NotFound", () =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
                 ok += 1;
-                console.log(`✓ already gone ${p.name}`);
+                yield* Console.log(`✓ already gone ${p.name}`);
               }),
             ),
             Effect.catch((e) =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
                 fail += 1;
-                console.error(`✗ ${p.name} (${p.id}): ${String(e)}`);
+                yield* Console.error(`✗ ${p.name} (${p.id}): ${String(e)}`);
               }),
             ),
           ),
     { concurrency: CONCURRENCY },
   ),
   Stream.runDrain,
-  Effect.tap(() =>
-    Effect.sync(() => console.log(`→ done: total=${total} deleted=${ok} failed=${fail}`)),
-  ),
+  Effect.tap(() => Console.log(`→ done: total=${total} deleted=${ok} failed=${fail}`)),
 );
 
 const runtime = Layer.mergeAll(

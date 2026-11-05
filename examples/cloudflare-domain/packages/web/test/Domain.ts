@@ -2,7 +2,18 @@ import * as Domain from "@alchemy.run/domain";
 import { customer } from "@bank/domain/Actor";
 import { Bank } from "@bank/domain/Bank.model";
 import { CurrentActor } from "@bank/domain/CurrentActor.context";
+import {
+  MainAccountProvisioning,
+  MainAccountProvisioningLive,
+} from "@bank/domain/Customer/MainAccountProvisioning.policy";
+import {
+  UsernameReservation,
+  UsernameReservationLive,
+} from "@bank/domain/Customer/UsernameReservation.policy";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import { AccountLedger, AccountLedgerLive } from "@bank/domain/Ledger/AccountLedger.query";
+import { Ledger, LedgerLive } from "@bank/domain/Ledger/Ledger.projection";
+import { memoryLedger } from "@bank/domain/Ledger/LedgerStore";
 import { MfaChallenge, MfaRequired } from "@bank/domain/MfaChallenge.middleware";
 import { Session } from "@bank/domain/Session.middleware";
 import * as Effect from "effect/Effect";
@@ -12,8 +23,18 @@ class WebBank extends Domain.Model("WebBank", {
   aggregates: Bank.definitions.aggregates,
   views: Bank.definitions.views,
   streams: Bank.definitions.streams,
+  // Registration opens the main account, so the app can write and read it back.
+  policies: [UsernameReservation, MainAccountProvisioning],
+  projections: [Ledger],
+  queries: [AccountLedger],
 }) {}
-const Hosted = WebBank.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory));
+const Hosted = WebBank.layer(
+  Layer.mergeAll(
+    UsernameReservationLive,
+    MainAccountProvisioningLive,
+    Layer.merge(LedgerLive, AccountLedgerLive).pipe(Layer.provide(memoryLedger())),
+  ),
+).pipe(Layer.provide(Domain.InMemory));
 const Middleware = Layer.merge(
   Layer.succeed(Session, (effect) => Effect.provideService(effect, CurrentActor, customer("c-1"))),
   Layer.succeed(MfaChallenge, () => Effect.fail(MfaRequired.make({}))),

@@ -197,7 +197,10 @@ export type BucketProps = {
    */
   storageClass?: Bucket.StorageClass;
   /**
-   * Jurisdiction where objects in this bucket are guaranteed to be stored.
+   * Jurisdiction where objects in this bucket are guaranteed to be stored:
+   * `"eu"` (the European Union), `"us"` (the United States), or `"fedramp"`
+   * (FedRAMP-compliant data centers). `"default"` places no restriction.
+   * Changing it replaces the bucket.
    * @default "default"
    */
   jurisdiction?: Bucket.Jurisdiction;
@@ -315,8 +318,26 @@ export type Bucket = Resource<
     publicDomain: string | undefined;
   },
   never,
-  Cloudflare.Providers
+  Cloudflare.Providers,
+  BucketLookup
 >;
+
+/**
+ * Props for {@link Bucket.lookup}: find an R2 bucket this stack doesn't
+ * manage, by its name.
+ */
+export type BucketLookup = {
+  /**
+   * The name of the existing bucket.
+   */
+  name: string;
+  /**
+   * The jurisdiction the bucket lives in. A bucket name is unique only
+   * within its jurisdiction.
+   * @default "default"
+   */
+  jurisdiction?: Bucket.Jurisdiction;
+};
 
 /**
  * A Cloudflare R2 object storage bucket with S3-compatible API.
@@ -617,6 +638,29 @@ export type Bucket = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` binds a bucket Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `name` and, outside the default
+ * jurisdiction, `jurisdiction`. It is read during plan/deploy and never
+ * created, updated or deleted.
+ *
+ * **Example:** By name
+ * ```typescript
+ * const assets = yield* Cloudflare.R2.ReadBucket(
+ *   Cloudflare.R2.Bucket.lookup({ name: "assets" }),
+ * );
+ * ```
+ *
+ * **Example:** In a jurisdiction, in an async Worker's `env`
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     ASSETS: Cloudflare.R2.Bucket.lookup({ name: "assets", jurisdiction: "eu" }),
+ *   },
+ * });
+ * ```
+ *
  * @resource
  * @product R2
  * @category Storage & Databases
@@ -627,7 +671,7 @@ export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket", {
 
 export declare namespace Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";
-  export type Jurisdiction = "default" | "eu" | "fedramp";
+  export type Jurisdiction = "default" | "eu" | "us" | "fedramp";
   export type Location = "apac" | "eeur" | "enam" | "weur" | "wnam" | "oc";
   export type LifecycleRule = {
     id: string;
@@ -686,7 +730,7 @@ export const ProviderLive = () =>
           .items({
             accountId,
             bucketName,
-            cfR2Jurisdiction: jurisdiction,
+            jurisdiction,
             perPage: 1000,
           })
           .pipe(
@@ -698,7 +742,7 @@ export const ProviderLive = () =>
               r2.deleteObjects({
                 accountId,
                 bucketName,
-                cfR2Jurisdiction: jurisdiction,
+                jurisdiction,
                 body: [...chunk],
               }),
             ),
@@ -984,6 +1028,98 @@ export const ProviderLive = () =>
           return all;
         });
 
+      // Hydrate a bucket into the exact `read` Attributes shape, so `list`
+      // results are directly usable by `delete` (which needs `domains` to
+      // tear down custom domains) and lookups report the bucket's real config.
+      const hydrateBucket = (
+        accountId: string,
+        bucket: {
+          name: string;
+          jurisdiction: Bucket.Jurisdiction;
+          storageClass: Bucket.StorageClass;
+          location: Bucket.Location | undefined;
+        },
+      ) =>
+        Effect.gen(function* () {
+          // The hydration reads are independent — issue them
+          // concurrently so each bucket costs one round-trip of wall
+          // clock instead of four (a large leaked-bucket census can
+          // otherwise blow the nuke scan's per-provider timeout).
+          const [domains, lifecycleRules, cors, publicDomain] = yield* Effect.all(
+            [
+              listCustomDomains(bucket.name, bucket.jurisdiction, {
+                retryMissing: false,
+              }).pipe(Effect.map((d) => d ?? [])),
+              r2
+                .getBucketLifecycle({
+                  accountId,
+                  bucketName: bucket.name,
+                  jurisdiction: bucket.jurisdiction,
+                })
+                .pipe(
+                  Effect.map((observed) => (observed.rules ?? []).map(toLifecycleRule)),
+                  Effect.catchTag("NoSuchBucket", () =>
+                    Effect.succeed([] as Bucket.LifecycleRule[]),
+                  ),
+                ),
+              r2
+                .getBucketCors({
+                  accountId,
+                  bucketName: bucket.name,
+                  jurisdiction: bucket.jurisdiction,
+                })
+                .pipe(
+                  Effect.map((observed) => (observed.rules ?? []).map(toCorsRule)),
+                  Effect.catchTag(["NoSuchBucket", "NoCorsConfiguration"], () =>
+                    Effect.succeed([] as Bucket.CorsRule[]),
+                  ),
+                ),
+              listManagedDomain(bucket.name, bucket.jurisdiction, {
+                retryMissing: false,
+              }),
+            ] as const,
+            { concurrency: 4 },
+          );
+          return {
+            bucketName: bucket.name,
+            storageClass: bucket.storageClass,
+            jurisdiction: bucket.jurisdiction,
+            location: bucket.location,
+            accountId,
+            domains,
+            lifecycleRules,
+            cors,
+            locks: undefined,
+            localUploads: undefined,
+            publicDomain,
+          };
+        }).pipe(
+          // The custom-domain endpoint intermittently 500s ("Failed to
+          // access or modify the bucket policy"), and some buckets 500
+          // PERSISTENTLY. The blanket Cloudflare retry policy already
+          // retries each call's transient blips; don't stack another
+          // retry here (the budgets multiply into minutes per bucket).
+          // A bucket that still 500s must not abort the account-wide
+          // enumeration (nuke would then see ZERO buckets) — degrade
+          // it to an un-hydrated shape; delete can still tear the
+          // bucket down.
+          Effect.catchTag("InternalServerError", () =>
+            Effect.succeed({
+              bucketName: bucket.name,
+              storageClass: bucket.storageClass,
+              jurisdiction: bucket.jurisdiction,
+              location: bucket.location,
+              accountId,
+              domains: [] as Bucket.CustomDomain[],
+              lifecycleRules: [] as Bucket.LifecycleRule[],
+              cors: [] as Bucket.CorsRule[],
+              locks: undefined,
+              localUploads: undefined,
+              publicDomain: undefined,
+            }),
+          ),
+        );
+
       const reconcileLifecycleRules = (
         bucketName: string,
         jurisdiction: Bucket.Jurisdiction,
@@ -1178,7 +1314,7 @@ export const ProviderLive = () =>
             // R2 buckets are account-scoped but partitioned by jurisdiction, so
             // enumerate each jurisdiction. Accounts not entitled to a given
             // jurisdiction (e.g. `fedramp`) reject the route — treat as empty.
-            const jurisdictions: Bucket.Jurisdiction[] = ["default", "eu", "fedramp"];
+            const jurisdictions: Bucket.Jurisdiction[] = ["default", "eu", "us", "fedramp"];
             const perJurisdiction = yield* Effect.forEach(
               jurisdictions,
               (jurisdiction) =>
@@ -1192,93 +1328,9 @@ export const ProviderLive = () =>
             );
             const buckets = perJurisdiction.flat();
 
-            // Hydrate each bucket into the exact `read` Attributes shape so the
-            // result is directly usable by `delete` (which needs `domains` to
-            // tear down custom domains).
-            return yield* Effect.forEach(
-              buckets,
-              (bucket) =>
-                Effect.gen(function* () {
-                  // The hydration reads are independent — issue them
-                  // concurrently so each bucket costs one round-trip of wall
-                  // clock instead of four (a large leaked-bucket census can
-                  // otherwise blow the nuke scan's per-provider timeout).
-                  const [domains, lifecycleRules, cors, publicDomain] = yield* Effect.all(
-                    [
-                      listCustomDomains(bucket.name, bucket.jurisdiction, {
-                        retryMissing: false,
-                      }).pipe(Effect.map((d) => d ?? [])),
-                      r2
-                        .getBucketLifecycle({
-                          accountId,
-                          bucketName: bucket.name,
-                          jurisdiction: bucket.jurisdiction,
-                        })
-                        .pipe(
-                          Effect.map((observed) => (observed.rules ?? []).map(toLifecycleRule)),
-                          Effect.catchTag("NoSuchBucket", () =>
-                            Effect.succeed([] as Bucket.LifecycleRule[]),
-                          ),
-                        ),
-                      r2
-                        .getBucketCors({
-                          accountId,
-                          bucketName: bucket.name,
-                          jurisdiction: bucket.jurisdiction,
-                        })
-                        .pipe(
-                          Effect.map((observed) => (observed.rules ?? []).map(toCorsRule)),
-                          Effect.catchTag(["NoSuchBucket", "NoCorsConfiguration"], () =>
-                            Effect.succeed([] as Bucket.CorsRule[]),
-                          ),
-                        ),
-                      listManagedDomain(bucket.name, bucket.jurisdiction, {
-                        retryMissing: false,
-                      }),
-                    ] as const,
-                    { concurrency: 4 },
-                  );
-                  return {
-                    bucketName: bucket.name,
-                    storageClass: bucket.storageClass,
-                    jurisdiction: bucket.jurisdiction,
-                    location: bucket.location,
-                    accountId,
-                    domains,
-                    lifecycleRules,
-                    cors,
-                    locks: undefined,
-                    localUploads: undefined,
-                    publicDomain,
-                  };
-                }).pipe(
-                  // The custom-domain endpoint intermittently 500s ("Failed to
-                  // access or modify the bucket policy"), and some buckets 500
-                  // PERSISTENTLY. The blanket Cloudflare retry policy already
-                  // retries each call's transient blips; don't stack another
-                  // retry here (the budgets multiply into minutes per bucket).
-                  // A bucket that still 500s must not abort the account-wide
-                  // enumeration (nuke would then see ZERO buckets) — degrade
-                  // it to an un-hydrated shape; delete can still tear the
-                  // bucket down.
-                  Effect.catchTag("InternalServerError", () =>
-                    Effect.succeed({
-                      bucketName: bucket.name,
-                      storageClass: bucket.storageClass,
-                      jurisdiction: bucket.jurisdiction,
-                      location: bucket.location,
-                      accountId,
-                      domains: [] as Bucket.CustomDomain[],
-                      lifecycleRules: [] as Bucket.LifecycleRule[],
-                      cors: [] as Bucket.CorsRule[],
-                      locks: undefined,
-                      localUploads: undefined,
-                      publicDomain: undefined,
-                    }),
-                  ),
-                ),
-              { concurrency: 10 },
-            );
+            return yield* Effect.forEach(buckets, (bucket) => hydrateBucket(accountId, bucket), {
+              concurrency: 10,
+            });
           }),
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!isResolved(news)) return undefined;
@@ -1577,6 +1629,26 @@ export const ProviderLive = () =>
               }),
             ),
           );
+        }),
+        lookup: Effect.fn(function* (props) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const bucket = yield* r2
+            .getBucket({
+              accountId,
+              bucketName: props.name,
+              jurisdiction: props.jurisdiction,
+            })
+            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
+          if (!bucket) return undefined;
+          return yield* hydrateBucket(accountId, {
+            name: bucket.name ?? props.name,
+            // Distilled widened generated string enums to open unions.
+            storageClass: (bucket.storageClass ?? "Standard") as Bucket.StorageClass,
+            jurisdiction: (bucket.jurisdiction ??
+              props.jurisdiction ??
+              "default") as Bucket.Jurisdiction,
+            location: normalizeLocation(bucket.location),
+          });
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           const { accountId } = yield* yield* CloudflareEnvironment;

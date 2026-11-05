@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 An event records something that happened: `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`. It's named in the past tense because, by the time anyone sees it, it's a fact.
 
-Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them. This chapter covers how to find a business's events, how to declare one, what to put in it, and what happens to it after it's recorded.
+Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them.
 
 ## Events are the business's memory
 
@@ -56,6 +56,20 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 ```
 
 Each field is a schema, so events are encoded the same way wherever they're stored or sent. An event that needs no data has no fields: `Domain.Event("AccountClosed")`.
+
+## Describe it
+
+An event's last argument is its [annotations](/domain/annotations). Give it a `description` that says what happened, in the business's words. It is the event Schema's description too.
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class MoneyWithdrawn extends Domain.Event(
+  "MoneyWithdrawn",
+  { amount: Schema.Int, balanceAfter: Schema.Int },
+  { description: "Money left an account. Amounts are in cents." },
+) {}
+```
+
+The same argument holds the span `attributes` the event records. See [Observability](/domain/observability).
 
 ## Only decide creates events
 

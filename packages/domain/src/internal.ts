@@ -1,20 +1,31 @@
 import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import type * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
+
+export { DefinitionError } from "./DefinitionError.ts";
+
+const tags = new WeakMap<object, string>();
 
 /**
- * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
- * the kernel is built, or when a handler returns something its declaration
- * does not allow.
+ * The `_tag` a rejection class declares: the literal its schema gives
+ * `_tag`, so any tagged error class can be a rejection.
+ *
+ * @internal
  */
-export class DefinitionError extends Data.TaggedError("DefinitionError")<{
-  readonly message: string;
-}> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
+export const rejectionTag = (rejection: Schema.Top): string => {
+  const cached = tags.get(rejection);
+  if (cached !== undefined) return cached;
+  const encoded = SchemaAST.toEncoded(rejection.ast);
+  const tag = SchemaAST.isObjects(encoded)
+    ? encoded.propertySignatures.find((property) => property.name === "_tag")?.type
+    : undefined;
+  const value = tag && SchemaAST.isLiteral(tag) ? String(tag.literal) : "";
+  tags.set(rejection, value);
+  return value;
+};
 
 /** What `decide` returned, once its Effect (if any) ran. @internal */
 export type Settled =
@@ -54,18 +65,23 @@ export const judge = (
   command: {
     readonly tag: string;
     readonly events: ReadonlyArray<{ readonly tag: string }>;
-    readonly rejects: ReadonlyArray<{ readonly tag: string }>;
+    readonly rejects: ReadonlyArray<Schema.Top>;
   },
   decision: unknown,
 ): Judged => {
   if (!Array.isArray(decision)) {
     const rejection = decision as { readonly _tag: string };
-    if (!command.rejects.some((r) => r.tag === rejection?._tag)) {
+    if (!command.rejects.some((r) => rejectionTag(r) === rejection?._tag)) {
       return {
         _tag: "Undeclared",
-        error: new DefinitionError(
-          `${aggregateName}.decide.${command.tag} returned '${rejection?._tag}', which ${command.tag} does not declare in rejects`,
-        ),
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: String(rejection?._tag),
+            list: "rejects",
+          }),
+        }),
       };
     }
     return { _tag: "Rejected", rejection };
@@ -74,9 +90,14 @@ export const judge = (
     if (!command.events.some((e) => e.tag === event._tag)) {
       return {
         _tag: "Undeclared",
-        error: new DefinitionError(
-          `${aggregateName}.decide.${command.tag} returned '${event._tag}', which ${command.tag} does not declare in events`,
-        ),
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: event._tag,
+            list: "events",
+          }),
+        }),
       };
     }
   }

@@ -35,6 +35,7 @@ import {
   type ReplaceDiff,
   type UpdateDiff,
 } from "./Diff.ts";
+import { emit, type PlannedAction, type PlannedBinding, type PlannedResource } from "./Events.ts";
 import { parseFqn } from "./FQN.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -48,13 +49,8 @@ import {
 } from "./Provider.ts";
 import { defaultProviderMode, stampedMode, type ProviderMode } from "./ProviderMode.ts";
 import {
-  Progress,
-  type PlannedAction,
-  type PlannedBinding,
-  type PlannedResource,
-} from "./Report.ts";
-import {
   isResource,
+  LookupOfManagedResourceError,
   missingImplementation,
   type ResourceBinding,
   type ResourceLike,
@@ -378,6 +374,38 @@ export function make<A>(stack: StackSpec<A>, options: FilteredPlanOptions = {}) 
   return makePlan(stack, options);
 }
 
+/**
+ * Bind every ref to a resource this program declares in its own stack and
+ * stage, so the ref is a dependency like a direct reference: the target is
+ * created first and deleted last, and the ref resolves to the target's fresh
+ * attributes (see `Output.bindRef`). A ref is matched by its id against the
+ * declared resource's FQN, which is what the ref reads from state. A
+ * resource's ref to itself stays unbound: it reads its own persisted state.
+ */
+const bindSameStackRefs = (
+  stack: StackSpec<any>,
+  resources: ReadonlyArray<ResourceLike>,
+  actions: ReadonlyArray<ActionLike>,
+) => {
+  const byFqn = new Map(resources.map((resource) => [resource.FQN, resource]));
+  const bind = (owner: string, value: unknown) => {
+    for (const ref of Output.collectRefs(value)) {
+      if ((ref.stack ?? stack.name) !== stack.name) continue;
+      if ((ref.stage ?? stack.stage) !== stack.stage) continue;
+      if (ref.resourceId === owner) continue;
+      const target = byFqn.get(ref.resourceId);
+      if (target !== undefined) Output.bindRef(ref, target);
+    }
+  };
+  for (const resource of resources) {
+    bind(resource.FQN, resource.Props);
+    bind(resource.FQN, stack.bindings[resource.FQN] ?? []);
+  }
+  for (const action of actions) {
+    bind(action.FQN, [action.Input, action.Captures]);
+  }
+};
+
 const makePlan = <A>(
   stack: StackSpec<A>,
   options: FilteredPlanOptions = {},
@@ -385,13 +413,13 @@ const makePlan = <A>(
   // @ts-expect-error
   Effect.gen(function* () {
     // Per-resource plan progress and phase markers are reported through
-    // the ambient Progress reporter as the work happens, so a renderer can show
+    // events as the work happens, so a renderer can show
     // plan computation while it runs. The default reporter is a no-op.
-    const reportPlanned = yield* Progress;
 
     const declaredResources = Object.values(stack.resources);
     const declaredActions = Object.values(stack.actions ?? {});
     const declared = [...declaredResources, ...declaredActions];
+    bindSameStackRefs(stack, declaredResources, declaredActions);
     const upstream = (node: ResourceLike | ActionLike) =>
       Object.keys(
         Output.upstreamAny(
@@ -405,7 +433,7 @@ const makePlan = <A>(
     const actions = declaredActions.filter((node) => !selected || selected.has(node.FQN));
 
     // Resolving the state service may bootstrap a remote store.
-    yield* reportPlanned({ _tag: "plan.phase", phase: "loading-state" });
+    yield* emit({ type: "plan.phase", phase: "loading-state" });
     const state = yield* yield* State;
 
     // A bare platform tag yields a forward reference registered with
@@ -560,7 +588,7 @@ const makePlan = <A>(
       if (remote.length > 0) yield* demandRemoteCredentials(remote);
     }
 
-    yield* reportPlanned({ _tag: "plan.phase", phase: "computing-plan" });
+    yield* emit({ type: "plan.phase", phase: "computing-plan" });
 
     // ── FQN renames ──────────────────────────────────────────────────────
     // Map every former FQN claimed via `renamedFrom(...)` to its claimant's
@@ -990,6 +1018,42 @@ const makePlan = <A>(
       return mapPlainData(input, ancestors, (child) => materializeStableRefs(child, ancestors));
     };
 
+    // A lookup that finds a resource this stack manages would bind it with
+    // no dependency edge. Detected by the provider's static `stables`, the
+    // properties that identify a resource; providers without them go unchecked.
+    const rejectManagedLookup = Effect.fn(function* (
+      expr: Output.LookupExpr<any>,
+      props: unknown,
+      attrs: Record<string, unknown>,
+    ) {
+      const provider = yield* tryFindProviderByType(expr.lookupType, "live");
+      const stables = Option.getOrUndefined(provider)?.stables ?? [];
+      if (stables.length === 0) return;
+      for (const [fqn, row] of persistedRows) {
+        if (row === undefined || isActionState(row) || row.resourceType !== expr.lookupType) {
+          continue;
+        }
+        const attr = row.attr as Record<string, unknown> | undefined;
+        // An optional stable (a zone id on an account-level resource) is
+        // undefined on both sides and still matches; at least one stable
+        // must be set so an empty row never matches everything.
+        if (
+          attr !== undefined &&
+          stables.some((key) => attr[key] !== undefined) &&
+          stables.every((key) => attr[key] === attrs[key])
+        ) {
+          return yield* Effect.die(
+            new LookupOfManagedResourceError({
+              message: `${expr.lookupType}.lookup(${JSON.stringify(props)}) found '${fqn}', which this stack manages. Reference the declared resource instead: a lookup would not stop this stack deleting or replacing it.`,
+              type: expr.lookupType,
+              props,
+              fqn,
+            }),
+          );
+        }
+      }
+    });
+
     const resolveOutput = (
       expr: Output.Expr<any>,
     ): Effect.Effect<any, Config.ConfigError | StateStoreError> =>
@@ -1002,6 +1066,14 @@ const makePlan = <A>(
         } else if (Output.isApplyExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr);
           return Output.hasOutputs(upstream) ? expr : expr.f(upstream);
+        } else if (Output.isLookupExpr(expr)) {
+          // Props that depend on a resource still being created resolve at
+          // apply, like any other Output.
+          const props = yield* resolveInput(expr.expr);
+          if (Output.hasOutputs(props)) return expr;
+          const attrs = yield* expr.f(props);
+          yield* rejectManagedLookup(expr, props, attrs);
+          return attrs;
         } else if (Output.isEffectExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr);
           return Output.hasOutputs(upstream) ? expr : yield* expr.f(upstream);
@@ -1019,6 +1091,14 @@ const makePlan = <A>(
         } else if (Output.isLiteralExpr(expr)) {
           return expr.value;
         } else if (Output.isRefExpr(expr)) {
+          // A ref bound to a declared resource resolves like a direct
+          // reference: unknown while that resource is being created.
+          const target = Output.refTarget(expr);
+          if (target !== undefined) {
+            return yield* resolveResource(
+              Output.of(target as any) as Output.ResourceExpr<any, any>,
+            );
+          }
           const refStack = expr.stack ?? stackName;
           const refStage = expr.stage ?? stage;
           const refState = yield* state
@@ -1273,8 +1353,8 @@ const makePlan = <A>(
     const resourcePlanned = (node: CRUD) =>
       Ref.updateAndGet(plannedCount, (count) => count + 1).pipe(
         Effect.flatMap((completed) =>
-          reportPlanned({
-            _tag: "plan.resource.completed",
+          emit({
+            type: "plan.resource.completed",
             ...describeResource(node),
             completed,
             total: resources.length,
@@ -1289,8 +1369,8 @@ const makePlan = <A>(
       // Paired with the resource-planned completion below so renderers can
       // show what is actually in flight (diffs may read the cloud and run
       // concurrently — completions alone hide the slow tail).
-      yield* reportPlanned({
-        _tag: "plan.resource.started",
+      yield* emit({
+        type: "plan.resource.started",
         fqn,
         logicalId: id,
         resourceType: resource.Type,
@@ -1980,8 +2060,8 @@ const makePlan = <A>(
     const actionPlanned = (entry: readonly [string, ActionApply]) =>
       Ref.updateAndGet(actionCount, (count) => count + 1).pipe(
         Effect.flatMap((completed) =>
-          reportPlanned({
-            _tag: "plan.action.completed",
+          emit({
+            type: "plan.action.completed",
             ...describeAction(entry[1]),
             completed,
             total: actions.length,
@@ -2103,8 +2183,8 @@ const makePlan = <A>(
         Effect.flatMap((completed) =>
           entry === undefined
             ? Effect.void
-            : reportPlanned({
-                _tag: "plan.action.completed",
+            : emit({
+                type: "plan.action.completed",
                 ...describeAction(entry[1]),
                 completed,
                 total: persistedFqns.length,
@@ -2167,8 +2247,8 @@ const makePlan = <A>(
         Effect.flatMap((completed) =>
           entry === undefined
             ? Effect.void
-            : reportPlanned({
-                _tag: "plan.resource.completed",
+            : emit({
+                type: "plan.resource.completed",
                 ...describeResource(entry[1]),
                 completed,
                 total: deletionCandidates.length,
@@ -2254,6 +2334,7 @@ const makePlan = <A>(
               FormerFqns: undefined,
               RuntimeContext: undefined!,
               Providers: undefined,
+              Lookup: undefined as never,
             } as ResourceLike,
             downstream: [...downstream],
             bindings: oldState.bindings.map((binding) => ({

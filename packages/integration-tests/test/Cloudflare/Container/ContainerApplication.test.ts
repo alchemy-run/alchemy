@@ -1581,6 +1581,51 @@ describe.concurrent(
       { timeout: 600_000 },
     );
 
+    // #2919: an image only in the local Docker (built on the machine or
+    // `docker load`ed) has no registry to pull from. Deploy publishes the
+    // local copy when the pull fails, and an image that is neither pullable
+    // nor local fails with the commands that fix it.
+    test.provider(
+      "image only in the local Docker is published from the local copy",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const docker = yield* Docker;
+          const localOnly = `alchemy-test.invalid/local-only-echo:${scratch.stage}`;
+          yield* docker.image.pull("mendhak/http-https-echo:41", "linux/amd64");
+          yield* docker.image.tag("mendhak/http-https-echo:41", localOnly);
+
+          const app = yield* scratch
+            .deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Container("LocalOnlyImage", { image: localOnly })
+                  .Application;
+              }),
+            )
+            .pipe(Effect.ensuring(Effect.ignore(docker.image.remove(localOnly))));
+          expect(app.configuration.image).toMatch(
+            /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
+          );
+
+          const failure = yield* scratch
+            .deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Container("MissingImage", {
+                  image: `alchemy-test.invalid/missing:${scratch.stage}`,
+                }).Application;
+              }),
+            )
+            .pipe(Effect.flip);
+          const message = Cause.pretty(Cause.fail(failure));
+          expect(message).toContain("could not be pulled and is not in the local Docker");
+          expect(message).toContain("docker login");
+          expect(message).toContain("docker build --platform linux/amd64");
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
     // #1282: the image tag is `<repo>:<sourceHash>`, so any change to the
     // build inputs pushes a new tag — even when the resulting image is
     // byte-for-byte identical (a context file the Dockerfile never COPYs, a
@@ -1612,24 +1657,31 @@ describe.concurrent(
           expect(first.app.configuration.image).toMatch(
             /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
           );
+          // #2602: the "no effective changes" path saves the configuration as
+          // `read` reports it (with Cloudflare's defaults filled in), not as
+          // requested, so drift reports nothing.
+          const afterNoop = yield* Drift.detect(scratch);
+          expect(afterNoop.resources.DigestReuse?.action).toBe("unchanged");
 
           // A genuinely different image still updates and rolls out. The API
           // reports the ACTIVE configuration (and version) until the rollout
-          // completes, so poll until the new digest is live.
+          // completes, and the deploy waits for it, so the new digest is
+          // already live when it returns.
           const third = yield* deployImage(scratch, "mendhak/http-https-echo:40");
           expect(third.app.applicationId).toBe(first.app.applicationId);
           expect(third.app.configuration.image).toMatch(
             /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
           );
           expect(third.app.configuration.image).not.toBe(first.app.configuration.image);
-          const rolledOut = yield* waitForImage(
-            accountId,
-            first.app.applicationId,
-            third.app.configuration.image!,
-          );
+          const rolledOut = yield* live(accountId, first.app.applicationId);
           expect(rolledOut.image).toBe(third.app.configuration.image);
           expect(first.app.version).toEqual(expect.any(Number));
           expect(rolledOut.version).toBeGreaterThan(first.app.version!);
+          // #2602: reconcile saves the application after the rollout, so the
+          // saved version and configuration match what `read` returns.
+          expect(third.app.version).toBe(rolledOut.version);
+          const afterRollout = yield* Drift.detect(scratch);
+          expect(afterRollout.resources.DigestReuse?.action).toBe("unchanged");
 
           yield* scratch.destroy();
         }).pipe(logLevel),

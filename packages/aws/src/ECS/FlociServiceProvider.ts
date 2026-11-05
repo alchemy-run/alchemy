@@ -35,6 +35,7 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { deepEqual } from "alchemy/Diff";
 import { registerRpcErrorClasses } from "alchemy/Local/RpcSerialization";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -171,7 +172,7 @@ export const FlociServiceProvider = () =>
     // Fires on every reconcile — watcher-triggered AND engine-driven
     // (prop changes never produce a file event, so rolling only from the
     // watch loop left the service's containers on the old revision).
-    onReconciled: ({ id, previous, attrs }) =>
+    onReconciled: ({ previous, attrs }) =>
       Effect.gen(function* () {
         if (
           attrs.taskFamily === undefined ||
@@ -180,7 +181,7 @@ export const FlociServiceProvider = () =>
         ) {
           return;
         }
-        const startedAt = Date.now();
+        const startedAt = yield* Clock.currentTimeMillis;
         // `updateService` (inside the reconcile) pointed the service at
         // the new revision, but floci's in-place swap keeps the old
         // containers running — stop them so the scheduler relaunches on
@@ -191,13 +192,9 @@ export const FlociServiceProvider = () =>
           serviceManaged: true,
         });
         yield* Effect.logInfo(
-          `[alchemy dev] ${attrs.serviceName}: task definition swapped (${restarted} service task(s) rolling) in ${Date.now() - startedAt}ms`,
+          `task definition swapped (${restarted} service task(s) rolling) in ${(yield* Clock.currentTimeMillis) - startedAt}ms`,
         );
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning(`[alchemy dev] ${id}: service roll failed`, cause),
-        ),
-      ),
+      }).pipe(Effect.catchCause((cause) => Effect.logWarning(`service roll failed`, cause))),
     startWatch: (ctx) =>
       Effect.gen(function* () {
         if (taskRefOf(ctx.news) !== undefined) {
@@ -230,11 +227,7 @@ export const FlociServiceProvider = () =>
                   );
                 }),
               )
-              .pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
-                ),
-              ),
+              .pipe(Effect.catchCause((cause) => Effect.logWarning(`image swap failed`, cause))),
           ),
         );
       }),

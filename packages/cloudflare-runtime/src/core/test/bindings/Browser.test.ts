@@ -482,11 +482,15 @@ const routes = {
     });
     pageWs.accept();
 
+    // Listen before the DELETE: the closes arrive while it waits for Chrome
+    // to exit, and a missed close event leaves the socket CLOSING forever.
+    const closed = Promise.all([waitForClosedConnection(browserWs), waitForClosedConnection(pageWs)]);
+
     // DELETE should close everything
     const deleteResp = await env.MYBROWSER.fetch(base, { method: "DELETE" });
     const deleteBody = await deleteResp.json();
 
-    await Promise.all([waitForClosedConnection(browserWs), waitForClosedConnection(pageWs)]);
+    await closed;
 
     return Response.json({
       deleteStatus: deleteResp.status,

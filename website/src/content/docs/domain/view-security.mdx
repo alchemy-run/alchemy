@@ -204,21 +204,16 @@ Expose it in the agents' Api only.
 ```typescript
 // packages/domain/src/SupportApi.api.ts
 import * as Domain from "@alchemy.run/domain";
-import { AccountActivity } from "./Account/AccountActivity.view.ts";
-import { AccountSummary } from "./Account/AccountSummary.view.ts";
-import { ChangeOwner } from "./Account/ChangeOwner.command.ts";
-import { FreezeAccount } from "./Account/FreezeAccount.command.ts";
-import { ApproveTransfer } from "./Transfer/ApproveTransfer.command.ts";
+import { Bank } from "./Bank.model.ts";
 
 /** What the support console reaches, over the same Bank. */
-export class SupportApi extends Domain.Api(
-  "SupportApi",
-  FreezeAccount,
-  ChangeOwner,
-  ApproveTransfer,
-  AccountSummary,
-  AccountActivity,
-) {}
+export class SupportApi extends Domain.Api("SupportApi", {
+  model: Bank,
+  commands: ["FreezeAccount", "ChangeOwner", "ApproveTransfer"],
+  views: ["AccountSummary", "AccountActivity"],
+  streams: [],
+  aggregates: [],
+}) {}
 ```
 
 ## Re-check every change
@@ -228,6 +223,10 @@ export class SupportApi extends Domain.Api(
 ## Filter only what's allowed
 
 A client's `where` filter narrows a read it's already allowed to make, and never grants one. `validate` doesn't look at filters, so a filter can't widen what someone sees.
+
+## Rows across keys
+
+A view's rule judges one key. A [query](/domain/query) reads many keys from a store a projection wrote, so it judges twice: `validate` decides, per request, whether the caller may ask at all, and `visible` decides, per row, whether the caller may see that row. Rows `visible` refuses are dropped, never rejected.
 
 :::note
 Authenticate the person asking with [Sessions and middleware](/domain/sessions).

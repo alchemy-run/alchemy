@@ -140,6 +140,44 @@ layer(NodeServices.layer)("readPrebuiltWorkerBundle", (it) => {
   );
 
   it.effect(
+    "types matching files by their rule's type",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* writeFixture({
+          "index.mjs": `export default { fetch: () => new Response("ok") };\n`,
+          "notes.md": "# notes",
+          "font.ttf": "FONT",
+        });
+        const read = (type?: "Text") =>
+          readPrebuiltWorkerBundle({
+            main: path.join(root, "index.mjs"),
+            rules: [{ globs: ["**/*.mjs"] }, { type, globs: ["**/*.md"] }, { globs: ["**/*.ttf"] }],
+          });
+
+        const bundle = yield* read("Text");
+        expect(bundle.files.map((file) => [file.path, file.type])).toEqual([
+          ["index.mjs", undefined],
+          ["font.ttf", undefined],
+          ["notes.md", "Text"],
+        ]);
+        // The type is part of the hash, so changing it redeploys.
+        expect((yield* read()).hash).not.toEqual(bundle.hash);
+
+        // The first matching rule decides, typed or not, as when bundling.
+        const first = yield* readPrebuiltWorkerBundle({
+          main: path.join(root, "index.mjs"),
+          rules: [{ globs: ["**/*.mjs", "**/*.md"] }, { type: "Text", globs: ["**/*.md"] }],
+        });
+        expect(first.files.find((file) => file.path === "notes.md")?.type).toBeUndefined();
+
+        yield* fs.remove(root, { recursive: true });
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+  );
+
+  it.effect(
     "hash is stable across reads and sensitive to module changes",
     () =>
       Effect.gen(function* () {

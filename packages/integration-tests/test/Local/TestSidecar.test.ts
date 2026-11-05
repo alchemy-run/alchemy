@@ -74,7 +74,7 @@ live.test(
 
 const cleanupOrder: Array<string> = [];
 
-describe("file-owned runtime cleanup", () => {
+describe("file-owned runtime cleanup", { tags: ["local"] }, () => {
   const nested = Test.make({
     providers: Layer.empty,
     dev: true,
@@ -92,6 +92,7 @@ describe("file-owned runtime cleanup", () => {
     Effect.sync(() => {
       expect(cleanupOrder).toEqual([]);
     }),
+    { tags: ["unit", "local"] },
   );
   nested.afterAll(
     Effect.sync(() => {
@@ -105,7 +106,7 @@ describe("file-owned runtime cleanup", () => {
     dev: true,
     sidecar: true,
   });
-  skipped.test.skip("unused handles need no RPC session", Effect.void);
+  skipped.test.skip("unused handles need no RPC session", Effect.void, { tags: ["unit", "local"] });
 });
 
 live.afterAll(

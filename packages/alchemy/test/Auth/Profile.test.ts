@@ -3,6 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -16,6 +17,7 @@ import {
   AuthProvider,
   AuthProviderLayer,
   AuthProviders,
+  AuthProvidersLive,
   getAuthProvider,
   NeedsReauth,
 } from "@/Auth/AuthProvider.ts";
@@ -168,9 +170,10 @@ const makeTestLayer = (config: Record<string, unknown> = {}) =>
     Layer.provideMerge(RotationLive),
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.succeed(AuthProviders, {}),
+        AuthProvidersLive,
         ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
         NodeServices.layer,
+        SecureRandom.layerWebCrypto,
       ),
     ),
   );
@@ -200,7 +203,11 @@ const withTempHome = <A, E, R>(
         }),
     );
     return yield* effect.pipe(Effect.provide(makeTestLayer(config)));
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(NodeServices.layer),
+    Effect.provide(SecureRandom.layerWebCrypto),
+  );
 
 it.live(
   "loadProviderConfig requires profiles to be explicitly created",
@@ -659,12 +666,8 @@ it.live(
         }
         yield* resolveProviderConfig("OtherNoticeProvider");
         expect(messages).toEqual([
-          [
-            "FakeEnvAuthProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
-          ],
-          [
-            "OtherNoticeProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
-          ],
+          ["FakeEnvAuthProvider: using environment variables (FAKE_ENV_TOKEN)."],
+          ["OtherNoticeProvider: using environment variables (FAKE_ENV_TOKEN)."],
         ]);
       }),
       { FAKE_ENV_TOKEN: "from-env" },

@@ -45,7 +45,7 @@ describe(
         }),
       () =>
         Cloudflare.Website.Astro("A", {
-          // @ts-expect-error `main` is not supported (no custom-entry seam)
+          // `main` is the custom Worker entry seam
           main: "worker.ts",
         }),
       () =>

@@ -130,6 +130,10 @@ const downloadSecrets = Effect.fn("downloadInfisicalSecrets")(function* (
       includeImports,
       viewSecretValue: true,
       expandSecretReferences: true,
+      // Without it the API leaves personal secrets out. With it, the API
+      // returns one secret per key in each folder, the user's personal one
+      // when it exists.
+      includePersonalOverrides: true,
     });
   }).pipe(
     Retry.none,

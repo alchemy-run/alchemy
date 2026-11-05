@@ -2,16 +2,15 @@
 title: Sign in with better-auth
 description: Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
 ---
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 [better-auth](https://better-auth.com) signs users in with GitHub, Google and many other providers, and keeps their sessions in your database. A Domain Api reads that session in middleware, so every command and view knows who is asking.
 
-This page builds a small notes app on Cloudflare, with a [foldkit](https://foldkit.dev) UI: users sign in with GitHub or Google and write notes only they can read. The whole app is in [`examples/cloudflare-domain-better-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth).
+Take a small notes app on Cloudflare, with a [foldkit](https://foldkit.dev) UI: users sign in with GitHub or Google and write notes only they can read. The whole app is in [`examples/cloudflare-domain-better-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth).
 
 ## Install
 
-```sh
-bun add @alchemy.run/domain @alchemy.run/better-auth @alchemy.run/cloudflare better-auth
-```
+<PackageManagers add="@alchemy.run/domain @alchemy.run/better-auth @alchemy.run/cloudflare better-auth" />
 
 ## Declare who is asking
 
@@ -172,11 +171,14 @@ export class NotesModel extends Domain.Model("Notes", {
 ```typescript
 // src/NotesApi.api.ts
 import * as Domain from "@alchemy.run/domain";
-import { Notes } from "./Notes.view.ts";
-import { WriteNote } from "./WriteNote.command.ts";
+import { NotesModel } from "./Notes.model.ts";
 
 /** What the browser reaches. */
-export class NotesApi extends Domain.Api("NotesApi", WriteNote, Notes) {}
+export class NotesApi extends Domain.Api("NotesApi", {
+  model: NotesModel,
+  commands: ["WriteNote"],
+  views: ["Notes"],
+}) {}
 ```
 
 `validate` runs on every read, so only the owner reads a notebook's notes.
@@ -298,7 +300,7 @@ import { SessionLive } from "./Session.ts";
 const NotesLive = SessionLive.pipe(
   Layer.provideMerge(AuthLive),
   Layer.provideMerge(NotesModel.layer(Layer.empty)),
-  Layer.provide(Layer.mergeAll(DomainCloudflare.DurableObjects, CloudflareD1(AuthDb))),
+  Layer.provide(Layer.mergeAll(DomainCloudflare.layerDurableObjects(), CloudflareD1(AuthDb))),
 );
 
 /** Serves better-auth's routes under /api/auth, and the NotesApi under /api. */
@@ -327,10 +329,7 @@ The Notes Worker serves better-auth's routes under `/api/auth` and the NotesApi 
 
 ## Install foldkit
 
-```sh
-bun add foldkit @effect/platform-browser
-bun add -d vite @foldkit/vite-plugin
-```
+<PackageManagers add="foldkit @effect/platform-browser" dev="vite @foldkit/vite-plugin" />
 
 ## Configure Vite
 
@@ -673,9 +672,7 @@ Keep `.env` out of source control. For production, register the deployed app's c
 
 ## Run it
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 Open the app's URL, sign in with GitHub or Google, and write a note.
 

@@ -13,6 +13,7 @@ import { Action } from "@/Action";
 import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import { dedupeBindings, isResolved } from "@/Diff";
+import { onEvent, type Event } from "@/Events.ts";
 import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -21,8 +22,12 @@ import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
 import { renamedFrom } from "@/Rename.ts";
-import { Progress, type ProgressEvent } from "@/Report.ts";
-import { Resource, type ResourceBinding } from "@/Resource";
+import {
+  type LookupNotFoundError,
+  type LookupNotSupportedError,
+  Resource,
+  type ResourceBinding,
+} from "@/Resource";
 import { packEnvValue } from "@/RuntimeContext.ts";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -44,6 +49,9 @@ import {
   Function,
   inDev,
   KindStablesResource,
+  lookupCalls,
+  LookupTarget,
+  lookupTargets,
   ModalResource,
   NoPrecreateBindingTarget,
   OverrideStablesResource,
@@ -55,6 +63,7 @@ import {
   TestResource,
   TestResourceHooks,
   type TestResourceProps,
+  UnsupportedLookup,
 } from "./test.resources";
 
 const TEST_STACK = "test";
@@ -595,7 +604,7 @@ test(
 );
 
 test(
-  "reports each diffed resource and action through the ambient Progress reporter",
+  "reports each diffed resource and action as events",
   Effect.gen(function* () {
     yield* seed({
       A: {
@@ -613,7 +622,7 @@ test(
       },
     });
     const Announce = Action("Announce", (_: { table: string }) => Effect.succeed(1));
-    const events: Array<ProgressEvent> = [];
+    const events: Array<Event> = [];
     yield* Effect.gen(function* () {
       const target = yield* BindingTarget("A", { name: "target" });
       yield* target.bind("TestBinding", { env: { FEATURE_FLAG: "on" } });
@@ -621,7 +630,7 @@ test(
       yield* Announce({ table: "users" });
     }).pipe(
       makePlan,
-      Effect.provideService(Progress, (event) =>
+      onEvent((event) =>
         Effect.sync(() => {
           events.push(event);
         }),
@@ -629,40 +638,40 @@ test(
     );
 
     // Phase markers land before any node event: state loads, then diffing.
-    expect(events.filter((event) => event._tag === "plan.phase").map(({ phase }) => phase)).toEqual(
+    expect(events.filter((event) => event.type === "plan.phase").map(({ phase }) => phase)).toEqual(
       ["loading-state", "computing-plan"],
     );
-    expect(events[0]).toMatchObject({ _tag: "plan.phase", phase: "loading-state" });
-    expect(events[1]).toMatchObject({ _tag: "plan.phase", phase: "computing-plan" });
+    expect(events[0]).toMatchObject({ type: "plan.phase", phase: "loading-state" });
+    expect(events[1]).toMatchObject({ type: "plan.phase", phase: "computing-plan" });
 
     // Each resource diff announces its start before the planned completion.
     expect(
       events
-        .filter((event) => event._tag === "plan.resource.started")
+        .filter((event) => event.type === "plan.resource.started")
         .map(({ logicalId }) => logicalId)
         .sort(),
     ).toEqual(["A", "MyQueue"]);
 
     const nodes = events.filter(
-      (event) => event._tag === "plan.resource.completed" || event._tag === "plan.action.completed",
+      (event) => event.type === "plan.resource.completed" || event.type === "plan.action.completed",
     );
     const byId = Object.fromEntries(nodes.map((event) => [event.logicalId, event]));
     // resource rows carry their binding rows across the wire
     expect(byId.A).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       action: "update",
       bindings: [{ sid: "TestBinding", action: "create" }],
       total: 2,
     });
     expect(byId.MyQueue).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       action: "create",
       bindings: [],
       total: 2,
     });
     // stack actions get their own events
     expect(byId.Announce).toMatchObject({
-      _tag: "plan.action.completed",
+      type: "plan.action.completed",
       actionType: "Announce",
       action: "run",
       completed: 1,
@@ -670,7 +679,7 @@ test(
     });
     expect(
       events
-        .filter((event) => event._tag === "plan.resource.completed")
+        .filter((event) => event.type === "plan.resource.completed")
         .map(({ completed }) => completed)
         .sort(),
     ).toEqual([1, 2]);
@@ -679,7 +688,7 @@ test(
 );
 
 test(
-  "destroy plans report deletions through the ambient Progress reporter",
+  "destroy plans report deletions as events",
   Effect.gen(function* () {
     yield* seed({
       MyBucket: {
@@ -696,10 +705,10 @@ test(
         downstream: [],
       },
     });
-    const events: Array<ProgressEvent> = [];
+    const events: Array<Event> = [];
     const { name, stage } = yield* resolveStackId;
     const plan = yield* Plan.destroy({ name, stage }).pipe(
-      Effect.provideService(Progress, (event) =>
+      onEvent((event) =>
         Effect.sync(() => {
           events.push(event);
         }),
@@ -708,13 +717,13 @@ test(
     );
 
     expect(plan.deletions.MyBucket).toMatchObject({ action: "delete" });
-    expect(events.filter((event) => event._tag === "plan.phase").map(({ phase }) => phase)).toEqual(
+    expect(events.filter((event) => event.type === "plan.phase").map(({ phase }) => phase)).toEqual(
       ["loading-state", "computing-plan"],
     );
-    const nodes = events.filter((event) => event._tag === "plan.resource.completed");
+    const nodes = events.filter((event) => event.type === "plan.resource.completed");
     expect(nodes).toHaveLength(1);
     expect(nodes[0]).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       fqn: "MyBucket",
       logicalId: "MyBucket",
       resourceType: "Test.Bucket",
@@ -3745,6 +3754,380 @@ describe("RefExpr resolution", { tags: ["unit", "local"] }, () => {
         expect(err.resourceId).toBe("Ghost");
         expect(err.stage).toBe("other");
       }
+    }),
+  );
+});
+
+// `Resource.lookup(props)` finds a resource no stack manages through its
+// provider's `lookup`. It resolves at plan time like a ref, but from the
+// provider instead of state, and never becomes a node in the plan.
+describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
+  test(
+    "resolves through the provider's lookup and is not planned",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-found", { name: "plan-found", value: "external" });
+      const plan = yield* Effect.gen(function* () {
+        const found = LookupTarget.lookup({ name: "plan-found" });
+        yield* TestResource("Consumer", { string: found.value });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({ string: "external" });
+      expect(Object.keys(plan.resources)).toEqual(["Consumer"]);
+      expect(lookupCalls.filter((c) => c.name === "plan-found")).toEqual([
+        { mode: "live", name: "plan-found" },
+      ]);
+    }),
+  );
+
+  test(
+    "a lookup that finds nothing dies with LookupNotFoundError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const found = LookupTarget.lookup({ name: "plan-missing" });
+          yield* TestResource("Consumer", { string: found.value });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as LookupNotFoundError;
+        expect(err._tag).toBe("LookupNotFoundError");
+        expect(err.type).toBe("Test.LookupTarget");
+        expect(err.props).toEqual({ name: "plan-missing" });
+      }
+    }),
+  );
+
+  test(
+    "a provider without lookup dies with LookupNotSupportedError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const found = UnsupportedLookup.lookup({ name: "anything" });
+          yield* TestResource("Consumer", { string: found.name });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as LookupNotSupportedError;
+        expect(err._tag).toBe("LookupNotSupportedError");
+        expect(err.type).toBe("Test.UnsupportedLookup");
+      }
+    }),
+  );
+
+  test(
+    "under alchemy dev a lookup still goes through the live provider",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-dev", { name: "plan-dev", value: "external" });
+      const plan = yield* inDev(
+        Effect.gen(function* () {
+          const found = LookupTarget.lookup({ name: "plan-dev" });
+          yield* TestResource("Consumer", { string: found.value });
+        }).pipe(makePlan),
+      );
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({ string: "external" });
+      expect(lookupCalls.filter((c) => c.name === "plan-dev")).toEqual([
+        { mode: "live", name: "plan-dev" },
+      ]);
+    }),
+  );
+
+  test(
+    "a lookup keyed by a resource being created waits for it",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-keyed", { name: "plan-keyed", value: "external" });
+      const plan = yield* Effect.gen(function* () {
+        const key = yield* TestResource("Key", { string: "plan-keyed" });
+        const found = LookupTarget.lookup({ name: key.string });
+        yield* TestResource("Consumer", { string: found.value });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect(Output.isOutput((plan.resources.Consumer as any)?.props.string)).toBe(true);
+      expect(lookupCalls.filter((c) => c.name === "plan-keyed")).toEqual([]);
+    }),
+  );
+
+  test(
+    "a lookup carries its resource type statically",
+    Effect.gen(function* () {
+      const found = LookupTarget.lookup({ name: "plan-static" });
+      expect(found.Type).toBe("Test.LookupTarget");
+      expect(Output.isLookupExpr(found)).toBe(true);
+      // Nothing is looked up until the value is resolved.
+      expect(lookupCalls.filter((c) => c.name === "plan-static")).toEqual([]);
+      // `lookup` exists only on resources that declare lookup props.
+      // @ts-expect-error
+      TestResource.lookup;
+    }),
+  );
+});
+
+// A ref to a resource the same program declares, in the current stack and
+// stage, is a dependency exactly like a direct reference: an edge in the plan
+// DAG (create waits for the target, delete runs the dependent first) and an
+// unknown value while the target is created or changes. Every other ref keeps
+// reading persisted state and carries no edge.
+describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, () => {
+  const seedAt = (stack: string, stage: string, resources: Record<string, ResourceState>) =>
+    Effect.gen(function* () {
+      const state = yield* yield* State;
+      for (const [fqn, value] of Object.entries(resources)) {
+        yield* state.set({ stack, stage, fqn, value });
+      }
+    });
+
+  const row = (
+    fqn: string,
+    props: TestResourceProps,
+    attr: Partial<TestResource["Attributes"]> = {},
+    downstream: string[] = [],
+  ): ResourceState =>
+    ({
+      instanceId,
+      providerVersion: 0,
+      logicalId: fqn.split("/").at(-1)!,
+      fqn,
+      namespace: undefined,
+      resourceType: "Test.TestResource",
+      status: "created" as ResourceStatus,
+      props,
+      attr: {
+        string: props.string ?? fqn,
+        stringArray: [],
+        stableString: "stable",
+        stableArray: [],
+        replaceString: props.replaceString,
+        redacted: undefined,
+        redactedArray: undefined,
+        ...attr,
+      },
+      bindings: [],
+      downstream,
+    }) as ResourceState;
+
+  // The same consumer written with a ref and with a direct reference.
+  const viaRef = (sharedProps: TestResourceProps) =>
+    Effect.gen(function* () {
+      yield* TestResource("Shared", sharedProps);
+      const shared = yield* TestResource.ref("Shared");
+      yield* TestResource("Consumer", { string: shared.string });
+    });
+  const viaDirect = (sharedProps: TestResourceProps) =>
+    Effect.gen(function* () {
+      const shared = yield* TestResource("Shared", sharedProps);
+      yield* TestResource("Consumer", { string: shared.string });
+    });
+
+  test(
+    "a ref to a resource created in the same deploy plans like a direct reference",
+    Effect.gen(function* () {
+      const plan = yield* viaRef({ string: "shared-string" }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.action).toBe("create");
+      expect(plan.resources.Consumer!.action).toBe("create");
+      expect(plan.resources.Shared!.downstream).toContain("Consumer");
+      expect(plan.resources.Consumer!.downstream).not.toContain("Shared");
+      // Unknown until Shared is created, instead of an InvalidReferenceError.
+      expect(Output.isExpr((plan.resources.Consumer as any).props.string)).toBe(true);
+    }),
+  );
+
+  const scenarios: [
+    name: string,
+    seeded: Record<string, ResourceState>,
+    shared: TestResourceProps,
+  ][] = [
+    ["both new", {}, { string: "shared-string" }],
+    [
+      "nothing changes",
+      {
+        Shared: row("Shared", { string: "shared-string" }, {}, ["Consumer"]),
+        Consumer: row("Consumer", { string: "shared-string" }),
+      },
+      { string: "shared-string" },
+    ],
+    [
+      "the target updates",
+      {
+        Shared: row("Shared", { string: "shared-string" }, {}, ["Consumer"]),
+        Consumer: row("Consumer", { string: "shared-string" }),
+      },
+      { string: "shared-string-v2" },
+    ],
+    [
+      "the target is replaced",
+      {
+        Shared: row("Shared", { string: "shared-string", replaceString: "a" }, {}, ["Consumer"]),
+        Consumer: row("Consumer", { string: "shared-string" }),
+      },
+      { string: "shared-string", replaceString: "b" },
+    ],
+  ];
+
+  for (const [name, seeded, shared] of scenarios) {
+    test(
+      `plans the same actions, props and edges as a direct reference when ${name}`,
+      Effect.gen(function* () {
+        yield* seed(seeded);
+        const direct = yield* viaDirect(shared).pipe(makePlan);
+        const ref = yield* viaRef(shared).pipe(makePlan);
+
+        for (const fqn of ["Shared", "Consumer"] as const) {
+          expect(ref.resources[fqn]!.action).toBe(direct.resources[fqn]!.action);
+          expect(ref.resources[fqn]!.downstream).toEqual(direct.resources[fqn]!.downstream);
+        }
+        // A noop node carries no props; a changing one carries the resolved
+        // (or still unknown) value the consumer reads.
+        if (direct.resources.Consumer!.action !== "noop") {
+          const consumerString = (plan: typeof ref) =>
+            (plan.resources.Consumer as any).props.string;
+          expect(Output.isExpr(consumerString(ref))).toBe(Output.isExpr(consumerString(direct)));
+          if (!Output.isExpr(consumerString(direct))) {
+            expect(consumerString(ref)).toEqual(consumerString(direct));
+          }
+        }
+      }),
+    );
+  }
+
+  test(
+    "a ref naming the current stack and stage explicitly is an edge",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "shared-string" });
+        const shared = yield* TestResource.ref("Shared", { stack: TEST_STACK, stage: TEST_STAGE });
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).toContain("Consumer");
+    }),
+  );
+
+  test(
+    "a ref to another stage is not an edge, even when this program declares the same id",
+    Effect.gen(function* () {
+      yield* seedAt(TEST_STACK, "other", {
+        Shared: row("Shared", { string: "other-stage-string" }),
+      });
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "this-stage-string" });
+        const shared = yield* TestResource.ref("Shared", { stage: "other" });
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).not.toContain("Consumer");
+      expect((plan.resources.Consumer as any).props).toMatchObject({
+        string: "other-stage-string",
+      });
+    }),
+  );
+
+  test(
+    "a ref to another stack is not an edge, even when this program declares the same id",
+    Effect.gen(function* () {
+      yield* seedAt("other-stack", TEST_STAGE, {
+        Shared: row("Shared", { string: "other-stack-string" }),
+      });
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "this-stack-string" });
+        const shared = yield* TestResource.ref("Shared", { stack: "other-stack" });
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).not.toContain("Consumer");
+      expect((plan.resources.Consumer as any).props).toMatchObject({
+        string: "other-stack-string",
+      });
+    }),
+  );
+
+  test(
+    "a ref to a resource only in state (not declared) reads state and is not an edge",
+    Effect.gen(function* () {
+      yield* seed({ Shared: row("Shared", { string: "state-only-string" }) });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared");
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared).toBeUndefined();
+      expect((plan.resources.Consumer as any).props).toMatchObject({
+        string: "state-only-string",
+      });
+    }),
+  );
+
+  test(
+    "a resource's ref to itself reads its persisted state and is not an edge",
+    Effect.gen(function* () {
+      yield* seed({ Self: row("Self", { string: "self-v1" }) });
+      const plan = yield* Effect.gen(function* () {
+        const self = yield* TestResource.ref("Self");
+        yield* TestResource("Self", { string: "self-v2", stringArray: [self.string] });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Self!.action).toBe("update");
+      expect(plan.resources.Self!.downstream).not.toContain("Self");
+      expect((plan.resources.Self as any).props).toMatchObject({ stringArray: ["self-v1"] });
+    }),
+  );
+
+  test(
+    "a ref is matched by the target's full FQN, not its logical id",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "nested" }).pipe(Namespace.push("Ns"));
+        const shared = yield* TestResource.ref("Ns/Shared");
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+      expect(plan.resources["Ns/Shared"]!.downstream).toContain("Consumer");
+
+      const bare = yield* Effect.exit(
+        Effect.gen(function* () {
+          yield* TestResource("Shared", { string: "nested" }).pipe(Namespace.push("Ns"));
+          const shared = yield* TestResource.ref("Shared");
+          yield* TestResource("Consumer", { string: shared.string });
+        }).pipe(makePlan),
+      );
+      // `Shared` names no declared resource: it stays a state lookup.
+      expect(Exit.isFailure(bare)).toBe(true);
+      if (Exit.isFailure(bare)) {
+        expect((Cause.squash(bare.cause) as Output.InvalidReferenceError)._tag).toBe(
+          "InvalidReferenceError",
+        );
+      }
+    }),
+  );
+
+  test(
+    "a ref used only in a binding is a binding edge",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "shared-string" });
+        const shared = yield* TestResource.ref("Shared");
+        const host = yield* BindingTarget("Host", { name: "host" });
+        yield* host.bind("Shared", { env: { SHARED: shared.string } });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).toContain("Host");
+    }),
+  );
+
+  test(
+    "a ref in an Action's input is an edge to the Action",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (_: { name: string }) => Effect.succeed({ value: "v" }));
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "shared-string" });
+        const shared = yield* TestResource.ref("Shared");
+        yield* Compute({ name: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).toContain("Compute");
     }),
   );
 });

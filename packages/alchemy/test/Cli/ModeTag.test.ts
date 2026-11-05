@@ -175,10 +175,10 @@ describe("compact plan output", { tags: ["unit", "local"] }, () => {
     );
 
     store.emit({
-      _tag: "apply.resource.status",
+      type: "apply.resource.status",
       fqn: "codex/toolchain",
       id: "toolchain",
-      type: "Test.Resource",
+      resourceType: "Test.Resource",
       status: "updating",
     });
 

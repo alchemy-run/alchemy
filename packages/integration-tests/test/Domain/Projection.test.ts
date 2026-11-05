@@ -222,7 +222,11 @@ class Wallets extends Domain.Model("Wallets", {
   streams: [WalletCard],
 }) {}
 
-class WalletApi extends Domain.Api("WalletApi", Deposit, WalletCard) {}
+class WalletApi extends Domain.Api("WalletApi", {
+  model: Wallets,
+  commands: ["Deposit"],
+  streams: ["WalletCard"],
+}) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
   Layer.mergeAll(walletLedgerLayer(options), WalletCardsLive, LargeMovementsLive);
@@ -232,7 +236,7 @@ const sam = Wallet.ref("sam-1");
 const kim = Wallet.ref("kim-1");
 const p1 = Payment.ref("p-1");
 
-describe("Domain Projection", () => {
+describe("Domain Projection", { tags: ["unit", "local"] }, () => {
   it.effect("routes inputs to keys and writes a store you own", () =>
     Effect.gen(function* () {
       yield* story(

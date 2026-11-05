@@ -198,8 +198,10 @@ class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
  * for explicit names. Changing queue mode replaces the physical queue and
  * updates downstream references; existing messages are not migrated.
  *
- * `queueName` and `fifo` must be known before the queue is precreated; unresolved
- * resource outputs in these identity properties fail with `UnresolvedQueueIdentity`.
+ * `queueName` and `fifo` must be known before the queue is precreated. Outputs
+ * of resources outside the queue's binding cycle resolve before precreation;
+ * an identity that depends on a resource inside the cycle fails with
+ * `UnresolvedQueueIdentity`.
  * Mutable settings and policy bindings may reference other resource outputs,
  * including the queue's own ARN.
  *

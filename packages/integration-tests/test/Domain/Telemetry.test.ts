@@ -89,9 +89,7 @@ const AuditDebitsLive = AuditDebits.toLayer(
     const ledgers = yield* Ledger;
     return Effect.fn(function* ({ source }) {
       yield* ledgers.send("main", new Audit({ wallet: source.id }));
-      yield* ledgers
-        .schedule("main", new Remind(), { after: "1 hour" })
-        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+      yield* ledgers.schedule("main", new Remind(), { after: "1 hour" });
     });
   }),
 );
@@ -107,7 +105,12 @@ class Balance extends Domain.View("Balance", {
   },
 }) {}
 
-class WalletApi extends Domain.Api("WalletApi", Balance) {}
+// The model a browser client reads the balance from.
+class Balances extends Domain.Model("TelemetryBalances", {
+  aggregates: [Wallet],
+  views: [Balance],
+}) {}
+class WalletApi extends Domain.Api("WalletApi", { model: Balances, views: ["Balance"] }) {}
 
 class Bank extends Domain.Model("TelemetryBank", {
   aggregates: [Wallet, Ledger],
@@ -189,7 +192,7 @@ const recording = () => {
 
 const parentId = (span: Tracer.Span) => Option.getOrUndefined(span.parent)?.spanId;
 
-describe("Domain telemetry", () => {
+describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
   it.effect("a command's whole flow is one trace, with one correlation id", () =>
     Effect.gen(function* () {
       const { tracer, one, spans } = recording();

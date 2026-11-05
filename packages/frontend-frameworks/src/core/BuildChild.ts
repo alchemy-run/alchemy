@@ -38,6 +38,7 @@ import * as SemVerRange from "effect/SemVerRange";
 import * as Stream from "effect/Stream";
 import { readBuildOutput } from "./BuildOutput.ts";
 import type { BuildOutput } from "./BuildOutput.ts";
+import { logChildOutput } from "./ChildOutput.ts";
 import { FrameworkError } from "./Framework.ts";
 
 /**
@@ -131,9 +132,9 @@ export const resolveBuildEnv = (
  * Run a framework production build in a disposable child process with
  * `cwd = rootDir` and return its {@link BuildOutput}.
  *
- * Build logs are re-emitted through the parent's own `process.stdout` /
- * `process.stderr` JS streams — NOT `stdio: "inherit"` — so in-process
- * capture (a test runner's log file) sees them.
+ * Build output becomes log records — NOT `stdio: "inherit"` — so the
+ * process that renders logs shows it and in-process capture (a test
+ * runner's log file) sees it.
  */
 export const runBuildChild = (
   options: BuildChildOptions,
@@ -206,13 +207,18 @@ export const runBuildChild = (
         );
         const forward = (
           stream: Stream.Stream<Uint8Array, PlatformError>,
-          dest: NodeJS.WriteStream,
-        ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
+          name: "stdout" | "stderr",
+        ) =>
+          stream.pipe(
+            Stream.decodeText,
+            Stream.splitLines,
+            Stream.runForEach((line) => logChildOutput(line, name)),
+          );
         const { code } = yield* Effect.all(
           {
             code: child.exitCode,
-            stdout: forward(child.stdout, process.stdout),
-            stderr: forward(child.stderr, process.stderr),
+            stdout: forward(child.stdout, "stdout"),
+            stderr: forward(child.stderr, "stderr"),
           },
           { concurrency: "unbounded" },
         ).pipe(

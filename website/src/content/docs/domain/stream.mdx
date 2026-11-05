@@ -57,6 +57,18 @@ Add it to the model's `streams`.
 
 A stream can also be keyed by a string Schema, like an org id, with one log per value. Its writer is then keyed by the same Schema, and reads take the value: `bank.OrgFeed.peek(orgId)`. See [Key a view by a value](/domain/view#key-a-view-by-a-value).
 
+## Describe it
+
+A stream's last argument is its [annotations](/domain/annotations). The read tools, CLI subcommand and OpenAPI operations an [Api](/domain/api) builds for the stream show its `description` after the sentence that says what the call does.
+
+```typescript title="packages/domain/src/Account/AccountCard.stream.ts"
+export class AccountCard extends Domain.Stream(
+  "AccountCard",
+  { key: Account, entries: [CardChanged] },
+  { description: "An account's card, with an entry each time it changes." },
+) {}
+```
+
 ## Write it from a projection
 
 A stream has exactly one writer: a projection that lists it in `writes`, keyed by the same aggregate. `AccountCards` reads the account summary, whose events arrive with the summary's state after each one, and appends a card for every change.
@@ -169,4 +181,4 @@ streamed(
 ),
 ```
 
-Next, [Policy](/domain/policy): the consumer that acts on the world rather than recording it.
+Next, [Query](/domain/query) serves a store a projection writes, across keys.

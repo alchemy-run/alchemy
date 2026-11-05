@@ -304,7 +304,7 @@ const checks = Story.make(Checks, {
   stub: [Sanctions],
 });
 
-describe("Domain.Saga", () => {
+describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
   it.effect("a policy starts a saga that debits and credits", () =>
     story(
       Story.given(alice, new Opened({ balance: 100 })),

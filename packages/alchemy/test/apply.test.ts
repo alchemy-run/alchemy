@@ -23,7 +23,7 @@ import { remote } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
 import { Cli } from "@/Report.ts";
-import { Resource } from "@/Resource";
+import { type LookupOfManagedResourceError, Resource } from "@/Resource";
 import { Stack, make as makeStack } from "@/Stack";
 import { Stage } from "@/Stage";
 import {
@@ -50,6 +50,9 @@ import {
   Function,
   inDev,
   KindStablesResource,
+  LookupTarget,
+  lookupTargetDeletes,
+  lookupTargets,
   ModalResource,
   modalCalls,
   type ModalResourceProps,
@@ -97,7 +100,7 @@ const recordingCli = (events: Array<{ id: string; status: string }>) =>
         done: () => Effect.void,
         emit: (event) =>
           Effect.sync(() => {
-            if (event._tag === "apply.resource.status") {
+            if (event.type === "apply.resource.status") {
               events.push({ id: event.id, status: event.status });
             }
           }),
@@ -997,6 +1000,323 @@ describe("FQN separator in logical ID", { tags: ["unit", "local"] }, () => {
   );
 });
 
+// A lookup binds a resource no stack manages: it re-resolves through the
+// provider on every plan, and is never written to state or deleted.
+describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
+  const program = (name: string) =>
+    Effect.gen(function* () {
+      const found = LookupTarget.lookup({ name });
+      return yield* TestResource("Consumer", { string: found.value });
+    });
+
+  test.provider("deploys a consumer of a lookup without managing the looked-up resource", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-found";
+      lookupTargets.set(name, { name, value: "v1" });
+
+      const consumer = yield* stack.deploy(program(name));
+      expect(consumer.string).toEqual("v1");
+      expect(yield* listState()).toEqual(["Consumer"]);
+
+      // Unchanged, the lookup re-resolves to the same value.
+      expect(actionOfPlan(yield* stack.plan(program(name)), "Consumer")).toBe("noop");
+
+      // A change to the looked-up resource flows into the consumer.
+      lookupTargets.set(name, { name, value: "v2" });
+      expect(actionOfPlan(yield* stack.plan(program(name)), "Consumer")).toBe("update");
+      expect((yield* stack.deploy(program(name))).string).toEqual("v2");
+
+      yield* stack.destroy();
+      expect(yield* listState()).toEqual([]);
+      expect(lookupTargetDeletes).not.toContain(name);
+      expect(lookupTargets.get(name)).toEqual({ name, value: "v2" });
+    }),
+  );
+
+  test.provider("a lookup keyed by another resource's Output waits for it", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-keyed";
+      lookupTargets.set(name, { name, value: "keyed" });
+      const keyed = Effect.gen(function* () {
+        const key = yield* TestResource("Key", { string: name });
+        const found = LookupTarget.lookup({ name: key.string });
+        return yield* TestResource("Consumer", { string: found.value });
+      });
+
+      const consumer = yield* stack.deploy(keyed);
+      expect(consumer.string).toEqual("keyed");
+      expect([...(yield* listState())].sort()).toEqual(["Consumer", "Key"]);
+      expect(actionOfPlan(yield* stack.plan(keyed), "Consumer")).toBe("noop");
+
+      yield* stack.destroy();
+      expect(yield* listState()).toEqual([]);
+      expect(lookupTargets.get(name)).toEqual({ name, value: "keyed" });
+    }),
+  );
+
+  // `kind` is also the tag every Output expression carries; reading it off
+  // a lookup must still reach the resource's attribute.
+  test.provider("a lookup's kind attribute resolves to the resource's value", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-kind";
+      lookupTargets.set(name, { name, value: "v", kind: "ip" });
+      const program = TestResource("KindConsumer", {
+        string: Output.map(LookupTarget.lookup({ name }).kind, (kind) => kind ?? "none"),
+      });
+
+      const consumer = yield* stack.deploy(program);
+      expect(consumer.string).toEqual("ip");
+
+      yield* stack.destroy();
+      lookupTargets.delete(name);
+    }),
+  );
+
+  // Always a user mistake: the lookup would bind the resource with no
+  // dependency, so this stack could delete or replace it under its consumer.
+  test.provider("a lookup of a resource this stack manages fails the deploy", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(LookupTarget("apply-managed", { value: "v1" }));
+
+      const expectManaged = (program: Effect.Effect<unknown, any, any>) =>
+        Effect.gen(function* () {
+          const exit = yield* Effect.exit(stack.deploy(program));
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const err = Cause.squash(exit.cause) as LookupOfManagedResourceError;
+            expect(err._tag).toBe("LookupOfManagedResourceError");
+            expect(err.fqn).toBe("apply-managed");
+          }
+        });
+
+      // Declared and looked up in the same program.
+      yield* expectManaged(
+        Effect.gen(function* () {
+          yield* LookupTarget("apply-managed", { value: "v1" });
+          yield* program("apply-managed");
+        }),
+      );
+      // Swapped from a declaration to a lookup, which would delete it.
+      yield* expectManaged(program("apply-managed"));
+
+      expect(yield* listState()).toEqual(["apply-managed"]);
+      yield* stack.destroy();
+      expect(lookupTargets.has("apply-managed")).toBe(false);
+    }),
+  );
+
+  // Stables are compared all together, optional ones included: a resource
+  // with the managed one's name but a different `kind` (as an identity
+  // provider of the same name in another zone) is a different resource.
+  test.provider(
+    "a lookup that differs from a managed resource only in an optional stable resolves",
+    (stack) =>
+      Effect.gen(function* () {
+        const name = "apply-optional-stable";
+        const managed = LookupTarget(name, { value: "managed" });
+        yield* stack.deploy(managed);
+        // The managed row has no `kind`; the found resource does.
+        lookupTargets.set(name, { name, value: "foreign", kind: "zone" });
+
+        const consumer = yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* managed;
+            return yield* TestResource("OptionalStableConsumer", {
+              string: LookupTarget.lookup({ name }).value,
+            });
+          }),
+        );
+        expect(consumer.string).toEqual("foreign");
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "a lookup that finds nothing fails the deploy before anything is created",
+    (stack) =>
+      Effect.gen(function* () {
+        const exit = yield* Effect.exit(stack.deploy(program("apply-missing")));
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          expect(Cause.pretty(exit.cause)).toContain("LookupNotFoundError");
+        }
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
+
+// A ref to a resource the same program declares (current stack and stage) is
+// a dependency like a direct reference. Each case slows the side a missing
+// edge would let run first, so a race shows up as a wrong order instead of
+// passing by luck.
+describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, () => {
+  const program = (shared: TestResourceProps, withConsumer = true) =>
+    Effect.gen(function* () {
+      const declared = yield* TestResource("Shared", shared);
+      if (!withConsumer) return { shared: declared, consumer: undefined };
+      const ref = yield* TestResource.ref("Shared");
+      const consumer = yield* TestResource("Consumer", { string: ref.string });
+      return { shared: declared, consumer };
+    });
+
+  // Target first, then the dependent: a ref that already resolves from state,
+  // so the later assertions isolate ordering and freshness from the
+  // same-deploy create case.
+  const deployInPhases = (stack: Test.ScratchStack, shared: TestResourceProps) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(program(shared, false));
+      return yield* stack.deploy(program(shared));
+    });
+
+  const recorder = () => {
+    const events: string[] = [];
+    const record = (event: string, slow?: string) => (id: string) =>
+      Effect.gen(function* () {
+        if (id === slow) yield* Effect.sleep("100 millis");
+        events.push(`${event} ${id}`);
+      });
+    return { events, record };
+  };
+
+  test.provider("deploys a ref to a resource created in the same deploy, target first", (stack) =>
+    Effect.gen(function* () {
+      const { events, record } = recorder();
+      const output = yield* program({ string: "v1" }).pipe(
+        stack.deploy,
+        hook({ create: record("create", "Shared") }),
+      );
+
+      expect(output.consumer!.string).toEqual("v1");
+      expect(events).toEqual(["create Shared", "create Consumer"]);
+      // The edge is persisted, so a later destroy orders deletes without the program.
+      expect((yield* getState("Shared"))?.downstream).toContain("Consumer");
+    }),
+  );
+
+  test.provider("destroy deletes the ref's dependent before its target", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1" });
+
+      const { events, record } = recorder();
+      yield* stack.destroy().pipe(hook({ delete: record("delete", "Consumer") }));
+
+      expect(events).toEqual(["delete Consumer", "delete Shared"]);
+      expect(yield* listState()).toEqual([]);
+    }),
+  );
+
+  test.provider("removing both from the program deletes the dependent first", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1" });
+
+      const { events, record } = recorder();
+      yield* stack
+        .deploy(Effect.gen(function* () {}))
+        .pipe(hook({ delete: record("delete", "Consumer") }));
+
+      expect(events).toEqual(["delete Consumer", "delete Shared"]);
+    }),
+  );
+
+  test.provider("removing only the dependent keeps the target", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1" });
+
+      const { events, record } = recorder();
+      yield* stack
+        .deploy(program({ string: "v1" }, false))
+        .pipe(hook({ delete: record("delete") }));
+
+      expect(events).toEqual(["delete Consumer"]);
+      expect((yield* getState("Shared"))?.status).toEqual("created");
+      expect((yield* getState("Shared"))?.downstream ?? []).not.toContain("Consumer");
+    }),
+  );
+
+  test.provider("an update to the target reaches the dependent fresh, never stale", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1" });
+
+      const seen: string[] = [];
+      const output = yield* program({ string: "v2" }).pipe(
+        stack.deploy,
+        hook({
+          update: (id, props) =>
+            Effect.gen(function* () {
+              if (id === "Shared") yield* Effect.sleep("100 millis");
+              if (id === "Consumer" && typeof props.string === "string") seen.push(props.string);
+            }),
+        }),
+      );
+
+      expect(output.consumer!.string).toEqual("v2");
+      expect(seen).toEqual(["v2"]);
+    }),
+  );
+
+  test.provider("a replaced target hands the dependent its new generation", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1", replaceString: "a" });
+
+      const { events, record } = recorder();
+      const output = yield* program({ string: "v2", replaceString: "b" }).pipe(
+        stack.deploy,
+        hook({
+          create: record("create", "Shared"),
+          update: record("update"),
+          delete: record("delete"),
+        }),
+      );
+
+      expect(output.shared.replaceString).toEqual("b");
+      expect(output.consumer!.string).toEqual("v2");
+      // Create-first replacement: new generation, then the dependent, then
+      // the old generation is retired.
+      expect(events).toEqual(["create Shared", "update Consumer", "delete Shared"]);
+    }),
+  );
+
+  test.provider(
+    "a resource's ref to itself reads its persisted state without waiting on itself",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(TestResource("Self", { string: "v1" }));
+
+        const output = yield* stack.deploy(
+          Effect.gen(function* () {
+            const self = yield* TestResource.ref("Self");
+            return yield* TestResource("Self", { string: "v2", stringArray: [self.string] });
+          }),
+        );
+
+        expect(output.string).toEqual("v2");
+        expect(output.stringArray).toEqual(["v1"]);
+        expect((yield* getState("Self"))?.downstream ?? []).not.toContain("Self");
+      }),
+  );
+
+  test.provider("a ref used only in a binding persists the binding edge", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(TestResource("Shared", { string: "v1" }));
+      const output = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* TestResource("Shared", { string: "v1" });
+          const ref = yield* TestResource.ref("Shared");
+          const host = yield* BindingTarget("Host", { name: "host" });
+          yield* host.bind("Shared", { env: { SHARED: ref.string } });
+          return host;
+        }),
+      );
+
+      expect(output.env.SHARED).toEqual("v1");
+      expect((yield* getState("Shared"))?.downstream).toContain("Host");
+    }),
+  );
+});
+
 describe("linear update propagation", { tags: ["unit", "local"] }, () => {
   // Regression: in a linear chain (A -> B with no cycle), an update to A
   // followed by an update to B must let B see A's *post-update* attr, never
@@ -1737,7 +2057,7 @@ describe("prop-flow convergence", { tags: ["unit", "local"] }, () => {
               done: () => Effect.void,
               emit: (event) =>
                 Effect.sync(() => {
-                  if (event._tag === "apply.resource.status") {
+                  if (event.type === "apply.resource.status") {
                     events.push({ id: event.id, status: event.status });
                   }
                 }),
@@ -7599,7 +7919,7 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
                     Effect.succeed({
                       done: () => Effect.void,
                       emit: (event) =>
-                        event._tag === "apply.resource.status" &&
+                        event.type === "apply.resource.status" &&
                         event.id === "Old" &&
                         event.status === "pending"
                           ? Deferred.succeed(oldCheckpointed, undefined).pipe(
@@ -7696,7 +8016,7 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
                 Effect.succeed({
                   done: () => Effect.void,
                   emit: (event) =>
-                    event._tag === "apply.resource.status" &&
+                    event.type === "apply.resource.status" &&
                     event.id === "Old" &&
                     event.status === "pending"
                       ? Deferred.succeed(oldCheckpointed, undefined).pipe(Effect.asVoid)
@@ -9394,30 +9714,7 @@ describe("noop stable readiness", { tags: ["unit", "local"] }, () => {
       const plan = yield* stack.plan(program(2));
       expect(plan.resources.Source.action).toBe("noop");
       expect(plan.actions.Compute.action).toBe("run");
-      // The policy note holds the noop until the Action reports pending.
-      // One cooperative yield lets it await readyStable before publication;
-      // Deferred completion then resumes the waiting consumer synchronously.
-      const pending = yield* Deferred.make<void>();
-      expect(
-        yield* apply(plan, {
-          session: {
-            done: () => Effect.void,
-            emit: (event) => {
-              if (
-                event._tag === "apply.resource.status" &&
-                event.id === "Compute" &&
-                event.status === "pending"
-              ) {
-                return Deferred.succeed(pending, undefined).pipe(Effect.asVoid);
-              }
-              if (event._tag === "apply.resource.note" && event.id === "Source") {
-                return Deferred.await(pending).pipe(Effect.andThen(Effect.yieldNow));
-              }
-              return Effect.void;
-            },
-          },
-        }),
-      ).toBe("ready");
+      expect(yield* apply(plan)).toBe("ready");
       expect(runs).toBe(2);
       expect(yield* stack.deploy(program(2))).toBe("ready");
       expect(runs).toBe(2);

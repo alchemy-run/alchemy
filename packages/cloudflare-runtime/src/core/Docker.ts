@@ -4,6 +4,7 @@ import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -13,7 +14,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import {
   CONTAINER_LOOPBACK_ALIAS,
@@ -122,6 +123,15 @@ const BUILDKIT_MISSING_MARKERS = [
   "buildx component is missing",
 ];
 
+/**
+ * What to do when a Container `image` can be neither pulled nor found in the
+ * local Docker.
+ */
+export const imageUnavailableHint = (imageUri: string) =>
+  `If "${imageUri}" is in a registry, check the name and tag, and run \`docker login\` for a private registry. ` +
+  `If it is built on this machine, build or load it before starting: ` +
+  `\`docker build --platform linux/amd64 -t ${imageUri} .\` or \`docker load\`.`;
+
 /** Names the missing buildx plugin when docker's own stderr only names the flag. */
 export const buildFailureHint = (stderr: string): string | undefined =>
   BUILDKIT_MISSING_MARKERS.some((marker) => stderr.includes(marker))
@@ -197,6 +207,7 @@ export const DockerLive = Layer.effect(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const runFork = yield* FiberSet.makeRuntime();
+    const random = yield* SecureRandom.SecureRandom;
 
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
@@ -204,7 +215,10 @@ export const DockerLive = Layer.effect(
     // Every container created through the proxy carries this runtime's label.
     // Native containers can start from images nobody prepared (snapshots,
     // managed `cloudflare/*` images), so per-image cleanup cannot find them.
-    const runtimeLabels = { [RUNTIME_LABEL]: crypto.randomUUID() };
+    const runtimeLabels = { [RUNTIME_LABEL]: yield* random.uuidV4() };
+    // Set once workerd asks the proxy to create a container. A runtime that
+    // never did has nothing to remove and must not wait on the daemon.
+    let createdContainers = false;
 
     const registeredLoopbackPorts = () => {
       const ports = new Set<number>();
@@ -280,6 +294,7 @@ export const DockerLive = Layer.effect(
         Effect.gen(function* () {
           const isCreateRequest =
             req.method === "POST" && req.url?.startsWith("/containers/create");
+          if (isCreateRequest) createdContainers = true;
           if (isCreateRequest && !req.url!.endsWith("-proxy")) {
             const original = yield* readJson<{
               Image: string;
@@ -496,26 +511,33 @@ export const DockerLive = Layer.effect(
         ),
       );
 
+    const removeRuntimeContainers = run([
+      "ps",
+      "--all",
+      "--quiet",
+      "--filter",
+      `label=${RUNTIME_LABEL}=${runtimeLabels[RUNTIME_LABEL]}`,
+    ]).pipe(
+      Effect.flatMap(({ stdout }) => {
+        const ids = stdout.split("\n").filter((id) => id.trim() !== "");
+        return ids.length === 0 ? Effect.void : Effect.asVoid(run(["rm", "--force", ...ids]));
+      }),
+      Effect.timeout("30 seconds"),
+      Effect.withLogSpan("docker: remove runtime containers"),
+      Effect.ignore,
+    );
     // Runs after the runtime (and its workerd) has shut down.
     yield* Effect.addFinalizer(() =>
-      run([
-        "ps",
-        "--all",
-        "--quiet",
-        "--filter",
-        `label=${RUNTIME_LABEL}=${runtimeLabels[RUNTIME_LABEL]}`,
-      ]).pipe(
-        Effect.flatMap(({ stdout }) => {
-          const ids = stdout.split("\n").filter((id) => id.trim() !== "");
-          return ids.length === 0 ? Effect.void : Effect.asVoid(run(["rm", "--force", ...ids]));
-        }),
-        Effect.timeout("30 seconds"),
-        Effect.withLogSpan("docker: remove runtime containers"),
-        Effect.ignore,
-      ),
+      Effect.suspend(() => (createdContainers ? removeRuntimeContainers : Effect.void)),
     );
 
-    const docker = yield* Effect.zipWith(
+    // Connect to the daemon on first use. Only Workers with containers ask for
+    // the engine configuration, so every other runtime never touches Docker.
+    // It runs in the layer's scope, so it outlives the caller that started it.
+    const context = yield* Effect.context<
+      Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | SecureRandom.SecureRandom
+    >();
+    const startDocker = Effect.zipWith(
       DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),
         Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
@@ -553,7 +575,8 @@ export const DockerLive = Layer.effect(
         },
       }),
       { concurrent: true },
-    ).pipe(Effect.forkScoped({ startImmediately: false }));
+    ).pipe(Effect.provide(context), Effect.forkIn(Context.get(context, Scope.Scope)));
+    const docker = yield* Effect.cached(startDocker);
 
     // Docker refuses to create a container whose device is missing on the
     // host, so a Linux host without /dev/fuse gets the capability alone.
@@ -569,7 +592,7 @@ export const DockerLive = Layer.effect(
     );
 
     return Docker.of({
-      getWorkerdDockerConfiguration: Fiber.join(docker),
+      getWorkerdDockerConfiguration: Effect.flatMap(docker, Fiber.join),
       getContainerPrivileges,
       registerImageEnv: (className, tag, env) => {
         const alias = generateImageTag(className);
@@ -639,8 +662,33 @@ export const DockerLive = Layer.effect(
             ),
           );
         }),
+      // Pull every time so a mutable tag picks up a newly pushed image and
+      // the `linux/amd64` variant replaces any native build under the tag.
+      // An image that exists only locally (built on the machine or
+      // `docker load`ed) has nothing to pull from, so when the pull fails
+      // and the image is present, use the local copy.
       pull: (tag, image) =>
         pull({ ...image, platform: "linux/amd64" }).pipe(
+          Effect.catchTag("SystemError", (error) =>
+            inspect(image.imageUri, "{{.Id}}").pipe(
+              Effect.orElseSucceed(() => ""),
+              Effect.flatMap((id) =>
+                id.trim()
+                  ? Effect.logDebug(
+                      `docker: pull ${image.imageUri} failed, using the local image ${id.trim()}`,
+                    )
+                  : Effect.fail(
+                      SystemError.make({
+                        subtag: "DockerPullFailed",
+                        message: `Image "${image.imageUri}" could not be pulled and is not in the local Docker.`,
+                        hint: imageUnavailableHint(image.imageUri),
+                        detail: error.detail,
+                        cause: error,
+                      }),
+                    ),
+              ),
+            ),
+          ),
           Effect.andThen(
             run(["tag", image.imageUri, tag]).pipe(
               Effect.mapError((cause) =>

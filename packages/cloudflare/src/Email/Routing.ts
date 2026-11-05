@@ -12,13 +12,17 @@ type RoutingAttributes = Routing["Attributes"];
 
 const toAttributes = (
   zoneId: string,
-  result: emailRouting.GetEmailRoutingResponse,
+  result: Pick<
+    emailRouting.GetEmailRoutingResponse,
+    "id" | "name" | "enabled" | "status" | "supportSubaddress"
+  >,
 ): RoutingAttributes => ({
   routingId: result.id,
   zoneId,
   name: result.name,
   enabled: result.enabled,
   status: (result.status ?? undefined) as RoutingStatus | undefined,
+  subaddressing: result.supportSubaddress ?? undefined,
 });
 
 export type RoutingStatus =
@@ -40,6 +44,16 @@ export type RoutingProps = {
    * @default true
    */
   enabled?: boolean;
+  /**
+   * Whether routing rules honor subaddressing (plus addressing, RFC 5233):
+   * mail to `user+detail@example.com` matches the rule for
+   * `user@example.com`, with the full address kept in `message.to`. A rule
+   * for the exact subaddress still takes precedence. Omit to leave the
+   * setting as Cloudflare has it.
+   *
+   * @see https://developers.cloudflare.com/email-service/configuration/email-routing-addresses/#subaddressing
+   */
+  subaddressing?: boolean;
 };
 
 export type Routing = Resource<
@@ -51,6 +65,8 @@ export type Routing = Resource<
     name: string;
     enabled: boolean;
     status: RoutingStatus | undefined;
+    /** Whether routing rules honor subaddressing (plus addressing). */
+    subaddressing: boolean | undefined;
   },
   never,
   Providers
@@ -65,6 +81,15 @@ export type Routing = Resource<
  * ```typescript
  * const routing = yield* Cloudflare.Email.Routing("Routing", {
  *   zone: "example.com",
+ * });
+ * ```
+ *
+ * ### Subaddressing
+ * **Example:** Route `docs+anything@example.com` through the `docs@` rule
+ * ```typescript
+ * const routing = yield* Cloudflare.Email.Routing("Routing", {
+ *   zone: "example.com",
+ *   subaddressing: true,
  * });
  * ```
  *
@@ -117,20 +142,19 @@ export const RoutingProvider = () =>
       if ((news.enabled ?? true) !== output.enabled) {
         return { action: "update" } as const;
       }
-      return undefined;
+      if (news.subaddressing !== undefined && news.subaddressing !== output.subaddressing) {
+        return { action: "update" } as const;
+      }
+      // Every prop is compared above against the observed output, so an
+      // omitted `subaddressing` (keep the zone's setting) is not a change.
+      return { action: "noop" } as const;
     }),
     read: Effect.fn(function* ({ output }) {
       if (!output?.zoneId) return undefined;
       const result = yield* emailRouting.getEmailRouting({
         zoneId: output.zoneId,
       });
-      return {
-        routingId: result.id,
-        zoneId: output.zoneId,
-        name: result.name,
-        enabled: result.enabled,
-        status: (result.status ?? undefined) as RoutingStatus | undefined,
-      };
+      return toAttributes(output.zoneId, result);
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
       const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
@@ -138,22 +162,17 @@ export const RoutingProvider = () =>
 
       if (desired) {
         const result = yield* emailRouting.enableEmailRouting({ zoneId });
-        return {
-          routingId: result.id,
-          zoneId,
-          name: result.name,
-          enabled: result.enabled,
-          status: (result.status ?? undefined) as RoutingStatus | undefined,
-        };
+        // Subaddressing is a zone setting beside `enabled`; converge it only
+        // when declared, and only when it differs.
+        const subaddressing = news.subaddressing;
+        if (subaddressing === undefined || result.supportSubaddress === subaddressing) {
+          return toAttributes(zoneId, result);
+        }
+        const edited = yield* emailRouting.edit({ zoneId, supportSubaddress: subaddressing });
+        return toAttributes(zoneId, edited);
       } else {
         const result = yield* emailRouting.disableEmailRouting({ zoneId });
-        return {
-          routingId: result.id,
-          zoneId,
-          name: result.name,
-          enabled: result.enabled,
-          status: (result.status ?? undefined) as RoutingStatus | undefined,
-        };
+        return toAttributes(zoneId, result);
       }
     }),
     delete: Effect.fn(function* ({ output }) {

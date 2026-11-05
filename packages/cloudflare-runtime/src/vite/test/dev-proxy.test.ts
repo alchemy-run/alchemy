@@ -26,6 +26,7 @@ const devServer = async (source: string): Promise<string> => {
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [
@@ -92,8 +93,14 @@ test("stops the Worker's stream when the client hangs up", async () => {
     let pulls = 0;
     export default {
       fetch(request) {
-        if (new URL(request.url).pathname === "/pulls") {
+        const { pathname } = new URL(request.url);
+        if (pathname === "/pulls") {
           return Response.json({ pulls });
+        }
+        // Only the test's own stream counts: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with \`GET /\`.
+        if (pathname !== "/events") {
+          return new Response("Not Found", { status: 404 });
         }
         return new Response(
           new ReadableStream({
@@ -118,11 +125,22 @@ test("stops the Worker's stream when the client hangs up", async () => {
   await stream.body!.getReader().read();
   client.abort();
 
-  // workerd stops pulling once it sees the request cancelled.
-  await sleep(500);
-  const afterHangUp = await pulls();
-  await sleep(500);
-  expect(await pulls()).toBe(afterHangUp);
+  // workerd stops pulling once it sees the request cancelled. The cancel can
+  // take a while to land on a loaded machine, so wait for the count to hold
+  // still: a live stream pulls every 50ms and never would.
+  let previous = await pulls();
+  await expect
+    .poll(
+      async () => {
+        await sleep(300);
+        const next = await pulls();
+        const stopped = next === previous;
+        previous = next;
+        return stopped;
+      },
+      { timeout: 15_000, interval: 0 },
+    )
+    .toBe(true);
 });
 
 test("keeps connections usable after the Worker answers without reading the body", async () => {

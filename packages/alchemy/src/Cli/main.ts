@@ -1,4 +1,4 @@
-import { AlchemyContextLive } from "alchemy/AlchemyContext";
+import { AlchemyContext, AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
@@ -6,18 +6,22 @@ import * as Contributions from "alchemy/Contributions";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { moduleExtension } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
-import * as Cause from "effect/Cause";
 import * as CliConfig from "effect/cli/CliConfig";
 import * as CliError from "effect/cli/CliError";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import * as GlobalFlag from "effect/cli/GlobalFlag";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Scope from "effect/Scope";
 import packageJson from "../../package.json" with { type: "json" };
-import * as Interaction from "../Interaction.ts";
+import { logShutdown } from "../Util/Shutdown.ts";
 import { checkLatestVersion } from "./checkVersion.ts";
 import {
   compatibilityCommand,
@@ -25,8 +29,10 @@ import {
   type CompatibilityCommand,
 } from "./commands/compat.ts";
 import { handleCliErrors } from "./commands/errors.ts";
-import { GlobalLogLive, logRunHeader } from "./GlobalLog.ts";
-import { selectCliServices } from "./selectCli.ts";
+import { VersionCheck } from "./commands/instrument.ts";
+import { GlobalLogLive, LogFormatFlag, LogLevelFlag } from "./GlobalLog.ts";
+import * as JsonConsole from "./JsonConsole.ts";
+import { selectRenderer } from "./selectCli.ts";
 
 const commandMetadata = [
   ["provider", "Manage cloud provider prerequisites and utilities"],
@@ -76,8 +82,10 @@ const loadCommand = async (name: CommandName) => {
       return (await import("./commands/logs.ts")).logsCommand;
     case "profile":
       return (await import("./commands/profile/index.ts")).profileCommand;
-    case "state":
-      return (await import("./commands/state.ts")).stateCommand;
+    case "state": {
+      const { stateCommand } = await import("./commands/state.ts");
+      return loadContributions().then(stateCommand);
+    }
     case "drift":
       return (await import("./commands/drift.ts")).driftCommand;
     case "unsafe":
@@ -159,7 +167,10 @@ const root = Command.make("alchemy", {}, () =>
       compatibilityCommand(name as CompatibilityCommand),
     ),
   ]),
-  Command.withGlobalFlags([NoInput, FastDistilled]),
+  Command.withGlobalFlags([NoInput, FastDistilled, LogLevelFlag, LogFormatFlag]),
+  // Built per command, once the flags are parsed: `--log-format json`
+  // swaps in the JSON console's renderer.
+  Command.provide(JsonConsole.override),
 );
 
 /**
@@ -185,7 +196,7 @@ const cli = Command.run(root, {
 
 const services = Layer.mergeAll(
   CliConfig.layer({
-    builtIns: [GlobalFlag.Help, GlobalFlag.Version, GlobalFlag.Completions, GlobalFlag.LogLevel],
+    builtIns: [GlobalFlag.Help, GlobalFlag.Version, GlobalFlag.Completions],
   }),
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
   Layer.provide(ProfileStoreLive, PlatformServices),
@@ -196,31 +207,35 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  Layer.provide(Layer.provideMerge(selectCliServices(), Interaction.layer()), PlatformServices),
-  // Debug run log under ~/.alchemy/logs — the console noise floor stays at
+  Layer.provide(selectRenderer(), PlatformServices),
+  // Debug run log in the project's .alchemy/log — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.
-  //
-  // Telemetry sits on top of the console/file loggers so its OTLP logger
-  // merges with them. Listed as `mergeAll` siblings, whichever came last
-  // would win the `CurrentLoggers` slot and silently drop the other.
-  Layer.provideMerge(TelemetryLive, Layer.provide(GlobalLogLive, PlatformServices)),
+  Layer.provide(GlobalLogLive, PlatformServices),
+  TelemetryLive,
 );
 
 const program = Effect.gen(function* () {
-  yield* logRunHeader;
-  // Best-effort check for a newer published version. Runs to completion
-  // before the command so the warning prints before any interactive
-  // prompts; the registry response is cached for a day and the fetch is
-  // bounded by a short timeout, so this stays fast.
-  yield* checkLatestVersion;
-  return yield* cli;
-}).pipe(
-  // The terminal shows the friendly message; the run log keeps the full
-  // cause chain. Must sit inside the service provision so the file logger
-  // is still installed.
-  Effect.tapCause((cause) => Effect.logDebug(`command failed:\n${Cause.pretty(cause)}`)),
-);
+  // Best-effort check for a newer published version, run by each command
+  // before its handler: the console flags are parsed by then, and the
+  // warning prints before any interactive prompt. Cached for a day and
+  // bounded by a short timeout, so it stays fast. Its fetch may finish in
+  // the background, in this scope.
+  // Only the check's own services, so the command's flags and loggers win.
+  const services = Context.pick(
+    AlchemyContext,
+    FileSystem.FileSystem,
+    HttpClient.HttpClient,
+    Path.Path,
+    Scope.Scope,
+  )(
+    yield* Effect.context<
+      AlchemyContext | FileSystem.FileSystem | HttpClient.HttpClient | Path.Path | Scope.Scope
+    >(),
+  );
+  const check = yield* Effect.cached(Effect.provideContext(checkLatestVersion, services));
+  return yield* cli.pipe(Effect.provideService(VersionCheck, check));
+}).pipe(logShutdown("cli"));
 
 const mainEffect = program.pipe(
   // $USER and $ALCHEMY_STAGE are set by the environment

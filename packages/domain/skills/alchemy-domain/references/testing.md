@@ -51,6 +51,7 @@ The steps:
 - `replied(value)` asserts the last command's reply.
 - `state(ref, partial | fn)` asserts aggregate state.
 - `view(View, ref, partial | fn | Story.none)` asserts view state. `emitted(View, ref, [...])` asserts a view's emitted events, and `streamed(Stream, ref, ...)` a stream's entries.
+- `query(Query, input, rows | partial | fn, { take, after }?)` asks a query as the provided context: `validate`, the handler and `visible` run, and the result goes through its schema. Rows are matched in order, each partially. Without an expectation, the query must be rejected, and the next step is `rejected(...)`.
 - `provide(Service, value)` stands in for middleware on the commands that follow.
 - `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`. It only moves forward: a time before the current one fails the story, unless only `provide` steps ran before it.
 - `advance("1 day")` moves the clock forward by a duration (any `Duration.Input`) instead of to a time.
@@ -104,6 +105,26 @@ story(
 
 More: [Testing models: Assert real calls](https://alchemy.run/domain/testing-models#assert-real-calls).
 
+### Every adapter, same tests
+
+An adapter is a Layer for the system's service. Run one set of tests against each adapter (vendor, in-memory fake, no-op) so a fake never drifts from the vendor:
+
+```ts
+for (const [adapter, layer] of [["Twilio", TwilioSms], ["fake", FakeSms]] as const) {
+  describe(`Sms: ${adapter}`, () => {
+    it.effect("counts the segments", () =>
+      Effect.gen(function* () {
+        const sms = yield* Sms;
+        const sent = yield* sms.send({ to: "+15550100", body: "x".repeat(200) });
+        expect(sent.segments).toBe(2);
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+}
+```
+
+More: [Testing models: Run the same tests against every adapter](https://alchemy.run/domain/testing-models#run-the-same-tests-against-every-adapter).
+
 ### Sagas
 
 Test what a saga does: the events its steps record on aggregates, and how the run ended. Don't test its internal steps.
@@ -131,7 +152,15 @@ More: [Domain Model: Check the declaration](https://alchemy.run/domain/model#che
 
 ### What to cover
 
-For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, the reaction when its command is rejected, and the reaction when an external call fails with its declared error. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds.
+For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, the reaction when its command is rejected, and the reaction when an external call fails with its declared error. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds. For every query, cover the rows the owner sees, each refused caller (`rejected`), rows `visible` hides, and a second page.
+
+```ts
+as(sam),
+Story.query(AccountLedger, { account: a1.id }, [{ kind: "MoneyDeposited", amount: 10_000 }]),
+as(alex),
+Story.query(AccountLedger, { account: a1.id }),
+Story.rejected(new NotOwner()),
+```
 
 More: [Testing models: Check every outcome](https://alchemy.run/domain/testing-models#check-every-outcome).
 

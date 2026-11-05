@@ -6,6 +6,7 @@ import { poll } from "alchemy/Util/poll";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -22,13 +23,11 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const key = "alchemy-test-flag-read-local";
+      const key = testName("alchemy-test-flag-read-local");
 
       const out = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.Flagship.App("ReadFlagsLocalApp", {
-            name: "alchemy-test-flagship-read-local",
-          });
+          const app = yield* Cloudflare.Flagship.App("ReadFlagsLocalApp", {});
           // defaultVariation "on" -> with no rules the flag always evaluates
           // to `true`, which is distinct from the client-side default `false`,
           // so a successful read is observable.
