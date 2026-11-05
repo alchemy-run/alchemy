@@ -21,43 +21,31 @@
       "operation": "describeSigningJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["signer:DescribeSigningJob"],
-      "arns": ["arn:${Partition}:signer:${Region}:${Account}:/signing-jobs/*"]
+      }
     },
     "GetRevocationStatus": {
       "operation": "getRevocationStatus",
       "request": {
         "mode": "required"
-      },
-      "actions": ["signer:GetRevocationStatus"],
-      "arns": [
-        "arn:${Partition}:signer:${Region}:${Account}:/signing-jobs/*",
-        "arn:${Partition}:signer:${Region}:${Account}:/signing-profiles/*"
-      ]
+      }
     },
     "GetSigningPlatform": {
       "operation": "getSigningPlatform",
       "request": {
         "mode": "required"
-      },
-      "actions": ["signer:GetSigningPlatform"]
+      }
     },
     "ListSigningJobs": {
-      "operation": "listSigningJobs",
-      "actions": ["signer:ListSigningJobs"]
+      "operation": "listSigningJobs"
     },
     "ListSigningPlatforms": {
-      "operation": "listSigningPlatforms",
-      "actions": ["signer:ListSigningPlatforms"]
+      "operation": "listSigningPlatforms"
     },
     "RevokeSignature": {
       "operation": "revokeSignature",
       "request": {
         "mode": "required"
-      },
-      "actions": ["signer:RevokeSignature"],
-      "arns": ["arn:${Partition}:signer:${Region}:${Account}:/signing-jobs/*"]
+      }
     },
     "RevokeSigningProfile": {
       "operation": "revokeSigningProfile",
@@ -68,8 +56,7 @@
         "omit": ["profileName"],
         "inline": true
       },
-      "builder": "makeSignerProfileHttpBinding",
-      "actions": ["signer:RevokeSigningProfile"]
+      "builder": "makeSignerProfileHttpBinding"
     },
     "SignPayload": {
       "operation": "signPayload",
@@ -80,8 +67,7 @@
         "omit": ["profileName"],
         "inline": true
       },
-      "builder": "makeSignerProfileHttpBinding",
-      "actions": ["signer:SignPayload"]
+      "builder": "makeSignerProfileHttpBinding"
     },
     "StartSigningJob": {
       "operation": "startSigningJob",
@@ -92,8 +78,7 @@
         "omit": ["profileName"],
         "inline": true
       },
-      "builder": "makeSignerProfileHttpBinding",
-      "actions": ["signer:StartSigningJob"]
+      "builder": "makeSignerProfileHttpBinding"
     }
   }
 }

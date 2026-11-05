@@ -27,31 +27,14 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:CreateBatchInferenceJob"],
       "with": {
         "passRole": true
-      },
-      "arns": [
-        "arn:${Partition}:personalize:${Region}:${Account}:batch-inference-job/*",
-        "arn:${Partition}:personalize:${Region}:${Account}:solution/*"
-      ],
-      "reviewed": {
-        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
-        "iam:PassRole": "AWS lists it for the operation, but the Personalize Bindings suite calls it successfully without it."
       }
     },
     "CreateCampaign": {
       "operation": "createCampaign",
       "request": {
         "mode": "required"
-      },
-      "actions": ["personalize:CreateCampaign"],
-      "arns": [
-        "arn:${Partition}:personalize:${Region}:${Account}:campaign/*",
-        "arn:${Partition}:personalize:${Region}:${Account}:solution/*"
-      ],
-      "reviewed": {
-        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "CreateDatasetImportJob": {
@@ -59,107 +42,72 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:CreateDatasetImportJob"],
       "with": {
         "passRole": true
-      },
-      "arns": [
-        "arn:${Partition}:personalize:${Region}:${Account}:dataset-import-job/*",
-        "arn:${Partition}:personalize:${Region}:${Account}:dataset/*"
-      ],
-      "reviewed": {
-        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
-        "iam:PassRole": "AWS lists it for the operation, but the Personalize Bindings suite calls it successfully without it."
       }
     },
     "CreateSolution": {
       "operation": "createSolution",
       "request": {
         "mode": "required"
-      },
-      "actions": ["personalize:CreateSolution"],
-      "reviewed": {
-        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
-      },
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:personalize:${Region}:${Account}:dataset-group/*, arn:${Partition}:personalize:${Region}:${Account}:solution/*), the call was denied live in the Personalize Bindings suite; the grant stays on *."
+      }
     },
     "CreateSolutionVersion": {
       "operation": "createSolutionVersion",
       "request": {
         "mode": "required"
-      },
-      "actions": ["personalize:CreateSolutionVersion"],
-      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:solution/*"],
-      "reviewed": {
-        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "DescribeBatchInferenceJob": {
       "operation": "describeBatchInferenceJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["personalize:DescribeBatchInferenceJob"],
-      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:batch-inference-job/*"]
+      }
     },
     "DescribeCampaign": {
       "operation": "describeCampaign",
       "request": {
         "mode": "required"
-      },
-      "actions": ["personalize:DescribeCampaign"],
-      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"]
+      }
     },
     "DescribeDatasetImportJob": {
       "operation": "describeDatasetImportJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["personalize:DescribeDatasetImportJob"],
-      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:dataset-import-job/*"]
+      }
     },
     "DescribeSolutionVersion": {
       "operation": "describeSolutionVersion",
       "request": {
         "mode": "required"
-      },
-      "actions": ["personalize:DescribeSolutionVersion"],
-      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:solution/*"]
+      }
     },
     "GetActionRecommendations": {
       "operation": "getActionRecommendations",
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:GetActionRecommendations"],
-      "module": "personalize-runtime",
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:personalize:${Region}:${Account}:campaign/*), the call was denied live in the Personalize Bindings suite; the grant stays on *."
+      "module": "personalize-runtime"
     },
     "GetPersonalizedRanking": {
       "operation": "getPersonalizedRanking",
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:GetPersonalizedRanking"],
-      "module": "personalize-runtime",
-      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"]
+      "module": "personalize-runtime"
     },
     "GetRecommendations": {
       "operation": "getRecommendations",
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:GetRecommendations"],
-      "module": "personalize-runtime",
-      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"]
+      "module": "personalize-runtime"
     },
     "GetSolutionMetrics": {
       "operation": "getSolutionMetrics",
       "request": {
         "mode": "required"
-      },
-      "actions": ["personalize:GetSolutionMetrics"],
-      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:solution/*"]
+      }
     },
     "PutActionInteractions": {
       "operation": "putActionInteractions",
@@ -171,7 +119,6 @@
         "omit": ["trackingId"]
       },
       "builder": "makePersonalizeEventTrackerHttpBinding",
-      "actions": ["personalize:PutActionInteractions"],
       "module": "personalize-events"
     },
     "PutActions": {
@@ -183,7 +130,6 @@
         "omit": ["datasetArn"]
       },
       "builder": "makePersonalizeDatasetHttpBinding",
-      "actions": ["personalize:PutActions"],
       "module": "personalize-events"
     },
     "PutEvents": {
@@ -196,7 +142,6 @@
         "omit": ["trackingId"]
       },
       "builder": "makePersonalizeEventTrackerHttpBinding",
-      "actions": ["personalize:PutEvents"],
       "module": "personalize-events"
     },
     "PutItems": {
@@ -208,7 +153,6 @@
         "omit": ["datasetArn"]
       },
       "builder": "makePersonalizeDatasetHttpBinding",
-      "actions": ["personalize:PutItems"],
       "module": "personalize-events"
     },
     "PutUsers": {
@@ -220,16 +164,13 @@
         "omit": ["datasetArn"]
       },
       "builder": "makePersonalizeDatasetHttpBinding",
-      "actions": ["personalize:PutUsers"],
       "module": "personalize-events"
     },
     "UpdateCampaign": {
       "operation": "updateCampaign",
       "request": {
         "mode": "required"
-      },
-      "actions": ["personalize:UpdateCampaign"],
-      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"]
+      }
     }
   }
 }

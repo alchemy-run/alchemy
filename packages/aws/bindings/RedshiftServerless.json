@@ -22,11 +22,7 @@
       "operation": "convertRecoveryPointToSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": [
-        "redshift-serverless:ConvertRecoveryPointToSnapshot",
-        "redshift-serverless:TagResource"
-      ]
+      }
     },
     "CreateSnapshot": {
       "operation": "createSnapshot",
@@ -37,7 +33,6 @@
         "inline": true
       },
       "builder": "makeServerlessNamespaceHttpBinding",
-      "actions": ["redshift-serverless:CreateSnapshot", "redshift-serverless:TagResource"],
       "withTs": {
         "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:snapshot/*`];}"
       },
@@ -50,48 +45,40 @@
       "operation": "deleteSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["redshift-serverless:DeleteSnapshot"]
+      }
     },
     "GetIdentityCenterAuthToken": {
       "operation": "getIdentityCenterAuthToken",
       "request": {
         "mode": "required"
-      },
-      "actions": ["redshift-serverless:GetIdentityCenterAuthToken"]
+      }
     },
     "GetRecoveryPoint": {
       "operation": "getRecoveryPoint",
       "request": {
         "mode": "required"
-      },
-      "actions": ["redshift-serverless:GetRecoveryPoint"]
+      }
     },
     "GetSnapshot": {
       "operation": "getSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["redshift-serverless:GetSnapshot"]
+      }
     },
     "GetTableRestoreStatus": {
       "operation": "getTableRestoreStatus",
       "request": {
         "mode": "required"
-      },
-      "actions": ["redshift-serverless:GetTableRestoreStatus"]
+      }
     },
     "ListRecoveryPoints": {
-      "operation": "listRecoveryPoints",
-      "actions": ["redshift-serverless:ListRecoveryPoints"]
+      "operation": "listRecoveryPoints"
     },
     "ListSnapshots": {
-      "operation": "listSnapshots",
-      "actions": ["redshift-serverless:ListSnapshots"]
+      "operation": "listSnapshots"
     },
     "ListTableRestoreStatus": {
-      "operation": "listTableRestoreStatus",
-      "actions": ["redshift-serverless:ListTableRestoreStatus"]
+      "operation": "listTableRestoreStatus"
     },
     "RestoreFromRecoveryPoint": {
       "operation": "restoreFromRecoveryPoint",
@@ -102,7 +89,6 @@
         "inline": true
       },
       "builder": "makeServerlessNamespaceHttpBinding",
-      "actions": ["redshift-serverless:RestoreFromRecoveryPoint"],
       "withTs": {
         "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:recoverypoint/*`, `${prefix}:workgroup/*`];}"
       },
@@ -120,7 +106,6 @@
         "inline": true
       },
       "builder": "makeServerlessNamespaceHttpBinding",
-      "actions": ["redshift-serverless:RestoreFromSnapshot"],
       "withTs": {
         "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:snapshot/*`, `${prefix}:workgroup/*`];}"
       },
@@ -138,7 +123,6 @@
         "inline": true
       },
       "builder": "makeServerlessNamespaceHttpBinding",
-      "actions": ["redshift-serverless:RestoreTableFromRecoveryPoint"],
       "withTs": {
         "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:recoverypoint/*`, `${prefix}:workgroup/*`];}"
       },
@@ -156,7 +140,6 @@
         "inline": true
       },
       "builder": "makeServerlessNamespaceHttpBinding",
-      "actions": ["redshift-serverless:RestoreTableFromSnapshot"],
       "withTs": {
         "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:snapshot/*`, `${prefix}:workgroup/*`];}"
       },
@@ -169,8 +152,7 @@
       "operation": "updateSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["redshift-serverless:UpdateSnapshot"]
+      }
     }
   }
 }

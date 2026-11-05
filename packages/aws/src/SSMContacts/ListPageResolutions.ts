@@ -42,5 +42,6 @@ export const ListPageResolutionsHttp = Layer.effect(
     tag: "AWS.SSMContacts.ListPageResolutions",
     operation: ssm.listPageResolutions,
     actions: ["ssm-contacts:ListPageResolutions"],
+    arns: ["arn:${Partition}:ssm-contacts:${Region}:${Account}:page/*/*"],
   }),
 );

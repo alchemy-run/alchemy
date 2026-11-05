@@ -48,6 +48,7 @@ export const CopyBackupToRegionHttp = Layer.effect(
   makeCloudHsmHttpBinding({
     tag: "AWS.CloudHSMV2.CopyBackupToRegion",
     operation: cloudhsm.copyBackupToRegion,
-    actions: ["cloudhsm:CopyBackupToRegion", "cloudhsm:TagResource"],
+    actions: ["cloudhsm:CopyBackupToRegion", "cloudhsm:TagResource", "cloudhsm:UntagResource"],
+    arns: ["arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*"],
   }),
 );

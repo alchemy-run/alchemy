@@ -49,5 +49,6 @@ export const DescribeTopicsDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.DescribeTopicsDetectionJob",
     operation: comprehend.describeTopicsDetectionJob,
     actions: ["comprehend:DescribeTopicsDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:topics-detection-job/*"],
   }),
 );

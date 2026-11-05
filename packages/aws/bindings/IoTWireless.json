@@ -46,7 +46,6 @@
         "interface": "DeleteQueuedMessagesRequest",
         "omit": ["Id"]
       },
-      "actions": ["iotwireless:DeleteQueuedMessages"],
       "withTs": {
         "prepare": "(request: DeleteQueuedMessagesRequest, wirelessDeviceId) => ({...request, Id: wirelessDeviceId})"
       }
@@ -57,7 +56,6 @@
         "mode": "required"
       },
       "builder": "makeIotWirelessAccountHttpBinding",
-      "actions": ["iotwireless:GetPositionEstimate"],
       "withTs": {
         "prepare": "(request: iotw.GetPositionEstimateRequest) => request"
       }
@@ -71,19 +69,17 @@
         "interface": "GetResourcePositionRequest",
         "omit": ["ResourceIdentifier", "ResourceType"]
       },
-      "actions": ["iotwireless:GetResourcePosition"],
       "with": {
         "resourceScope": "any"
       },
       "withTs": {
         "prepare": "(request: GetResourcePositionRequest | undefined, wirelessDeviceId) => ({...request, ResourceIdentifier: wirelessDeviceId, ResourceType: \"WirelessDevice\" as const})"
       },
-      "note": "IoT Wireless authorizes the position APIs against a type-level ARN (\u2026:WirelessDevice/WirelessDevice) \u2014 the device ARN never matches."
+      "note": "IoT Wireless authorizes the position APIs against a type-level ARN (…:WirelessDevice/WirelessDevice) — the device ARN never matches."
     },
     "GetServiceEndpoint": {
       "operation": "getServiceEndpoint",
       "builder": "makeIotWirelessAccountHttpBinding",
-      "actions": ["iotwireless:GetServiceEndpoint"],
       "withTs": {
         "prepare": "(request: iotw.GetServiceEndpointRequest | undefined) => request ?? {}"
       }
@@ -97,7 +93,6 @@
         "interface": "GetWirelessDeviceStatisticsRequest",
         "omit": ["WirelessDeviceId"]
       },
-      "actions": ["iotwireless:GetWirelessDeviceStatistics"],
       "withTs": {
         "prepare": "(request: GetWirelessDeviceStatisticsRequest | undefined, wirelessDeviceId) => ({...request, WirelessDeviceId: wirelessDeviceId})"
       }
@@ -112,7 +107,6 @@
         "omit": ["WirelessGatewayId"]
       },
       "builder": "makeIotWirelessGatewayHttpBinding",
-      "actions": ["iotwireless:GetWirelessGatewayStatistics"],
       "withTs": {
         "prepare": "(request: GetWirelessGatewayStatisticsRequest | undefined, wirelessGatewayId) => ({...request, WirelessGatewayId: wirelessGatewayId})"
       }
@@ -126,7 +120,6 @@
         "interface": "ListQueuedMessagesRequest",
         "omit": ["Id"]
       },
-      "actions": ["iotwireless:ListQueuedMessages"],
       "withTs": {
         "prepare": "(request: ListQueuedMessagesRequest | undefined, wirelessDeviceId) => ({...request, Id: wirelessDeviceId})"
       }
@@ -140,7 +133,6 @@
         "interface": "SendDataToWirelessDeviceRequest",
         "omit": ["Id"]
       },
-      "actions": ["iotwireless:SendDataToWirelessDevice"],
       "withTs": {
         "prepare": "(request: SendDataToWirelessDeviceRequest, wirelessDeviceId) => ({...request, Id: wirelessDeviceId})"
       }
@@ -154,7 +146,6 @@
         "interface": "TestWirelessDeviceRequest",
         "omit": ["Id"]
       },
-      "actions": ["iotwireless:TestWirelessDevice"],
       "withTs": {
         "prepare": "(request: TestWirelessDeviceRequest | undefined, wirelessDeviceId) => ({...request, Id: wirelessDeviceId})"
       }
@@ -168,14 +159,13 @@
         "interface": "UpdateResourcePositionRequest",
         "omit": ["ResourceIdentifier", "ResourceType"]
       },
-      "actions": ["iotwireless:UpdateResourcePosition"],
       "with": {
         "resourceScope": "any"
       },
       "withTs": {
         "prepare": "(request: UpdateResourcePositionRequest, wirelessDeviceId) => ({...request, ResourceIdentifier: wirelessDeviceId, ResourceType: \"WirelessDevice\" as const})"
       },
-      "note": "IoT Wireless authorizes the position APIs against a type-level ARN (\u2026:WirelessDevice/WirelessDevice) \u2014 the device ARN never matches."
+      "note": "IoT Wireless authorizes the position APIs against a type-level ARN (…:WirelessDevice/WirelessDevice) — the device ARN never matches."
     }
   }
 }

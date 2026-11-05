@@ -22,8 +22,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:AcceptAdministratorInvitation"]
+      }
     },
     "ArchiveFindings": {
       "operation": "archiveFindings",
@@ -32,8 +31,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:ArchiveFindings"]
+      }
     },
     "CreateInvestigation": {
       "operation": "createInvestigation",
@@ -42,8 +40,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:CreateInvestigation"]
+      }
     },
     "CreateMembers": {
       "operation": "createMembers",
@@ -52,8 +49,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:CreateMembers"]
+      }
     },
     "CreateSampleFindings": {
       "operation": "createSampleFindings",
@@ -62,18 +58,15 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:CreateSampleFindings"]
+      }
     },
     "DeclineInvitations": {
       "operation": "declineInvitations",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:DeclineInvitations"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "DeleteInvitations": {
       "operation": "deleteInvitations",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:DeleteInvitations"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "DeleteMembers": {
       "operation": "deleteMembers",
@@ -82,8 +75,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:DeleteMembers"]
+      }
     },
     "DescribeMalwareScans": {
       "operation": "describeMalwareScans",
@@ -92,8 +84,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:DescribeMalwareScans"]
+      }
     },
     "DescribeOrganizationConfiguration": {
       "operation": "describeOrganizationConfiguration",
@@ -102,13 +93,11 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:DescribeOrganizationConfiguration"]
+      }
     },
     "DisableOrganizationAdminAccount": {
       "operation": "disableOrganizationAdminAccount",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:DisableOrganizationAdminAccount"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "DisassociateFromAdministratorAccount": {
       "operation": "disassociateFromAdministratorAccount",
@@ -117,8 +106,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:DisassociateFromAdministratorAccount"]
+      }
     },
     "DisassociateMembers": {
       "operation": "disassociateMembers",
@@ -127,13 +115,11 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:DisassociateMembers"]
+      }
     },
     "EnableOrganizationAdminAccount": {
       "operation": "enableOrganizationAdminAccount",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:EnableOrganizationAdminAccount"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "GetAdministratorAccount": {
       "operation": "getAdministratorAccount",
@@ -142,8 +128,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:GetAdministratorAccount"]
+      }
     },
     "GetCoverageStatistics": {
       "operation": "getCoverageStatistics",
@@ -153,7 +138,6 @@
         "omit": ["DetectorId"],
         "inline": true
       },
-      "actions": ["guardduty:GetCoverageStatistics"],
       "with": {
         "resourceLevel": true
       },
@@ -166,8 +150,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:GetFindings"]
+      }
     },
     "GetFindingsStatistics": {
       "operation": "getFindingsStatistics",
@@ -176,8 +159,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:GetFindingsStatistics"]
+      }
     },
     "GetInvestigation": {
       "operation": "getInvestigation",
@@ -186,18 +168,15 @@
         "mode": "required",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:GetInvestigation"]
+      }
     },
     "GetInvitationsCount": {
       "operation": "getInvitationsCount",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:GetInvitationsCount"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "GetMalwareScan": {
       "operation": "getMalwareScan",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:GetMalwareScan"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "GetMalwareScanSettings": {
       "operation": "getMalwareScanSettings",
@@ -206,8 +185,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:GetMalwareScanSettings"]
+      }
     },
     "GetMemberDetectors": {
       "operation": "getMemberDetectors",
@@ -216,8 +194,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:GetMemberDetectors"]
+      }
     },
     "GetMembers": {
       "operation": "getMembers",
@@ -226,13 +203,11 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:GetMembers"]
+      }
     },
     "GetOrganizationStatistics": {
       "operation": "getOrganizationStatistics",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:GetOrganizationStatistics"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "GetRemainingFreeTrialDays": {
       "operation": "getRemainingFreeTrialDays",
@@ -241,8 +216,7 @@
         "mode": "required",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:GetRemainingFreeTrialDays"]
+      }
     },
     "GetUsageStatistics": {
       "operation": "getUsageStatistics",
@@ -251,8 +225,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:GetUsageStatistics"]
+      }
     },
     "InviteMembers": {
       "operation": "inviteMembers",
@@ -261,8 +234,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:InviteMembers"]
+      }
     },
     "ListCoverage": {
       "operation": "listCoverage",
@@ -272,7 +244,6 @@
         "omit": ["DetectorId"],
         "inline": true
       },
-      "actions": ["guardduty:ListCoverage"],
       "with": {
         "resourceLevel": true
       },
@@ -285,8 +256,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:ListFindings"]
+      }
     },
     "ListInvestigations": {
       "operation": "listInvestigations",
@@ -295,18 +265,15 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:ListInvestigations"]
+      }
     },
     "ListInvitations": {
       "operation": "listInvitations",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:ListInvitations"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "ListMalwareScans": {
       "operation": "listMalwareScans",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:ListMalwareScans"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "ListMembers": {
       "operation": "listMembers",
@@ -315,26 +282,19 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:ListMembers"]
+      }
     },
     "ListOrganizationAdminAccounts": {
       "operation": "listOrganizationAdminAccounts",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:ListOrganizationAdminAccounts"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "SendObjectMalwareScan": {
       "operation": "sendObjectMalwareScan",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:SendObjectMalwareScan"]
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "StartMalwareScan": {
       "operation": "startMalwareScan",
-      "builder": "makeGuardDutyAccountHttpBinding",
-      "actions": ["guardduty:StartMalwareScan"],
-      "reviewed": {
-        "iam:PassRole": "Needed only when the request passes ScanConfiguration.Role; not granted, so a role is never passed unasked."
-      }
+      "builder": "makeGuardDutyAccountHttpBinding"
     },
     "StartMonitoringMembers": {
       "operation": "startMonitoringMembers",
@@ -343,8 +303,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:StartMonitoringMembers"]
+      }
     },
     "StopMonitoringMembers": {
       "operation": "stopMonitoringMembers",
@@ -353,8 +312,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:StopMonitoringMembers"]
+      }
     },
     "UnarchiveFindings": {
       "operation": "unarchiveFindings",
@@ -363,8 +321,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:UnarchiveFindings"]
+      }
     },
     "UpdateFindingsFeedback": {
       "operation": "updateFindingsFeedback",
@@ -373,8 +330,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:UpdateFindingsFeedback"]
+      }
     },
     "UpdateMalwareScanSettings": {
       "operation": "updateMalwareScanSettings",
@@ -383,8 +339,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:UpdateMalwareScanSettings"]
+      }
     },
     "UpdateMemberDetectors": {
       "operation": "updateMemberDetectors",
@@ -393,8 +348,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:UpdateMemberDetectors"]
+      }
     },
     "UpdateOrganizationConfiguration": {
       "operation": "updateOrganizationConfiguration",
@@ -403,8 +357,7 @@
         "mode": "optional",
         "omit": ["DetectorId"],
         "inline": true
-      },
-      "actions": ["guardduty:UpdateOrganizationConfiguration"]
+      }
     }
   }
 }

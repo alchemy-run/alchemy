@@ -57,6 +57,6 @@ export const StartImagePipelineExecutionHttp = Layer.effect(
   makeImageBuilderPipelineHttpBinding({
     tag: "AWS.ImageBuilder.StartImagePipelineExecution",
     operation: imagebuilder.startImagePipelineExecution,
-    actions: ["imagebuilder:StartImagePipelineExecution"],
+    actions: ["imagebuilder:StartImagePipelineExecution", "imagebuilder:TagResource"],
   }),
 );

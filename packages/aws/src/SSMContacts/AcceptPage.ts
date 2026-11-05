@@ -43,5 +43,6 @@ export const AcceptPageHttp = Layer.effect(
     tag: "AWS.SSMContacts.AcceptPage",
     operation: ssm.acceptPage,
     actions: ["ssm-contacts:AcceptPage"],
+    arns: ["arn:${Partition}:ssm-contacts:${Region}:${Account}:page/*/*"],
   }),
 );

@@ -20,8 +20,7 @@
         "mode": "required",
         "interface": "DeleteMessageRequest",
         "omit": ["roomIdentifier"]
-      },
-      "actions": ["ivschat:DeleteMessage"]
+      }
     },
     "DisconnectUser": {
       "operation": "disconnectUser",
@@ -30,8 +29,7 @@
         "mode": "required",
         "interface": "DisconnectUserRequest",
         "omit": ["roomIdentifier"]
-      },
-      "actions": ["ivschat:DisconnectUser"]
+      }
     },
     "SendEvent": {
       "operation": "sendEvent",
@@ -40,8 +38,7 @@
         "mode": "required",
         "interface": "SendEventRequest",
         "omit": ["roomIdentifier"]
-      },
-      "actions": ["ivschat:SendEvent"]
+      }
     }
   }
 }

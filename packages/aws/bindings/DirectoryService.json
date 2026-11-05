@@ -25,8 +25,7 @@
         "mode": "required",
         "omit": ["DirectoryId"],
         "inline": true
-      },
-      "actions": ["ds:CreateComputer"]
+      }
     },
     "CreateSnapshot": {
       "operation": "createSnapshot",
@@ -35,13 +34,11 @@
         "mode": "optional",
         "omit": ["DirectoryId"],
         "inline": true
-      },
-      "actions": ["ds:CreateSnapshot"]
+      }
     },
     "DescribeDirectories": {
       "operation": "describeDirectories",
-      "builder": "makeDirectoryServiceAccountHttpBinding",
-      "actions": ["ds:DescribeDirectories"]
+      "builder": "makeDirectoryServiceAccountHttpBinding"
     },
     "DescribeDomainControllers": {
       "operation": "describeDomainControllers",
@@ -50,8 +47,7 @@
         "mode": "optional",
         "omit": ["DirectoryId"],
         "inline": true
-      },
-      "actions": ["ds:DescribeDomainControllers"]
+      }
     },
     "DescribeSnapshots": {
       "operation": "describeSnapshots",
@@ -60,24 +56,21 @@
         "mode": "optional",
         "omit": ["DirectoryId"],
         "inline": true
-      },
-      "actions": ["ds:DescribeSnapshots"]
+      }
     },
     "GetDirectoryLimits": {
       "operation": "getDirectoryLimits",
       "request": {
         "mode": "none"
       },
-      "builder": "makeDirectoryServiceAccountHttpBinding",
-      "actions": ["ds:GetDirectoryLimits"]
+      "builder": "makeDirectoryServiceAccountHttpBinding"
     },
     "GetSnapshotLimits": {
       "operation": "getSnapshotLimits",
       "resource": "Directory",
       "request": {
         "mode": "none"
-      },
-      "actions": ["ds:GetSnapshotLimits"]
+      }
     },
     "ResetUserPassword": {
       "operation": "resetUserPassword",
@@ -86,8 +79,7 @@
         "mode": "required",
         "omit": ["DirectoryId"],
         "inline": true
-      },
-      "actions": ["ds:ResetUserPassword"]
+      }
     }
   }
 }

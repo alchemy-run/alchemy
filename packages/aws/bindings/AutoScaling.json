@@ -20,7 +20,6 @@
         "interface": "DescribeScalingActivitiesRequest",
         "omit": ["AutoScalingGroupName"]
       },
-      "actions": ["autoscaling:DescribeScalingActivities"],
       "with": {
         "resource": "*"
       }
@@ -33,8 +32,7 @@
         "mode": "required",
         "interface": "ExecutePolicyRequest",
         "omit": ["AutoScalingGroupName"]
-      },
-      "actions": ["autoscaling:ExecutePolicy"]
+      }
     },
     "SetDesiredCapacity": {
       "operation": "setDesiredCapacity",
@@ -44,8 +42,7 @@
         "mode": "required",
         "interface": "SetDesiredCapacityRequest",
         "omit": ["AutoScalingGroupName"]
-      },
-      "actions": ["autoscaling:SetDesiredCapacity"]
+      }
     },
     "SetInstanceHealth": {
       "operation": "setInstanceHealth",
@@ -55,8 +52,7 @@
         "mode": "required",
         "interface": "SetInstanceHealthRequest",
         "omit": []
-      },
-      "actions": ["autoscaling:SetInstanceHealth"]
+      }
     },
     "SetInstanceProtection": {
       "operation": "setInstanceProtection",
@@ -66,8 +62,7 @@
         "mode": "required",
         "interface": "SetInstanceProtectionRequest",
         "omit": ["AutoScalingGroupName"]
-      },
-      "actions": ["autoscaling:SetInstanceProtection"]
+      }
     },
     "TerminateInstanceInAutoScalingGroup": {
       "operation": "terminateInstanceInAutoScalingGroup",
@@ -77,8 +72,7 @@
         "mode": "required",
         "interface": "TerminateInstanceRequest",
         "omit": []
-      },
-      "actions": ["autoscaling:TerminateInstanceInAutoScalingGroup"]
+      }
     }
   }
 }

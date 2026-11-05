@@ -22,29 +22,25 @@
       "resource": "Pipe",
       "request": {
         "mode": "none"
-      },
-      "actions": ["pipes:DescribePipe"]
+      }
     },
     "ListPipes": {
       "operation": "listPipes",
-      "builder": "makePipesAccountHttpBinding",
-      "actions": ["pipes:ListPipes"]
+      "builder": "makePipesAccountHttpBinding"
     },
     "StartPipe": {
       "operation": "startPipe",
       "resource": "Pipe",
       "request": {
         "mode": "none"
-      },
-      "actions": ["pipes:StartPipe"]
+      }
     },
     "StopPipe": {
       "operation": "stopPipe",
       "resource": "Pipe",
       "request": {
         "mode": "none"
-      },
-      "actions": ["pipes:StopPipe"]
+      }
     }
   }
 }

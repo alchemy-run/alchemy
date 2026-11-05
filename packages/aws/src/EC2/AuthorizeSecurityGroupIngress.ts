@@ -66,6 +66,6 @@ export const AuthorizeSecurityGroupIngressHttp = Layer.effect(
   makeSecurityGroupHttpBinding({
     tag: "AWS.EC2.AuthorizeSecurityGroupIngress",
     operation: ec2.authorizeSecurityGroupIngress,
-    actions: ["ec2:AuthorizeSecurityGroupIngress"],
+    actions: ["ec2:AuthorizeSecurityGroupIngress", "ec2:CreateTags"],
   }),
 );

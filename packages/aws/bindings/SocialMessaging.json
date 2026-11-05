@@ -25,8 +25,7 @@
         "mode": "required",
         "interface": "CreateWhatsAppFlowRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:CreateWhatsAppFlow"]
+      }
     },
     "CreateWhatsAppMessageTemplate": {
       "operation": "createWhatsAppMessageTemplate",
@@ -36,8 +35,7 @@
         "mode": "required",
         "interface": "CreateWhatsAppMessageTemplateRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:CreateWhatsAppMessageTemplate"]
+      }
     },
     "CreateWhatsAppMessageTemplateMedia": {
       "operation": "createWhatsAppMessageTemplateMedia",
@@ -47,8 +45,7 @@
         "mode": "required",
         "interface": "CreateWhatsAppMessageTemplateMediaRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:CreateWhatsAppMessageTemplateMedia"]
+      }
     },
     "DeleteWhatsAppFlow": {
       "operation": "deleteWhatsAppFlow",
@@ -58,8 +55,7 @@
         "mode": "required",
         "interface": "DeleteWhatsAppFlowRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:DeleteWhatsAppFlow"]
+      }
     },
     "DeleteWhatsAppMessageMedia": {
       "operation": "deleteWhatsAppMessageMedia",
@@ -68,8 +64,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeWabaPhonePlaneHttpBinding",
-      "actions": ["social-messaging:DeleteWhatsAppMessageMedia"]
+      "builder": "makeWabaPhonePlaneHttpBinding"
     },
     "DeleteWhatsAppMessageTemplate": {
       "operation": "deleteWhatsAppMessageTemplate",
@@ -79,8 +74,7 @@
         "mode": "required",
         "interface": "DeleteWhatsAppMessageTemplateRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:DeleteWhatsAppMessageTemplate"]
+      }
     },
     "DeprecateWhatsAppFlow": {
       "operation": "deprecateWhatsAppFlow",
@@ -90,8 +84,7 @@
         "mode": "required",
         "interface": "DeprecateWhatsAppFlowRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:DeprecateWhatsAppFlow"]
+      }
     },
     "GetLinkedWhatsAppBusinessAccountPhoneNumber": {
       "operation": "getLinkedWhatsAppBusinessAccountPhoneNumber",
@@ -100,8 +93,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeWabaPhonePlaneHttpBinding",
-      "actions": ["social-messaging:GetLinkedWhatsAppBusinessAccountPhoneNumber"]
+      "builder": "makeWabaPhonePlaneHttpBinding"
     },
     "GetWhatsAppFlow": {
       "operation": "getWhatsAppFlow",
@@ -111,8 +103,7 @@
         "mode": "required",
         "interface": "GetWhatsAppFlowRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:GetWhatsAppFlow"]
+      }
     },
     "GetWhatsAppFlowPreview": {
       "operation": "getWhatsAppFlowPreview",
@@ -122,8 +113,7 @@
         "mode": "required",
         "interface": "GetWhatsAppFlowPreviewRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:GetWhatsAppFlowPreview"]
+      }
     },
     "GetWhatsAppMessageMedia": {
       "operation": "getWhatsAppMessageMedia",
@@ -132,8 +122,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeWabaPhonePlaneHttpBinding",
-      "actions": ["social-messaging:GetWhatsAppMessageMedia"]
+      "builder": "makeWabaPhonePlaneHttpBinding"
     },
     "GetWhatsAppMessageTemplate": {
       "operation": "getWhatsAppMessageTemplate",
@@ -143,8 +132,7 @@
         "mode": "required",
         "interface": "GetWhatsAppMessageTemplateRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:GetWhatsAppMessageTemplate"]
+      }
     },
     "ListWhatsAppFlowAssets": {
       "operation": "listWhatsAppFlowAssets",
@@ -154,8 +142,7 @@
         "mode": "required",
         "interface": "ListWhatsAppFlowAssetsRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:ListWhatsAppFlowAssets"]
+      }
     },
     "ListWhatsAppFlows": {
       "operation": "listWhatsAppFlows",
@@ -165,8 +152,7 @@
         "mode": "optional",
         "interface": "ListWhatsAppFlowsRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:ListWhatsAppFlows"]
+      }
     },
     "ListWhatsAppMessageTemplates": {
       "operation": "listWhatsAppMessageTemplates",
@@ -176,8 +162,7 @@
         "mode": "optional",
         "interface": "ListWhatsAppMessageTemplatesRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:ListWhatsAppMessageTemplates"]
+      }
     },
     "ListWhatsAppTemplateLibrary": {
       "operation": "listWhatsAppTemplateLibrary",
@@ -187,8 +172,7 @@
         "mode": "optional",
         "interface": "ListWhatsAppTemplateLibraryRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:ListWhatsAppTemplateLibrary"]
+      }
     },
     "PostWhatsAppMessageMedia": {
       "operation": "postWhatsAppMessageMedia",
@@ -197,8 +181,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeWabaPhonePlaneHttpBinding",
-      "actions": ["social-messaging:PostWhatsAppMessageMedia"]
+      "builder": "makeWabaPhonePlaneHttpBinding"
     },
     "PublishWhatsAppFlow": {
       "operation": "publishWhatsAppFlow",
@@ -208,8 +191,7 @@
         "mode": "required",
         "interface": "PublishWhatsAppFlowRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:PublishWhatsAppFlow"]
+      }
     },
     "SendWhatsAppMessage": {
       "operation": "sendWhatsAppMessage",
@@ -218,8 +200,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeWabaPhonePlaneHttpBinding",
-      "actions": ["social-messaging:SendWhatsAppMessage"]
+      "builder": "makeWabaPhonePlaneHttpBinding"
     },
     "UpdateWhatsAppFlow": {
       "operation": "updateWhatsAppFlow",
@@ -229,8 +210,7 @@
         "mode": "required",
         "interface": "UpdateWhatsAppFlowRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:UpdateWhatsAppFlow"]
+      }
     },
     "UpdateWhatsAppFlowAssets": {
       "operation": "updateWhatsAppFlowAssets",
@@ -240,8 +220,7 @@
         "mode": "required",
         "interface": "UpdateWhatsAppFlowAssetsRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:UpdateWhatsAppFlowAssets"]
+      }
     },
     "UpdateWhatsAppMessageTemplate": {
       "operation": "updateWhatsAppMessageTemplate",
@@ -251,8 +230,7 @@
         "mode": "required",
         "interface": "UpdateWhatsAppMessageTemplateRequest",
         "omit": ["id"]
-      },
-      "actions": ["social-messaging:UpdateWhatsAppMessageTemplate"]
+      }
     }
   }
 }

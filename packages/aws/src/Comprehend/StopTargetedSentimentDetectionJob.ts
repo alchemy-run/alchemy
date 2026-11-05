@@ -50,5 +50,6 @@ export const StopTargetedSentimentDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.StopTargetedSentimentDetectionJob",
     operation: comprehend.stopTargetedSentimentDetectionJob,
     actions: ["comprehend:StopTargetedSentimentDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:targeted-sentiment-detection-job/*"],
   }),
 );

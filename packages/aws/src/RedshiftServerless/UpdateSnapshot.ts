@@ -43,5 +43,6 @@ export const UpdateSnapshotHttp = Layer.effect(
     tag: "AWS.RedshiftServerless.UpdateSnapshot",
     operation: serverless.updateSnapshot,
     actions: ["redshift-serverless:UpdateSnapshot"],
+    arns: ["arn:${Partition}:redshift-serverless:${Region}:${Account}:snapshot/*"],
   }),
 );

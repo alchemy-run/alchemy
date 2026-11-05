@@ -28,24 +28,21 @@
       "resource": "AccessPoint",
       "request": {
         "mode": "none"
-      },
-      "actions": ["s3:GetAccessPoint"]
+      }
     },
     "GetAccessPointPolicy": {
       "operation": "getAccessPointPolicy",
       "resource": "AccessPoint",
       "request": {
         "mode": "none"
-      },
-      "actions": ["s3:GetAccessPointPolicy"]
+      }
     },
     "GetAccessPointPolicyStatus": {
       "operation": "getAccessPointPolicyStatus",
       "resource": "AccessPoint",
       "request": {
         "mode": "none"
-      },
-      "actions": ["s3:GetAccessPointPolicyStatus"]
+      }
     },
     "GetMultiRegionAccessPointRoutes": {
       "operation": "getMultiRegionAccessPointRoutes",
@@ -54,8 +51,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeS3ControlMrapHttpBinding",
-      "actions": ["s3:GetMultiRegionAccessPointRoutes"]
+      "builder": "makeS3ControlMrapHttpBinding"
     },
     "ListAccessPoints": {
       "operation": "listAccessPoints",
@@ -64,8 +60,7 @@
         "omit": ["AccountId"],
         "inline": true
       },
-      "builder": "makeS3ControlAccountHttpBinding",
-      "actions": ["s3:ListAccessPoints"]
+      "builder": "makeS3ControlAccountHttpBinding"
     },
     "SubmitMultiRegionAccessPointRoutes": {
       "operation": "submitMultiRegionAccessPointRoutes",
@@ -76,8 +71,7 @@
         "omit": ["AccountId", "Mrap"],
         "inline": true
       },
-      "builder": "makeS3ControlMrapHttpBinding",
-      "actions": ["s3:SubmitMultiRegionAccessPointRoutes"]
+      "builder": "makeS3ControlMrapHttpBinding"
     }
   }
 }

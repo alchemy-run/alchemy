@@ -43,11 +43,11 @@ export const UpdateTopicHttp = Layer.effect(
     tag: "AWS.Kafka.UpdateTopic",
     operation: kafka.updateTopic,
     actions: [
-      "kafka:UpdateTopic",
-      "kafka-cluster:Connect",
       "kafka-cluster:AlterTopic",
       "kafka-cluster:AlterTopicDynamicConfiguration",
+      "kafka-cluster:Connect",
       "kafka-cluster:DescribeTopic",
+      "kafka:UpdateTopic",
     ],
     topicScoped: true,
   }),

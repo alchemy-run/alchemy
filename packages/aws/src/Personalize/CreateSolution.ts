@@ -44,6 +44,6 @@ export const CreateSolutionHttp = Layer.effect(
   makePersonalizeAccountHttpBinding({
     tag: "AWS.Personalize.CreateSolution",
     operation: personalize.createSolution,
-    actions: ["personalize:CreateSolution"],
+    actions: ["personalize:CreateSolution", "personalize:TagResource"],
   }),
 );

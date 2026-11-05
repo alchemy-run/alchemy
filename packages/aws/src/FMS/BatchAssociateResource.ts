@@ -49,5 +49,6 @@ export const BatchAssociateResourceHttp = Layer.effect(
     capability: "BatchAssociateResource",
     iamActions: ["fms:BatchAssociateResource"],
     operation: fms.batchAssociateResource,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:resource-set/*"],
   }),
 );

@@ -22,14 +22,10 @@
         "omit": ["ClusterArn"],
         "inline": true
       },
-      "actions": ["kafka:CreateTopic", "kafka-cluster:Connect", "kafka-cluster:CreateTopic"],
       "with": {
         "topicScoped": true
       },
-      "note": "The control-plane action authorizes against the topic ARN; the kafka-cluster analogs cover the underlying Kafka admin operation.",
-      "reviewed": {
-        "kafka:CreateTopic": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
-      }
+      "note": "The control-plane action authorizes against the topic ARN; the kafka-cluster analogs cover the underlying Kafka admin operation."
     },
     "DeleteTopic": {
       "operation": "deleteTopic",
@@ -40,17 +36,8 @@
         "omit": ["ClusterArn"],
         "inline": true
       },
-      "actions": [
-        "kafka:DeleteTopic",
-        "kafka-cluster:Connect",
-        "kafka-cluster:DeleteTopic",
-        "kafka-cluster:DescribeTopic"
-      ],
       "with": {
         "topicScoped": true
-      },
-      "reviewed": {
-        "kafka:DeleteTopic": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     },
     "DescribeTopic": {
@@ -62,17 +49,8 @@
         "omit": ["ClusterArn"],
         "inline": true
       },
-      "actions": [
-        "kafka:DescribeTopic",
-        "kafka-cluster:Connect",
-        "kafka-cluster:DescribeTopic",
-        "kafka-cluster:DescribeTopicDynamicConfiguration"
-      ],
       "with": {
         "topicScoped": true
-      },
-      "reviewed": {
-        "kafka:DescribeTopic": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     },
     "DescribeTopicPartitions": {
@@ -84,17 +62,8 @@
         "omit": ["ClusterArn"],
         "inline": true
       },
-      "actions": [
-        "kafka:DescribeTopicPartitions",
-        "kafka-cluster:Connect",
-        "kafka-cluster:DescribeTopic",
-        "kafka-cluster:DescribeTopicDynamicConfiguration"
-      ],
       "with": {
         "topicScoped": true
-      },
-      "reviewed": {
-        "kafka:DescribeTopicPartitions": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     },
     "GetBootstrapBrokers": {
@@ -103,8 +72,7 @@
       "param": "cluster",
       "request": {
         "mode": "none"
-      },
-      "actions": ["kafka:GetBootstrapBrokers"]
+      }
     },
     "ListTopics": {
       "operation": "listTopics",
@@ -115,12 +83,8 @@
         "omit": ["ClusterArn"],
         "inline": true
       },
-      "actions": ["kafka:ListTopics", "kafka-cluster:Connect", "kafka-cluster:DescribeTopic"],
       "with": {
         "topicScoped": true
-      },
-      "reviewed": {
-        "kafka:ListTopics": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     },
     "UpdateTopic": {
@@ -132,18 +96,8 @@
         "omit": ["ClusterArn"],
         "inline": true
       },
-      "actions": [
-        "kafka:UpdateTopic",
-        "kafka-cluster:Connect",
-        "kafka-cluster:AlterTopic",
-        "kafka-cluster:AlterTopicDynamicConfiguration",
-        "kafka-cluster:DescribeTopic"
-      ],
       "with": {
         "topicScoped": true
-      },
-      "reviewed": {
-        "kafka:UpdateTopic": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     }
   }

@@ -24,24 +24,21 @@
       "resource": "Table",
       "request": {
         "mode": "none"
-      },
-      "actions": ["s3tables:GetTable"]
+      }
     },
     "GetTableMaintenanceJobStatus": {
       "operation": "getTableMaintenanceJobStatus",
       "resource": "Table",
       "request": {
         "mode": "none"
-      },
-      "actions": ["s3tables:GetTableMaintenanceJobStatus"]
+      }
     },
     "GetTableMetadataLocation": {
       "operation": "getTableMetadataLocation",
       "resource": "Table",
       "request": {
         "mode": "none"
-      },
-      "actions": ["s3tables:GetTableMetadataLocation"]
+      }
     },
     "ListNamespaces": {
       "operation": "listNamespaces",
@@ -51,8 +48,7 @@
         "interface": "ListNamespacesRequest",
         "omit": ["tableBucketARN"]
       },
-      "builder": "makeS3TablesTableBucketHttpBinding",
-      "actions": ["s3tables:ListNamespaces"]
+      "builder": "makeS3TablesTableBucketHttpBinding"
     },
     "ListTables": {
       "operation": "listTables",
@@ -62,8 +58,7 @@
         "interface": "ListTablesRequest",
         "omit": ["tableBucketARN"]
       },
-      "builder": "makeS3TablesTableBucketHttpBinding",
-      "actions": ["s3tables:ListTables"]
+      "builder": "makeS3TablesTableBucketHttpBinding"
     },
     "UpdateTableMetadataLocation": {
       "operation": "updateTableMetadataLocation",
@@ -72,8 +67,7 @@
         "mode": "required",
         "interface": "UpdateTableMetadataLocationRequest",
         "omit": ["tableBucketARN", "namespace", "name"]
-      },
-      "actions": ["s3tables:UpdateTableMetadataLocation"]
+      }
     }
   }
 }

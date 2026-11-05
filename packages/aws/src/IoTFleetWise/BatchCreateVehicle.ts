@@ -57,10 +57,10 @@ export const BatchCreateVehicleHttp = Layer.effect(
     tag: "AWS.IoTFleetWise.BatchCreateVehicle",
     operation: iotfleetwise.batchCreateVehicle,
     actions: [
-      "iotfleetwise:BatchCreateVehicle",
       "iotfleetwise:CreateVehicle",
       "iot:CreateThing",
       "iot:DescribeThing",
+      "iotfleetwise:BatchCreateVehicle",
     ],
   }),
 );

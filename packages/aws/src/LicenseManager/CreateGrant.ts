@@ -52,7 +52,8 @@ export const CreateGrantHttp = Layer.effect(
   CreateGrant,
   makeLicenseManagerHttpBinding({
     capability: "CreateGrant",
-    iamActions: ["license-manager:CreateGrant"],
+    iamActions: ["license-manager:CreateGrant", "license-manager:TagResource"],
     operation: licensemanager.createGrant,
+    arns: ["arn:${Partition}:license-manager::${Account}:license:*"],
   }),
 );

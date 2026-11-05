@@ -49,5 +49,6 @@ export const IndexFacesHttp = Layer.effect(
     tag: "AWS.Rekognition.IndexFaces",
     operation: rekognition.indexFaces,
     actions: ["rekognition:IndexFaces"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

@@ -46,5 +46,6 @@ export const DeleteMedicalVocabularyHttp = Layer.effect(
     tag: "AWS.Transcribe.DeleteMedicalVocabulary",
     operation: transcribe.deleteMedicalVocabulary,
     actions: ["transcribe:DeleteMedicalVocabulary"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:medical-vocabulary/*"],
   }),
 );

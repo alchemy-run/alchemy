@@ -47,5 +47,6 @@ export const DescribeCollectionHttp = Layer.effect(
     tag: "AWS.Rekognition.DescribeCollection",
     operation: rekognition.describeCollection,
     actions: ["rekognition:DescribeCollection"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

@@ -45,5 +45,9 @@ export const GetTimelineEventHttp = Layer.effect(
     tag: "AWS.SSMIncidents.GetTimelineEvent",
     operation: incidents.getTimelineEvent,
     actions: ["ssm-incidents:GetTimelineEvent"],
+    arns: [
+      "arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*",
+      "arn:${Partition}:ssm-incidents::${Account}:response-plan/*",
+    ],
   }),
 );

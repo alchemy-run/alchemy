@@ -46,6 +46,6 @@ export const CreateCollectionHttp = Layer.effect(
   makeRekognitionHttpBinding({
     tag: "AWS.Rekognition.CreateCollection",
     operation: rekognition.createCollection,
-    actions: ["rekognition:CreateCollection"],
+    actions: ["rekognition:CreateCollection", "rekognition:TagResource"],
   }),
 );

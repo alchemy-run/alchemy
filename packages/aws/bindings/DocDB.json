@@ -27,18 +27,12 @@
       "operation": "applyPendingMaintenanceAction",
       "request": {
         "mode": "required"
-      },
-      "actions": ["rds:ApplyPendingMaintenanceAction"]
+      }
     },
     "CopyDBClusterSnapshot": {
       "operation": "copyDBClusterSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["rds:CopyDBClusterSnapshot"],
-      "arns": ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"],
-      "reviewed": {
-        "rds:AddTagsToResource": "Needed only when the request sets tags or CopyTags."
       }
     },
     "CreateDBClusterSnapshot": {
@@ -51,7 +45,6 @@
         "inline": true
       },
       "builder": "makeDocDBClusterHttpBinding",
-      "actions": ["rds:CreateDBClusterSnapshot", "rds:AddTagsToResource"],
       "withTs": {
         "extraResources": "(clusterArn) => [`${clusterArn.split(\":\").slice(0, 5).join(\":\")}:cluster-snapshot:*`]"
       },
@@ -61,29 +54,22 @@
       "operation": "deleteDBClusterSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["rds:DeleteDBClusterSnapshot"],
-      "arns": ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"]
+      }
     },
     "DescribeDBClusterSnapshots": {
-      "operation": "describeDBClusterSnapshots",
-      "actions": ["rds:DescribeDBClusterSnapshots"]
+      "operation": "describeDBClusterSnapshots"
     },
     "DescribeDBClusters": {
-      "operation": "describeDBClusters",
-      "actions": ["rds:DescribeDBClusters"]
+      "operation": "describeDBClusters"
     },
     "DescribeDBInstances": {
-      "operation": "describeDBInstances",
-      "actions": ["rds:DescribeDBInstances"]
+      "operation": "describeDBInstances"
     },
     "DescribeEvents": {
-      "operation": "describeEvents",
-      "actions": ["rds:DescribeEvents"]
+      "operation": "describeEvents"
     },
     "DescribePendingMaintenanceActions": {
-      "operation": "describePendingMaintenanceActions",
-      "actions": ["rds:DescribePendingMaintenanceActions"]
+      "operation": "describePendingMaintenanceActions"
     },
     "FailoverDBCluster": {
       "operation": "failoverDBCluster",
@@ -94,8 +80,7 @@
         "omit": ["DBClusterIdentifier"],
         "inline": true
       },
-      "builder": "makeDocDBClusterHttpBinding",
-      "actions": ["rds:FailoverDBCluster"]
+      "builder": "makeDocDBClusterHttpBinding"
     },
     "RebootDBInstance": {
       "operation": "rebootDBInstance",
@@ -106,8 +91,7 @@
         "omit": ["DBInstanceIdentifier"],
         "inline": true
       },
-      "builder": "makeDocDBInstanceHttpBinding",
-      "actions": ["rds:RebootDBInstance"]
+      "builder": "makeDocDBInstanceHttpBinding"
     },
     "StartDBCluster": {
       "operation": "startDBCluster",
@@ -116,8 +100,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeDocDBClusterHttpBinding",
-      "actions": ["rds:StartDBCluster"]
+      "builder": "makeDocDBClusterHttpBinding"
     },
     "StopDBCluster": {
       "operation": "stopDBCluster",
@@ -126,8 +109,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeDocDBClusterHttpBinding",
-      "actions": ["rds:StopDBCluster"]
+      "builder": "makeDocDBClusterHttpBinding"
     }
   }
 }

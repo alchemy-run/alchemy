@@ -74,6 +74,6 @@ export const InvokeBlueprintOptimizationAsyncHttp = Layer.effect(
   makeBdaBlueprintOptimizationHttpBinding({
     tag: "AWS.BedrockDataAutomation.InvokeBlueprintOptimizationAsync",
     operation: bda.invokeBlueprintOptimizationAsync,
-    actions: ["bedrock:InvokeBlueprintOptimizationAsync"],
+    actions: ["bedrock:InvokeBlueprintOptimizationAsync", "bedrock:TagResource"],
   }),
 );

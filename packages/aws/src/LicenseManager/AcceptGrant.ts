@@ -45,5 +45,6 @@ export const AcceptGrantHttp = Layer.effect(
     capability: "AcceptGrant",
     iamActions: ["license-manager:AcceptGrant"],
     operation: licensemanager.acceptGrant,
+    arns: ["arn:${Partition}:license-manager::${Account}:grant:*"],
   }),
 );

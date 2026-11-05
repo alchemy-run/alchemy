@@ -52,5 +52,6 @@ export const ListImageBuildVersionsHttp = Layer.effect(
     tag: "AWS.ImageBuilder.ListImageBuildVersions",
     operation: imagebuilder.listImageBuildVersions,
     actions: ["imagebuilder:ListImageBuildVersions"],
+    arns: ["arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*"],
   }),
 );

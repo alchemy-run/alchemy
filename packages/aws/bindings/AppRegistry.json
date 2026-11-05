@@ -29,8 +29,7 @@
       "resource": "Application",
       "request": {
         "mode": "none"
-      },
-      "actions": ["servicecatalog:GetApplication"]
+      }
     },
     "GetAssociatedResource": {
       "operation": "getAssociatedResource",
@@ -39,8 +38,7 @@
         "mode": "required",
         "interface": "GetAssociatedResourceRequest",
         "omit": ["application"]
-      },
-      "actions": ["servicecatalog:GetAssociatedResource"]
+      }
     },
     "GetAttributeGroup": {
       "operation": "getAttributeGroup",
@@ -48,13 +46,11 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeAttributeGroupScopedHttpBinding",
-      "actions": ["servicecatalog:GetAttributeGroup"]
+      "builder": "makeAttributeGroupScopedHttpBinding"
     },
     "ListApplications": {
       "operation": "listApplications",
-      "builder": "makeAppRegistryAccountHttpBinding",
-      "actions": ["servicecatalog:ListApplications"]
+      "builder": "makeAppRegistryAccountHttpBinding"
     },
     "ListAssociatedAttributeGroups": {
       "operation": "listAssociatedAttributeGroups",
@@ -63,8 +59,7 @@
         "mode": "optional",
         "interface": "ListAssociatedAttributeGroupsRequest",
         "omit": ["application"]
-      },
-      "actions": ["servicecatalog:ListAssociatedAttributeGroups"]
+      }
     },
     "ListAssociatedResources": {
       "operation": "listAssociatedResources",
@@ -73,13 +68,11 @@
         "mode": "optional",
         "interface": "ListAssociatedResourcesRequest",
         "omit": ["application"]
-      },
-      "actions": ["servicecatalog:ListAssociatedResources"]
+      }
     },
     "ListAttributeGroups": {
       "operation": "listAttributeGroups",
-      "builder": "makeAppRegistryAccountHttpBinding",
-      "actions": ["servicecatalog:ListAttributeGroups"]
+      "builder": "makeAppRegistryAccountHttpBinding"
     },
     "ListAttributeGroupsForApplication": {
       "operation": "listAttributeGroupsForApplication",
@@ -88,8 +81,7 @@
         "mode": "optional",
         "interface": "ListAttributeGroupsForApplicationRequest",
         "omit": ["application"]
-      },
-      "actions": ["servicecatalog:ListAttributeGroupsForApplication"]
+      }
     },
     "SyncResource": {
       "operation": "syncResource",
@@ -97,22 +89,7 @@
         "mode": "required"
       },
       "builder": "makeAppRegistryAccountHttpBinding",
-      "actions": [
-        "servicecatalog:SyncResource",
-        "cloudformation:DescribeStacks",
-        "cloudformation:UpdateStack",
-        "tag:GetResources",
-        "tag:TagResources",
-        "tag:UntagResources"
-      ],
-      "note": "The target is an arbitrary external resource, so nothing here supports resource-level scoping. SyncResource verifies the CALLER can read and update the target resource, so the documented companion permissions (CloudFormation + resource-tagging) are granted alongside.",
-      "reviewed": {
-        "cloudformation:DescribeStacks": "See the note: The target is an arbitrary external resource, so nothing here supports resource-level scoping.",
-        "cloudformation:UpdateStack": "See the note: The target is an arbitrary external resource, so nothing here supports resource-level scoping.",
-        "tag:GetResources": "See the note: The target is an arbitrary external resource, so nothing here supports resource-level scoping.",
-        "tag:TagResources": "See the note: The target is an arbitrary external resource, so nothing here supports resource-level scoping.",
-        "tag:UntagResources": "See the note: The target is an arbitrary external resource, so nothing here supports resource-level scoping."
-      }
+      "note": "The target is an arbitrary external resource, so nothing here supports resource-level scoping. SyncResource verifies the CALLER can read and update the target resource, so the documented companion permissions (CloudFormation + resource-tagging) are granted alongside."
     }
   }
 }

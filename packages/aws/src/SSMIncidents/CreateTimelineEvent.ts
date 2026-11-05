@@ -51,5 +51,9 @@ export const CreateTimelineEventHttp = Layer.effect(
     tag: "AWS.SSMIncidents.CreateTimelineEvent",
     operation: incidents.createTimelineEvent,
     actions: ["ssm-incidents:CreateTimelineEvent"],
+    arns: [
+      "arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*",
+      "arn:${Partition}:ssm-incidents::${Account}:response-plan/*",
+    ],
   }),
 );

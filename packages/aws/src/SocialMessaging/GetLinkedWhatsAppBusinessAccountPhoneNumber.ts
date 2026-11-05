@@ -58,5 +58,6 @@ export const GetLinkedWhatsAppBusinessAccountPhoneNumberHttp = Layer.effect(
     tag: "AWS.SocialMessaging.GetLinkedWhatsAppBusinessAccountPhoneNumber",
     operation: socialmessaging.getLinkedWhatsAppBusinessAccountPhoneNumber,
     actions: ["social-messaging:GetLinkedWhatsAppBusinessAccountPhoneNumber"],
+    arns: ["arn:${Partition}:social-messaging:${Region}:${Account}:phone-number-id/*"],
   }),
 );

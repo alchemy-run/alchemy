@@ -61,7 +61,7 @@ export const CreatePrefetchScheduleHttp = Layer.effect(
   CreatePrefetchSchedule,
   makeMediaTailorPlaybackHttpBinding({
     capability: "CreatePrefetchSchedule",
-    iamActions: ["mediatailor:CreatePrefetchSchedule"],
+    iamActions: ["mediatailor:CreatePrefetchSchedule", "mediatailor:TagResource"],
     operation: mediatailor.createPrefetchSchedule,
   }),
 );

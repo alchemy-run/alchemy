@@ -47,7 +47,8 @@ export const PutResourceSetHttp = Layer.effect(
   PutResourceSet,
   makeFmsHttpBinding({
     capability: "PutResourceSet",
-    iamActions: ["fms:PutResourceSet"],
+    iamActions: ["fms:PutResourceSet", "fms:TagResource"],
     operation: fms.putResourceSet,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:resource-set/*"],
   }),
 );

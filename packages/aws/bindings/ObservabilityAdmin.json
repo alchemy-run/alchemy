@@ -17,20 +17,16 @@
   },
   "bindings": {
     "GetTelemetryEnrichmentStatus": {
-      "operation": "getTelemetryEnrichmentStatus",
-      "actions": ["observabilityadmin:GetTelemetryEnrichmentStatus"]
+      "operation": "getTelemetryEnrichmentStatus"
     },
     "GetTelemetryEvaluationStatus": {
-      "operation": "getTelemetryEvaluationStatus",
-      "actions": ["observabilityadmin:GetTelemetryEvaluationStatus"]
+      "operation": "getTelemetryEvaluationStatus"
     },
     "ListResourceTelemetry": {
-      "operation": "listResourceTelemetry",
-      "actions": ["observabilityadmin:ListResourceTelemetry"]
+      "operation": "listResourceTelemetry"
     },
     "ListTelemetryRules": {
-      "operation": "listTelemetryRules",
-      "actions": ["observabilityadmin:ListTelemetryRules"]
+      "operation": "listTelemetryRules"
     }
   }
 }

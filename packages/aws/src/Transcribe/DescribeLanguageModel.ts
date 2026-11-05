@@ -48,5 +48,6 @@ export const DescribeLanguageModelHttp = Layer.effect(
     tag: "AWS.Transcribe.DescribeLanguageModel",
     operation: transcribe.describeLanguageModel,
     actions: ["transcribe:DescribeLanguageModel"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:language-model/*"],
   }),
 );

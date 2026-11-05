@@ -49,6 +49,6 @@ export const StartTaskExecutionHttp = Layer.effect(
   makeDataSyncTaskHttpBinding({
     tag: "AWS.DataSync.StartTaskExecution",
     operation: datasync.startTaskExecution,
-    actions: ["datasync:StartTaskExecution"],
+    actions: ["datasync:StartTaskExecution", "datasync:TagResource"],
   }),
 );

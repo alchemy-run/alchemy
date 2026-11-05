@@ -53,5 +53,6 @@ export const StartProjectVersionHttp = Layer.effect(
     tag: "AWS.Rekognition.StartProjectVersion",
     operation: rekognition.startProjectVersion,
     actions: ["rekognition:StartProjectVersion"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:project/*/version/*/*"],
   }),
 );

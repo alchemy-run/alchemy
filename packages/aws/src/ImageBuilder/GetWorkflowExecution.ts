@@ -50,5 +50,6 @@ export const GetWorkflowExecutionHttp = Layer.effect(
     tag: "AWS.ImageBuilder.GetWorkflowExecution",
     operation: imagebuilder.getWorkflowExecution,
     actions: ["imagebuilder:GetWorkflowExecution"],
+    arns: ["arn:${Partition}:imagebuilder:${Region}:${Account}:workflow-execution/*"],
   }),
 );

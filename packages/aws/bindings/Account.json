@@ -16,30 +16,25 @@
   },
   "bindings": {
     "GetAccountInformation": {
-      "operation": "getAccountInformation",
-      "actions": ["account:GetAccountInformation"]
+      "operation": "getAccountInformation"
     },
     "GetAlternateContact": {
       "operation": "getAlternateContact",
       "request": {
         "mode": "required"
-      },
-      "actions": ["account:GetAlternateContact"]
+      }
     },
     "GetContactInformation": {
-      "operation": "getContactInformation",
-      "actions": ["account:GetContactInformation"]
+      "operation": "getContactInformation"
     },
     "GetRegionOptStatus": {
       "operation": "getRegionOptStatus",
       "request": {
         "mode": "required"
-      },
-      "actions": ["account:GetRegionOptStatus"]
+      }
     },
     "ListRegions": {
-      "operation": "listRegions",
-      "actions": ["account:ListRegions"]
+      "operation": "listRegions"
     }
   }
 }

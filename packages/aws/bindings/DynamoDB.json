@@ -17,8 +17,7 @@
         "mode": "optional",
         "interface": "ListTablesRequest",
         "omit": []
-      },
-      "actions": ["dynamodb:ListTables"]
+      }
     }
   }
 }

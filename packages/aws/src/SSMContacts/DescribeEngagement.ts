@@ -43,5 +43,6 @@ export const DescribeEngagementHttp = Layer.effect(
     tag: "AWS.SSMContacts.DescribeEngagement",
     operation: ssm.describeEngagement,
     actions: ["ssm-contacts:DescribeEngagement"],
+    arns: ["arn:${Partition}:ssm-contacts:${Region}:${Account}:engagement/*/*"],
   }),
 );

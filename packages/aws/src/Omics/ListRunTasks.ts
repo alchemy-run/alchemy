@@ -41,5 +41,6 @@ export const ListRunTasksHttp = Layer.effect(
     tag: "AWS.Omics.ListRunTasks",
     operation: omics.listRunTasks,
     actions: ["omics:ListRunTasks"],
+    arns: ["arn:${Partition}:omics:${Region}:${Account}:run/*"],
   }),
 );

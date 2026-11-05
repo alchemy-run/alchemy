@@ -34,7 +34,6 @@
         "omit": ["ChannelGroupName", "ChannelName", "OriginEndpointName"],
         "inline": true
       },
-      "actions": ["mediapackagev2:CancelHarvestJob"],
       "with": {
         "harvestJobScoped": true
       }
@@ -48,12 +47,8 @@
         "omit": ["ChannelGroupName", "ChannelName", "OriginEndpointName"],
         "inline": true
       },
-      "actions": ["mediapackagev2:CreateHarvestJob"],
       "with": {
         "harvestJobScoped": true
-      },
-      "reviewed": {
-        "mediapackagev2:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "GetHarvestJob": {
@@ -65,7 +60,6 @@
         "omit": ["ChannelGroupName", "ChannelName", "OriginEndpointName"],
         "inline": true
       },
-      "actions": ["mediapackagev2:GetHarvestJob"],
       "with": {
         "harvestJobScoped": true
       }
@@ -79,8 +73,7 @@
         "omit": ["ChannelGroupName"],
         "inline": true
       },
-      "builder": "makeMediaPackageV2ChannelGroupHttpBinding",
-      "actions": ["mediapackagev2:ListHarvestJobs"]
+      "builder": "makeMediaPackageV2ChannelGroupHttpBinding"
     },
     "ResetChannelState": {
       "operation": "resetChannelState",
@@ -88,8 +81,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeMediaPackageV2ChannelHttpBinding",
-      "actions": ["mediapackagev2:ResetChannelState"]
+      "builder": "makeMediaPackageV2ChannelHttpBinding"
     },
     "ResetOriginEndpointState": {
       "operation": "resetOriginEndpointState",
@@ -97,8 +89,7 @@
       "param": "endpoint",
       "request": {
         "mode": "none"
-      },
-      "actions": ["mediapackagev2:ResetOriginEndpointState"]
+      }
     }
   }
 }

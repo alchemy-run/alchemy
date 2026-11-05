@@ -42,5 +42,6 @@ export const RetryImageHttp = Layer.effect(
     tag: "AWS.ImageBuilder.RetryImage",
     operation: imagebuilder.retryImage,
     actions: ["imagebuilder:RetryImage"],
+    arns: ["arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*"],
   }),
 );

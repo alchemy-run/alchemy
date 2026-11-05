@@ -56,7 +56,7 @@ export const CreateServerlessCacheSnapshotHttp = Layer.effect(
   makeElastiCacheCacheHttpBinding({
     tag: "AWS.ElastiCache.CreateServerlessCacheSnapshot",
     operation: elasticache.createServerlessCacheSnapshot,
-    actions: ["elasticache:CreateServerlessCacheSnapshot", "elasticache:AddTagsToResource"],
+    actions: ["elasticache:AddTagsToResource", "elasticache:CreateServerlessCacheSnapshot"],
     extraResources: [SERVERLESS_SNAPSHOT_ARN_WILDCARD],
   }),
 );

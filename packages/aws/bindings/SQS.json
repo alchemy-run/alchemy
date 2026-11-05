@@ -22,13 +22,7 @@
         "omit": []
       },
       "builder": "makeQueueGrantHttpBinding",
-      "actions": ["sqs:CancelMessageMoveTask"],
-      "note": "The request identifies the task by `TaskHandle` only; the bound queue exists purely to scope the IAM grant to the redrive source.",
-      "reviewed": {
-        "sqs:DeleteMessage": "Checked when a message move task starts (it reads and deletes from the source queue), not to cancel or list one.",
-        "sqs:GetQueueAttributes": "Checked when a message move task starts (it reads and deletes from the source queue), not to cancel or list one.",
-        "sqs:ReceiveMessage": "Checked when a message move task starts (it reads and deletes from the source queue), not to cancel or list one."
-      }
+      "note": "The request identifies the task by `TaskHandle` only; the bound queue exists purely to scope the IAM grant to the redrive source."
     },
     "ChangeMessageVisibility": {
       "operation": "changeMessageVisibility",
@@ -37,8 +31,7 @@
         "mode": "required",
         "interface": "ChangeMessageVisibilityRequest",
         "omit": ["QueueUrl"]
-      },
-      "actions": ["sqs:ChangeMessageVisibility"]
+      }
     },
     "ChangeMessageVisibilityBatch": {
       "operation": "changeMessageVisibilityBatch",
@@ -48,7 +41,6 @@
         "interface": "ChangeMessageVisibilityBatchRequest",
         "omit": ["QueueUrl"]
       },
-      "actions": ["sqs:ChangeMessageVisibility"],
       "note": "Batch entries are authorized by the singular action."
     },
     "DeleteMessage": {
@@ -58,8 +50,7 @@
         "mode": "required",
         "interface": "DeleteMessageRequest",
         "omit": ["QueueUrl"]
-      },
-      "actions": ["sqs:DeleteMessage"]
+      }
     },
     "DeleteMessageBatch": {
       "operation": "deleteMessageBatch",
@@ -69,7 +60,6 @@
         "interface": "DeleteMessageBatchRequest",
         "omit": ["QueueUrl"]
       },
-      "actions": ["sqs:DeleteMessage"],
       "note": "Batch entries are authorized by the singular action."
     },
     "GetQueueAttributes": {
@@ -79,8 +69,7 @@
         "mode": "optional",
         "interface": "GetQueueAttributesRequest",
         "omit": ["QueueUrl"]
-      },
-      "actions": ["sqs:GetQueueAttributes"]
+      }
     },
     "ListDeadLetterSourceQueues": {
       "operation": "listDeadLetterSourceQueues",
@@ -89,8 +78,7 @@
         "mode": "optional",
         "interface": "ListDeadLetterSourceQueuesRequest",
         "omit": ["QueueUrl"]
-      },
-      "actions": ["sqs:ListDeadLetterSourceQueues"]
+      }
     },
     "ListMessageMoveTasks": {
       "operation": "listMessageMoveTasks",
@@ -100,19 +88,14 @@
         "interface": "ListMessageMoveTasksRequest",
         "omit": ["SourceArn"]
       },
-      "builder": "makeQueueArnHttpBinding",
-      "actions": ["sqs:ListMessageMoveTasks"],
-      "reviewed": {
-        "sqs:GetQueueAttributes": "Checked when a message move task starts (it reads and deletes from the source queue), not to cancel or list one."
-      }
+      "builder": "makeQueueArnHttpBinding"
     },
     "PurgeQueue": {
       "operation": "purgeQueue",
       "resource": "Queue",
       "request": {
         "mode": "none"
-      },
-      "actions": ["sqs:PurgeQueue"]
+      }
     },
     "ReceiveMessage": {
       "operation": "receiveMessage",
@@ -121,8 +104,7 @@
         "mode": "required",
         "interface": "ReceiveMessageRequest",
         "omit": ["QueueUrl"]
-      },
-      "actions": ["sqs:ReceiveMessage"]
+      }
     },
     "SendMessage": {
       "operation": "sendMessage",
@@ -131,8 +113,7 @@
         "mode": "required",
         "interface": "SendMessageRequest",
         "omit": ["QueueUrl"]
-      },
-      "actions": ["sqs:SendMessage"]
+      }
     },
     "SendMessageBatch": {
       "operation": "sendMessageBatch",
@@ -142,7 +123,6 @@
         "interface": "SendMessageBatchRequest",
         "omit": ["QueueUrl"]
       },
-      "actions": ["sqs:SendMessage"],
       "note": "Batch entries are authorized by the singular action."
     }
   }

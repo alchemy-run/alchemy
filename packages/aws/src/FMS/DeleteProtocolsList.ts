@@ -45,5 +45,6 @@ export const DeleteProtocolsListHttp = Layer.effect(
     capability: "DeleteProtocolsList",
     iamActions: ["fms:DeleteProtocolsList"],
     operation: fms.deleteProtocolsList,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:protocols-list/*"],
   }),
 );

@@ -33,9 +33,7 @@
         "mode": "required",
         "interface": "GetManagedNotificationChildEventRequest",
         "omit": []
-      },
-      "actions": ["notifications:GetManagedNotificationChildEvent"],
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:notifications::${Account}:managed-notification-configuration/category/*/sub-category/*/event/*/child-event/*), the call was denied live in the Notifications Bindings suite; the grant stays on *."
+      }
     },
     "GetManagedNotificationConfiguration": {
       "operation": "getManagedNotificationConfiguration",
@@ -43,11 +41,7 @@
         "mode": "required",
         "interface": "GetManagedNotificationConfigurationRequest",
         "omit": []
-      },
-      "actions": ["notifications:GetManagedNotificationConfiguration"],
-      "arns": [
-        "arn:${Partition}:notifications::${Account}:managed-notification-configuration/category/*/sub-category/*"
-      ]
+      }
     },
     "GetManagedNotificationEvent": {
       "operation": "getManagedNotificationEvent",
@@ -55,13 +49,6 @@
         "mode": "required",
         "interface": "GetManagedNotificationEventRequest",
         "omit": []
-      },
-      "actions": ["notifications:GetManagedNotificationEvent"],
-      "arns": [
-        "arn:${Partition}:notifications::${Account}:managed-notification-configuration/category/*/sub-category/*/event/*"
-      ],
-      "reviewed": {
-        "notifications:AccessSensitiveEvents": "AWS lists it for the operation, but the Notifications Bindings suite calls it successfully without it."
       }
     },
     "GetNotificationEvent": {
@@ -70,9 +57,7 @@
         "mode": "required",
         "interface": "GetNotificationEventRequest",
         "omit": []
-      },
-      "actions": ["notifications:GetNotificationEvent"],
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:notifications:${Region}:${Account}:configuration/*/event/*), the call was denied live in the Notifications Bindings suite; the grant stays on *."
+      }
     },
     "ListChannels": {
       "operation": "listChannels",
@@ -83,8 +68,7 @@
         "interface": "ListChannelsRequest",
         "omit": ["notificationConfigurationArn"]
       },
-      "builder": "makeNotificationConfigurationHttpBinding",
-      "actions": ["notifications:ListChannels"]
+      "builder": "makeNotificationConfigurationHttpBinding"
     },
     "ListManagedNotificationChildEvents": {
       "operation": "listManagedNotificationChildEvents",
@@ -92,8 +76,7 @@
         "mode": "required",
         "interface": "ListManagedNotificationChildEventsRequest",
         "omit": []
-      },
-      "actions": ["notifications:ListManagedNotificationChildEvents"]
+      }
     },
     "ListManagedNotificationEvents": {
       "operation": "listManagedNotificationEvents",
@@ -101,10 +84,6 @@
         "mode": "optional",
         "interface": "ListManagedNotificationEventsRequest",
         "omit": []
-      },
-      "actions": ["notifications:ListManagedNotificationEvents"],
-      "reviewed": {
-        "notifications:AccessSensitiveEvents": "AWS lists it for the operation, but the Notifications Bindings suite calls it successfully without it."
       }
     },
     "ListNotificationEvents": {
@@ -113,8 +92,7 @@
         "mode": "optional",
         "interface": "ListNotificationEventsRequest",
         "omit": []
-      },
-      "actions": ["notifications:ListNotificationEvents"]
+      }
     }
   }
 }

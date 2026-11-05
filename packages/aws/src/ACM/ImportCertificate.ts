@@ -57,7 +57,7 @@ export const ImportCertificateHttp = Layer.effect(
   // Importing with `Tags` additionally requires `acm:AddTagsToCertificate`, which ACM checks alongside the import itself.
   makeAcmAccountHttpBinding({
     capability: "ImportCertificate",
-    iamActions: ["acm:ImportCertificate", "acm:AddTagsToCertificate"],
+    iamActions: ["acm:AddTagsToCertificate", "acm:ImportCertificate"],
     operation: acm.importCertificate,
   }),
 );

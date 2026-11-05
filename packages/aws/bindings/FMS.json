@@ -21,8 +21,7 @@
         "mode": "required",
         "interface": "AssociateThirdPartyFirewallRequest",
         "omit": []
-      },
-      "actions": ["fms:AssociateThirdPartyFirewall"]
+      }
     },
     "BatchAssociateResource": {
       "operation": "batchAssociateResource",
@@ -30,8 +29,7 @@
         "mode": "required",
         "interface": "BatchAssociateResourceRequest",
         "omit": []
-      },
-      "actions": ["fms:BatchAssociateResource"]
+      }
     },
     "BatchDisassociateResource": {
       "operation": "batchDisassociateResource",
@@ -39,8 +37,7 @@
         "mode": "required",
         "interface": "BatchDisassociateResourceRequest",
         "omit": []
-      },
-      "actions": ["fms:BatchDisassociateResource"]
+      }
     },
     "DeleteAppsList": {
       "operation": "deleteAppsList",
@@ -48,8 +45,7 @@
         "mode": "required",
         "interface": "DeleteAppsListRequest",
         "omit": []
-      },
-      "actions": ["fms:DeleteAppsList"]
+      }
     },
     "DeleteNotificationChannel": {
       "operation": "deleteNotificationChannel",
@@ -57,8 +53,7 @@
         "mode": "optional",
         "interface": "DeleteNotificationChannelRequest",
         "omit": []
-      },
-      "actions": ["fms:DeleteNotificationChannel"]
+      }
     },
     "DeletePolicy": {
       "operation": "deletePolicy",
@@ -66,8 +61,7 @@
         "mode": "required",
         "interface": "DeletePolicyRequest",
         "omit": []
-      },
-      "actions": ["fms:DeletePolicy"]
+      }
     },
     "DeleteProtocolsList": {
       "operation": "deleteProtocolsList",
@@ -75,8 +69,7 @@
         "mode": "required",
         "interface": "DeleteProtocolsListRequest",
         "omit": []
-      },
-      "actions": ["fms:DeleteProtocolsList"]
+      }
     },
     "DeleteResourceSet": {
       "operation": "deleteResourceSet",
@@ -84,8 +77,7 @@
         "mode": "required",
         "interface": "DeleteResourceSetRequest",
         "omit": []
-      },
-      "actions": ["fms:DeleteResourceSet"]
+      }
     },
     "DisassociateThirdPartyFirewall": {
       "operation": "disassociateThirdPartyFirewall",
@@ -93,8 +85,7 @@
         "mode": "required",
         "interface": "DisassociateThirdPartyFirewallRequest",
         "omit": []
-      },
-      "actions": ["fms:DisassociateThirdPartyFirewall"]
+      }
     },
     "GetAdminScope": {
       "operation": "getAdminScope",
@@ -103,7 +94,6 @@
         "interface": "GetAdminScopeRequest",
         "omit": []
       },
-      "actions": ["fms:GetAdminScope"],
       "with": {
         "pinToAdminRegion": true
       }
@@ -114,8 +104,7 @@
         "mode": "required",
         "interface": "GetAppsListRequest",
         "omit": []
-      },
-      "actions": ["fms:GetAppsList"]
+      }
     },
     "GetComplianceDetail": {
       "operation": "getComplianceDetail",
@@ -123,8 +112,7 @@
         "mode": "required",
         "interface": "GetComplianceDetailRequest",
         "omit": []
-      },
-      "actions": ["fms:GetComplianceDetail"]
+      }
     },
     "GetNotificationChannel": {
       "operation": "getNotificationChannel",
@@ -132,8 +120,7 @@
         "mode": "optional",
         "interface": "GetNotificationChannelRequest",
         "omit": []
-      },
-      "actions": ["fms:GetNotificationChannel"]
+      }
     },
     "GetPolicy": {
       "operation": "getPolicy",
@@ -141,8 +128,7 @@
         "mode": "required",
         "interface": "GetPolicyRequest",
         "omit": []
-      },
-      "actions": ["fms:GetPolicy"]
+      }
     },
     "GetProtectionStatus": {
       "operation": "getProtectionStatus",
@@ -150,8 +136,7 @@
         "mode": "required",
         "interface": "GetProtectionStatusRequest",
         "omit": []
-      },
-      "actions": ["fms:GetProtectionStatus"]
+      }
     },
     "GetProtocolsList": {
       "operation": "getProtocolsList",
@@ -159,8 +144,7 @@
         "mode": "required",
         "interface": "GetProtocolsListRequest",
         "omit": []
-      },
-      "actions": ["fms:GetProtocolsList"]
+      }
     },
     "GetResourceSet": {
       "operation": "getResourceSet",
@@ -168,8 +152,7 @@
         "mode": "required",
         "interface": "GetResourceSetRequest",
         "omit": []
-      },
-      "actions": ["fms:GetResourceSet"]
+      }
     },
     "GetViolationDetails": {
       "operation": "getViolationDetails",
@@ -177,8 +160,7 @@
         "mode": "required",
         "interface": "GetViolationDetailsRequest",
         "omit": []
-      },
-      "actions": ["fms:GetViolationDetails"]
+      }
     },
     "ListAdminAccountsForOrganization": {
       "operation": "listAdminAccountsForOrganization",
@@ -187,7 +169,6 @@
         "interface": "ListAdminAccountsForOrganizationRequest",
         "omit": []
       },
-      "actions": ["fms:ListAdminAccountsForOrganization"],
       "with": {
         "pinToAdminRegion": true
       }
@@ -199,7 +180,6 @@
         "interface": "ListAdminsManagingAccountRequest",
         "omit": []
       },
-      "actions": ["fms:ListAdminsManagingAccount"],
       "with": {
         "pinToAdminRegion": true
       }
@@ -210,8 +190,7 @@
         "mode": "required",
         "interface": "ListAppsListsRequest",
         "omit": []
-      },
-      "actions": ["fms:ListAppsLists"]
+      }
     },
     "ListComplianceStatus": {
       "operation": "listComplianceStatus",
@@ -219,8 +198,7 @@
         "mode": "required",
         "interface": "ListComplianceStatusRequest",
         "omit": []
-      },
-      "actions": ["fms:ListComplianceStatus"]
+      }
     },
     "ListDiscoveredResources": {
       "operation": "listDiscoveredResources",
@@ -228,8 +206,7 @@
         "mode": "required",
         "interface": "ListDiscoveredResourcesRequest",
         "omit": []
-      },
-      "actions": ["fms:ListDiscoveredResources"]
+      }
     },
     "ListMemberAccounts": {
       "operation": "listMemberAccounts",
@@ -237,8 +214,7 @@
         "mode": "optional",
         "interface": "ListMemberAccountsRequest",
         "omit": []
-      },
-      "actions": ["fms:ListMemberAccounts"]
+      }
     },
     "ListPolicies": {
       "operation": "listPolicies",
@@ -246,8 +222,7 @@
         "mode": "optional",
         "interface": "ListPoliciesRequest",
         "omit": []
-      },
-      "actions": ["fms:ListPolicies"]
+      }
     },
     "ListProtocolsLists": {
       "operation": "listProtocolsLists",
@@ -255,8 +230,7 @@
         "mode": "required",
         "interface": "ListProtocolsListsRequest",
         "omit": []
-      },
-      "actions": ["fms:ListProtocolsLists"]
+      }
     },
     "ListResourceSetResources": {
       "operation": "listResourceSetResources",
@@ -264,8 +238,7 @@
         "mode": "required",
         "interface": "ListResourceSetResourcesRequest",
         "omit": []
-      },
-      "actions": ["fms:ListResourceSetResources"]
+      }
     },
     "ListResourceSets": {
       "operation": "listResourceSets",
@@ -273,8 +246,7 @@
         "mode": "optional",
         "interface": "ListResourceSetsRequest",
         "omit": []
-      },
-      "actions": ["fms:ListResourceSets"]
+      }
     },
     "PutAppsList": {
       "operation": "putAppsList",
@@ -282,10 +254,6 @@
         "mode": "required",
         "interface": "PutAppsListRequest",
         "omit": []
-      },
-      "actions": ["fms:PutAppsList"],
-      "reviewed": {
-        "fms:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "PutNotificationChannel": {
@@ -295,7 +263,6 @@
         "interface": "PutNotificationChannelRequest",
         "omit": []
       },
-      "actions": ["fms:PutNotificationChannel"],
       "with": {
         "passRole": true
       }
@@ -306,10 +273,6 @@
         "mode": "required",
         "interface": "PutPolicyRequest",
         "omit": []
-      },
-      "actions": ["fms:PutPolicy"],
-      "reviewed": {
-        "fms:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "PutProtocolsList": {
@@ -318,10 +281,6 @@
         "mode": "required",
         "interface": "PutProtocolsListRequest",
         "omit": []
-      },
-      "actions": ["fms:PutProtocolsList"],
-      "reviewed": {
-        "fms:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "PutResourceSet": {
@@ -330,10 +289,6 @@
         "mode": "required",
         "interface": "PutResourceSetRequest",
         "omit": []
-      },
-      "actions": ["fms:PutResourceSet"],
-      "reviewed": {
-        "fms:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     }
   }

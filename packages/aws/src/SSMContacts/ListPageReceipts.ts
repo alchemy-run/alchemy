@@ -43,5 +43,6 @@ export const ListPageReceiptsHttp = Layer.effect(
     tag: "AWS.SSMContacts.ListPageReceipts",
     operation: ssm.listPageReceipts,
     actions: ["ssm-contacts:ListPageReceipts"],
+    arns: ["arn:${Partition}:ssm-contacts:${Region}:${Account}:page/*/*"],
   }),
 );

@@ -47,5 +47,6 @@ export const ListImagePackagesHttp = Layer.effect(
     tag: "AWS.ImageBuilder.ListImagePackages",
     operation: imagebuilder.listImagePackages,
     actions: ["imagebuilder:ListImagePackages"],
+    arns: ["arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*"],
   }),
 );

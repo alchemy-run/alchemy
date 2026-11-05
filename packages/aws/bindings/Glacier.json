@@ -20,8 +20,7 @@
         "mode": "required",
         "interface": "AbortMultipartUploadRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:AbortMultipartUpload"]
+      }
     },
     "CompleteMultipartUpload": {
       "operation": "completeMultipartUpload",
@@ -30,8 +29,7 @@
         "mode": "required",
         "interface": "CompleteMultipartUploadRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:CompleteMultipartUpload"]
+      }
     },
     "DeleteArchive": {
       "operation": "deleteArchive",
@@ -40,8 +38,7 @@
         "mode": "required",
         "interface": "DeleteArchiveRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:DeleteArchive"]
+      }
     },
     "DescribeJob": {
       "operation": "describeJob",
@@ -50,16 +47,14 @@
         "mode": "required",
         "interface": "DescribeJobRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:DescribeJob"]
+      }
     },
     "DescribeVault": {
       "operation": "describeVault",
       "resource": "Vault",
       "request": {
         "mode": "none"
-      },
-      "actions": ["glacier:DescribeVault"]
+      }
     },
     "GetJobOutput": {
       "operation": "getJobOutput",
@@ -68,8 +63,7 @@
         "mode": "required",
         "interface": "GetJobOutputRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:GetJobOutput"]
+      }
     },
     "InitiateJob": {
       "operation": "initiateJob",
@@ -78,10 +72,6 @@
         "mode": "optional",
         "interface": "InitiateJobRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:InitiateJob"],
-      "reviewed": {
-        "glacier:GetJobOutput": "Reading the job's output is the separate GetJobOutput binding."
       }
     },
     "InitiateMultipartUpload": {
@@ -91,8 +81,7 @@
         "mode": "optional",
         "interface": "InitiateMultipartUploadRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:InitiateMultipartUpload"]
+      }
     },
     "ListJobs": {
       "operation": "listJobs",
@@ -101,8 +90,7 @@
         "mode": "optional",
         "interface": "ListJobsRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:ListJobs"]
+      }
     },
     "ListMultipartUploads": {
       "operation": "listMultipartUploads",
@@ -111,8 +99,7 @@
         "mode": "optional",
         "interface": "ListMultipartUploadsRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:ListMultipartUploads"]
+      }
     },
     "ListParts": {
       "operation": "listParts",
@@ -121,8 +108,7 @@
         "mode": "required",
         "interface": "ListPartsRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:ListParts"]
+      }
     },
     "UploadArchive": {
       "operation": "uploadArchive",
@@ -131,8 +117,7 @@
         "mode": "optional",
         "interface": "UploadArchiveRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:UploadArchive"]
+      }
     },
     "UploadMultipartPart": {
       "operation": "uploadMultipartPart",
@@ -141,8 +126,7 @@
         "mode": "required",
         "interface": "UploadMultipartPartRequest",
         "omit": ["accountId", "vaultName"]
-      },
-      "actions": ["glacier:UploadMultipartPart"]
+      }
     }
   }
 }

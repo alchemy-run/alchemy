@@ -48,5 +48,6 @@ export const GetMedicalTranscriptionJobHttp = Layer.effect(
     tag: "AWS.Transcribe.GetMedicalTranscriptionJob",
     operation: transcribe.getMedicalTranscriptionJob,
     actions: ["transcribe:GetMedicalTranscriptionJob"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:medical-transcription-job/*"],
   }),
 );

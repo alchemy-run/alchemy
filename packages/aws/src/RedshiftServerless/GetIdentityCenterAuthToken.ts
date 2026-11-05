@@ -50,5 +50,6 @@ export const GetIdentityCenterAuthTokenHttp = Layer.effect(
     tag: "AWS.RedshiftServerless.GetIdentityCenterAuthToken",
     operation: serverless.getIdentityCenterAuthToken,
     actions: ["redshift-serverless:GetIdentityCenterAuthToken"],
+    arns: ["arn:${Partition}:redshift-serverless:${Region}:${Account}:workgroup/*"],
   }),
 );

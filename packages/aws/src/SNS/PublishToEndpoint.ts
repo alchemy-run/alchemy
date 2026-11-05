@@ -48,5 +48,6 @@ export const PublishToEndpointHttp = Layer.effect(
     tag: "AWS.SNS.PublishToEndpoint",
     operation: sns.publish,
     actions: ["sns:Publish"],
+    arns: ["arn:${Partition}:sns:${Region}:${Account}:*"],
   }),
 );

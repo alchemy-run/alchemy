@@ -44,5 +44,6 @@ export const GetProtocolsListHttp = Layer.effect(
     capability: "GetProtocolsList",
     iamActions: ["fms:GetProtocolsList"],
     operation: fms.getProtocolsList,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:protocols-list/*"],
   }),
 );

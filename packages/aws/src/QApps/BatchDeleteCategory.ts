@@ -51,5 +51,6 @@ export const BatchDeleteCategoryHttp = Layer.effect(
     capability: "BatchDeleteCategory",
     iamActions: ["qapps:BatchDeleteCategory"],
     operation: qapps.batchDeleteCategory,
+    arns: ["arn:${Partition}:qbusiness:${Region}:${Account}:application/*"],
   }),
 );

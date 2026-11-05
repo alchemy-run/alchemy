@@ -58,5 +58,6 @@ export const PostWhatsAppMessageMediaHttp = Layer.effect(
     tag: "AWS.SocialMessaging.PostWhatsAppMessageMedia",
     operation: socialmessaging.postWhatsAppMessageMedia,
     actions: ["social-messaging:PostWhatsAppMessageMedia"],
+    arns: ["arn:${Partition}:social-messaging:${Region}:${Account}:phone-number-id/*"],
   }),
 );

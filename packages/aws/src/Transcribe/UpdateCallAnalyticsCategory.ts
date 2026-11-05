@@ -49,5 +49,6 @@ export const UpdateCallAnalyticsCategoryHttp = Layer.effect(
     tag: "AWS.Transcribe.UpdateCallAnalyticsCategory",
     operation: transcribe.updateCallAnalyticsCategory,
     actions: ["transcribe:UpdateCallAnalyticsCategory"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:analytics-category/*"],
   }),
 );

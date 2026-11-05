@@ -28,7 +28,6 @@
         "omit": ["EndpointGroupArn"],
         "inline": true
       },
-      "actions": ["globalaccelerator:AddEndpoints", "globalaccelerator:UpdateEndpointGroup"],
       "withTs": {
         "extraStatements": "[{Effect: \"Allow\", Action: [\"ec2:DescribeAddresses\", \"ec2:DescribeInstances\", \"ec2:DescribeInternetGateways\", \"ec2:DescribeSubnets\", \"elasticloadbalancing:DescribeLoadBalancers\"], Resource: [\"*\"]}]"
       },
@@ -43,8 +42,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeGaAcceleratorHttpBinding",
-      "actions": ["globalaccelerator:DescribeAccelerator"]
+      "builder": "makeGaAcceleratorHttpBinding"
     },
     "DescribeEndpointGroup": {
       "operation": "describeEndpointGroup",
@@ -53,8 +51,7 @@
         "mode": "required",
         "omit": ["EndpointGroupArn"],
         "inline": true
-      },
-      "actions": ["globalaccelerator:DescribeEndpointGroup"]
+      }
     },
     "RemoveEndpoints": {
       "operation": "removeEndpoints",
@@ -64,7 +61,6 @@
         "omit": ["EndpointGroupArn"],
         "inline": true
       },
-      "actions": ["globalaccelerator:RemoveEndpoints", "globalaccelerator:UpdateEndpointGroup"],
       "note": "Like AddEndpoints, Global Accelerator authorizes endpoint removal as an update to the endpoint group, so both actions are required."
     }
   }

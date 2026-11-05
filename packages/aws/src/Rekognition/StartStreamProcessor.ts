@@ -50,5 +50,6 @@ export const StartStreamProcessorHttp = Layer.effect(
     tag: "AWS.Rekognition.StartStreamProcessor",
     operation: rekognition.startStreamProcessor,
     actions: ["rekognition:StartStreamProcessor"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:streamprocessor/*"],
   }),
 );

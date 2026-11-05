@@ -49,5 +49,6 @@ export const ListWorkflowStepExecutionsHttp = Layer.effect(
     tag: "AWS.ImageBuilder.ListWorkflowStepExecutions",
     operation: imagebuilder.listWorkflowStepExecutions,
     actions: ["imagebuilder:ListWorkflowStepExecutions"],
+    arns: ["arn:${Partition}:imagebuilder:${Region}:${Account}:workflow-execution/*"],
   }),
 );

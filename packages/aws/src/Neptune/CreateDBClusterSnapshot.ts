@@ -52,7 +52,7 @@ export const CreateDBClusterSnapshotHttp = Layer.effect(
   makeNeptuneClusterHttpBinding({
     tag: "AWS.Neptune.CreateDBClusterSnapshot",
     operation: neptune.createDBClusterSnapshot,
-    actions: ["rds:CreateDBClusterSnapshot", "rds:AddTagsToResource"],
+    actions: ["rds:AddTagsToResource", "rds:CreateDBClusterSnapshot"],
     extraResources: (clusterArn) => [
       `${clusterArn.split(":").slice(0, 5).join(":")}:cluster-snapshot:*`,
     ],

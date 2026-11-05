@@ -49,5 +49,6 @@ export const ListLicenseVersionsHttp = Layer.effect(
     capability: "ListLicenseVersions",
     iamActions: ["license-manager:ListLicenseVersions"],
     operation: licensemanager.listLicenseVersions,
+    arns: ["arn:${Partition}:license-manager::${Account}:license:*"],
   }),
 );

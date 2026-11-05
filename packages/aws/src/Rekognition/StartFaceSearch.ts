@@ -53,5 +53,6 @@ export const StartFaceSearchHttp = Layer.effect(
     tag: "AWS.Rekognition.StartFaceSearch",
     operation: rekognition.startFaceSearch,
     actions: ["rekognition:StartFaceSearch"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

@@ -54,7 +54,7 @@ export const CopyServerlessCacheSnapshotHttp = Layer.effect(
   makeElastiCacheAccountHttpBinding({
     tag: "AWS.ElastiCache.CopyServerlessCacheSnapshot",
     operation: elasticache.copyServerlessCacheSnapshot,
-    actions: ["elasticache:CopyServerlessCacheSnapshot", "elasticache:AddTagsToResource"],
+    actions: ["elasticache:AddTagsToResource", "elasticache:CopyServerlessCacheSnapshot"],
     resources: [SERVERLESS_SNAPSHOT_ARN_WILDCARD],
   }),
 );

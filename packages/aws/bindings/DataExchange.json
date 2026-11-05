@@ -27,42 +27,24 @@
       "operation": "acceptDataGrant",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dataexchange:AcceptDataGrant"],
-      "reviewed": {
-        "aws-marketplace:Subscribe": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
       }
     },
     "CancelJob": {
       "operation": "cancelJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dataexchange:CancelJob"]
+      }
     },
     "CreateDataGrant": {
       "operation": "createDataGrant",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dataexchange:CreateDataGrant"],
-      "reviewed": {
-        "dataexchange:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
-        "dataexchange:CreateJob": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
-        "dataexchange:PublishDataSet": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
-        "dataexchange:PublishToDataGrant": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
-        "dataexchange:StartJob": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
       }
     },
     "CreateJob": {
       "operation": "createJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dataexchange:CreateJob"],
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:dataexchange:${Region}:${Account}:jobs/*), the call was denied live in the DataExchange Bindings suite; the grant stays on *.",
-      "reviewed": {
-        "iam:PassRole": "Needed only for job types that pass a role; not granted, so a role is never passed unasked."
       }
     },
     "DeleteAsset": {
@@ -74,7 +56,6 @@
         "inline": true
       },
       "builder": "makeRevisionHttpBinding",
-      "actions": ["dataexchange:DeleteAsset"],
       "withTs": {
         "resources": "revisionAssetArns"
       },
@@ -86,12 +67,6 @@
       "operation": "deleteDataGrant",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dataexchange:DeleteDataGrant"],
-      "reviewed": {
-        "dataexchange:CreateJob": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
-        "dataexchange:DeleteDataSet": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked.",
-        "dataexchange:StartJob": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
       }
     },
     "GetAsset": {
@@ -103,7 +78,6 @@
         "inline": true
       },
       "builder": "makeRevisionHttpBinding",
-      "actions": ["dataexchange:GetAsset"],
       "withTs": {
         "resources": "revisionAssetArns"
       },
@@ -115,10 +89,6 @@
       "operation": "getDataGrant",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dataexchange:GetDataGrant"],
-      "reviewed": {
-        "dataexchange:GetDataSet": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
       }
     },
     "GetDataSet": {
@@ -127,25 +97,18 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeDataSetHttpBinding",
-      "actions": ["dataexchange:GetDataSet"]
+      "builder": "makeDataSetHttpBinding"
     },
     "GetJob": {
       "operation": "getJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dataexchange:GetJob"],
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:dataexchange:${Region}:${Account}:jobs/*), the call was denied live in the DataExchange Bindings suite; the grant stays on *."
+      }
     },
     "GetReceivedDataGrant": {
       "operation": "getReceivedDataGrant",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dataexchange:GetReceivedDataGrant"],
-      "reviewed": {
-        "dataexchange:GetDataSet": "Authorized for the data-grant flows that publish or subscribe; not granted unless asked."
       }
     },
     "GetRevision": {
@@ -154,15 +117,10 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeRevisionHttpBinding",
-      "actions": ["dataexchange:GetRevision"]
+      "builder": "makeRevisionHttpBinding"
     },
     "ListDataGrants": {
-      "operation": "listDataGrants",
-      "actions": ["dataexchange:ListDataGrants"],
-      "reviewed": {
-        "dataexchange:ListDataSets": "AWS lists it for the operation, but the DataExchange Bindings suite calls it successfully without it."
-      }
+      "operation": "listDataGrants"
     },
     "ListDataSetRevisions": {
       "operation": "listDataSetRevisions",
@@ -172,27 +130,19 @@
         "omit": ["DataSetId"],
         "inline": true
       },
-      "builder": "makeDataSetHttpBinding",
-      "actions": ["dataexchange:ListDataSetRevisions"]
+      "builder": "makeDataSetHttpBinding"
     },
     "ListDataSets": {
-      "operation": "listDataSets",
-      "actions": ["dataexchange:ListDataSets"]
+      "operation": "listDataSets"
     },
     "ListEventActions": {
-      "operation": "listEventActions",
-      "actions": ["dataexchange:ListEventActions"]
+      "operation": "listEventActions"
     },
     "ListJobs": {
-      "operation": "listJobs",
-      "actions": ["dataexchange:ListJobs"]
+      "operation": "listJobs"
     },
     "ListReceivedDataGrants": {
-      "operation": "listReceivedDataGrants",
-      "actions": ["dataexchange:ListReceivedDataGrants"],
-      "reviewed": {
-        "dataexchange:ListDataSets": "AWS lists it for the operation, but the DataExchange Bindings suite calls it successfully without it."
-      }
+      "operation": "listReceivedDataGrants"
     },
     "ListRevisionAssets": {
       "operation": "listRevisionAssets",
@@ -202,8 +152,7 @@
         "omit": ["DataSetId", "RevisionId"],
         "inline": true
       },
-      "builder": "makeRevisionHttpBinding",
-      "actions": ["dataexchange:ListRevisionAssets"]
+      "builder": "makeRevisionHttpBinding"
     },
     "RevokeRevision": {
       "operation": "revokeRevision",
@@ -213,8 +162,7 @@
         "omit": ["DataSetId", "RevisionId"],
         "inline": true
       },
-      "builder": "makeRevisionHttpBinding",
-      "actions": ["dataexchange:RevokeRevision"]
+      "builder": "makeRevisionHttpBinding"
     },
     "SendApiAsset": {
       "operation": "sendApiAsset",
@@ -225,7 +173,6 @@
         "inline": true
       },
       "builder": "makeDataSetHttpBinding",
-      "actions": ["dataexchange:SendApiAsset"],
       "withTs": {
         "resources": "dataSetAssetArns"
       },
@@ -241,8 +188,7 @@
         "omit": ["DataSetId"],
         "inline": true
       },
-      "builder": "makeDataSetHttpBinding",
-      "actions": ["dataexchange:SendDataSetNotification"]
+      "builder": "makeDataSetHttpBinding"
     },
     "UpdateAsset": {
       "operation": "updateAsset",
@@ -253,7 +199,6 @@
         "inline": true
       },
       "builder": "makeRevisionHttpBinding",
-      "actions": ["dataexchange:UpdateAsset"],
       "withTs": {
         "resources": "revisionAssetArns"
       },

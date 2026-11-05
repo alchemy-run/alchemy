@@ -48,5 +48,6 @@ export const DeleteFacesHttp = Layer.effect(
     tag: "AWS.Rekognition.DeleteFaces",
     operation: rekognition.deleteFaces,
     actions: ["rekognition:DeleteFaces"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

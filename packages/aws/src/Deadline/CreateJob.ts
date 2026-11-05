@@ -49,6 +49,6 @@ export const CreateJobHttp = Layer.effect(
   makeDeadlineQueueHttpBinding({
     tag: "AWS.Deadline.CreateJob",
     operation: deadline.createJob,
-    actions: ["deadline:CreateJob"],
+    actions: ["deadline:CreateJob", "deadline:TagResource"],
   }),
 );

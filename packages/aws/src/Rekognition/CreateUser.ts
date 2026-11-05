@@ -44,5 +44,6 @@ export const CreateUserHttp = Layer.effect(
     tag: "AWS.Rekognition.CreateUser",
     operation: rekognition.createUser,
     actions: ["rekognition:CreateUser"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

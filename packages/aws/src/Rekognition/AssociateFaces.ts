@@ -49,5 +49,6 @@ export const AssociateFacesHttp = Layer.effect(
     tag: "AWS.Rekognition.AssociateFaces",
     operation: rekognition.associateFaces,
     actions: ["rekognition:AssociateFaces"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

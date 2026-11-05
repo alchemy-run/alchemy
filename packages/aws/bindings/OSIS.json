@@ -23,7 +23,6 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["osis:GetPipeline"],
       "with": {
         "requestKey": "PipelineName"
       },
@@ -36,9 +35,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeOsisAccountHttpBinding",
-      "actions": ["osis:GetPipelineBlueprint"],
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:osis:${Region}:${Account}:blueprint/*), the call was denied live in the OSIS Bindings suite; the grant stays on *."
+      "builder": "makeOsisAccountHttpBinding"
     },
     "GetPipelineChangeProgress": {
       "operation": "getPipelineChangeProgress",
@@ -46,7 +43,6 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["osis:GetPipelineChangeProgress"],
       "with": {
         "requestKey": "PipelineName"
       },
@@ -56,13 +52,11 @@
     },
     "ListPipelineBlueprints": {
       "operation": "listPipelineBlueprints",
-      "builder": "makeOsisAccountHttpBinding",
-      "actions": ["osis:ListPipelineBlueprints"]
+      "builder": "makeOsisAccountHttpBinding"
     },
     "ListPipelineEndpointConnections": {
       "operation": "listPipelineEndpointConnections",
-      "builder": "makeOsisAccountHttpBinding",
-      "actions": ["osis:ListPipelineEndpointConnections"]
+      "builder": "makeOsisAccountHttpBinding"
     },
     "RevokePipelineEndpointConnections": {
       "operation": "revokePipelineEndpointConnections",
@@ -72,7 +66,6 @@
         "omit": ["PipelineArn"],
         "inline": true
       },
-      "actions": ["osis:RevokePipelineEndpointConnections"],
       "with": {
         "requestKey": "PipelineArn"
       },
@@ -86,7 +79,6 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["osis:StartPipeline"],
       "with": {
         "requestKey": "PipelineName"
       },
@@ -100,7 +92,6 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["osis:StopPipeline"],
       "with": {
         "requestKey": "PipelineName"
       },
@@ -113,8 +104,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeOsisAccountHttpBinding",
-      "actions": ["osis:ValidatePipeline"]
+      "builder": "makeOsisAccountHttpBinding"
     }
   }
 }

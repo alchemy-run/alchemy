@@ -43,5 +43,6 @@ export const DeleteSnapshotHttp = Layer.effect(
     tag: "AWS.RedshiftServerless.DeleteSnapshot",
     operation: serverless.deleteSnapshot,
     actions: ["redshift-serverless:DeleteSnapshot"],
+    arns: ["arn:${Partition}:redshift-serverless:${Region}:${Account}:snapshot/*"],
   }),
 );

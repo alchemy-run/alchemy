@@ -46,6 +46,7 @@ export const CreateDataGrantHttp = Layer.effect(
   makeDataExchangeAccountHttpBinding({
     tag: "AWS.DataExchange.CreateDataGrant",
     operation: dataexchange.createDataGrant,
-    actions: ["dataexchange:CreateDataGrant"],
+    actions: ["dataexchange:CreateDataGrant", "dataexchange:TagResource"],
+    arns: ["arn:${Partition}:dataexchange:${Region}:${Account}:data-grants/*"],
   }),
 );

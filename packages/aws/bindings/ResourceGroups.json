@@ -14,50 +14,29 @@
       "operation": "cancelTagSyncTask",
       "request": {
         "mode": "required"
-      },
-      "actions": ["resource-groups:CancelTagSyncTask"],
-      "arns": ["arn:${Partition}:resource-groups:${Region}:${Account}:group/*"],
-      "reviewed": {
-        "resource-groups:DeleteGroup": "AWS lists it for the operation, but the ResourceGroups Bindings suite calls it successfully without it."
       }
     },
     "GetAccountSettings": {
       "operation": "getAccountSettings",
       "request": {
         "mode": "none"
-      },
-      "actions": ["resource-groups:GetAccountSettings"]
+      }
     },
     "GetTagSyncTask": {
       "operation": "getTagSyncTask",
       "request": {
         "mode": "required"
-      },
-      "actions": ["resource-groups:GetTagSyncTask"],
-      "arns": ["arn:${Partition}:resource-groups:${Region}:${Account}:group/*"]
+      }
     },
     "ListTagSyncTasks": {
-      "operation": "listTagSyncTasks",
-      "actions": ["resource-groups:ListTagSyncTasks"],
-      "arns": ["arn:${Partition}:resource-groups:${Region}:${Account}:group/*"]
+      "operation": "listTagSyncTasks"
     },
     "SearchResources": {
       "operation": "searchResources",
       "request": {
         "mode": "required"
       },
-      "actions": [
-        "resource-groups:SearchResources",
-        "tag:GetResources",
-        "cloudformation:DescribeStacks",
-        "cloudformation:ListStackResources"
-      ],
-      "note": "Documented minimum permissions: the search reads through the Resource Groups Tagging API and (for stack queries) CloudFormation.",
-      "reviewed": {
-        "tag:GetResources": "See the note: Documented minimum permissions: the search reads through the Resource Groups Tagging API and (for stack queries) CloudFormation.",
-        "cloudformation:DescribeStacks": "See the note: Documented minimum permissions: the search reads through the Resource Groups Tagging API and (for stack queries) CloudFormation.",
-        "cloudformation:ListStackResources": "See the note: Documented minimum permissions: the search reads through the Resource Groups Tagging API and (for stack queries) CloudFormation."
-      }
+      "note": "Documented minimum permissions: the search reads through the Resource Groups Tagging API and (for stack queries) CloudFormation."
     }
   }
 }

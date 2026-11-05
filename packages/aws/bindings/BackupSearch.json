@@ -18,8 +18,7 @@
       "resource": "SearchJob",
       "request": {
         "mode": "none"
-      },
-      "actions": ["backup-search:GetSearchJob"]
+      }
     },
     "ListSearchJobBackups": {
       "operation": "listSearchJobBackups",
@@ -28,8 +27,7 @@
         "mode": "optional",
         "interface": "ListSearchJobBackupsRequest",
         "omit": ["SearchJobIdentifier"]
-      },
-      "actions": ["backup-search:ListSearchJobBackups"]
+      }
     },
     "ListSearchJobResults": {
       "operation": "listSearchJobResults",
@@ -38,8 +36,7 @@
         "mode": "optional",
         "interface": "ListSearchJobResultsRequest",
         "omit": ["SearchJobIdentifier"]
-      },
-      "actions": ["backup-search:ListSearchJobResults"]
+      }
     }
   }
 }

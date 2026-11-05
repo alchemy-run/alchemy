@@ -44,5 +44,6 @@ export const ListRecoveryPointsHttp = Layer.effect(
     tag: "AWS.RedshiftServerless.ListRecoveryPoints",
     operation: serverless.listRecoveryPoints,
     actions: ["redshift-serverless:ListRecoveryPoints"],
+    arns: ["arn:${Partition}:redshift-serverless:${Region}:${Account}:recoverypoint/*"],
   }),
 );

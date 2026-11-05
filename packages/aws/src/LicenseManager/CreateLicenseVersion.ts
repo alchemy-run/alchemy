@@ -64,5 +64,6 @@ export const CreateLicenseVersionHttp = Layer.effect(
     capability: "CreateLicenseVersion",
     iamActions: ["license-manager:CreateLicenseVersion"],
     operation: licensemanager.createLicenseVersion,
+    arns: ["arn:${Partition}:license-manager::${Account}:license:*"],
   }),
 );

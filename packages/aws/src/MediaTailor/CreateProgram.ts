@@ -48,7 +48,7 @@ export const CreateProgramHttp = Layer.effect(
   CreateProgram,
   makeMediaTailorHttpBinding({
     capability: "CreateProgram",
-    iamActions: ["mediatailor:CreateProgram"],
+    iamActions: ["mediatailor:CreateProgram", "mediatailor:TagResource"],
     operation: mediatailor.createProgram,
   }),
 );

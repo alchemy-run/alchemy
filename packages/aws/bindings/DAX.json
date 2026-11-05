@@ -24,18 +24,15 @@
         "mode": "required",
         "omit": ["ClusterName"],
         "inline": true
-      },
-      "actions": ["dax:DecreaseReplicationFactor"]
+      }
     },
     "DescribeClusters": {
       "operation": "describeClusters",
-      "builder": "makeDaxAccountHttpBinding",
-      "actions": ["dax:DescribeClusters"]
+      "builder": "makeDaxAccountHttpBinding"
     },
     "DescribeEvents": {
       "operation": "describeEvents",
-      "builder": "makeDaxAccountHttpBinding",
-      "actions": ["dax:DescribeEvents"]
+      "builder": "makeDaxAccountHttpBinding"
     },
     "IncreaseReplicationFactor": {
       "operation": "increaseReplicationFactor",
@@ -44,8 +41,7 @@
         "mode": "required",
         "omit": ["ClusterName"],
         "inline": true
-      },
-      "actions": ["dax:IncreaseReplicationFactor"]
+      }
     },
     "RebootNode": {
       "operation": "rebootNode",
@@ -54,8 +50,7 @@
         "mode": "required",
         "omit": ["ClusterName"],
         "inline": true
-      },
-      "actions": ["dax:RebootNode"]
+      }
     }
   }
 }

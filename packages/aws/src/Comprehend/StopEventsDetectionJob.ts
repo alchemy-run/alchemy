@@ -50,5 +50,6 @@ export const StopEventsDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.StopEventsDetectionJob",
     operation: comprehend.stopEventsDetectionJob,
     actions: ["comprehend:StopEventsDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:events-detection-job/*"],
   }),
 );

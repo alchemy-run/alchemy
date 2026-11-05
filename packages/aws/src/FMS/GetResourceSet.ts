@@ -44,5 +44,6 @@ export const GetResourceSetHttp = Layer.effect(
     capability: "GetResourceSet",
     iamActions: ["fms:GetResourceSet"],
     operation: fms.getResourceSet,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:resource-set/*"],
   }),
 );

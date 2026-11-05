@@ -43,7 +43,6 @@
         "omit": ["TopicArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:AddPermission"],
       "with": {
         "key": "TopicArn"
       }
@@ -55,11 +54,7 @@
         "interface": "CheckIfPhoneNumberIsOptedOutRequest",
         "omit": []
       },
-      "actions": ["sns:CheckIfPhoneNumberIsOptedOut", "sms-voice:DescribeOptedOutNumbers"],
-      "note": "Opt-out reads are backed by `sms-voice:DescribeOptedOutNumbers` (probe-verified).",
-      "reviewed": {
-        "sms-voice:DescribeOptedOutNumbers": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
-      }
+      "note": "Opt-out reads are backed by `sms-voice:DescribeOptedOutNumbers` (probe-verified)."
     },
     "ConfirmSubscription": {
       "operation": "confirmSubscription",
@@ -70,7 +65,6 @@
         "omit": ["TopicArn"]
       },
       "builder": "makeSnsSubscriptionHttpBinding",
-      "actions": ["sns:ConfirmSubscription"],
       "with": {
         "key": "TopicArn"
       }
@@ -84,8 +78,7 @@
         "interface": "CreatePlatformEndpointRequest",
         "omit": ["PlatformApplicationArn"]
       },
-      "builder": "makeSnsPlatformHttpBinding",
-      "actions": ["sns:CreatePlatformEndpoint"]
+      "builder": "makeSnsPlatformHttpBinding"
     },
     "CreateSMSSandboxPhoneNumber": {
       "operation": "createSMSSandboxPhoneNumber",
@@ -94,18 +87,7 @@
         "interface": "CreateSMSSandboxPhoneNumberRequest",
         "omit": []
       },
-      "actions": [
-        "sns:CreateSMSSandboxPhoneNumber",
-        "sms-voice:CreateVerifiedDestinationNumber",
-        "sms-voice:SendDestinationNumberVerificationCode",
-        "sms-voice:SendTextMessage"
-      ],
-      "note": "Registering a sandbox number creates a verified destination number and sends the OTP text via End User Messaging (probe-verified).",
-      "reviewed": {
-        "sms-voice:CreateVerifiedDestinationNumber": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials.",
-        "sms-voice:SendDestinationNumberVerificationCode": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials.",
-        "sms-voice:SendTextMessage": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
-      }
+      "note": "Registering a sandbox number creates a verified destination number and sends the OTP text via End User Messaging (probe-verified)."
     },
     "DeleteEndpoint": {
       "operation": "deleteEndpoint",
@@ -116,8 +98,7 @@
         "interface": "DeleteEndpointRequest",
         "omit": []
       },
-      "builder": "makeSnsEndpointHttpBinding",
-      "actions": ["sns:DeleteEndpoint"]
+      "builder": "makeSnsEndpointHttpBinding"
     },
     "DeleteSMSSandboxPhoneNumber": {
       "operation": "deleteSMSSandboxPhoneNumber",
@@ -125,10 +106,6 @@
         "mode": "required",
         "interface": "DeleteSMSSandboxPhoneNumberRequest",
         "omit": []
-      },
-      "actions": ["sns:DeleteSMSSandboxPhoneNumber", "sms-voice:DeleteVerifiedDestinationNumber"],
-      "reviewed": {
-        "sms-voice:DeleteVerifiedDestinationNumber": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
       }
     },
     "GetDataProtectionPolicy": {
@@ -140,7 +117,6 @@
         "omit": ["ResourceArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:GetDataProtectionPolicy"],
       "with": {
         "key": "ResourceArn"
       }
@@ -154,8 +130,7 @@
         "interface": "GetEndpointAttributesRequest",
         "omit": []
       },
-      "builder": "makeSnsEndpointHttpBinding",
-      "actions": ["sns:GetEndpointAttributes"]
+      "builder": "makeSnsEndpointHttpBinding"
     },
     "GetSMSAttributes": {
       "operation": "getSMSAttributes",
@@ -164,11 +139,7 @@
         "interface": "GetSMSAttributesRequest",
         "omit": []
       },
-      "actions": ["sns:GetSMSAttributes", "sms-voice:DescribeSpendLimits"],
-      "note": "SNS SMS preferences are backed by AWS End User Messaging — the read fans out to `sms-voice:DescribeSpendLimits` (probe-verified).",
-      "reviewed": {
-        "sms-voice:DescribeSpendLimits": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
-      }
+      "note": "SNS SMS preferences are backed by AWS End User Messaging — the read fans out to `sms-voice:DescribeSpendLimits` (probe-verified)."
     },
     "GetSMSSandboxAccountStatus": {
       "operation": "getSMSSandboxAccountStatus",
@@ -176,10 +147,6 @@
         "mode": "optional",
         "interface": "GetSMSSandboxAccountStatusRequest",
         "omit": []
-      },
-      "actions": ["sns:GetSMSSandboxAccountStatus", "sms-voice:DescribeAccountAttributes"],
-      "reviewed": {
-        "sms-voice:DescribeAccountAttributes": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
       }
     },
     "GetSubscriptionAttributes": {
@@ -191,7 +158,6 @@
         "omit": ["SubscriptionArn"]
       },
       "builder": "makeSnsSubscriptionHttpBinding",
-      "actions": ["sns:GetSubscriptionAttributes"],
       "with": {
         "key": "SubscriptionArn"
       }
@@ -205,7 +171,6 @@
         "omit": ["TopicArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:GetTopicAttributes"],
       "with": {
         "key": "TopicArn"
       }
@@ -219,8 +184,7 @@
         "interface": "ListEndpointsByPlatformApplicationRequest",
         "omit": ["PlatformApplicationArn"]
       },
-      "builder": "makeSnsPlatformHttpBinding",
-      "actions": ["sns:ListEndpointsByPlatformApplication"]
+      "builder": "makeSnsPlatformHttpBinding"
     },
     "ListOriginationNumbers": {
       "operation": "listOriginationNumbers",
@@ -228,10 +192,6 @@
         "mode": "optional",
         "interface": "ListOriginationNumbersRequest",
         "omit": []
-      },
-      "actions": ["sns:ListOriginationNumbers", "sms-voice:DescribePhoneNumbers"],
-      "reviewed": {
-        "sms-voice:DescribePhoneNumbers": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
       }
     },
     "ListPhoneNumbersOptedOut": {
@@ -240,10 +200,6 @@
         "mode": "optional",
         "interface": "ListPhoneNumbersOptedOutRequest",
         "omit": []
-      },
-      "actions": ["sns:ListPhoneNumbersOptedOut", "sms-voice:DescribeOptedOutNumbers"],
-      "reviewed": {
-        "sms-voice:DescribeOptedOutNumbers": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
       }
     },
     "ListPlatformApplications": {
@@ -252,8 +208,7 @@
         "mode": "optional",
         "interface": "ListPlatformApplicationsRequest",
         "omit": []
-      },
-      "actions": ["sns:ListPlatformApplications"]
+      }
     },
     "ListSMSSandboxPhoneNumbers": {
       "operation": "listSMSSandboxPhoneNumbers",
@@ -261,10 +216,6 @@
         "mode": "optional",
         "interface": "ListSMSSandboxPhoneNumbersRequest",
         "omit": []
-      },
-      "actions": ["sns:ListSMSSandboxPhoneNumbers", "sms-voice:DescribeVerifiedDestinationNumbers"],
-      "reviewed": {
-        "sms-voice:DescribeVerifiedDestinationNumbers": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
       }
     },
     "ListSubscriptions": {
@@ -273,8 +224,7 @@
         "mode": "optional",
         "interface": "ListSubscriptionsRequest",
         "omit": []
-      },
-      "actions": ["sns:ListSubscriptions"]
+      }
     },
     "ListSubscriptionsByTopic": {
       "operation": "listSubscriptionsByTopic",
@@ -285,7 +235,6 @@
         "omit": ["TopicArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:ListSubscriptionsByTopic"],
       "with": {
         "key": "TopicArn"
       }
@@ -299,7 +248,6 @@
         "omit": ["ResourceArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:ListTagsForResource"],
       "with": {
         "key": "ResourceArn"
       }
@@ -310,8 +258,7 @@
         "mode": "optional",
         "interface": "ListTopicsRequest",
         "omit": []
-      },
-      "actions": ["sns:ListTopics"]
+      }
     },
     "OptInPhoneNumber": {
       "operation": "optInPhoneNumber",
@@ -320,11 +267,7 @@
         "interface": "OptInPhoneNumberRequest",
         "omit": []
       },
-      "actions": ["sns:OptInPhoneNumber", "sms-voice:DeleteOptedOutNumber"],
-      "note": "Opting a number back in deletes it from the End User Messaging opted-out list (probe-verified).",
-      "reviewed": {
-        "sms-voice:DeleteOptedOutNumber": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
-      }
+      "note": "Opting a number back in deletes it from the End User Messaging opted-out list (probe-verified)."
     },
     "Publish": {
       "operation": "publish",
@@ -335,7 +278,6 @@
         "omit": ["TopicArn", "TargetArn", "PhoneNumber"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:Publish"],
       "with": {
         "key": "TopicArn"
       }
@@ -349,7 +291,6 @@
         "omit": ["TopicArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:Publish"],
       "with": {
         "key": "TopicArn"
       }
@@ -361,11 +302,8 @@
         "interface": "PublishSmsRequest",
         "omit": ["TopicArn", "TargetArn"]
       },
-      "actions": ["sns:Publish", "sms-voice:SendTextMessage"],
       "note": "Direct SMS delivery is backed by `sms-voice:SendTextMessage` (probe-verified).",
-      "reviewed": {
-        "sms-voice:SendTextMessage": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
-      }
+      "sets": ["PhoneNumber"]
     },
     "PublishToEndpoint": {
       "operation": "publish",
@@ -376,8 +314,7 @@
         "interface": "PublishToEndpointRequest",
         "omit": ["TopicArn", "PhoneNumber"]
       },
-      "builder": "makeSnsEndpointHttpBinding",
-      "actions": ["sns:Publish"]
+      "builder": "makeSnsEndpointHttpBinding"
     },
     "PutDataProtectionPolicy": {
       "operation": "putDataProtectionPolicy",
@@ -388,7 +325,6 @@
         "omit": ["ResourceArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:PutDataProtectionPolicy"],
       "with": {
         "key": "ResourceArn"
       }
@@ -402,7 +338,6 @@
         "omit": ["TopicArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:RemovePermission"],
       "with": {
         "key": "TopicArn"
       }
@@ -416,8 +351,7 @@
         "interface": "SetEndpointAttributesRequest",
         "omit": []
       },
-      "builder": "makeSnsEndpointHttpBinding",
-      "actions": ["sns:SetEndpointAttributes"]
+      "builder": "makeSnsEndpointHttpBinding"
     },
     "SetSMSAttributes": {
       "operation": "setSMSAttributes",
@@ -426,17 +360,7 @@
         "interface": "SetSMSAttributesRequest",
         "omit": []
       },
-      "actions": [
-        "sns:SetSMSAttributes",
-        "sms-voice:DescribeSpendLimits",
-        "sms-voice:SetTextMessageSpendLimitOverride"
-      ],
-      "note": "Spend-limit updates fan out to AWS End User Messaging.",
-      "reviewed": {
-        "sms-voice:DescribeSpendLimits": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials.",
-        "sms-voice:SetTextMessageSpendLimitOverride": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials.",
-        "iam:PassRole": "Needed only when the request sets a role ARN attribute (delivery-status logging, a Firehose subscription role); not granted, so a role is never passed unasked."
-      }
+      "note": "Spend-limit updates fan out to AWS End User Messaging."
     },
     "SetSubscriptionAttributes": {
       "operation": "setSubscriptionAttributes",
@@ -447,12 +371,8 @@
         "omit": ["SubscriptionArn"]
       },
       "builder": "makeSnsSubscriptionHttpBinding",
-      "actions": ["sns:SetSubscriptionAttributes"],
       "with": {
         "key": "SubscriptionArn"
-      },
-      "reviewed": {
-        "iam:PassRole": "Needed only when the request sets a role ARN attribute (delivery-status logging, a Firehose subscription role); not granted, so a role is never passed unasked."
       }
     },
     "SetTopicAttributes": {
@@ -464,12 +384,8 @@
         "omit": ["TopicArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:SetTopicAttributes"],
       "with": {
         "key": "TopicArn"
-      },
-      "reviewed": {
-        "iam:PassRole": "Needed only when the request sets a role ARN attribute (delivery-status logging, a Firehose subscription role); not granted, so a role is never passed unasked."
       }
     },
     "Subscribe": {
@@ -481,12 +397,8 @@
         "omit": ["TopicArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:Subscribe"],
       "with": {
         "key": "TopicArn"
-      },
-      "reviewed": {
-        "iam:PassRole": "Needed only when the request sets a role ARN attribute (delivery-status logging, a Firehose subscription role); not granted, so a role is never passed unasked."
       }
     },
     "TagResource": {
@@ -498,7 +410,6 @@
         "omit": ["ResourceArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:TagResource"],
       "with": {
         "key": "ResourceArn"
       }
@@ -509,8 +420,7 @@
         "mode": "required",
         "interface": "UnsubscribeRequest",
         "omit": []
-      },
-      "actions": ["sns:Unsubscribe"]
+      }
     },
     "UntagResource": {
       "operation": "untagResource",
@@ -521,7 +431,6 @@
         "omit": ["ResourceArn"]
       },
       "builder": "makeSnsTopicHttpBinding",
-      "actions": ["sns:UntagResource"],
       "with": {
         "key": "ResourceArn"
       }
@@ -532,10 +441,6 @@
         "mode": "required",
         "interface": "VerifySMSSandboxPhoneNumberRequest",
         "omit": []
-      },
-      "actions": ["sns:VerifySMSSandboxPhoneNumber", "sms-voice:VerifyDestinationNumber"],
-      "reviewed": {
-        "sms-voice:VerifyDestinationNumber": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
       }
     }
   }

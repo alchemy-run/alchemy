@@ -52,7 +52,7 @@ export const CreateDBClusterSnapshotHttp = Layer.effect(
   makeRdsClusterHttpBinding({
     tag: "AWS.RDS.CreateDBClusterSnapshot",
     operation: rds.createDBClusterSnapshot,
-    actions: ["rds:CreateDBClusterSnapshot", "rds:AddTagsToResource"],
+    actions: ["rds:AddTagsToResource", "rds:CreateDBClusterSnapshot"],
     extraResources: (arn) => [`${arn.split(":").slice(0, 5).join(":")}:cluster-snapshot:*`],
   }),
 );

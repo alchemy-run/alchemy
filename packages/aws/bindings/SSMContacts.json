@@ -34,8 +34,7 @@
       "operation": "acceptPage",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ssm-contacts:AcceptPage"]
+      }
     },
     "ActivateContactChannel": {
       "operation": "activateContactChannel",
@@ -46,8 +45,7 @@
         "omit": ["ContactChannelId"],
         "inline": true
       },
-      "builder": "makeContactChannelHttpBinding",
-      "actions": ["ssm-contacts:ActivateContactChannel"]
+      "builder": "makeContactChannelHttpBinding"
     },
     "CreateRotationOverride": {
       "operation": "createRotationOverride",
@@ -57,8 +55,7 @@
         "omit": ["RotationId"],
         "inline": true
       },
-      "builder": "makeRotationHttpBinding",
-      "actions": ["ssm-contacts:CreateRotationOverride"]
+      "builder": "makeRotationHttpBinding"
     },
     "DeactivateContactChannel": {
       "operation": "deactivateContactChannel",
@@ -67,8 +64,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeContactChannelHttpBinding",
-      "actions": ["ssm-contacts:DeactivateContactChannel"]
+      "builder": "makeContactChannelHttpBinding"
     },
     "DeleteRotationOverride": {
       "operation": "deleteRotationOverride",
@@ -78,22 +74,19 @@
         "omit": ["RotationId"],
         "inline": true
       },
-      "builder": "makeRotationHttpBinding",
-      "actions": ["ssm-contacts:DeleteRotationOverride"]
+      "builder": "makeRotationHttpBinding"
     },
     "DescribeEngagement": {
       "operation": "describeEngagement",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ssm-contacts:DescribeEngagement"]
+      }
     },
     "DescribePage": {
       "operation": "describePage",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ssm-contacts:DescribePage"]
+      }
     },
     "GetRotationOverride": {
       "operation": "getRotationOverride",
@@ -103,26 +96,22 @@
         "omit": ["RotationId"],
         "inline": true
       },
-      "builder": "makeRotationHttpBinding",
-      "actions": ["ssm-contacts:GetRotationOverride"]
+      "builder": "makeRotationHttpBinding"
     },
     "ListEngagements": {
-      "operation": "listEngagements",
-      "actions": ["ssm-contacts:ListEngagements"]
+      "operation": "listEngagements"
     },
     "ListPageReceipts": {
       "operation": "listPageReceipts",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ssm-contacts:ListPageReceipts"]
+      }
     },
     "ListPageResolutions": {
       "operation": "listPageResolutions",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ssm-contacts:ListPageResolutions"]
+      }
     },
     "ListPagesByContact": {
       "operation": "listPagesByContact",
@@ -132,22 +121,19 @@
         "omit": ["ContactId"],
         "inline": true
       },
-      "builder": "makeContactHttpBinding",
-      "actions": ["ssm-contacts:ListPagesByContact"]
+      "builder": "makeContactHttpBinding"
     },
     "ListPagesByEngagement": {
       "operation": "listPagesByEngagement",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ssm-contacts:ListPagesByEngagement"]
+      }
     },
     "ListPreviewRotationShifts": {
       "operation": "listPreviewRotationShifts",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ssm-contacts:ListPreviewRotationShifts"]
+      }
     },
     "ListRotationOverrides": {
       "operation": "listRotationOverrides",
@@ -157,8 +143,7 @@
         "omit": ["RotationId"],
         "inline": true
       },
-      "builder": "makeRotationHttpBinding",
-      "actions": ["ssm-contacts:ListRotationOverrides"]
+      "builder": "makeRotationHttpBinding"
     },
     "ListRotationShifts": {
       "operation": "listRotationShifts",
@@ -168,8 +153,7 @@
         "omit": ["RotationId"],
         "inline": true
       },
-      "builder": "makeRotationHttpBinding",
-      "actions": ["ssm-contacts:ListRotationShifts"]
+      "builder": "makeRotationHttpBinding"
     },
     "SendActivationCode": {
       "operation": "sendActivationCode",
@@ -178,8 +162,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeContactChannelHttpBinding",
-      "actions": ["ssm-contacts:SendActivationCode"]
+      "builder": "makeContactChannelHttpBinding"
     },
     "StartEngagement": {
       "operation": "startEngagement",
@@ -189,15 +172,13 @@
         "omit": ["ContactId"],
         "inline": true
       },
-      "builder": "makeContactHttpBinding",
-      "actions": ["ssm-contacts:StartEngagement"]
+      "builder": "makeContactHttpBinding"
     },
     "StopEngagement": {
       "operation": "stopEngagement",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ssm-contacts:StopEngagement"]
+      }
     }
   }
 }

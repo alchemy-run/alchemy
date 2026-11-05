@@ -56,5 +56,6 @@ export const AssociateLibraryItemReviewHttp = Layer.effect(
     capability: "AssociateLibraryItemReview",
     iamActions: ["qapps:AssociateLibraryItemReview"],
     operation: qapps.associateLibraryItemReview,
+    arns: ["arn:${Partition}:qapps:${Region}:${Account}:application/*/qapp/*"],
   }),
 );

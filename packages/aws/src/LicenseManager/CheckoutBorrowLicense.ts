@@ -56,5 +56,6 @@ export const CheckoutBorrowLicenseHttp = Layer.effect(
     capability: "CheckoutBorrowLicense",
     iamActions: ["license-manager:CheckoutBorrowLicense"],
     operation: licensemanager.checkoutBorrowLicense,
+    arns: ["arn:${Partition}:license-manager::${Account}:license:*"],
   }),
 );

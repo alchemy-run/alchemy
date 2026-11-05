@@ -46,5 +46,6 @@ export const ListResourceSetResourcesHttp = Layer.effect(
     capability: "ListResourceSetResources",
     iamActions: ["fms:ListResourceSetResources"],
     operation: fms.listResourceSetResources,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:resource-set/*"],
   }),
 );

@@ -46,5 +46,9 @@ export const UpdateIncidentRecordHttp = Layer.effect(
     tag: "AWS.SSMIncidents.UpdateIncidentRecord",
     operation: incidents.updateIncidentRecord,
     actions: ["ssm-incidents:UpdateIncidentRecord"],
+    arns: [
+      "arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*",
+      "arn:${Partition}:ssm-incidents::${Account}:response-plan/*",
+    ],
   }),
 );

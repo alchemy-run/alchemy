@@ -39,5 +39,6 @@ export const GetRunHttp = Layer.effect(
     tag: "AWS.Omics.GetRun",
     operation: omics.getRun,
     actions: ["omics:GetRun"],
+    arns: ["arn:${Partition}:omics:${Region}:${Account}:run/*"],
   }),
 );

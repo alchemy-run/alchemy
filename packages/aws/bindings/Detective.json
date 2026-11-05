@@ -22,8 +22,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:AcceptInvitation"]
+      "builder": "makeDetectiveAccountHttpBinding"
     },
     "BatchGetGraphMemberDatasources": {
       "operation": "batchGetGraphMemberDatasources",
@@ -32,16 +31,14 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:BatchGetGraphMemberDatasources"]
+      }
     },
     "BatchGetMembershipDatasources": {
       "operation": "batchGetMembershipDatasources",
       "request": {
         "mode": "required"
       },
-      "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:BatchGetMembershipDatasources"]
+      "builder": "makeDetectiveAccountHttpBinding"
     },
     "CreateMembers": {
       "operation": "createMembers",
@@ -50,8 +47,7 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:CreateMembers"]
+      }
     },
     "DeleteMembers": {
       "operation": "deleteMembers",
@@ -60,45 +56,35 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:DeleteMembers"]
+      }
     },
     "DescribeOrganizationConfiguration": {
       "operation": "describeOrganizationConfiguration",
       "resource": "Graph",
       "request": {
         "mode": "none"
-      },
-      "actions": ["detective:DescribeOrganizationConfiguration"]
+      }
     },
     "DisableOrganizationAdminAccount": {
       "operation": "disableOrganizationAdminAccount",
       "request": {
         "mode": "none"
       },
-      "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:DisableOrganizationAdminAccount"]
+      "builder": "makeDetectiveAccountHttpBinding"
     },
     "DisassociateMembership": {
       "operation": "disassociateMembership",
       "request": {
         "mode": "required"
       },
-      "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:DisassociateMembership"]
+      "builder": "makeDetectiveAccountHttpBinding"
     },
     "EnableOrganizationAdminAccount": {
       "operation": "enableOrganizationAdminAccount",
       "request": {
         "mode": "required"
       },
-      "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:EnableOrganizationAdminAccount"],
-      "reviewed": {
-        "iam:CreateServiceLinkedRole": "Needed only the first time an organization enables Detective (its service-linked role and trusted access), which the management account sets up; not granted to a runtime.",
-        "organizations:EnableAWSServiceAccess": "Needed only the first time an organization enables Detective (its service-linked role and trusted access), which the management account sets up; not granted to a runtime.",
-        "organizations:RegisterDelegatedAdministrator": "Needed only the first time an organization enables Detective (its service-linked role and trusted access), which the management account sets up; not granted to a runtime."
-      }
+      "builder": "makeDetectiveAccountHttpBinding"
     },
     "GetInvestigation": {
       "operation": "getInvestigation",
@@ -107,8 +93,7 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:GetInvestigation"]
+      }
     },
     "GetMembers": {
       "operation": "getMembers",
@@ -117,8 +102,7 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:GetMembers"]
+      }
     },
     "ListDatasourcePackages": {
       "operation": "listDatasourcePackages",
@@ -127,8 +111,7 @@
         "mode": "optional",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:ListDatasourcePackages"]
+      }
     },
     "ListIndicators": {
       "operation": "listIndicators",
@@ -137,8 +120,7 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:ListIndicators"]
+      }
     },
     "ListInvestigations": {
       "operation": "listInvestigations",
@@ -147,13 +129,11 @@
         "mode": "optional",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:ListInvestigations"]
+      }
     },
     "ListInvitations": {
       "operation": "listInvitations",
-      "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:ListInvitations"]
+      "builder": "makeDetectiveAccountHttpBinding"
     },
     "ListMembers": {
       "operation": "listMembers",
@@ -162,25 +142,18 @@
         "mode": "optional",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:ListMembers"]
+      }
     },
     "ListOrganizationAdminAccounts": {
       "operation": "listOrganizationAdminAccounts",
-      "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:ListOrganizationAdminAccounts"],
-      "reviewed": {
-        "detective:ListOrganizationAdminAccount": "AWS lists it for the operation, but the Detective Bindings suite calls it successfully without it.",
-        "detective:ListOrganizationAdminAccounts": "Not in AWS's reference (which names it ListOrganizationAdminAccount), but the Detective Bindings suite calls the operation successfully with it."
-      }
+      "builder": "makeDetectiveAccountHttpBinding"
     },
     "RejectInvitation": {
       "operation": "rejectInvitation",
       "request": {
         "mode": "required"
       },
-      "builder": "makeDetectiveAccountHttpBinding",
-      "actions": ["detective:RejectInvitation"]
+      "builder": "makeDetectiveAccountHttpBinding"
     },
     "StartInvestigation": {
       "operation": "startInvestigation",
@@ -189,8 +162,7 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:StartInvestigation"]
+      }
     },
     "StartMonitoringMember": {
       "operation": "startMonitoringMember",
@@ -199,8 +171,7 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:StartMonitoringMember"]
+      }
     },
     "UpdateDatasourcePackages": {
       "operation": "updateDatasourcePackages",
@@ -209,8 +180,7 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:UpdateDatasourcePackages"]
+      }
     },
     "UpdateInvestigationState": {
       "operation": "updateInvestigationState",
@@ -219,8 +189,7 @@
         "mode": "required",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:UpdateInvestigationState"]
+      }
     },
     "UpdateOrganizationConfiguration": {
       "operation": "updateOrganizationConfiguration",
@@ -229,8 +198,7 @@
         "mode": "optional",
         "omit": ["GraphArn"],
         "inline": true
-      },
-      "actions": ["detective:UpdateOrganizationConfiguration"]
+      }
     }
   }
 }

@@ -66,7 +66,7 @@ export const RegisterDomainHttp = Layer.effect(
   // RegisterDomain pre-validates that the caller can create the hosted zone Route 53 auto-creates during registration — without route53:CreateHostedZone the API rejects the call with AccessDeniedException ("not authorized to perform: route53:CreateHostedZone") before even validating the TLD.
   makeRoute53DomainsHttpBinding({
     capability: "RegisterDomain",
-    iamActions: ["route53domains:RegisterDomain", "route53:CreateHostedZone"],
+    iamActions: ["route53:CreateHostedZone", "route53domains:RegisterDomain"],
     operation: route53domains.registerDomain,
   }),
 );

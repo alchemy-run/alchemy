@@ -51,5 +51,6 @@ export const DetectCustomLabelsHttp = Layer.effect(
     tag: "AWS.Rekognition.DetectCustomLabels",
     operation: rekognition.detectCustomLabels,
     actions: ["rekognition:DetectCustomLabels"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:project/*/version/*/*"],
   }),
 );

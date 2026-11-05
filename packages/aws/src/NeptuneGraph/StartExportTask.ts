@@ -47,7 +47,7 @@ export const StartExportTaskHttp = Layer.effect(
   makeNeptuneGraphGraphHttpBinding({
     tag: "AWS.NeptuneGraph.StartExportTask",
     operation: neptunegraph.startExportTask,
-    actions: ["neptune-graph:StartExportTask"],
+    actions: ["neptune-graph:StartExportTask", "neptune-graph:TagResource"],
     passRole: true,
     extraResources: [EXPORT_TASK_ARN_WILDCARD],
   }),

@@ -42,5 +42,6 @@ export const GetMemberHttp = Layer.effect(
     tag: "AWS.Macie2.GetMember",
     operation: macie2.getMember,
     actions: ["macie2:GetMember"],
+    arns: ["arn:${Partition}:macie2:${Region}:${Account}:member/*"],
   }),
 );

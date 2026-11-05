@@ -48,7 +48,8 @@ export const PutPolicyHttp = Layer.effect(
   PutPolicy,
   makeFmsHttpBinding({
     capability: "PutPolicy",
-    iamActions: ["fms:PutPolicy"],
+    iamActions: ["fms:PutPolicy", "fms:TagResource"],
     operation: fms.putPolicy,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:policy/*"],
   }),
 );

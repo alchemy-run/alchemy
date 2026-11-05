@@ -29,7 +29,6 @@
         "omit": ["SloIds"]
       },
       "builder": "makeSloBatchHttpBinding",
-      "actions": ["application-signals:BatchGetServiceLevelObjectiveBudgetReport"],
       "with": {
         "accountActions": ["cloudwatch:GetMetricData"]
       },
@@ -44,15 +43,13 @@
         "interface": "UpdateExclusionWindowsRequest",
         "omit": ["SloIds"]
       },
-      "builder": "makeSloBatchHttpBinding",
-      "actions": ["application-signals:BatchUpdateExclusionWindows"]
+      "builder": "makeSloBatchHttpBinding"
     },
     "GetService": {
       "operation": "getService",
       "request": {
         "mode": "required"
-      },
-      "actions": ["application-signals:GetService"]
+      }
     },
     "GetServiceLevelObjective": {
       "operation": "getServiceLevelObjective",
@@ -61,45 +58,32 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeSloIdHttpBinding",
-      "actions": ["application-signals:GetServiceLevelObjective"]
+      "builder": "makeSloIdHttpBinding"
     },
     "ListAuditFindings": {
       "operation": "listAuditFindings",
       "request": {
         "mode": "required"
       },
-      "actions": [
-        "application-signals:ListAuditFindings",
-        "application-signals:ListServiceLevelObjectives",
-        "cloudwatch:GetMetricData"
-      ],
-      "note": "The auditors run with the CALLER's credentials — verified live: a service-target audit fails with AccessDeniedException (empty message) unless the caller can also enumerate SLOs and read metric data. Deeper detail levels (trace/log auditors) may need further read permissions (xray/logs).",
-      "reviewed": {
-        "cloudwatch:GetMetricData": "See the note: The auditors run with the CALLER's credentials — verified live: a service-target audit fails with AccessDeniedException (empty message) unless the caller can also enumerate SLOs and read metric data.",
-        "application-signals:GetServiceLevelObjective": "AWS lists it for the operation, but the ApplicationSignals Bindings suite calls it successfully without it."
-      }
+      "note": "The auditors run with the CALLER's credentials — verified live: a service-target audit fails with AccessDeniedException (empty message) unless the caller can also enumerate SLOs and read metric data. Deeper detail levels (trace/log auditors) may need further read permissions (xray/logs)."
     },
     "ListEntityEvents": {
       "operation": "listEntityEvents",
       "request": {
         "mode": "required"
-      },
-      "actions": ["application-signals:ListEntityEvents"]
+      }
     },
     "ListServiceDependencies": {
       "operation": "listServiceDependencies",
       "request": {
         "mode": "required"
-      },
-      "actions": ["application-signals:ListServiceDependencies"]
+      }
     },
     "ListServiceDependents": {
       "operation": "listServiceDependents",
       "request": {
         "mode": "required"
-      },
-      "actions": ["application-signals:ListServiceDependents"]
+      }
     },
     "ListServiceLevelObjectiveExclusionWindows": {
       "operation": "listServiceLevelObjectiveExclusionWindows",
@@ -110,36 +94,31 @@
         "interface": "ListExclusionWindowsRequest",
         "omit": ["Id"]
       },
-      "builder": "makeSloIdHttpBinding",
-      "actions": ["application-signals:ListServiceLevelObjectiveExclusionWindows"]
+      "builder": "makeSloIdHttpBinding"
     },
     "ListServiceLevelObjectives": {
       "operation": "listServiceLevelObjectives",
       "request": {
         "mode": "required"
-      },
-      "actions": ["application-signals:ListServiceLevelObjectives"]
+      }
     },
     "ListServiceOperations": {
       "operation": "listServiceOperations",
       "request": {
         "mode": "required"
-      },
-      "actions": ["application-signals:ListServiceOperations"]
+      }
     },
     "ListServiceStates": {
       "operation": "listServiceStates",
       "request": {
         "mode": "required"
-      },
-      "actions": ["application-signals:ListServiceStates"]
+      }
     },
     "ListServices": {
       "operation": "listServices",
       "request": {
         "mode": "required"
-      },
-      "actions": ["application-signals:ListServices"]
+      }
     }
   }
 }

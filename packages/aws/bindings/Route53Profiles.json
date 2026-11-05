@@ -22,8 +22,7 @@
         "mode": "optional",
         "interface": "ListProfileAssociationsRequest",
         "omit": ["ProfileId"]
-      },
-      "actions": ["route53profiles:ListProfileAssociations"]
+      }
     },
     "ListProfileResourceAssociations": {
       "operation": "listProfileResourceAssociations",
@@ -32,8 +31,7 @@
         "mode": "optional",
         "interface": "ListProfileResourceAssociationsRequest",
         "omit": ["ProfileId"]
-      },
-      "actions": ["route53profiles:ListProfileResourceAssociations"]
+      }
     }
   }
 }

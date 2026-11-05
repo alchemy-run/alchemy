@@ -42,5 +42,6 @@ export const DeleteMemberHttp = Layer.effect(
     tag: "AWS.Macie2.DeleteMember",
     operation: macie2.deleteMember,
     actions: ["macie2:DeleteMember"],
+    arns: ["arn:${Partition}:macie2:${Region}:${Account}:member/*"],
   }),
 );

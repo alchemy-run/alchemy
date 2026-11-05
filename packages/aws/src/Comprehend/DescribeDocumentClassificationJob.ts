@@ -49,5 +49,6 @@ export const DescribeDocumentClassificationJobHttp = Layer.effect(
     tag: "AWS.Comprehend.DescribeDocumentClassificationJob",
     operation: comprehend.describeDocumentClassificationJob,
     actions: ["comprehend:DescribeDocumentClassificationJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:document-classification-job/*"],
   }),
 );

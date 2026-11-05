@@ -14,36 +14,25 @@
       "operation": "describeAttack",
       "request": {
         "mode": "required"
-      },
-      "actions": ["shield:DescribeAttack"],
-      "arns": ["arn:${Partition}:shield::${Account}:attack/*"],
-      "reviewed": {
-        "shield:DescribeProtectionGroup": "AWS lists it for the operation, but the Shield Bindings suite calls it successfully without it."
       }
     },
     "DescribeAttackStatistics": {
-      "operation": "describeAttackStatistics",
-      "actions": ["shield:DescribeAttackStatistics"]
+      "operation": "describeAttackStatistics"
     },
     "DescribeDRTAccess": {
-      "operation": "describeDRTAccess",
-      "actions": ["shield:DescribeDRTAccess"]
+      "operation": "describeDRTAccess"
     },
     "GetSubscriptionState": {
-      "operation": "getSubscriptionState",
-      "actions": ["shield:GetSubscriptionState"]
+      "operation": "getSubscriptionState"
     },
     "ListAttacks": {
-      "operation": "listAttacks",
-      "actions": ["shield:ListAttacks"]
+      "operation": "listAttacks"
     },
     "ListResourcesInProtectionGroup": {
       "operation": "listResourcesInProtectionGroup",
       "request": {
         "mode": "required"
-      },
-      "actions": ["shield:ListResourcesInProtectionGroup"],
-      "arns": ["arn:${Partition}:shield::${Account}:protection-group/*"]
+      }
     }
   }
 }

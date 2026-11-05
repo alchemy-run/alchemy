@@ -42,5 +42,6 @@ export const GetPolicyHttp = Layer.effect(
     capability: "GetPolicy",
     iamActions: ["fms:GetPolicy"],
     operation: fms.getPolicy,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:policy/*"],
   }),
 );

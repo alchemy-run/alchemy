@@ -22,8 +22,7 @@
       "operation": "batchGetEffectiveLifecyclePolicy",
       "request": {
         "mode": "required"
-      },
-      "actions": ["aoss:BatchGetEffectiveLifecyclePolicy"]
+      }
     },
     "CreateIndex": {
       "operation": "createIndex",
@@ -34,11 +33,7 @@
         "inline": true
       },
       "builder": "makeAossCollectionHttpBinding",
-      "actions": ["aoss:CreateIndex", "aoss:APIAccessAll"],
-      "note": "IAM checks both: `aoss:CreateIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it). IAM has no narrower data-plane action; per-index permissions belong in the collection's AccessPolicy.",
-      "reviewed": {
-        "aoss:APIAccessAll": "See the note: IAM checks both: `aoss:CreateIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it)."
-      }
+      "note": "IAM checks both: `aoss:CreateIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it). IAM has no narrower data-plane action; per-index permissions belong in the collection's AccessPolicy."
     },
     "DeleteIndex": {
       "operation": "deleteIndex",
@@ -49,15 +44,10 @@
         "inline": true
       },
       "builder": "makeAossCollectionHttpBinding",
-      "actions": ["aoss:DeleteIndex", "aoss:APIAccessAll"],
-      "note": "IAM checks both: `aoss:DeleteIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it). IAM has no narrower data-plane action; per-index permissions belong in the collection's AccessPolicy.",
-      "reviewed": {
-        "aoss:APIAccessAll": "See the note: IAM checks both: `aoss:DeleteIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it)."
-      }
+      "note": "IAM checks both: `aoss:DeleteIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it). IAM has no narrower data-plane action; per-index permissions belong in the collection's AccessPolicy."
     },
     "GetAccountSettings": {
-      "operation": "getAccountSettings",
-      "actions": ["aoss:GetAccountSettings"]
+      "operation": "getAccountSettings"
     },
     "GetIndex": {
       "operation": "getIndex",
@@ -68,22 +58,16 @@
         "inline": true
       },
       "builder": "makeAossCollectionHttpBinding",
-      "actions": ["aoss:GetIndex", "aoss:APIAccessAll"],
-      "note": "IAM checks both: `aoss:GetIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it). IAM has no narrower data-plane action; per-index permissions belong in the collection's AccessPolicy.",
-      "reviewed": {
-        "aoss:APIAccessAll": "See the note: IAM checks both: `aoss:GetIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it)."
-      }
+      "note": "IAM checks both: `aoss:GetIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it). IAM has no narrower data-plane action; per-index permissions belong in the collection's AccessPolicy."
     },
     "GetPoliciesStats": {
-      "operation": "getPoliciesStats",
-      "actions": ["aoss:GetPoliciesStats"]
+      "operation": "getPoliciesStats"
     },
     "UpdateAccountSettings": {
       "operation": "updateAccountSettings",
       "request": {
         "mode": "required"
-      },
-      "actions": ["aoss:UpdateAccountSettings"]
+      }
     },
     "UpdateIndex": {
       "operation": "updateIndex",
@@ -94,11 +78,7 @@
         "inline": true
       },
       "builder": "makeAossCollectionHttpBinding",
-      "actions": ["aoss:UpdateIndex", "aoss:APIAccessAll"],
-      "note": "IAM checks both: `aoss:UpdateIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it). IAM has no narrower data-plane action; per-index permissions belong in the collection's AccessPolicy.",
-      "reviewed": {
-        "aoss:APIAccessAll": "See the note: IAM checks both: `aoss:UpdateIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it)."
-      }
+      "note": "IAM checks both: `aoss:UpdateIndex` for the API call, and `aoss:APIAccessAll` because the service reads the index through the collection's data plane (\"Access denied to head index\" without it). IAM has no narrower data-plane action; per-index permissions belong in the collection's AccessPolicy."
     }
   }
 }

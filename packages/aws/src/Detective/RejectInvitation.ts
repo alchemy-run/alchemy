@@ -42,5 +42,6 @@ export const RejectInvitationHttp = Layer.effect(
     tag: "AWS.Detective.RejectInvitation",
     operation: detective.rejectInvitation,
     actions: ["detective:RejectInvitation"],
+    arns: ["arn:${Partition}:detective:${Region}:${Account}:graph:*"],
   }),
 );

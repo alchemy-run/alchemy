@@ -50,5 +50,6 @@ export const DescribeStreamProcessorHttp = Layer.effect(
     tag: "AWS.Rekognition.DescribeStreamProcessor",
     operation: rekognition.describeStreamProcessor,
     actions: ["rekognition:DescribeStreamProcessor"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:streamprocessor/*"],
   }),
 );

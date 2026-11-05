@@ -19,8 +19,7 @@
   "bindings": {
     "DescribeCanariesLastRun": {
       "operation": "describeCanariesLastRun",
-      "builder": "makeSyntheticsAccountHttpBinding",
-      "actions": ["synthetics:DescribeCanariesLastRun"]
+      "builder": "makeSyntheticsAccountHttpBinding"
     },
     "GetCanary": {
       "operation": "getCanary",
@@ -29,8 +28,7 @@
         "mode": "optional",
         "interface": "GetCanaryRequest",
         "omit": ["Name"]
-      },
-      "actions": ["synthetics:GetCanary"]
+      }
     },
     "GetCanaryRuns": {
       "operation": "getCanaryRuns",
@@ -39,24 +37,21 @@
         "mode": "optional",
         "interface": "GetCanaryRunsRequest",
         "omit": ["Name"]
-      },
-      "actions": ["synthetics:GetCanaryRuns"]
+      }
     },
     "StartCanary": {
       "operation": "startCanary",
       "resource": "Canary",
       "request": {
         "mode": "none"
-      },
-      "actions": ["synthetics:StartCanary"]
+      }
     },
     "StopCanary": {
       "operation": "stopCanary",
       "resource": "Canary",
       "request": {
         "mode": "none"
-      },
-      "actions": ["synthetics:StopCanary"]
+      }
     }
   }
 }

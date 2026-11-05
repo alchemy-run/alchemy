@@ -49,5 +49,6 @@ export const CancelImageCreationHttp = Layer.effect(
     tag: "AWS.ImageBuilder.CancelImageCreation",
     operation: imagebuilder.cancelImageCreation,
     actions: ["imagebuilder:CancelImageCreation"],
+    arns: ["arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*"],
   }),
 );

@@ -24,8 +24,7 @@
         "mode": "required",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:AssociateLicense"]
+      }
     },
     "CreateWorkspaceServiceAccount": {
       "operation": "createWorkspaceServiceAccount",
@@ -34,8 +33,7 @@
         "mode": "required",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:CreateWorkspaceServiceAccount"]
+      }
     },
     "DeleteWorkspaceServiceAccount": {
       "operation": "deleteWorkspaceServiceAccount",
@@ -44,8 +42,7 @@
         "mode": "required",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:DeleteWorkspaceServiceAccount"]
+      }
     },
     "DeleteWorkspaceServiceAccountToken": {
       "operation": "deleteWorkspaceServiceAccountToken",
@@ -54,24 +51,21 @@
         "mode": "required",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:DeleteWorkspaceServiceAccountToken"]
+      }
     },
     "DescribeWorkspaceAuthentication": {
       "operation": "describeWorkspaceAuthentication",
       "resource": "Workspace",
       "request": {
         "mode": "none"
-      },
-      "actions": ["grafana:DescribeWorkspaceAuthentication"]
+      }
     },
     "DescribeWorkspaceConfiguration": {
       "operation": "describeWorkspaceConfiguration",
       "resource": "Workspace",
       "request": {
         "mode": "none"
-      },
-      "actions": ["grafana:DescribeWorkspaceConfiguration"]
+      }
     },
     "DisassociateLicense": {
       "operation": "disassociateLicense",
@@ -80,8 +74,7 @@
         "mode": "required",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:DisassociateLicense"]
+      }
     },
     "ListPermissions": {
       "operation": "listPermissions",
@@ -90,16 +83,11 @@
         "mode": "optional",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:ListPermissions"]
+      }
     },
     "ListVersions": {
       "operation": "listVersions",
-      "builder": "makeGrafanaAccountHttpBinding",
-      "actions": ["grafana:ListVersions"],
-      "reviewed": {
-        "grafana:DescribeWorkspace": "AWS lists it for the operation, but the Grafana Bindings suite calls it successfully without it."
-      }
+      "builder": "makeGrafanaAccountHttpBinding"
     },
     "ListWorkspaceServiceAccountTokens": {
       "operation": "listWorkspaceServiceAccountTokens",
@@ -108,8 +96,7 @@
         "mode": "required",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:ListWorkspaceServiceAccountTokens"]
+      }
     },
     "ListWorkspaceServiceAccounts": {
       "operation": "listWorkspaceServiceAccounts",
@@ -118,8 +105,7 @@
         "mode": "optional",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:ListWorkspaceServiceAccounts"]
+      }
     },
     "UpdatePermissions": {
       "operation": "updatePermissions",
@@ -128,8 +114,7 @@
         "mode": "required",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:UpdatePermissions"]
+      }
     },
     "UpdateWorkspaceAuthentication": {
       "operation": "updateWorkspaceAuthentication",
@@ -138,8 +123,7 @@
         "mode": "required",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:UpdateWorkspaceAuthentication"]
+      }
     },
     "UpdateWorkspaceConfiguration": {
       "operation": "updateWorkspaceConfiguration",
@@ -148,8 +132,7 @@
         "mode": "required",
         "omit": ["workspaceId"],
         "inline": true
-      },
-      "actions": ["grafana:UpdateWorkspaceConfiguration"]
+      }
     }
   }
 }

@@ -24,9 +24,7 @@
         "interface": "CancelJobRequest",
         "omit": []
       },
-      "actions": ["batch:CancelJob"],
-      "note": "Job ARNs (arn:…:job/{jobId}) are only known at runtime, so the statement cannot enumerate them at deploy time.",
-      "arns": ["arn:${Partition}:batch:${Region}:${Account}:job/*"]
+      "note": "Job ARNs (arn:…:job/{jobId}) are only known at runtime, so the statement cannot enumerate them at deploy time."
     },
     "DescribeJobs": {
       "operation": "describeJobs",
@@ -37,7 +35,6 @@
         "interface": "DescribeJobsRequest",
         "omit": []
       },
-      "actions": ["batch:DescribeJobs"],
       "note": "batch:DescribeJobs does not support resource-level IAM."
     },
     "GetJobQueueSnapshot": {
@@ -50,7 +47,6 @@
         "omit": ["jobQueue"]
       },
       "builder": "makeBatchQueueHttpBinding",
-      "actions": ["batch:GetJobQueueSnapshot"],
       "note": "batch:GetJobQueueSnapshot supports the job-queue resource type — scope the grant to the bound queue's ARN."
     },
     "ListJobs": {
@@ -63,7 +59,6 @@
         "omit": ["jobQueue"]
       },
       "builder": "makeBatchQueueHttpBinding",
-      "actions": ["batch:ListJobs"],
       "with": {
         "wildcardIam": true
       },
@@ -78,9 +73,7 @@
         "interface": "TerminateJobRequest",
         "omit": []
       },
-      "actions": ["batch:TerminateJob"],
-      "note": "Job ARNs (arn:…:job/{jobId}) are only known at runtime, so the statement cannot enumerate them at deploy time.",
-      "arns": ["arn:${Partition}:batch:${Region}:${Account}:job/*"]
+      "note": "Job ARNs (arn:…:job/{jobId}) are only known at runtime, so the statement cannot enumerate them at deploy time."
     }
   }
 }

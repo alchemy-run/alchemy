@@ -49,5 +49,6 @@ export const DescribeKeyPhrasesDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.DescribeKeyPhrasesDetectionJob",
     operation: comprehend.describeKeyPhrasesDetectionJob,
     actions: ["comprehend:DescribeKeyPhrasesDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:key-phrases-detection-job/*"],
   }),
 );

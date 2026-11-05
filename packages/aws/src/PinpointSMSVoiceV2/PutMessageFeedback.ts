@@ -52,5 +52,6 @@ export const PutMessageFeedbackHttp = Layer.effect(
     tag: "AWS.PinpointSMSVoiceV2.PutMessageFeedback",
     operation: smsvoice.putMessageFeedback,
     actions: ["sms-voice:PutMessageFeedback"],
+    arns: ["arn:${Partition}:sms-voice:${Region}:${Account}:message/*"],
   }),
 );

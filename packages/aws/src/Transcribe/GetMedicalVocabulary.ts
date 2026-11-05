@@ -48,5 +48,6 @@ export const GetMedicalVocabularyHttp = Layer.effect(
     tag: "AWS.Transcribe.GetMedicalVocabulary",
     operation: transcribe.getMedicalVocabulary,
     actions: ["transcribe:GetMedicalVocabulary"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:medical-vocabulary/*"],
   }),
 );

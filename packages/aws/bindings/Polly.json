@@ -16,37 +16,31 @@
   },
   "bindings": {
     "DescribeVoices": {
-      "operation": "describeVoices",
-      "actions": ["polly:DescribeVoices"]
+      "operation": "describeVoices"
     },
     "GetSpeechSynthesisTask": {
       "operation": "getSpeechSynthesisTask",
       "request": {
         "mode": "required"
-      },
-      "actions": ["polly:GetSpeechSynthesisTask"]
+      }
     },
     "ListLexicons": {
-      "operation": "listLexicons",
-      "actions": ["polly:ListLexicons"]
+      "operation": "listLexicons"
     },
     "ListSpeechSynthesisTasks": {
-      "operation": "listSpeechSynthesisTasks",
-      "actions": ["polly:ListSpeechSynthesisTasks"]
+      "operation": "listSpeechSynthesisTasks"
     },
     "StartSpeechSynthesisStream": {
       "operation": "startSpeechSynthesisStream",
       "request": {
         "mode": "required"
-      },
-      "actions": ["polly:StartSpeechSynthesisStream"]
+      }
     },
     "StartSpeechSynthesisTask": {
       "operation": "startSpeechSynthesisTask",
       "request": {
         "mode": "required"
-      },
-      "actions": ["polly:StartSpeechSynthesisTask"]
+      }
     }
   }
 }

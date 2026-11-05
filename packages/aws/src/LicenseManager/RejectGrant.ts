@@ -44,5 +44,6 @@ export const RejectGrantHttp = Layer.effect(
     capability: "RejectGrant",
     iamActions: ["license-manager:RejectGrant"],
     operation: licensemanager.rejectGrant,
+    arns: ["arn:${Partition}:license-manager::${Account}:grant:*"],
   }),
 );

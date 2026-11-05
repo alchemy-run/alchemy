@@ -52,6 +52,6 @@ export const StartMedicalTranscriptionJobHttp = Layer.effect(
   makeTranscribeHttpBinding({
     tag: "AWS.Transcribe.StartMedicalTranscriptionJob",
     operation: transcribe.startMedicalTranscriptionJob,
-    actions: ["transcribe:StartMedicalTranscriptionJob"],
+    actions: ["transcribe:StartMedicalTranscriptionJob", "transcribe:TagResource"],
   }),
 );

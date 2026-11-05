@@ -59,8 +59,9 @@ export const CreateDatasetImportJobHttp = Layer.effect(
   CreateDatasetImportJob,
   makeForecastHttpBinding({
     capability: "CreateDatasetImportJob",
-    iamActions: ["forecast:CreateDatasetImportJob"],
+    iamActions: ["forecast:CreateDatasetImportJob", "forecast:TagResource"],
     operation: forecast.createDatasetImportJob,
     passRole: true,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:dataset-import-job/*"],
   }),
 );

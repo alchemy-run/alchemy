@@ -39,5 +39,6 @@ export const DeleteRunHttp = Layer.effect(
     tag: "AWS.Omics.DeleteRun",
     operation: omics.deleteRun,
     actions: ["omics:DeleteRun"],
+    arns: ["arn:${Partition}:omics:${Region}:${Account}:run/*"],
   }),
 );

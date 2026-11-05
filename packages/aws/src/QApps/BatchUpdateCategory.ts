@@ -53,5 +53,6 @@ export const BatchUpdateCategoryHttp = Layer.effect(
     capability: "BatchUpdateCategory",
     iamActions: ["qapps:BatchUpdateCategory"],
     operation: qapps.batchUpdateCategory,
+    arns: ["arn:${Partition}:qbusiness:${Region}:${Account}:application/*"],
   }),
 );

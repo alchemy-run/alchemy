@@ -27,24 +27,18 @@
       "operation": "applyPendingMaintenanceAction",
       "request": {
         "mode": "required"
-      },
-      "actions": ["rds:ApplyPendingMaintenanceAction"]
+      }
     },
     "CopyDBClusterSnapshot": {
       "operation": "copyDBClusterSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["rds:CopyDBClusterSnapshot", "rds:AddTagsToResource"]
+      }
     },
     "CopyDBSnapshot": {
       "operation": "copyDBSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["rds:CopyDBSnapshot", "rds:AddTagsToResource"],
-      "reviewed": {
-        "rds:CopyCustomDBEngineVersion": "AWS lists it for the operation, but the RDS Bindings suite calls it successfully without it."
       }
     },
     "CreateDBClusterSnapshot": {
@@ -57,7 +51,6 @@
         "inline": true
       },
       "builder": "makeRdsClusterHttpBinding",
-      "actions": ["rds:CreateDBClusterSnapshot", "rds:AddTagsToResource"],
       "withTs": {
         "extraResources": "(arn) => [`${arn.split(\":\").slice(0, 5).join(\":\")}:cluster-snapshot:*`]"
       },
@@ -73,7 +66,6 @@
         "inline": true
       },
       "builder": "makeRdsInstanceHttpBinding",
-      "actions": ["rds:CreateDBSnapshot", "rds:AddTagsToResource"],
       "withTs": {
         "extraResources": "(arn) => [`${arn.split(\":\").slice(0, 5).join(\":\")}:snapshot:*`]"
       },
@@ -83,45 +75,34 @@
       "operation": "deleteDBClusterSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["rds:DeleteDBClusterSnapshot"],
-      "arns": ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"]
+      }
     },
     "DeleteDBSnapshot": {
       "operation": "deleteDBSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["rds:DeleteDBSnapshot"],
-      "arns": ["arn:${Partition}:rds:${Region}:${Account}:snapshot:*"]
+      }
     },
     "DescribeDBClusterEndpoints": {
-      "operation": "describeDBClusterEndpoints",
-      "actions": ["rds:DescribeDBClusterEndpoints"]
+      "operation": "describeDBClusterEndpoints"
     },
     "DescribeDBClusterSnapshots": {
-      "operation": "describeDBClusterSnapshots",
-      "actions": ["rds:DescribeDBClusterSnapshots"]
+      "operation": "describeDBClusterSnapshots"
     },
     "DescribeDBClusters": {
-      "operation": "describeDBClusters",
-      "actions": ["rds:DescribeDBClusters"]
+      "operation": "describeDBClusters"
     },
     "DescribeDBInstances": {
-      "operation": "describeDBInstances",
-      "actions": ["rds:DescribeDBInstances"]
+      "operation": "describeDBInstances"
     },
     "DescribeDBSnapshots": {
-      "operation": "describeDBSnapshots",
-      "actions": ["rds:DescribeDBSnapshots"]
+      "operation": "describeDBSnapshots"
     },
     "DescribeEvents": {
-      "operation": "describeEvents",
-      "actions": ["rds:DescribeEvents"]
+      "operation": "describeEvents"
     },
     "DescribePendingMaintenanceActions": {
-      "operation": "describePendingMaintenanceActions",
-      "actions": ["rds:DescribePendingMaintenanceActions"]
+      "operation": "describePendingMaintenanceActions"
     },
     "FailoverDBCluster": {
       "operation": "failoverDBCluster",
@@ -132,8 +113,7 @@
         "omit": ["DBClusterIdentifier"],
         "inline": true
       },
-      "builder": "makeRdsClusterHttpBinding",
-      "actions": ["rds:FailoverDBCluster"]
+      "builder": "makeRdsClusterHttpBinding"
     },
     "RebootDBInstance": {
       "operation": "rebootDBInstance",
@@ -144,8 +124,7 @@
         "omit": ["DBInstanceIdentifier"],
         "inline": true
       },
-      "builder": "makeRdsInstanceHttpBinding",
-      "actions": ["rds:RebootDBInstance"]
+      "builder": "makeRdsInstanceHttpBinding"
     },
     "StartDBCluster": {
       "operation": "startDBCluster",
@@ -154,8 +133,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeRdsClusterHttpBinding",
-      "actions": ["rds:StartDBCluster"]
+      "builder": "makeRdsClusterHttpBinding"
     },
     "StartDBInstance": {
       "operation": "startDBInstance",
@@ -164,8 +142,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeRdsInstanceHttpBinding",
-      "actions": ["rds:StartDBInstance"]
+      "builder": "makeRdsInstanceHttpBinding"
     },
     "StopDBCluster": {
       "operation": "stopDBCluster",
@@ -174,8 +151,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeRdsClusterHttpBinding",
-      "actions": ["rds:StopDBCluster"]
+      "builder": "makeRdsClusterHttpBinding"
     },
     "StopDBInstance": {
       "operation": "stopDBInstance",
@@ -186,12 +162,7 @@
         "omit": ["DBInstanceIdentifier"],
         "inline": true
       },
-      "builder": "makeRdsInstanceHttpBinding",
-      "actions": ["rds:StopDBInstance"],
-      "reviewed": {
-        "rds:AddTagsToResource": "Needed only when the request names a DBSnapshotIdentifier (a snapshot taken on stop).",
-        "rds:CreateDBSnapshot": "Needed only when the request names a DBSnapshotIdentifier (a snapshot taken on stop)."
-      }
+      "builder": "makeRdsInstanceHttpBinding"
     }
   }
 }

@@ -56,7 +56,7 @@ export const CreateForecastExportJobHttp = Layer.effect(
   // Destination hands Forecast a role to write the export to S3.
   makeForecastHttpBinding({
     capability: "CreateForecastExportJob",
-    iamActions: ["forecast:CreateForecastExportJob"],
+    iamActions: ["forecast:CreateForecastExportJob", "forecast:TagResource"],
     operation: forecast.createForecastExportJob,
     passRole: true,
     arns: ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"],

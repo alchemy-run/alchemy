@@ -45,5 +45,6 @@ export const ListQAppsHttp = Layer.effect(
     capability: "ListQApps",
     iamActions: ["qapps:ListQApps"],
     operation: qapps.listQApps,
+    arns: ["arn:${Partition}:qbusiness:${Region}:${Account}:application/*"],
   }),
 );

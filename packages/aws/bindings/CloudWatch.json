@@ -42,16 +42,12 @@
         "omit": ["AlarmName"]
       },
       "builder": "makeCloudWatchResourceHttpBinding",
-      "actions": ["cloudwatch:DescribeAlarmContributors"],
       "with": {
         "requestKey": "AlarmName"
       },
       "withTs": {
         "identifier": "(alarm: AlarmResource) => alarm.alarmName",
         "resourceArn": "(alarm: AlarmResource) => alarm.alarmArn"
-      },
-      "reviewed": {
-        "cloudwatch:DescribeAlarmContributors": "Not in AWS's reference; the CloudWatch Bindings suite calls the operation successfully with it."
       }
     },
     "DescribeAlarmHistory": {
@@ -60,9 +56,7 @@
         "mode": "optional",
         "interface": "DescribeAlarmHistoryRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:DescribeAlarmHistory"],
-      "arns": ["arn:${Partition}:cloudwatch:${Region}:${Account}:alarm:*"]
+      }
     },
     "DescribeAlarmsForMetric": {
       "operation": "describeAlarmsForMetric",
@@ -70,8 +64,7 @@
         "mode": "required",
         "interface": "DescribeAlarmsForMetricRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:DescribeAlarmsForMetric"]
+      }
     },
     "DescribeAnomalyDetectors": {
       "operation": "describeAnomalyDetectors",
@@ -79,8 +72,7 @@
         "mode": "optional",
         "interface": "DescribeAnomalyDetectorsRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:DescribeAnomalyDetectors"]
+      }
     },
     "DescribeInsightRules": {
       "operation": "describeInsightRules",
@@ -88,8 +80,7 @@
         "mode": "optional",
         "interface": "DescribeInsightRulesRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:DescribeInsightRules"]
+      }
     },
     "GetAlarmMuteRule": {
       "operation": "getAlarmMuteRule",
@@ -101,7 +92,6 @@
         "omit": ["AlarmMuteRuleName"]
       },
       "builder": "makeCloudWatchResourceHttpBinding",
-      "actions": ["cloudwatch:GetAlarmMuteRule"],
       "with": {
         "requestKey": "AlarmMuteRuleName"
       },
@@ -119,7 +109,6 @@
         "omit": ["DashboardName"]
       },
       "builder": "makeCloudWatchResourceHttpBinding",
-      "actions": ["cloudwatch:GetDashboard"],
       "with": {
         "requestKey": "DashboardName"
       },
@@ -138,7 +127,6 @@
         "omit": ["RuleName"]
       },
       "builder": "makeCloudWatchResourceHttpBinding",
-      "actions": ["cloudwatch:GetInsightRuleReport"],
       "with": {
         "requestKey": "RuleName"
       },
@@ -153,8 +141,7 @@
         "mode": "required",
         "interface": "GetMetricDataRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:GetMetricData"]
+      }
     },
     "GetMetricStatistics": {
       "operation": "getMetricStatistics",
@@ -162,8 +149,7 @@
         "mode": "required",
         "interface": "GetMetricStatisticsRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:GetMetricStatistics"]
+      }
     },
     "GetMetricStream": {
       "operation": "getMetricStream",
@@ -174,7 +160,6 @@
         "omit": ["Name"]
       },
       "builder": "makeCloudWatchResourceHttpBinding",
-      "actions": ["cloudwatch:GetMetricStream"],
       "with": {
         "requestKey": "Name"
       },
@@ -189,8 +174,7 @@
         "mode": "required",
         "interface": "GetMetricWidgetImageRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:GetMetricWidgetImage"]
+      }
     },
     "ListAlarmMuteRules": {
       "operation": "listAlarmMuteRules",
@@ -198,9 +182,7 @@
         "mode": "optional",
         "interface": "ListAlarmMuteRulesRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:ListAlarmMuteRules"],
-      "arns": ["arn:${Partition}:cloudwatch:${Region}:${Account}:alarm-mute-rule:*"]
+      }
     },
     "ListDashboards": {
       "operation": "listDashboards",
@@ -208,8 +190,7 @@
         "mode": "optional",
         "interface": "ListDashboardsRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:ListDashboards"]
+      }
     },
     "ListManagedInsightRules": {
       "operation": "listManagedInsightRules",
@@ -217,8 +198,7 @@
         "mode": "optional",
         "interface": "ListManagedInsightRulesRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:ListManagedInsightRules"]
+      }
     },
     "ListMetricStreams": {
       "operation": "listMetricStreams",
@@ -226,8 +206,7 @@
         "mode": "optional",
         "interface": "ListMetricStreamsRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:ListMetricStreams"]
+      }
     },
     "ListMetrics": {
       "operation": "listMetrics",
@@ -235,8 +214,7 @@
         "mode": "optional",
         "interface": "ListMetricsRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:ListMetrics"]
+      }
     },
     "ListTagsForResource": {
       "operation": "listTagsForResource",
@@ -248,7 +226,6 @@
         "omit": ["ResourceARN"]
       },
       "builder": "makeCloudWatchResourceHttpBinding",
-      "actions": ["cloudwatch:ListTagsForResource"],
       "with": {
         "requestKey": "ResourceARN"
       },
@@ -258,9 +235,6 @@
       },
       "imports": {
         "./binding-common.ts": ["getTaggableResourceArn"]
-      },
-      "reviewed": {
-        "oam:ListTagsForResource": "AWS lists it for the operation, but the CloudWatch Bindings suite calls it successfully without it."
       }
     },
     "PutMetricData": {
@@ -269,8 +243,7 @@
         "mode": "required",
         "interface": "PutMetricDataRequest",
         "omit": []
-      },
-      "actions": ["cloudwatch:PutMetricData"]
+      }
     },
     "SetAlarmState": {
       "operation": "setAlarmState",
@@ -282,7 +255,6 @@
         "omit": ["AlarmName"]
       },
       "builder": "makeCloudWatchResourceHttpBinding",
-      "actions": ["cloudwatch:SetAlarmState"],
       "with": {
         "requestKey": "AlarmName"
       },

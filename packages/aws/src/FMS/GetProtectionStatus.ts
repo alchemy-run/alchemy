@@ -46,5 +46,6 @@ export const GetProtectionStatusHttp = Layer.effect(
     capability: "GetProtectionStatus",
     iamActions: ["fms:GetProtectionStatus"],
     operation: fms.getProtectionStatus,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:policy/*"],
   }),
 );

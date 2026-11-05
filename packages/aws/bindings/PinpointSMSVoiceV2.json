@@ -29,8 +29,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeSmsVoiceAccountHttpBinding",
-      "actions": ["sms-voice:CarrierLookup"]
+      "builder": "makeSmsVoiceAccountHttpBinding"
     },
     "DeleteKeyword": {
       "operation": "deleteKeyword",
@@ -39,8 +38,7 @@
         "mode": "required",
         "interface": "DeleteKeywordRequest",
         "omit": ["OriginationIdentity"]
-      },
-      "actions": ["sms-voice:DeleteKeyword"]
+      }
     },
     "DeleteOptedOutNumber": {
       "operation": "deleteOptedOutNumber",
@@ -50,8 +48,7 @@
         "interface": "DeleteOptedOutNumberRequest",
         "omit": ["OptOutListName"]
       },
-      "builder": "makeSmsVoiceOptOutListHttpBinding",
-      "actions": ["sms-voice:DeleteOptedOutNumber"]
+      "builder": "makeSmsVoiceOptOutListHttpBinding"
     },
     "DescribeKeywords": {
       "operation": "describeKeywords",
@@ -60,8 +57,7 @@
         "mode": "required",
         "interface": "DescribeKeywordsRequest",
         "omit": ["OriginationIdentity"]
-      },
-      "actions": ["sms-voice:DescribeKeywords"]
+      }
     },
     "DescribeOptedOutNumbers": {
       "operation": "describeOptedOutNumbers",
@@ -71,8 +67,7 @@
         "interface": "DescribeOptedOutNumbersRequest",
         "omit": ["OptOutListName"]
       },
-      "builder": "makeSmsVoiceOptOutListHttpBinding",
-      "actions": ["sms-voice:DescribeOptedOutNumbers"]
+      "builder": "makeSmsVoiceOptOutListHttpBinding"
     },
     "PutKeyword": {
       "operation": "putKeyword",
@@ -81,16 +76,14 @@
         "mode": "required",
         "interface": "PutKeywordRequest",
         "omit": ["OriginationIdentity"]
-      },
-      "actions": ["sms-voice:PutKeyword"]
+      }
     },
     "PutMessageFeedback": {
       "operation": "putMessageFeedback",
       "request": {
         "mode": "required"
       },
-      "builder": "makeSmsVoiceAccountHttpBinding",
-      "actions": ["sms-voice:PutMessageFeedback"]
+      "builder": "makeSmsVoiceAccountHttpBinding"
     },
     "PutOptedOutNumber": {
       "operation": "putOptedOutNumber",
@@ -100,8 +93,7 @@
         "interface": "PutOptedOutNumberRequest",
         "omit": ["OptOutListName"]
       },
-      "builder": "makeSmsVoiceOptOutListHttpBinding",
-      "actions": ["sms-voice:PutOptedOutNumber"]
+      "builder": "makeSmsVoiceOptOutListHttpBinding"
     },
     "SendMediaMessage": {
       "operation": "sendMediaMessage",
@@ -110,8 +102,7 @@
         "mode": "required",
         "interface": "SendMediaMessageRequest",
         "omit": ["OriginationIdentity"]
-      },
-      "actions": ["sms-voice:SendMediaMessage"]
+      }
     },
     "SendTextMessage": {
       "operation": "sendTextMessage",
@@ -120,8 +111,7 @@
         "mode": "required",
         "interface": "SendTextMessageRequest",
         "omit": ["OriginationIdentity"]
-      },
-      "actions": ["sms-voice:SendTextMessage"]
+      }
     },
     "SendVoiceMessage": {
       "operation": "sendVoiceMessage",
@@ -130,8 +120,7 @@
         "mode": "required",
         "interface": "SendVoiceMessageRequest",
         "omit": ["OriginationIdentity"]
-      },
-      "actions": ["sms-voice:SendVoiceMessage"]
+      }
     }
   }
 }

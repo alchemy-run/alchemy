@@ -26,8 +26,7 @@
         "mode": "required",
         "interface": "DecryptRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:Decrypt"]
+      }
     },
     "DeriveSharedSecret": {
       "operation": "deriveSharedSecret",
@@ -37,8 +36,7 @@
         "mode": "required",
         "interface": "DeriveSharedSecretRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:DeriveSharedSecret"]
+      }
     },
     "DescribeKey": {
       "operation": "describeKey",
@@ -48,8 +46,7 @@
         "mode": "optional",
         "interface": "DescribeKeyRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:DescribeKey"]
+      }
     },
     "Encrypt": {
       "operation": "encrypt",
@@ -59,8 +56,7 @@
         "mode": "required",
         "interface": "EncryptRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:Encrypt"]
+      }
     },
     "GenerateDataKey": {
       "operation": "generateDataKey",
@@ -70,8 +66,7 @@
         "mode": "required",
         "interface": "GenerateDataKeyRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:GenerateDataKey"]
+      }
     },
     "GenerateDataKeyPair": {
       "operation": "generateDataKeyPair",
@@ -81,8 +76,7 @@
         "mode": "required",
         "interface": "GenerateDataKeyPairRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:GenerateDataKeyPair"]
+      }
     },
     "GenerateDataKeyPairWithoutPlaintext": {
       "operation": "generateDataKeyPairWithoutPlaintext",
@@ -92,8 +86,7 @@
         "mode": "required",
         "interface": "GenerateDataKeyPairWithoutPlaintextRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:GenerateDataKeyPairWithoutPlaintext"]
+      }
     },
     "GenerateDataKeyWithoutPlaintext": {
       "operation": "generateDataKeyWithoutPlaintext",
@@ -103,8 +96,7 @@
         "mode": "required",
         "interface": "GenerateDataKeyWithoutPlaintextRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:GenerateDataKeyWithoutPlaintext"]
+      }
     },
     "GenerateMac": {
       "operation": "generateMac",
@@ -114,8 +106,7 @@
         "mode": "required",
         "interface": "GenerateMacRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:GenerateMac"]
+      }
     },
     "GenerateRandom": {
       "operation": "generateRandom",
@@ -124,8 +115,7 @@
         "interface": "GenerateRandomRequest",
         "omit": []
       },
-      "builder": "makeKmsAccountHttpBinding",
-      "actions": ["kms:GenerateRandom"]
+      "builder": "makeKmsAccountHttpBinding"
     },
     "GetPublicKey": {
       "operation": "getPublicKey",
@@ -135,8 +125,7 @@
         "mode": "optional",
         "interface": "GetPublicKeyRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:GetPublicKey"]
+      }
     },
     "Sign": {
       "operation": "sign",
@@ -146,8 +135,7 @@
         "mode": "required",
         "interface": "SignRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:Sign"]
+      }
     },
     "Verify": {
       "operation": "verify",
@@ -157,8 +145,7 @@
         "mode": "required",
         "interface": "VerifyRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:Verify"]
+      }
     },
     "VerifyMac": {
       "operation": "verifyMac",
@@ -168,8 +155,7 @@
         "mode": "required",
         "interface": "VerifyMacRequest",
         "omit": ["KeyId"]
-      },
-      "actions": ["kms:VerifyMac"]
+      }
     }
   }
 }

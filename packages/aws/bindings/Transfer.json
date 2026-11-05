@@ -31,8 +31,7 @@
         "omit": ["ServerId", "UserName"],
         "inline": true
       },
-      "builder": "makeTransferUserHttpBinding",
-      "actions": ["transfer:DeleteSshPublicKey"]
+      "builder": "makeTransferUserHttpBinding"
     },
     "DescribeServer": {
       "operation": "describeServer",
@@ -41,8 +40,7 @@
         "mode": "optional",
         "omit": ["ServerId"],
         "inline": true
-      },
-      "actions": ["transfer:DescribeServer"]
+      }
     },
     "DescribeUser": {
       "operation": "describeUser",
@@ -52,8 +50,7 @@
         "omit": ["ServerId", "UserName"],
         "inline": true
       },
-      "builder": "makeTransferUserHttpBinding",
-      "actions": ["transfer:DescribeUser"]
+      "builder": "makeTransferUserHttpBinding"
     },
     "ImportSshPublicKey": {
       "operation": "importSshPublicKey",
@@ -63,8 +60,7 @@
         "omit": ["ServerId", "UserName"],
         "inline": true
       },
-      "builder": "makeTransferUserHttpBinding",
-      "actions": ["transfer:ImportSshPublicKey"]
+      "builder": "makeTransferUserHttpBinding"
     },
     "ListUsers": {
       "operation": "listUsers",
@@ -73,17 +69,14 @@
         "mode": "optional",
         "omit": ["ServerId"],
         "inline": true
-      },
-      "actions": ["transfer:ListUsers"]
+      }
     },
     "SendWorkflowStepState": {
       "operation": "sendWorkflowStepState",
       "request": {
         "mode": "required"
       },
-      "builder": "makeTransferAccountHttpBinding",
-      "actions": ["transfer:SendWorkflowStepState"],
-      "arns": ["arn:${Partition}:transfer:${Region}:${Account}:workflow/*"]
+      "builder": "makeTransferAccountHttpBinding"
     },
     "StartServer": {
       "operation": "startServer",
@@ -92,8 +85,7 @@
         "mode": "optional",
         "omit": ["ServerId"],
         "inline": true
-      },
-      "actions": ["transfer:StartServer"]
+      }
     },
     "StopServer": {
       "operation": "stopServer",
@@ -102,8 +94,7 @@
         "mode": "optional",
         "omit": ["ServerId"],
         "inline": true
-      },
-      "actions": ["transfer:StopServer"]
+      }
     },
     "TestIdentityProvider": {
       "operation": "testIdentityProvider",
@@ -113,7 +104,6 @@
         "omit": ["ServerId"],
         "inline": true
       },
-      "actions": ["transfer:TestIdentityProvider"],
       "withTs": {
         "resource": "(server) => Output.map(server.arn, (arn) => `${arn.replace(\":server/\", \":user/\")}/*`)"
       },

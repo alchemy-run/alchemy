@@ -20,7 +20,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:AnalyzeDocument"],
       "note": "No resource-level IAM for this action."
     },
     "AnalyzeExpense": {
@@ -28,7 +27,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:AnalyzeExpense"],
       "note": "No resource-level IAM for this action."
     },
     "AnalyzeID": {
@@ -36,7 +34,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:AnalyzeID"],
       "note": "No resource-level IAM for this action."
     },
     "DetectDocumentText": {
@@ -44,7 +41,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:DetectDocumentText"],
       "note": "textract:DetectDocumentText has no resource-level IAM."
     },
     "GetDocumentAnalysis": {
@@ -52,7 +48,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:GetDocumentAnalysis"],
       "note": "No resource-level IAM for this action."
     },
     "GetDocumentTextDetection": {
@@ -60,7 +55,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:GetDocumentTextDetection"],
       "note": "No resource-level IAM for this action."
     },
     "GetExpenseAnalysis": {
@@ -68,7 +62,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:GetExpenseAnalysis"],
       "note": "No resource-level IAM for this action."
     },
     "GetLendingAnalysis": {
@@ -76,7 +69,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:GetLendingAnalysis"],
       "note": "No resource-level IAM for this action."
     },
     "GetLendingAnalysisSummary": {
@@ -84,12 +76,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:GetLendingAnalysisSummary"],
       "note": "No resource-level IAM for this action."
     },
     "ListAdapters": {
       "operation": "listAdapters",
-      "actions": ["textract:ListAdapters"],
       "note": "No resource-level IAM for this action."
     },
     "StartDocumentAnalysis": {
@@ -97,44 +87,28 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:StartDocumentAnalysis"],
-      "note": "No resource-level IAM for this action.",
-      "reviewed": {
-        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
-      }
+      "note": "No resource-level IAM for this action."
     },
     "StartDocumentTextDetection": {
       "operation": "startDocumentTextDetection",
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:StartDocumentTextDetection"],
-      "note": "No resource-level IAM for this action.",
-      "reviewed": {
-        "iam:PassRole": "AWS lists it for the operation, but the Textract Bindings suite calls it successfully without it."
-      }
+      "note": "No resource-level IAM for this action."
     },
     "StartExpenseAnalysis": {
       "operation": "startExpenseAnalysis",
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:StartExpenseAnalysis"],
-      "note": "No resource-level IAM for this action.",
-      "reviewed": {
-        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
-      }
+      "note": "No resource-level IAM for this action."
     },
     "StartLendingAnalysis": {
       "operation": "startLendingAnalysis",
       "request": {
         "mode": "required"
       },
-      "actions": ["textract:StartLendingAnalysis"],
-      "note": "No resource-level IAM for this action.",
-      "reviewed": {
-        "iam:PassRole": "Needed only when the request passes NotificationChannel.RoleArn (an SNS completion topic); not granted, so a role is never passed unasked."
-      }
+      "note": "No resource-level IAM for this action."
     }
   }
 }

@@ -45,6 +45,7 @@ export const CopyDBClusterSnapshotHttp = Layer.effect(
   makeRdsAccountHttpBinding({
     tag: "AWS.RDS.CopyDBClusterSnapshot",
     operation: rds.copyDBClusterSnapshot,
-    actions: ["rds:CopyDBClusterSnapshot", "rds:AddTagsToResource"],
+    actions: ["rds:AddTagsToResource", "rds:CopyDBClusterSnapshot"],
+    arns: ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"],
   }),
 );

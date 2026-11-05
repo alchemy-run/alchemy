@@ -26,15 +26,13 @@
       "operation": "batchGetResourceConfig",
       "request": {
         "mode": "required"
-      },
-      "actions": ["config:BatchGetResourceConfig"]
+      }
     },
     "DeleteResourceConfig": {
       "operation": "deleteResourceConfig",
       "request": {
         "mode": "required"
-      },
-      "actions": ["config:DeleteResourceConfig"]
+      }
     },
     "DeliverConfigSnapshot": {
       "operation": "deliverConfigSnapshot",
@@ -44,7 +42,6 @@
         "mode": "none"
       },
       "builder": "makeConfigResourceHttpBinding",
-      "actions": ["config:DeliverConfigSnapshot"],
       "with": {
         "requestKey": "deliveryChannelName"
       },
@@ -53,16 +50,13 @@
       }
     },
     "DescribeComplianceByConfigRule": {
-      "operation": "describeComplianceByConfigRule",
-      "actions": ["config:DescribeComplianceByConfigRule"]
+      "operation": "describeComplianceByConfigRule"
     },
     "DescribeComplianceByResource": {
-      "operation": "describeComplianceByResource",
-      "actions": ["config:DescribeComplianceByResource"]
+      "operation": "describeComplianceByResource"
     },
     "DescribeConfigRuleEvaluationStatus": {
-      "operation": "describeConfigRuleEvaluationStatus",
-      "actions": ["config:DescribeConfigRuleEvaluationStatus"]
+      "operation": "describeConfigRuleEvaluationStatus"
     },
     "GetComplianceDetailsByConfigRule": {
       "operation": "getComplianceDetailsByConfigRule",
@@ -74,62 +68,51 @@
         "omit": ["ConfigRuleName"]
       },
       "builder": "makeConfigResourceHttpBinding",
-      "actions": ["config:GetComplianceDetailsByConfigRule"],
       "with": {
         "requestKey": "ConfigRuleName"
       },
       "withTs": {
         "identifier": "(rule: ConfigRule) => rule.configRuleName"
-      },
-      "arns": ["arn:${Partition}:config:${Region}:${Account}:config-rule/*"]
+      }
     },
     "GetComplianceDetailsByResource": {
-      "operation": "getComplianceDetailsByResource",
-      "actions": ["config:GetComplianceDetailsByResource"]
+      "operation": "getComplianceDetailsByResource"
     },
     "GetComplianceSummaryByConfigRule": {
-      "operation": "getComplianceSummaryByConfigRule",
-      "actions": ["config:GetComplianceSummaryByConfigRule"]
+      "operation": "getComplianceSummaryByConfigRule"
     },
     "GetComplianceSummaryByResourceType": {
-      "operation": "getComplianceSummaryByResourceType",
-      "actions": ["config:GetComplianceSummaryByResourceType"]
+      "operation": "getComplianceSummaryByResourceType"
     },
     "GetDiscoveredResourceCounts": {
-      "operation": "getDiscoveredResourceCounts",
-      "actions": ["config:GetDiscoveredResourceCounts"]
+      "operation": "getDiscoveredResourceCounts"
     },
     "GetResourceConfigHistory": {
       "operation": "getResourceConfigHistory",
       "request": {
         "mode": "required"
-      },
-      "actions": ["config:GetResourceConfigHistory"]
+      }
     },
     "GetResourceEvaluationSummary": {
       "operation": "getResourceEvaluationSummary",
       "request": {
         "mode": "required"
-      },
-      "actions": ["config:GetResourceEvaluationSummary"]
+      }
     },
     "ListDiscoveredResources": {
       "operation": "listDiscoveredResources",
       "request": {
         "mode": "required"
-      },
-      "actions": ["config:ListDiscoveredResources"]
+      }
     },
     "ListResourceEvaluations": {
-      "operation": "listResourceEvaluations",
-      "actions": ["config:ListResourceEvaluations"]
+      "operation": "listResourceEvaluations"
     },
     "PutEvaluations": {
       "operation": "putEvaluations",
       "request": {
         "mode": "required"
-      },
-      "actions": ["config:PutEvaluations"]
+      }
     },
     "PutExternalEvaluation": {
       "operation": "putExternalEvaluation",
@@ -141,28 +124,24 @@
         "omit": ["ConfigRuleName"]
       },
       "builder": "makeConfigResourceHttpBinding",
-      "actions": ["config:PutExternalEvaluation"],
       "with": {
         "requestKey": "ConfigRuleName"
       },
       "withTs": {
         "identifier": "(rule: ConfigRule) => rule.configRuleName"
-      },
-      "arns": ["arn:${Partition}:config:${Region}:${Account}:config-rule/*"]
+      }
     },
     "PutResourceConfig": {
       "operation": "putResourceConfig",
       "request": {
         "mode": "required"
-      },
-      "actions": ["config:PutResourceConfig"]
+      }
     },
     "SelectResourceConfig": {
       "operation": "selectResourceConfig",
       "request": {
         "mode": "required"
-      },
-      "actions": ["config:SelectResourceConfig"]
+      }
     },
     "StartConfigRulesEvaluation": {
       "operation": "startConfigRulesEvaluation",
@@ -172,26 +151,20 @@
         "mode": "none"
       },
       "builder": "makeConfigResourceHttpBinding",
-      "actions": ["config:StartConfigRulesEvaluation"],
       "with": {
         "requestKey": "ConfigRuleNames",
         "asList": true
       },
       "withTs": {
         "identifier": "(rule: ConfigRule) => rule.configRuleName"
-      },
-      "arns": ["arn:${Partition}:config:${Region}:${Account}:config-rule/*"]
+      }
     },
     "StartResourceEvaluation": {
       "operation": "startResourceEvaluation",
       "request": {
         "mode": "required"
       },
-      "actions": ["config:StartResourceEvaluation", "cloudformation:DescribeType"],
-      "note": "cloudformation:DescribeType is a dependent action: Config validates the CFN_RESOURCE_SCHEMA resource type schema with the CALLER's permissions and rejects with AccessDeniedException without it (observed live; see the StartResourceEvaluation API reference).",
-      "reviewed": {
-        "cloudformation:DescribeType": "See the note: cloudformation:DescribeType is a dependent action: Config validates the CFN_RESOURCE_SCHEMA resource type schema with the CALLER's permissions and rejects with AccessDeniedException without it (observed live; see the StartResourceEvaluation API reference)."
-      }
+      "note": "cloudformation:DescribeType is a dependent action: Config validates the CFN_RESOURCE_SCHEMA resource type schema with the CALLER's permissions and rejects with AccessDeniedException without it (observed live; see the StartResourceEvaluation API reference)."
     }
   }
 }

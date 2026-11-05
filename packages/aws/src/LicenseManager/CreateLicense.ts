@@ -61,7 +61,7 @@ export const CreateLicenseHttp = Layer.effect(
   CreateLicense,
   makeLicenseManagerHttpBinding({
     capability: "CreateLicense",
-    iamActions: ["license-manager:CreateLicense"],
+    iamActions: ["license-manager:CreateLicense", "license-manager:TagResource"],
     operation: licensemanager.createLicense,
   }),
 );

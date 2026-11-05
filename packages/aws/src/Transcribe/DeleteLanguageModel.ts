@@ -43,5 +43,6 @@ export const DeleteLanguageModelHttp = Layer.effect(
     tag: "AWS.Transcribe.DeleteLanguageModel",
     operation: transcribe.deleteLanguageModel,
     actions: ["transcribe:DeleteLanguageModel"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:language-model/*"],
   }),
 );

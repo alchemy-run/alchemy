@@ -49,5 +49,6 @@ export const UpdateSafetyLeverStateHttp = Layer.effect(
     tag: "AWS.FIS.UpdateSafetyLeverState",
     operation: fis.updateSafetyLeverState,
     actions: ["fis:UpdateSafetyLeverState"],
+    arns: ["arn:${Partition}:fis:${Region}:${Account}:safety-lever/*"],
   }),
 );

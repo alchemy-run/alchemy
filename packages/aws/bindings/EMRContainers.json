@@ -29,8 +29,7 @@
         "mode": "required",
         "omit": ["virtualClusterId"],
         "inline": true
-      },
-      "actions": ["emr-containers:CancelJobRun"]
+      }
     },
     "DescribeJobRun": {
       "operation": "describeJobRun",
@@ -39,8 +38,7 @@
         "mode": "required",
         "omit": ["virtualClusterId"],
         "inline": true
-      },
-      "actions": ["emr-containers:DescribeJobRun"]
+      }
     },
     "DescribeJobTemplate": {
       "operation": "describeJobTemplate",
@@ -49,8 +47,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeEMRContainersJobTemplateHttpBinding",
-      "actions": ["emr-containers:DescribeJobTemplate"]
+      "builder": "makeEMRContainersJobTemplateHttpBinding"
     },
     "DescribeManagedEndpoint": {
       "operation": "describeManagedEndpoint",
@@ -59,8 +56,7 @@
         "mode": "required",
         "omit": ["virtualClusterId"],
         "inline": true
-      },
-      "actions": ["emr-containers:DescribeManagedEndpoint"]
+      }
     },
     "ListJobRuns": {
       "operation": "listJobRuns",
@@ -69,13 +65,11 @@
         "mode": "optional",
         "omit": ["virtualClusterId"],
         "inline": true
-      },
-      "actions": ["emr-containers:ListJobRuns"]
+      }
     },
     "ListJobTemplates": {
       "operation": "listJobTemplates",
-      "builder": "makeEMRContainersAccountHttpBinding",
-      "actions": ["emr-containers:ListJobTemplates"]
+      "builder": "makeEMRContainersAccountHttpBinding"
     },
     "ListManagedEndpoints": {
       "operation": "listManagedEndpoints",
@@ -84,13 +78,11 @@
         "mode": "optional",
         "omit": ["virtualClusterId"],
         "inline": true
-      },
-      "actions": ["emr-containers:ListManagedEndpoints"]
+      }
     },
     "ListVirtualClusters": {
       "operation": "listVirtualClusters",
-      "builder": "makeEMRContainersAccountHttpBinding",
-      "actions": ["emr-containers:ListVirtualClusters"]
+      "builder": "makeEMRContainersAccountHttpBinding"
     }
   }
 }

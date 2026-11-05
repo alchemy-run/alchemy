@@ -54,5 +54,6 @@ export const GetBlueprintOptimizationStatusHttp = Layer.effect(
     tag: "AWS.BedrockDataAutomation.GetBlueprintOptimizationStatus",
     operation: bda.getBlueprintOptimizationStatus,
     actions: ["bedrock:GetBlueprintOptimizationStatus"],
+    arns: ["arn:${Partition}:bedrock:${Region}:${Account}:blueprint-optimization-invocation/*"],
   }),
 );

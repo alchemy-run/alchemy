@@ -57,5 +57,6 @@ export const DeleteWhatsAppMessageMediaHttp = Layer.effect(
     tag: "AWS.SocialMessaging.DeleteWhatsAppMessageMedia",
     operation: socialmessaging.deleteWhatsAppMessageMedia,
     actions: ["social-messaging:DeleteWhatsAppMessageMedia"],
+    arns: ["arn:${Partition}:social-messaging:${Region}:${Account}:phone-number-id/*"],
   }),
 );

@@ -48,6 +48,6 @@ export const CreateCallAnalyticsCategoryHttp = Layer.effect(
   makeTranscribeHttpBinding({
     tag: "AWS.Transcribe.CreateCallAnalyticsCategory",
     operation: transcribe.createCallAnalyticsCategory,
-    actions: ["transcribe:CreateCallAnalyticsCategory"],
+    actions: ["transcribe:CreateCallAnalyticsCategory", "transcribe:TagResource"],
   }),
 );

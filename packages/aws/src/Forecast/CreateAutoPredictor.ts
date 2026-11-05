@@ -51,7 +51,7 @@ export const CreateAutoPredictorHttp = Layer.effect(
   CreateAutoPredictor,
   makeForecastHttpBinding({
     capability: "CreateAutoPredictor",
-    iamActions: ["forecast:CreateAutoPredictor"],
+    iamActions: ["forecast:CreateAutoPredictor", "forecast:TagResource"],
     operation: forecast.createAutoPredictor,
     passRole: true,
   }),

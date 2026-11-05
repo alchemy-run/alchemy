@@ -22,8 +22,7 @@
         "mode": "optional",
         "interface": "GetDataLakePrincipalRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:GetDataLakePrincipal"]
+      }
     },
     "GetEffectivePermissionsForPath": {
       "operation": "getEffectivePermissionsForPath",
@@ -31,8 +30,7 @@
         "mode": "required",
         "interface": "GetEffectivePermissionsForPathRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:GetEffectivePermissionsForPath"]
+      }
     },
     "GetLFTag": {
       "operation": "getLFTag",
@@ -40,8 +38,7 @@
         "mode": "required",
         "interface": "GetLFTagRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:GetLFTag"]
+      }
     },
     "GetResourceLFTags": {
       "operation": "getResourceLFTags",
@@ -49,8 +46,7 @@
         "mode": "required",
         "interface": "GetResourceLFTagsRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:GetResourceLFTags"]
+      }
     },
     "GetTemporaryDataLocationCredentials": {
       "operation": "getTemporaryDataLocationCredentials",
@@ -58,8 +54,7 @@
         "mode": "required",
         "interface": "GetTemporaryDataLocationCredentialsRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:GetDataAccess"]
+      }
     },
     "GetTemporaryGlueTableCredentials": {
       "operation": "getTemporaryGlueTableCredentials",
@@ -67,10 +62,6 @@
         "mode": "required",
         "interface": "GetTemporaryGlueTableCredentialsRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:GetDataAccess"],
-      "reviewed": {
-        "lakeformation:GetDataAccess": "Lake Formation authorizes temporary table credentials as lakeformation:GetDataAccess (Lake Formation API reference); not verified live."
       }
     },
     "ListLFTags": {
@@ -79,8 +70,7 @@
         "mode": "optional",
         "interface": "ListLFTagsRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:ListLFTags"]
+      }
     },
     "ListPermissions": {
       "operation": "listPermissions",
@@ -88,8 +78,7 @@
         "mode": "optional",
         "interface": "ListPermissionsRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:ListPermissions"]
+      }
     },
     "SearchDatabasesByLFTags": {
       "operation": "searchDatabasesByLFTags",
@@ -97,8 +86,7 @@
         "mode": "required",
         "interface": "SearchDatabasesByLFTagsRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:SearchDatabasesByLFTags"]
+      }
     },
     "SearchTablesByLFTags": {
       "operation": "searchTablesByLFTags",
@@ -106,8 +94,7 @@
         "mode": "required",
         "interface": "SearchTablesByLFTagsRequest",
         "omit": []
-      },
-      "actions": ["lakeformation:SearchTablesByLFTags"]
+      }
     }
   }
 }

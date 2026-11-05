@@ -41,5 +41,6 @@ export const DeletePolicyHttp = Layer.effect(
     capability: "DeletePolicy",
     iamActions: ["fms:DeletePolicy"],
     operation: fms.deletePolicy,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:policy/*"],
   }),
 );

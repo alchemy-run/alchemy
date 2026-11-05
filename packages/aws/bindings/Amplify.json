@@ -26,7 +26,6 @@
         "interface": "CreateDeploymentRequest",
         "omit": ["appId"]
       },
-      "actions": ["amplify:CreateDeployment"],
       "withTs": {
         "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*`]"
       },
@@ -42,7 +41,6 @@
         "interface": "DeleteJobRequest",
         "omit": ["appId"]
       },
-      "actions": ["amplify:DeleteJob"],
       "withTs": {
         "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
       },
@@ -58,7 +56,6 @@
         "interface": "GenerateAccessLogsRequest",
         "omit": ["appId"]
       },
-      "actions": ["amplify:GenerateAccessLogs"],
       "withTs": {
         "resources": "(app) => [app.appArn]"
       }
@@ -71,7 +68,6 @@
         "interface": "GetJobRequest",
         "omit": ["appId"]
       },
-      "actions": ["amplify:GetJob"],
       "withTs": {
         "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
       },
@@ -87,7 +83,6 @@
         "interface": "ListArtifactsRequest",
         "omit": ["appId"]
       },
-      "actions": ["amplify:ListArtifacts"],
       "withTs": {
         "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
       },
@@ -103,7 +98,6 @@
         "interface": "ListJobsRequest",
         "omit": ["appId"]
       },
-      "actions": ["amplify:ListJobs"],
       "withTs": {
         "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
       },
@@ -119,7 +113,6 @@
         "interface": "StartDeploymentRequest",
         "omit": ["appId"]
       },
-      "actions": ["amplify:StartDeployment"],
       "withTs": {
         "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*`]"
       },
@@ -135,7 +128,6 @@
         "interface": "StartJobRequest",
         "omit": ["appId"]
       },
-      "actions": ["amplify:StartJob"],
       "withTs": {
         "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
       },
@@ -151,7 +143,6 @@
         "interface": "StopJobRequest",
         "omit": ["appId"]
       },
-      "actions": ["amplify:StopJob"],
       "withTs": {
         "resources": "(app) => [Output.interpolate`${app.appArn}/branches/*/jobs/*`]"
       },

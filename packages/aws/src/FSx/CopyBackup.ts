@@ -45,5 +45,6 @@ export const CopyBackupHttp = Layer.effect(
     tag: "AWS.FSx.CopyBackup",
     operation: fsx.copyBackup,
     actions: ["fsx:CopyBackup", "fsx:TagResource"],
+    arns: ["arn:${Partition}:fsx:${Region}:${Account}:backup/*"],
   }),
 );

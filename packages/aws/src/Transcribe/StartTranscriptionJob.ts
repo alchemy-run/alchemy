@@ -55,6 +55,6 @@ export const StartTranscriptionJobHttp = Layer.effect(
   makeTranscribeHttpBinding({
     tag: "AWS.Transcribe.StartTranscriptionJob",
     operation: transcribe.startTranscriptionJob,
-    actions: ["transcribe:StartTranscriptionJob"],
+    actions: ["transcribe:StartTranscriptionJob", "transcribe:TagResource"],
   }),
 );

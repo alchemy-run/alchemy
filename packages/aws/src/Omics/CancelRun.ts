@@ -39,5 +39,6 @@ export const CancelRunHttp = Layer.effect(
     tag: "AWS.Omics.CancelRun",
     operation: omics.cancelRun,
     actions: ["omics:CancelRun"],
+    arns: ["arn:${Partition}:omics:${Region}:${Account}:run/*"],
   }),
 );

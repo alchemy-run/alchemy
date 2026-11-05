@@ -49,5 +49,6 @@ export const StopStreamProcessorHttp = Layer.effect(
     tag: "AWS.Rekognition.StopStreamProcessor",
     operation: rekognition.stopStreamProcessor,
     actions: ["rekognition:StopStreamProcessor"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:streamprocessor/*"],
   }),
 );

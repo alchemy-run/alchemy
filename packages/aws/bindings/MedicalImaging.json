@@ -20,8 +20,7 @@
         "mode": "required",
         "interface": "CopyImageSetRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:CopyImageSet"]
+      }
     },
     "DeleteImageSet": {
       "operation": "deleteImageSet",
@@ -30,8 +29,7 @@
         "mode": "required",
         "interface": "DeleteImageSetRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:DeleteImageSet"]
+      }
     },
     "GetDICOMImportJob": {
       "operation": "getDICOMImportJob",
@@ -40,8 +38,7 @@
         "mode": "required",
         "interface": "GetDICOMImportJobRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:GetDICOMImportJob"]
+      }
     },
     "GetImageFrame": {
       "operation": "getImageFrame",
@@ -50,8 +47,7 @@
         "mode": "required",
         "interface": "GetImageFrameRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:GetImageFrame"]
+      }
     },
     "GetImageSet": {
       "operation": "getImageSet",
@@ -60,8 +56,7 @@
         "mode": "required",
         "interface": "GetImageSetRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:GetImageSet"]
+      }
     },
     "GetImageSetMetadata": {
       "operation": "getImageSetMetadata",
@@ -70,8 +65,7 @@
         "mode": "required",
         "interface": "GetImageSetMetadataRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:GetImageSetMetadata"]
+      }
     },
     "ListDICOMImportJobs": {
       "operation": "listDICOMImportJobs",
@@ -80,8 +74,7 @@
         "mode": "optional",
         "interface": "ListDICOMImportJobsRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:ListDICOMImportJobs"]
+      }
     },
     "ListImageSetVersions": {
       "operation": "listImageSetVersions",
@@ -90,8 +83,7 @@
         "mode": "required",
         "interface": "ListImageSetVersionsRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:ListImageSetVersions"]
+      }
     },
     "SearchImageSets": {
       "operation": "searchImageSets",
@@ -100,8 +92,7 @@
         "mode": "optional",
         "interface": "SearchImageSetsRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:SearchImageSets"]
+      }
     },
     "UpdateImageSetMetadata": {
       "operation": "updateImageSetMetadata",
@@ -110,8 +101,7 @@
         "mode": "required",
         "interface": "UpdateImageSetMetadataRequest",
         "omit": ["datastoreId"]
-      },
-      "actions": ["medical-imaging:UpdateImageSetMetadata"]
+      }
     }
   }
 }

@@ -45,7 +45,8 @@ export const PutAppsListHttp = Layer.effect(
   PutAppsList,
   makeFmsHttpBinding({
     capability: "PutAppsList",
-    iamActions: ["fms:PutAppsList"],
+    iamActions: ["fms:PutAppsList", "fms:TagResource"],
     operation: fms.putAppsList,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:applications-list/*"],
   }),
 );

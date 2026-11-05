@@ -16,7 +16,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["servicediscovery:GetOperation"],
       "note": "GetOperation does not support resource-level IAM permissions."
     }
   }

@@ -60,7 +60,7 @@ export const StartCompositionHttp = Layer.effect(
   makeIvsRealtimeStageHttpBinding({
     tag: "AWS.IVSRealtime.StartComposition",
     operation: ivsrealtime.startComposition,
-    actions: ["ivs:StartComposition"],
+    actions: ["ivs:StartComposition", "ivs:TagResource"],
     extraResources: [
       COMPOSITION_ARN_WILDCARD,
       ENCODER_CONFIGURATION_ARN_WILDCARD,

@@ -20,8 +20,7 @@
         "mode": "required",
         "interface": "DeregisterTargetsRequest",
         "omit": ["targetGroupIdentifier"]
-      },
-      "actions": ["vpc-lattice:DeregisterTargets"]
+      }
     },
     "ListTargets": {
       "operation": "listTargets",
@@ -30,8 +29,7 @@
         "mode": "required",
         "interface": "ListTargetsRequest",
         "omit": ["targetGroupIdentifier"]
-      },
-      "actions": ["vpc-lattice:ListTargets"]
+      }
     },
     "RegisterTargets": {
       "operation": "registerTargets",
@@ -40,8 +38,7 @@
         "mode": "required",
         "interface": "RegisterTargetsRequest",
         "omit": ["targetGroupIdentifier"]
-      },
-      "actions": ["vpc-lattice:RegisterTargets"]
+      }
     }
   }
 }

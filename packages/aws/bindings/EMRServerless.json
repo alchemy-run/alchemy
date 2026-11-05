@@ -17,16 +17,14 @@
       "resource": "Application",
       "request": {
         "mode": "none"
-      },
-      "actions": ["emr-serverless:StartApplication"]
+      }
     },
     "StopApplication": {
       "operation": "stopApplication",
       "resource": "Application",
       "request": {
         "mode": "none"
-      },
-      "actions": ["emr-serverless:StopApplication"]
+      }
     }
   }
 }

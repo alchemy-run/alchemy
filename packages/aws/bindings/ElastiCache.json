@@ -19,7 +19,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["elasticache:CopyServerlessCacheSnapshot", "elasticache:AddTagsToResource"],
       "withTs": {
         "resources": "[SERVERLESS_SNAPSHOT_ARN_WILDCARD]"
       },
@@ -38,7 +37,6 @@
         "inline": true
       },
       "builder": "makeElastiCacheCacheHttpBinding",
-      "actions": ["elasticache:CreateServerlessCacheSnapshot", "elasticache:AddTagsToResource"],
       "withTs": {
         "extraResources": "[SERVERLESS_SNAPSHOT_ARN_WILDCARD]"
       },
@@ -52,7 +50,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["elasticache:DeleteServerlessCacheSnapshot"],
       "withTs": {
         "resources": "[SERVERLESS_SNAPSHOT_ARN_WILDCARD]"
       },
@@ -62,23 +59,19 @@
       "note": "Snapshot names are runtime data."
     },
     "DescribeEvents": {
-      "operation": "describeEvents",
-      "actions": ["elasticache:DescribeEvents"]
+      "operation": "describeEvents"
     },
     "DescribeServerlessCacheSnapshots": {
-      "operation": "describeServerlessCacheSnapshots",
-      "actions": ["elasticache:DescribeServerlessCacheSnapshots"]
+      "operation": "describeServerlessCacheSnapshots"
     },
     "DescribeServerlessCaches": {
-      "operation": "describeServerlessCaches",
-      "actions": ["elasticache:DescribeServerlessCaches"]
+      "operation": "describeServerlessCaches"
     },
     "ExportServerlessCacheSnapshot": {
       "operation": "exportServerlessCacheSnapshot",
       "request": {
         "mode": "required"
       },
-      "actions": ["elasticache:ExportServerlessCacheSnapshot"],
       "withTs": {
         "resources": "[SERVERLESS_SNAPSHOT_ARN_WILDCARD]"
       },

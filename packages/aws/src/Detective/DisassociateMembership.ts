@@ -48,5 +48,6 @@ export const DisassociateMembershipHttp = Layer.effect(
     tag: "AWS.Detective.DisassociateMembership",
     operation: detective.disassociateMembership,
     actions: ["detective:DisassociateMembership"],
+    arns: ["arn:${Partition}:detective:${Region}:${Account}:graph:*"],
   }),
 );

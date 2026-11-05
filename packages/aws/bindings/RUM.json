@@ -19,8 +19,7 @@
         "mode": "required",
         "interface": "GetAppMonitorDataRequest",
         "omit": ["Name"]
-      },
-      "actions": ["rum:GetAppMonitorData"]
+      }
     }
   }
 }

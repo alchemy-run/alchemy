@@ -43,5 +43,6 @@ export const PublishSmsHttp = Layer.effect(
     tag: "AWS.SNS.PublishSms",
     operation: sns.publish,
     actions: ["sns:Publish", "sms-voice:SendTextMessage"],
+    arns: ["arn:${Partition}:sns:${Region}:${Account}:*"],
   }),
 );

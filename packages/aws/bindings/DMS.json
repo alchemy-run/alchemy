@@ -26,23 +26,19 @@
   },
   "bindings": {
     "DescribeConnections": {
-      "operation": "describeConnections",
-      "actions": ["dms:DescribeConnections"]
+      "operation": "describeConnections"
     },
     "DescribeEndpointSettings": {
       "operation": "describeEndpointSettings",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dms:DescribeEndpointSettings"]
+      }
     },
     "DescribeEvents": {
-      "operation": "describeEvents",
-      "actions": ["dms:DescribeEvents"]
+      "operation": "describeEvents"
     },
     "DescribeOrderableReplicationInstances": {
-      "operation": "describeOrderableReplicationInstances",
-      "actions": ["dms:DescribeOrderableReplicationInstances"]
+      "operation": "describeOrderableReplicationInstances"
     },
     "DescribeRefreshSchemasStatus": {
       "operation": "describeRefreshSchemasStatus",
@@ -50,9 +46,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeDmsEndpointScopedHttpBinding",
-      "actions": ["dms:DescribeRefreshSchemasStatus"],
-      "arns": ["arn:${Partition}:dms:${Region}:${Account}:endpoint:*"]
+      "builder": "makeDmsEndpointScopedHttpBinding"
     },
     "DescribeReplicationInstanceTaskLogs": {
       "operation": "describeReplicationInstanceTaskLogs",
@@ -64,18 +58,15 @@
         "inline": true
       },
       "builder": "makeDmsInstanceScopedHttpBinding",
-      "actions": ["dms:DescribeReplicationInstanceTaskLogs"],
       "with": {
         "iam": "wildcard"
       }
     },
     "DescribeReplicationTasks": {
-      "operation": "describeReplicationTasks",
-      "actions": ["dms:DescribeReplicationTasks"]
+      "operation": "describeReplicationTasks"
     },
     "DescribeReplications": {
-      "operation": "describeReplications",
-      "actions": ["dms:DescribeReplications"]
+      "operation": "describeReplications"
     },
     "DescribeSchemas": {
       "operation": "describeSchemas",
@@ -85,17 +76,13 @@
         "omit": ["EndpointArn"],
         "inline": true
       },
-      "builder": "makeDmsEndpointScopedHttpBinding",
-      "actions": ["dms:DescribeSchemas"],
-      "arns": ["arn:${Partition}:dms:${Region}:${Account}:endpoint:*"]
+      "builder": "makeDmsEndpointScopedHttpBinding"
     },
     "DescribeTableStatistics": {
       "operation": "describeTableStatistics",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dms:DescribeTableStatistics"],
-      "arns": ["arn:${Partition}:dms:${Region}:${Account}:task:*"]
+      }
     },
     "RebootReplicationInstance": {
       "operation": "rebootReplicationInstance",
@@ -107,7 +94,6 @@
         "inline": true
       },
       "builder": "makeDmsInstanceScopedHttpBinding",
-      "actions": ["dms:RebootReplicationInstance"],
       "with": {
         "iam": "resource"
       }
@@ -116,41 +102,31 @@
       "operation": "reloadTables",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dms:ReloadTables"],
-      "arns": ["arn:${Partition}:dms:${Region}:${Account}:task:*"]
+      }
     },
     "StartReplication": {
       "operation": "startReplication",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dms:StartReplication"],
-      "arns": ["arn:${Partition}:dms:${Region}:${Account}:replication-config:*"]
+      }
     },
     "StartReplicationTask": {
       "operation": "startReplicationTask",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dms:StartReplicationTask"],
-      "arns": ["arn:${Partition}:dms:${Region}:${Account}:task:*"]
+      }
     },
     "StopReplication": {
       "operation": "stopReplication",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dms:StopReplication"],
-      "arns": ["arn:${Partition}:dms:${Region}:${Account}:replication-config:*"]
+      }
     },
     "StopReplicationTask": {
       "operation": "stopReplicationTask",
       "request": {
         "mode": "required"
-      },
-      "actions": ["dms:StopReplicationTask"],
-      "arns": ["arn:${Partition}:dms:${Region}:${Account}:task:*"]
+      }
     }
   }
 }

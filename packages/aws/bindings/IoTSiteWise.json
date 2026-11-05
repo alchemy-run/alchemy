@@ -35,7 +35,6 @@
         "interface": "DescribeAssetRequest",
         "omit": ["assetId"]
       },
-      "actions": ["iotsitewise:DescribeAsset"],
       "withTs": {
         "prepare": "(request: DescribeAssetRequest | undefined, assetId) => ({...request, assetId})"
       }
@@ -47,8 +46,7 @@
         "interface": "ExecuteQueryRequest",
         "omit": []
       },
-      "builder": "makeSiteWiseAccountHttpBinding",
-      "actions": ["iotsitewise:ExecuteQuery"]
+      "builder": "makeSiteWiseAccountHttpBinding"
     },
     "GetAssetPropertyAggregates": {
       "operation": "getAssetPropertyAggregates",
@@ -58,7 +56,6 @@
         "interface": "GetAssetPropertyAggregatesRequest",
         "omit": ["assetId"]
       },
-      "actions": ["iotsitewise:GetAssetPropertyAggregates"],
       "withTs": {
         "prepare": "(request: GetAssetPropertyAggregatesRequest, assetId) => ({...request, assetId})"
       }
@@ -71,7 +68,6 @@
         "interface": "GetAssetPropertyValueRequest",
         "omit": ["assetId"]
       },
-      "actions": ["iotsitewise:GetAssetPropertyValue"],
       "withTs": {
         "prepare": "(request: GetAssetPropertyValueRequest, assetId) => ({...request, assetId})"
       }
@@ -84,7 +80,6 @@
         "interface": "GetAssetPropertyValueHistoryRequest",
         "omit": ["assetId"]
       },
-      "actions": ["iotsitewise:GetAssetPropertyValueHistory"],
       "withTs": {
         "prepare": "(request: GetAssetPropertyValueHistoryRequest, assetId) => ({...request, assetId})"
       }
@@ -97,7 +92,6 @@
         "interface": "GetInterpolatedAssetPropertyValuesRequest",
         "omit": ["assetId"]
       },
-      "actions": ["iotsitewise:GetInterpolatedAssetPropertyValues"],
       "withTs": {
         "prepare": "(request: GetInterpolatedAssetPropertyValuesRequest, assetId) => ({...request, assetId})"
       }
@@ -110,7 +104,6 @@
         "interface": "ListAssetPropertiesRequest",
         "omit": ["assetId"]
       },
-      "actions": ["iotsitewise:ListAssetProperties"],
       "withTs": {
         "prepare": "(request: ListAssetPropertiesRequest | undefined, assetId) => ({...request, assetId})"
       }

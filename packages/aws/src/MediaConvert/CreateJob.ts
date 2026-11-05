@@ -47,7 +47,7 @@ export const CreateJobHttp = Layer.effect(
   CreateJob,
   makeMediaConvertHttpBinding({
     capability: "CreateJob",
-    iamActions: ["mediaconvert:CreateJob"],
+    iamActions: ["mediaconvert:CreateJob", "mediaconvert:TagResource"],
     operation: mediaconvert.createJob,
     passRole: true,
   }),

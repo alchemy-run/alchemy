@@ -49,5 +49,6 @@ export const PredictQAppHttp = Layer.effect(
     capability: "PredictQApp",
     iamActions: ["qapps:PredictQApp"],
     operation: qapps.predictQApp,
+    arns: ["arn:${Partition}:qbusiness:${Region}:${Account}:application/*"],
   }),
 );

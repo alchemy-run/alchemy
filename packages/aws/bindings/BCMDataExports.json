@@ -36,8 +36,7 @@
         "mode": "required",
         "interface": "GetExecutionRequest",
         "omit": ["ExportArn"]
-      },
-      "actions": ["bcm-data-exports:GetExecution"]
+      }
     },
     "GetExport": {
       "operation": "getExport",
@@ -45,8 +44,7 @@
       "param": "dataExport",
       "request": {
         "mode": "none"
-      },
-      "actions": ["bcm-data-exports:GetExport"]
+      }
     },
     "GetTable": {
       "operation": "getTable",
@@ -55,9 +53,7 @@
         "interface": "GetTableRequest",
         "omit": []
       },
-      "builder": "makeDataExportsAccountHttpBinding",
-      "actions": ["bcm-data-exports:GetTable"],
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:bcm-data-exports:${Region}:${Account}:table/*), the call was denied live in the BCMDataExports Bindings suite; the grant stays on *."
+      "builder": "makeDataExportsAccountHttpBinding"
     },
     "ListExecutions": {
       "operation": "listExecutions",
@@ -67,8 +63,7 @@
         "mode": "optional",
         "interface": "ListExecutionsRequest",
         "omit": ["ExportArn"]
-      },
-      "actions": ["bcm-data-exports:ListExecutions"]
+      }
     },
     "ListExports": {
       "operation": "listExports",
@@ -77,8 +72,7 @@
         "interface": "ListExportsRequest",
         "omit": []
       },
-      "builder": "makeDataExportsAccountHttpBinding",
-      "actions": ["bcm-data-exports:ListExports"]
+      "builder": "makeDataExportsAccountHttpBinding"
     },
     "ListTables": {
       "operation": "listTables",
@@ -87,8 +81,7 @@
         "interface": "ListTablesRequest",
         "omit": []
       },
-      "builder": "makeDataExportsAccountHttpBinding",
-      "actions": ["bcm-data-exports:ListTables"]
+      "builder": "makeDataExportsAccountHttpBinding"
     }
   }
 }

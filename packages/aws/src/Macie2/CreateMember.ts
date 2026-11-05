@@ -41,6 +41,7 @@ export const CreateMemberHttp = Layer.effect(
   makeMacie2HttpBinding({
     tag: "AWS.Macie2.CreateMember",
     operation: macie2.createMember,
-    actions: ["macie2:CreateMember"],
+    actions: ["macie2:CreateMember", "macie2:TagResource"],
+    arns: ["arn:${Partition}:macie2:${Region}:${Account}:member/*"],
   }),
 );

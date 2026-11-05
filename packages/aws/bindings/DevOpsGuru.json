@@ -14,137 +14,115 @@
       "operation": "deleteInsight",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:DeleteInsight"]
+      }
     },
     "DescribeAccountHealth": {
-      "operation": "describeAccountHealth",
-      "actions": ["devops-guru:DescribeAccountHealth"]
+      "operation": "describeAccountHealth"
     },
     "DescribeAccountOverview": {
       "operation": "describeAccountOverview",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:DescribeAccountOverview"]
+      }
     },
     "DescribeAnomaly": {
       "operation": "describeAnomaly",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:DescribeAnomaly"]
+      }
     },
     "DescribeFeedback": {
-      "operation": "describeFeedback",
-      "actions": ["devops-guru:DescribeFeedback"]
+      "operation": "describeFeedback"
     },
     "DescribeInsight": {
       "operation": "describeInsight",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:DescribeInsight"]
+      }
     },
     "DescribeOrganizationHealth": {
-      "operation": "describeOrganizationHealth",
-      "actions": ["devops-guru:DescribeOrganizationHealth"]
+      "operation": "describeOrganizationHealth"
     },
     "DescribeOrganizationOverview": {
       "operation": "describeOrganizationOverview",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:DescribeOrganizationOverview"]
+      }
     },
     "DescribeOrganizationResourceCollectionHealth": {
       "operation": "describeOrganizationResourceCollectionHealth",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:DescribeOrganizationResourceCollectionHealth"]
+      }
     },
     "DescribeResourceCollectionHealth": {
       "operation": "describeResourceCollectionHealth",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:DescribeResourceCollectionHealth"]
+      }
     },
     "GetCostEstimation": {
-      "operation": "getCostEstimation",
-      "actions": ["devops-guru:GetCostEstimation"]
+      "operation": "getCostEstimation"
     },
     "ListAnomaliesForInsight": {
       "operation": "listAnomaliesForInsight",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:ListAnomaliesForInsight"]
+      }
     },
     "ListAnomalousLogGroups": {
       "operation": "listAnomalousLogGroups",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:ListAnomalousLogGroups"]
+      }
     },
     "ListEvents": {
       "operation": "listEvents",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:ListEvents"]
+      }
     },
     "ListInsights": {
       "operation": "listInsights",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:ListInsights"]
+      }
     },
     "ListMonitoredResources": {
-      "operation": "listMonitoredResources",
-      "actions": ["devops-guru:ListMonitoredResources"]
+      "operation": "listMonitoredResources"
     },
     "ListOrganizationInsights": {
       "operation": "listOrganizationInsights",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:ListOrganizationInsights"]
+      }
     },
     "ListRecommendations": {
       "operation": "listRecommendations",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:ListRecommendations"]
+      }
     },
     "PutFeedback": {
-      "operation": "putFeedback",
-      "actions": ["devops-guru:PutFeedback"]
+      "operation": "putFeedback"
     },
     "SearchInsights": {
       "operation": "searchInsights",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:SearchInsights"]
+      }
     },
     "SearchOrganizationInsights": {
       "operation": "searchOrganizationInsights",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:SearchOrganizationInsights"]
+      }
     },
     "StartCostEstimation": {
       "operation": "startCostEstimation",
       "request": {
         "mode": "required"
-      },
-      "actions": ["devops-guru:StartCostEstimation"]
+      }
     }
   }
 }

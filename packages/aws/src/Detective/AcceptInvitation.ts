@@ -43,5 +43,6 @@ export const AcceptInvitationHttp = Layer.effect(
     tag: "AWS.Detective.AcceptInvitation",
     operation: detective.acceptInvitation,
     actions: ["detective:AcceptInvitation"],
+    arns: ["arn:${Partition}:detective:${Region}:${Account}:graph:*"],
   }),
 );

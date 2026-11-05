@@ -27,7 +27,6 @@
         "omit": []
       },
       "builder": "makeEcsServiceHttpBinding",
-      "actions": ["ecs:ContinueServiceDeployment"],
       "with": {
         "resources": ["service-deployment"]
       },
@@ -41,7 +40,6 @@
         "interface": "DescribeContainerInstancesRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:DescribeContainerInstances"],
       "with": {
         "resources": ["container-instance"]
       },
@@ -56,7 +54,6 @@
         "omit": []
       },
       "builder": "makeEcsServiceHttpBinding",
-      "actions": ["ecs:DescribeServiceDeployments"],
       "with": {
         "resources": ["service-deployment"]
       },
@@ -71,7 +68,6 @@
         "omit": []
       },
       "builder": "makeEcsServiceHttpBinding",
-      "actions": ["ecs:DescribeServiceRevisions"],
       "with": {
         "resources": ["service-revision"]
       },
@@ -85,7 +81,6 @@
         "interface": "DescribeServicesRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:DescribeServices"],
       "with": {
         "resources": ["service"]
       },
@@ -99,7 +94,6 @@
         "interface": "DescribeTasksRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:DescribeTasks"],
       "with": {
         "resources": ["task"]
       },
@@ -113,7 +107,6 @@
         "interface": "ExecuteCommandRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:ExecuteCommand"],
       "with": {
         "resources": ["cluster", "task"]
       },
@@ -127,7 +120,6 @@
         "interface": "GetTaskProtectionRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:GetTaskProtection"],
       "with": {
         "resources": ["task"]
       },
@@ -141,7 +133,6 @@
         "interface": "ListContainerInstancesRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:ListContainerInstances"],
       "with": {
         "resources": ["cluster"]
       },
@@ -156,7 +147,6 @@
         "omit": ["service", "cluster"]
       },
       "builder": "makeEcsServiceHttpBinding",
-      "actions": ["ecs:ListServiceDeployments"],
       "with": {
         "resources": ["service"],
         "inject": true
@@ -171,11 +161,10 @@
         "interface": "ListServicesRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:ListServices"],
       "with": {
         "resources": "cluster-condition"
       },
-      "note": "`ecs:ListServices` has no resource-level scoping \u2014 grant `*` conditioned on the bound cluster."
+      "note": "`ecs:ListServices` has no resource-level scoping — grant `*` conditioned on the bound cluster."
     },
     "ListTasks": {
       "operation": "listTasks",
@@ -185,7 +174,6 @@
         "interface": "ListTasksRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:ListTasks"],
       "with": {
         "resources": "cluster-condition"
       },
@@ -200,7 +188,6 @@
         "omit": []
       },
       "builder": "makeEcsServiceHttpBinding",
-      "actions": ["ecs:StopServiceDeployment"],
       "with": {
         "resources": ["service-deployment"]
       },
@@ -214,7 +201,6 @@
         "interface": "StopTaskRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:StopTask"],
       "with": {
         "resources": ["task"]
       },
@@ -228,7 +214,6 @@
         "interface": "UpdateContainerInstancesStateRequest",
         "omit": ["cluster"]
       },
-      "actions": ["ecs:UpdateContainerInstancesState"],
       "with": {
         "resources": ["container-instance"]
       },

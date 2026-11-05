@@ -21,8 +21,7 @@
       "operation": "copyClusterSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["redshift:CopyClusterSnapshot"]
+      }
     },
     "CreateClusterSnapshot": {
       "operation": "createClusterSnapshot",
@@ -33,35 +32,27 @@
         "inline": true
       },
       "builder": "makeRedshiftClusterHttpBinding",
-      "actions": ["redshift:CreateClusterSnapshot"],
       "withTs": {
         "extraResources": "(clusterArn) => [clusterSnapshotArnPattern(clusterArn)]"
       },
       "imports": {
         "./BindingHttp.ts": ["clusterSnapshotArnPattern"]
-      },
-      "reviewed": {
-        "redshift:CreateTags": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "DeleteClusterSnapshot": {
       "operation": "deleteClusterSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["redshift:DeleteClusterSnapshot"]
+      }
     },
     "DescribeClusterSnapshots": {
-      "operation": "describeClusterSnapshots",
-      "actions": ["redshift:DescribeClusterSnapshots"]
+      "operation": "describeClusterSnapshots"
     },
     "DescribeClusters": {
-      "operation": "describeClusters",
-      "actions": ["redshift:DescribeClusters"]
+      "operation": "describeClusters"
     },
     "DescribeEvents": {
-      "operation": "describeEvents",
-      "actions": ["redshift:DescribeEvents"]
+      "operation": "describeEvents"
     },
     "PauseCluster": {
       "operation": "pauseCluster",
@@ -69,8 +60,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeRedshiftClusterHttpBinding",
-      "actions": ["redshift:PauseCluster"]
+      "builder": "makeRedshiftClusterHttpBinding"
     },
     "RebootCluster": {
       "operation": "rebootCluster",
@@ -78,8 +68,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeRedshiftClusterHttpBinding",
-      "actions": ["redshift:RebootCluster"]
+      "builder": "makeRedshiftClusterHttpBinding"
     },
     "ResumeCluster": {
       "operation": "resumeCluster",
@@ -87,8 +76,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeRedshiftClusterHttpBinding",
-      "actions": ["redshift:ResumeCluster"]
+      "builder": "makeRedshiftClusterHttpBinding"
     }
   }
 }

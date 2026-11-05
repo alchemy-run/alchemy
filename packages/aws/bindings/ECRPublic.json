@@ -21,25 +21,20 @@
         "mode": "optional",
         "interface": "DescribeRegistriesRequest",
         "omit": []
-      },
-      "actions": ["ecr-public:DescribeRegistries"],
-      "arns": ["arn:${Partition}:ecr-public::${Account}:registry/*"]
+      }
     },
     "GetAuthorizationToken": {
       "operation": "getAuthorizationToken",
       "request": {
         "mode": "none"
       },
-      "actions": ["ecr-public:GetAuthorizationToken", "sts:GetServiceBearerToken"],
       "note": "The API requires both permissions; see the GetAuthorizationToken docs."
     },
     "GetRegistryCatalogData": {
       "operation": "getRegistryCatalogData",
       "request": {
         "mode": "none"
-      },
-      "actions": ["ecr-public:GetRegistryCatalogData"],
-      "arns": ["arn:${Partition}:ecr-public::${Account}:registry/*"]
+      }
     }
   }
 }

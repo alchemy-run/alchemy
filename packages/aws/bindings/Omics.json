@@ -36,7 +36,6 @@
         "interface": "BatchDeleteReadSetRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:BatchDeleteReadSet"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -52,8 +51,7 @@
         "interface": "CancelRunRequest",
         "omit": []
       },
-      "builder": "makeOmicsAccountHttpBinding",
-      "actions": ["omics:CancelRun"]
+      "builder": "makeOmicsAccountHttpBinding"
     },
     "DeleteReference": {
       "operation": "deleteReference",
@@ -64,7 +62,6 @@
         "interface": "DeleteReferenceRequest",
         "omit": ["referenceStoreId"]
       },
-      "actions": ["omics:DeleteReference"],
       "with": {
         "key": "referenceStoreId"
       },
@@ -80,8 +77,7 @@
         "interface": "DeleteRunRequest",
         "omit": []
       },
-      "builder": "makeOmicsAccountHttpBinding",
-      "actions": ["omics:DeleteRun"]
+      "builder": "makeOmicsAccountHttpBinding"
     },
     "GetReadSet": {
       "operation": "getReadSet",
@@ -92,7 +88,6 @@
         "interface": "GetReadSetRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:GetReadSet"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -110,7 +105,6 @@
         "interface": "GetReadSetActivationJobRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:GetReadSetActivationJob"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -128,7 +122,6 @@
         "interface": "GetReadSetExportJobRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:GetReadSetExportJob"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -146,7 +139,6 @@
         "interface": "GetReadSetImportJobRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:GetReadSetImportJob"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -164,7 +156,6 @@
         "interface": "GetReadSetMetadataRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:GetReadSetMetadata"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -182,7 +173,6 @@
         "interface": "GetReferenceRequest",
         "omit": ["referenceStoreId"]
       },
-      "actions": ["omics:GetReference"],
       "with": {
         "key": "referenceStoreId"
       },
@@ -200,7 +190,6 @@
         "interface": "GetReferenceImportJobRequest",
         "omit": ["referenceStoreId"]
       },
-      "actions": ["omics:GetReferenceImportJob"],
       "with": {
         "key": "referenceStoreId"
       },
@@ -218,7 +207,6 @@
         "interface": "GetReferenceMetadataRequest",
         "omit": ["referenceStoreId"]
       },
-      "actions": ["omics:GetReferenceMetadata"],
       "with": {
         "key": "referenceStoreId"
       },
@@ -234,8 +222,7 @@
         "interface": "GetRunRequest",
         "omit": []
       },
-      "builder": "makeOmicsAccountHttpBinding",
-      "actions": ["omics:GetRun"]
+      "builder": "makeOmicsAccountHttpBinding"
     },
     "GetRunTask": {
       "operation": "getRunTask",
@@ -244,8 +231,7 @@
         "interface": "GetRunTaskRequest",
         "omit": []
       },
-      "builder": "makeOmicsAccountHttpBinding",
-      "actions": ["omics:GetRunTask"]
+      "builder": "makeOmicsAccountHttpBinding"
     },
     "ListAnnotationImportJobs": {
       "operation": "listAnnotationImportJobs",
@@ -254,8 +240,7 @@
         "interface": "ListAnnotationImportJobsRequest",
         "omit": []
       },
-      "builder": "makeOmicsAccountHttpBinding",
-      "actions": ["omics:ListAnnotationImportJobs"]
+      "builder": "makeOmicsAccountHttpBinding"
     },
     "ListReadSetActivationJobs": {
       "operation": "listReadSetActivationJobs",
@@ -266,7 +251,6 @@
         "interface": "ListReadSetActivationJobsRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:ListReadSetActivationJobs"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -284,7 +268,6 @@
         "interface": "ListReadSetExportJobsRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:ListReadSetExportJobs"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -302,7 +285,6 @@
         "interface": "ListReadSetImportJobsRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:ListReadSetImportJobs"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -320,7 +302,6 @@
         "interface": "ListReadSetsRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:ListReadSets"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -338,7 +319,6 @@
         "interface": "ListReferenceImportJobsRequest",
         "omit": ["referenceStoreId"]
       },
-      "actions": ["omics:ListReferenceImportJobs"],
       "with": {
         "key": "referenceStoreId"
       },
@@ -356,7 +336,6 @@
         "interface": "ListReferencesRequest",
         "omit": ["referenceStoreId"]
       },
-      "actions": ["omics:ListReferences"],
       "with": {
         "key": "referenceStoreId"
       },
@@ -372,8 +351,7 @@
         "interface": "ListRunTasksRequest",
         "omit": []
       },
-      "builder": "makeOmicsAccountHttpBinding",
-      "actions": ["omics:ListRunTasks"]
+      "builder": "makeOmicsAccountHttpBinding"
     },
     "ListRuns": {
       "operation": "listRuns",
@@ -382,8 +360,7 @@
         "interface": "ListRunsRequest",
         "omit": []
       },
-      "builder": "makeOmicsAccountHttpBinding",
-      "actions": ["omics:ListRuns"]
+      "builder": "makeOmicsAccountHttpBinding"
     },
     "ListVariantImportJobs": {
       "operation": "listVariantImportJobs",
@@ -392,8 +369,7 @@
         "interface": "ListVariantImportJobsRequest",
         "omit": []
       },
-      "builder": "makeOmicsAccountHttpBinding",
-      "actions": ["omics:ListVariantImportJobs"]
+      "builder": "makeOmicsAccountHttpBinding"
     },
     "StartAnnotationImportJob": {
       "operation": "startAnnotationImportJob",
@@ -404,7 +380,6 @@
         "interface": "StartAnnotationImportJobRequest",
         "omit": ["destinationName"]
       },
-      "actions": ["omics:StartAnnotationImportJob"],
       "with": {
         "key": "destinationName",
         "passRole": true
@@ -423,7 +398,6 @@
         "interface": "StartReadSetActivationJobRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:StartReadSetActivationJob"],
       "with": {
         "key": "sequenceStoreId"
       },
@@ -441,7 +415,6 @@
         "interface": "StartReadSetExportJobRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:StartReadSetExportJob"],
       "with": {
         "key": "sequenceStoreId",
         "passRole": true
@@ -460,7 +433,6 @@
         "interface": "StartReadSetImportJobRequest",
         "omit": ["sequenceStoreId"]
       },
-      "actions": ["omics:StartReadSetImportJob"],
       "with": {
         "key": "sequenceStoreId",
         "passRole": true
@@ -468,9 +440,6 @@
       "withTs": {
         "id": "(store: SequenceStore) => store.sequenceStoreId",
         "arn": "(store: SequenceStore) => store.sequenceStoreArn"
-      },
-      "reviewed": {
-        "omics:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "StartReferenceImportJob": {
@@ -482,7 +451,6 @@
         "interface": "StartReferenceImportJobRequest",
         "omit": ["referenceStoreId"]
       },
-      "actions": ["omics:StartReferenceImportJob"],
       "with": {
         "key": "referenceStoreId",
         "passRole": true
@@ -490,9 +458,6 @@
       "withTs": {
         "id": "(store: ReferenceStore) => store.referenceStoreId",
         "arn": "(store: ReferenceStore) => store.referenceStoreArn"
-      },
-      "reviewed": {
-        "omics:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "StartRun": {
@@ -503,7 +468,6 @@
         "interface": "StartRunRequest",
         "omit": ["workflowId"]
       },
-      "actions": ["omics:StartRun"],
       "with": {
         "key": "workflowId",
         "passRole": true
@@ -511,9 +475,6 @@
       "withTs": {
         "id": "(workflow: Workflow) => workflow.workflowId",
         "arn": "(workflow: Workflow) => workflow.workflowArn"
-      },
-      "reviewed": {
-        "omics:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "StartVariantImportJob": {
@@ -525,7 +486,6 @@
         "interface": "StartVariantImportJobRequest",
         "omit": ["destinationName"]
       },
-      "actions": ["omics:StartVariantImportJob"],
       "with": {
         "key": "destinationName",
         "passRole": true

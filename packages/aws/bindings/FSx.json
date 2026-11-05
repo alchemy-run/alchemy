@@ -21,28 +21,20 @@
       "operation": "cancelDataRepositoryTask",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fsx:CancelDataRepositoryTask"],
-      "arns": ["arn:${Partition}:fsx:${Region}:${Account}:task/*"]
+      }
     },
     "CopyBackup": {
       "operation": "copyBackup",
       "request": {
         "mode": "required"
       },
-      "actions": ["fsx:CopyBackup", "fsx:TagResource"],
       "note": "CopyBackup tags the new backup it creates, so it needs TagResource alongside the copy itself."
     },
     "CopySnapshotAndUpdateVolume": {
       "operation": "copySnapshotAndUpdateVolume",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fsx:CopySnapshotAndUpdateVolume"],
-      "arns": [
-        "arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*",
-        "arn:${Partition}:fsx:${Region}:${Account}:volume/*/*"
-      ]
+      }
     },
     "CreateBackup": {
       "operation": "createBackup",
@@ -53,7 +45,6 @@
         "inline": true
       },
       "builder": "makeFSxFileSystemHttpBinding",
-      "actions": ["fsx:CreateBackup", "fsx:TagResource"],
       "with": {
         "extraResourceArns": ["arn:aws:fsx:*:*:backup/*"]
       },
@@ -68,7 +59,6 @@
         "inline": true
       },
       "builder": "makeFSxFileSystemHttpBinding",
-      "actions": ["fsx:CreateDataRepositoryTask", "fsx:TagResource"],
       "with": {
         "extraResourceArns": ["arn:aws:fsx:*:*:task/*"]
       },
@@ -78,36 +68,28 @@
       "operation": "createSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fsx:CreateSnapshot", "fsx:TagResource"]
+      }
     },
     "DeleteBackup": {
       "operation": "deleteBackup",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fsx:DeleteBackup"],
-      "arns": ["arn:${Partition}:fsx:${Region}:${Account}:backup/*"]
+      }
     },
     "DeleteSnapshot": {
       "operation": "deleteSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fsx:DeleteSnapshot"],
-      "arns": ["arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*"]
+      }
     },
     "DescribeBackups": {
-      "operation": "describeBackups",
-      "actions": ["fsx:DescribeBackups"]
+      "operation": "describeBackups"
     },
     "DescribeDataRepositoryAssociations": {
-      "operation": "describeDataRepositoryAssociations",
-      "actions": ["fsx:DescribeDataRepositoryAssociations"]
+      "operation": "describeDataRepositoryAssociations"
     },
     "DescribeDataRepositoryTasks": {
-      "operation": "describeDataRepositoryTasks",
-      "actions": ["fsx:DescribeDataRepositoryTasks"]
+      "operation": "describeDataRepositoryTasks"
     },
     "DescribeFileSystem": {
       "operation": "describeFileSystems",
@@ -116,22 +98,18 @@
         "mode": "none"
       },
       "builder": "makeFSxFileSystemHttpBinding",
-      "actions": ["fsx:DescribeFileSystems"],
       "with": {
         "requestKey": "FileSystemIds"
       }
     },
     "DescribeSnapshots": {
-      "operation": "describeSnapshots",
-      "actions": ["fsx:DescribeSnapshots"]
+      "operation": "describeSnapshots"
     },
     "DescribeStorageVirtualMachines": {
-      "operation": "describeStorageVirtualMachines",
-      "actions": ["fsx:DescribeStorageVirtualMachines"]
+      "operation": "describeStorageVirtualMachines"
     },
     "DescribeVolumes": {
-      "operation": "describeVolumes",
-      "actions": ["fsx:DescribeVolumes"]
+      "operation": "describeVolumes"
     },
     "ReleaseFileSystemNfsV3Locks": {
       "operation": "releaseFileSystemNfsV3Locks",
@@ -141,24 +119,19 @@
         "omit": ["FileSystemId"],
         "inline": true
       },
-      "builder": "makeFSxFileSystemHttpBinding",
-      "actions": ["fsx:ReleaseFileSystemNfsV3Locks"]
+      "builder": "makeFSxFileSystemHttpBinding"
     },
     "RestoreVolumeFromSnapshot": {
       "operation": "restoreVolumeFromSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fsx:RestoreVolumeFromSnapshot"],
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*, arn:${Partition}:fsx:${Region}:${Account}:volume/*/*), the call was denied live in the FSx Bindings suite; the grant stays on *."
+      }
     },
     "UpdateSnapshot": {
       "operation": "updateSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fsx:UpdateSnapshot"],
-      "arns": ["arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*"]
+      }
     }
   }
 }

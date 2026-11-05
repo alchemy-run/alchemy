@@ -22,16 +22,14 @@
       "resource": "Rule",
       "request": {
         "mode": "none"
-      },
-      "actions": ["rbin:GetRule"]
+      }
     },
     "ListRules": {
       "operation": "listRules",
       "request": {
         "mode": "required"
       },
-      "builder": "makeRbinAccountHttpBinding",
-      "actions": ["rbin:ListRules"]
+      "builder": "makeRbinAccountHttpBinding"
     }
   }
 }

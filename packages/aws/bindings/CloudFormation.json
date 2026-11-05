@@ -22,8 +22,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeCloudFormationAccountHttpBinding",
-      "actions": ["cloudformation:DescribeStackDriftDetectionStatus"]
+      "builder": "makeCloudFormationAccountHttpBinding"
     },
     "DescribeStackEvents": {
       "operation": "describeStackEvents",
@@ -32,8 +31,7 @@
         "mode": "optional",
         "omit": ["StackName"],
         "inline": true
-      },
-      "actions": ["cloudformation:DescribeStackEvents"]
+      }
     },
     "DescribeStackResourceDrifts": {
       "operation": "describeStackResourceDrifts",
@@ -42,8 +40,7 @@
         "mode": "optional",
         "omit": ["StackName"],
         "inline": true
-      },
-      "actions": ["cloudformation:DescribeStackResourceDrifts"]
+      }
     },
     "DescribeStackResources": {
       "operation": "describeStackResources",
@@ -52,8 +49,7 @@
         "mode": "optional",
         "omit": ["StackName"],
         "inline": true
-      },
-      "actions": ["cloudformation:DescribeStackResources"]
+      }
     },
     "DescribeStacks": {
       "operation": "describeStacks",
@@ -62,10 +58,6 @@
         "mode": "optional",
         "omit": ["StackName"],
         "inline": true
-      },
-      "actions": ["cloudformation:DescribeStacks"],
-      "reviewed": {
-        "cloudformation:ListStacks": "AWS lists it for the operation, but the CloudFormation Bindings suite calls it successfully without it."
       }
     },
     "DetectStackDrift": {
@@ -76,7 +68,6 @@
         "omit": ["StackName"],
         "inline": true
       },
-      "actions": ["cloudformation:DetectStackDrift", "cloudformation:DetectStackResourceDrift"],
       "note": "DetectStackDrift authorizes BOTH actions on the stack — the per-stack call fans out to per-resource drift checks and AWS rejects the call with AccessDenied on cloudformation:DetectStackResourceDrift alone."
     },
     "GetTemplate": {
@@ -86,21 +77,18 @@
         "mode": "optional",
         "omit": ["StackName"],
         "inline": true
-      },
-      "actions": ["cloudformation:GetTemplate"]
+      }
     },
     "ListExports": {
       "operation": "listExports",
-      "builder": "makeCloudFormationAccountHttpBinding",
-      "actions": ["cloudformation:ListExports"]
+      "builder": "makeCloudFormationAccountHttpBinding"
     },
     "ListImports": {
       "operation": "listImports",
       "request": {
         "mode": "required"
       },
-      "builder": "makeCloudFormationAccountHttpBinding",
-      "actions": ["cloudformation:ListImports"]
+      "builder": "makeCloudFormationAccountHttpBinding"
     },
     "ListStackResources": {
       "operation": "listStackResources",
@@ -109,8 +97,7 @@
         "mode": "optional",
         "omit": ["StackName"],
         "inline": true
-      },
-      "actions": ["cloudformation:ListStackResources"]
+      }
     },
     "SignalResource": {
       "operation": "signalResource",
@@ -119,16 +106,14 @@
         "mode": "required",
         "omit": ["StackName"],
         "inline": true
-      },
-      "actions": ["cloudformation:SignalResource"]
+      }
     },
     "ValidateTemplate": {
       "operation": "validateTemplate",
       "request": {
         "mode": "required"
       },
-      "builder": "makeCloudFormationAccountHttpBinding",
-      "actions": ["cloudformation:ValidateTemplate"]
+      "builder": "makeCloudFormationAccountHttpBinding"
     }
   }
 }

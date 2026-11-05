@@ -52,7 +52,7 @@ export const CreateClusterSnapshotHttp = Layer.effect(
   makeRedshiftClusterHttpBinding({
     tag: "AWS.Redshift.CreateClusterSnapshot",
     operation: redshift.createClusterSnapshot,
-    actions: ["redshift:CreateClusterSnapshot"],
+    actions: ["redshift:CreateClusterSnapshot", "redshift:CreateTags"],
     extraResources: (clusterArn) => [clusterSnapshotArnPattern(clusterArn)],
   }),
 );

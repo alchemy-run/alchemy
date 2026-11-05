@@ -50,5 +50,6 @@ export const DisassociateFacesHttp = Layer.effect(
     tag: "AWS.Rekognition.DisassociateFaces",
     operation: rekognition.disassociateFaces,
     actions: ["rekognition:DisassociateFaces"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

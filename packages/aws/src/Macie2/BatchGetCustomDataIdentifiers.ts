@@ -47,5 +47,6 @@ export const BatchGetCustomDataIdentifiersHttp = Layer.effect(
     tag: "AWS.Macie2.BatchGetCustomDataIdentifiers",
     operation: macie2.batchGetCustomDataIdentifiers,
     actions: ["macie2:BatchGetCustomDataIdentifiers"],
+    arns: ["arn:${Partition}:macie2:${Region}:${Account}:custom-data-identifier/*"],
   }),
 );

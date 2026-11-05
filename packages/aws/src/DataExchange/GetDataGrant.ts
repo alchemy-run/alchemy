@@ -42,5 +42,6 @@ export const GetDataGrantHttp = Layer.effect(
     tag: "AWS.DataExchange.GetDataGrant",
     operation: dataexchange.getDataGrant,
     actions: ["dataexchange:GetDataGrant"],
+    arns: ["arn:${Partition}:dataexchange:${Region}:${Account}:data-grants/*"],
   }),
 );

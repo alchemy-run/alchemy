@@ -46,5 +46,9 @@ export const ListRelatedItemsHttp = Layer.effect(
     tag: "AWS.SSMIncidents.ListRelatedItems",
     operation: incidents.listRelatedItems,
     actions: ["ssm-incidents:ListRelatedItems"],
+    arns: [
+      "arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*",
+      "arn:${Partition}:ssm-incidents::${Account}:response-plan/*",
+    ],
   }),
 );

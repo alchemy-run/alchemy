@@ -45,5 +45,9 @@ export const GetCoreDeviceHttp = Layer.effect(
     tag: "AWS.GreengrassV2.GetCoreDevice",
     operation: greengrassv2.getCoreDevice,
     actions: ["greengrass:GetCoreDevice", "iot:DescribeThing"],
+    arns: [
+      "arn:${Partition}:greengrass:${Region}:${Account}:coreDevices:*",
+      "arn:${Partition}:iot:${Region}:${Account}:thing/*",
+    ],
   }),
 );

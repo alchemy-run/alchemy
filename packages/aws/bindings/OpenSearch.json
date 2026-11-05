@@ -11,125 +11,106 @@
       "operation": "cancelServiceSoftwareUpdate",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:CancelServiceSoftwareUpdate"]
+      }
     },
     "DescribeDomain": {
       "operation": "describeDomain",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:DescribeDomain"]
+      }
     },
     "DescribeDomainAutoTunes": {
       "operation": "describeDomainAutoTunes",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:DescribeDomainAutoTunes"]
+      }
     },
     "DescribeDomainChangeProgress": {
       "operation": "describeDomainChangeProgress",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:DescribeDomainChangeProgress"]
+      }
     },
     "DescribeDomainConfig": {
       "operation": "describeDomainConfig",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:DescribeDomainConfig"]
+      }
     },
     "DescribeDomainHealth": {
       "operation": "describeDomainHealth",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:DescribeDomainHealth"]
+      }
     },
     "DescribeDomainNodes": {
       "operation": "describeDomainNodes",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:DescribeDomainNodes"]
+      }
     },
     "DescribeDomains": {
       "operation": "describeDomains",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:DescribeDomains"]
+      }
     },
     "GetCompatibleVersions": {
-      "operation": "getCompatibleVersions",
-      "actions": ["es:GetCompatibleVersions"]
+      "operation": "getCompatibleVersions"
     },
     "GetDomainMaintenanceStatus": {
       "operation": "getDomainMaintenanceStatus",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:GetDomainMaintenanceStatus"]
+      }
     },
     "GetUpgradeHistory": {
       "operation": "getUpgradeHistory",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:GetUpgradeHistory"]
+      }
     },
     "GetUpgradeStatus": {
       "operation": "getUpgradeStatus",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:GetUpgradeStatus"]
+      }
     },
     "ListDomainMaintenances": {
       "operation": "listDomainMaintenances",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:ListDomainMaintenances"]
+      }
     },
     "ListDomainNames": {
-      "operation": "listDomainNames",
-      "actions": ["es:ListDomainNames"]
+      "operation": "listDomainNames"
     },
     "ListInstanceTypeDetails": {
       "operation": "listInstanceTypeDetails",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:ListInstanceTypeDetails"]
+      }
     },
     "ListScheduledActions": {
       "operation": "listScheduledActions",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:ListScheduledActions"]
+      }
     },
     "ListVersions": {
-      "operation": "listVersions",
-      "actions": ["es:ListVersions"]
+      "operation": "listVersions"
     },
     "StartDomainMaintenance": {
       "operation": "startDomainMaintenance",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:StartDomainMaintenance"]
+      }
     },
     "StartServiceSoftwareUpdate": {
       "operation": "startServiceSoftwareUpdate",
       "request": {
         "mode": "required"
-      },
-      "actions": ["es:StartServiceSoftwareUpdate"]
+      }
     }
   }
 }

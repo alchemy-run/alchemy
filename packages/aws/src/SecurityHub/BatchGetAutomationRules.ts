@@ -49,5 +49,6 @@ export const BatchGetAutomationRulesHttp = Layer.effect(
     tag: "AWS.SecurityHub.BatchGetAutomationRules",
     operation: securityhub.batchGetAutomationRules,
     actions: ["securityhub:BatchGetAutomationRules"],
+    arns: ["arn:${Partition}:securityhub:${Region}:${Account}:automation-rule/*"],
   }),
 );

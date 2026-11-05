@@ -45,7 +45,7 @@ export const CreateForecastHttp = Layer.effect(
   CreateForecast,
   makeForecastHttpBinding({
     capability: "CreateForecast",
-    iamActions: ["forecast:CreateForecast"],
+    iamActions: ["forecast:CreateForecast", "forecast:TagResource"],
     operation: forecast.createForecast,
     arns: ["arn:${Partition}:forecast:${Region}:${Account}:predictor/*"],
   }),

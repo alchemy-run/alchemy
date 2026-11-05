@@ -50,5 +50,6 @@ export const StopDominantLanguageDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.StopDominantLanguageDetectionJob",
     operation: comprehend.stopDominantLanguageDetectionJob,
     actions: ["comprehend:StopDominantLanguageDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:dominant-language-detection-job/*"],
   }),
 );

@@ -26,8 +26,7 @@
         "mode": "required",
         "interface": "AcceptPredictionsRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:AcceptPredictions"]
+      }
     },
     "AcceptSubscriptionRequest": {
       "operation": "acceptSubscriptionRequest",
@@ -36,8 +35,7 @@
         "mode": "required",
         "interface": "AcceptSubscriptionRequestRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:AcceptSubscriptionRequest"]
+      }
     },
     "CancelSubscription": {
       "operation": "cancelSubscription",
@@ -46,8 +44,7 @@
         "mode": "required",
         "interface": "CancelSubscriptionRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:CancelSubscription"]
+      }
     },
     "CreateAsset": {
       "operation": "createAsset",
@@ -56,8 +53,7 @@
         "mode": "required",
         "interface": "CreateAssetRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:CreateAsset"]
+      }
     },
     "CreateAssetRevision": {
       "operation": "createAssetRevision",
@@ -66,8 +62,7 @@
         "mode": "required",
         "interface": "CreateAssetRevisionRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:CreateAssetRevision"]
+      }
     },
     "CreateSubscriptionRequest": {
       "operation": "createSubscriptionRequest",
@@ -76,8 +71,7 @@
         "mode": "required",
         "interface": "CreateSubscriptionRequestRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:CreateSubscriptionRequest"]
+      }
     },
     "GetAsset": {
       "operation": "getAsset",
@@ -86,8 +80,7 @@
         "mode": "required",
         "interface": "GetAssetRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:GetAsset"]
+      }
     },
     "GetDataSourceRun": {
       "operation": "getDataSourceRun",
@@ -96,8 +89,7 @@
         "mode": "required",
         "interface": "GetDataSourceRunRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:GetDataSourceRun"]
+      }
     },
     "GetEnvironmentCredentials": {
       "operation": "getEnvironmentCredentials",
@@ -105,16 +97,14 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeDataZoneEnvironmentHttpBinding",
-      "actions": ["datazone:GetEnvironmentCredentials"]
+      "builder": "makeDataZoneEnvironmentHttpBinding"
     },
     "GetIamPortalLoginUrl": {
       "operation": "getIamPortalLoginUrl",
       "resource": "Domain",
       "request": {
         "mode": "none"
-      },
-      "actions": ["datazone:GetIamPortalLoginUrl"]
+      }
     },
     "GetLineageNode": {
       "operation": "getLineageNode",
@@ -123,8 +113,7 @@
         "mode": "required",
         "interface": "GetLineageNodeRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:GetLineageNode"]
+      }
     },
     "GetListing": {
       "operation": "getListing",
@@ -133,8 +122,7 @@
         "mode": "required",
         "interface": "GetListingRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:GetListing"]
+      }
     },
     "GetMetadataGenerationRun": {
       "operation": "getMetadataGenerationRun",
@@ -143,8 +131,7 @@
         "mode": "required",
         "interface": "GetMetadataGenerationRunRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:GetMetadataGenerationRun"]
+      }
     },
     "GetSubscription": {
       "operation": "getSubscription",
@@ -153,8 +140,7 @@
         "mode": "required",
         "interface": "GetSubscriptionRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:GetSubscription"]
+      }
     },
     "GetTimeSeriesDataPoint": {
       "operation": "getTimeSeriesDataPoint",
@@ -163,8 +149,7 @@
         "mode": "required",
         "interface": "GetTimeSeriesDataPointRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:GetTimeSeriesDataPoint"]
+      }
     },
     "GetUserProfile": {
       "operation": "getUserProfile",
@@ -173,8 +158,7 @@
         "mode": "required",
         "interface": "GetUserProfileRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:GetUserProfile"]
+      }
     },
     "ListDataSourceRuns": {
       "operation": "listDataSourceRuns",
@@ -183,8 +167,7 @@
         "mode": "required",
         "interface": "ListDataSourceRunsRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:ListDataSourceRuns"]
+      }
     },
     "ListNotifications": {
       "operation": "listNotifications",
@@ -193,8 +176,7 @@
         "mode": "required",
         "interface": "ListNotificationsRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:ListNotifications"]
+      }
     },
     "ListSubscriptionRequests": {
       "operation": "listSubscriptionRequests",
@@ -203,8 +185,7 @@
         "mode": "optional",
         "interface": "ListSubscriptionRequestsRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:ListSubscriptionRequests"]
+      }
     },
     "ListSubscriptions": {
       "operation": "listSubscriptions",
@@ -213,8 +194,7 @@
         "mode": "optional",
         "interface": "ListSubscriptionsRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:ListSubscriptions"]
+      }
     },
     "ListTimeSeriesDataPoints": {
       "operation": "listTimeSeriesDataPoints",
@@ -223,8 +203,7 @@
         "mode": "required",
         "interface": "ListTimeSeriesDataPointsRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:ListTimeSeriesDataPoints"]
+      }
     },
     "PostLineageEvent": {
       "operation": "postLineageEvent",
@@ -233,8 +212,7 @@
         "mode": "required",
         "interface": "PostLineageEventRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:PostLineageEvent"]
+      }
     },
     "PostTimeSeriesDataPoints": {
       "operation": "postTimeSeriesDataPoints",
@@ -243,8 +221,7 @@
         "mode": "required",
         "interface": "PostTimeSeriesDataPointsRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:PostTimeSeriesDataPoints"]
+      }
     },
     "RejectPredictions": {
       "operation": "rejectPredictions",
@@ -253,8 +230,7 @@
         "mode": "required",
         "interface": "RejectPredictionsRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:RejectPredictions"]
+      }
     },
     "RejectSubscriptionRequest": {
       "operation": "rejectSubscriptionRequest",
@@ -263,8 +239,7 @@
         "mode": "required",
         "interface": "RejectSubscriptionRequestRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:RejectSubscriptionRequest"]
+      }
     },
     "RevokeSubscription": {
       "operation": "revokeSubscription",
@@ -273,8 +248,7 @@
         "mode": "required",
         "interface": "RevokeSubscriptionRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:RevokeSubscription"]
+      }
     },
     "Search": {
       "operation": "search",
@@ -283,8 +257,7 @@
         "mode": "required",
         "interface": "SearchRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:Search"]
+      }
     },
     "SearchListings": {
       "operation": "searchListings",
@@ -293,8 +266,7 @@
         "mode": "optional",
         "interface": "SearchListingsRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:SearchListings"]
+      }
     },
     "SearchTypes": {
       "operation": "searchTypes",
@@ -303,8 +275,7 @@
         "mode": "required",
         "interface": "SearchTypesRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:SearchTypes"]
+      }
     },
     "StartDataSourceRun": {
       "operation": "startDataSourceRun",
@@ -313,8 +284,7 @@
         "mode": "required",
         "interface": "StartDataSourceRunRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:StartDataSourceRun"]
+      }
     },
     "StartMetadataGenerationRun": {
       "operation": "startMetadataGenerationRun",
@@ -323,8 +293,7 @@
         "mode": "required",
         "interface": "StartMetadataGenerationRunRequest",
         "omit": ["domainIdentifier"]
-      },
-      "actions": ["datazone:StartMetadataGenerationRun"]
+      }
     }
   }
 }

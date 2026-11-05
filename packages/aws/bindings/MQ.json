@@ -30,21 +30,18 @@
       "resource": "Broker",
       "request": {
         "mode": "none"
-      },
-      "actions": ["mq:DescribeBroker"]
+      }
     },
     "ListBrokers": {
       "operation": "listBrokers",
-      "builder": "makeMqAccountHttpBinding",
-      "actions": ["mq:ListBrokers"]
+      "builder": "makeMqAccountHttpBinding"
     },
     "RebootBroker": {
       "operation": "rebootBroker",
       "resource": "Broker",
       "request": {
         "mode": "none"
-      },
-      "actions": ["mq:RebootBroker"]
+      }
     }
   }
 }

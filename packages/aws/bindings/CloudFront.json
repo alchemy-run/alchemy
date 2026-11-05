@@ -29,7 +29,6 @@
         "omit": ["DistributionId"]
       },
       "builder": "makeDistributionScopedHttpBinding",
-      "actions": ["cloudfront:CreateInvalidation"],
       "module": "cloudfront"
     },
     "DeleteKey": {
@@ -40,8 +39,7 @@
         "mode": "required",
         "interface": "DeleteKeyRequest",
         "omit": ["KvsARN"]
-      },
-      "actions": ["cloudfront-keyvaluestore:DeleteKey"]
+      }
     },
     "DescribeKeyValueStore": {
       "operation": "describeKeyValueStore",
@@ -51,8 +49,7 @@
         "mode": "required",
         "interface": "DescribeKeyValueStoreRequest",
         "omit": ["KvsARN"]
-      },
-      "actions": ["cloudfront-keyvaluestore:DescribeKeyValueStore"]
+      }
     },
     "GetInvalidation": {
       "operation": "getInvalidation",
@@ -63,7 +60,6 @@
         "omit": ["DistributionId"]
       },
       "builder": "makeDistributionScopedHttpBinding",
-      "actions": ["cloudfront:GetInvalidation"],
       "module": "cloudfront"
     },
     "GetKey": {
@@ -74,8 +70,7 @@
         "mode": "required",
         "interface": "GetKeyRequest",
         "omit": ["KvsARN"]
-      },
-      "actions": ["cloudfront-keyvaluestore:GetKey"]
+      }
     },
     "ListInvalidations": {
       "operation": "listInvalidations",
@@ -86,7 +81,6 @@
         "omit": ["DistributionId"]
       },
       "builder": "makeDistributionScopedHttpBinding",
-      "actions": ["cloudfront:ListInvalidations"],
       "module": "cloudfront"
     },
     "ListKeys": {
@@ -97,8 +91,7 @@
         "mode": "required",
         "interface": "ListKeysRequest",
         "omit": ["KvsARN"]
-      },
-      "actions": ["cloudfront-keyvaluestore:ListKeys"]
+      }
     },
     "PutKey": {
       "operation": "putKey",
@@ -108,8 +101,7 @@
         "mode": "required",
         "interface": "PutKeyRequest",
         "omit": ["KvsARN"]
-      },
-      "actions": ["cloudfront-keyvaluestore:PutKey"]
+      }
     },
     "UpdateKeys": {
       "operation": "updateKeys",
@@ -119,8 +111,7 @@
         "mode": "required",
         "interface": "UpdateKeysRequest",
         "omit": ["KvsARN"]
-      },
-      "actions": ["cloudfront-keyvaluestore:UpdateKeys"]
+      }
     }
   }
 }

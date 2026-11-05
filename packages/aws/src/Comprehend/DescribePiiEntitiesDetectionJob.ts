@@ -49,5 +49,6 @@ export const DescribePiiEntitiesDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.DescribePiiEntitiesDetectionJob",
     operation: comprehend.describePiiEntitiesDetectionJob,
     actions: ["comprehend:DescribePiiEntitiesDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:pii-entities-detection-job/*"],
   }),
 );

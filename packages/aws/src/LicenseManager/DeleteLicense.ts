@@ -49,5 +49,6 @@ export const DeleteLicenseHttp = Layer.effect(
     capability: "DeleteLicense",
     iamActions: ["license-manager:DeleteLicense"],
     operation: licensemanager.deleteLicense,
+    arns: ["arn:${Partition}:license-manager::${Account}:license:*"],
   }),
 );

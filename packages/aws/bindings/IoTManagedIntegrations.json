@@ -31,8 +31,7 @@
       "operation": "getCustomEndpoint",
       "request": {
         "mode": "none"
-      },
-      "actions": ["iotmanagedintegrations:GetCustomEndpoint"]
+      }
     },
     "GetDeviceDiscovery": {
       "operation": "getDeviceDiscovery",
@@ -40,8 +39,7 @@
         "mode": "required",
         "interface": "GetDeviceDiscoveryRequest",
         "omit": []
-      },
-      "actions": ["iotmanagedintegrations:GetDeviceDiscovery"]
+      }
     },
     "GetManagedThingCapabilities": {
       "operation": "getManagedThingCapabilities",
@@ -51,7 +49,6 @@
         "mode": "none"
       },
       "builder": "makeManagedThingHttpBinding",
-      "actions": ["iotmanagedintegrations:GetManagedThingCapabilities"],
       "with": {
         "key": "Identifier"
       }
@@ -64,7 +61,6 @@
         "mode": "none"
       },
       "builder": "makeManagedThingHttpBinding",
-      "actions": ["iotmanagedintegrations:GetManagedThingCertificate"],
       "with": {
         "key": "Identifier"
       }
@@ -77,7 +73,6 @@
         "mode": "none"
       },
       "builder": "makeManagedThingHttpBinding",
-      "actions": ["iotmanagedintegrations:GetManagedThingConnectivityData"],
       "with": {
         "key": "Identifier"
       }
@@ -90,7 +85,6 @@
         "mode": "none"
       },
       "builder": "makeManagedThingHttpBinding",
-      "actions": ["iotmanagedintegrations:GetManagedThingMetaData"],
       "with": {
         "key": "Identifier"
       }
@@ -103,7 +97,6 @@
         "mode": "none"
       },
       "builder": "makeManagedThingHttpBinding",
-      "actions": ["iotmanagedintegrations:GetManagedThingState"],
       "with": {
         "key": "ManagedThingId"
       }
@@ -114,8 +107,7 @@
         "mode": "required",
         "interface": "GetSchemaVersionRequest",
         "omit": []
-      },
-      "actions": ["iotmanagedintegrations:GetSchemaVersion"]
+      }
     },
     "ListDeviceDiscoveries": {
       "operation": "listDeviceDiscoveries",
@@ -123,8 +115,7 @@
         "mode": "optional",
         "interface": "ListDeviceDiscoveriesRequest",
         "omit": []
-      },
-      "actions": ["iotmanagedintegrations:ListDeviceDiscoveries"]
+      }
     },
     "ListDiscoveredDevices": {
       "operation": "listDiscoveredDevices",
@@ -132,8 +123,7 @@
         "mode": "required",
         "interface": "ListDiscoveredDevicesRequest",
         "omit": []
-      },
-      "actions": ["iotmanagedintegrations:ListDiscoveredDevices"]
+      }
     },
     "ListManagedThingSchemas": {
       "operation": "listManagedThingSchemas",
@@ -145,7 +135,6 @@
         "omit": ["Identifier"]
       },
       "builder": "makeManagedThingHttpBinding",
-      "actions": ["iotmanagedintegrations:ListManagedThingSchemas"],
       "with": {
         "key": "Identifier"
       }
@@ -156,8 +145,7 @@
         "mode": "required",
         "interface": "ListSchemaVersionsRequest",
         "omit": []
-      },
-      "actions": ["iotmanagedintegrations:ListSchemaVersions"]
+      }
     },
     "SendConnectorEvent": {
       "operation": "sendConnectorEvent",
@@ -165,8 +153,7 @@
         "mode": "required",
         "interface": "SendConnectorEventRequest",
         "omit": []
-      },
-      "actions": ["iotmanagedintegrations:SendConnectorEvent"]
+      }
     },
     "SendManagedThingCommand": {
       "operation": "sendManagedThingCommand",
@@ -178,7 +165,6 @@
         "omit": ["ManagedThingId"]
       },
       "builder": "makeManagedThingHttpBinding",
-      "actions": ["iotmanagedintegrations:SendManagedThingCommand"],
       "with": {
         "key": "ManagedThingId"
       }
@@ -189,8 +175,7 @@
         "mode": "required",
         "interface": "StartDeviceDiscoveryRequest",
         "omit": []
-      },
-      "actions": ["iotmanagedintegrations:StartDeviceDiscovery"]
+      }
     }
   }
 }

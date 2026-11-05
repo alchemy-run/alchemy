@@ -32,11 +32,7 @@
         "interface": "AuthorizeSecurityGroupIngressRequest",
         "omit": ["GroupId", "GroupName"]
       },
-      "builder": "makeSecurityGroupHttpBinding",
-      "actions": ["ec2:AuthorizeSecurityGroupIngress"],
-      "reviewed": {
-        "ec2:CreateTags": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
-      }
+      "builder": "makeSecurityGroupHttpBinding"
     },
     "CreateSnapshot": {
       "operation": "createSnapshot",
@@ -47,7 +43,6 @@
         "omit": ["VolumeId"]
       },
       "builder": "makeVolumeHttpBinding",
-      "actions": ["ec2:CreateSnapshot", "ec2:CreateTags"],
       "with": {
         "extraResources": ["arn:aws:ec2:*::snapshot/*"]
       },
@@ -61,7 +56,6 @@
         "interface": "DescribeInstanceStatusRequest",
         "omit": ["InstanceId", "InstanceIds"]
       },
-      "actions": ["ec2:DescribeInstanceStatus"],
       "with": {
         "requestKey": "InstanceIds",
         "resource": "*"
@@ -75,7 +69,6 @@
         "interface": "GetConsoleOutputRequest",
         "omit": ["InstanceId", "InstanceIds"]
       },
-      "actions": ["ec2:GetConsoleOutput"],
       "with": {
         "requestKey": "InstanceId"
       }
@@ -88,7 +81,6 @@
         "interface": "GetPasswordDataRequest",
         "omit": ["InstanceId", "InstanceIds"]
       },
-      "actions": ["ec2:GetPasswordData"],
       "with": {
         "requestKey": "InstanceId"
       }
@@ -101,7 +93,6 @@
         "interface": "RebootInstanceRequest",
         "omit": ["InstanceId", "InstanceIds"]
       },
-      "actions": ["ec2:RebootInstances"],
       "with": {
         "requestKey": "InstanceIds"
       }
@@ -115,8 +106,7 @@
         "interface": "RevokeSecurityGroupIngressRequest",
         "omit": ["GroupId", "GroupName"]
       },
-      "builder": "makeSecurityGroupHttpBinding",
-      "actions": ["ec2:RevokeSecurityGroupIngress"]
+      "builder": "makeSecurityGroupHttpBinding"
     },
     "StartInstance": {
       "operation": "startInstances",
@@ -126,7 +116,6 @@
         "interface": "StartInstanceRequest",
         "omit": ["InstanceId", "InstanceIds"]
       },
-      "actions": ["ec2:StartInstances"],
       "with": {
         "requestKey": "InstanceIds"
       }
@@ -139,7 +128,6 @@
         "interface": "StopInstanceRequest",
         "omit": ["InstanceId", "InstanceIds"]
       },
-      "actions": ["ec2:StopInstances"],
       "with": {
         "requestKey": "InstanceIds"
       }

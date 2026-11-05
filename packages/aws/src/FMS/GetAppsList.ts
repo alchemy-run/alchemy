@@ -42,5 +42,6 @@ export const GetAppsListHttp = Layer.effect(
     capability: "GetAppsList",
     iamActions: ["fms:GetAppsList"],
     operation: fms.getAppsList,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:applications-list/*"],
   }),
 );

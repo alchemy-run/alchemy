@@ -57,9 +57,9 @@ export const SearchResourcesHttp = Layer.effect(
     operation: resourcegroups.searchResources,
     actions: [
       "resource-groups:SearchResources",
-      "tag:GetResources",
       "cloudformation:DescribeStacks",
       "cloudformation:ListStackResources",
+      "tag:GetResources",
     ],
   }),
 );

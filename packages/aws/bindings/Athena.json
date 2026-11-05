@@ -24,8 +24,7 @@
       "resource": "WorkGroup",
       "request": {
         "mode": "required"
-      },
-      "actions": ["athena:BatchGetQueryExecution"]
+      }
     },
     "GetDatabase": {
       "operation": "getDatabase",
@@ -36,32 +35,28 @@
         "omit": ["CatalogName"],
         "inline": true
       },
-      "builder": "makeDataCatalogScopedHttpBinding",
-      "actions": ["athena:GetDatabase"]
+      "builder": "makeDataCatalogScopedHttpBinding"
     },
     "GetQueryExecution": {
       "operation": "getQueryExecution",
       "resource": "WorkGroup",
       "request": {
         "mode": "required"
-      },
-      "actions": ["athena:GetQueryExecution"]
+      }
     },
     "GetQueryResults": {
       "operation": "getQueryResults",
       "resource": "WorkGroup",
       "request": {
         "mode": "required"
-      },
-      "actions": ["athena:GetQueryResults"]
+      }
     },
     "GetQueryRuntimeStatistics": {
       "operation": "getQueryRuntimeStatistics",
       "resource": "WorkGroup",
       "request": {
         "mode": "required"
-      },
-      "actions": ["athena:GetQueryRuntimeStatistics"]
+      }
     },
     "GetTableMetadata": {
       "operation": "getTableMetadata",
@@ -72,8 +67,7 @@
         "omit": ["CatalogName"],
         "inline": true
       },
-      "builder": "makeDataCatalogScopedHttpBinding",
-      "actions": ["athena:GetTableMetadata"]
+      "builder": "makeDataCatalogScopedHttpBinding"
     },
     "ListDatabases": {
       "operation": "listDatabases",
@@ -84,8 +78,7 @@
         "omit": ["CatalogName"],
         "inline": true
       },
-      "builder": "makeDataCatalogScopedHttpBinding",
-      "actions": ["athena:ListDatabases"]
+      "builder": "makeDataCatalogScopedHttpBinding"
     },
     "ListNamedQueries": {
       "operation": "listNamedQueries",
@@ -95,7 +88,6 @@
         "omit": ["WorkGroup"],
         "inline": true
       },
-      "actions": ["athena:ListNamedQueries"],
       "with": {
         "injectWorkGroup": true
       }
@@ -108,7 +100,6 @@
         "omit": ["WorkGroup"],
         "inline": true
       },
-      "actions": ["athena:ListPreparedStatements"],
       "with": {
         "injectWorkGroup": true
       }
@@ -121,7 +112,6 @@
         "omit": ["WorkGroup"],
         "inline": true
       },
-      "actions": ["athena:ListQueryExecutions"],
       "with": {
         "injectWorkGroup": true
       }
@@ -135,16 +125,14 @@
         "omit": ["CatalogName"],
         "inline": true
       },
-      "builder": "makeDataCatalogScopedHttpBinding",
-      "actions": ["athena:ListTableMetadata"]
+      "builder": "makeDataCatalogScopedHttpBinding"
     },
     "StopQueryExecution": {
       "operation": "stopQueryExecution",
       "resource": "WorkGroup",
       "request": {
         "mode": "required"
-      },
-      "actions": ["athena:StopQueryExecution"]
+      }
     }
   }
 }

@@ -19,7 +19,6 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["schemas:StartDiscoverer"],
       "with": {
         "ruleActions": ["events:EnableRule"]
       },
@@ -31,7 +30,6 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["schemas:StopDiscoverer"],
       "with": {
         "ruleActions": ["events:DisableRule"]
       },

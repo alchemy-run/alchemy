@@ -41,5 +41,6 @@ export const DescribePageHttp = Layer.effect(
     tag: "AWS.SSMContacts.DescribePage",
     operation: ssm.describePage,
     actions: ["ssm-contacts:DescribePage"],
+    arns: ["arn:${Partition}:ssm-contacts:${Region}:${Account}:page/*/*"],
   }),
 );

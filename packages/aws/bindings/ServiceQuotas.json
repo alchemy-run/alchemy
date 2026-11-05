@@ -19,73 +19,61 @@
       "operation": "getAWSDefaultServiceQuota",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicequotas:GetAWSDefaultServiceQuota"]
+      }
     },
     "GetAutoManagementConfiguration": {
-      "operation": "getAutoManagementConfiguration",
-      "actions": ["servicequotas:GetAutoManagementConfiguration"]
+      "operation": "getAutoManagementConfiguration"
     },
     "GetQuotaUtilizationReport": {
       "operation": "getQuotaUtilizationReport",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicequotas:GetQuotaUtilizationReport"]
+      }
     },
     "GetRequestedServiceQuotaChange": {
       "operation": "getRequestedServiceQuotaChange",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicequotas:GetRequestedServiceQuotaChange"]
+      }
     },
     "GetServiceQuota": {
       "operation": "getServiceQuota",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicequotas:GetServiceQuota"]
+      }
     },
     "ListAWSDefaultServiceQuotas": {
       "operation": "listAWSDefaultServiceQuotas",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicequotas:ListAWSDefaultServiceQuotas"]
+      }
     },
     "ListRequestedServiceQuotaChangeHistory": {
-      "operation": "listRequestedServiceQuotaChangeHistory",
-      "actions": ["servicequotas:ListRequestedServiceQuotaChangeHistory"]
+      "operation": "listRequestedServiceQuotaChangeHistory"
     },
     "ListRequestedServiceQuotaChangeHistoryByQuota": {
       "operation": "listRequestedServiceQuotaChangeHistoryByQuota",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicequotas:ListRequestedServiceQuotaChangeHistoryByQuota"]
+      }
     },
     "ListServiceQuotas": {
       "operation": "listServiceQuotas",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicequotas:ListServiceQuotas"]
+      }
     },
     "ListServices": {
-      "operation": "listServices",
-      "actions": ["servicequotas:ListServices"]
+      "operation": "listServices"
     },
     "RequestServiceQuotaIncrease": {
       "operation": "requestServiceQuotaIncrease",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicequotas:RequestServiceQuotaIncrease"]
+      }
     },
     "StartQuotaUtilizationReport": {
-      "operation": "startQuotaUtilizationReport",
-      "actions": ["servicequotas:StartQuotaUtilizationReport"]
+      "operation": "startQuotaUtilizationReport"
     }
   }
 }

@@ -53,7 +53,7 @@ export const CreateDBClusterSnapshotHttp = Layer.effect(
   makeDocDBClusterHttpBinding({
     tag: "AWS.DocDB.CreateDBClusterSnapshot",
     operation: docdb.createDBClusterSnapshot,
-    actions: ["rds:CreateDBClusterSnapshot", "rds:AddTagsToResource"],
+    actions: ["rds:AddTagsToResource", "rds:CreateDBClusterSnapshot"],
     extraResources: (clusterArn) => [
       `${clusterArn.split(":").slice(0, 5).join(":")}:cluster-snapshot:*`,
     ],

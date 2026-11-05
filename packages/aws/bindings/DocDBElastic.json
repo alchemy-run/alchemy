@@ -18,19 +18,13 @@
       "operation": "applyPendingMaintenanceAction",
       "request": {
         "mode": "required"
-      },
-      "actions": ["docdb-elastic:ApplyPendingMaintenanceAction"]
+      }
     },
     "CopyClusterSnapshot": {
       "operation": "copyClusterSnapshot",
       "request": {
         "mode": "required"
       },
-      "actions": [
-        "docdb-elastic:CopyClusterSnapshot",
-        "docdb-elastic:CreateClusterSnapshot",
-        "docdb-elastic:TagResource"
-      ],
       "note": "Copying authorizes the creation of the target snapshot as a CreateClusterSnapshot on `cluster-snapshot/*` (verified live: without it the service returns AccessDeniedException naming this action)."
     },
     "CreateClusterSnapshot": {
@@ -42,7 +36,6 @@
         "inline": true
       },
       "builder": "makeDocDBElasticClusterHttpBinding",
-      "actions": ["docdb-elastic:CreateClusterSnapshot", "docdb-elastic:TagResource"],
       "withTs": {
         "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
       },
@@ -55,66 +48,32 @@
       "operation": "deleteClusterSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["docdb-elastic:DeleteClusterSnapshot"]
+      }
     },
     "GetClusterSnapshot": {
       "operation": "getClusterSnapshot",
       "request": {
         "mode": "required"
-      },
-      "actions": ["docdb-elastic:GetClusterSnapshot"]
+      }
     },
     "GetPendingMaintenanceAction": {
       "operation": "getPendingMaintenanceAction",
       "request": {
         "mode": "required"
-      },
-      "actions": ["docdb-elastic:GetPendingMaintenanceAction"]
+      }
     },
     "ListClusterSnapshots": {
-      "operation": "listClusterSnapshots",
-      "actions": ["docdb-elastic:ListClusterSnapshots"]
+      "operation": "listClusterSnapshots"
     },
     "ListPendingMaintenanceActions": {
-      "operation": "listPendingMaintenanceActions",
-      "actions": ["docdb-elastic:ListPendingMaintenanceActions"]
+      "operation": "listPendingMaintenanceActions"
     },
     "RestoreClusterFromSnapshot": {
       "operation": "restoreClusterFromSnapshot",
       "request": {
         "mode": "required"
       },
-      "actions": [
-        "docdb-elastic:RestoreClusterFromSnapshot",
-        "docdb-elastic:CreateCluster",
-        "docdb-elastic:TagResource",
-        "ec2:CreateVpcEndpoint",
-        "ec2:DescribeVpcEndpoints",
-        "ec2:DeleteVpcEndpoints",
-        "ec2:ModifyVpcEndpoint",
-        "ec2:DescribeVpcAttribute",
-        "ec2:DescribeSubnets",
-        "ec2:DescribeVpcs",
-        "ec2:DescribeAvailabilityZones",
-        "ec2:DescribeAccountAttributes",
-        "ec2:DescribeSecurityGroups",
-        "ec2:CreateTags"
-      ],
-      "note": "Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action). Restoring provisions a new cluster, which attaches to the VPC via a service-managed VPC endpoint using the caller's EC2 permissions.",
-      "reviewed": {
-        "ec2:CreateVpcEndpoint": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:DescribeVpcEndpoints": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:DeleteVpcEndpoints": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:ModifyVpcEndpoint": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:DescribeVpcAttribute": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:DescribeSubnets": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:DescribeVpcs": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:DescribeAvailabilityZones": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:DescribeAccountAttributes": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:DescribeSecurityGroups": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
-        "ec2:CreateTags": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action)."
-      }
+      "note": "Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action). Restoring provisions a new cluster, which attaches to the VPC via a service-managed VPC endpoint using the caller's EC2 permissions."
     },
     "StartCluster": {
       "operation": "startCluster",
@@ -122,8 +81,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeDocDBElasticClusterHttpBinding",
-      "actions": ["docdb-elastic:StartCluster"]
+      "builder": "makeDocDBElasticClusterHttpBinding"
     },
     "StopCluster": {
       "operation": "stopCluster",
@@ -131,8 +89,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeDocDBElasticClusterHttpBinding",
-      "actions": ["docdb-elastic:StopCluster"]
+      "builder": "makeDocDBElasticClusterHttpBinding"
     }
   }
 }

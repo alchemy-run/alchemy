@@ -16,14 +16,12 @@
     "GetDataLakeSources": {
       "operation": "getDataLakeSources",
       "resource": "DataLake",
-      "param": "lake",
-      "actions": ["securitylake:GetDataLakeSources"]
+      "param": "lake"
     },
     "ListDataLakeExceptions": {
       "operation": "listDataLakeExceptions",
       "resource": "DataLake",
-      "param": "lake",
-      "actions": ["securitylake:ListDataLakeExceptions"]
+      "param": "lake"
     }
   }
 }

@@ -50,5 +50,6 @@ export const DescribeDominantLanguageDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.DescribeDominantLanguageDetectionJob",
     operation: comprehend.describeDominantLanguageDetectionJob,
     actions: ["comprehend:DescribeDominantLanguageDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:dominant-language-detection-job/*"],
   }),
 );

@@ -21,8 +21,7 @@
         "mode": "optional",
         "interface": "DescribeServicesRequest",
         "omit": []
-      },
-      "actions": ["pricing:DescribeServices"]
+      }
     },
     "GetAttributeValues": {
       "operation": "getAttributeValues",
@@ -30,8 +29,7 @@
         "mode": "required",
         "interface": "GetAttributeValuesRequest",
         "omit": []
-      },
-      "actions": ["pricing:GetAttributeValues"]
+      }
     },
     "GetPriceListFileUrl": {
       "operation": "getPriceListFileUrl",
@@ -39,8 +37,7 @@
         "mode": "required",
         "interface": "GetPriceListFileUrlRequest",
         "omit": []
-      },
-      "actions": ["pricing:GetPriceListFileUrl"]
+      }
     },
     "GetProducts": {
       "operation": "getProducts",
@@ -48,8 +45,7 @@
         "mode": "required",
         "interface": "GetProductsRequest",
         "omit": []
-      },
-      "actions": ["pricing:GetProducts"]
+      }
     },
     "ListPriceLists": {
       "operation": "listPriceLists",
@@ -57,8 +53,7 @@
         "mode": "required",
         "interface": "ListPriceListsRequest",
         "omit": []
-      },
-      "actions": ["pricing:ListPriceLists"]
+      }
     }
   }
 }

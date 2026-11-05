@@ -14,53 +14,43 @@
       "operation": "deleteMicrosoftTeamsConfiguredTeam",
       "request": {
         "mode": "required"
-      },
-      "actions": ["chatbot:DeleteMicrosoftTeamsConfiguredTeam"]
+      }
     },
     "DeleteMicrosoftTeamsUserIdentity": {
       "operation": "deleteMicrosoftTeamsUserIdentity",
       "request": {
         "mode": "required"
-      },
-      "actions": ["chatbot:DeleteMicrosoftTeamsUserIdentity"]
+      }
     },
     "DeleteSlackUserIdentity": {
       "operation": "deleteSlackUserIdentity",
       "request": {
         "mode": "required"
-      },
-      "actions": ["chatbot:DeleteSlackUserIdentity"]
+      }
     },
     "DeleteSlackWorkspaceAuthorization": {
       "operation": "deleteSlackWorkspaceAuthorization",
       "request": {
         "mode": "required"
-      },
-      "actions": ["chatbot:DeleteSlackWorkspaceAuthorization"]
+      }
     },
     "DescribeSlackUserIdentities": {
-      "operation": "describeSlackUserIdentities",
-      "actions": ["chatbot:DescribeSlackUserIdentities"]
+      "operation": "describeSlackUserIdentities"
     },
     "DescribeSlackWorkspaces": {
-      "operation": "describeSlackWorkspaces",
-      "actions": ["chatbot:DescribeSlackWorkspaces"]
+      "operation": "describeSlackWorkspaces"
     },
     "GetAccountPreferences": {
-      "operation": "getAccountPreferences",
-      "actions": ["chatbot:GetAccountPreferences"]
+      "operation": "getAccountPreferences"
     },
     "ListMicrosoftTeamsConfiguredTeams": {
-      "operation": "listMicrosoftTeamsConfiguredTeams",
-      "actions": ["chatbot:ListMicrosoftTeamsConfiguredTeams"]
+      "operation": "listMicrosoftTeamsConfiguredTeams"
     },
     "ListMicrosoftTeamsUserIdentities": {
-      "operation": "listMicrosoftTeamsUserIdentities",
-      "actions": ["chatbot:ListMicrosoftTeamsUserIdentities"]
+      "operation": "listMicrosoftTeamsUserIdentities"
     },
     "UpdateAccountPreferences": {
-      "operation": "updateAccountPreferences",
-      "actions": ["chatbot:UpdateAccountPreferences"]
+      "operation": "updateAccountPreferences"
     }
   }
 }

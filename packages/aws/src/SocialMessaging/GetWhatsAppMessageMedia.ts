@@ -59,5 +59,6 @@ export const GetWhatsAppMessageMediaHttp = Layer.effect(
     tag: "AWS.SocialMessaging.GetWhatsAppMessageMedia",
     operation: socialmessaging.getWhatsAppMessageMedia,
     actions: ["social-messaging:GetWhatsAppMessageMedia"],
+    arns: ["arn:${Partition}:social-messaging:${Region}:${Account}:phone-number-id/*"],
   }),
 );

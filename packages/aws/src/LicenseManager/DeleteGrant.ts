@@ -46,5 +46,6 @@ export const DeleteGrantHttp = Layer.effect(
     capability: "DeleteGrant",
     iamActions: ["license-manager:DeleteGrant"],
     operation: licensemanager.deleteGrant,
+    arns: ["arn:${Partition}:license-manager::${Account}:grant:*"],
   }),
 );

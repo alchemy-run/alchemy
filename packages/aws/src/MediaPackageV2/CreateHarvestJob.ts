@@ -66,7 +66,7 @@ export const CreateHarvestJobHttp = Layer.effect(
   makeMediaPackageV2OriginEndpointHttpBinding({
     tag: "AWS.MediaPackageV2.CreateHarvestJob",
     operation: mediapackagev2.createHarvestJob,
-    actions: ["mediapackagev2:CreateHarvestJob"],
+    actions: ["mediapackagev2:CreateHarvestJob", "mediapackagev2:TagResource"],
     harvestJobScoped: true,
   }),
 );

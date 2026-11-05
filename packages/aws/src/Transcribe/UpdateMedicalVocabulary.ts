@@ -50,5 +50,6 @@ export const UpdateMedicalVocabularyHttp = Layer.effect(
     tag: "AWS.Transcribe.UpdateMedicalVocabulary",
     operation: transcribe.updateMedicalVocabulary,
     actions: ["transcribe:UpdateMedicalVocabulary"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:medical-vocabulary/*"],
   }),
 );

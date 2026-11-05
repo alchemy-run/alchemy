@@ -16,81 +16,64 @@
   },
   "bindings": {
     "GenerateCredentialReport": {
-      "operation": "generateCredentialReport",
-      "actions": ["iam:GenerateCredentialReport"]
+      "operation": "generateCredentialReport"
     },
     "GenerateServiceLastAccessedDetails": {
       "operation": "generateServiceLastAccessedDetails",
       "request": {
         "mode": "required"
-      },
-      "actions": ["iam:GenerateServiceLastAccessedDetails"]
+      }
     },
     "GetAccountAuthorizationDetails": {
-      "operation": "getAccountAuthorizationDetails",
-      "actions": ["iam:GetAccountAuthorizationDetails"]
+      "operation": "getAccountAuthorizationDetails"
     },
     "GetAccountSummary": {
-      "operation": "getAccountSummary",
-      "actions": ["iam:GetAccountSummary"]
+      "operation": "getAccountSummary"
     },
     "GetContextKeysForCustomPolicy": {
       "operation": "getContextKeysForCustomPolicy",
       "request": {
         "mode": "required"
-      },
-      "actions": ["iam:GetContextKeysForCustomPolicy"]
+      }
     },
     "GetContextKeysForPrincipalPolicy": {
       "operation": "getContextKeysForPrincipalPolicy",
       "request": {
         "mode": "required"
-      },
-      "actions": ["iam:GetContextKeysForPrincipalPolicy"]
+      }
     },
     "GetCredentialReport": {
-      "operation": "getCredentialReport",
-      "actions": ["iam:GetCredentialReport"]
+      "operation": "getCredentialReport"
     },
     "GetServiceLastAccessedDetails": {
       "operation": "getServiceLastAccessedDetails",
       "request": {
         "mode": "required"
-      },
-      "actions": ["iam:GetServiceLastAccessedDetails"]
+      }
     },
     "GetServiceLastAccessedDetailsWithEntities": {
       "operation": "getServiceLastAccessedDetailsWithEntities",
       "request": {
         "mode": "required"
-      },
-      "actions": ["iam:GetServiceLastAccessedDetailsWithEntities"]
+      }
     },
     "ListPoliciesGrantingServiceAccess": {
       "operation": "listPoliciesGrantingServiceAccess",
       "request": {
         "mode": "required"
-      },
-      "actions": ["iam:ListPoliciesGrantingServiceAccess"],
-      "arns": [
-        "arn:${Partition}:iam::${Account}:group/*",
-        "arn:${Partition}:iam::${Account}:role/*",
-        "arn:${Partition}:iam::${Account}:user/*"
-      ]
+      }
     },
     "SimulateCustomPolicy": {
       "operation": "simulateCustomPolicy",
       "request": {
         "mode": "required"
-      },
-      "actions": ["iam:SimulateCustomPolicy"]
+      }
     },
     "SimulatePrincipalPolicy": {
       "operation": "simulatePrincipalPolicy",
       "request": {
         "mode": "required"
-      },
-      "actions": ["iam:SimulatePrincipalPolicy"]
+      }
     }
   }
 }

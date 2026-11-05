@@ -47,5 +47,6 @@ export const UpdateVocabularyHttp = Layer.effect(
     tag: "AWS.Transcribe.UpdateVocabulary",
     operation: transcribe.updateVocabulary,
     actions: ["transcribe:UpdateVocabulary"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:vocabulary/*"],
   }),
 );

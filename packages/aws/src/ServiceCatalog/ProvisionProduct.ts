@@ -54,8 +54,8 @@ export const ProvisionProductHttp = Layer.effect(
     iamActions: [
       "servicecatalog:ProvisionProduct",
       "cloudformation:CreateStack",
-      "cloudformation:DescribeStacks",
       "cloudformation:DescribeStackEvents",
+      "cloudformation:DescribeStacks",
       "cloudformation:GetTemplateSummary",
       "cloudformation:SetStackPolicy",
       "cloudformation:ValidateTemplate",

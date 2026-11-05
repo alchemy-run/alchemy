@@ -21,24 +21,19 @@
       "operation": "getAction",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fis:GetAction"],
-      "arns": ["arn:${Partition}:fis:${Region}:${Account}:action/*"]
+      }
     },
     "GetExperiment": {
       "operation": "getExperiment",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fis:GetExperiment"],
-      "arns": ["arn:${Partition}:fis:${Region}:${Account}:experiment/*"]
+      }
     },
     "GetExperimentTargetAccountConfiguration": {
       "operation": "getExperimentTargetAccountConfiguration",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fis:GetExperimentTargetAccountConfiguration"]
+      }
     },
     "GetExperimentTemplate": {
       "operation": "getExperimentTemplate",
@@ -48,7 +43,6 @@
         "mode": "none"
       },
       "builder": "makeFisTemplateHttpBinding",
-      "actions": ["fis:GetExperimentTemplate"],
       "with": {
         "requestKey": "id"
       }
@@ -57,46 +51,37 @@
       "operation": "getSafetyLever",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fis:GetSafetyLever"],
-      "arns": ["arn:${Partition}:fis:${Region}:${Account}:safety-lever/*"]
+      }
     },
     "GetTargetResourceType": {
       "operation": "getTargetResourceType",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fis:GetTargetResourceType"]
+      }
     },
     "ListActions": {
-      "operation": "listActions",
-      "actions": ["fis:ListActions"]
+      "operation": "listActions"
     },
     "ListExperimentResolvedTargets": {
       "operation": "listExperimentResolvedTargets",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fis:ListExperimentResolvedTargets"]
+      }
     },
     "ListExperimentTargetAccountConfigurations": {
       "operation": "listExperimentTargetAccountConfigurations",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fis:ListExperimentTargetAccountConfigurations"]
+      }
     },
     "ListExperimentTemplates": {
-      "operation": "listExperimentTemplates",
-      "actions": ["fis:ListExperimentTemplates"]
+      "operation": "listExperimentTemplates"
     },
     "ListExperiments": {
-      "operation": "listExperiments",
-      "actions": ["fis:ListExperiments"]
+      "operation": "listExperiments"
     },
     "ListTargetResourceTypes": {
-      "operation": "listTargetResourceTypes",
-      "actions": ["fis:ListTargetResourceTypes"]
+      "operation": "listTargetResourceTypes"
     },
     "StartExperiment": {
       "operation": "startExperiment",
@@ -108,7 +93,6 @@
         "inline": true
       },
       "builder": "makeFisTemplateHttpBinding",
-      "actions": ["fis:StartExperiment", "fis:TagResource"],
       "with": {
         "requestKey": "experimentTemplateId",
         "grantExperimentWildcard": true,
@@ -120,16 +104,13 @@
       "operation": "stopExperiment",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fis:StopExperiment"],
-      "arns": ["arn:${Partition}:fis:${Region}:${Account}:experiment/*"]
+      }
     },
     "UpdateSafetyLeverState": {
       "operation": "updateSafetyLeverState",
       "request": {
         "mode": "required"
-      },
-      "actions": ["fis:UpdateSafetyLeverState"]
+      }
     }
   }
 }

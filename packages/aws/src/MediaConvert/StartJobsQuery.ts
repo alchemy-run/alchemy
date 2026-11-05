@@ -46,7 +46,7 @@ export const StartJobsQueryHttp = Layer.effect(
   // The wire operation is StartJobsQuery but IAM authorizes the creation of the query object as CreateJobsQuery — grant both spellings.
   makeMediaConvertHttpBinding({
     capability: "StartJobsQuery",
-    iamActions: ["mediaconvert:StartJobsQuery", "mediaconvert:CreateJobsQuery"],
+    iamActions: ["mediaconvert:CreateJobsQuery", "mediaconvert:StartJobsQuery"],
     operation: mediaconvert.startJobsQuery,
   }),
 );

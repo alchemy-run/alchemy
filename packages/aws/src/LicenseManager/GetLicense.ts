@@ -45,5 +45,6 @@ export const GetLicenseHttp = Layer.effect(
     capability: "GetLicense",
     iamActions: ["license-manager:GetLicense"],
     operation: licensemanager.getLicense,
+    arns: ["arn:${Partition}:license-manager::${Account}:license:*"],
   }),
 );

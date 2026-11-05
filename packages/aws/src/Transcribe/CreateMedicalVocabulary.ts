@@ -49,6 +49,6 @@ export const CreateMedicalVocabularyHttp = Layer.effect(
   makeTranscribeHttpBinding({
     tag: "AWS.Transcribe.CreateMedicalVocabulary",
     operation: transcribe.createMedicalVocabulary,
-    actions: ["transcribe:CreateMedicalVocabulary"],
+    actions: ["transcribe:CreateMedicalVocabulary", "transcribe:TagResource"],
   }),
 );

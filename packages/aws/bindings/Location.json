@@ -42,8 +42,7 @@
         "mode": "required",
         "interface": "BatchDeleteDevicePositionHistoryRequest",
         "omit": ["TrackerName"]
-      },
-      "actions": ["geo:BatchDeleteDevicePositionHistory"]
+      }
     },
     "BatchDeleteGeofence": {
       "operation": "batchDeleteGeofence",
@@ -54,8 +53,7 @@
         "interface": "BatchDeleteGeofenceRequest",
         "omit": ["CollectionName"]
       },
-      "builder": "makeLocationCollectionHttpBinding",
-      "actions": ["geo:BatchDeleteGeofence"]
+      "builder": "makeLocationCollectionHttpBinding"
     },
     "BatchEvaluateGeofences": {
       "operation": "batchEvaluateGeofences",
@@ -66,8 +64,7 @@
         "interface": "BatchEvaluateGeofencesRequest",
         "omit": ["CollectionName"]
       },
-      "builder": "makeLocationCollectionHttpBinding",
-      "actions": ["geo:BatchEvaluateGeofences"]
+      "builder": "makeLocationCollectionHttpBinding"
     },
     "BatchGetDevicePosition": {
       "operation": "batchGetDevicePosition",
@@ -76,8 +73,7 @@
         "mode": "required",
         "interface": "BatchGetDevicePositionRequest",
         "omit": ["TrackerName"]
-      },
-      "actions": ["geo:BatchGetDevicePosition"]
+      }
     },
     "BatchPutGeofence": {
       "operation": "batchPutGeofence",
@@ -88,8 +84,7 @@
         "interface": "BatchPutGeofenceRequest",
         "omit": ["CollectionName"]
       },
-      "builder": "makeLocationCollectionHttpBinding",
-      "actions": ["geo:BatchPutGeofence"]
+      "builder": "makeLocationCollectionHttpBinding"
     },
     "BatchUpdateDevicePosition": {
       "operation": "batchUpdateDevicePosition",
@@ -98,8 +93,7 @@
         "mode": "required",
         "interface": "BatchUpdateDevicePositionRequest",
         "omit": ["TrackerName"]
-      },
-      "actions": ["geo:BatchUpdateDevicePosition"]
+      }
     },
     "CalculateRoute": {
       "operation": "calculateRoute",
@@ -110,8 +104,7 @@
         "interface": "CalculateRouteRequest",
         "omit": ["CalculatorName"]
       },
-      "builder": "makeLocationCalculatorHttpBinding",
-      "actions": ["geo:CalculateRoute"]
+      "builder": "makeLocationCalculatorHttpBinding"
     },
     "CalculateRouteMatrix": {
       "operation": "calculateRouteMatrix",
@@ -122,17 +115,14 @@
         "interface": "CalculateRouteMatrixRequest",
         "omit": ["CalculatorName"]
       },
-      "builder": "makeLocationCalculatorHttpBinding",
-      "actions": ["geo:CalculateRouteMatrix"]
+      "builder": "makeLocationCalculatorHttpBinding"
     },
     "CancelJob": {
       "operation": "cancelJob",
       "request": {
         "mode": "required"
       },
-      "builder": "makeLocationAccountHttpBinding",
-      "actions": ["geo:CancelJob"],
-      "arns": ["arn:${Partition}:geo:${Region}:${Account}:job/*"]
+      "builder": "makeLocationAccountHttpBinding"
     },
     "ForecastGeofenceEvents": {
       "operation": "forecastGeofenceEvents",
@@ -143,8 +133,7 @@
         "interface": "ForecastGeofenceEventsRequest",
         "omit": ["CollectionName"]
       },
-      "builder": "makeLocationCollectionHttpBinding",
-      "actions": ["geo:ForecastGeofenceEvents"]
+      "builder": "makeLocationCollectionHttpBinding"
     },
     "GetDevicePosition": {
       "operation": "getDevicePosition",
@@ -153,8 +142,7 @@
         "mode": "required",
         "interface": "GetDevicePositionRequest",
         "omit": ["TrackerName"]
-      },
-      "actions": ["geo:GetDevicePosition"]
+      }
     },
     "GetDevicePositionHistory": {
       "operation": "getDevicePositionHistory",
@@ -163,8 +151,7 @@
         "mode": "required",
         "interface": "GetDevicePositionHistoryRequest",
         "omit": ["TrackerName"]
-      },
-      "actions": ["geo:GetDevicePositionHistory"]
+      }
     },
     "GetGeofence": {
       "operation": "getGeofence",
@@ -175,17 +162,14 @@
         "interface": "GetGeofenceRequest",
         "omit": ["CollectionName"]
       },
-      "builder": "makeLocationCollectionHttpBinding",
-      "actions": ["geo:GetGeofence"]
+      "builder": "makeLocationCollectionHttpBinding"
     },
     "GetJob": {
       "operation": "getJob",
       "request": {
         "mode": "required"
       },
-      "builder": "makeLocationAccountHttpBinding",
-      "actions": ["geo:GetJob"],
-      "arns": ["arn:${Partition}:geo:${Region}:${Account}:job/*"]
+      "builder": "makeLocationAccountHttpBinding"
     },
     "GetPlace": {
       "operation": "getPlace",
@@ -196,8 +180,7 @@
         "interface": "GetPlaceRequest",
         "omit": ["IndexName"]
       },
-      "builder": "makeLocationPlaceIndexHttpBinding",
-      "actions": ["geo:GetPlace"]
+      "builder": "makeLocationPlaceIndexHttpBinding"
     },
     "ListDevicePositions": {
       "operation": "listDevicePositions",
@@ -206,8 +189,7 @@
         "mode": "optional",
         "interface": "ListDevicePositionsRequest",
         "omit": ["TrackerName"]
-      },
-      "actions": ["geo:ListDevicePositions"]
+      }
     },
     "ListGeofences": {
       "operation": "listGeofences",
@@ -218,14 +200,11 @@
         "interface": "ListGeofencesRequest",
         "omit": ["CollectionName"]
       },
-      "builder": "makeLocationCollectionHttpBinding",
-      "actions": ["geo:ListGeofences"]
+      "builder": "makeLocationCollectionHttpBinding"
     },
     "ListJobs": {
       "operation": "listJobs",
-      "builder": "makeLocationAccountHttpBinding",
-      "actions": ["geo:ListJobs"],
-      "arns": ["arn:${Partition}:geo:${Region}:${Account}:job/*"]
+      "builder": "makeLocationAccountHttpBinding"
     },
     "PutGeofence": {
       "operation": "putGeofence",
@@ -236,8 +215,7 @@
         "interface": "PutGeofenceRequest",
         "omit": ["CollectionName"]
       },
-      "builder": "makeLocationCollectionHttpBinding",
-      "actions": ["geo:PutGeofence"]
+      "builder": "makeLocationCollectionHttpBinding"
     },
     "SearchPlaceIndexForPosition": {
       "operation": "searchPlaceIndexForPosition",
@@ -248,8 +226,7 @@
         "interface": "SearchPlaceIndexForPositionRequest",
         "omit": ["IndexName"]
       },
-      "builder": "makeLocationPlaceIndexHttpBinding",
-      "actions": ["geo:SearchPlaceIndexForPosition"]
+      "builder": "makeLocationPlaceIndexHttpBinding"
     },
     "SearchPlaceIndexForSuggestions": {
       "operation": "searchPlaceIndexForSuggestions",
@@ -260,8 +237,7 @@
         "interface": "SearchPlaceIndexForSuggestionsRequest",
         "omit": ["IndexName"]
       },
-      "builder": "makeLocationPlaceIndexHttpBinding",
-      "actions": ["geo:SearchPlaceIndexForSuggestions"]
+      "builder": "makeLocationPlaceIndexHttpBinding"
     },
     "SearchPlaceIndexForText": {
       "operation": "searchPlaceIndexForText",
@@ -272,8 +248,7 @@
         "interface": "SearchPlaceIndexForTextRequest",
         "omit": ["IndexName"]
       },
-      "builder": "makeLocationPlaceIndexHttpBinding",
-      "actions": ["geo:SearchPlaceIndexForText"]
+      "builder": "makeLocationPlaceIndexHttpBinding"
     },
     "VerifyDevicePosition": {
       "operation": "verifyDevicePosition",
@@ -282,8 +257,7 @@
         "mode": "required",
         "interface": "VerifyDevicePositionRequest",
         "omit": ["TrackerName"]
-      },
-      "actions": ["geo:VerifyDevicePosition"]
+      }
     }
   }
 }

@@ -49,5 +49,9 @@ export const UpdateTimelineEventHttp = Layer.effect(
     tag: "AWS.SSMIncidents.UpdateTimelineEvent",
     operation: incidents.updateTimelineEvent,
     actions: ["ssm-incidents:UpdateTimelineEvent"],
+    arns: [
+      "arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*",
+      "arn:${Partition}:ssm-incidents::${Account}:response-plan/*",
+    ],
   }),
 );

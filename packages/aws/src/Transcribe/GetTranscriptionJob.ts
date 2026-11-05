@@ -50,5 +50,6 @@ export const GetTranscriptionJobHttp = Layer.effect(
     tag: "AWS.Transcribe.GetTranscriptionJob",
     operation: transcribe.getTranscriptionJob,
     actions: ["transcribe:GetTranscriptionJob"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:transcription-job/*"],
   }),
 );

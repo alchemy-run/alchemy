@@ -44,7 +44,8 @@ export const PutProtocolsListHttp = Layer.effect(
   PutProtocolsList,
   makeFmsHttpBinding({
     capability: "PutProtocolsList",
-    iamActions: ["fms:PutProtocolsList"],
+    iamActions: ["fms:PutProtocolsList", "fms:TagResource"],
     operation: fms.putProtocolsList,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:protocols-list/*"],
   }),
 );

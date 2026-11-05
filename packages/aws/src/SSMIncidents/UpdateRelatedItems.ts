@@ -54,5 +54,9 @@ export const UpdateRelatedItemsHttp = Layer.effect(
     tag: "AWS.SSMIncidents.UpdateRelatedItems",
     operation: incidents.updateRelatedItems,
     actions: ["ssm-incidents:UpdateRelatedItems"],
+    arns: [
+      "arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*",
+      "arn:${Partition}:ssm-incidents::${Account}:response-plan/*",
+    ],
   }),
 );

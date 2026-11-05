@@ -48,5 +48,6 @@ export const SearchUsersHttp = Layer.effect(
     tag: "AWS.Rekognition.SearchUsers",
     operation: rekognition.searchUsers,
     actions: ["rekognition:SearchUsers"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

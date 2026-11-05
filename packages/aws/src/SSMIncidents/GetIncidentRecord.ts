@@ -45,5 +45,9 @@ export const GetIncidentRecordHttp = Layer.effect(
     tag: "AWS.SSMIncidents.GetIncidentRecord",
     operation: incidents.getIncidentRecord,
     actions: ["ssm-incidents:GetIncidentRecord"],
+    arns: [
+      "arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*",
+      "arn:${Partition}:ssm-incidents::${Account}:response-plan/*",
+    ],
   }),
 );

@@ -25,8 +25,7 @@
         "mode": "required",
         "omit": ["EventDataStore"],
         "inline": true
-      },
-      "actions": ["cloudtrail:CancelQuery"]
+      }
     },
     "DescribeQuery": {
       "operation": "describeQuery",
@@ -36,8 +35,7 @@
         "mode": "required",
         "omit": ["EventDataStore"],
         "inline": true
-      },
-      "actions": ["cloudtrail:DescribeQuery"]
+      }
     },
     "GenerateQuery": {
       "operation": "generateQuery",
@@ -48,7 +46,6 @@
         "omit": ["EventDataStores"],
         "inline": true
       },
-      "actions": ["cloudtrail:GenerateQuery"],
       "with": {
         "injectEventDataStores": true
       }
@@ -61,35 +58,25 @@
         "mode": "required",
         "omit": ["EventDataStore"],
         "inline": true
-      },
-      "actions": ["cloudtrail:GetQueryResults"]
+      }
     },
     "ListInsightsData": {
       "operation": "listInsightsData",
       "request": {
         "mode": "required"
       },
-      "builder": "makeCloudTrailAccountHttpBinding",
-      "actions": ["cloudtrail:ListInsightsData"],
-      "arns": ["arn:${Partition}:cloudtrail:${Region}:${Account}:trail/*"]
+      "builder": "makeCloudTrailAccountHttpBinding"
     },
     "ListInsightsMetricData": {
       "operation": "listInsightsMetricData",
       "request": {
         "mode": "required"
       },
-      "builder": "makeCloudTrailAccountHttpBinding",
-      "actions": ["cloudtrail:ListInsightsMetricData"],
-      "reviewed": {
-        "cloudtrail:ListInsightsMetricData": "Not in AWS's reference, but the call is authorized live with it (CloudTrail Bindings suite).",
-        "cloudtrail:ListInsightsData": "AWS lists it for the operation, but the CloudTrail Bindings suite calls it successfully without it.",
-        "cloudtrail:LookupEvents": "AWS lists it for the operation, but the CloudTrail Bindings suite calls it successfully without it."
-      }
+      "builder": "makeCloudTrailAccountHttpBinding"
     },
     "ListPublicKeys": {
       "operation": "listPublicKeys",
-      "builder": "makeCloudTrailAccountHttpBinding",
-      "actions": ["cloudtrail:ListPublicKeys"]
+      "builder": "makeCloudTrailAccountHttpBinding"
     },
     "ListQueries": {
       "operation": "listQueries",
@@ -100,15 +87,13 @@
         "omit": ["EventDataStore"],
         "inline": true
       },
-      "actions": ["cloudtrail:ListQueries"],
       "with": {
         "injectEventDataStore": true
       }
     },
     "LookupEvents": {
       "operation": "lookupEvents",
-      "builder": "makeCloudTrailAccountHttpBinding",
-      "actions": ["cloudtrail:LookupEvents"]
+      "builder": "makeCloudTrailAccountHttpBinding"
     }
   }
 }

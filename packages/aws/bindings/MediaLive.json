@@ -30,24 +30,21 @@
         "mode": "optional",
         "omit": ["ChannelId"],
         "inline": true
-      },
-      "actions": ["medialive:BatchUpdateSchedule"]
+      }
     },
     "DeleteSchedule": {
       "operation": "deleteSchedule",
       "resource": "Channel",
       "request": {
         "mode": "none"
-      },
-      "actions": ["medialive:DeleteSchedule"]
+      }
     },
     "DescribeChannel": {
       "operation": "describeChannel",
       "resource": "Channel",
       "request": {
         "mode": "none"
-      },
-      "actions": ["medialive:DescribeChannel"]
+      }
     },
     "DescribeInput": {
       "operation": "describeInput",
@@ -55,8 +52,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeMediaLiveInputHttpBinding",
-      "actions": ["medialive:DescribeInput"]
+      "builder": "makeMediaLiveInputHttpBinding"
     },
     "DescribeSchedule": {
       "operation": "describeSchedule",
@@ -65,8 +61,7 @@
         "mode": "optional",
         "omit": ["ChannelId"],
         "inline": true
-      },
-      "actions": ["medialive:DescribeSchedule"]
+      }
     },
     "DescribeThumbnails": {
       "operation": "describeThumbnails",
@@ -75,8 +70,7 @@
         "mode": "optional",
         "omit": ["ChannelId"],
         "inline": true
-      },
-      "actions": ["medialive:DescribeThumbnails"]
+      }
     },
     "ListAlerts": {
       "operation": "listAlerts",
@@ -85,18 +79,15 @@
         "mode": "optional",
         "omit": ["ChannelId"],
         "inline": true
-      },
-      "actions": ["medialive:ListAlerts"]
+      }
     },
     "ListChannels": {
       "operation": "listChannels",
-      "builder": "makeMediaLiveAccountHttpBinding",
-      "actions": ["medialive:ListChannels"]
+      "builder": "makeMediaLiveAccountHttpBinding"
     },
     "ListInputs": {
       "operation": "listInputs",
-      "builder": "makeMediaLiveAccountHttpBinding",
-      "actions": ["medialive:ListInputs"]
+      "builder": "makeMediaLiveAccountHttpBinding"
     },
     "RestartChannelPipelines": {
       "operation": "restartChannelPipelines",
@@ -105,24 +96,21 @@
         "mode": "optional",
         "omit": ["ChannelId"],
         "inline": true
-      },
-      "actions": ["medialive:RestartChannelPipelines"]
+      }
     },
     "StartChannel": {
       "operation": "startChannel",
       "resource": "Channel",
       "request": {
         "mode": "none"
-      },
-      "actions": ["medialive:StartChannel"]
+      }
     },
     "StopChannel": {
       "operation": "stopChannel",
       "resource": "Channel",
       "request": {
         "mode": "none"
-      },
-      "actions": ["medialive:StopChannel"]
+      }
     }
   }
 }

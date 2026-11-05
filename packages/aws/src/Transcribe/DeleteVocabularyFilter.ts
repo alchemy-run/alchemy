@@ -46,5 +46,6 @@ export const DeleteVocabularyFilterHttp = Layer.effect(
     tag: "AWS.Transcribe.DeleteVocabularyFilter",
     operation: transcribe.deleteVocabularyFilter,
     actions: ["transcribe:DeleteVocabularyFilter"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:vocabulary-filter/*"],
   }),
 );

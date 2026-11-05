@@ -37,7 +37,6 @@
         "interface": "AssociateVehicleFleetRequest",
         "omit": ["fleetId"]
       },
-      "actions": ["iotfleetwise:AssociateVehicleFleet"],
       "with": {
         "requestKey": "fleetId"
       },
@@ -53,19 +52,7 @@
         "mode": "required"
       },
       "builder": "makeFleetWiseAccountHttpBinding",
-      "actions": [
-        "iotfleetwise:BatchCreateVehicle",
-        "iotfleetwise:CreateVehicle",
-        "iot:CreateThing",
-        "iot:DescribeThing"
-      ],
-      "note": "The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing.",
-      "reviewed": {
-        "iotfleetwise:BatchCreateVehicle": "See the note: The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing.",
-        "iot:CreateThing": "See the note: The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing.",
-        "iot:DescribeThing": "See the note: The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing.",
-        "iotfleetwise:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
-      }
+      "note": "The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing."
     },
     "BatchUpdateVehicle": {
       "operation": "batchUpdateVehicle",
@@ -73,15 +60,10 @@
         "mode": "required"
       },
       "builder": "makeFleetWiseAccountHttpBinding",
-      "actions": ["iotfleetwise:BatchUpdateVehicle", "iotfleetwise:UpdateVehicle"],
       "with": {
         "resources": ["arn:aws:iotfleetwise:*:*:vehicle/*"]
       },
-      "note": "The vehicle names are runtime arguments, so the grant is the account-wide vehicle pattern.",
-      "reviewed": {
-        "iotfleetwise:BatchUpdateVehicle": "BatchUpdateVehicle is authorized per vehicle as iotfleetwise:UpdateVehicle (IoT FleetWise API reference); not verified live.",
-        "iotfleetwise:UpdateVehicle": "BatchUpdateVehicle is authorized per vehicle as iotfleetwise:UpdateVehicle (IoT FleetWise API reference); not verified live."
-      }
+      "note": "The vehicle names are runtime arguments, so the grant is the account-wide vehicle pattern."
     },
     "DisassociateVehicleFleet": {
       "operation": "disassociateVehicleFleet",
@@ -91,7 +73,6 @@
         "interface": "DisassociateVehicleFleetRequest",
         "omit": ["fleetId"]
       },
-      "actions": ["iotfleetwise:DisassociateVehicleFleet"],
       "with": {
         "requestKey": "fleetId"
       },
@@ -108,7 +89,6 @@
         "interface": "GetVehicleStatusRequest",
         "omit": ["vehicleName"]
       },
-      "actions": ["iotfleetwise:GetVehicleStatus"],
       "with": {
         "requestKey": "vehicleName"
       },
@@ -127,7 +107,6 @@
         "interface": "ListDecoderManifestSignalsRequest",
         "omit": ["name"]
       },
-      "actions": ["iotfleetwise:ListDecoderManifestSignals"],
       "with": {
         "requestKey": "name"
       },
@@ -144,7 +123,6 @@
         "interface": "ListFleetsForVehicleRequest",
         "omit": ["vehicleName"]
       },
-      "actions": ["iotfleetwise:ListFleetsForVehicle"],
       "with": {
         "requestKey": "vehicleName"
       },
@@ -162,7 +140,6 @@
         "interface": "ListModelManifestNodesRequest",
         "omit": ["name"]
       },
-      "actions": ["iotfleetwise:ListModelManifestNodes"],
       "with": {
         "requestKey": "name"
       },
@@ -180,7 +157,6 @@
         "interface": "ListSignalCatalogNodesRequest",
         "omit": ["name"]
       },
-      "actions": ["iotfleetwise:ListSignalCatalogNodes"],
       "with": {
         "requestKey": "name"
       },
@@ -191,8 +167,7 @@
     },
     "ListVehicles": {
       "operation": "listVehicles",
-      "builder": "makeFleetWiseAccountHttpBinding",
-      "actions": ["iotfleetwise:ListVehicles"]
+      "builder": "makeFleetWiseAccountHttpBinding"
     },
     "ListVehiclesInFleet": {
       "operation": "listVehiclesInFleet",
@@ -202,7 +177,6 @@
         "interface": "ListVehiclesInFleetRequest",
         "omit": ["fleetId"]
       },
-      "actions": ["iotfleetwise:ListVehiclesInFleet"],
       "with": {
         "requestKey": "fleetId"
       },
@@ -219,7 +193,6 @@
         "interface": "UpdateCampaignRequest",
         "omit": ["name"]
       },
-      "actions": ["iotfleetwise:UpdateCampaign"],
       "with": {
         "requestKey": "name"
       },

@@ -26,8 +26,7 @@
       "param": "endpoint",
       "request": {
         "mode": "none"
-      },
-      "actions": ["route53resolver:GetResolverEndpoint"]
+      }
     },
     "GetResolverRule": {
       "operation": "getResolverRule",
@@ -36,8 +35,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeRoute53ResolverRuleHttpBinding",
-      "actions": ["route53resolver:GetResolverRule"]
+      "builder": "makeRoute53ResolverRuleHttpBinding"
     },
     "ListResolverEndpointIpAddresses": {
       "operation": "listResolverEndpointIpAddresses",
@@ -47,8 +45,7 @@
         "mode": "optional",
         "interface": "ListResolverEndpointIpAddressesRequest",
         "omit": ["ResolverEndpointId"]
-      },
-      "actions": ["route53resolver:ListResolverEndpointIpAddresses"]
+      }
     },
     "UpdateResolverRule": {
       "operation": "updateResolverRule",
@@ -59,8 +56,7 @@
         "interface": "UpdateResolverRuleRequest",
         "omit": ["ResolverRuleId"]
       },
-      "builder": "makeRoute53ResolverRuleHttpBinding",
-      "actions": ["route53resolver:UpdateResolverRule"]
+      "builder": "makeRoute53ResolverRuleHttpBinding"
     }
   }
 }

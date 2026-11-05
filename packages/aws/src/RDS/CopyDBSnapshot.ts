@@ -43,6 +43,7 @@ export const CopyDBSnapshotHttp = Layer.effect(
   makeRdsAccountHttpBinding({
     tag: "AWS.RDS.CopyDBSnapshot",
     operation: rds.copyDBSnapshot,
-    actions: ["rds:CopyDBSnapshot", "rds:AddTagsToResource"],
+    actions: ["rds:AddTagsToResource", "rds:CopyDBSnapshot"],
+    arns: ["arn:${Partition}:rds:${Region}:${Account}:snapshot:*"],
   }),
 );

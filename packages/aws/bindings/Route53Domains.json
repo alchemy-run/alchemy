@@ -21,8 +21,7 @@
         "mode": "required",
         "interface": "CheckDomainAvailabilityRequest",
         "omit": []
-      },
-      "actions": ["route53domains:CheckDomainAvailability"]
+      }
     },
     "CheckDomainTransferability": {
       "operation": "checkDomainTransferability",
@@ -30,8 +29,7 @@
         "mode": "required",
         "interface": "CheckDomainTransferabilityRequest",
         "omit": []
-      },
-      "actions": ["route53domains:CheckDomainTransferability"]
+      }
     },
     "GetDomainDetail": {
       "operation": "getDomainDetail",
@@ -39,8 +37,7 @@
         "mode": "required",
         "interface": "GetDomainDetailRequest",
         "omit": []
-      },
-      "actions": ["route53domains:GetDomainDetail"]
+      }
     },
     "GetDomainSuggestions": {
       "operation": "getDomainSuggestions",
@@ -48,8 +45,7 @@
         "mode": "required",
         "interface": "GetDomainSuggestionsRequest",
         "omit": []
-      },
-      "actions": ["route53domains:GetDomainSuggestions"]
+      }
     },
     "GetOperationDetail": {
       "operation": "getOperationDetail",
@@ -57,8 +53,7 @@
         "mode": "required",
         "interface": "GetOperationDetailRequest",
         "omit": []
-      },
-      "actions": ["route53domains:GetOperationDetail"]
+      }
     },
     "ListDomains": {
       "operation": "listDomains",
@@ -66,8 +61,7 @@
         "mode": "required",
         "interface": "ListDomainsRequest",
         "omit": []
-      },
-      "actions": ["route53domains:ListDomains"]
+      }
     },
     "ListOperations": {
       "operation": "listOperations",
@@ -75,8 +69,7 @@
         "mode": "required",
         "interface": "ListOperationsRequest",
         "omit": []
-      },
-      "actions": ["route53domains:ListOperations"]
+      }
     },
     "ListPrices": {
       "operation": "listPrices",
@@ -84,8 +77,7 @@
         "mode": "required",
         "interface": "ListPricesRequest",
         "omit": []
-      },
-      "actions": ["route53domains:ListPrices"]
+      }
     },
     "RegisterDomain": {
       "operation": "registerDomain",
@@ -94,8 +86,7 @@
         "interface": "RegisterDomainRequest",
         "omit": []
       },
-      "actions": ["route53domains:RegisterDomain", "route53:CreateHostedZone"],
-      "note": "RegisterDomain pre-validates that the caller can create the hosted zone Route 53 auto-creates during registration \u2014 without route53:CreateHostedZone the API rejects the call with AccessDeniedException (\"not authorized to perform: route53:CreateHostedZone\") before even validating the TLD."
+      "note": "RegisterDomain pre-validates that the caller can create the hosted zone Route 53 auto-creates during registration — without route53:CreateHostedZone the API rejects the call with AccessDeniedException (\"not authorized to perform: route53:CreateHostedZone\") before even validating the TLD."
     },
     "RenewDomain": {
       "operation": "renewDomain",
@@ -103,8 +94,7 @@
         "mode": "required",
         "interface": "RenewDomainRequest",
         "omit": []
-      },
-      "actions": ["route53domains:RenewDomain"]
+      }
     },
     "RetrieveDomainAuthCode": {
       "operation": "retrieveDomainAuthCode",
@@ -112,8 +102,7 @@
         "mode": "required",
         "interface": "RetrieveDomainAuthCodeRequest",
         "omit": []
-      },
-      "actions": ["route53domains:RetrieveDomainAuthCode"]
+      }
     },
     "UpdateDomainNameservers": {
       "operation": "updateDomainNameservers",
@@ -121,8 +110,7 @@
         "mode": "required",
         "interface": "UpdateDomainNameserversRequest",
         "omit": []
-      },
-      "actions": ["route53domains:UpdateDomainNameservers"]
+      }
     }
   }
 }

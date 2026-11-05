@@ -19,102 +19,82 @@
       "operation": "acceptResourceShareInvitation",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:AcceptResourceShareInvitation"],
-      "arns": ["arn:${Partition}:ram:${Region}:${Account}:resource-share-invitation/*"]
+      }
     },
     "GetPermission": {
       "operation": "getPermission",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:GetPermission"],
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:ram:${Region}:${Account}:permission/*, arn:${Partition}:ram::${Account}:permission/*), the call was denied live in the RAM Bindings suite; the grant stays on *."
+      }
     },
     "GetResourcePolicies": {
       "operation": "getResourcePolicies",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:GetResourcePolicies"]
+      }
     },
     "GetResourceShareAssociations": {
       "operation": "getResourceShareAssociations",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:GetResourceShareAssociations"]
+      }
     },
     "GetResourceShareInvitations": {
-      "operation": "getResourceShareInvitations",
-      "actions": ["ram:GetResourceShareInvitations"]
+      "operation": "getResourceShareInvitations"
     },
     "GetResourceShares": {
       "operation": "getResourceShares",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:GetResourceShares"]
+      }
     },
     "ListPendingInvitationResources": {
       "operation": "listPendingInvitationResources",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:ListPendingInvitationResources"],
-      "arns": ["arn:${Partition}:ram:${Region}:${Account}:resource-share-invitation/*"]
+      }
     },
     "ListPermissionAssociations": {
-      "operation": "listPermissionAssociations",
-      "actions": ["ram:ListPermissionAssociations"]
+      "operation": "listPermissionAssociations"
     },
     "ListPermissionVersions": {
       "operation": "listPermissionVersions",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:ListPermissionVersions"]
+      }
     },
     "ListPermissions": {
-      "operation": "listPermissions",
-      "actions": ["ram:ListPermissions"]
+      "operation": "listPermissions"
     },
     "ListPrincipals": {
       "operation": "listPrincipals",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:ListPrincipals"]
+      }
     },
     "ListResourceSharePermissions": {
       "operation": "listResourceSharePermissions",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:ListResourceSharePermissions"]
+      }
     },
     "ListResourceTypes": {
-      "operation": "listResourceTypes",
-      "actions": ["ram:ListResourceTypes"]
+      "operation": "listResourceTypes"
     },
     "ListResources": {
       "operation": "listResources",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:ListResources"]
+      }
     },
     "ListSourceAssociations": {
-      "operation": "listSourceAssociations",
-      "actions": ["ram:ListSourceAssociations"]
+      "operation": "listSourceAssociations"
     },
     "RejectResourceShareInvitation": {
       "operation": "rejectResourceShareInvitation",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ram:RejectResourceShareInvitation"],
-      "arns": ["arn:${Partition}:ram:${Region}:${Account}:resource-share-invitation/*"]
+      }
     }
   }
 }

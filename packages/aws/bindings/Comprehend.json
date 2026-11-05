@@ -14,264 +14,220 @@
       "operation": "batchDetectDominantLanguage",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:BatchDetectDominantLanguage"]
+      }
     },
     "BatchDetectEntities": {
       "operation": "batchDetectEntities",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:BatchDetectEntities"]
+      }
     },
     "BatchDetectKeyPhrases": {
       "operation": "batchDetectKeyPhrases",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:BatchDetectKeyPhrases"]
+      }
     },
     "BatchDetectSentiment": {
       "operation": "batchDetectSentiment",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:BatchDetectSentiment"]
+      }
     },
     "BatchDetectSyntax": {
       "operation": "batchDetectSyntax",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:BatchDetectSyntax"]
+      }
     },
     "BatchDetectTargetedSentiment": {
       "operation": "batchDetectTargetedSentiment",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:BatchDetectTargetedSentiment"]
+      }
     },
     "ClassifyDocument": {
       "operation": "classifyDocument",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:ClassifyDocument"],
-      "arns": ["arn:${Partition}:comprehend:${Region}:${Account}:document-classifier-endpoint/*"]
+      }
     },
     "ContainsPiiEntities": {
       "operation": "containsPiiEntities",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:ContainsPiiEntities"]
+      }
     },
     "DescribeDocumentClassificationJob": {
       "operation": "describeDocumentClassificationJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DescribeDocumentClassificationJob"]
+      }
     },
     "DescribeDominantLanguageDetectionJob": {
       "operation": "describeDominantLanguageDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DescribeDominantLanguageDetectionJob"]
+      }
     },
     "DescribeEntitiesDetectionJob": {
       "operation": "describeEntitiesDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DescribeEntitiesDetectionJob"]
+      }
     },
     "DescribeEventsDetectionJob": {
       "operation": "describeEventsDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DescribeEventsDetectionJob"]
+      }
     },
     "DescribeKeyPhrasesDetectionJob": {
       "operation": "describeKeyPhrasesDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DescribeKeyPhrasesDetectionJob"]
+      }
     },
     "DescribePiiEntitiesDetectionJob": {
       "operation": "describePiiEntitiesDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DescribePiiEntitiesDetectionJob"]
+      }
     },
     "DescribeSentimentDetectionJob": {
       "operation": "describeSentimentDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DescribeSentimentDetectionJob"],
-      "arns": ["arn:${Partition}:comprehend:${Region}:${Account}:sentiment-detection-job/*"]
+      }
     },
     "DescribeTargetedSentimentDetectionJob": {
       "operation": "describeTargetedSentimentDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DescribeTargetedSentimentDetectionJob"]
+      }
     },
     "DescribeTopicsDetectionJob": {
       "operation": "describeTopicsDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DescribeTopicsDetectionJob"]
+      }
     },
     "DetectDominantLanguage": {
       "operation": "detectDominantLanguage",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DetectDominantLanguage"]
+      }
     },
     "DetectEntities": {
       "operation": "detectEntities",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DetectEntities"]
+      }
     },
     "DetectKeyPhrases": {
       "operation": "detectKeyPhrases",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DetectKeyPhrases"]
+      }
     },
     "DetectPiiEntities": {
       "operation": "detectPiiEntities",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DetectPiiEntities"]
+      }
     },
     "DetectSentiment": {
       "operation": "detectSentiment",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DetectSentiment"]
+      }
     },
     "DetectSyntax": {
       "operation": "detectSyntax",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DetectSyntax"]
+      }
     },
     "DetectTargetedSentiment": {
       "operation": "detectTargetedSentiment",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DetectTargetedSentiment"]
+      }
     },
     "DetectToxicContent": {
       "operation": "detectToxicContent",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:DetectToxicContent"]
+      }
     },
     "ListDocumentClassificationJobs": {
-      "operation": "listDocumentClassificationJobs",
-      "actions": ["comprehend:ListDocumentClassificationJobs"]
+      "operation": "listDocumentClassificationJobs"
     },
     "ListDominantLanguageDetectionJobs": {
-      "operation": "listDominantLanguageDetectionJobs",
-      "actions": ["comprehend:ListDominantLanguageDetectionJobs"]
+      "operation": "listDominantLanguageDetectionJobs"
     },
     "ListEntitiesDetectionJobs": {
-      "operation": "listEntitiesDetectionJobs",
-      "actions": ["comprehend:ListEntitiesDetectionJobs"]
+      "operation": "listEntitiesDetectionJobs"
     },
     "ListEventsDetectionJobs": {
-      "operation": "listEventsDetectionJobs",
-      "actions": ["comprehend:ListEventsDetectionJobs"]
+      "operation": "listEventsDetectionJobs"
     },
     "ListKeyPhrasesDetectionJobs": {
-      "operation": "listKeyPhrasesDetectionJobs",
-      "actions": ["comprehend:ListKeyPhrasesDetectionJobs"]
+      "operation": "listKeyPhrasesDetectionJobs"
     },
     "ListPiiEntitiesDetectionJobs": {
-      "operation": "listPiiEntitiesDetectionJobs",
-      "actions": ["comprehend:ListPiiEntitiesDetectionJobs"]
+      "operation": "listPiiEntitiesDetectionJobs"
     },
     "ListSentimentDetectionJobs": {
-      "operation": "listSentimentDetectionJobs",
-      "actions": ["comprehend:ListSentimentDetectionJobs"]
+      "operation": "listSentimentDetectionJobs"
     },
     "ListTargetedSentimentDetectionJobs": {
-      "operation": "listTargetedSentimentDetectionJobs",
-      "actions": ["comprehend:ListTargetedSentimentDetectionJobs"]
+      "operation": "listTargetedSentimentDetectionJobs"
     },
     "ListTopicsDetectionJobs": {
-      "operation": "listTopicsDetectionJobs",
-      "actions": ["comprehend:ListTopicsDetectionJobs"]
+      "operation": "listTopicsDetectionJobs"
     },
     "StopDominantLanguageDetectionJob": {
       "operation": "stopDominantLanguageDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:StopDominantLanguageDetectionJob"]
+      }
     },
     "StopEntitiesDetectionJob": {
       "operation": "stopEntitiesDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:StopEntitiesDetectionJob"]
+      }
     },
     "StopEventsDetectionJob": {
       "operation": "stopEventsDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:StopEventsDetectionJob"]
+      }
     },
     "StopKeyPhrasesDetectionJob": {
       "operation": "stopKeyPhrasesDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:StopKeyPhrasesDetectionJob"]
+      }
     },
     "StopPiiEntitiesDetectionJob": {
       "operation": "stopPiiEntitiesDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:StopPiiEntitiesDetectionJob"]
+      }
     },
     "StopSentimentDetectionJob": {
       "operation": "stopSentimentDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:StopSentimentDetectionJob"],
-      "arns": ["arn:${Partition}:comprehend:${Region}:${Account}:sentiment-detection-job/*"]
+      }
     },
     "StopTargetedSentimentDetectionJob": {
       "operation": "stopTargetedSentimentDetectionJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["comprehend:StopTargetedSentimentDetectionJob"]
+      }
     }
   }
 }

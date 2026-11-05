@@ -33,8 +33,7 @@
         "mode": "required",
         "interface": "AcceptGrantRequest",
         "omit": []
-      },
-      "actions": ["license-manager:AcceptGrant"]
+      }
     },
     "CheckInLicense": {
       "operation": "checkInLicense",
@@ -42,8 +41,7 @@
         "mode": "required",
         "interface": "CheckInLicenseRequest",
         "omit": []
-      },
-      "actions": ["license-manager:CheckInLicense"]
+      }
     },
     "CheckoutBorrowLicense": {
       "operation": "checkoutBorrowLicense",
@@ -51,8 +49,7 @@
         "mode": "required",
         "interface": "CheckoutBorrowLicenseRequest",
         "omit": []
-      },
-      "actions": ["license-manager:CheckoutBorrowLicense"]
+      }
     },
     "CheckoutLicense": {
       "operation": "checkoutLicense",
@@ -60,8 +57,7 @@
         "mode": "required",
         "interface": "CheckoutLicenseRequest",
         "omit": []
-      },
-      "actions": ["license-manager:CheckoutLicense"]
+      }
     },
     "CreateGrant": {
       "operation": "createGrant",
@@ -69,10 +65,6 @@
         "mode": "required",
         "interface": "CreateGrantRequest",
         "omit": []
-      },
-      "actions": ["license-manager:CreateGrant"],
-      "reviewed": {
-        "license-manager:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "CreateGrantVersion": {
@@ -81,8 +73,7 @@
         "mode": "required",
         "interface": "CreateGrantVersionRequest",
         "omit": []
-      },
-      "actions": ["license-manager:CreateGrantVersion"]
+      }
     },
     "CreateLicense": {
       "operation": "createLicense",
@@ -90,10 +81,6 @@
         "mode": "required",
         "interface": "CreateLicenseRequest",
         "omit": []
-      },
-      "actions": ["license-manager:CreateLicense"],
-      "reviewed": {
-        "license-manager:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "CreateLicenseVersion": {
@@ -102,8 +89,7 @@
         "mode": "required",
         "interface": "CreateLicenseVersionRequest",
         "omit": []
-      },
-      "actions": ["license-manager:CreateLicenseVersion"]
+      }
     },
     "CreateToken": {
       "operation": "createToken",
@@ -111,8 +97,7 @@
         "mode": "required",
         "interface": "CreateTokenRequest",
         "omit": []
-      },
-      "actions": ["license-manager:CreateToken"]
+      }
     },
     "DeleteGrant": {
       "operation": "deleteGrant",
@@ -120,8 +105,7 @@
         "mode": "required",
         "interface": "DeleteGrantRequest",
         "omit": []
-      },
-      "actions": ["license-manager:DeleteGrant"]
+      }
     },
     "DeleteLicense": {
       "operation": "deleteLicense",
@@ -129,8 +113,7 @@
         "mode": "required",
         "interface": "DeleteLicenseRequest",
         "omit": []
-      },
-      "actions": ["license-manager:DeleteLicense"]
+      }
     },
     "DeleteToken": {
       "operation": "deleteToken",
@@ -138,8 +121,7 @@
         "mode": "required",
         "interface": "DeleteTokenRequest",
         "omit": []
-      },
-      "actions": ["license-manager:DeleteToken"]
+      }
     },
     "ExtendLicenseConsumption": {
       "operation": "extendLicenseConsumption",
@@ -147,8 +129,7 @@
         "mode": "required",
         "interface": "ExtendLicenseConsumptionRequest",
         "omit": []
-      },
-      "actions": ["license-manager:ExtendLicenseConsumption"]
+      }
     },
     "GetAccessToken": {
       "operation": "getAccessToken",
@@ -156,8 +137,7 @@
         "mode": "required",
         "interface": "GetAccessTokenRequest",
         "omit": []
-      },
-      "actions": ["license-manager:GetAccessToken"]
+      }
     },
     "GetGrant": {
       "operation": "getGrant",
@@ -165,8 +145,7 @@
         "mode": "required",
         "interface": "GetGrantRequest",
         "omit": []
-      },
-      "actions": ["license-manager:GetGrant"]
+      }
     },
     "GetLicense": {
       "operation": "getLicense",
@@ -174,8 +153,7 @@
         "mode": "required",
         "interface": "GetLicenseRequest",
         "omit": []
-      },
-      "actions": ["license-manager:GetLicense"]
+      }
     },
     "GetLicenseConfiguration": {
       "operation": "getLicenseConfiguration",
@@ -184,8 +162,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeLicenseConfigurationHttpBinding",
-      "actions": ["license-manager:GetLicenseConfiguration"]
+      "builder": "makeLicenseConfigurationHttpBinding"
     },
     "GetLicenseUsage": {
       "operation": "getLicenseUsage",
@@ -193,8 +170,7 @@
         "mode": "required",
         "interface": "GetLicenseUsageRequest",
         "omit": []
-      },
-      "actions": ["license-manager:GetLicenseUsage"]
+      }
     },
     "GetServiceSettings": {
       "operation": "getServiceSettings",
@@ -202,8 +178,7 @@
         "mode": "optional",
         "interface": "GetServiceSettingsRequest",
         "omit": []
-      },
-      "actions": ["license-manager:GetServiceSettings"]
+      }
     },
     "ListDistributedGrants": {
       "operation": "listDistributedGrants",
@@ -211,8 +186,7 @@
         "mode": "optional",
         "interface": "ListDistributedGrantsRequest",
         "omit": []
-      },
-      "actions": ["license-manager:ListDistributedGrants"]
+      }
     },
     "ListLicenseVersions": {
       "operation": "listLicenseVersions",
@@ -220,8 +194,7 @@
         "mode": "required",
         "interface": "ListLicenseVersionsRequest",
         "omit": []
-      },
-      "actions": ["license-manager:ListLicenseVersions"]
+      }
     },
     "ListLicenses": {
       "operation": "listLicenses",
@@ -229,8 +202,7 @@
         "mode": "optional",
         "interface": "ListLicensesRequest",
         "omit": []
-      },
-      "actions": ["license-manager:ListLicenses"]
+      }
     },
     "ListReceivedGrants": {
       "operation": "listReceivedGrants",
@@ -238,8 +210,7 @@
         "mode": "optional",
         "interface": "ListReceivedGrantsRequest",
         "omit": []
-      },
-      "actions": ["license-manager:ListReceivedGrants"]
+      }
     },
     "ListReceivedLicenses": {
       "operation": "listReceivedLicenses",
@@ -247,8 +218,7 @@
         "mode": "optional",
         "interface": "ListReceivedLicensesRequest",
         "omit": []
-      },
-      "actions": ["license-manager:ListReceivedLicenses"]
+      }
     },
     "ListResourceInventory": {
       "operation": "listResourceInventory",
@@ -256,8 +226,7 @@
         "mode": "optional",
         "interface": "ListResourceInventoryRequest",
         "omit": []
-      },
-      "actions": ["license-manager:ListResourceInventory"]
+      }
     },
     "ListTokens": {
       "operation": "listTokens",
@@ -265,8 +234,7 @@
         "mode": "optional",
         "interface": "ListTokensRequest",
         "omit": []
-      },
-      "actions": ["license-manager:ListTokens"]
+      }
     },
     "ListUsageForLicenseConfiguration": {
       "operation": "listUsageForLicenseConfiguration",
@@ -277,8 +245,7 @@
         "interface": "ListUsageForLicenseConfigurationRequest",
         "omit": ["LicenseConfigurationArn"]
       },
-      "builder": "makeLicenseConfigurationHttpBinding",
-      "actions": ["license-manager:ListUsageForLicenseConfiguration"]
+      "builder": "makeLicenseConfigurationHttpBinding"
     },
     "RejectGrant": {
       "operation": "rejectGrant",
@@ -286,8 +253,7 @@
         "mode": "required",
         "interface": "RejectGrantRequest",
         "omit": []
-      },
-      "actions": ["license-manager:RejectGrant"]
+      }
     }
   }
 }

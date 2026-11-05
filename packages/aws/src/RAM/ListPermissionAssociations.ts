@@ -47,5 +47,9 @@ export const ListPermissionAssociationsHttp = Layer.effect(
     capability: "ListPermissionAssociations",
     iamActions: ["ram:ListPermissionAssociations"],
     operation: ram.listPermissionAssociations,
+    arns: [
+      "arn:${Partition}:ram:${Region}:${Account}:permission/*",
+      "arn:${Partition}:ram::${Account}:permission/*",
+    ],
   }),
 );

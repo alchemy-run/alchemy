@@ -25,40 +25,35 @@
         "mode": "required",
         "interface": "ApplyArchiveRuleRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:ApplyArchiveRule"]
+      }
     },
     "CancelPolicyGeneration": {
       "operation": "cancelPolicyGeneration",
       "request": {
         "mode": "required"
       },
-      "builder": "makeAccessAnalyzerAccountHttpBinding",
-      "actions": ["access-analyzer:CancelPolicyGeneration"]
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
     },
     "CheckAccessNotGranted": {
       "operation": "checkAccessNotGranted",
       "request": {
         "mode": "required"
       },
-      "builder": "makeAccessAnalyzerAccountHttpBinding",
-      "actions": ["access-analyzer:CheckAccessNotGranted"]
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
     },
     "CheckNoNewAccess": {
       "operation": "checkNoNewAccess",
       "request": {
         "mode": "required"
       },
-      "builder": "makeAccessAnalyzerAccountHttpBinding",
-      "actions": ["access-analyzer:CheckNoNewAccess"]
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
     },
     "CheckNoPublicAccess": {
       "operation": "checkNoPublicAccess",
       "request": {
         "mode": "required"
       },
-      "builder": "makeAccessAnalyzerAccountHttpBinding",
-      "actions": ["access-analyzer:CheckNoPublicAccess"]
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
     },
     "CreateAccessPreview": {
       "operation": "createAccessPreview",
@@ -67,8 +62,7 @@
         "mode": "required",
         "interface": "CreateAccessPreviewRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:CreateAccessPreview"]
+      }
     },
     "GenerateFindingRecommendation": {
       "operation": "generateFindingRecommendation",
@@ -77,8 +71,7 @@
         "mode": "required",
         "interface": "GenerateFindingRecommendationRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:GenerateFindingRecommendation"]
+      }
     },
     "GetAccessPreview": {
       "operation": "getAccessPreview",
@@ -87,8 +80,7 @@
         "mode": "required",
         "interface": "GetAccessPreviewRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:GetAccessPreview"]
+      }
     },
     "GetAnalyzedResource": {
       "operation": "getAnalyzedResource",
@@ -97,8 +89,7 @@
         "mode": "required",
         "interface": "GetAnalyzedResourceRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:GetAnalyzedResource"]
+      }
     },
     "GetFinding": {
       "operation": "getFinding",
@@ -107,8 +98,7 @@
         "mode": "required",
         "interface": "GetFindingRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:GetFinding"]
+      }
     },
     "GetFindingRecommendation": {
       "operation": "getFindingRecommendation",
@@ -117,8 +107,7 @@
         "mode": "required",
         "interface": "GetFindingRecommendationRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:GetFindingRecommendation"]
+      }
     },
     "GetFindingV2": {
       "operation": "getFindingV2",
@@ -128,7 +117,6 @@
         "interface": "GetFindingV2Request",
         "omit": ["analyzerArn"]
       },
-      "actions": ["access-analyzer:GetFinding"],
       "note": "GetFinding and GetFindingV2 both use `access-analyzer:GetFinding`."
     },
     "GetFindingsStatistics": {
@@ -138,16 +126,14 @@
         "mode": "optional",
         "interface": "GetFindingsStatisticsRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:GetFindingsStatistics"]
+      }
     },
     "GetGeneratedPolicy": {
       "operation": "getGeneratedPolicy",
       "request": {
         "mode": "required"
       },
-      "builder": "makeAccessAnalyzerAccountHttpBinding",
-      "actions": ["access-analyzer:GetGeneratedPolicy"]
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
     },
     "ListAccessPreviewFindings": {
       "operation": "listAccessPreviewFindings",
@@ -156,8 +142,7 @@
         "mode": "required",
         "interface": "ListAccessPreviewFindingsRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:ListAccessPreviewFindings"]
+      }
     },
     "ListAccessPreviews": {
       "operation": "listAccessPreviews",
@@ -166,8 +151,7 @@
         "mode": "optional",
         "interface": "ListAccessPreviewsRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:ListAccessPreviews"]
+      }
     },
     "ListAnalyzedResources": {
       "operation": "listAnalyzedResources",
@@ -176,8 +160,7 @@
         "mode": "optional",
         "interface": "ListAnalyzedResourcesRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:ListAnalyzedResources"]
+      }
     },
     "ListFindings": {
       "operation": "listFindings",
@@ -186,8 +169,7 @@
         "mode": "optional",
         "interface": "ListFindingsRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:ListFindings"]
+      }
     },
     "ListFindingsV2": {
       "operation": "listFindingsV2",
@@ -197,24 +179,18 @@
         "interface": "ListFindingsV2Request",
         "omit": ["analyzerArn"]
       },
-      "actions": ["access-analyzer:ListFindings"],
       "note": "ListFindings and ListFindingsV2 both use `access-analyzer:ListFindings`."
     },
     "ListPolicyGenerations": {
       "operation": "listPolicyGenerations",
-      "builder": "makeAccessAnalyzerAccountHttpBinding",
-      "actions": ["access-analyzer:ListPolicyGenerations"]
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
     },
     "StartPolicyGeneration": {
       "operation": "startPolicyGeneration",
       "request": {
         "mode": "required"
       },
-      "builder": "makeAccessAnalyzerAccountHttpBinding",
-      "actions": ["access-analyzer:StartPolicyGeneration"],
-      "reviewed": {
-        "iam:PassRole": "AWS lists it for the operation, but the AccessAnalyzer Bindings suite calls it successfully without it."
-      }
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
     },
     "StartResourceScan": {
       "operation": "startResourceScan",
@@ -223,8 +199,7 @@
         "mode": "required",
         "interface": "StartResourceScanRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:StartResourceScan"]
+      }
     },
     "UpdateFindings": {
       "operation": "updateFindings",
@@ -233,16 +208,14 @@
         "mode": "required",
         "interface": "UpdateFindingsRequest",
         "omit": ["analyzerArn"]
-      },
-      "actions": ["access-analyzer:UpdateFindings"]
+      }
     },
     "ValidatePolicy": {
       "operation": "validatePolicy",
       "request": {
         "mode": "required"
       },
-      "builder": "makeAccessAnalyzerAccountHttpBinding",
-      "actions": ["access-analyzer:ValidatePolicy"]
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
     }
   }
 }

@@ -42,7 +42,7 @@ export const CreateCampaignHttp = Layer.effect(
   makePersonalizeAccountHttpBinding({
     tag: "AWS.Personalize.CreateCampaign",
     operation: personalize.createCampaign,
-    actions: ["personalize:CreateCampaign"],
+    actions: ["personalize:CreateCampaign", "personalize:TagResource"],
     arns: [
       "arn:${Partition}:personalize:${Region}:${Account}:campaign/*",
       "arn:${Partition}:personalize:${Region}:${Account}:solution/*",

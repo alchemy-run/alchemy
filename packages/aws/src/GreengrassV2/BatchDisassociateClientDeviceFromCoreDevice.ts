@@ -53,5 +53,6 @@ export const BatchDisassociateClientDeviceFromCoreDeviceHttp = Layer.effect(
     tag: "AWS.GreengrassV2.BatchDisassociateClientDeviceFromCoreDevice",
     operation: greengrassv2.batchDisassociateClientDeviceFromCoreDevice,
     actions: ["greengrass:BatchDisassociateClientDeviceFromCoreDevice"],
+    arns: ["arn:${Partition}:greengrass:${Region}:${Account}:coreDevices:*"],
   }),
 );

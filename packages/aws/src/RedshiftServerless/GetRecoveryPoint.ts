@@ -42,5 +42,6 @@ export const GetRecoveryPointHttp = Layer.effect(
     tag: "AWS.RedshiftServerless.GetRecoveryPoint",
     operation: serverless.getRecoveryPoint,
     actions: ["redshift-serverless:GetRecoveryPoint"],
+    arns: ["arn:${Partition}:redshift-serverless:${Region}:${Account}:recoverypoint/*"],
   }),
 );

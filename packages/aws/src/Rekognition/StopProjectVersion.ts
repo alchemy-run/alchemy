@@ -47,5 +47,6 @@ export const StopProjectVersionHttp = Layer.effect(
     tag: "AWS.Rekognition.StopProjectVersion",
     operation: rekognition.stopProjectVersion,
     actions: ["rekognition:StopProjectVersion"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:project/*/version/*/*"],
   }),
 );

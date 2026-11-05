@@ -11,212 +11,151 @@
   },
   "bindings": {
     "AcceptAdministratorInvitation": {
-      "operation": "acceptAdministratorInvitation",
-      "actions": ["securityhub:AcceptAdministratorInvitation"]
+      "operation": "acceptAdministratorInvitation"
     },
     "BatchDisableStandards": {
-      "operation": "batchDisableStandards",
-      "actions": ["securityhub:BatchDisableStandards"]
+      "operation": "batchDisableStandards"
     },
     "BatchEnableStandards": {
-      "operation": "batchEnableStandards",
-      "actions": ["securityhub:BatchEnableStandards"]
+      "operation": "batchEnableStandards"
     },
     "BatchGetAutomationRules": {
-      "operation": "batchGetAutomationRules",
-      "actions": ["securityhub:BatchGetAutomationRules"]
+      "operation": "batchGetAutomationRules"
     },
     "BatchGetSecurityControls": {
-      "operation": "batchGetSecurityControls",
-      "actions": ["securityhub:BatchGetSecurityControls"],
-      "reviewed": {
-        "securityhub:DescribeStandardsControls": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
-      }
+      "operation": "batchGetSecurityControls"
     },
     "BatchGetStandardsControlAssociations": {
-      "operation": "batchGetStandardsControlAssociations",
-      "actions": ["securityhub:BatchGetStandardsControlAssociations"],
-      "reviewed": {
-        "securityhub:DescribeStandardsControls": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
-      }
+      "operation": "batchGetStandardsControlAssociations"
     },
     "BatchImportFindings": {
-      "operation": "batchImportFindings",
-      "actions": ["securityhub:BatchImportFindings"],
-      "arns": ["arn:${Partition}:securityhub:${Region}:${Account}:product/*/*"]
+      "operation": "batchImportFindings"
     },
     "BatchUpdateFindings": {
-      "operation": "batchUpdateFindings",
-      "actions": ["securityhub:BatchUpdateFindings"]
+      "operation": "batchUpdateFindings"
     },
     "BatchUpdateStandardsControlAssociations": {
-      "operation": "batchUpdateStandardsControlAssociations",
-      "actions": ["securityhub:BatchUpdateStandardsControlAssociations"],
-      "reviewed": {
-        "securityhub:UpdateStandardsControl": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
-      }
+      "operation": "batchUpdateStandardsControlAssociations"
     },
     "CreateMembers": {
-      "operation": "createMembers",
-      "actions": ["securityhub:CreateMembers"]
+      "operation": "createMembers"
     },
     "DeclineInvitations": {
-      "operation": "declineInvitations",
-      "actions": ["securityhub:DeclineInvitations"]
+      "operation": "declineInvitations"
     },
     "DeleteInvitations": {
-      "operation": "deleteInvitations",
-      "actions": ["securityhub:DeleteInvitations"]
+      "operation": "deleteInvitations"
     },
     "DeleteMembers": {
-      "operation": "deleteMembers",
-      "actions": ["securityhub:DeleteMembers"]
+      "operation": "deleteMembers"
     },
     "DescribeActionTargets": {
-      "operation": "describeActionTargets",
-      "actions": ["securityhub:DescribeActionTargets"]
+      "operation": "describeActionTargets"
     },
     "DescribeOrganizationConfiguration": {
-      "operation": "describeOrganizationConfiguration",
-      "actions": ["securityhub:DescribeOrganizationConfiguration"]
+      "operation": "describeOrganizationConfiguration"
     },
     "DescribeProducts": {
-      "operation": "describeProducts",
-      "actions": ["securityhub:DescribeProducts"]
+      "operation": "describeProducts"
     },
     "DescribeStandards": {
-      "operation": "describeStandards",
-      "actions": ["securityhub:DescribeStandards"]
+      "operation": "describeStandards"
     },
     "DescribeStandardsControls": {
       "operation": "describeStandardsControls",
       "request": {
         "mode": "required"
-      },
-      "actions": ["securityhub:DescribeStandardsControls"]
+      }
     },
     "DisableImportFindingsForProduct": {
       "operation": "disableImportFindingsForProduct",
       "request": {
         "mode": "required"
-      },
-      "actions": ["securityhub:DisableImportFindingsForProduct"]
+      }
     },
     "DisableOrganizationAdminAccount": {
-      "operation": "disableOrganizationAdminAccount",
-      "actions": ["securityhub:DisableOrganizationAdminAccount"]
+      "operation": "disableOrganizationAdminAccount"
     },
     "DisassociateFromAdministratorAccount": {
-      "operation": "disassociateFromAdministratorAccount",
-      "actions": ["securityhub:DisassociateFromAdministratorAccount"]
+      "operation": "disassociateFromAdministratorAccount"
     },
     "DisassociateMembers": {
-      "operation": "disassociateMembers",
-      "actions": ["securityhub:DisassociateMembers"]
+      "operation": "disassociateMembers"
     },
     "EnableImportFindingsForProduct": {
-      "operation": "enableImportFindingsForProduct",
-      "actions": ["securityhub:EnableImportFindingsForProduct"]
+      "operation": "enableImportFindingsForProduct"
     },
     "EnableOrganizationAdminAccount": {
-      "operation": "enableOrganizationAdminAccount",
-      "actions": ["securityhub:EnableOrganizationAdminAccount"]
+      "operation": "enableOrganizationAdminAccount"
     },
     "GetAdministratorAccount": {
-      "operation": "getAdministratorAccount",
-      "actions": ["securityhub:GetAdministratorAccount"]
+      "operation": "getAdministratorAccount"
     },
     "GetEnabledStandards": {
-      "operation": "getEnabledStandards",
-      "actions": ["securityhub:GetEnabledStandards"]
+      "operation": "getEnabledStandards"
     },
     "GetFindingHistory": {
-      "operation": "getFindingHistory",
-      "actions": ["securityhub:GetFindingHistory"]
+      "operation": "getFindingHistory"
     },
     "GetFindings": {
-      "operation": "getFindings",
-      "actions": ["securityhub:GetFindings"]
+      "operation": "getFindings"
     },
     "GetInsightResults": {
       "operation": "getInsightResults",
       "request": {
         "mode": "required"
-      },
-      "actions": ["securityhub:GetInsightResults"]
+      }
     },
     "GetInsights": {
-      "operation": "getInsights",
-      "actions": ["securityhub:GetInsights"]
+      "operation": "getInsights"
     },
     "GetInvitationsCount": {
-      "operation": "getInvitationsCount",
-      "actions": ["securityhub:GetInvitationsCount"]
+      "operation": "getInvitationsCount"
     },
     "GetMembers": {
-      "operation": "getMembers",
-      "actions": ["securityhub:GetMembers"]
+      "operation": "getMembers"
     },
     "GetSecurityControlDefinition": {
-      "operation": "getSecurityControlDefinition",
-      "actions": ["securityhub:GetSecurityControlDefinition"]
+      "operation": "getSecurityControlDefinition"
     },
     "InviteMembers": {
-      "operation": "inviteMembers",
-      "actions": ["securityhub:InviteMembers"]
+      "operation": "inviteMembers"
     },
     "ListAutomationRules": {
-      "operation": "listAutomationRules",
-      "actions": ["securityhub:ListAutomationRules"]
+      "operation": "listAutomationRules"
     },
     "ListEnabledProductsForImport": {
-      "operation": "listEnabledProductsForImport",
-      "actions": ["securityhub:ListEnabledProductsForImport"]
+      "operation": "listEnabledProductsForImport"
     },
     "ListFindingAggregators": {
-      "operation": "listFindingAggregators",
-      "actions": ["securityhub:ListFindingAggregators"]
+      "operation": "listFindingAggregators"
     },
     "ListInvitations": {
-      "operation": "listInvitations",
-      "actions": ["securityhub:ListInvitations"]
+      "operation": "listInvitations"
     },
     "ListMembers": {
-      "operation": "listMembers",
-      "actions": ["securityhub:ListMembers"]
+      "operation": "listMembers"
     },
     "ListOrganizationAdminAccounts": {
-      "operation": "listOrganizationAdminAccounts",
-      "actions": ["securityhub:ListOrganizationAdminAccounts"]
+      "operation": "listOrganizationAdminAccounts"
     },
     "ListSecurityControlDefinitions": {
-      "operation": "listSecurityControlDefinitions",
-      "actions": ["securityhub:ListSecurityControlDefinitions"]
+      "operation": "listSecurityControlDefinitions"
     },
     "ListStandardsControlAssociations": {
-      "operation": "listStandardsControlAssociations",
-      "actions": ["securityhub:ListStandardsControlAssociations"],
-      "reviewed": {
-        "securityhub:DescribeStandardsControls": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
-      }
+      "operation": "listStandardsControlAssociations"
     },
     "UpdateOrganizationConfiguration": {
-      "operation": "updateOrganizationConfiguration",
-      "actions": ["securityhub:UpdateOrganizationConfiguration"]
+      "operation": "updateOrganizationConfiguration"
     },
     "UpdateSecurityControl": {
-      "operation": "updateSecurityControl",
-      "actions": ["securityhub:UpdateSecurityControl"],
-      "reviewed": {
-        "securityhub:UpdateStandardsControl": "The standards-control action of Security Hub's pre-consolidation controls API; the consolidated security-controls call authorizes its own action."
-      }
+      "operation": "updateSecurityControl"
     },
     "UpdateStandardsControl": {
       "operation": "updateStandardsControl",
       "request": {
         "mode": "required"
-      },
-      "actions": ["securityhub:UpdateStandardsControl"]
+      }
     }
   }
 }

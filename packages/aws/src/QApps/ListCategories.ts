@@ -47,5 +47,6 @@ export const ListCategoriesHttp = Layer.effect(
     capability: "ListCategories",
     iamActions: ["qapps:ListCategories"],
     operation: qapps.listCategories,
+    arns: ["arn:${Partition}:qbusiness:${Region}:${Account}:application/*"],
   }),
 );

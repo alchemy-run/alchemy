@@ -30,8 +30,7 @@
         "mode": "optional",
         "interface": "DescribeScalingActivitiesRequest",
         "omit": ["ServiceNamespace", "ResourceId", "ScalableDimension"]
-      },
-      "actions": ["application-autoscaling:DescribeScalingActivities"]
+      }
     },
     "GetPredictiveScalingForecast": {
       "operation": "getPredictiveScalingForecast",
@@ -42,8 +41,7 @@
         "interface": "GetPredictiveScalingForecastRequest",
         "omit": ["ServiceNamespace", "ResourceId", "ScalableDimension", "PolicyName"]
       },
-      "builder": "makePolicyScopedHttpBinding",
-      "actions": ["application-autoscaling:GetPredictiveScalingForecast"]
+      "builder": "makePolicyScopedHttpBinding"
     }
   }
 }

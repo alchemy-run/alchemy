@@ -81,6 +81,6 @@ export const InvokeDataAutomationAsyncHttp = Layer.effect(
   makeBdaProjectHttpBinding({
     tag: "AWS.BedrockDataAutomation.InvokeDataAutomationAsync",
     operation: bdar.invokeDataAutomationAsync,
-    actions: ["bedrock:InvokeDataAutomationAsync"],
+    actions: ["bedrock:InvokeDataAutomationAsync", "bedrock:TagResource"],
   }),
 );

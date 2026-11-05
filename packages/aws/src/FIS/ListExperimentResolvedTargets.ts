@@ -52,5 +52,6 @@ export const ListExperimentResolvedTargetsHttp = Layer.effect(
     tag: "AWS.FIS.ListExperimentResolvedTargets",
     operation: fis.listExperimentResolvedTargets,
     actions: ["fis:ListExperimentResolvedTargets"],
+    arns: ["arn:${Partition}:fis:${Region}:${Account}:experiment/*"],
   }),
 );

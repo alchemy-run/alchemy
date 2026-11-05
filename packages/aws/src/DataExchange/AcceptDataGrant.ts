@@ -43,5 +43,6 @@ export const AcceptDataGrantHttp = Layer.effect(
     tag: "AWS.DataExchange.AcceptDataGrant",
     operation: dataexchange.acceptDataGrant,
     actions: ["dataexchange:AcceptDataGrant"],
+    arns: ["arn:${Partition}:dataexchange:${Region}:${Account}:data-grants/*"],
   }),
 );

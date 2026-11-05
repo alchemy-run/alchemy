@@ -45,5 +45,6 @@ export const DeleteIncidentRecordHttp = Layer.effect(
     tag: "AWS.SSMIncidents.DeleteIncidentRecord",
     operation: incidents.deleteIncidentRecord,
     actions: ["ssm-incidents:DeleteIncidentRecord"],
+    arns: ["arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*"],
   }),
 );

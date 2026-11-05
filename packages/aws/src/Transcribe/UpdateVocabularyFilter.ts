@@ -49,5 +49,6 @@ export const UpdateVocabularyFilterHttp = Layer.effect(
     tag: "AWS.Transcribe.UpdateVocabularyFilter",
     operation: transcribe.updateVocabularyFilter,
     actions: ["transcribe:UpdateVocabularyFilter"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:vocabulary-filter/*"],
   }),
 );

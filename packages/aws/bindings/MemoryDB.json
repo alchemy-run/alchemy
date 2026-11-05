@@ -19,18 +19,16 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["memorydb:BatchUpdateCluster"],
       "with": {
         "resources": ["arn:aws:memorydb:*:*:cluster/*"]
       },
-      "note": "Clusters are addressed by a runtime name list \u2014 grant on the cluster ARN wildcard."
+      "note": "Clusters are addressed by a runtime name list — grant on the cluster ARN wildcard."
     },
     "CopySnapshot": {
       "operation": "copySnapshot",
       "request": {
         "mode": "required"
       },
-      "actions": ["memorydb:CopySnapshot", "memorydb:TagResource"],
       "withTs": {
         "resources": "[SNAPSHOT_ARN_WILDCARD]"
       },
@@ -48,7 +46,6 @@
         "inline": true
       },
       "builder": "makeMemoryDBClusterHttpBinding",
-      "actions": ["memorydb:CreateSnapshot", "memorydb:TagResource"],
       "withTs": {
         "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
       },
@@ -62,7 +59,6 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["memorydb:DeleteSnapshot"],
       "withTs": {
         "resources": "[SNAPSHOT_ARN_WILDCARD]"
       },
@@ -71,24 +67,19 @@
       }
     },
     "DescribeClusters": {
-      "operation": "describeClusters",
-      "actions": ["memorydb:DescribeClusters"]
+      "operation": "describeClusters"
     },
     "DescribeEngineVersions": {
-      "operation": "describeEngineVersions",
-      "actions": ["memorydb:DescribeEngineVersions"]
+      "operation": "describeEngineVersions"
     },
     "DescribeEvents": {
-      "operation": "describeEvents",
-      "actions": ["memorydb:DescribeEvents"]
+      "operation": "describeEvents"
     },
     "DescribeServiceUpdates": {
-      "operation": "describeServiceUpdates",
-      "actions": ["memorydb:DescribeServiceUpdates"]
+      "operation": "describeServiceUpdates"
     },
     "DescribeSnapshots": {
-      "operation": "describeSnapshots",
-      "actions": ["memorydb:DescribeSnapshots"]
+      "operation": "describeSnapshots"
     },
     "FailoverShard": {
       "operation": "failoverShard",
@@ -98,8 +89,7 @@
         "omit": ["ClusterName"],
         "inline": true
       },
-      "builder": "makeMemoryDBClusterHttpBinding",
-      "actions": ["memorydb:FailoverShard"]
+      "builder": "makeMemoryDBClusterHttpBinding"
     },
     "ListAllowedNodeTypeUpdates": {
       "operation": "listAllowedNodeTypeUpdates",
@@ -107,8 +97,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeMemoryDBClusterHttpBinding",
-      "actions": ["memorydb:ListAllowedNodeTypeUpdates"]
+      "builder": "makeMemoryDBClusterHttpBinding"
     }
   }
 }

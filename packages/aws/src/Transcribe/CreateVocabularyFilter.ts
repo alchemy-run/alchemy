@@ -49,6 +49,6 @@ export const CreateVocabularyFilterHttp = Layer.effect(
   makeTranscribeHttpBinding({
     tag: "AWS.Transcribe.CreateVocabularyFilter",
     operation: transcribe.createVocabularyFilter,
-    actions: ["transcribe:CreateVocabularyFilter"],
+    actions: ["transcribe:CreateVocabularyFilter", "transcribe:TagResource"],
   }),
 );

@@ -46,5 +46,6 @@ export const DeleteCallAnalyticsJobHttp = Layer.effect(
     tag: "AWS.Transcribe.DeleteCallAnalyticsJob",
     operation: transcribe.deleteCallAnalyticsJob,
     actions: ["transcribe:DeleteCallAnalyticsJob"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:analytics/*"],
   }),
 );

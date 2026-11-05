@@ -55,5 +55,6 @@ export const CreateGrantVersionHttp = Layer.effect(
     capability: "CreateGrantVersion",
     iamActions: ["license-manager:CreateGrantVersion"],
     operation: licensemanager.createGrantVersion,
+    arns: ["arn:${Partition}:license-manager::${Account}:grant:*"],
   }),
 );

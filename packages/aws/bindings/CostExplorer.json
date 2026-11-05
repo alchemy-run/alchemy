@@ -36,8 +36,7 @@
         "interface": "GetAnomaliesRequest",
         "omit": ["MonitorArn"]
       },
-      "builder": "makeAnomalyMonitorHttpBinding",
-      "actions": ["ce:GetAnomalies"]
+      "builder": "makeAnomalyMonitorHttpBinding"
     },
     "GetApproximateUsageRecords": {
       "operation": "getApproximateUsageRecords",
@@ -45,8 +44,7 @@
         "mode": "required",
         "interface": "GetApproximateUsageRecordsRequest",
         "omit": []
-      },
-      "actions": ["ce:GetApproximateUsageRecords"]
+      }
     },
     "GetCommitmentPurchaseAnalysis": {
       "operation": "getCommitmentPurchaseAnalysis",
@@ -54,8 +52,7 @@
         "mode": "required",
         "interface": "GetCommitmentPurchaseAnalysisRequest",
         "omit": []
-      },
-      "actions": ["ce:GetCommitmentPurchaseAnalysis"]
+      }
     },
     "GetCostAndUsage": {
       "operation": "getCostAndUsage",
@@ -63,10 +60,6 @@
         "mode": "required",
         "interface": "GetCostAndUsageRequest",
         "omit": []
-      },
-      "actions": ["ce:GetCostAndUsage"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetCostAndUsageComparisons": {
@@ -75,8 +68,7 @@
         "mode": "required",
         "interface": "GetCostAndUsageComparisonsRequest",
         "omit": []
-      },
-      "actions": ["ce:GetCostAndUsageComparisons"]
+      }
     },
     "GetCostAndUsageWithResources": {
       "operation": "getCostAndUsageWithResources",
@@ -84,10 +76,6 @@
         "mode": "required",
         "interface": "GetCostAndUsageWithResourcesRequest",
         "omit": []
-      },
-      "actions": ["ce:GetCostAndUsageWithResources"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetCostCategories": {
@@ -96,10 +84,6 @@
         "mode": "required",
         "interface": "GetCostCategoriesRequest",
         "omit": []
-      },
-      "actions": ["ce:GetCostCategories"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetCostComparisonDrivers": {
@@ -108,8 +92,7 @@
         "mode": "required",
         "interface": "GetCostComparisonDriversRequest",
         "omit": []
-      },
-      "actions": ["ce:GetCostComparisonDrivers"]
+      }
     },
     "GetCostForecast": {
       "operation": "getCostForecast",
@@ -117,10 +100,6 @@
         "mode": "required",
         "interface": "GetCostForecastRequest",
         "omit": []
-      },
-      "actions": ["ce:GetCostForecast"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetDimensionValues": {
@@ -129,10 +108,6 @@
         "mode": "required",
         "interface": "GetDimensionValuesRequest",
         "omit": []
-      },
-      "actions": ["ce:GetDimensionValues"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetReservationCoverage": {
@@ -141,10 +116,6 @@
         "mode": "required",
         "interface": "GetReservationCoverageRequest",
         "omit": []
-      },
-      "actions": ["ce:GetReservationCoverage"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetReservationUtilization": {
@@ -153,10 +124,6 @@
         "mode": "required",
         "interface": "GetReservationUtilizationRequest",
         "omit": []
-      },
-      "actions": ["ce:GetReservationUtilization"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetRightsizingRecommendation": {
@@ -165,10 +132,6 @@
         "mode": "required",
         "interface": "GetRightsizingRecommendationRequest",
         "omit": []
-      },
-      "actions": ["ce:GetRightsizingRecommendation"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetSavingsPlansCoverage": {
@@ -177,10 +140,6 @@
         "mode": "required",
         "interface": "GetSavingsPlansCoverageRequest",
         "omit": []
-      },
-      "actions": ["ce:GetSavingsPlansCoverage"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetSavingsPlansUtilization": {
@@ -189,10 +148,6 @@
         "mode": "required",
         "interface": "GetSavingsPlansUtilizationRequest",
         "omit": []
-      },
-      "actions": ["ce:GetSavingsPlansUtilization"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetSavingsPlansUtilizationDetails": {
@@ -201,10 +156,6 @@
         "mode": "required",
         "interface": "GetSavingsPlansUtilizationDetailsRequest",
         "omit": []
-      },
-      "actions": ["ce:GetSavingsPlansUtilizationDetails"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetTags": {
@@ -213,10 +164,6 @@
         "mode": "required",
         "interface": "GetTagsRequest",
         "omit": []
-      },
-      "actions": ["ce:GetTags"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "GetUsageForecast": {
@@ -225,10 +172,6 @@
         "mode": "required",
         "interface": "GetUsageForecastRequest",
         "omit": []
-      },
-      "actions": ["ce:GetUsageForecast"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "ListCommitmentPurchaseAnalyses": {
@@ -237,8 +180,7 @@
         "mode": "optional",
         "interface": "ListCommitmentPurchaseAnalysesRequest",
         "omit": []
-      },
-      "actions": ["ce:ListCommitmentPurchaseAnalyses"]
+      }
     },
     "ListCostAllocationTags": {
       "operation": "listCostAllocationTags",
@@ -246,10 +188,6 @@
         "mode": "optional",
         "interface": "ListCostAllocationTagsRequest",
         "omit": []
-      },
-      "actions": ["ce:ListCostAllocationTags"],
-      "reviewed": {
-        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     },
     "ProvideAnomalyFeedback": {
@@ -258,8 +196,7 @@
         "mode": "required",
         "interface": "ProvideAnomalyFeedbackRequest",
         "omit": []
-      },
-      "actions": ["ce:ProvideAnomalyFeedback"]
+      }
     },
     "StartCommitmentPurchaseAnalysis": {
       "operation": "startCommitmentPurchaseAnalysis",
@@ -267,8 +204,7 @@
         "mode": "required",
         "interface": "StartCommitmentPurchaseAnalysisRequest",
         "omit": []
-      },
-      "actions": ["ce:StartCommitmentPurchaseAnalysis"]
+      }
     },
     "StartCostAllocationTagBackfill": {
       "operation": "startCostAllocationTagBackfill",
@@ -276,8 +212,7 @@
         "mode": "required",
         "interface": "StartCostAllocationTagBackfillRequest",
         "omit": []
-      },
-      "actions": ["ce:StartCostAllocationTagBackfill"]
+      }
     },
     "UpdateCostAllocationTagsStatus": {
       "operation": "updateCostAllocationTagsStatus",
@@ -285,10 +220,6 @@
         "mode": "required",
         "interface": "UpdateCostAllocationTagsStatusRequest",
         "omit": []
-      },
-      "actions": ["ce:UpdateCostAllocationTagsStatus"],
-      "reviewed": {
-        "aws-portal:ModifyBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
       }
     }
   }

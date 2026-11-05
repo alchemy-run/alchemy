@@ -53,5 +53,6 @@ export const BatchCreateCategoryHttp = Layer.effect(
     capability: "BatchCreateCategory",
     iamActions: ["qapps:BatchCreateCategory"],
     operation: qapps.batchCreateCategory,
+    arns: ["arn:${Partition}:qbusiness:${Region}:${Account}:application/*"],
   }),
 );

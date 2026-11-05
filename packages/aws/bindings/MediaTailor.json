@@ -36,20 +36,12 @@
         "interface": "CreatePrefetchScheduleRequest",
         "omit": ["PlaybackConfigurationName"]
       },
-      "builder": "makeMediaTailorPlaybackHttpBinding",
-      "actions": ["mediatailor:CreatePrefetchSchedule"],
-      "reviewed": {
-        "mediatailor:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
-      }
+      "builder": "makeMediaTailorPlaybackHttpBinding"
     },
     "CreateProgram": {
       "operation": "createProgram",
       "request": {
         "mode": "required"
-      },
-      "actions": ["mediatailor:CreateProgram"],
-      "reviewed": {
-        "mediatailor:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "DeletePrefetchSchedule": {
@@ -61,32 +53,25 @@
         "interface": "DeletePrefetchScheduleRequest",
         "omit": ["PlaybackConfigurationName"]
       },
-      "builder": "makeMediaTailorPlaybackHttpBinding",
-      "actions": ["mediatailor:DeletePrefetchSchedule"]
+      "builder": "makeMediaTailorPlaybackHttpBinding"
     },
     "DeleteProgram": {
       "operation": "deleteProgram",
       "request": {
         "mode": "required"
-      },
-      "actions": ["mediatailor:DeleteProgram"],
-      "arns": ["arn:${Partition}:mediatailor:${Region}:${Account}:program/*/*"]
+      }
     },
     "DescribeProgram": {
       "operation": "describeProgram",
       "request": {
         "mode": "required"
-      },
-      "actions": ["mediatailor:DescribeProgram"],
-      "arns": ["arn:${Partition}:mediatailor:${Region}:${Account}:program/*/*"]
+      }
     },
     "GetChannelSchedule": {
       "operation": "getChannelSchedule",
       "request": {
         "mode": "required"
-      },
-      "actions": ["mediatailor:GetChannelSchedule"],
-      "arns": ["arn:${Partition}:mediatailor:${Region}:${Account}:channel/*"]
+      }
     },
     "GetPrefetchSchedule": {
       "operation": "getPrefetchSchedule",
@@ -97,15 +82,13 @@
         "interface": "GetPrefetchScheduleRequest",
         "omit": ["PlaybackConfigurationName"]
       },
-      "builder": "makeMediaTailorPlaybackHttpBinding",
-      "actions": ["mediatailor:GetPrefetchSchedule"]
+      "builder": "makeMediaTailorPlaybackHttpBinding"
     },
     "ListAlerts": {
       "operation": "listAlerts",
       "request": {
         "mode": "required"
-      },
-      "actions": ["mediatailor:ListAlerts"]
+      }
     },
     "ListPrefetchSchedules": {
       "operation": "listPrefetchSchedules",
@@ -116,32 +99,25 @@
         "interface": "ListPrefetchSchedulesRequest",
         "omit": ["PlaybackConfigurationName"]
       },
-      "builder": "makeMediaTailorPlaybackHttpBinding",
-      "actions": ["mediatailor:ListPrefetchSchedules"]
+      "builder": "makeMediaTailorPlaybackHttpBinding"
     },
     "StartChannel": {
       "operation": "startChannel",
       "request": {
         "mode": "required"
-      },
-      "actions": ["mediatailor:StartChannel"],
-      "arns": ["arn:${Partition}:mediatailor:${Region}:${Account}:channel/*"]
+      }
     },
     "StopChannel": {
       "operation": "stopChannel",
       "request": {
         "mode": "required"
-      },
-      "actions": ["mediatailor:StopChannel"],
-      "arns": ["arn:${Partition}:mediatailor:${Region}:${Account}:channel/*"]
+      }
     },
     "UpdateProgram": {
       "operation": "updateProgram",
       "request": {
         "mode": "required"
-      },
-      "actions": ["mediatailor:UpdateProgram"],
-      "arns": ["arn:${Partition}:mediatailor:${Region}:${Account}:program/*/*"]
+      }
     }
   }
 }

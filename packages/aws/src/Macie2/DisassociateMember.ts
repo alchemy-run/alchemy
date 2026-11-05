@@ -44,5 +44,6 @@ export const DisassociateMemberHttp = Layer.effect(
     tag: "AWS.Macie2.DisassociateMember",
     operation: macie2.disassociateMember,
     actions: ["macie2:DisassociateMember"],
+    arns: ["arn:${Partition}:macie2:${Region}:${Account}:member/*"],
   }),
 );

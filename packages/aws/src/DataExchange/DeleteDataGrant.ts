@@ -40,5 +40,6 @@ export const DeleteDataGrantHttp = Layer.effect(
     tag: "AWS.DataExchange.DeleteDataGrant",
     operation: dataexchange.deleteDataGrant,
     actions: ["dataexchange:DeleteDataGrant"],
+    arns: ["arn:${Partition}:dataexchange:${Region}:${Account}:data-grants/*"],
   }),
 );

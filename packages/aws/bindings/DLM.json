@@ -18,8 +18,7 @@
   },
   "bindings": {
     "GetLifecyclePolicies": {
-      "operation": "getLifecyclePolicies",
-      "actions": ["dlm:GetLifecyclePolicies"]
+      "operation": "getLifecyclePolicies"
     },
     "GetLifecyclePolicy": {
       "operation": "getLifecyclePolicy",
@@ -28,8 +27,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeDlmPolicyHttpBinding",
-      "actions": ["dlm:GetLifecyclePolicy"]
+      "builder": "makeDlmPolicyHttpBinding"
     }
   }
 }

@@ -20,8 +20,7 @@
         "mode": "required",
         "interface": "BatchAddChannelRoleToAccessorsRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:BatchAddChannelRoleToAccessors"]
+      }
     },
     "BatchAddRole": {
       "operation": "batchAddRole",
@@ -30,8 +29,7 @@
         "mode": "required",
         "interface": "BatchAddRoleRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:BatchAddRole"]
+      }
     },
     "BatchRemoveChannelRoleFromAccessors": {
       "operation": "batchRemoveChannelRoleFromAccessors",
@@ -40,8 +38,7 @@
         "mode": "required",
         "interface": "BatchRemoveChannelRoleFromAccessorsRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:BatchRemoveChannelRoleFromAccessors"]
+      }
     },
     "BatchRemoveRole": {
       "operation": "batchRemoveRole",
@@ -50,8 +47,7 @@
         "mode": "required",
         "interface": "BatchRemoveRoleRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:BatchRemoveRole"]
+      }
     },
     "CreateChannel": {
       "operation": "createChannel",
@@ -60,8 +56,7 @@
         "mode": "required",
         "interface": "CreateChannelRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:CreateChannel"]
+      }
     },
     "DeregisterAdmin": {
       "operation": "deregisterAdmin",
@@ -70,8 +65,7 @@
         "mode": "required",
         "interface": "DeregisterAdminRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:DeregisterAdmin"]
+      }
     },
     "GetChannel": {
       "operation": "getChannel",
@@ -80,8 +74,7 @@
         "mode": "required",
         "interface": "GetChannelRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:GetChannel"]
+      }
     },
     "ListChannels": {
       "operation": "listChannels",
@@ -90,8 +83,7 @@
         "mode": "optional",
         "interface": "ListChannelsRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:ListChannels"]
+      }
     },
     "RegisterAdmin": {
       "operation": "registerAdmin",
@@ -100,8 +92,7 @@
         "mode": "required",
         "interface": "RegisterAdminRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:RegisterAdmin"]
+      }
     },
     "SendInvites": {
       "operation": "sendInvites",
@@ -110,8 +101,7 @@
         "mode": "required",
         "interface": "SendInvitesRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:SendInvites"]
+      }
     },
     "UpdateChannel": {
       "operation": "updateChannel",
@@ -120,8 +110,7 @@
         "mode": "required",
         "interface": "UpdateChannelRequest",
         "omit": ["spaceId"]
-      },
-      "actions": ["repostspace:UpdateChannel"]
+      }
     }
   }
 }

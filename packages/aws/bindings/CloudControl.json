@@ -14,19 +14,16 @@
       "operation": "cancelResourceRequest",
       "request": {
         "mode": "required"
-      },
-      "actions": ["cloudformation:CancelResourceRequest"]
+      }
     },
     "GetResourceRequestStatus": {
       "operation": "getResourceRequestStatus",
       "request": {
         "mode": "required"
-      },
-      "actions": ["cloudformation:GetResourceRequestStatus"]
+      }
     },
     "ListResourceRequests": {
-      "operation": "listResourceRequests",
-      "actions": ["cloudformation:ListResourceRequests"]
+      "operation": "listResourceRequests"
     }
   }
 }

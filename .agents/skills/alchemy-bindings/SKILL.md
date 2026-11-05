@@ -158,22 +158,36 @@ generator instead of repeating hand-written code.
 
 ## Loop D: least privilege (AWS)
 
-`node scripts/generate-aws-bindings.ts --report` audits every generated
-binding against `packages/aws/bindings/actions.json`, a snapshot of AWS's
-Service Authorization Reference (`--refresh-actions`):
+Grants come from distilled, never from a binding's config. Every distilled
+AWS operation carries `op.iam`: the actions AWS's Service Authorization
+Reference lists for it, the ARN formats a grant may name (only where every
+resource type an action accepts is required), and which actions only some
+requests need (`conditional`: `iam:PassRole` when a role is optional, tagging
+when tags are). The generator grants `iam.actions` minus the conditional
+ones (unless the binding `sets` their field), on the bound resource or,
+for a builder that grants `*` and takes `arns`, on the actions' ARN formats
+in the deploying account and region.
 
-| Finding | Meaning | What to do |
-| --- | --- | --- |
-| `missing` | AWS lists an action for the operation the binding doesn't grant | grant it if the call needs it; otherwise `reviewed` with why (legacy `aws-portal:`, only when the request sets tags, …) |
-| `extra` | the binding grants an action AWS doesn't list | drop it, or `reviewed` with why (a service acting with the caller's credentials, verified live) |
-| `scopable` | a builder grants `*` though the actions accept an ARN | `--scope` proposes `arns`; keep them only once the service's Bindings suite passes, else `unscoped` with why |
-| `unknown` | AWS publishes no actions for the operation | review by hand against the API docs |
+When a live call disagrees, fix distilled, where every SDK consumer gets
+the fix: an `operations.<op>.iam` patch in
+`submodules/distilled/packages/aws/patches/<module>.json`, with the
+evidence in `reason`:
+
+| Live result | Patch |
+| --- | --- |
+| AccessDenied on an action AWS doesn't list | `add` |
+| a listed action the call never needs (legacy, console-only) | `remove`, or `allOperations.iam.remove` with a glob (`sso-directory:*`) |
+| AccessDenied on the ARN formats (a list call, another region's ARNs) | `resources: { "<action>": "*" }` |
+| an action only some request field needs | `conditional: { "<action>": "<field>" }` |
+| AWS publishes nothing for the operation | `actions` |
+
+`--report` lists only what the config can settle: `noiam` (patch distilled)
+and `scopable` (a builder that grants `*` and takes no `arns`).
 
 The reference is a proposal, not proof. It lists actions an operation may
 authorize under some request fields, misses actions that exist, and its
 ARN formats don't fit every call: narrowing to them was denied live for
-one binding in eight (list calls are evaluated against `*`, some services'
-ARNs name another region, probes pass foreign ARNs). Every grant change
+one binding in eight. Every change to a grant, in a patch or a builder,
 gets the service's `Bindings.test.ts` run before it ships.
 
 ## Loop C: upgrade distilled

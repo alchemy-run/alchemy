@@ -43,7 +43,7 @@ export const StartRunHttp = Layer.effect(
   makeOmicsResourceHttpBinding({
     tag: "AWS.Omics.StartRun",
     operation: omics.startRun,
-    actions: ["omics:StartRun"],
+    actions: ["omics:StartRun", "omics:TagResource"],
     key: "workflowId",
     passRole: true,
     id: (workflow: Workflow) => workflow.workflowId,

@@ -43,5 +43,6 @@ export const DeleteResourceSetHttp = Layer.effect(
     capability: "DeleteResourceSet",
     iamActions: ["fms:DeleteResourceSet"],
     operation: fms.deleteResourceSet,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:resource-set/*"],
   }),
 );

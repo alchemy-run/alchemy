@@ -50,5 +50,6 @@ export const ListResourceSharePermissionsHttp = Layer.effect(
     capability: "ListResourceSharePermissions",
     iamActions: ["ram:ListResourceSharePermissions"],
     operation: ram.listResourceSharePermissions,
+    arns: ["arn:${Partition}:ram:${Region}:${Account}:resource-share/*"],
   }),
 );

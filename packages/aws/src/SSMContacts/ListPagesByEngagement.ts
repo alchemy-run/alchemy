@@ -42,5 +42,6 @@ export const ListPagesByEngagementHttp = Layer.effect(
     tag: "AWS.SSMContacts.ListPagesByEngagement",
     operation: ssm.listPagesByEngagement,
     actions: ["ssm-contacts:ListPagesByEngagement"],
+    arns: ["arn:${Partition}:ssm-contacts:${Region}:${Account}:engagement/*/*"],
   }),
 );

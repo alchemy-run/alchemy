@@ -26,8 +26,7 @@
         "mode": "required",
         "interface": "BatchDeleteDocumentRequest",
         "omit": ["IndexId"]
-      },
-      "actions": ["kendra:BatchDeleteDocument"]
+      }
     },
     "BatchGetDocumentStatus": {
       "operation": "batchGetDocumentStatus",
@@ -36,8 +35,7 @@
         "mode": "required",
         "interface": "BatchGetDocumentStatusRequest",
         "omit": ["IndexId"]
-      },
-      "actions": ["kendra:BatchGetDocumentStatus"]
+      }
     },
     "BatchPutDocument": {
       "operation": "batchPutDocument",
@@ -46,10 +44,6 @@
         "mode": "required",
         "interface": "BatchPutDocumentRequest",
         "omit": ["IndexId"]
-      },
-      "actions": ["kendra:BatchPutDocument"],
-      "reviewed": {
-        "iam:PassRole": "Needed only when the request passes RoleArn; not granted, so a role is never passed unasked."
       }
     },
     "ClearQuerySuggestions": {
@@ -57,8 +51,7 @@
       "resource": "Index",
       "request": {
         "mode": "none"
-      },
-      "actions": ["kendra:ClearQuerySuggestions"]
+      }
     },
     "CreateAccessControlConfiguration": {
       "operation": "createAccessControlConfiguration",
@@ -68,7 +61,6 @@
         "interface": "CreateAccessControlConfigurationRequest",
         "omit": ["IndexId"]
       },
-      "actions": ["kendra:CreateAccessControlConfiguration"],
       "with": {
         "subResources": ["access-control-configuration/*"]
       }
@@ -81,7 +73,6 @@
         "interface": "DeleteAccessControlConfigurationRequest",
         "omit": ["IndexId"]
       },
-      "actions": ["kendra:DeleteAccessControlConfiguration"],
       "with": {
         "subResources": ["access-control-configuration/*"]
       }
@@ -94,7 +85,6 @@
         "interface": "DeletePrincipalMappingRequest",
         "omit": ["IndexId"]
       },
-      "actions": ["kendra:DeletePrincipalMapping"],
       "with": {
         "subResources": ["data-source/*"]
       }
@@ -107,7 +97,6 @@
         "interface": "DescribeAccessControlConfigurationRequest",
         "omit": ["IndexId"]
       },
-      "actions": ["kendra:DescribeAccessControlConfiguration"],
       "with": {
         "subResources": ["access-control-configuration/*"]
       }
@@ -120,7 +109,6 @@
         "interface": "DescribePrincipalMappingRequest",
         "omit": ["IndexId"]
       },
-      "actions": ["kendra:DescribePrincipalMapping"],
       "with": {
         "subResources": ["data-source/*"]
       }
@@ -130,8 +118,7 @@
       "resource": "Index",
       "request": {
         "mode": "none"
-      },
-      "actions": ["kendra:DescribeQuerySuggestionsConfig"]
+      }
     },
     "GetQuerySuggestions": {
       "operation": "getQuerySuggestions",
@@ -140,8 +127,7 @@
         "mode": "required",
         "interface": "GetQuerySuggestionsRequest",
         "omit": ["IndexId"]
-      },
-      "actions": ["kendra:GetQuerySuggestions"]
+      }
     },
     "GetSnapshots": {
       "operation": "getSnapshots",
@@ -150,8 +136,7 @@
         "mode": "required",
         "interface": "GetSnapshotsRequest",
         "omit": ["IndexId"]
-      },
-      "actions": ["kendra:GetSnapshots"]
+      }
     },
     "ListAccessControlConfigurations": {
       "operation": "listAccessControlConfigurations",
@@ -160,8 +145,7 @@
         "mode": "optional",
         "interface": "ListAccessControlConfigurationsRequest",
         "omit": ["IndexId"]
-      },
-      "actions": ["kendra:ListAccessControlConfigurations"]
+      }
     },
     "ListDataSourceSyncJobs": {
       "operation": "listDataSourceSyncJobs",
@@ -171,8 +155,7 @@
         "interface": "ListDataSourceSyncJobsRequest",
         "omit": ["Id", "IndexId"]
       },
-      "builder": "makeKendraDataSourceHttpBinding",
-      "actions": ["kendra:ListDataSourceSyncJobs"]
+      "builder": "makeKendraDataSourceHttpBinding"
     },
     "ListGroupsOlderThanOrderingId": {
       "operation": "listGroupsOlderThanOrderingId",
@@ -182,7 +165,6 @@
         "interface": "ListGroupsOlderThanOrderingIdRequest",
         "omit": ["IndexId"]
       },
-      "actions": ["kendra:ListGroupsOlderThanOrderingId"],
       "with": {
         "subResources": ["data-source/*"]
       }
@@ -195,12 +177,8 @@
         "interface": "PutPrincipalMappingRequest",
         "omit": ["IndexId"]
       },
-      "actions": ["kendra:PutPrincipalMapping"],
       "with": {
         "subResources": ["data-source/*"]
-      },
-      "reviewed": {
-        "iam:PassRole": "Needed only when the request passes RoleArn; not granted, so a role is never passed unasked."
       }
     },
     "Query": {
@@ -210,8 +188,7 @@
         "mode": "optional",
         "interface": "QueryRequest",
         "omit": ["IndexId"]
-      },
-      "actions": ["kendra:Query"]
+      }
     },
     "Retrieve": {
       "operation": "retrieve",
@@ -220,8 +197,7 @@
         "mode": "required",
         "interface": "RetrieveRequest",
         "omit": ["IndexId"]
-      },
-      "actions": ["kendra:Retrieve"]
+      }
     },
     "StartDataSourceSyncJob": {
       "operation": "startDataSourceSyncJob",
@@ -229,8 +205,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeKendraDataSourceHttpBinding",
-      "actions": ["kendra:StartDataSourceSyncJob"]
+      "builder": "makeKendraDataSourceHttpBinding"
     },
     "StopDataSourceSyncJob": {
       "operation": "stopDataSourceSyncJob",
@@ -238,8 +213,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeKendraDataSourceHttpBinding",
-      "actions": ["kendra:StopDataSourceSyncJob"]
+      "builder": "makeKendraDataSourceHttpBinding"
     },
     "SubmitFeedback": {
       "operation": "submitFeedback",
@@ -248,8 +222,7 @@
         "mode": "required",
         "interface": "SubmitFeedbackRequest",
         "omit": ["IndexId"]
-      },
-      "actions": ["kendra:SubmitFeedback"]
+      }
     },
     "UpdateAccessControlConfiguration": {
       "operation": "updateAccessControlConfiguration",
@@ -259,7 +232,6 @@
         "interface": "UpdateAccessControlConfigurationRequest",
         "omit": ["IndexId"]
       },
-      "actions": ["kendra:UpdateAccessControlConfiguration"],
       "with": {
         "subResources": ["access-control-configuration/*"]
       }

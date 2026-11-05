@@ -36,11 +36,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeConnectionScopedHttpBinding",
-      "actions": ["codeconnections:GetConnection"],
-      "reviewed": {
-        "codestar-connections:GetConnection": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
-      }
+      "builder": "makeConnectionScopedHttpBinding"
     },
     "GetRepositorySyncStatus": {
       "operation": "getRepositorySyncStatus",
@@ -49,10 +45,6 @@
         "mode": "required",
         "interface": "GetRepositorySyncStatusRequest",
         "omit": ["RepositoryLinkId"]
-      },
-      "actions": ["codeconnections:GetRepositorySyncStatus"],
-      "reviewed": {
-        "codestar-connections:GetRepositorySyncStatus": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
       }
     },
     "GetResourceSyncStatus": {
@@ -61,11 +53,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeSyncConfigurationScopedHttpBinding",
-      "actions": ["codeconnections:GetResourceSyncStatus"],
-      "reviewed": {
-        "codestar-connections:GetResourceSyncStatus": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
-      }
+      "builder": "makeSyncConfigurationScopedHttpBinding"
     },
     "GetSyncBlockerSummary": {
       "operation": "getSyncBlockerSummary",
@@ -73,11 +61,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeSyncConfigurationScopedHttpBinding",
-      "actions": ["codeconnections:GetSyncBlockerSummary"],
-      "reviewed": {
-        "codestar-connections:GetSyncBlockerSummary": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
-      }
+      "builder": "makeSyncConfigurationScopedHttpBinding"
     },
     "ListConnections": {
       "operation": "listConnections",
@@ -86,12 +70,7 @@
         "interface": "ListConnectionsRequest",
         "omit": []
       },
-      "builder": "makeCodeConnectionsAccountHttpBinding",
-      "actions": ["codeconnections:ListConnections"],
-      "reviewed": {
-        "codestar-connections:ListConnections": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
-      },
-      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:codeconnections:${Region}:${Account}:connection/*), the call was denied live in the CodeConnections Bindings suite; the grant stays on *."
+      "builder": "makeCodeConnectionsAccountHttpBinding"
     },
     "ListHosts": {
       "operation": "listHosts",
@@ -100,11 +79,7 @@
         "interface": "ListHostsRequest",
         "omit": []
       },
-      "builder": "makeCodeConnectionsAccountHttpBinding",
-      "actions": ["codeconnections:ListHosts"],
-      "reviewed": {
-        "codestar-connections:ListHosts": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
-      }
+      "builder": "makeCodeConnectionsAccountHttpBinding"
     },
     "ListRepositoryLinks": {
       "operation": "listRepositoryLinks",
@@ -113,11 +88,7 @@
         "interface": "ListRepositoryLinksRequest",
         "omit": []
       },
-      "builder": "makeCodeConnectionsAccountHttpBinding",
-      "actions": ["codeconnections:ListRepositoryLinks"],
-      "reviewed": {
-        "codestar-connections:ListRepositoryLinks": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
-      }
+      "builder": "makeCodeConnectionsAccountHttpBinding"
     },
     "ListRepositorySyncDefinitions": {
       "operation": "listRepositorySyncDefinitions",
@@ -126,10 +97,6 @@
         "mode": "required",
         "interface": "ListRepositorySyncDefinitionsRequest",
         "omit": ["RepositoryLinkId"]
-      },
-      "actions": ["codeconnections:ListRepositorySyncDefinitions"],
-      "reviewed": {
-        "codestar-connections:ListRepositorySyncDefinitions": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
       }
     },
     "ListSyncConfigurations": {
@@ -139,10 +106,6 @@
         "mode": "required",
         "interface": "ListSyncConfigurationsRequest",
         "omit": ["RepositoryLinkId"]
-      },
-      "actions": ["codeconnections:ListSyncConfigurations"],
-      "reviewed": {
-        "codestar-connections:ListSyncConfigurations": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
       }
     },
     "UpdateSyncBlocker": {
@@ -153,11 +116,7 @@
         "interface": "UpdateSyncBlockerRequest",
         "omit": ["ResourceName", "SyncType"]
       },
-      "builder": "makeSyncConfigurationScopedHttpBinding",
-      "actions": ["codeconnections:UpdateSyncBlocker"],
-      "reviewed": {
-        "codestar-connections:UpdateSyncBlocker": "codestar-connections is the legacy prefix of codeconnections; AWS authorizes either."
-      }
+      "builder": "makeSyncConfigurationScopedHttpBinding"
     }
   }
 }

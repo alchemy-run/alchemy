@@ -29,11 +29,6 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:CreateJob"],
-      "reviewed": {
-        "deadline:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
-        "deadline:GetJobTemplate": "AWS lists it for the operation, but the Deadline Bindings suite calls it successfully without it."
       }
     },
     "GetJob": {
@@ -43,8 +38,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:GetJob"]
+      }
     },
     "GetSession": {
       "operation": "getSession",
@@ -53,8 +47,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:GetSession"]
+      }
     },
     "GetSessionAction": {
       "operation": "getSessionAction",
@@ -63,8 +56,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:GetSessionAction"]
+      }
     },
     "GetSessionsStatisticsAggregation": {
       "operation": "getSessionsStatisticsAggregation",
@@ -74,8 +66,7 @@
         "omit": ["farmId"],
         "inline": true
       },
-      "builder": "makeDeadlineFarmHttpBinding",
-      "actions": ["deadline:GetSessionsStatisticsAggregation"]
+      "builder": "makeDeadlineFarmHttpBinding"
     },
     "GetStep": {
       "operation": "getStep",
@@ -84,8 +75,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:GetStep"]
+      }
     },
     "GetTask": {
       "operation": "getTask",
@@ -94,8 +84,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:GetTask"]
+      }
     },
     "ListJobParameterDefinitions": {
       "operation": "listJobParameterDefinitions",
@@ -104,8 +93,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:ListJobParameterDefinitions"]
+      }
     },
     "ListJobs": {
       "operation": "listJobs",
@@ -114,8 +102,7 @@
         "mode": "optional",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:ListJobs"]
+      }
     },
     "ListSessionActions": {
       "operation": "listSessionActions",
@@ -124,8 +111,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:ListSessionActions"]
+      }
     },
     "ListSessions": {
       "operation": "listSessions",
@@ -134,8 +120,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:ListSessions"]
+      }
     },
     "ListSteps": {
       "operation": "listSteps",
@@ -144,8 +129,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:ListSteps"]
+      }
     },
     "ListTasks": {
       "operation": "listTasks",
@@ -154,8 +138,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:ListTasks"]
+      }
     },
     "SearchJobs": {
       "operation": "searchJobs",
@@ -165,8 +148,7 @@
         "omit": ["farmId", "queueIds"],
         "inline": true
       },
-      "builder": "makeDeadlineQueueSearchHttpBinding",
-      "actions": ["deadline:SearchJobs"]
+      "builder": "makeDeadlineQueueSearchHttpBinding"
     },
     "SearchSteps": {
       "operation": "searchSteps",
@@ -176,8 +158,7 @@
         "omit": ["farmId", "queueIds"],
         "inline": true
       },
-      "builder": "makeDeadlineQueueSearchHttpBinding",
-      "actions": ["deadline:SearchSteps"]
+      "builder": "makeDeadlineQueueSearchHttpBinding"
     },
     "SearchTasks": {
       "operation": "searchTasks",
@@ -187,8 +168,7 @@
         "omit": ["farmId", "queueIds"],
         "inline": true
       },
-      "builder": "makeDeadlineQueueSearchHttpBinding",
-      "actions": ["deadline:SearchTasks"]
+      "builder": "makeDeadlineQueueSearchHttpBinding"
     },
     "StartSessionsStatisticsAggregation": {
       "operation": "startSessionsStatisticsAggregation",
@@ -198,8 +178,7 @@
         "omit": ["farmId"],
         "inline": true
       },
-      "builder": "makeDeadlineFarmHttpBinding",
-      "actions": ["deadline:StartSessionsStatisticsAggregation"]
+      "builder": "makeDeadlineFarmHttpBinding"
     },
     "UpdateJob": {
       "operation": "updateJob",
@@ -208,8 +187,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:UpdateJob"]
+      }
     },
     "UpdateStep": {
       "operation": "updateStep",
@@ -218,8 +196,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:UpdateStep"]
+      }
     },
     "UpdateTask": {
       "operation": "updateTask",
@@ -228,8 +205,7 @@
         "mode": "required",
         "omit": ["farmId", "queueId"],
         "inline": true
-      },
-      "actions": ["deadline:UpdateTask"]
+      }
     }
   }
 }

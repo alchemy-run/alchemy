@@ -47,7 +47,7 @@ export const CreateTopicHttp = Layer.effect(
   makeKafkaClusterHttpBinding({
     tag: "AWS.Kafka.CreateTopic",
     operation: kafka.createTopic,
-    actions: ["kafka:CreateTopic", "kafka-cluster:Connect", "kafka-cluster:CreateTopic"],
+    actions: ["kafka-cluster:Connect", "kafka-cluster:CreateTopic", "kafka:CreateTopic"],
     topicScoped: true,
   }),
 );

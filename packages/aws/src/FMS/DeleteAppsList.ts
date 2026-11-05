@@ -43,5 +43,6 @@ export const DeleteAppsListHttp = Layer.effect(
     capability: "DeleteAppsList",
     iamActions: ["fms:DeleteAppsList"],
     operation: fms.deleteAppsList,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:applications-list/*"],
   }),
 );

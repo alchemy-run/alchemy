@@ -56,5 +56,6 @@ export const UpdateLibraryItemMetadataHttp = Layer.effect(
     capability: "UpdateLibraryItemMetadata",
     iamActions: ["qapps:UpdateLibraryItemMetadata"],
     operation: qapps.updateLibraryItemMetadata,
+    arns: ["arn:${Partition}:qapps:${Region}:${Account}:application/*/qapp/*"],
   }),
 );

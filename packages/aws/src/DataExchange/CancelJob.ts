@@ -40,5 +40,6 @@ export const CancelJobHttp = Layer.effect(
     tag: "AWS.DataExchange.CancelJob",
     operation: dataexchange.cancelJob,
     actions: ["dataexchange:CancelJob"],
+    arns: ["arn:${Partition}:dataexchange:${Region}:${Account}:jobs/*"],
   }),
 );

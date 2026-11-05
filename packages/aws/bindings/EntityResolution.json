@@ -24,8 +24,7 @@
         "mode": "required",
         "omit": ["workflowName"],
         "inline": true
-      },
-      "actions": ["entityresolution:BatchDeleteUniqueId"]
+      }
     },
     "GenerateMatchId": {
       "operation": "generateMatchId",
@@ -35,8 +34,7 @@
         "mode": "required",
         "omit": ["workflowName"],
         "inline": true
-      },
-      "actions": ["entityresolution:GenerateMatchId"]
+      }
     },
     "GetIdMappingJob": {
       "operation": "getIdMappingJob",
@@ -46,8 +44,7 @@
         "mode": "required",
         "omit": ["workflowName"],
         "inline": true
-      },
-      "actions": ["entityresolution:GetIdMappingJob"]
+      }
     },
     "GetMatchId": {
       "operation": "getMatchId",
@@ -57,8 +54,7 @@
         "mode": "required",
         "omit": ["workflowName"],
         "inline": true
-      },
-      "actions": ["entityresolution:GetMatchId"]
+      }
     },
     "GetMatchingJob": {
       "operation": "getMatchingJob",
@@ -68,8 +64,7 @@
         "mode": "required",
         "omit": ["workflowName"],
         "inline": true
-      },
-      "actions": ["entityresolution:GetMatchingJob"]
+      }
     },
     "ListIdMappingJobs": {
       "operation": "listIdMappingJobs",
@@ -79,8 +74,7 @@
         "mode": "required",
         "omit": ["workflowName"],
         "inline": true
-      },
-      "actions": ["entityresolution:ListIdMappingJobs"]
+      }
     },
     "ListMatchingJobs": {
       "operation": "listMatchingJobs",
@@ -90,8 +84,7 @@
         "mode": "required",
         "omit": ["workflowName"],
         "inline": true
-      },
-      "actions": ["entityresolution:ListMatchingJobs"]
+      }
     },
     "StartIdMappingJob": {
       "operation": "startIdMappingJob",
@@ -101,11 +94,6 @@
         "mode": "required",
         "omit": ["workflowName"],
         "inline": true
-      },
-      "actions": ["entityresolution:StartIdMappingJob"],
-      "reviewed": {
-        "iam:PassRole": "Needed only when the job's output passes a role; not granted, so a role is never passed unasked.",
-        "entityresolution:UseIdNamespace": "Needed only when the job reads an ID namespace; not granted unless asked."
       }
     },
     "StartMatchingJob": {
@@ -116,8 +104,7 @@
         "mode": "required",
         "omit": ["workflowName"],
         "inline": true
-      },
-      "actions": ["entityresolution:StartMatchingJob"]
+      }
     }
   }
 }

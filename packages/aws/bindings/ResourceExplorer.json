@@ -12,8 +12,7 @@
   },
   "bindings": {
     "ListSupportedResourceTypes": {
-      "operation": "listSupportedResourceTypes",
-      "actions": ["resource-explorer-2:ListSupportedResourceTypes"]
+      "operation": "listSupportedResourceTypes"
     }
   }
 }

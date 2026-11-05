@@ -41,5 +41,6 @@ export const ListSnapshotsHttp = Layer.effect(
     tag: "AWS.RedshiftServerless.ListSnapshots",
     operation: serverless.listSnapshots,
     actions: ["redshift-serverless:ListSnapshots"],
+    arns: ["arn:${Partition}:redshift-serverless:${Region}:${Account}:snapshot/*"],
   }),
 );

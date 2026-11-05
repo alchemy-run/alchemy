@@ -43,5 +43,6 @@ export const GetVocabularyHttp = Layer.effect(
     tag: "AWS.Transcribe.GetVocabulary",
     operation: transcribe.getVocabulary,
     actions: ["transcribe:GetVocabulary"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:vocabulary/*"],
   }),
 );

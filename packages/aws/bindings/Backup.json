@@ -25,7 +25,6 @@
         "omit": ["BackupVaultName"]
       },
       "builder": "makeBackupVaultHttpBinding",
-      "actions": ["backup:DeleteRecoveryPoint"],
       "with": {
         "wildcardIam": true
       },
@@ -35,22 +34,19 @@
       "operation": "describeBackupJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["backup:DescribeBackupJob"]
+      }
     },
     "DescribeCopyJob": {
       "operation": "describeCopyJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["backup:DescribeCopyJob"]
+      }
     },
     "DescribeProtectedResource": {
       "operation": "describeProtectedResource",
       "request": {
         "mode": "required"
-      },
-      "actions": ["backup:DescribeProtectedResource"]
+      }
     },
     "DescribeRecoveryPoint": {
       "operation": "describeRecoveryPoint",
@@ -62,7 +58,6 @@
         "omit": ["BackupVaultName"]
       },
       "builder": "makeBackupVaultHttpBinding",
-      "actions": ["backup:DescribeRecoveryPoint"],
       "with": {
         "wildcardIam": true
       },
@@ -72,8 +67,7 @@
       "operation": "describeRestoreJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["backup:DescribeRestoreJob"]
+      }
     },
     "GetRecoveryPointRestoreMetadata": {
       "operation": "getRecoveryPointRestoreMetadata",
@@ -85,7 +79,6 @@
         "omit": ["BackupVaultName"]
       },
       "builder": "makeBackupVaultHttpBinding",
-      "actions": ["backup:GetRecoveryPointRestoreMetadata"],
       "with": {
         "wildcardIam": true
       },
@@ -95,24 +88,19 @@
       "operation": "getRestoreJobMetadata",
       "request": {
         "mode": "required"
-      },
-      "actions": ["backup:GetRestoreJobMetadata"]
+      }
     },
     "GetSupportedResourceTypes": {
-      "operation": "getSupportedResourceTypes",
-      "actions": ["backup:GetSupportedResourceTypes"]
+      "operation": "getSupportedResourceTypes"
     },
     "ListBackupJobs": {
-      "operation": "listBackupJobs",
-      "actions": ["backup:ListBackupJobs"]
+      "operation": "listBackupJobs"
     },
     "ListCopyJobs": {
-      "operation": "listCopyJobs",
-      "actions": ["backup:ListCopyJobs"]
+      "operation": "listCopyJobs"
     },
     "ListProtectedResources": {
-      "operation": "listProtectedResources",
-      "actions": ["backup:ListProtectedResources"]
+      "operation": "listProtectedResources"
     },
     "ListRecoveryPointsByBackupVault": {
       "operation": "listRecoveryPointsByBackupVault",
@@ -123,33 +111,28 @@
         "interface": "ListRecoveryPointsByBackupVaultRequest",
         "omit": ["BackupVaultName"]
       },
-      "builder": "makeBackupVaultHttpBinding",
-      "actions": ["backup:ListRecoveryPointsByBackupVault"]
+      "builder": "makeBackupVaultHttpBinding"
     },
     "ListRecoveryPointsByResource": {
       "operation": "listRecoveryPointsByResource",
       "request": {
         "mode": "required"
-      },
-      "actions": ["backup:ListRecoveryPointsByResource"]
+      }
     },
     "ListRestoreJobs": {
-      "operation": "listRestoreJobs",
-      "actions": ["backup:ListRestoreJobs"]
+      "operation": "listRestoreJobs"
     },
     "PutRestoreValidationResult": {
       "operation": "putRestoreValidationResult",
       "request": {
         "mode": "required"
-      },
-      "actions": ["backup:PutRestoreValidationResult"]
+      }
     },
     "StopBackupJob": {
       "operation": "stopBackupJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["backup:StopBackupJob"]
+      }
     }
   }
 }

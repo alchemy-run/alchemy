@@ -51,5 +51,6 @@ export const GetViolationDetailsHttp = Layer.effect(
     capability: "GetViolationDetails",
     iamActions: ["fms:GetViolationDetails"],
     operation: fms.getViolationDetails,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:policy/*"],
   }),
 );

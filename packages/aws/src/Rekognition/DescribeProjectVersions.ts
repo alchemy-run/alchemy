@@ -50,5 +50,6 @@ export const DescribeProjectVersionsHttp = Layer.effect(
     tag: "AWS.Rekognition.DescribeProjectVersions",
     operation: rekognition.describeProjectVersions,
     actions: ["rekognition:DescribeProjectVersions"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:project/*/*"],
   }),
 );

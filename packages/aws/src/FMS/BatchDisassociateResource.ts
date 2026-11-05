@@ -49,5 +49,6 @@ export const BatchDisassociateResourceHttp = Layer.effect(
     capability: "BatchDisassociateResource",
     iamActions: ["fms:BatchDisassociateResource"],
     operation: fms.batchDisassociateResource,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:resource-set/*"],
   }),
 );

@@ -51,5 +51,6 @@ export const ListInstalledComponentsHttp = Layer.effect(
     tag: "AWS.GreengrassV2.ListInstalledComponents",
     operation: greengrassv2.listInstalledComponents,
     actions: ["greengrass:ListInstalledComponents"],
+    arns: ["arn:${Partition}:greengrass:${Region}:${Account}:coreDevices:*"],
   }),
 );

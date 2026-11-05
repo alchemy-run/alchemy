@@ -55,8 +55,8 @@ export const TerminateProvisionedProductHttp = Layer.effect(
     iamActions: [
       "servicecatalog:TerminateProvisionedProduct",
       "cloudformation:DeleteStack",
-      "cloudformation:DescribeStacks",
       "cloudformation:DescribeStackEvents",
+      "cloudformation:DescribeStacks",
     ],
     operation: servicecatalog.terminateProvisionedProduct,
   }),

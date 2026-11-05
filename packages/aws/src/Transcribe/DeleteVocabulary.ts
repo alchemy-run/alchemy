@@ -43,5 +43,6 @@ export const DeleteVocabularyHttp = Layer.effect(
     tag: "AWS.Transcribe.DeleteVocabulary",
     operation: transcribe.deleteVocabulary,
     actions: ["transcribe:DeleteVocabulary"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:vocabulary/*"],
   }),
 );

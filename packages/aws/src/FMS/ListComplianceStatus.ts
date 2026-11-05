@@ -46,5 +46,6 @@ export const ListComplianceStatusHttp = Layer.effect(
     capability: "ListComplianceStatus",
     iamActions: ["fms:ListComplianceStatus"],
     operation: fms.listComplianceStatus,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:policy/*"],
   }),
 );

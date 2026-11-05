@@ -49,5 +49,6 @@ export const DescribeEntitiesDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.DescribeEntitiesDetectionJob",
     operation: comprehend.describeEntitiesDetectionJob,
     actions: ["comprehend:DescribeEntitiesDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:entities-detection-job/*"],
   }),
 );

@@ -14,59 +14,49 @@
       "operation": "describeTextTranslationJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["translate:DescribeTextTranslationJob"]
+      }
     },
     "GetParallelData": {
       "operation": "getParallelData",
       "request": {
         "mode": "required"
-      },
-      "actions": ["translate:GetParallelData"]
+      }
     },
     "GetTerminology": {
       "operation": "getTerminology",
       "request": {
         "mode": "required"
-      },
-      "actions": ["translate:GetTerminology"]
+      }
     },
     "ListLanguages": {
-      "operation": "listLanguages",
-      "actions": ["translate:ListLanguages"]
+      "operation": "listLanguages"
     },
     "ListParallelData": {
-      "operation": "listParallelData",
-      "actions": ["translate:ListParallelData"]
+      "operation": "listParallelData"
     },
     "ListTerminologies": {
-      "operation": "listTerminologies",
-      "actions": ["translate:ListTerminologies"]
+      "operation": "listTerminologies"
     },
     "ListTextTranslationJobs": {
-      "operation": "listTextTranslationJobs",
-      "actions": ["translate:ListTextTranslationJobs"]
+      "operation": "listTextTranslationJobs"
     },
     "StopTextTranslationJob": {
       "operation": "stopTextTranslationJob",
       "request": {
         "mode": "required"
-      },
-      "actions": ["translate:StopTextTranslationJob"]
+      }
     },
     "TranslateDocument": {
       "operation": "translateDocument",
       "request": {
         "mode": "required"
-      },
-      "actions": ["translate:TranslateDocument"]
+      }
     },
     "TranslateText": {
       "operation": "translateText",
       "request": {
         "mode": "required"
-      },
-      "actions": ["translate:TranslateText"]
+      }
     }
   }
 }

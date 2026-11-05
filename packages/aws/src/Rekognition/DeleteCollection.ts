@@ -48,5 +48,6 @@ export const DeleteCollectionHttp = Layer.effect(
     tag: "AWS.Rekognition.DeleteCollection",
     operation: rekognition.deleteCollection,
     actions: ["rekognition:DeleteCollection"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

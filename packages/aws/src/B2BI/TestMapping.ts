@@ -48,5 +48,6 @@ export const TestMappingHttp = Layer.effect(
     tag: "AWS.B2BI.TestMapping",
     operation: b2bi.testMapping,
     actions: ["b2bi:TestMapping"],
+    arns: ["arn:${Partition}:b2bi:${Region}:${Account}:transformer/*"],
   }),
 );

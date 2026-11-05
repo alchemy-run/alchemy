@@ -50,5 +50,6 @@ export const StopKeyPhrasesDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.StopKeyPhrasesDetectionJob",
     operation: comprehend.stopKeyPhrasesDetectionJob,
     actions: ["comprehend:StopKeyPhrasesDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:key-phrases-detection-job/*"],
   }),
 );

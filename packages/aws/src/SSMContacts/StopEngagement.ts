@@ -45,5 +45,6 @@ export const StopEngagementHttp = Layer.effect(
     tag: "AWS.SSMContacts.StopEngagement",
     operation: ssm.stopEngagement,
     actions: ["ssm-contacts:StopEngagement"],
+    arns: ["arn:${Partition}:ssm-contacts:${Region}:${Account}:engagement/*/*"],
   }),
 );

@@ -30,8 +30,7 @@
       "resource": "Certificate",
       "request": {
         "mode": "none"
-      },
-      "actions": ["acm:DescribeCertificate"]
+      }
     },
     "ExportCertificate": {
       "operation": "exportCertificate",
@@ -40,16 +39,14 @@
         "mode": "required",
         "interface": "ExportCertificateRequest",
         "omit": ["CertificateArn"]
-      },
-      "actions": ["acm:ExportCertificate"]
+      }
     },
     "GetCertificate": {
       "operation": "getCertificate",
       "resource": "Certificate",
       "request": {
         "mode": "none"
-      },
-      "actions": ["acm:GetCertificate"]
+      }
     },
     "ImportCertificate": {
       "operation": "importCertificate",
@@ -59,7 +56,6 @@
         "omit": []
       },
       "builder": "makeAcmAccountHttpBinding",
-      "actions": ["acm:ImportCertificate", "acm:AddTagsToCertificate"],
       "note": "Importing with `Tags` additionally requires `acm:AddTagsToCertificate`, which ACM checks alongside the import itself."
     },
     "ListCertificates": {
@@ -69,16 +65,14 @@
         "interface": "ListCertificatesRequest",
         "omit": []
       },
-      "builder": "makeAcmAccountHttpBinding",
-      "actions": ["acm:ListCertificates"]
+      "builder": "makeAcmAccountHttpBinding"
     },
     "RenewCertificate": {
       "operation": "renewCertificate",
       "resource": "Certificate",
       "request": {
         "mode": "none"
-      },
-      "actions": ["acm:RenewCertificate"]
+      }
     },
     "ResendValidationEmail": {
       "operation": "resendValidationEmail",
@@ -87,8 +81,7 @@
         "mode": "required",
         "interface": "ResendValidationEmailRequest",
         "omit": ["CertificateArn"]
-      },
-      "actions": ["acm:ResendValidationEmail"]
+      }
     },
     "RevokeCertificate": {
       "operation": "revokeCertificate",
@@ -97,8 +90,7 @@
         "mode": "required",
         "interface": "RevokeCertificateRequest",
         "omit": ["CertificateArn"]
-      },
-      "actions": ["acm:RevokeCertificate"]
+      }
     },
     "SearchCertificates": {
       "operation": "searchCertificates",
@@ -107,8 +99,7 @@
         "interface": "SearchCertificatesRequest",
         "omit": []
       },
-      "builder": "makeAcmAccountHttpBinding",
-      "actions": ["acm:SearchCertificates"]
+      "builder": "makeAcmAccountHttpBinding"
     }
   }
 }

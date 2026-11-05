@@ -47,10 +47,10 @@ export const DescribeTopicPartitionsHttp = Layer.effect(
     tag: "AWS.Kafka.DescribeTopicPartitions",
     operation: kafka.describeTopicPartitions,
     actions: [
-      "kafka:DescribeTopicPartitions",
       "kafka-cluster:Connect",
       "kafka-cluster:DescribeTopic",
       "kafka-cluster:DescribeTopicDynamicConfiguration",
+      "kafka:DescribeTopicPartitions",
     ],
     topicScoped: true,
   }),

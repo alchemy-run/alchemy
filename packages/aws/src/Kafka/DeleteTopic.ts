@@ -42,10 +42,10 @@ export const DeleteTopicHttp = Layer.effect(
     tag: "AWS.Kafka.DeleteTopic",
     operation: kafka.deleteTopic,
     actions: [
-      "kafka:DeleteTopic",
       "kafka-cluster:Connect",
       "kafka-cluster:DeleteTopic",
       "kafka-cluster:DescribeTopic",
+      "kafka:DeleteTopic",
     ],
     topicScoped: true,
   }),

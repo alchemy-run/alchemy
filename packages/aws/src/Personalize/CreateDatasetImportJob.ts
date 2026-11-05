@@ -52,7 +52,7 @@ export const CreateDatasetImportJobHttp = Layer.effect(
   makePersonalizeAccountHttpBinding({
     tag: "AWS.Personalize.CreateDatasetImportJob",
     operation: personalize.createDatasetImportJob,
-    actions: ["personalize:CreateDatasetImportJob"],
+    actions: ["personalize:CreateDatasetImportJob", "personalize:TagResource"],
     passRole: true,
     arns: [
       "arn:${Partition}:personalize:${Region}:${Account}:dataset-import-job/*",

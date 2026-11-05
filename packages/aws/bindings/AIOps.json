@@ -24,7 +24,6 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["aiops:GetInvestigationGroup"],
       "withTs": {
         "input": "(identifier) => ({identifier})"
       }
@@ -36,15 +35,13 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["aiops:GetInvestigationGroupPolicy"],
       "withTs": {
         "input": "(identifier) => ({identifier})"
       }
     },
     "ListInvestigationGroups": {
       "operation": "listInvestigationGroups",
-      "builder": "makeAIOpsAccountHttpBinding",
-      "actions": ["aiops:ListInvestigationGroups"]
+      "builder": "makeAIOpsAccountHttpBinding"
     },
     "ListTagsForResource": {
       "operation": "listTagsForResource",
@@ -53,7 +50,6 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["aiops:ListTagsForResource"],
       "withTs": {
         "input": "(resourceArn) => ({resourceArn})"
       }

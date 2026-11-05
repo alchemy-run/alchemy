@@ -53,5 +53,6 @@ export const BatchAssociateClientDeviceWithCoreDeviceHttp = Layer.effect(
     tag: "AWS.GreengrassV2.BatchAssociateClientDeviceWithCoreDevice",
     operation: greengrassv2.batchAssociateClientDeviceWithCoreDevice,
     actions: ["greengrass:BatchAssociateClientDeviceWithCoreDevice"],
+    arns: ["arn:${Partition}:greengrass:${Region}:${Account}:coreDevices:*"],
   }),
 );

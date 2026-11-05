@@ -44,10 +44,10 @@ export const DescribeTopicHttp = Layer.effect(
     tag: "AWS.Kafka.DescribeTopic",
     operation: kafka.describeTopic,
     actions: [
-      "kafka:DescribeTopic",
       "kafka-cluster:Connect",
       "kafka-cluster:DescribeTopic",
       "kafka-cluster:DescribeTopicDynamicConfiguration",
+      "kafka:DescribeTopic",
     ],
     topicScoped: true,
   }),

@@ -45,5 +45,6 @@ export const GetCallAnalyticsJobHttp = Layer.effect(
     tag: "AWS.Transcribe.GetCallAnalyticsJob",
     operation: transcribe.getCallAnalyticsJob,
     actions: ["transcribe:GetCallAnalyticsJob"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:analytics/*"],
   }),
 );

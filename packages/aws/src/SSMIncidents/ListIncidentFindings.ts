@@ -46,5 +46,9 @@ export const ListIncidentFindingsHttp = Layer.effect(
     tag: "AWS.SSMIncidents.ListIncidentFindings",
     operation: incidents.listIncidentFindings,
     actions: ["ssm-incidents:ListIncidentFindings"],
+    arns: [
+      "arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*",
+      "arn:${Partition}:ssm-incidents::${Account}:response-plan/*",
+    ],
   }),
 );

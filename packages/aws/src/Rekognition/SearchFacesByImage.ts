@@ -51,5 +51,6 @@ export const SearchFacesByImageHttp = Layer.effect(
     tag: "AWS.Rekognition.SearchFacesByImage",
     operation: rekognition.searchFacesByImage,
     actions: ["rekognition:SearchFacesByImage"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

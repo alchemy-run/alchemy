@@ -31,8 +31,7 @@
         "interface": "DescribeAccountSettingsRequest",
         "omit": []
       },
-      "builder": "makeKinesisAccountHttpBinding",
-      "actions": ["kinesis:DescribeAccountSettings"]
+      "builder": "makeKinesisAccountHttpBinding"
     },
     "DescribeLimits": {
       "operation": "describeLimits",
@@ -41,8 +40,7 @@
         "interface": "DescribeLimitsRequest",
         "omit": []
       },
-      "builder": "makeKinesisAccountHttpBinding",
-      "actions": ["kinesis:DescribeLimits"]
+      "builder": "makeKinesisAccountHttpBinding"
     },
     "DescribeStream": {
       "operation": "describeStream",
@@ -52,7 +50,6 @@
         "interface": "DescribeStreamRequest",
         "omit": ["StreamName", "StreamARN"]
       },
-      "actions": ["kinesis:DescribeStream"],
       "with": {
         "key": "StreamARN"
       }
@@ -66,8 +63,7 @@
         "interface": "DescribeStreamConsumerRequest",
         "omit": ["ConsumerARN", "StreamARN", "ConsumerName"]
       },
-      "builder": "makeConsumerHttpBinding",
-      "actions": ["kinesis:DescribeStreamConsumer"]
+      "builder": "makeConsumerHttpBinding"
     },
     "DescribeStreamSummary": {
       "operation": "describeStreamSummary",
@@ -77,7 +73,6 @@
         "interface": "DescribeStreamSummaryRequest",
         "omit": ["StreamName", "StreamARN"]
       },
-      "actions": ["kinesis:DescribeStreamSummary"],
       "with": {
         "key": "StreamARN"
       }
@@ -90,7 +85,6 @@
         "interface": "GetRecordsRequest",
         "omit": ["StreamARN"]
       },
-      "actions": ["kinesis:GetRecords"],
       "with": {
         "key": "StreamARN"
       }
@@ -103,7 +97,6 @@
         "interface": "GetResourcePolicyRequest",
         "omit": ["ResourceARN"]
       },
-      "actions": ["kinesis:GetResourcePolicy"],
       "with": {
         "key": "ResourceARN"
       }
@@ -116,7 +109,6 @@
         "interface": "GetShardIteratorRequest",
         "omit": ["StreamName", "StreamARN"]
       },
-      "actions": ["kinesis:GetShardIterator"],
       "with": {
         "key": "StreamARN"
       }
@@ -129,7 +121,6 @@
         "interface": "ListShardsRequest",
         "omit": ["StreamName", "StreamARN"]
       },
-      "actions": ["kinesis:ListShards"],
       "with": {
         "key": "StreamARN"
       }
@@ -142,7 +133,6 @@
         "interface": "ListStreamConsumersRequest",
         "omit": ["StreamARN"]
       },
-      "actions": ["kinesis:ListStreamConsumers"],
       "with": {
         "key": "StreamARN"
       }
@@ -154,8 +144,7 @@
         "interface": "ListStreamsRequest",
         "omit": []
       },
-      "builder": "makeKinesisAccountHttpBinding",
-      "actions": ["kinesis:ListStreams"]
+      "builder": "makeKinesisAccountHttpBinding"
     },
     "MergeShards": {
       "operation": "mergeShards",
@@ -165,7 +154,6 @@
         "interface": "MergeShardsRequest",
         "omit": ["StreamName", "StreamARN"]
       },
-      "actions": ["kinesis:MergeShards"],
       "with": {
         "key": "StreamARN"
       }
@@ -178,7 +166,6 @@
         "interface": "PutRecordRequest",
         "omit": ["StreamName"]
       },
-      "actions": ["kinesis:PutRecord"],
       "with": {
         "key": "StreamName"
       }
@@ -191,7 +178,6 @@
         "interface": "PutRecordsRequest",
         "omit": ["StreamName"]
       },
-      "actions": ["kinesis:PutRecords"],
       "with": {
         "key": "StreamName"
       }
@@ -204,7 +190,6 @@
         "interface": "SplitShardRequest",
         "omit": ["StreamName", "StreamARN"]
       },
-      "actions": ["kinesis:SplitShard"],
       "with": {
         "key": "StreamARN"
       }
@@ -218,8 +203,7 @@
         "interface": "SubscribeToShardRequest",
         "omit": ["ConsumerARN"]
       },
-      "builder": "makeConsumerHttpBinding",
-      "actions": ["kinesis:SubscribeToShard"]
+      "builder": "makeConsumerHttpBinding"
     }
   }
 }

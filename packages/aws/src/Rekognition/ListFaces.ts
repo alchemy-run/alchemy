@@ -45,5 +45,6 @@ export const ListFacesHttp = Layer.effect(
     tag: "AWS.Rekognition.ListFaces",
     operation: rekognition.listFaces,
     actions: ["rekognition:ListFaces"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

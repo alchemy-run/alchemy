@@ -16,144 +16,72 @@
   },
   "bindings": {
     "DescribeProduct": {
-      "operation": "describeProduct",
-      "actions": ["servicecatalog:DescribeProduct"],
-      "arns": ["arn:${Partition}:catalog:${Region}:${Account}:product/*"]
+      "operation": "describeProduct"
     },
     "DescribeProvisionedProduct": {
-      "operation": "describeProvisionedProduct",
-      "actions": ["servicecatalog:DescribeProvisionedProduct"]
+      "operation": "describeProvisionedProduct"
     },
     "DescribeProvisioningParameters": {
-      "operation": "describeProvisioningParameters",
-      "actions": ["servicecatalog:DescribeProvisioningParameters"],
-      "arns": ["arn:${Partition}:catalog:${Region}:${Account}:product/*"]
+      "operation": "describeProvisioningParameters"
     },
     "DescribeRecord": {
       "operation": "describeRecord",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicecatalog:DescribeRecord"]
+      }
     },
     "DescribeServiceActionExecutionParameters": {
       "operation": "describeServiceActionExecutionParameters",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicecatalog:DescribeServiceActionExecutionParameters"]
+      }
     },
     "ExecuteProvisionedProductServiceAction": {
       "operation": "executeProvisionedProductServiceAction",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicecatalog:ExecuteProvisionedProductServiceAction"]
+      }
     },
     "GetProvisionedProductOutputs": {
-      "operation": "getProvisionedProductOutputs",
-      "actions": ["servicecatalog:GetProvisionedProductOutputs"]
+      "operation": "getProvisionedProductOutputs"
     },
     "ListLaunchPaths": {
       "operation": "listLaunchPaths",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicecatalog:ListLaunchPaths"],
-      "arns": ["arn:${Partition}:catalog:${Region}:${Account}:product/*"]
+      }
     },
     "ListRecordHistory": {
-      "operation": "listRecordHistory",
-      "actions": ["servicecatalog:ListRecordHistory"]
+      "operation": "listRecordHistory"
     },
     "ListStackInstancesForProvisionedProduct": {
       "operation": "listStackInstancesForProvisionedProduct",
       "request": {
         "mode": "required"
-      },
-      "actions": ["servicecatalog:ListStackInstancesForProvisionedProduct"]
+      }
     },
     "ProvisionProduct": {
       "operation": "provisionProduct",
       "request": {
         "mode": "required"
-      },
-      "actions": [
-        "servicecatalog:ProvisionProduct",
-        "cloudformation:CreateStack",
-        "cloudformation:DescribeStacks",
-        "cloudformation:DescribeStackEvents",
-        "cloudformation:GetTemplateSummary",
-        "cloudformation:SetStackPolicy",
-        "cloudformation:ValidateTemplate",
-        "s3:GetObject"
-      ],
-      "reviewed": {
-        "cloudformation:CreateStack": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:DescribeStacks": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:DescribeStackEvents": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:GetTemplateSummary": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:SetStackPolicy": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:ValidateTemplate": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "s3:GetObject": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials."
       }
     },
     "SearchProducts": {
-      "operation": "searchProducts",
-      "actions": ["servicecatalog:SearchProducts"]
+      "operation": "searchProducts"
     },
     "SearchProvisionedProducts": {
-      "operation": "searchProvisionedProducts",
-      "actions": ["servicecatalog:SearchProvisionedProducts"]
+      "operation": "searchProvisionedProducts"
     },
     "TerminateProvisionedProduct": {
       "operation": "terminateProvisionedProduct",
       "request": {
         "mode": "required"
-      },
-      "actions": [
-        "servicecatalog:TerminateProvisionedProduct",
-        "cloudformation:DeleteStack",
-        "cloudformation:DescribeStacks",
-        "cloudformation:DescribeStackEvents"
-      ],
-      "reviewed": {
-        "cloudformation:DeleteStack": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:DescribeStacks": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:DescribeStackEvents": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials."
       }
     },
     "UpdateProvisionedProduct": {
       "operation": "updateProvisionedProduct",
       "request": {
         "mode": "required"
-      },
-      "actions": [
-        "servicecatalog:UpdateProvisionedProduct",
-        "cloudformation:UpdateStack",
-        "cloudformation:CreateChangeSet",
-        "cloudformation:DescribeChangeSet",
-        "cloudformation:ExecuteChangeSet",
-        "cloudformation:DeleteChangeSet",
-        "cloudformation:DescribeStacks",
-        "cloudformation:DescribeStackEvents",
-        "cloudformation:GetTemplateSummary",
-        "cloudformation:SetStackPolicy",
-        "cloudformation:ValidateTemplate",
-        "s3:GetObject"
-      ],
-      "reviewed": {
-        "cloudformation:UpdateStack": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:CreateChangeSet": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:DescribeChangeSet": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:ExecuteChangeSet": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:DeleteChangeSet": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:DescribeStacks": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:DescribeStackEvents": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:GetTemplateSummary": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:SetStackPolicy": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "cloudformation:ValidateTemplate": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials.",
-        "s3:GetObject": "Without a launch constraint role, Service Catalog runs the product's CloudFormation stack (and reads its template) with the caller's credentials."
       }
     }
   }

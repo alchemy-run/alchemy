@@ -46,5 +46,6 @@ export const DeleteUserHttp = Layer.effect(
     tag: "AWS.Rekognition.DeleteUser",
     operation: rekognition.deleteUser,
     actions: ["rekognition:DeleteUser"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

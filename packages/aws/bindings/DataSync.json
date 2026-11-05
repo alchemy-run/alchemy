@@ -17,8 +17,7 @@
       "resource": "Task",
       "request": {
         "mode": "required"
-      },
-      "actions": ["datasync:CancelTaskExecution"]
+      }
     },
     "DescribeTask": {
       "operation": "describeTask",
@@ -26,16 +25,14 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeDataSyncTaskHttpBinding",
-      "actions": ["datasync:DescribeTask"]
+      "builder": "makeDataSyncTaskHttpBinding"
     },
     "DescribeTaskExecution": {
       "operation": "describeTaskExecution",
       "resource": "Task",
       "request": {
         "mode": "required"
-      },
-      "actions": ["datasync:DescribeTaskExecution"]
+      }
     },
     "ListTaskExecutions": {
       "operation": "listTaskExecutions",
@@ -45,8 +42,7 @@
         "omit": ["TaskArn"],
         "inline": true
       },
-      "builder": "makeDataSyncTaskHttpBinding",
-      "actions": ["datasync:ListTaskExecutions"]
+      "builder": "makeDataSyncTaskHttpBinding"
     },
     "StartTaskExecution": {
       "operation": "startTaskExecution",
@@ -56,20 +52,14 @@
         "omit": ["TaskArn"],
         "inline": true
       },
-      "builder": "makeDataSyncTaskHttpBinding",
-      "actions": ["datasync:StartTaskExecution"],
-      "reviewed": {
-        "datasync:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access.",
-        "iam:PassRole": "AWS lists it for the operation, but the DataSync Bindings suite calls it successfully without it."
-      }
+      "builder": "makeDataSyncTaskHttpBinding"
     },
     "UpdateTaskExecution": {
       "operation": "updateTaskExecution",
       "resource": "Task",
       "request": {
         "mode": "required"
-      },
-      "actions": ["datasync:UpdateTaskExecution"]
+      }
     }
   }
 }

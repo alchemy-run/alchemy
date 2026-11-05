@@ -46,5 +46,6 @@ export const DeleteTimelineEventHttp = Layer.effect(
     tag: "AWS.SSMIncidents.DeleteTimelineEvent",
     operation: incidents.deleteTimelineEvent,
     actions: ["ssm-incidents:DeleteTimelineEvent"],
+    arns: ["arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*"],
   }),
 );

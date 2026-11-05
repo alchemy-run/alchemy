@@ -27,8 +27,7 @@
         "mode": "required",
         "interface": "DeregisterTargetsRequest",
         "omit": ["TargetGroupArn"]
-      },
-      "actions": ["elasticloadbalancing:DeregisterTargets"]
+      }
     },
     "DescribeCapacityReservation": {
       "operation": "describeCapacityReservation",
@@ -39,7 +38,6 @@
         "omit": ["LoadBalancerArn"]
       },
       "builder": "makeLoadBalancerHttpBinding",
-      "actions": ["elasticloadbalancing:DescribeCapacityReservation"],
       "with": {
         "resource": "*"
       }
@@ -52,7 +50,6 @@
         "interface": "DescribeTargetHealthRequest",
         "omit": ["TargetGroupArn"]
       },
-      "actions": ["elasticloadbalancing:DescribeTargetHealth"],
       "with": {
         "resource": "*"
       }
@@ -65,8 +62,7 @@
         "omit": ["TrustStoreArn"],
         "inline": true
       },
-      "builder": "makeTrustStoreHttpBinding",
-      "actions": ["elasticloadbalancing:GetTrustStoreCaCertificatesBundle"]
+      "builder": "makeTrustStoreHttpBinding"
     },
     "GetTrustStoreRevocationContent": {
       "operation": "getTrustStoreRevocationContent",
@@ -76,8 +72,7 @@
         "interface": "GetTrustStoreRevocationContentRequest",
         "omit": ["TrustStoreArn"]
       },
-      "builder": "makeTrustStoreHttpBinding",
-      "actions": ["elasticloadbalancing:GetTrustStoreRevocationContent"]
+      "builder": "makeTrustStoreHttpBinding"
     },
     "ModifyCapacityReservation": {
       "operation": "modifyCapacityReservation",
@@ -87,8 +82,7 @@
         "interface": "ModifyCapacityReservationRequest",
         "omit": ["LoadBalancerArn"]
       },
-      "builder": "makeLoadBalancerHttpBinding",
-      "actions": ["elasticloadbalancing:ModifyCapacityReservation"]
+      "builder": "makeLoadBalancerHttpBinding"
     },
     "RegisterTargets": {
       "operation": "registerTargets",
@@ -97,8 +91,7 @@
         "mode": "required",
         "interface": "RegisterTargetsRequest",
         "omit": ["TargetGroupArn"]
-      },
-      "actions": ["elasticloadbalancing:RegisterTargets"]
+      }
     }
   }
 }

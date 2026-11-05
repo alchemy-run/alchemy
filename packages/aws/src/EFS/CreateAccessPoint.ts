@@ -64,7 +64,7 @@ export const CreateAccessPointHttp = Layer.effect(
   makeEfsFileSystemHttpBinding({
     tag: "AWS.EFS.CreateAccessPoint",
     operation: efs.createAccessPoint,
-    actions: ["elasticfilesystem:CreateAccessPoint"],
+    actions: ["elasticfilesystem:CreateAccessPoint", "elasticfilesystem:TagResource"],
     wildcardActions: ["elasticfilesystem:TagResource"],
   }),
 );

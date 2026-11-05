@@ -19,13 +19,10 @@
       "operation": "getSubject",
       "request": {
         "mode": "required"
-      },
-      "actions": ["rolesanywhere:GetSubject"],
-      "arns": ["arn:${Partition}:rolesanywhere:${Region}:${Account}:subject/*"]
+      }
     },
     "ListSubjects": {
-      "operation": "listSubjects",
-      "actions": ["rolesanywhere:ListSubjects"]
+      "operation": "listSubjects"
     }
   }
 }

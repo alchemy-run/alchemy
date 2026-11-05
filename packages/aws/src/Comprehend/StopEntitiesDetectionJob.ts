@@ -50,5 +50,6 @@ export const StopEntitiesDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.StopEntitiesDetectionJob",
     operation: comprehend.stopEntitiesDetectionJob,
     actions: ["comprehend:StopEntitiesDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:entities-detection-job/*"],
   }),
 );

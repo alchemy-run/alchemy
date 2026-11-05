@@ -48,7 +48,7 @@ export const CreateWhatIfAnalysisHttp = Layer.effect(
   CreateWhatIfAnalysis,
   makeForecastHttpBinding({
     capability: "CreateWhatIfAnalysis",
-    iamActions: ["forecast:CreateWhatIfAnalysis"],
+    iamActions: ["forecast:CreateWhatIfAnalysis", "forecast:TagResource"],
     operation: forecast.createWhatIfAnalysis,
     arns: ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"],
   }),

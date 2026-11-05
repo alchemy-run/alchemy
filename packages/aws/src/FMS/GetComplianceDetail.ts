@@ -49,5 +49,6 @@ export const GetComplianceDetailHttp = Layer.effect(
     capability: "GetComplianceDetail",
     iamActions: ["fms:GetComplianceDetail"],
     operation: fms.getComplianceDetail,
+    arns: ["arn:${Partition}:fms:${Region}:${Account}:policy/*"],
   }),
 );

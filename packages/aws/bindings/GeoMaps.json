@@ -20,47 +20,31 @@
       "operation": "getGlyphs",
       "request": {
         "mode": "required"
-      },
-      "actions": ["geo-maps:GetGlyphs"],
-      "reviewed": {
-        "geo-maps:GetGlyphs": "Not in AWS's reference; the GeoMaps Bindings suite calls the operation successfully with it."
       }
     },
     "GetSprites": {
       "operation": "getSprites",
       "request": {
         "mode": "required"
-      },
-      "actions": ["geo-maps:GetSprites"],
-      "reviewed": {
-        "geo-maps:GetSprites": "Not in AWS's reference; the GeoMaps Bindings suite calls the operation successfully with it."
       }
     },
     "GetStaticMap": {
       "operation": "getStaticMap",
       "request": {
         "mode": "required"
-      },
-      "actions": ["geo-maps:GetStaticMap"],
-      "arns": ["arn:${Partition}:geo-maps:${Region}::provider/default"]
+      }
     },
     "GetStyleDescriptor": {
       "operation": "getStyleDescriptor",
       "request": {
         "mode": "required"
-      },
-      "actions": ["geo-maps:GetStyleDescriptor"],
-      "reviewed": {
-        "geo-maps:GetStyleDescriptor": "Not in AWS's reference; the GeoMaps Bindings suite calls the operation successfully with it."
       }
     },
     "GetTile": {
       "operation": "getTile",
       "request": {
         "mode": "required"
-      },
-      "actions": ["geo-maps:GetTile"],
-      "arns": ["arn:${Partition}:geo-maps:${Region}::provider/default"]
+      }
     }
   }
 }

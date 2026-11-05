@@ -27,8 +27,7 @@
         "omit": ["AddressListId"],
         "inline": true
       },
-      "builder": "makeAddressListHttpBinding",
-      "actions": ["ses:CreateAddressListImportJob"]
+      "builder": "makeAddressListHttpBinding"
     },
     "DeregisterMemberFromAddressList": {
       "operation": "deregisterMemberFromAddressList",
@@ -39,8 +38,7 @@
         "omit": ["AddressListId"],
         "inline": true
       },
-      "builder": "makeAddressListHttpBinding",
-      "actions": ["ses:DeregisterMemberFromAddressList"]
+      "builder": "makeAddressListHttpBinding"
     },
     "GetAddressListImportJob": {
       "operation": "getAddressListImportJob",
@@ -49,48 +47,42 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeAddressListJobHttpBinding",
-      "actions": ["ses:GetAddressListImportJob"]
+      "builder": "makeAddressListJobHttpBinding"
     },
     "GetArchiveExport": {
       "operation": "getArchiveExport",
       "resource": "Archive",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ses:GetArchiveExport"]
+      }
     },
     "GetArchiveMessage": {
       "operation": "getArchiveMessage",
       "resource": "Archive",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ses:GetArchiveMessage"]
+      }
     },
     "GetArchiveMessageContent": {
       "operation": "getArchiveMessageContent",
       "resource": "Archive",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ses:GetArchiveMessageContent"]
+      }
     },
     "GetArchiveSearch": {
       "operation": "getArchiveSearch",
       "resource": "Archive",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ses:GetArchiveSearch"]
+      }
     },
     "GetArchiveSearchResults": {
       "operation": "getArchiveSearchResults",
       "resource": "Archive",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ses:GetArchiveSearchResults"]
+      }
     },
     "GetMemberOfAddressList": {
       "operation": "getMemberOfAddressList",
@@ -101,8 +93,7 @@
         "omit": ["AddressListId"],
         "inline": true
       },
-      "builder": "makeAddressListHttpBinding",
-      "actions": ["ses:GetMemberOfAddressList"]
+      "builder": "makeAddressListHttpBinding"
     },
     "ListAddressListImportJobs": {
       "operation": "listAddressListImportJobs",
@@ -113,8 +104,7 @@
         "omit": ["AddressListId"],
         "inline": true
       },
-      "builder": "makeAddressListHttpBinding",
-      "actions": ["ses:ListAddressListImportJobs"]
+      "builder": "makeAddressListHttpBinding"
     },
     "ListArchiveExports": {
       "operation": "listArchiveExports",
@@ -124,8 +114,7 @@
         "omit": ["ArchiveId"],
         "inline": true
       },
-      "builder": "makeArchiveHttpBinding",
-      "actions": ["ses:ListArchiveExports"]
+      "builder": "makeArchiveHttpBinding"
     },
     "ListArchiveSearches": {
       "operation": "listArchiveSearches",
@@ -135,8 +124,7 @@
         "omit": ["ArchiveId"],
         "inline": true
       },
-      "builder": "makeArchiveHttpBinding",
-      "actions": ["ses:ListArchiveSearches"]
+      "builder": "makeArchiveHttpBinding"
     },
     "ListMembersOfAddressList": {
       "operation": "listMembersOfAddressList",
@@ -147,8 +135,7 @@
         "omit": ["AddressListId"],
         "inline": true
       },
-      "builder": "makeAddressListHttpBinding",
-      "actions": ["ses:ListMembersOfAddressList"]
+      "builder": "makeAddressListHttpBinding"
     },
     "RegisterMemberToAddressList": {
       "operation": "registerMemberToAddressList",
@@ -159,8 +146,7 @@
         "omit": ["AddressListId"],
         "inline": true
       },
-      "builder": "makeAddressListHttpBinding",
-      "actions": ["ses:RegisterMemberToAddressList"]
+      "builder": "makeAddressListHttpBinding"
     },
     "StartAddressListImportJob": {
       "operation": "startAddressListImportJob",
@@ -169,8 +155,7 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeAddressListJobHttpBinding",
-      "actions": ["ses:StartAddressListImportJob"]
+      "builder": "makeAddressListJobHttpBinding"
     },
     "StartArchiveExport": {
       "operation": "startArchiveExport",
@@ -180,8 +165,7 @@
         "omit": ["ArchiveId"],
         "inline": true
       },
-      "builder": "makeArchiveHttpBinding",
-      "actions": ["ses:StartArchiveExport"]
+      "builder": "makeArchiveHttpBinding"
     },
     "StartArchiveSearch": {
       "operation": "startArchiveSearch",
@@ -191,8 +175,7 @@
         "omit": ["ArchiveId"],
         "inline": true
       },
-      "builder": "makeArchiveHttpBinding",
-      "actions": ["ses:StartArchiveSearch"]
+      "builder": "makeArchiveHttpBinding"
     },
     "StopAddressListImportJob": {
       "operation": "stopAddressListImportJob",
@@ -201,24 +184,21 @@
       "request": {
         "mode": "required"
       },
-      "builder": "makeAddressListJobHttpBinding",
-      "actions": ["ses:StopAddressListImportJob"]
+      "builder": "makeAddressListJobHttpBinding"
     },
     "StopArchiveExport": {
       "operation": "stopArchiveExport",
       "resource": "Archive",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ses:StopArchiveExport"]
+      }
     },
     "StopArchiveSearch": {
       "operation": "stopArchiveSearch",
       "resource": "Archive",
       "request": {
         "mode": "required"
-      },
-      "actions": ["ses:StopArchiveSearch"]
+      }
     }
   }
 }

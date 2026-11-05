@@ -54,5 +54,9 @@ export const SendWorkflowStepActionHttp = Layer.effect(
     tag: "AWS.ImageBuilder.SendWorkflowStepAction",
     operation: imagebuilder.sendWorkflowStepAction,
     actions: ["imagebuilder:SendWorkflowStepAction"],
+    arns: [
+      "arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*",
+      "arn:${Partition}:imagebuilder:${Region}:${Account}:workflow-step-execution/*",
+    ],
   }),
 );

@@ -67,5 +67,6 @@ export const SendWhatsAppMessageHttp = Layer.effect(
     tag: "AWS.SocialMessaging.SendWhatsAppMessage",
     operation: socialmessaging.sendWhatsAppMessage,
     actions: ["social-messaging:SendWhatsAppMessage"],
+    arns: ["arn:${Partition}:social-messaging:${Region}:${Account}:phone-number-id/*"],
   }),
 );

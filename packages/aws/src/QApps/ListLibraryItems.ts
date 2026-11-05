@@ -47,5 +47,6 @@ export const ListLibraryItemsHttp = Layer.effect(
     capability: "ListLibraryItems",
     iamActions: ["qapps:ListLibraryItems"],
     operation: qapps.listLibraryItems,
+    arns: ["arn:${Partition}:qbusiness:${Region}:${Account}:application/*"],
   }),
 );

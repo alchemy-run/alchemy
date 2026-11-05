@@ -52,5 +52,6 @@ export const ListClientDevicesAssociatedWithCoreDeviceHttp = Layer.effect(
     tag: "AWS.GreengrassV2.ListClientDevicesAssociatedWithCoreDevice",
     operation: greengrassv2.listClientDevicesAssociatedWithCoreDevice,
     actions: ["greengrass:ListClientDevicesAssociatedWithCoreDevice"],
+    arns: ["arn:${Partition}:greengrass:${Region}:${Account}:coreDevices:*"],
   }),
 );

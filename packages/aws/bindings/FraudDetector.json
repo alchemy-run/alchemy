@@ -32,8 +32,7 @@
         "mode": "required",
         "interface": "DeleteEventRequest",
         "omit": ["eventTypeName"]
-      },
-      "actions": ["frauddetector:DeleteEvent"]
+      }
     },
     "DeleteEventsByEventType": {
       "operation": "deleteEventsByEventType",
@@ -42,8 +41,7 @@
         "mode": "required",
         "interface": "DeleteEventsByEventTypeRequest",
         "omit": ["eventTypeName"]
-      },
-      "actions": ["frauddetector:DeleteEventsByEventType"]
+      }
     },
     "GetDeleteEventsByEventTypeStatus": {
       "operation": "getDeleteEventsByEventTypeStatus",
@@ -52,8 +50,7 @@
         "mode": "required",
         "interface": "GetDeleteEventsByEventTypeStatusRequest",
         "omit": ["eventTypeName"]
-      },
-      "actions": ["frauddetector:GetDeleteEventsByEventTypeStatus"]
+      }
     },
     "GetEvent": {
       "operation": "getEvent",
@@ -62,8 +59,7 @@
         "mode": "required",
         "interface": "GetEventRequest",
         "omit": ["eventTypeName"]
-      },
-      "actions": ["frauddetector:GetEvent"]
+      }
     },
     "GetEventPrediction": {
       "operation": "getEventPrediction",
@@ -73,8 +69,7 @@
         "interface": "GetEventPredictionRequest",
         "omit": ["detectorId"]
       },
-      "builder": "makeFraudDetectorDetectorHttpBinding",
-      "actions": ["frauddetector:GetEventPrediction"]
+      "builder": "makeFraudDetectorDetectorHttpBinding"
     },
     "GetEventPredictionMetadata": {
       "operation": "getEventPredictionMetadata",
@@ -84,8 +79,7 @@
         "interface": "GetEventPredictionMetadataRequest",
         "omit": ["detectorId"]
       },
-      "builder": "makeFraudDetectorDetectorHttpBinding",
-      "actions": ["frauddetector:GetEventPredictionMetadata"]
+      "builder": "makeFraudDetectorDetectorHttpBinding"
     },
     "GetListElements": {
       "operation": "getListElements",
@@ -95,8 +89,7 @@
         "interface": "GetListElementsRequest",
         "omit": ["name"]
       },
-      "builder": "makeFraudDetectorListHttpBinding",
-      "actions": ["frauddetector:GetListElements"]
+      "builder": "makeFraudDetectorListHttpBinding"
     },
     "SendEvent": {
       "operation": "sendEvent",
@@ -105,8 +98,7 @@
         "mode": "required",
         "interface": "SendEventRequest",
         "omit": ["eventTypeName"]
-      },
-      "actions": ["frauddetector:SendEvent"]
+      }
     },
     "UpdateEventLabel": {
       "operation": "updateEventLabel",
@@ -115,8 +107,7 @@
         "mode": "required",
         "interface": "UpdateEventLabelRequest",
         "omit": ["eventTypeName"]
-      },
-      "actions": ["frauddetector:UpdateEventLabel"]
+      }
     },
     "UpdateList": {
       "operation": "updateList",
@@ -126,8 +117,7 @@
         "interface": "UpdateListRequest",
         "omit": ["name"]
       },
-      "builder": "makeFraudDetectorListHttpBinding",
-      "actions": ["frauddetector:UpdateList"]
+      "builder": "makeFraudDetectorListHttpBinding"
     }
   }
 }

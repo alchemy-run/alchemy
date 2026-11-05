@@ -45,5 +45,6 @@ export const ListUsersHttp = Layer.effect(
     tag: "AWS.Rekognition.ListUsers",
     operation: rekognition.listUsers,
     actions: ["rekognition:ListUsers"],
+    arns: ["arn:${Partition}:rekognition:${Region}:${Account}:collection/*"],
   }),
 );

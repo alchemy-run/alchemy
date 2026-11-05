@@ -20,7 +20,6 @@
         "mode": "required"
       },
       "builder": "makeNeptuneGraphAccountHttpBinding",
-      "actions": ["neptune-graph:CancelExportTask"],
       "withTs": {
         "resources": "[EXPORT_TASK_ARN_WILDCARD]"
       },
@@ -34,7 +33,6 @@
         "mode": "required"
       },
       "builder": "makeNeptuneGraphAccountHttpBinding",
-      "actions": ["neptune-graph:CancelImportTask"],
       "withTs": {
         "resources": "[IMPORT_TASK_ARN_WILDCARD]"
       },
@@ -49,8 +47,7 @@
         "mode": "required",
         "omit": ["graphIdentifier"],
         "inline": true
-      },
-      "actions": ["neptune-graph:CancelQuery"]
+      }
     },
     "CreateGraphSnapshot": {
       "operation": "createGraphSnapshot",
@@ -60,7 +57,6 @@
         "omit": ["graphIdentifier"],
         "inline": true
       },
-      "actions": ["neptune-graph:CreateGraphSnapshot", "neptune-graph:TagResource"],
       "withTs": {
         "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
       },
@@ -74,7 +70,6 @@
         "mode": "required"
       },
       "builder": "makeNeptuneGraphAccountHttpBinding",
-      "actions": ["neptune-graph:DeleteGraphSnapshot"],
       "withTs": {
         "resources": "[SNAPSHOT_ARN_WILDCARD]"
       },
@@ -88,7 +83,6 @@
         "mode": "required"
       },
       "builder": "makeNeptuneGraphAccountHttpBinding",
-      "actions": ["neptune-graph:GetExportTask"],
       "withTs": {
         "resources": "[EXPORT_TASK_ARN_WILDCARD]"
       },
@@ -102,7 +96,6 @@
         "mode": "required"
       },
       "builder": "makeNeptuneGraphAccountHttpBinding",
-      "actions": ["neptune-graph:GetGraphSnapshot"],
       "withTs": {
         "resources": "[SNAPSHOT_ARN_WILDCARD]"
       },
@@ -117,8 +110,7 @@
         "mode": "optional",
         "omit": ["graphIdentifier"],
         "inline": true
-      },
-      "actions": ["neptune-graph:GetGraphSummary"]
+      }
     },
     "GetImportTask": {
       "operation": "getImportTask",
@@ -126,7 +118,6 @@
         "mode": "required"
       },
       "builder": "makeNeptuneGraphAccountHttpBinding",
-      "actions": ["neptune-graph:GetImportTask"],
       "withTs": {
         "resources": "[IMPORT_TASK_ARN_WILDCARD]"
       },
@@ -141,10 +132,6 @@
         "mode": "required",
         "omit": ["graphIdentifier"],
         "inline": true
-      },
-      "actions": ["neptune-graph:GetQueryStatus"],
-      "reviewed": {
-        "neptune-graph:GetQueryStatus": "Neptune Analytics authorizes GetQuery as neptune-graph:GetQueryStatus (Neptune Analytics API reference); not verified live."
       }
     },
     "ListExportTasks": {
@@ -155,7 +142,6 @@
         "omit": ["graphIdentifier"],
         "inline": true
       },
-      "actions": ["neptune-graph:ListExportTasks"],
       "withTs": {
         "extraResources": "[EXPORT_TASK_ARN_WILDCARD]"
       },
@@ -172,7 +158,6 @@
         "omit": ["graphIdentifier"],
         "inline": true
       },
-      "actions": ["neptune-graph:ListGraphSnapshots"],
       "withTs": {
         "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
       },
@@ -183,7 +168,6 @@
     "ListImportTasks": {
       "operation": "listImportTasks",
       "builder": "makeNeptuneGraphAccountHttpBinding",
-      "actions": ["neptune-graph:ListImportTasks"],
       "withTs": {
         "resources": "[IMPORT_TASK_ARN_WILDCARD]"
       },
@@ -198,8 +182,7 @@
         "mode": "required",
         "omit": ["graphIdentifier"],
         "inline": true
-      },
-      "actions": ["neptune-graph:ListQueries"]
+      }
     },
     "ResetGraph": {
       "operation": "resetGraph",
@@ -208,8 +191,7 @@
         "mode": "required",
         "omit": ["graphIdentifier"],
         "inline": true
-      },
-      "actions": ["neptune-graph:ResetGraph"]
+      }
     },
     "StartExportTask": {
       "operation": "startExportTask",
@@ -219,7 +201,6 @@
         "omit": ["graphIdentifier"],
         "inline": true
       },
-      "actions": ["neptune-graph:StartExportTask"],
       "with": {
         "passRole": true
       },
@@ -229,18 +210,14 @@
       "imports": {
         "./BindingHttp.ts": ["EXPORT_TASK_ARN_WILDCARD"]
       },
-      "note": "StartExportTask authorizes against both the graph and the (not yet existing) export-task resource types.",
-      "reviewed": {
-        "neptune-graph:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
-      }
+      "note": "StartExportTask authorizes against both the graph and the (not yet existing) export-task resource types."
     },
     "StartGraph": {
       "operation": "startGraph",
       "resource": "Graph",
       "request": {
         "mode": "none"
-      },
-      "actions": ["neptune-graph:StartGraph"]
+      }
     },
     "StartImportTask": {
       "operation": "startImportTask",
@@ -250,7 +227,6 @@
         "omit": ["graphIdentifier"],
         "inline": true
       },
-      "actions": ["neptune-graph:StartImportTask"],
       "with": {
         "passRole": true
       },
@@ -267,8 +243,7 @@
       "resource": "Graph",
       "request": {
         "mode": "none"
-      },
-      "actions": ["neptune-graph:StopGraph"]
+      }
     }
   }
 }

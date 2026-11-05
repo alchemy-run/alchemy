@@ -22,8 +22,7 @@
         "mode": "required",
         "interface": "ActivateEmailContactRequest",
         "omit": ["arn"]
-      },
-      "actions": ["notifications-contacts:ActivateEmailContact"]
+      }
     },
     "GetEmailContact": {
       "operation": "getEmailContact",
@@ -31,8 +30,7 @@
       "param": "contact",
       "request": {
         "mode": "none"
-      },
-      "actions": ["notifications-contacts:GetEmailContact"]
+      }
     },
     "SendActivationCode": {
       "operation": "sendActivationCode",
@@ -40,8 +38,7 @@
       "param": "contact",
       "request": {
         "mode": "none"
-      },
-      "actions": ["notifications-contacts:SendActivationCode"]
+      }
     }
   }
 }

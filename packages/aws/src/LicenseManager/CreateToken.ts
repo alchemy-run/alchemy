@@ -50,5 +50,6 @@ export const CreateTokenHttp = Layer.effect(
     capability: "CreateToken",
     iamActions: ["license-manager:CreateToken"],
     operation: licensemanager.createToken,
+    arns: ["arn:${Partition}:license-manager::${Account}:license:*"],
   }),
 );

@@ -53,7 +53,7 @@ export const CreateBatchInferenceJobHttp = Layer.effect(
   makePersonalizeAccountHttpBinding({
     tag: "AWS.Personalize.CreateBatchInferenceJob",
     operation: personalize.createBatchInferenceJob,
-    actions: ["personalize:CreateBatchInferenceJob"],
+    actions: ["personalize:CreateBatchInferenceJob", "personalize:TagResource"],
     passRole: true,
     arns: [
       "arn:${Partition}:personalize:${Region}:${Account}:batch-inference-job/*",

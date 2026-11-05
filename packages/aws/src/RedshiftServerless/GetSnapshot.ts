@@ -42,5 +42,6 @@ export const GetSnapshotHttp = Layer.effect(
     tag: "AWS.RedshiftServerless.GetSnapshot",
     operation: serverless.getSnapshot,
     actions: ["redshift-serverless:GetSnapshot"],
+    arns: ["arn:${Partition}:redshift-serverless:${Region}:${Account}:snapshot/*"],
   }),
 );

@@ -54,5 +54,11 @@ export const GenerateServiceLastAccessedDetailsHttp = Layer.effect(
     capability: "GenerateServiceLastAccessedDetails",
     iamActions: ["iam:GenerateServiceLastAccessedDetails"],
     operation: iam.generateServiceLastAccessedDetails,
+    arns: [
+      "arn:${Partition}:iam::${Account}:group/*",
+      "arn:${Partition}:iam::${Account}:policy/*",
+      "arn:${Partition}:iam::${Account}:role/*",
+      "arn:${Partition}:iam::${Account}:user/*",
+    ],
   }),
 );

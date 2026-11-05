@@ -52,5 +52,9 @@ export const BatchGetIncidentFindingsHttp = Layer.effect(
     tag: "AWS.SSMIncidents.BatchGetIncidentFindings",
     operation: incidents.batchGetIncidentFindings,
     actions: ["ssm-incidents:BatchGetIncidentFindings"],
+    arns: [
+      "arn:${Partition}:ssm-incidents::${Account}:incident-record/*/*",
+      "arn:${Partition}:ssm-incidents::${Account}:response-plan/*",
+    ],
   }),
 );

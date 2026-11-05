@@ -50,5 +50,9 @@ export const ConvertRecoveryPointToSnapshotHttp = Layer.effect(
       "redshift-serverless:ConvertRecoveryPointToSnapshot",
       "redshift-serverless:TagResource",
     ],
+    arns: [
+      "arn:${Partition}:redshift-serverless:${Region}:${Account}:recoverypoint/*",
+      "arn:${Partition}:redshift-serverless:${Region}:${Account}:snapshot/*",
+    ],
   }),
 );

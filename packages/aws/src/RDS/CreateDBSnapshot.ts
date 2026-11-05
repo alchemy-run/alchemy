@@ -49,7 +49,7 @@ export const CreateDBSnapshotHttp = Layer.effect(
   makeRdsInstanceHttpBinding({
     tag: "AWS.RDS.CreateDBSnapshot",
     operation: rds.createDBSnapshot,
-    actions: ["rds:CreateDBSnapshot", "rds:AddTagsToResource"],
+    actions: ["rds:AddTagsToResource", "rds:CreateDBSnapshot"],
     extraResources: (arn) => [`${arn.split(":").slice(0, 5).join(":")}:snapshot:*`],
   }),
 );

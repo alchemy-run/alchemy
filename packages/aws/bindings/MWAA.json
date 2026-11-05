@@ -18,16 +18,14 @@
       "resource": "Environment",
       "request": {
         "mode": "none"
-      },
-      "actions": ["airflow:CreateCliToken"]
+      }
     },
     "GetEnvironment": {
       "operation": "getEnvironment",
       "resource": "Environment",
       "request": {
         "mode": "none"
-      },
-      "actions": ["airflow:GetEnvironment"]
+      }
     }
   }
 }

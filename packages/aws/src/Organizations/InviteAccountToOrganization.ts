@@ -47,7 +47,7 @@ export const InviteAccountToOrganizationHttp = Layer.effect(
   InviteAccountToOrganization,
   makeOrganizationsHttpBinding({
     capability: "InviteAccountToOrganization",
-    iamActions: ["organizations:InviteAccountToOrganization"],
+    iamActions: ["organizations:InviteAccountToOrganization", "organizations:TagResource"],
     operation: organizations.inviteAccountToOrganization,
   }),
 );

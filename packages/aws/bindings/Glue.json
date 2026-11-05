@@ -37,7 +37,6 @@
         "interface": "BatchCreatePartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:BatchCreatePartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -50,7 +49,6 @@
         "interface": "BatchDeletePartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:BatchDeletePartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -63,7 +61,6 @@
         "interface": "BatchGetPartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:BatchGetPartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -76,8 +73,7 @@
         "interface": "BatchStopJobRunRequest",
         "omit": ["JobName"]
       },
-      "builder": "makeGlueJobHttpBinding",
-      "actions": ["glue:BatchStopJobRun"]
+      "builder": "makeGlueJobHttpBinding"
     },
     "BatchUpdatePartition": {
       "operation": "batchUpdatePartition",
@@ -87,7 +83,6 @@
         "interface": "BatchUpdatePartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:BatchUpdatePartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -100,7 +95,6 @@
         "interface": "CreatePartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:CreatePartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -113,7 +107,6 @@
         "interface": "DeletePartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:DeletePartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -124,8 +117,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeGlueCrawlerHttpBinding",
-      "actions": ["glue:GetCrawler"]
+      "builder": "makeGlueCrawlerHttpBinding"
     },
     "GetJobBookmark": {
       "operation": "getJobBookmark",
@@ -136,7 +128,6 @@
         "omit": ["JobName"]
       },
       "builder": "makeGlueJobHttpBinding",
-      "actions": ["glue:GetJobBookmark"],
       "with": {
         "anyResource": true
       },
@@ -150,8 +141,7 @@
         "interface": "GetJobRunRequest",
         "omit": ["JobName"]
       },
-      "builder": "makeGlueJobHttpBinding",
-      "actions": ["glue:GetJobRun"]
+      "builder": "makeGlueJobHttpBinding"
     },
     "GetJobRuns": {
       "operation": "getJobRuns",
@@ -161,8 +151,7 @@
         "interface": "GetJobRunsRequest",
         "omit": ["JobName"]
       },
-      "builder": "makeGlueJobHttpBinding",
-      "actions": ["glue:GetJobRuns"]
+      "builder": "makeGlueJobHttpBinding"
     },
     "GetPartition": {
       "operation": "getPartition",
@@ -172,7 +161,6 @@
         "interface": "GetPartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:GetPartition"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -185,7 +173,6 @@
         "interface": "GetPartitionsRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:GetPartitions"],
       "with": {
         "tableNameKey": "TableName"
       }
@@ -198,12 +185,8 @@
         "interface": "GetTableRequest",
         "omit": ["DatabaseName", "Name", "CatalogId"]
       },
-      "actions": ["glue:GetTable"],
       "with": {
         "tableNameKey": "Name"
-      },
-      "reviewed": {
-        "athena:GetTable": "AWS lists it for the operation, but the Glue Bindings suite calls it successfully without it."
       }
     },
     "GetTables": {
@@ -214,11 +197,7 @@
         "interface": "GetTablesRequest",
         "omit": ["DatabaseName", "CatalogId"]
       },
-      "builder": "makeGlueDatabaseHttpBinding",
-      "actions": ["glue:GetTables"],
-      "reviewed": {
-        "athena:GetTables": "AWS lists it for the operation, but the Glue Bindings suite calls it successfully without it."
-      }
+      "builder": "makeGlueDatabaseHttpBinding"
     },
     "ResetJobBookmark": {
       "operation": "resetJobBookmark",
@@ -229,7 +208,6 @@
         "omit": ["JobName"]
       },
       "builder": "makeGlueJobHttpBinding",
-      "actions": ["glue:ResetJobBookmark"],
       "with": {
         "anyResource": true
       },
@@ -241,8 +219,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeGlueCrawlerHttpBinding",
-      "actions": ["glue:StartCrawler"]
+      "builder": "makeGlueCrawlerHttpBinding"
     },
     "StartJobRun": {
       "operation": "startJobRun",
@@ -252,11 +229,7 @@
         "interface": "StartJobRunRequest",
         "omit": ["JobName"]
       },
-      "builder": "makeGlueJobHttpBinding",
-      "actions": ["glue:StartJobRun"],
-      "reviewed": {
-        "glue:GetUsageProfile": "AWS lists it for the operation, but the Glue Bindings suite calls it successfully without it."
-      }
+      "builder": "makeGlueJobHttpBinding"
     },
     "StopCrawler": {
       "operation": "stopCrawler",
@@ -264,8 +237,7 @@
       "request": {
         "mode": "none"
       },
-      "builder": "makeGlueCrawlerHttpBinding",
-      "actions": ["glue:StopCrawler"]
+      "builder": "makeGlueCrawlerHttpBinding"
     },
     "UpdatePartition": {
       "operation": "updatePartition",
@@ -275,7 +247,6 @@
         "interface": "UpdatePartitionRequest",
         "omit": ["DatabaseName", "TableName", "CatalogId"]
       },
-      "actions": ["glue:UpdatePartition"],
       "with": {
         "tableNameKey": "TableName"
       }

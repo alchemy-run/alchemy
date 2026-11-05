@@ -26,8 +26,7 @@
         "mode": "required",
         "omit": ["AwsAccountId", "DataSetId"],
         "inline": true
-      },
-      "actions": ["quicksight:CancelIngestion"]
+      }
     },
     "CreateIngestion": {
       "operation": "createIngestion",
@@ -36,8 +35,7 @@
         "mode": "required",
         "omit": ["AwsAccountId", "DataSetId"],
         "inline": true
-      },
-      "actions": ["quicksight:CreateIngestion"]
+      }
     },
     "DescribeDashboardSnapshotJob": {
       "operation": "describeDashboardSnapshotJob",
@@ -47,8 +45,7 @@
         "omit": ["AwsAccountId", "DashboardId"],
         "inline": true
       },
-      "builder": "makeQuickSightDashboardHttpBinding",
-      "actions": ["quicksight:DescribeDashboardSnapshotJob"]
+      "builder": "makeQuickSightDashboardHttpBinding"
     },
     "DescribeDashboardSnapshotJobResult": {
       "operation": "describeDashboardSnapshotJobResult",
@@ -58,8 +55,7 @@
         "omit": ["AwsAccountId", "DashboardId"],
         "inline": true
       },
-      "builder": "makeQuickSightDashboardHttpBinding",
-      "actions": ["quicksight:DescribeDashboardSnapshotJobResult"]
+      "builder": "makeQuickSightDashboardHttpBinding"
     },
     "DescribeIngestion": {
       "operation": "describeIngestion",
@@ -68,8 +64,7 @@
         "mode": "required",
         "omit": ["AwsAccountId", "DataSetId"],
         "inline": true
-      },
-      "actions": ["quicksight:DescribeIngestion"]
+      }
     },
     "ListIngestions": {
       "operation": "listIngestions",
@@ -78,8 +73,7 @@
         "mode": "optional",
         "omit": ["AwsAccountId", "DataSetId"],
         "inline": true
-      },
-      "actions": ["quicksight:ListIngestions"]
+      }
     },
     "StartDashboardSnapshotJob": {
       "operation": "startDashboardSnapshotJob",
@@ -89,8 +83,7 @@
         "omit": ["AwsAccountId", "DashboardId"],
         "inline": true
       },
-      "builder": "makeQuickSightDashboardHttpBinding",
-      "actions": ["quicksight:StartDashboardSnapshotJob"]
+      "builder": "makeQuickSightDashboardHttpBinding"
     }
   }
 }

@@ -46,5 +46,6 @@ export const DeleteCallAnalyticsCategoryHttp = Layer.effect(
     tag: "AWS.Transcribe.DeleteCallAnalyticsCategory",
     operation: transcribe.deleteCallAnalyticsCategory,
     actions: ["transcribe:DeleteCallAnalyticsCategory"],
+    arns: ["arn:${Partition}:transcribe:${Region}:${Account}:analytics-category/*"],
   }),
 );

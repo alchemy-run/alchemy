@@ -56,5 +56,6 @@ export const DisassociateLibraryItemReviewHttp = Layer.effect(
     capability: "DisassociateLibraryItemReview",
     iamActions: ["qapps:DisassociateLibraryItemReview"],
     operation: qapps.disassociateLibraryItemReview,
+    arns: ["arn:${Partition}:qapps:${Region}:${Account}:application/*/qapp/*"],
   }),
 );

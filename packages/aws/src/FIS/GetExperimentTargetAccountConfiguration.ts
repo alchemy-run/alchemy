@@ -53,5 +53,6 @@ export const GetExperimentTargetAccountConfigurationHttp = Layer.effect(
     tag: "AWS.FIS.GetExperimentTargetAccountConfiguration",
     operation: fis.getExperimentTargetAccountConfiguration,
     actions: ["fis:GetExperimentTargetAccountConfiguration"],
+    arns: ["arn:${Partition}:fis:${Region}:${Account}:experiment/*"],
   }),
 );

@@ -52,5 +52,6 @@ export const SendBounceHttp = Layer.effect(
     tag: "AWS.SES.SendBounce",
     operation: ses.sendBounce,
     actions: ["ses:SendBounce"],
+    arns: ["arn:${Partition}:ses:${Region}:${Account}:identity/*"],
   }),
 );
