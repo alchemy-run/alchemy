@@ -5822,6 +5822,35 @@ const buildDurableObjectExports = (params: {
  */
 const MAX_SCRIPT_EXPORTS = 100;
 
+/** `bindings` without the Durable Object bindings of `classes` on this script. */
+const withoutClasses = (
+  bindings: ResourceBinding<Worker["Binding"]>[],
+  scriptName: string,
+  classes: ReadonlySet<string>,
+) =>
+  classes.size === 0
+    ? bindings
+    : bindings.map((binding) =>
+        binding.data.bindings === undefined
+          ? binding
+          : {
+              ...binding,
+              data: {
+                ...binding.data,
+                bindings: binding.data.bindings.filter(
+                  (item: WorkerBinding) =>
+                    !(
+                      item.type === "durable_object_namespace" &&
+                      "className" in item &&
+                      item.className !== undefined &&
+                      classes.has(item.className) &&
+                      (item.scriptName === undefined || item.scriptName === scriptName)
+                    ),
+                ),
+              },
+            },
+      );
+
 /**
  * Leave out of the upload each version 0 Domain class whose objects have all
  * moved to the shared class, so the upload deletes it (see
@@ -5869,6 +5898,16 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
     deployedClasses,
   }))
     deployedClasses.add(to);
+  // None of them on the script (a new Worker, or every one deleted): nothing to look up.
+  if (!movers.some((mover) => deployedClasses.has(mover.className)))
+    return {
+      bindings: withoutClasses(
+        bindings,
+        scriptName,
+        new Set(movers.map((mover) => mover.className)),
+      ),
+      dropped: new Set(movers.map((mover) => mover.className)),
+    };
   // The migration Workflow's complete passes: see `DomainVersion.passMarker`.
   const workflowName = bindings
     .flatMap((b) => b.data.bindings ?? [])
@@ -5877,7 +5916,9 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
         item.type === "workflow" && item.className === DomainVersion.MIGRATION_WORKFLOW,
     );
   const passes =
-    workflowName === undefined || !("workflowName" in workflowName)
+    workflowName === undefined ||
+    !("workflowName" in workflowName) ||
+    typeof workflowName.workflowName !== "string"
       ? []
       : Array.from(
           yield* workflowsApi.listInstances
@@ -5904,27 +5945,7 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
     movers.map((mover) => mover.className).filter((className) => !kept.has(className)),
   );
   if (dropped.size === 0) return { bindings, dropped };
-  const remaining = bindings.map((binding) =>
-    binding.data.bindings === undefined
-      ? binding
-      : {
-          ...binding,
-          data: {
-            ...binding.data,
-            bindings: binding.data.bindings.filter(
-              (item: WorkerBinding) =>
-                !(
-                  item.type === "durable_object_namespace" &&
-                  "className" in item &&
-                  item.className !== undefined &&
-                  dropped.has(item.className) &&
-                  (item.scriptName === undefined || item.scriptName === scriptName)
-                ),
-            ),
-          },
-        },
-  );
-  return { bindings: remaining, dropped };
+  return { bindings: withoutClasses(bindings, scriptName, dropped), dropped };
 });
 
 /**
