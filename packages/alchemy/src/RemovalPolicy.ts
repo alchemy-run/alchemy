@@ -139,22 +139,12 @@ export const destroy: {
  * @param enabled `true` (the default) protects; `false` leaves the policy
  *   unchanged. May also be an `Effect` producing the boolean.
  */
-export const protect: {
-  (
-    enabled?: boolean,
-  ): <R, Req = never>(enabled: Effect.Effect<R, never, Req>) => Effect.Effect<R, never, Req>;
-  <Req = never>(
-    enabled: Effect.Effect<boolean, never, Req>,
-  ): <R, Req2 = never>(a: Effect.Effect<R, never, Req2>) => Effect.Effect<R, never, Req | Req2>;
-} = ((enabled: boolean | Effect.Effect<boolean, never, any> = true) =>
-  (eff: Effect.Effect<any, never, any>) =>
-    typeof enabled === "boolean"
-      ? enabled
-        ? eff.pipe(Effect.provideService(RemovalPolicy, "protect"))
-        : eff
-      : Effect.flatMap(enabled, (a) =>
-          a ? eff.pipe(Effect.provideService(RemovalPolicy, "protect")) : eff,
-        )) as any;
+export const protect =
+  <Req = never>(enabled: boolean | Effect.Effect<boolean, never, Req> = true) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R | Req> =>
+    Effect.flatMap(Effect.isEffect(enabled) ? enabled : Effect.succeed(enabled), (on) =>
+      on ? Effect.provideService(effect, RemovalPolicy, "protect") : effect,
+    );
 
 /**
  * Raised by `Plan.make` when the plan would replace or delete resources whose
