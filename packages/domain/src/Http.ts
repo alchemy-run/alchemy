@@ -5,7 +5,9 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
+import * as HttpEffect from "effect/http/HttpEffect";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
@@ -214,6 +216,14 @@ const live = Effect.fn(function* (
   );
 });
 
+/**
+ * Every answer is for one caller (middleware reads its session, a query's
+ * `visible` filters its rows) and is stale after the next write, so no cache
+ * may keep it, shared or private.
+ */
+const noStore: HttpEffect.PreResponseHandler = (_request, response) =>
+  Effect.succeed(HttpServerResponse.setHeader(response, "cache-control", "private, no-store"));
+
 /** A call that answers once, through a client that lives for the request. */
 const once = Effect.fn(function* (
   client: Effect.Effect<Client, never, Scope.Scope>,
@@ -326,6 +336,9 @@ const endpointOf = (
  * ends the stream with an `effect/http-api/stream/failure` event whose
  * `data` is the typed failure.
  *
+ * Every response carries `cache-control: private, no-store`: it is for one
+ * caller, and stale after the next write.
+ *
  * Every call goes through the Api's own handlers in process, with the HTTP
  * request's headers, so its middleware, its checks and its rejections run as
  * for any client, and its input is decoded once. A read's `where` filter is
@@ -402,12 +415,13 @@ export const toHttpApi = <A extends Publishable>(
         const declaredOnly = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
           Effect.catchIf(effect, (error) => !isDeclared(error), Effect.die);
         handlers = handlers.handle(operation.rpc._tag, (request: DecodedRequest) =>
-          operation.stream
+          (operation.stream
             ? live(client, operation, request).pipe(
                 declaredOnly,
                 Effect.map(Stream.catchIf((error) => !isDeclared(error), Stream.die)),
               )
-            : once(client, operation, request).pipe(declaredOnly, Effect.scoped),
+            : once(client, operation, request).pipe(declaredOnly, Effect.scoped)
+          ).pipe(HttpEffect.withPreResponseHandler(noStore)),
         );
       }
       return handlers;

@@ -339,6 +339,32 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(Served)),
   );
 
+  it.live(
+    "no cache may keep an answer: every response, success or failure, is private and no-store",
+    () =>
+      Effect.gen(function* () {
+        const responses = [
+          yield* execute("POST", "/Deposit", {
+            owner: "sam",
+            body: { target: "w-cache", input: { amount: 1, at } },
+          }),
+          yield* execute("QUERY", "/Rates", { owner: "sam", body: { input: { base: "USD" } } }),
+          yield* execute("QUERY", "/Rates", { owner: "sam", body: { input: { base: "XYZ" } } }),
+          yield* execute("QUERY", "/Rates", { body: { input: { base: "USD" } } }),
+          yield* execute("GET", "/Balance/w-cache", { owner: "sam" }),
+          yield* execute("GET", "/Balance/w-cache/watch", { owner: "sam" }),
+        ];
+        // Read the watch's first event, so its stream closes before the server stops.
+        yield* responses[5]!.stream.pipe(Stream.take(1), Stream.runDrain);
+        expect(responses.map((response) => response.status)).toEqual([
+          200, 200, 422, 401, 200, 200,
+        ]);
+        for (const response of responses) {
+          expect(response.headers["cache-control"]).toBe("private, no-store");
+        }
+      }).pipe(Effect.provide(Served)),
+  );
+
   it.live("a read endpoint answers with the key's state, read after a write", () =>
     Effect.gen(function* () {
       const { body: receipt } = yield* send("POST", "/Deposit", {
