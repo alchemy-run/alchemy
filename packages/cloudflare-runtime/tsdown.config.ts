@@ -47,6 +47,9 @@ const workerConfig = (
   },
 });
 
+// Declarations are emitted by tsrs, the same checker `pnpm typecheck` runs.
+const DTS = { incremental: false, generator: "tsrs" } as const;
+
 export default defineConfig([
   {
     cwd: ".",
@@ -55,7 +58,7 @@ export default defineConfig([
     outDir: "dist/rolldown",
     tsconfig: "tsconfig.json",
     unbundle: true,
-    dts: { incremental: false },
+    dts: DTS,
     shims: false,
     sourcemap: true,
     target: "esnext",
@@ -98,7 +101,7 @@ export default defineConfig([
     outDir: "dist/core/node",
     tsconfig: "tsconfig.json",
     unbundle: true,
-    dts: { incremental: false },
+    dts: DTS,
     shims: false,
     target: "esnext",
     format: "esm",
@@ -148,7 +151,7 @@ export default defineConfig([
     exports: false,
     outDir: "dist/vite/node",
     tsconfig: "tsconfig.json",
-    dts: { incremental: false },
+    dts: DTS,
     shims: false,
     target: "esnext",
     format: "esm",
