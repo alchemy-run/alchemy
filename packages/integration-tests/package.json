@@ -22,7 +22,6 @@
     "@alchemy.run/git": "workspace:*",
     "@alchemy.run/github": "workspace:*",
     "@alchemy.run/hetzner": "workspace:*",
-    "@alchemy.run/infisical": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/neon": "workspace:*",
     "@alchemy.run/planetscale": "workspace:*",

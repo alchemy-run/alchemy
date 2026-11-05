@@ -10196,9 +10196,6 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../hetzner
-      '@alchemy.run/infisical':
-        specifier: workspace:*
-        version: link:../infisical
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
