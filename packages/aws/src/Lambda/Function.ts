@@ -1468,10 +1468,10 @@ export const Function: Platform<
                       Layer.effectContext(
                         buildEventTelemetry(services, scope, (ctx as FunctionContext).telemetry),
                       ),
-                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                    ),
                   ),
                   Effect.tap(Effect.logDebug),
-                  Effect.runPromiseExit,
+                  Effect.runPromiseExitWith(services),
                 );
                 if (!isScopeEjected(scope)) {
                   // The HttpMiddleware tracer ends the request's root span
@@ -1484,7 +1484,7 @@ export const Function: Platform<
                       log: "Warn",
                       message: "Lambda invocation scope close failed",
                     }),
-                    Effect.runPromise,
+                    Effect.runPromiseWith(services),
                   );
                 }
                 if (deadline.fired) {
