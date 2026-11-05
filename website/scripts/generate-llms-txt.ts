@@ -511,6 +511,7 @@ const SECTIONS: Section[] = [
         "neon/index",
         "neon/what-is-neon",
         "neon/setup",
+        "neon/organizations-and-keys",
         "neon/functions",
         "neon/storage",
         "neon/governance",

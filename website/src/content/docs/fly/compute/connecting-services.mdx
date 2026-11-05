@@ -21,7 +21,7 @@ Two things decide who can call a Service. The first is the **network**. Every Ap
   caption="All three Services sit on the stack's own network. Only the Gateway has a public address, and a Service can call another only if it binds it and so holds its caller token."
 />
 
-This guide builds the
+Take the
 [fly-microservices example](https://github.com/alchemy-run/alchemy/tree/main/examples/fly-microservices):
 a private `Users` Service, a private `Orders` Service that calls
 `Users`, and a public `Gateway` that calls both.
