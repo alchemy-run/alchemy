@@ -24,6 +24,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -369,7 +370,7 @@ export const RecordSetProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const zoneId = output?.zoneId ?? zoneIdOf(olds?.zone);
       const name =
         output?.name ?? (olds?.name !== undefined ? normalizeName(olds.name) : undefined);
@@ -384,6 +385,20 @@ export const RecordSetProvider = () =>
         current = yield* findByLabels(zoneId, id);
       }
       if (current === undefined) return undefined;
+      // A record set is identified by its name and type.
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: current.id,
+          claimedName:
+            olds?.name !== undefined && olds?.type !== undefined
+              ? `${normalizeName(olds.name)}/${normalizeType(olds.type)}`
+              : undefined,
+          foundName: `${current.name}/${current.type}`,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(current);
       return (yield* hasAlchemyLabels(id, tagRecord(current.labels))) ? attrs : Unowned(attrs);
     }),
