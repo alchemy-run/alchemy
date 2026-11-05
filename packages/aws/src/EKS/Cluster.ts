@@ -357,7 +357,7 @@ const loggingByType = (logging: eks.Logging | undefined) => {
 };
 
 interface ClusterConfigUpdate {
-  /** Stable category slug — also feeds the per-category idempotency token. */
+  /** Stable category slug, used in progress notes. */
   category: string;
   request: Omit<eks.UpdateClusterConfigRequest, "name" | "clientRequestToken">;
 }
