@@ -31,7 +31,6 @@ import {
   UnknownWait,
   UnknownStream,
   UnmatchedRoute,
-  VisibleWithoutPaging,
   WriterKeyMismatch,
 } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
@@ -686,7 +685,6 @@ const build = (
     if (callNames.has(name)) problem(new DuplicateName({ entity: name }));
     const def = query.definition;
     if (def.paged && !def.success) problem(new PagedWithoutSuccess({ query: name }));
-    if (def.visible && !def.paged) problem(new VisibleWithoutPaging({ query: name }));
     for (const projection of def.waitsFor ?? []) {
       if (projectionByName.get(projection.projectionName) !== projection) {
         problem(new UnknownWait({ query: name, projection: projection.projectionName }));

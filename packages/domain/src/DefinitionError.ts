@@ -353,15 +353,6 @@ export class PagedWithoutSuccess extends Data.TaggedError("PagedWithoutSuccess")
   }
 }
 
-/** A query declares `visible` but is not `paged`: only the entries of a page are judged. */
-export class VisibleWithoutPaging extends Data.TaggedError("VisibleWithoutPaging")<{
-  readonly query: string;
-}> {
-  override get message() {
-    return `Query '${this.query}' declares \`visible\` but is not \`paged\`: only the entries of a page are judged`;
-  }
-}
-
 /** A query waits for a projection the Domain does not list. */
 export class UnknownWait extends Data.TaggedError("UnknownWait")<{
   readonly query: string;
@@ -408,7 +399,6 @@ export type Reason =
   | ModelHostedTwice
   | LazyViewNeedsOneSource
   | PagedWithoutSuccess
-  | VisibleWithoutPaging
   | UnknownWait;
 
 /**

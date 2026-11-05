@@ -101,15 +101,13 @@ export interface Members<
  *
  * `Provided` is every aggregate, view, stream and projection-progress service
  * the Model provides; `Policies` is every policy, projection and query whose
- * implementation `layer` requires; `Missing` is any member a query reads that
- * the Model does not host.
+ * implementation `layer` requires.
  */
 export interface ModelClass<
   Name extends string,
   Provided,
   Policies,
   Parts extends Servable = Servable,
-  Missing = never,
 > {
   new (_: never): {};
   readonly kind: "Model";
@@ -138,7 +136,7 @@ export interface ModelClass<
   ): Layer.Layer<
     Provided | Internals,
     E,
-    Platform | SecureRandom.SecureRandom | Exclude<R, Provided> | Missing
+    Platform | SecureRandom.SecureRandom | Exclude<R, Provided>
   >;
 }
 
@@ -289,13 +287,7 @@ export const make = <
   name: Name,
   members: Members<A, V, P, J, S, G, Q>,
   annotations: Annotations = {},
-): ModelClass<
-  Name,
-  ProvidedBy<A, V, J, S, G>,
-  HandledBy<P, J, G, Q>,
-  ServableBy<A, V, S, Q>,
-  Exclude<Query.NeedsOf<Q[number]>, ProvidedBy<A, V, J, S, G>>
-> => {
+): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G, Q>, ServableBy<A, V, S, Q>> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
@@ -335,8 +327,7 @@ export const make = <
     Name,
     ProvidedBy<A, V, J, S, G>,
     HandledBy<P, J, G, Q>,
-    ServableBy<A, V, S, Q>,
-    Exclude<Query.NeedsOf<Q[number]>, ProvidedBy<A, V, J, S, G>>
+    ServableBy<A, V, S, Q>
   >;
 };
 

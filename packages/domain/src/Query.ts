@@ -34,16 +34,6 @@ export type AtLeastInput = AtLeast | ReadonlyArray<AtLeast>;
 export const receiptsOf = (atLeast: AtLeastInput | undefined): ReadonlyArray<AtLeast> =>
   atLeast === undefined ? [] : Array.isArray(atLeast) ? atLeast : [atLeast as AtLeast];
 
-/** What `validate` sees besides the input. */
-export interface Request {
-  /**
-   * The writes the client asked to read at least, one receipt each; empty
-   * when it passed none. A view's `query` takes the receipt of a command on
-   * the view's own key.
-   */
-  readonly atLeast: ReadonlyArray<AtLeast>;
-}
-
 /** The page a paged query's handler is asked for. */
 export interface PageRequest {
   /** The cursor of the previous page, or `undefined` for the first. */
@@ -67,14 +57,6 @@ export interface Take {
   readonly max?: number;
 }
 
-/** What `validate` and `visible` may read besides what the middleware provides: the model's members. */
-export type Member =
-  | Aggregate.Key<string>
-  | View.ViewKey<string>
-  | DomainStream.StreamKey<string>
-  | Saga.SagaKey<string>
-  | Projection.ProgressKey<string>;
-
 /** A query's result: its `success`, or a page of them when it is `paged`. */
 export type ResultType<P extends boolean, S> = S extends Schema.Top
   ? P extends true
@@ -85,17 +67,13 @@ export type ResultType<P extends boolean, S> = S extends Schema.Top
 /** What a query's handler receives besides the input: the page, for a paged query. */
 export type PageOf<P extends boolean> = P extends true ? PageRequest : undefined;
 
-type EntryType<P extends boolean, S> = P extends true
-  ? S extends Schema.Top
-    ? S["Type"]
-    : never
-  : never;
-
 /**
- * A query's handler: one run, for one request. Resolve your store while
- * building it, in `toLayer`; the handler may only need what the query's
- * middleware provides (to scope the store by the caller) and the runtime it
- * runs in (`RuntimeContext`), as a database binding does.
+ * A query's handler: one run, for one request. Resolve your store and the
+ * model members it reads (a view's client, say) while building it, in
+ * `toLayer`; the handler may only need what the query's middleware provides
+ * (who is asking) and the runtime it runs in (`RuntimeContext`), as a
+ * database binding does. It checks who may ask by failing with one of the
+ * query's rejections, and returns only the rows the caller may see.
  */
 export type Handler<I, Result, E, Ctx, Page> = (
   input: I,
@@ -125,8 +103,6 @@ export interface AnyDefinition {
   readonly waitsFor?: ReadonlyArray<Projection.Any>;
   readonly middleware?: Middleware.List;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
-  readonly validate?: (input: never, request: Request) => Effect.Effect<void, unknown, unknown>;
-  readonly visible?: (entry: never, input: never) => Effect.Effect<boolean, unknown, unknown>;
 }
 
 /**
@@ -143,8 +119,6 @@ export interface Any extends Context.Key<unknown, unknown> {
   readonly "~input": unknown;
   /** Type-level only: the decoded result. */
   readonly "~result": unknown;
-  /** Type-level only: what `validate` and `visible` read from the model. */
-  readonly "~needs": unknown;
 }
 
 /** The requirement identifier of a query class. */
@@ -153,8 +127,6 @@ export type Identifier<Q extends Any> = Q extends Context.Key<infer I, unknown> 
 export type InputOf<Q extends Any> = Q["~input"];
 /** The decoded result of a query class. */
 export type ResultOf<Q extends Any> = Q["~result"];
-/** The model members a query's `validate` and `visible` read. */
-export type NeedsOf<Q extends Any> = Q extends Any ? Q["~needs"] : never;
 
 /**
  * What running a query can fail with, besides its middleware's errors: its
@@ -174,7 +146,9 @@ export interface QueryKey<Name extends string> {
 }
 
 /**
- * The pure declaration of a query: its message, and how it is authorized.
+ * The declaration of a query: its message, the middleware that guards it,
+ * and the rejections it may fail with. Its handler, on its Layer, does the
+ * rest.
  */
 export interface Definition<
   F extends Fields,
@@ -183,8 +157,6 @@ export interface Definition<
   From extends ReadonlyArray<Projection.Any>,
   Ms extends Middleware.List,
   Rejects extends ReadonlyArray<Rejection.Any>,
-  RV,
-  RS,
 > {
   /** The query's fields. Filters, sort orders and scopes are fields too. */
   readonly input?: F;
@@ -210,48 +182,31 @@ export interface Definition<
   readonly waitsFor?: From;
   /**
    * Middleware that guards the query when an Api exposes it, in order. What
-   * it provides is what `validate`, `visible` and the handler may read.
+   * it provides is what the handler may read: who is asking.
    */
   readonly middleware?: Ms;
-  /** The rejections the query may fail with; they reach the client typed. */
+  /**
+   * The rejections the query may fail with; they reach the client typed.
+   * The handler fails with one to refuse a caller.
+   */
   readonly rejects?: Rejects;
-  /**
-   * Judge the request, before the store is read: may the caller (what
-   * `middleware` provides) ask this? It may read the model's views,
-   * aggregates and streams. Without it, anyone who reaches the Api may ask.
-   */
-  readonly validate?: (
-    input: Data<F>,
-    request: Request,
-  ) => Effect.Effect<void, Aggregate.InstanceOf<Rejects[number]>, RV>;
-  /**
-   * Judge each entry of a paged result: entries it refuses are dropped, never
-   * rejected, so a page may hold fewer than `take` and still have a `cursor`.
-   * The handler should scope its store by the caller; this is the guarantee
-   * that no other entry gets out. Keep it cheap: it runs per entry.
-   */
-  readonly visible?: (entry: EntryType<P, S>, input: Data<F>) => Effect.Effect<boolean, never, RS>;
 }
 
 /**
  * A question a client asks across keys, answered from a store you own: the
  * table, index or warehouse a {@link Projection} writes. Where a view is one
  * key's read model, a query is a message, like a command: it declares its
- * input, its result, the middleware that guards it, the rejections it may
- * return, and who may ask (`validate`) and see each row (`visible`). Its
- * Layer reads the store. List it in the model's `queries`, and in an Api to
- * give clients a typed method.
+ * input, its result, the middleware that guards it, and the rejections it
+ * may return. Its Layer is one handler: it checks who may ask, then reads
+ * the store, scoped to what the caller may see. List it in the model's
+ * `queries`, and in an Api to give clients a typed method.
  *
  * ### Declaring a query
  * **Example:** An account's ledger, a page at a time
  * ```typescript
  * import * as Domain from "@alchemy.run/domain";
- * import * as Effect from "effect/Effect";
- * import * as Option from "effect/Option";
  * import * as Schema from "effect/Schema";
- * import { Account, AccountId } from "./Account.ts";
- * import { AccountSummary } from "./AccountSummary.ts";
- * import { CurrentActor } from "./CurrentActor.ts";
+ * import { AccountId } from "./Account.ts";
  * import { Ledger } from "./Ledger.ts";
  * import { NotOwner } from "./NotOwner.ts";
  * import { Session } from "./Session.ts";
@@ -265,27 +220,29 @@ export interface Definition<
  *   waitsFor: [Ledger],
  *   middleware: [Session],
  *   rejects: [NotOwner],
- *   validate: Effect.fn(function* ({ account }) {
- *     const actor = yield* CurrentActor;
- *     const summary = yield* (yield* AccountSummary).query(Account.ref(account)).pipe(Effect.orDie);
- *     const owner = Option.getOrNull(summary)?.customerId;
- *     if (owner && owner !== actor.customerId) return yield* new NotOwner();
- *   }),
  * }) {}
  * ```
  *
  * ### Implementing it
- * The construction Effect runs once and resolves the store. The handler gets
- * the input and, for a paged query, the page asked for; it returns the
- * entries and the cursor of the next page (`null` on the last, never a
- * short page).
+ * The construction Effect runs once and resolves the store and any model
+ * member the handler reads. The handler gets the input and, for a paged
+ * query, the page asked for. It refuses a caller by failing with one of the
+ * query's rejections, and returns the entries and the cursor of the next
+ * page (`null` on the last, never a short page).
  *
- * **Example:** Reading the projection's store
+ * **Example:** Checking the caller, then reading the projection's store
  * ```typescript
  * export const AccountLedgerLive = AccountLedger.toLayer(
  *   Effect.gen(function* () {
  *     const store = yield* LedgerStore;
- *     return ({ account }, page) => store.forAccount(account, page);
+ *     const summaries = yield* AccountSummary;
+ *     return Effect.fn(function* ({ account }, page) {
+ *       const actor = yield* CurrentActor;
+ *       const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
+ *       const owner = Option.getOrNull(summary)?.customerId;
+ *       if (owner && owner !== actor.customerId) return yield* new NotOwner();
+ *       return yield* store.forAccount(account, page);
+ *     });
  *   }),
  * );
  * ```
@@ -316,8 +273,7 @@ export interface Definition<
  * model, read back as `X.annotations`. Add your own keys by augmenting
  * `Domain.Annotations`.
  *
- * The MCP, CLI and OpenAPI surfaces don't serve queries yet, so it is for
- * the people and the tools that read the model, as `X.annotations`.
+ * An Api's MCP tools, CLI help and OpenAPI document show its `description`.
  *
  * **Example:** A description
  * ```typescript
@@ -338,21 +294,18 @@ export const make = <
   const From extends ReadonlyArray<Projection.Any> = readonly [],
   const Ms extends Middleware.List = readonly [],
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-  RV extends Middleware.Provides<Ms> | Member = never,
-  RS extends Middleware.Provides<Ms> | Member = never,
 >(
   name: Name,
-  definition: Definition<F, P, S, From, Ms, Rejects, RV, RS>,
+  definition: Definition<F, P, S, From, Ms, Rejects>,
   annotations: Annotations = {},
 ): QueryClass<
   Name,
-  Definition<F, P, S, From, Ms, Rejects, RV, RS>,
+  Definition<F, P, S, From, Ms, Rejects>,
   Data<F>,
   ResultType<P, S>,
   PageOf<P>,
   Aggregate.InstanceOf<Rejects[number]>,
-  Ms,
-  Exclude<RV | RS, Middleware.Provides<Ms>>
+  Ms
 > => {
   const rejects = definition.rejects ?? [];
   const errors: ReadonlyArray<Schema.Top> = [
@@ -395,13 +348,12 @@ export const make = <
     }
   } as unknown as QueryClass<
     Name,
-    Definition<F, P, S, From, Ms, Rejects, RV, RS>,
+    Definition<F, P, S, From, Ms, Rejects>,
     Data<F>,
     ResultType<P, S>,
     PageOf<P>,
     Aggregate.InstanceOf<Rejects[number]>,
-    Ms,
-    Exclude<RV | RS, Middleware.Provides<Ms>>
+    Ms
   >;
 };
 
@@ -416,7 +368,6 @@ export interface QueryClass<
   Page,
   Rejected,
   Ms extends Middleware.List,
-  Needs,
 > extends Context.ServiceClass<QueryKey<Name>, string, Implementation> {
   readonly kind: "Query";
   readonly annotations: Annotations;
@@ -428,11 +379,11 @@ export interface QueryClass<
   readonly rpc: Rpc.Any;
   readonly "~input": I;
   readonly "~result": Result;
-  readonly "~needs": Needs;
   /**
    * Implement the query. The construction Effect runs once, resolving your
-   * store; the handler may only need what the middleware provides. The
-   * options tune how it runs: page size limits.
+   * store and the model members the handler reads; the handler may only need
+   * what the middleware provides. The options tune how it runs: page size
+   * limits.
    */
   toLayer<E, R>(
     build: Effect.Effect<Handler<I, Result, Rejected, Middleware.Provides<Ms>, Page>, E, R>,
@@ -447,14 +398,14 @@ export interface RunOptions {
   readonly atLeast?: AtLeastInput;
 }
 
-/** A hosted query: `validate`, the `atLeast` wait, the handler, then `visible`. @internal */
+/** A hosted query: the `atLeast` wait, then the handler. @internal */
 export interface Host {
   readonly run: (input: unknown, options: RunOptions) => Effect.Effect<unknown, unknown>;
 }
 
 /**
- * Host a query: run it with the model's members available to `validate` and
- * `visible`, traced as `Domain.query <Name>` and counted by outcome.
+ * Host a query: wait for the caller's writes, run its handler, traced as
+ * `Domain.query <Name>` and counted by outcome.
  *
  * @internal
  */
@@ -469,18 +420,10 @@ export const host = (
   const take = implementation.options.take;
   const max = Math.max(1, Math.floor(take?.max ?? 500));
   const fallback = Math.min(max, Math.max(1, Math.floor(take?.default ?? 50)));
-  const validate = def.validate as
-    | ((input: unknown, request: Request) => Effect.Effect<void, unknown>)
-    | undefined;
-  const visible = def.visible as
-    | ((entry: unknown, input: unknown) => Effect.Effect<boolean>)
-    | undefined;
   return {
     run: (input, { after, take, atLeast }) =>
       Effect.gen(function* () {
         const receipts = receiptsOf(atLeast);
-        // Judge the request first: a refused caller never waits on a projection.
-        if (validate) yield* validate(input, { atLeast: receipts });
         // Every receipt, through every projection: each command's events name its own keys.
         for (const receipt of receipts) {
           for (const projection of def.waitsFor ?? []) {
@@ -502,14 +445,8 @@ export const host = (
           after,
           take: size,
         })) as Page<unknown>;
-        const shown = visible
-          ? yield* Effect.filter(page.entries, (entry) => visible(entry, input))
-          : page.entries;
-        yield* Effect.annotateCurrentSpan({
-          "domain.query.rows": shown.length,
-          "domain.query.hidden": page.entries.length - shown.length,
-        });
-        return { entries: shown, cursor: page.cursor };
+        yield* Effect.annotateCurrentSpan("domain.query.rows", page.entries.length);
+        return page;
       }).pipe(
         // The model's members fill in under the request's own services.
         Effect.updateContext((context: Context.Context<never>) =>

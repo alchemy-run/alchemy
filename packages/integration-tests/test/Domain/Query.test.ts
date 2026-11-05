@@ -143,7 +143,7 @@ const ViewerSessionLive = Layer.succeed(ViewerSession, (effect, { headers }) =>
 
 // ---------------------------------------------------------------- the queries
 
-/** One wallet's movements, for its owner: authorized per request. */
+/** One wallet's movements, for its owner: the handler checks who asks, then reads. */
 class WalletMovements extends Domain.Query("WalletMovements", {
   input: { wallet: Schema.String },
   success: Movement,
@@ -151,39 +151,36 @@ class WalletMovements extends Domain.Query("WalletMovements", {
   waitsFor: [Ledger],
   middleware: [ViewerSession],
   rejects: [NotYours],
-  validate: Effect.fn(function* ({ wallet }) {
-    const viewer = yield* Viewer;
-    const owners = yield* WalletOwner;
-    const owner = Option.getOrNull(yield* owners.query(Wallet.ref(wallet)).pipe(Effect.orDie));
-    if (owner && owner.owner !== viewer) return yield* new NotYours({ wallet });
-  }),
 }) {}
 const WalletMovementsLive = WalletMovements.toLayer(
   Effect.gen(function* () {
     const movements = yield* Movements;
-    return ({ wallet }, page) => movements.page((row) => row.wallet === wallet, page);
+    const owners = yield* WalletOwner;
+    return Effect.fn(function* ({ wallet }, page) {
+      const viewer = yield* Viewer;
+      const owner = Option.getOrNull(yield* owners.query(Wallet.ref(wallet)).pipe(Effect.orDie));
+      if (owner && owner.owner !== viewer) return yield* new NotYours({ wallet });
+      return yield* movements.page((row) => row.wallet === wallet, page);
+    });
   }),
   { take: { default: 2, max: 3 } },
 );
 
-/** Large movements across every wallet: each row judged on its own. */
+/** Large movements across every wallet, scoped to the viewer's own. */
 class LargeMovements extends Domain.Query("LargeMovements", {
   input: { min: Schema.Number, note: Schema.Redacted(Schema.String) },
   success: Movement,
   paged: true,
   middleware: [ViewerSession],
-  visible: Effect.fn(function* (row) {
-    return row.owner === (yield* Viewer);
-  }),
 }) {}
-// Forgets to scope by the viewer: `visible` still keeps other owners' rows out.
 const LargeMovementsLive = LargeMovements.toLayer(
   Effect.gen(function* () {
     const movements = yield* Movements;
     return Effect.fn(function* ({ min }, page) {
       // The handler records what it wants on the query's span.
       yield* Effect.annotateCurrentSpan("query.min", min);
-      return yield* movements.page((row) => row.amount >= min, page);
+      const viewer = yield* Viewer;
+      return yield* movements.page((row) => row.amount >= min && row.owner === viewer, page);
     });
   }),
 );
@@ -273,7 +270,7 @@ const recording = () => {
 };
 
 describe("Domain Query", { tags: ["unit", "local"] }, () => {
-  it.effect("reads rows a projection wrote, and refuses who validate refuses", () =>
+  it.effect("reads rows a projection wrote, and refuses who the handler refuses", () =>
     story(
       Story.given(sam, new Opened({ owner: "sam" })),
       Story.when(sam, new Deposit({ amounts: [10, 20] })),
@@ -320,7 +317,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
     ).pipe(Effect.provide(Movements.memory)),
   );
 
-  it.effect("visible keeps rows the caller may not see out of a cross-key result", () =>
+  it.effect("a handler scopes a cross-key result to what the caller may see", () =>
     Effect.gen(function* () {
       const { tracer, named } = recording();
       yield* story(
@@ -335,7 +332,6 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
       ).pipe(Effect.provide(Movements.memory), Effect.withTracer(tracer));
       const [span] = named("Domain.query LargeMovements");
       expect(span!.attributes.get("domain.query.rows")).toBe(1);
-      expect(span!.attributes.get("domain.query.hidden")).toBe(1);
       expect(span!.attributes.get("domain.outcome")).toBe("ok");
       // Only what the handler annotates is recorded.
       expect(span!.attributes.get("query.min")).toBe(100);
@@ -527,19 +523,14 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
 
   it("verify reports every query problem without hosting the model", () => {
     class Pages extends Domain.Query("Pages", { paged: true }) {}
-    class Judged extends Domain.Query("Judged", {
-      success: Schema.Number,
-      visible: () => Effect.succeed(true),
-    }) {}
     class Named extends Domain.Query("WalletOwner", { success: Schema.Number }) {}
     class Broken extends Domain.Model("QueryBroken", {
       aggregates: [Wallet],
       views: [WalletOwner],
-      queries: [Pages, Judged, Named, Total, Total],
+      queries: [Pages, Named, Total, Total],
     }) {}
     expect(Domain.verify(Broken).map((problem) => problem.message)).toEqual([
       "Query 'Pages' is `paged` but declares no `success`: name the schema of one entry",
-      "Query 'Judged' declares `visible` but is not `paged`: only the entries of a page are judged",
       "Two entities are named 'WalletOwner'",
       "Total waits for Ledger, which is not in the Domain",
       "Duplicate query 'Total'",
@@ -648,7 +639,7 @@ describe("Domain Query through Foldkit", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const wallets = yield* Wallet;
       const opened = yield* wallets.send(sam, new Open({ owner: "sam" }));
-      // `validate` reads this view: wait for it so the refusal is certain.
+      // The handler reads this view: wait for it so the refusal is certain.
       const owners = yield* WalletOwner;
       yield* owners.query(sam, { atLeast: opened }).pipe(Effect.orDie);
       const rejected = yield* Wallets$.WalletMovements({

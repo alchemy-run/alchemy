@@ -188,8 +188,6 @@ export declare namespace Query {
   export type Page<Row> = QueryModule.Page<Row>;
   /** The page a paged query's handler is asked for. */
   export type PageRequest = QueryModule.PageRequest;
-  /** What `validate` sees besides the input. */
-  export type Request = QueryModule.Request;
   /** How a query's Layer runs it: page size limits. */
   export type LayerOptions = QueryModule.LayerOptions;
 }
