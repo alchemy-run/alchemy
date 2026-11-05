@@ -293,9 +293,8 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  *
  * An instance's calls run in parallel, storage included: unlike Cloudflare,
  * there is no input gate. Make a read-then-write atomic with
- * `state.storage.transaction(...)`, or provide the `InputGate` Layer from
- * `alchemy/Workers/InputGate` to run code written for Cloudflare's gate
- * unchanged.
+ * `state.storage.transaction(...)`, or provide `Workers.InputGate` (from
+ * `alchemy/Workers`) to run code written for Cloudflare's gate unchanged.
  *
  * ### Declaring a Durable Object
  * **Example:** A counter on a local pool

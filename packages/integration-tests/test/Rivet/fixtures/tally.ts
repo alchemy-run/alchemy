@@ -6,7 +6,7 @@
  * replaced while it fires.
  *
  * `Tally` runs its calls fully in parallel; `GatedTally` (gated-tally.ts)
- * is the same class given the `InputGate` Layer.
+ * is the same class given `Workers.InputGate`.
  */
 import * as Rivet from "@alchemy.run/rivet";
 import * as Data from "effect/Data";

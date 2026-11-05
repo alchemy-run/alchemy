@@ -53,9 +53,9 @@ export interface BaseRuntimeContext {
    */
   telemetry?: Layer.Layer<never, any, any>;
   /**
-   * Set during init by providing the `InputGate` Layer
-   * (`alchemy/Workers/InputGate`): the Durable Object bridge gives each
-   * instance an input gate.
+   * Set during init by providing the `Workers.InputGate` Layer
+   * (`alchemy/Workers`): the Durable Object bridge gives each instance an
+   * input gate.
    */
   inputGate?: boolean;
   /**

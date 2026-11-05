@@ -147,7 +147,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           instance = makeDurableObjectInstance({
             build: () => Promise.resolve(build),
             // RivetKit runs an actor's calls concurrently over async
-            // storage; a class given the `InputGate` Layer gets a gate per
+            // storage; a class given `Workers.InputGate` gets a gate per
             // instance from the bridge.
             services: Context.make(DurableObjectState, makeDurableObjectState(c, activation)).pipe(
               // Construction runs under the activation's construction

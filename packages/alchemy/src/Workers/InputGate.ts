@@ -21,7 +21,8 @@
  * of it after it returns, so a background loop started by the constructor
  * is gated as one long call.
  *
- * It's opt-in: provide the {@link InputGate} Layer to a Durable Object
+ * It's opt-in: provide the {@link InputGate} Layer (`Workers.InputGate`,
+ * from `alchemy/Workers`) to a Durable Object
  * class's outer Effect, and the Durable Object bridge gives each of its
  * instances a gate. Storage goes through the gate where the engine wraps
  * its operations in {@link gateStorage}. Cloudflare has a gate of its own,
@@ -201,7 +202,7 @@ export const makeInputGate: Effect.Effect<InputGateShape> = Effect.sync(() => {
  * ### Running Cloudflare code unchanged
  * **Example:** A get-then-put counter on Rivet that loses no updates
  * ```typescript
- * import { InputGate } from "alchemy/Workers/InputGate";
+ * import * as Workers from "alchemy/Workers";
  *
  * export default class Counter extends Rivet.DurableObject<Counter>()(
  *   "Counter",
@@ -218,7 +219,7 @@ export const makeInputGate: Effect.Effect<InputGateShape> = Effect.sync(() => {
  *           }),
  *       };
  *     });
- *   }).pipe(Effect.provide(Layer.mergeAll(Default, InputGate))),
+ *   }).pipe(Effect.provide(Layer.mergeAll(Default, Workers.InputGate))),
  * ) {}
  * ```
  */

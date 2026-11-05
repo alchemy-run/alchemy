@@ -418,7 +418,7 @@ export const makeDurableObjectState = (
   };
 
   // Calls run concurrently and every operation is a round trip. A class
-  // given the `InputGate` Layer runs each one through the instance's gate, so a
+  // given `Workers.InputGate` runs each one through the instance's gate, so a
   // call's storage, with only plain code between, can't interleave with
   // another call's; without it, `gateStorage` runs them as they come. A call
   // a transaction here waits on would wait on the transaction forever: it
