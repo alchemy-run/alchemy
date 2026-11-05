@@ -7,6 +7,13 @@
  *   node scripts/generate-gcp-bindings.ts PubSub          # one service
  *   node scripts/generate-gcp-bindings.ts --report PubSub # classify only, write nothing
  *   node scripts/generate-gcp-bindings.ts --check         # fail if any generated file is stale
+ *   node scripts/generate-gcp-bindings.ts --changes       # regenerate, then list what changed
+ *
+ * `--changes` is the upgrade report: after bumping distilled, it lists per
+ * service the bindings added, removed, and changed (and whether a change
+ * touched the IAM role, the operation, the request, the response, or only
+ * docs), plus methods that need a config decision. Run it on a clean tree:
+ * it reads the change set from git.
  *
  * Inputs, per service, in `packages/gcp/bindings/`:
  *
@@ -1359,7 +1366,7 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
     for (const r of results.filter((r) => r.kind !== "binding" && r.kind !== "internal")) {
       yield* Console.log(`  ${r.kind.padEnd(16)} ${r.id}${r.reason ? `  (${r.reason})` : ""}`);
     }
-    return;
+    return unresolvedOf(results);
   }
 
   const handWritten = new Set(files.filter((f) => !generated.has(f)));
@@ -1471,6 +1478,149 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
       { cwd: root, stdin: "ignore", stderr: "ignore" },
     ),
   );
+  return unresolvedOf(results);
+});
+
+/**
+ * Methods that need a decision in the service's config: no permission
+ * could be derived (`needs-permission`), or a name collision pushed a
+ * method out of the bindings.
+ */
+const unresolvedOf = (results: Classified[]) =>
+  results.filter(
+    (r) =>
+      r.kind === "needs-permission" ||
+      (r.kind === "project" && r.reason?.startsWith("name collision") === true),
+  );
+
+// ============ Changes ============
+
+/**
+ * A generated binding cut into the parts a change can touch: the request
+ * interface, the shape (response and errors), the IAM grants and the
+ * operation each variant calls, and everything else (docs).
+ */
+const bindingSections = (source: string) => {
+  const take = (re: RegExp) => {
+    const m = re.exec(source);
+    if (!m) return "";
+    source = source.replace(m[0], "");
+    return m[0];
+  };
+  const request = take(/export interface \w+Request\b[\s\S]*?\n\}\n/);
+  const response = take(/export type \w+Shape\b[\s\S]*?\n>;\n/);
+  const variants = take(/variants: \[[\s\S]*?\n {4}\],/);
+  const iam = [...variants.matchAll(/^.*\b(iam|role|roles|project)\b.*$/gm)].map((m) => m[0]);
+  const operation = variants
+    .split("\n")
+    .filter((l) => !iam.includes(l))
+    .join("\n");
+  // Docs name the role too; a role change alone shouldn't also read as docs.
+  const docs = source.replace(/roles\/[\w.]+/g, "");
+  return { request, response, role: iam.join("\n"), operation, docs };
+};
+
+/**
+ * Regenerated in place, so git's view of the generated trees is the
+ * change set: new, removed, and changed bindings per service, with what
+ * each changed binding's diff touched. Probe suites are listed per service.
+ */
+const reportChanges = Effect.fn(function* (root: string, unresolved: Map<string, Classified[]>) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const spawner = yield* ChildProcessSpawner;
+  const git = (args: string[]) =>
+    spawner.string(ChildProcess.make("git", args, { cwd: root, stdin: "ignore" }));
+  const status = yield* git([
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+    "--",
+    "packages/gcp/src",
+    "packages/integration-tests/test/GCP",
+  ]);
+  interface ServiceChanges {
+    added: string[];
+    removed: string[];
+    changed: { name: string; aspects: string[] }[];
+    probes: string[];
+  }
+  const byService = new Map<string, ServiceChanges>();
+  const of = (service: string) => {
+    let entry = byService.get(service);
+    if (entry === undefined) {
+      entry = { added: [], removed: [], changed: [], probes: [] };
+      byService.set(service, entry);
+    }
+    return entry;
+  };
+  for (const line of status.split("\n").filter(Boolean)) {
+    const code = line.slice(0, 2);
+    const file = line.slice(3);
+    const test = /^packages\/integration-tests\/test\/GCP\/(\w+)\//.exec(file);
+    if (test) {
+      of(test[1]!).probes.push(file.slice(test[0].length));
+      continue;
+    }
+    const src = /^packages\/gcp\/src\/(\w+)\/(\w+)\.ts$/.exec(file);
+    if (!src) continue;
+    const service = src[1]!;
+    const name = src[2]!;
+    if (name === "generated" || name === "index") continue;
+    if (code.includes("?") || code.includes("A")) of(service).added.push(name);
+    else if (code.includes("D")) of(service).removed.push(name);
+    else {
+      const before = bindingSections(yield* git(["show", `HEAD:${file}`]));
+      const after = bindingSections(yield* fs.readFileString(path.join(root, file)));
+      const aspects = (Object.keys(before) as (keyof typeof before)[]).filter(
+        (k) => before[k] !== after[k],
+      );
+      of(service).changed.push({ name, aspects: aspects.length ? aspects : ["format"] });
+    }
+  }
+  // Unresolved methods the committed probe suite already skips are a
+  // standing backlog, not this change: count them, list only new ones.
+  const fresh = new Map<string, Classified[]>();
+  let standing = 0;
+  for (const [service, rs] of unresolved) {
+    const committed = yield* git([
+      "show",
+      `HEAD:packages/integration-tests/test/GCP/${service}/Generated.test.ts`,
+    ]).pipe(Effect.orElseSucceed(() => ""));
+    const added = rs.filter((r) => !committed.includes(JSON.stringify(`${r.id}:`).slice(0, -1)));
+    standing += rs.length - added.length;
+    if (added.length) {
+      fresh.set(service, added);
+      of(service);
+    }
+  }
+  const backlog = () =>
+    standing
+      ? Console.log(
+          `\n${standing} ${standing === 1 ? "method was" : "methods were"} already unresolved before this change; \`--report <Svc>\` lists them.`,
+        )
+      : Effect.void;
+  if (byService.size === 0) {
+    yield* Console.log("No binding changes.");
+    return yield* backlog();
+  }
+  for (const [service, c] of [...byService].sort(([a], [b]) => a.localeCompare(b))) {
+    yield* Console.log(`\n${service}`);
+    for (const name of c.added.sort()) yield* Console.log(`  added      ${name}`);
+    for (const name of c.removed.sort()) yield* Console.log(`  removed    ${name}`);
+    for (const { name, aspects } of c.changed.sort((a, b) => a.name.localeCompare(b.name))) {
+      yield* Console.log(`  changed    ${name}  [${aspects.join(", ")}]`);
+    }
+    for (const r of fresh.get(service) ?? []) {
+      const why =
+        r.kind === "needs-permission"
+          ? `no predefined role grants ${r.reason ?? "its permission"}; add a permissions or roles override`
+          : r.reason;
+      yield* Console.log(`  unresolved ${r.id}  (${why})`);
+    }
+    if (c.probes.length) yield* Console.log(`  probes     ${c.probes.join(", ")}`);
+  }
+  yield* backlog();
 });
 
 // ============ Probes ============
@@ -1883,8 +2033,9 @@ const command = Command.make(
     report: Flag.Boolean("report").pipe(Flag.withDefault(false)),
     refreshRoles: Flag.Boolean("refresh-roles").pipe(Flag.withDefault(false)),
     check: Flag.Boolean("check").pipe(Flag.withDefault(false)),
+    changes: Flag.Boolean("changes").pipe(Flag.withDefault(false)),
   },
-  Effect.fn(function* ({ services, report, refreshRoles: refresh, check }) {
+  Effect.fn(function* ({ services, report, refreshRoles: refresh, check, changes }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const root = path.resolve(import.meta.dirname, "..");
@@ -1896,9 +2047,11 @@ const command = Command.make(
       .filter((f) => f.endsWith(".json") && f !== "roles.json")
       .map((f) => f.slice(0, -5))
       .sort();
+    const unresolved = new Map<string, Classified[]>();
     for (const service of services.length > 0 ? services : all) {
-      yield* generateService(root, service, report);
+      unresolved.set(service, yield* generateService(root, service, report));
     }
+    if (changes && !report) yield* reportChanges(root, unresolved);
     if (check) {
       // Regenerated in place: anything git now sees as changed was stale.
       const spawner = yield* ChildProcessSpawner;

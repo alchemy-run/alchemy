@@ -260,7 +260,7 @@ classified the way `scripts/audit-service.ts` classifies AWS:
 | Category | Meaning | Becomes |
 | --- | --- | --- |
 | `resource-lifecycle` | create/get/update/delete/list of the resource itself | a resource's `reconcile`/`read`/`delete`/`list` |
-| `binding` | data-plane work on or inside a resource (put an object, send a message, query a table, read a secret, invoke a function) | a `Binding.Service` + `<Op>Http.ts` |
+| `binding` | data-plane work on or inside a resource (put an object, send a message, query a table, read a secret, invoke a function) | a `Binding.Service` and its `<Op>Http` layer, in `<Op>.ts` |
 | `event-source` | the resource triggers runtimes (notifications, streams, subscriptions) | an event source |
 | `internal` | not useful from user code (long-running-operation polling, deprecated aliases) | nothing, with a reason |
 
@@ -444,9 +444,12 @@ obvious from the code:
 | #2267 | deploy-only services read behind the runtime guard; `*Http` bindings on local resources fail with a typed error (`packages/cloudflare/src/HttpBindingDev.ts`) |
 | #2244, #2315 | no branching on another provider's host type; reach the host through `RuntimeContext` and core host services (`alchemy/WebhookHost`) |
 
-**Cover every `binding` operation** in the catalog. Follow the AWS
-shape: one `Binding.Service` per operation (`SQS.SendMessage`,
-`DynamoDB.GetItem`), each with an `<Op>Http.ts` layer built on the
+**Cover every `binding` operation** in the catalog. Generate them: the
+`alchemy-bindings` skill covers the generator, its per-service configs,
+the refinement loop, and distilled upgrades; write by hand only what a
+config can't express. Every binding has the same shape: one
+`Binding.Service` per operation (`SQS.SendMessage`, `DynamoDB.GetItem`),
+each with an `<Op>Http` layer in the same `<Op>.ts`, built on the
 distilled operation, which injects the bound resource's identifier and
 grants only that operation on that resource. Where the API has clear
 access levels (object storage, key-value stores), also ship the
@@ -462,7 +465,7 @@ Least privilege depends on the cloud's permission model:
   operation, create a custom role with exactly the permissions or data
   actions it needs, and reuse it across hosts.
 
-Every binding is a distilled call: the `<Op>Http.ts` layer wraps
+Every binding is a distilled call: the `<Op>Http` layer wraps
 `<service>.<operation>` from `@distilled.cloud/<pkg>`. If the operation
 isn't in distilled (the data plane is missing, or the operation isn't
 modelled), patch distilled first (step 1).
@@ -552,7 +555,7 @@ Rules the reference code follows:
   a foreign host at init.
 - Per-service grant helpers are constructors too (`GrantOnQueue` in
   `packages/aws/src/SQS/BindingHttp.ts`), and shared scaffolding lives in
-  an unexported `BindingHttp.ts` so each `<Op>Http.ts` is a one-line
+  an unexported `BindingHttp.ts` so each `<Op>Http` layer is a one-line
   `Layer.effect(Cap, make…({ … }))`.
 - A provider with local emulation fails an HTTP binding to a locally
   emulated resource with a typed error naming the native binding and
