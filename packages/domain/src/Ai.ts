@@ -101,14 +101,15 @@ export const toolName = (op: {
 }): string => `${op.api}_${op.name}_${op.operation}`.replace(unsafe, "_");
 
 /**
- * What the model reads about the tool: a command's Schema `description`
- * annotation, or a sentence built from the call.
+ * What the model reads about the tool: a command's `description`, or a
+ * sentence for the call; a read follows its sentence with its entry's
+ * `description` (`Get the current AccountSummary of a key. An account's
+ * balance and owner.`).
  */
-const toolDescription = (op: Operation): string =>
-  (op.served.kind === "Command" ? SchemaAST.resolveDescription(op.served.ast) : undefined) ??
-  (op.operation === "send"
-    ? `Send the ${op.name} command.`
-    : op.operation === "ask"
+const toolDescription = (op: Operation): string => {
+  if (op.operation === "send") return op.description ?? `Send the ${op.name} command.`;
+  const call =
+    op.operation === "ask"
       ? op.served.kind === "Query" && op.served.definition.paged
         ? `Ask the ${op.name} query for a page of entries.`
         : `Ask the ${op.name} query.`
@@ -118,7 +119,9 @@ const toolDescription = (op: Operation): string =>
           ? `List a page of the ${op.name} entries of a key.`
           : op.operation === "snapshot"
             ? `Get the current ${op.name} of a key, with the cursor it is valid at.`
-            : `Get the current ${op.name} of a key.`);
+            : `Get the current ${op.name} of a key.`;
+  return op.description === undefined ? call : `${call} ${op.description}`;
+};
 
 /**
  * A call that returns once. A stream (`watch`, `events`) is not one tool

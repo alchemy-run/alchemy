@@ -4787,6 +4787,12 @@ export const LiveWorkerProvider = () =>
               const { env: _env, codeUpdateStrategy: _codeUpdateStrategy, ...rest } = props;
               return {
                 ...rest,
+                // A namespace is identified by its name (compared above);
+                // its other attributes, like `scriptCount`, change as user
+                // Workers are uploaded into it.
+                ...(props.namespace !== undefined
+                  ? { namespace: resolveNamespaceName(props.namespace) }
+                  : undefined),
                 ...(props.main !== undefined ? { main: "<source>" } : undefined),
                 ...(props.assets
                   ? {

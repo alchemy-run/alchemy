@@ -286,6 +286,7 @@ export const Model = ModelModule.make;
 /** Every definition problem in a Model, without hosting it. See {@link ModelModule.verify}. */
 export const verify = ModelModule.verify;
 /** A problem in a Model's definitions, found by {@link verify} or when its Layer is built. */
+export type { Annotations } from "./Annotations.ts";
 export { DefinitionError } from "./Kernel.ts";
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */

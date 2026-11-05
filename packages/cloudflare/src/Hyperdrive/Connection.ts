@@ -176,6 +176,16 @@ export type Connection = Resource<
     accountId: string;
     origin: Origin;
     mtls: Mtls;
+    /**
+     * Caching configuration as Cloudflare holds it: `{ disabled: true }`, or
+     * the enabled settings with defaults filled in.
+     */
+    caching: Caching;
+    /**
+     * The (soft) maximum number of origin connections, or `undefined` when
+     * Cloudflare's default applies.
+     */
+    originConnectionLimit: number | undefined;
     dev: DevOrigin | undefined;
   },
   never,
@@ -310,21 +320,11 @@ export const ProviderLive = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((c) => ({
-              hyperdriveId: c.id,
-              name: c.name,
-              accountId,
-              // The connection-string password is write-only and never
-              // returned by the API, so it is absent here (matching `read`,
-              // which sources it from `olds`).
-              origin: { ...c.origin } as Origin,
-              mtls: {
-                caCertificateId: c.mtls?.caCertificateId ?? undefined,
-                mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
-                sslmode: c.mtls?.sslmode ?? undefined,
-              } as Mtls,
-              dev: undefined,
-            })),
+            // The write-only secrets are never returned by the API, so they
+            // are absent here (`read` sources them from `olds`).
+            (page.result ?? []).map((c) =>
+              toAttributes(c, { accountId, secrets: undefined, dev: undefined }),
+            ),
           ),
         ),
       );
@@ -338,19 +338,8 @@ export const ProviderLive = () =>
               .pipe(Effect.catchTag("HyperdriveConfigNotFound", () => Effect.undefined))
           : yield* findByName(props.name);
       if (!config) return undefined;
-      return {
-        hyperdriveId: config.id,
-        name: config.name,
-        accountId,
-        // The origin password is write-only: the API never returns it.
-        origin: { ...config.origin } as Origin,
-        mtls: {
-          caCertificateId: config.mtls?.caCertificateId ?? undefined,
-          mtlsCertificateId: config.mtls?.mtlsCertificateId ?? undefined,
-          sslmode: config.mtls?.sslmode ?? undefined,
-        } as Mtls,
-        dev: props.dev,
-      };
+      // The origin password is write-only: the API never returns it.
+      return toAttributes(config, { accountId, secrets: undefined, dev: props.dev });
     }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -393,42 +382,20 @@ export const ProviderLive = () =>
             hyperdriveId: output.hyperdriveId,
           })
           .pipe(
-            Effect.map((c) => ({
-              hyperdriveId: c.id,
-              name: c.name,
-              accountId: output.accountId,
-              origin: {
-                ...c.origin,
-                password: olds?.origin?.password,
-              } as Origin,
-              mtls: {
-                caCertificateId: c.mtls?.caCertificateId ?? undefined,
-                mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
-                sslmode: c.mtls?.sslmode ?? undefined,
-              } as Mtls,
-              dev: output?.dev,
-            })),
+            Effect.map((c) =>
+              toAttributes(c, {
+                accountId: output.accountId,
+                secrets: olds?.origin,
+                dev: output.dev,
+              }),
+            ),
             Effect.catchTag("HyperdriveConfigNotFound", () => Effect.undefined),
           );
       }
       const name = yield* createConfigName(id, olds?.name);
       const match = yield* findByName(name);
       if (match) {
-        return {
-          hyperdriveId: match.id,
-          name: match.name,
-          accountId,
-          origin: {
-            ...match.origin,
-            password: olds?.origin?.password,
-          } as Origin,
-          mtls: {
-            caCertificateId: match.mtls?.caCertificateId ?? undefined,
-            mtlsCertificateId: match.mtls?.mtlsCertificateId ?? undefined,
-            sslmode: match.mtls?.sslmode ?? undefined,
-          } as Mtls,
-          dev: output?.dev,
-        };
+        return toAttributes(match, { accountId, secrets: olds?.origin, dev: output?.dev });
       }
       return undefined;
     }),
@@ -459,14 +426,11 @@ export const ProviderLive = () =>
         deepEqual(requestBody, toRequestBody(olds)) &&
         isInSync(observed, news.name ?? name, requestBody)
       ) {
-        return {
-          hyperdriveId: observed.id,
-          name: observed.name,
+        return toAttributes(observed, {
           accountId: output?.accountId ?? accountId,
-          origin: news.origin,
-          mtls: news.mtls ?? {},
+          secrets: news.origin,
           dev: news.dev,
-        };
+        });
       }
 
       // Ensure + sync. With a live config we update it in place; otherwise
@@ -509,14 +473,11 @@ export const ProviderLive = () =>
         }),
       );
 
-      return {
-        hyperdriveId: synced.id,
-        name: synced.name,
+      return toAttributes(synced, {
         accountId: output?.accountId ?? accountId,
-        origin: news.origin,
-        mtls: news.mtls ?? {},
+        secrets: news.origin,
         dev: news.dev,
-      };
+      });
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* hyperdrive
@@ -561,6 +522,14 @@ export const ProviderLocal = () =>
         accountId: output?.accountId ?? accountId,
         origin: news.origin,
         mtls: news.mtls ?? {},
+        ...observedSettings({
+          caching: {
+            disabled: news.caching?.disabled ?? false,
+            maxAge: news.caching?.maxAge,
+            staleWhileRevalidate: news.caching?.staleWhileRevalidate,
+          },
+          originConnectionLimit: news.originConnectionLimit,
+        }),
         dev: news.dev,
       };
     }),
@@ -606,6 +575,92 @@ const toRequestBody = (props: Props) => ({
 const SECRET_ORIGIN_KEYS = new Set(["password", "accessClientSecret"]);
 const DEFAULT_MAX_AGE = 60;
 const DEFAULT_STALE_WHILE_REVALIDATE = 15;
+
+/**
+ * The attributes of a live config, built from what Cloudflare holds so that
+ * `reconcile` saves exactly what a later `read` observes and `drift` reports
+ * only real changes. The write-only secrets (password, Access client secret)
+ * are never returned, so they come from `secrets`, the last-applied origin.
+ */
+const toAttributes = (
+  config: hyperdrive.GetConfigResponse,
+  {
+    accountId,
+    secrets,
+    dev,
+  }: { accountId: string; secrets: Origin | undefined; dev: DevOrigin | undefined },
+): Connection["Attributes"] => ({
+  hyperdriveId: config.id,
+  name: config.name,
+  accountId,
+  origin: observedOrigin(config.origin, secrets),
+  mtls: {
+    caCertificateId: config.mtls?.caCertificateId ?? undefined,
+    mtlsCertificateId: config.mtls?.mtlsCertificateId ?? undefined,
+    sslmode: (config.mtls?.sslmode ?? undefined) as Mtls["sslmode"],
+  },
+  ...observedSettings(config),
+  dev,
+});
+
+const observedOrigin = (
+  live: hyperdrive.GetConfigResponse["origin"],
+  secrets: Origin | undefined,
+): Origin => {
+  if ("serviceId" in live) {
+    return {
+      scheme: live.scheme,
+      serviceId: live.serviceId,
+      database: live.database,
+      user: live.user,
+      password: secrets?.password!,
+    };
+  }
+  if ("accessClientId" in live) {
+    return {
+      scheme: live.scheme,
+      host: live.host,
+      database: live.database,
+      user: live.user,
+      password: secrets?.password!,
+      accessClientId: Redacted.make(live.accessClientId),
+      accessClientSecret: (secrets && "accessClientSecret" in secrets
+        ? secrets.accessClientSecret
+        : undefined)!,
+    };
+  }
+  return {
+    scheme: live.scheme,
+    host: live.host,
+    port: live.port,
+    database: live.database,
+    user: live.user,
+    password: secrets?.password!,
+  };
+};
+
+/**
+ * The caching and connection-limit attributes, as Cloudflare holds them, so
+ * `drift` sees a change made outside Alchemy. Enabled caching carries its
+ * defaults; disabled caching carries none, since Cloudflare ignores them.
+ */
+const observedSettings = (config: {
+  caching: {
+    disabled: boolean;
+    maxAge?: number | null;
+    staleWhileRevalidate?: number | null;
+  };
+  originConnectionLimit?: number | null;
+}): { caching: Caching; originConnectionLimit: number | undefined } => ({
+  caching: config.caching.disabled
+    ? { disabled: true }
+    : {
+        disabled: false,
+        maxAge: config.caching.maxAge ?? DEFAULT_MAX_AGE,
+        staleWhileRevalidate: config.caching.staleWhileRevalidate ?? DEFAULT_STALE_WHILE_REVALIDATE,
+      },
+  originConnectionLimit: config.originConnectionLimit ?? undefined,
+});
 
 /**
  * Whether the live config already matches every readable field of the

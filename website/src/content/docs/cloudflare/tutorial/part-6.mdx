@@ -4,6 +4,7 @@ description: Ship your Worker traces and logs to Axiom — datasets, an ingest t
 sidebar:
   order: 6
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 In [Part 5](/cloudflare/tutorial/part-5) you set up CI/CD. Now you'll watch
 your Worker run in production. Every Alchemy runtime ships with
@@ -160,13 +161,11 @@ datasets and token deploy before the Worker, automatically.
 
 Deploy, then hit the Worker to produce telemetry:
 
-```sh
-bun alchemy deploy
+<PackageManagers script={`{run} alchemy deploy
 
-curl -X PUT https://myapp-worker-dev-you-abc123.workers.dev/hello.txt \
+curl -X PUT https://myapp-worker-dev-you-abc123.workers.dev/hello.txt \\
   -d 'Hello, observability!'
-curl https://myapp-worker-dev-you-abc123.workers.dev/hello.txt
-```
+curl https://myapp-worker-dev-you-abc123.workers.dev/hello.txt`} />
 
 Nothing in the handler code changed: the runtime builds the OTLP
 exporters from the bound configuration for each request, and flushes

@@ -54,6 +54,18 @@ A read is marked read-only and idempotent, and a command destructive, as an MCP 
 }
 ```
 
+That generated description is all an agent knows about a command it hasn't seen. Give the command a `description` in its [annotations](/domain/annotations), and the tool uses it instead:
+
+```typescript title="src/DepositMoney.command.ts"
+export class DepositMoney extends Domain.Command(
+  "DepositMoney",
+  { target: AccountId, input: { amount: Schema.Int }, events: [MoneyDeposited] },
+  { description: "Put money into an account. The amount is in cents." },
+) {}
+```
+
+A read tool keeps its generated sentence and adds the description of the view, stream or aggregate after it: "Get the current AccountSummary of a key. An account's balance and owner."
+
 `layer` holds the tools' handlers. It needs what the Api needs to serve: the hosted model and the Layers of the middleware of what it serves.
 
 ## An agent in the app

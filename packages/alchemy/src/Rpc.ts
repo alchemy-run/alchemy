@@ -554,7 +554,9 @@ export const serveRpc = <Req = never>(
     if (queryAt !== -1) name = name.slice(0, queryAt);
     name = decodeURIComponent(name);
 
-    const method = shape[name];
+    // A name like `constructor`, `toString` or `__proto__` must not reach
+    // `Object.prototype`.
+    const method = name in Object.prototype ? undefined : shape[name];
     if (typeof method !== "function") {
       return HttpServerResponse.text(`Unknown RPC method "${name}"`, {
         status: 404,

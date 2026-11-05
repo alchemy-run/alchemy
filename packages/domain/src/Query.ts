@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type { Data, Fields } from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Projection from "./Projection.ts";
@@ -139,6 +140,7 @@ export interface AnyDefinition {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Query";
+  readonly annotations: Annotations;
   readonly queryName: string;
   readonly definition: AnyDefinition;
   readonly middleware: Middleware.List;
@@ -315,6 +317,23 @@ export interface Definition<
  * const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
  * ```
  *
+ * ### Annotating queries
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * The MCP, CLI and OpenAPI surfaces don't serve queries yet, so it is for
+ * the people and the tools that read the model, as `X.annotations`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class AccountLedger extends Domain.Query(
+ *   "AccountLedger",
+ *   { input: { account: AccountId }, success: LedgerRow, paged: true },
+ *   { description: "One account's ledger, a page at a time." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -330,6 +349,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<F, P, S, From, Ms, Rejects, RV, RS>,
+  annotations: Annotations = {},
 ): QueryClass<
   Name,
   Definition<F, P, S, From, Ms, Rejects, RV, RS>,
@@ -365,6 +385,7 @@ export const make = <
   const Tag = Context.Service<QueryKey<Name>, Implementation>()(`alchemy/Domain/Query/${name}`);
   return class extends Tag {
     static readonly kind = "Query" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly queryName: Name = name;
     static readonly definition = definition;
     static readonly middleware = middleware;
@@ -404,6 +425,7 @@ export interface QueryClass<
   Needs,
 > extends Context.ServiceClass<QueryKey<Name>, string, Implementation> {
   readonly kind: "Query";
+  readonly annotations: Annotations;
   readonly queryName: Name;
   readonly definition: Def;
   /** The middleware that guards the query when an Api exposes it, in order. */

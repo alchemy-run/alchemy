@@ -2,14 +2,13 @@
 title: MySQL
 description: Deploy Better Auth on Lambda with an existing MySQL database and a request-scoped mysql2 pool.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 This example connects a Better Auth Lambda to an existing MySQL database over TCP with TLS. The database, credentials, and network access must already exist.
 
 ## Install
 
-```sh
-bun add @alchemy.run/better-auth better-auth@^1.7.5 kysely mysql2
-```
+<PackageManagers add="@alchemy.run/better-auth better-auth@^1.7.5 kysely mysql2" />
 
 Configure AWS through an [Alchemy profile](/environments/profiles) and set `DATABASE_URL` in the deploying environment. Both the deployer and Lambda must be able to reach that URL.
 
@@ -88,9 +87,7 @@ Preserve and protect the local `.alchemy` state directory across deployments. Th
 
 ## Deploy and migrate
 
-```sh
-bunx alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Automatic migrations use the resolved URL and the same pool options before updating the function. The deployer needs schema-changing permissions; migrations create auth tables inside the existing database.
 

@@ -513,6 +513,71 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
     ),
   );
 
+  it.live("describes each subcommand with its entry's description annotation", () =>
+    hosted(
+      Effect.gen(function* () {
+        class Withdraw extends Domain.Command(
+          "Withdraw",
+          {
+            target: WalletId,
+            input: { amount: Schema.Int },
+            events: [Deposited],
+          },
+          { description: "Take money out of a wallet. The amount is in cents." },
+        ) {}
+        class Purse extends Domain.Aggregate(
+          "Purse",
+          {
+            id: WalletId,
+            state: Schema.Struct({ balance: Schema.Int }),
+            initial: { balance: 0 },
+            commands: [Withdraw],
+            decide: { Withdraw: () => [] },
+            evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+            read: {},
+          },
+          { description: "A purse, which keeps its own balance." },
+        ) {}
+        class Total extends Domain.View(
+          "Total",
+          {
+            from: [Purse],
+            key: Purse,
+            state: Schema.Struct({ balance: Schema.Int }),
+            initial: { balance: 0 },
+            evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+          },
+          { description: "The current balance of one purse." },
+        ) {}
+        class Purses extends Domain.Model("Purses", { aggregates: [Purse], views: [Total] }) {}
+        class PurseApi extends Domain.Api(
+          "PurseApi",
+          {
+            model: Purses,
+            aggregates: ["Purse"],
+          },
+          { description: "What a purse app reaches." },
+        ) {}
+        const run = yield* cliOver;
+        const help = yield* run(
+          toCli(PurseApi, {
+            name: "purse",
+            expose: ["Withdraw", "Purse.get", "Total.get"],
+          }) as typeof asSam,
+          ["--help"],
+        );
+        expect(help.code).toBe(0);
+        expect(help.stdout).toMatch(
+          /^\s+withdraw\s+Take money out of a wallet\. The amount is in cents\.$/m,
+        );
+        // The root's help is the Api's own description.
+        expect(help.stdout).toContain("What a purse app reaches.");
+        expect(help.stdout).toMatch(/^\s+purse\s+A purse, which keeps its own balance\.$/m);
+        expect(help.stdout).toMatch(/^\s+total\s+The current balance of one purse\.$/m);
+      }),
+    ),
+  );
+
   it.live("builds no subcommand it is not told to expose", () =>
     hosted(
       Effect.gen(function* () {

@@ -31,7 +31,7 @@ import type { StreamBinding } from "../Stream/StreamBinding.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { VpcService } from "../VpcService/VpcService.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import type { WorkflowLike } from "../Workflows/Workflow.ts";
+import type { WorkflowLike, WorkflowLookup } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type { AnyBindingEffect } from "./Binding.ts";
@@ -245,6 +245,7 @@ export type WorkerBindingResource =
   | DispatchNamespace
   | DurableObjectLike<any>
   | WorkflowLike<any>
+  | WorkflowLookup<any>
   | VpcService
   // An account-level mTLS certificate becomes an `mtls_certificate` binding.
   | MtlsCertificate

@@ -2,6 +2,7 @@
 title: Backups & restores
 description: Restore a PlanetScale backup into a fresh branch with backupId, or seed a new branch from the last successful backup with seedData.
 ---
+import BranchGraph from "../../../../components/diagrams/BranchGraph.astro";
 
 Alchemy doesn't manage PlanetScale backup schedules — create backups
 in the PlanetScale dashboard or via the API. What it gives you is the
@@ -11,6 +12,20 @@ backup's schema and data.
 Both `MySQLBranch` and `PostgresBranch` accept the same two props:
 `backupId` restores a specific backup, `seedData` restores the parent
 branch's last successful backup.
+
+<BranchGraph
+  end={10}
+  branches={[
+    { id: "main", label: "main", type: "production", tone: "accent" },
+    { id: "restored", label: "restored", type: "backupId: backup-123", from: { branch: "main", at: 3 } },
+  ]}
+  points={[
+    { branch: "main", at: 3, label: "backup-123" },
+    { branch: "main", at: 6.5, label: "bad migration" },
+    { branch: "restored", at: 7, label: "schema + data as of the backup", below: true },
+  ]}
+  caption="A restored branch starts from the backup, not from main as it is now, so it comes up without the changes made after the backup."
+/>
 
 ## Restore a branch from a backup
 

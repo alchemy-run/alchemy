@@ -4,11 +4,12 @@ description: Build a schema-validated HTTP API with Effect's HttpApi module, dep
 sidebar:
   order: 2
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 `HttpApi` gives you real REST endpoints, with paths, query strings,
 and typed bodies, behind a typed client. Use it when the API's callers
 aren't all Effect, or aren't TypeScript. The concept lives at
-[Effect HTTP](/apis/effect-http). This page wires it onto Cloud Run.
+[Effect HTTP](/apis/effect-http).
 
 ## Define the schema
 
@@ -152,9 +153,7 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Invalid payloads get a 400 with the validation errors.
 
