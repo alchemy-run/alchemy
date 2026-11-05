@@ -12,7 +12,8 @@
       "grants": "resource"
     },
     "makeAuditManagerAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

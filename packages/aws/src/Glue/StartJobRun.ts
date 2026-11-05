@@ -54,6 +54,6 @@ export const StartJobRunHttp = Layer.effect(
   makeGlueJobHttpBinding({
     tag: "AWS.Glue.StartJobRun",
     operation: glue.startJobRun,
-    actions: ["glue:StartJobRun", "glue:GetJobRun"],
+    actions: ["glue:StartJobRun"],
   }),
 );

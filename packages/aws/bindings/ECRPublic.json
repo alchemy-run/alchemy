@@ -10,7 +10,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -21,7 +22,8 @@
         "interface": "DescribeRegistriesRequest",
         "omit": []
       },
-      "actions": ["ecr-public:DescribeRegistries"]
+      "actions": ["ecr-public:DescribeRegistries"],
+      "arns": ["arn:${Partition}:ecr-public::${Account}:registry/*"]
     },
     "GetAuthorizationToken": {
       "operation": "getAuthorizationToken",
@@ -36,7 +38,8 @@
       "request": {
         "mode": "none"
       },
-      "actions": ["ecr-public:GetRegistryCatalogData"]
+      "actions": ["ecr-public:GetRegistryCatalogData"],
+      "arns": ["arn:${Partition}:ecr-public::${Account}:registry/*"]
     }
   }
 }

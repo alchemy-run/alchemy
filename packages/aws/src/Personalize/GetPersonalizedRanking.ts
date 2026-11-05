@@ -51,5 +51,6 @@ export const GetPersonalizedRankingHttp = Layer.effect(
     tag: "AWS.Personalize.GetPersonalizedRanking",
     operation: personalizeruntime.getPersonalizedRanking,
     actions: ["personalize:GetPersonalizedRanking"],
+    arns: ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"],
   }),
 );

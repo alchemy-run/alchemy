@@ -48,5 +48,6 @@ export const StartReplicationTaskHttp = Layer.effect(
     tag: "AWS.DMS.StartReplicationTask",
     operation: dms.startReplicationTask,
     actions: ["dms:StartReplicationTask"],
+    arns: ["arn:${Partition}:dms:${Region}:${Account}:task:*"],
   }),
 );

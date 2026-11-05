@@ -50,5 +50,6 @@ export const ListInsightsDataHttp = Layer.effect(
     tag: "AWS.CloudTrail.ListInsightsData",
     operation: cloudtrail.listInsightsData,
     actions: ["cloudtrail:ListInsightsData"],
+    arns: ["arn:${Partition}:cloudtrail:${Region}:${Account}:trail/*"],
   }),
 );

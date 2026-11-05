@@ -10,7 +10,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -19,7 +20,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["rolesanywhere:GetSubject"]
+      "actions": ["rolesanywhere:GetSubject"],
+      "arns": ["arn:${Partition}:rolesanywhere:${Region}:${Account}:subject/*"]
     },
     "ListSubjects": {
       "operation": "listSubjects",

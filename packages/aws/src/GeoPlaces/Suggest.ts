@@ -56,5 +56,6 @@ export const SuggestHttp = Layer.effect(
     capability: "Suggest",
     iamActions: ["geo-places:Suggest"],
     operation: geoPlaces.suggest,
+    arns: ["arn:${Partition}:geo-places:${Region}::provider/default"],
   }),
 );

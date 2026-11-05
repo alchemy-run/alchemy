@@ -11,7 +11,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -20,35 +21,40 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-routes:CalculateIsolines"]
+      "actions": ["geo-routes:CalculateIsolines"],
+      "arns": ["arn:${Partition}:geo-routes:${Region}::provider/default"]
     },
     "CalculateRouteMatrix": {
       "operation": "calculateRouteMatrix",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-routes:CalculateRouteMatrix"]
+      "actions": ["geo-routes:CalculateRouteMatrix"],
+      "arns": ["arn:${Partition}:geo-routes:${Region}::provider/default"]
     },
     "CalculateRoutes": {
       "operation": "calculateRoutes",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-routes:CalculateRoutes"]
+      "actions": ["geo-routes:CalculateRoutes"],
+      "arns": ["arn:${Partition}:geo-routes:${Region}::provider/default"]
     },
     "OptimizeWaypoints": {
       "operation": "optimizeWaypoints",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-routes:OptimizeWaypoints"]
+      "actions": ["geo-routes:OptimizeWaypoints"],
+      "arns": ["arn:${Partition}:geo-routes:${Region}::provider/default"]
     },
     "SnapToRoads": {
       "operation": "snapToRoads",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-routes:SnapToRoads"]
+      "actions": ["geo-routes:SnapToRoads"],
+      "arns": ["arn:${Partition}:geo-routes:${Region}::provider/default"]
     }
   }
 }

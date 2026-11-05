@@ -16,7 +16,8 @@
   "builder": "makeBdaBlueprintHttpBinding",
   "builders": {
     "makeBdaAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeBdaBlueprintHttpBinding": {
       "grants": "resource"
@@ -80,7 +81,8 @@
       "builder": "makeBdaAccountHttpBinding",
       "actions": ["bedrock:GetDataAutomationStatus"],
       "module": "bedrock-data-automation-runtime",
-      "alias": "bdar"
+      "alias": "bdar",
+      "arns": ["arn:${Partition}:bedrock:${Region}:${Account}:data-automation-invocation/*"]
     },
     "InvokeBlueprintOptimizationAsync": {
       "operation": "invokeBlueprintOptimizationAsync",
@@ -91,7 +93,10 @@
         "omit": ["blueprint"]
       },
       "builder": "makeBdaBlueprintOptimizationHttpBinding",
-      "actions": ["bedrock:InvokeBlueprintOptimizationAsync"]
+      "actions": ["bedrock:InvokeBlueprintOptimizationAsync"],
+      "reviewed": {
+        "bedrock:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "InvokeDataAutomation": {
       "operation": "invokeDataAutomation",
@@ -119,7 +124,10 @@
       "builder": "makeBdaProjectHttpBinding",
       "actions": ["bedrock:InvokeDataAutomationAsync"],
       "module": "bedrock-data-automation-runtime",
-      "alias": "bdar"
+      "alias": "bdar",
+      "reviewed": {
+        "bedrock:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "ListDataAutomationLibraryEntities": {
       "operation": "listDataAutomationLibraryEntities",

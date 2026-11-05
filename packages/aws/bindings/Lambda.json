@@ -13,7 +13,8 @@
       "grants": "resource"
     },
     "makeLambdaAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

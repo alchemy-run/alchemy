@@ -53,5 +53,6 @@ export const ListResourcesInProtectionGroupHttp = Layer.effect(
     tag: "AWS.Shield.ListResourcesInProtectionGroup",
     operation: shield.listResourcesInProtectionGroup,
     actions: ["shield:ListResourcesInProtectionGroup"],
+    arns: ["arn:${Partition}:shield::${Account}:protection-group/*"],
   }),
 );

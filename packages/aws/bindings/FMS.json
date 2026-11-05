@@ -10,7 +10,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -282,7 +283,10 @@
         "interface": "PutAppsListRequest",
         "omit": []
       },
-      "actions": ["fms:PutAppsList"]
+      "actions": ["fms:PutAppsList"],
+      "reviewed": {
+        "fms:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "PutNotificationChannel": {
       "operation": "putNotificationChannel",
@@ -300,7 +304,10 @@
         "interface": "PutPolicyRequest",
         "omit": []
       },
-      "actions": ["fms:PutPolicy"]
+      "actions": ["fms:PutPolicy"],
+      "reviewed": {
+        "fms:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "PutProtocolsList": {
       "operation": "putProtocolsList",
@@ -309,7 +316,10 @@
         "interface": "PutProtocolsListRequest",
         "omit": []
       },
-      "actions": ["fms:PutProtocolsList"]
+      "actions": ["fms:PutProtocolsList"],
+      "reviewed": {
+        "fms:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "PutResourceSet": {
       "operation": "putResourceSet",
@@ -318,7 +328,10 @@
         "interface": "PutResourceSetRequest",
         "omit": []
       },
-      "actions": ["fms:PutResourceSet"]
+      "actions": ["fms:PutResourceSet"],
+      "reviewed": {
+        "fms:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     }
   }
 }

@@ -10,7 +10,8 @@
   "builder": "makeApplicationSignalsAccountHttpBinding",
   "builders": {
     "makeApplicationSignalsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeSloBatchHttpBinding": {},
     "makeSloIdHttpBinding": {
@@ -32,7 +33,7 @@
       "with": {
         "accountActions": ["cloudwatch:GetMetricData"]
       },
-      "note": "Budget reports evaluate the SLI with the CALLER's credentials \u2014 verified live: without cloudwatch:GetMetricData the operation fails with AccessDeniedException (empty message)."
+      "note": "Budget reports evaluate the SLI with the CALLER's credentials — verified live: without cloudwatch:GetMetricData the operation fails with AccessDeniedException (empty message)."
     },
     "BatchUpdateExclusionWindows": {
       "operation": "batchUpdateExclusionWindows",
@@ -73,7 +74,10 @@
         "application-signals:ListServiceLevelObjectives",
         "cloudwatch:GetMetricData"
       ],
-      "note": "The auditors run with the CALLER's credentials \u2014 verified live: a service-target audit fails with AccessDeniedException (empty message) unless the caller can also enumerate SLOs and read metric data. Deeper detail levels (trace/log auditors) may need further read permissions (xray/logs)."
+      "note": "The auditors run with the CALLER's credentials — verified live: a service-target audit fails with AccessDeniedException (empty message) unless the caller can also enumerate SLOs and read metric data. Deeper detail levels (trace/log auditors) may need further read permissions (xray/logs).",
+      "reviewed": {
+        "cloudwatch:GetMetricData": "See the note: The auditors run with the CALLER's credentials — verified live: a service-target audit fails with AccessDeniedException (empty message) unless the caller can also enumerate SLOs and read metric data."
+      }
     },
     "ListEntityEvents": {
       "operation": "listEntityEvents",

@@ -50,5 +50,6 @@ export const DescribeTableStatisticsHttp = Layer.effect(
     tag: "AWS.DMS.DescribeTableStatistics",
     operation: dms.describeTableStatistics,
     actions: ["dms:DescribeTableStatistics"],
+    arns: ["arn:${Partition}:dms:${Region}:${Account}:task:*"],
   }),
 );

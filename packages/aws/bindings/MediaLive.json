@@ -12,7 +12,8 @@
   "builder": "makeMediaLiveChannelHttpBinding",
   "builders": {
     "makeMediaLiveAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeMediaLiveChannelHttpBinding": {
       "grants": "resource"

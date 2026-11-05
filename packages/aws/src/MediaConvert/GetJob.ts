@@ -44,5 +44,6 @@ export const GetJobHttp = Layer.effect(
     capability: "GetJob",
     iamActions: ["mediaconvert:GetJob"],
     operation: mediaconvert.getJob,
+    arns: ["arn:${Partition}:mediaconvert:${Region}:${Account}:jobs/*"],
   }),
 );

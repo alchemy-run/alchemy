@@ -20,7 +20,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeControlTowerHttpBinding": {
       "options": {
@@ -36,7 +37,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["controltower:GetBaseline"]
+      "actions": ["controltower:GetBaseline"],
+      "arns": ["arn:${Partition}:controltower:${Region}::baseline/*"]
     },
     "GetBaselineOperation": {
       "operation": "getBaselineOperation",
@@ -87,7 +89,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["controltower:GetLandingZone"]
+      "actions": ["controltower:GetLandingZone"],
+      "arns": ["arn:${Partition}:controltower:${Region}:${Account}:landingzone/*"]
     },
     "GetLandingZoneOperation": {
       "operation": "getLandingZoneOperation",

@@ -50,5 +50,6 @@ export const ListComponentVersionsHttp = Layer.effect(
     tag: "AWS.GreengrassV2.ListComponentVersions",
     operation: greengrassv2.listComponentVersions,
     actions: ["greengrass:ListComponentVersions"],
+    arns: ["arn:${Partition}:greengrass:${Region}:${Account}:components:*"],
   }),
 );

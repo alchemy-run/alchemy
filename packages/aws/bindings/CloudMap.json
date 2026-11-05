@@ -6,7 +6,8 @@
   "builder": "makeCloudMapAccountHttpBinding",
   "builders": {
     "makeCloudMapAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

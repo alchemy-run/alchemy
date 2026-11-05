@@ -10,7 +10,8 @@
   "builder": "makeIncidentsAccountHttpBinding",
   "builders": {
     "makeIncidentsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeIncidentsResponsePlanHttpBinding": {
       "grants": "resource"

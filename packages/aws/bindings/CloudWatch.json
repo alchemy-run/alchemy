@@ -24,7 +24,8 @@
   "builder": "makeCloudWatchAccountHttpBinding",
   "builders": {
     "makeCloudWatchAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeCloudWatchResourceHttpBinding": {
       "grants": "resource"
@@ -57,7 +58,8 @@
         "interface": "DescribeAlarmHistoryRequest",
         "omit": []
       },
-      "actions": ["cloudwatch:DescribeAlarmHistory"]
+      "actions": ["cloudwatch:DescribeAlarmHistory"],
+      "arns": ["arn:${Partition}:cloudwatch:${Region}:${Account}:alarm:*"]
     },
     "DescribeAlarmsForMetric": {
       "operation": "describeAlarmsForMetric",
@@ -194,7 +196,8 @@
         "interface": "ListAlarmMuteRulesRequest",
         "omit": []
       },
-      "actions": ["cloudwatch:ListAlarmMuteRules"]
+      "actions": ["cloudwatch:ListAlarmMuteRules"],
+      "arns": ["arn:${Partition}:cloudwatch:${Region}:${Account}:alarm-mute-rule:*"]
     },
     "ListDashboards": {
       "operation": "listDashboards",

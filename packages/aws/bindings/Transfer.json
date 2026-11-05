@@ -12,7 +12,8 @@
   "builder": "makeTransferServerHttpBinding",
   "builders": {
     "makeTransferAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeTransferServerHttpBinding": {
       "grants": "resource"
@@ -81,7 +82,8 @@
         "mode": "required"
       },
       "builder": "makeTransferAccountHttpBinding",
-      "actions": ["transfer:SendWorkflowStepState"]
+      "actions": ["transfer:SendWorkflowStepState"],
+      "arns": ["arn:${Partition}:transfer:${Region}:${Account}:workflow/*"]
     },
     "StartServer": {
       "operation": "startServer",

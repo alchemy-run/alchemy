@@ -53,5 +53,6 @@ export const DescribeWhatIfForecastExportHttp = Layer.effect(
     capability: "DescribeWhatIfForecastExport",
     iamActions: ["forecast:DescribeWhatIfForecastExport"],
     operation: forecast.describeWhatIfForecastExport,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast-export/*"],
   }),
 );

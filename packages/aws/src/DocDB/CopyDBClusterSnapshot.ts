@@ -47,5 +47,6 @@ export const CopyDBClusterSnapshotHttp = Layer.effect(
     tag: "AWS.DocDB.CopyDBClusterSnapshot",
     operation: docdb.copyDBClusterSnapshot,
     actions: ["rds:CopyDBClusterSnapshot"],
+    arns: ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"],
   }),
 );

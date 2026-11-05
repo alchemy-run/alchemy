@@ -9,7 +9,8 @@
   "builder": "makeRbinRuleHttpBinding",
   "builders": {
     "makeRbinAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeRbinRuleHttpBinding": {
       "grants": "resource"

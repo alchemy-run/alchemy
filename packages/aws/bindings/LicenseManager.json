@@ -22,7 +22,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -69,7 +70,10 @@
         "interface": "CreateGrantRequest",
         "omit": []
       },
-      "actions": ["license-manager:CreateGrant"]
+      "actions": ["license-manager:CreateGrant"],
+      "reviewed": {
+        "license-manager:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateGrantVersion": {
       "operation": "createGrantVersion",
@@ -87,7 +91,10 @@
         "interface": "CreateLicenseRequest",
         "omit": []
       },
-      "actions": ["license-manager:CreateLicense"]
+      "actions": ["license-manager:CreateLicense"],
+      "reviewed": {
+        "license-manager:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateLicenseVersion": {
       "operation": "createLicenseVersion",

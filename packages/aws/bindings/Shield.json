@@ -5,7 +5,8 @@
   "builder": "makeShieldHttpBinding",
   "builders": {
     "makeShieldHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -14,7 +15,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["shield:DescribeAttack"]
+      "actions": ["shield:DescribeAttack"],
+      "arns": ["arn:${Partition}:shield::${Account}:attack/*"]
     },
     "DescribeAttackStatistics": {
       "operation": "describeAttackStatistics",
@@ -37,7 +39,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["shield:ListResourcesInProtectionGroup"]
+      "actions": ["shield:ListResourcesInProtectionGroup"],
+      "arns": ["arn:${Partition}:shield::${Account}:protection-group/*"]
     }
   }
 }

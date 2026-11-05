@@ -10,7 +10,8 @@
   "builder": "makeInternetMonitorMonitorHttpBinding",
   "builders": {
     "makeInternetMonitorAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeInternetMonitorMonitorHttpBinding": {
       "grants": "resource"
@@ -35,7 +36,8 @@
         "omit": []
       },
       "builder": "makeInternetMonitorAccountHttpBinding",
-      "actions": ["internetmonitor:GetInternetEvent"]
+      "actions": ["internetmonitor:GetInternetEvent"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:internetmonitor::${Account}:internet-event/*), the call was denied live in the InternetMonitor Bindings suite; the grant stays on *."
     },
     "GetQueryResults": {
       "operation": "getQueryResults",

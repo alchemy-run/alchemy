@@ -49,5 +49,6 @@ export const ListDelegatedServicesForAccountHttp = Layer.effect(
     capability: "ListDelegatedServicesForAccount",
     iamActions: ["organizations:ListDelegatedServicesForAccount"],
     operation: organizations.listDelegatedServicesForAccount,
+    arns: ["arn:${Partition}:organizations::${Account}:account/o-*/*"],
   }),
 );

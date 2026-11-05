@@ -45,5 +45,6 @@ export const DescribeAttackHttp = Layer.effect(
     tag: "AWS.Shield.DescribeAttack",
     operation: shield.describeAttack,
     actions: ["shield:DescribeAttack"],
+    arns: ["arn:${Partition}:shield::${Account}:attack/*"],
   }),
 );

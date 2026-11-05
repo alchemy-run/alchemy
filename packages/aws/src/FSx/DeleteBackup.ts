@@ -44,5 +44,6 @@ export const DeleteBackupHttp = Layer.effect(
     tag: "AWS.FSx.DeleteBackup",
     operation: fsx.deleteBackup,
     actions: ["fsx:DeleteBackup"],
+    arns: ["arn:${Partition}:fsx:${Region}:${Account}:backup/*"],
   }),
 );

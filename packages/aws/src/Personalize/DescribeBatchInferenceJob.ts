@@ -48,5 +48,6 @@ export const DescribeBatchInferenceJobHttp = Layer.effect(
     tag: "AWS.Personalize.DescribeBatchInferenceJob",
     operation: personalize.describeBatchInferenceJob,
     actions: ["personalize:DescribeBatchInferenceJob"],
+    arns: ["arn:${Partition}:personalize:${Region}:${Account}:batch-inference-job/*"],
   }),
 );

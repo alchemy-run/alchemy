@@ -10,7 +10,8 @@
   "builder": "makeProfilesHttpBinding",
   "builders": {
     "makeProfilesHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

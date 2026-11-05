@@ -52,5 +52,6 @@ export const ListEffectivePolicyValidationErrorsHttp = Layer.effect(
     capability: "ListEffectivePolicyValidationErrors",
     iamActions: ["organizations:ListEffectivePolicyValidationErrors"],
     operation: organizations.listEffectivePolicyValidationErrors,
+    arns: ["arn:${Partition}:organizations::${Account}:account/o-*/*"],
   }),
 );

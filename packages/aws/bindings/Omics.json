@@ -21,7 +21,8 @@
   "builder": "makeOmicsResourceHttpBinding",
   "builders": {
     "makeOmicsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeOmicsResourceHttpBinding": {}
   },
@@ -467,6 +468,9 @@
       "withTs": {
         "id": "(store: SequenceStore) => store.sequenceStoreId",
         "arn": "(store: SequenceStore) => store.sequenceStoreArn"
+      },
+      "reviewed": {
+        "omics:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "StartReferenceImportJob": {
@@ -486,6 +490,9 @@
       "withTs": {
         "id": "(store: ReferenceStore) => store.referenceStoreId",
         "arn": "(store: ReferenceStore) => store.referenceStoreArn"
+      },
+      "reviewed": {
+        "omics:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "StartRun": {
@@ -504,6 +511,9 @@
       "withTs": {
         "id": "(workflow: Workflow) => workflow.workflowId",
         "arn": "(workflow: Workflow) => workflow.workflowArn"
+      },
+      "reviewed": {
+        "omics:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "StartVariantImportJob": {

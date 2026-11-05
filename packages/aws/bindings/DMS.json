@@ -13,10 +13,12 @@
   "builder": "makeDmsAccountHttpBinding",
   "builders": {
     "makeDmsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeDmsEndpointScopedHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeDmsInstanceScopedHttpBinding": {
       "grants": "resource"
@@ -49,7 +51,8 @@
         "mode": "none"
       },
       "builder": "makeDmsEndpointScopedHttpBinding",
-      "actions": ["dms:DescribeRefreshSchemasStatus"]
+      "actions": ["dms:DescribeRefreshSchemasStatus"],
+      "arns": ["arn:${Partition}:dms:${Region}:${Account}:endpoint:*"]
     },
     "DescribeReplicationInstanceTaskLogs": {
       "operation": "describeReplicationInstanceTaskLogs",
@@ -83,14 +86,16 @@
         "inline": true
       },
       "builder": "makeDmsEndpointScopedHttpBinding",
-      "actions": ["dms:DescribeSchemas"]
+      "actions": ["dms:DescribeSchemas"],
+      "arns": ["arn:${Partition}:dms:${Region}:${Account}:endpoint:*"]
     },
     "DescribeTableStatistics": {
       "operation": "describeTableStatistics",
       "request": {
         "mode": "required"
       },
-      "actions": ["dms:DescribeTableStatistics"]
+      "actions": ["dms:DescribeTableStatistics"],
+      "arns": ["arn:${Partition}:dms:${Region}:${Account}:task:*"]
     },
     "RebootReplicationInstance": {
       "operation": "rebootReplicationInstance",
@@ -112,35 +117,40 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["dms:ReloadTables"]
+      "actions": ["dms:ReloadTables"],
+      "arns": ["arn:${Partition}:dms:${Region}:${Account}:task:*"]
     },
     "StartReplication": {
       "operation": "startReplication",
       "request": {
         "mode": "required"
       },
-      "actions": ["dms:StartReplication"]
+      "actions": ["dms:StartReplication"],
+      "arns": ["arn:${Partition}:dms:${Region}:${Account}:replication-config:*"]
     },
     "StartReplicationTask": {
       "operation": "startReplicationTask",
       "request": {
         "mode": "required"
       },
-      "actions": ["dms:StartReplicationTask"]
+      "actions": ["dms:StartReplicationTask"],
+      "arns": ["arn:${Partition}:dms:${Region}:${Account}:task:*"]
     },
     "StopReplication": {
       "operation": "stopReplication",
       "request": {
         "mode": "required"
       },
-      "actions": ["dms:StopReplication"]
+      "actions": ["dms:StopReplication"],
+      "arns": ["arn:${Partition}:dms:${Region}:${Account}:replication-config:*"]
     },
     "StopReplicationTask": {
       "operation": "stopReplicationTask",
       "request": {
         "mode": "required"
       },
-      "actions": ["dms:StopReplicationTask"]
+      "actions": ["dms:StopReplicationTask"],
+      "arns": ["arn:${Partition}:dms:${Region}:${Account}:task:*"]
     }
   }
 }

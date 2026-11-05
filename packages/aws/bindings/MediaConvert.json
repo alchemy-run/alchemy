@@ -10,7 +10,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -19,7 +20,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["mediaconvert:CancelJob"]
+      "actions": ["mediaconvert:CancelJob"],
+      "arns": ["arn:${Partition}:mediaconvert:${Region}:${Account}:jobs/*"]
     },
     "CreateJob": {
       "operation": "createJob",
@@ -29,6 +31,9 @@
       "actions": ["mediaconvert:CreateJob"],
       "with": {
         "passRole": true
+      },
+      "reviewed": {
+        "mediaconvert:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "GetJob": {
@@ -36,7 +41,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["mediaconvert:GetJob"]
+      "actions": ["mediaconvert:GetJob"],
+      "arns": ["arn:${Partition}:mediaconvert:${Region}:${Account}:jobs/*"]
     },
     "GetJobsQueryResults": {
       "operation": "getJobsQueryResults",
@@ -63,7 +69,7 @@
     "StartJobsQuery": {
       "operation": "startJobsQuery",
       "actions": ["mediaconvert:StartJobsQuery", "mediaconvert:CreateJobsQuery"],
-      "note": "The wire operation is StartJobsQuery but IAM authorizes the creation of the query object as CreateJobsQuery \u2014 grant both spellings."
+      "note": "The wire operation is StartJobsQuery but IAM authorizes the creation of the query object as CreateJobsQuery — grant both spellings."
     }
   }
 }

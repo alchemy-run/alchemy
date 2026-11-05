@@ -51,5 +51,6 @@ export const GeocodeHttp = Layer.effect(
     capability: "Geocode",
     iamActions: ["geo-places:Geocode"],
     operation: geoPlaces.geocode,
+    arns: ["arn:${Partition}:geo-places:${Region}::provider/default"],
   }),
 );

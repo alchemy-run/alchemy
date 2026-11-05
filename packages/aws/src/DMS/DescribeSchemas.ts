@@ -45,5 +45,6 @@ export const DescribeSchemasHttp = Layer.effect(
     tag: "AWS.DMS.DescribeSchemas",
     operation: dms.describeSchemas,
     actions: ["dms:DescribeSchemas"],
+    arns: ["arn:${Partition}:dms:${Region}:${Account}:endpoint:*"],
   }),
 );

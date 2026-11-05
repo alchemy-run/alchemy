@@ -5,7 +5,8 @@
   "builder": "makeMacie2HttpBinding",
   "builders": {
     "makeMacie2HttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -27,7 +28,10 @@
     },
     "CreateMember": {
       "operation": "createMember",
-      "actions": ["macie2:CreateMember"]
+      "actions": ["macie2:CreateMember"],
+      "reviewed": {
+        "macie2:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateSampleFindings": {
       "operation": "createSampleFindings",

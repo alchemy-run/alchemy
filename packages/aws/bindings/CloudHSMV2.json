@@ -6,7 +6,8 @@
   "builder": "makeCloudHsmHttpBinding",
   "builders": {
     "makeCloudHsmHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -16,21 +17,26 @@
         "mode": "required"
       },
       "actions": ["cloudhsm:CopyBackupToRegion", "cloudhsm:TagResource"],
-      "note": "TagResource lets the copy carry the source backup's user tags into the destination region."
+      "note": "TagResource lets the copy carry the source backup's user tags into the destination region.",
+      "reviewed": {
+        "cloudhsm:UntagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "DeleteBackup": {
       "operation": "deleteBackup",
       "request": {
         "mode": "required"
       },
-      "actions": ["cloudhsm:DeleteBackup"]
+      "actions": ["cloudhsm:DeleteBackup"],
+      "arns": ["arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*"]
     },
     "DeleteResourcePolicy": {
       "operation": "deleteResourcePolicy",
       "request": {
         "mode": "required"
       },
-      "actions": ["cloudhsm:DeleteResourcePolicy"]
+      "actions": ["cloudhsm:DeleteResourcePolicy"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*), the call was denied live in the CloudHSMV2 Bindings suite; the grant stays on *."
     },
     "DescribeBackups": {
       "operation": "describeBackups",
@@ -42,35 +48,40 @@
     },
     "GetResourcePolicy": {
       "operation": "getResourcePolicy",
-      "actions": ["cloudhsm:GetResourcePolicy"]
+      "actions": ["cloudhsm:GetResourcePolicy"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*), the call was denied live in the CloudHSMV2 Bindings suite; the grant stays on *."
     },
     "InitializeCluster": {
       "operation": "initializeCluster",
       "request": {
         "mode": "required"
       },
-      "actions": ["cloudhsm:InitializeCluster"]
+      "actions": ["cloudhsm:InitializeCluster"],
+      "arns": ["arn:${Partition}:cloudhsm:${Region}:${Account}:cluster/*"]
     },
     "ModifyBackupAttributes": {
       "operation": "modifyBackupAttributes",
       "request": {
         "mode": "required"
       },
-      "actions": ["cloudhsm:ModifyBackupAttributes"]
+      "actions": ["cloudhsm:ModifyBackupAttributes"],
+      "arns": ["arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*"]
     },
     "PutResourcePolicy": {
       "operation": "putResourcePolicy",
       "request": {
         "mode": "required"
       },
-      "actions": ["cloudhsm:PutResourcePolicy"]
+      "actions": ["cloudhsm:PutResourcePolicy"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*), the call was denied live in the CloudHSMV2 Bindings suite; the grant stays on *."
     },
     "RestoreBackup": {
       "operation": "restoreBackup",
       "request": {
         "mode": "required"
       },
-      "actions": ["cloudhsm:RestoreBackup"]
+      "actions": ["cloudhsm:RestoreBackup"],
+      "arns": ["arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*"]
     }
   }
 }

@@ -46,5 +46,6 @@ export const GetLandingZoneHttp = Layer.effect(
     capability: "GetLandingZone",
     iamActions: ["controltower:GetLandingZone"],
     operation: controltower.getLandingZone,
+    arns: ["arn:${Partition}:controltower:${Region}:${Account}:landingzone/*"],
   }),
 );

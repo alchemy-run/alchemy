@@ -45,5 +45,6 @@ export const GetSubjectHttp = Layer.effect(
     capability: "GetSubject",
     iamActions: ["rolesanywhere:GetSubject"],
     operation: rolesanywhere.getSubject,
+    arns: ["arn:${Partition}:rolesanywhere:${Region}:${Account}:subject/*"],
   }),
 );

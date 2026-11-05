@@ -59,5 +59,6 @@ export const OptimizeWaypointsHttp = Layer.effect(
     capability: "OptimizeWaypoints",
     iamActions: ["geo-routes:OptimizeWaypoints"],
     operation: geoRoutes.optimizeWaypoints,
+    arns: ["arn:${Partition}:geo-routes:${Region}::provider/default"],
   }),
 );

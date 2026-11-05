@@ -125,7 +125,10 @@
           "STORAGE_CONFIGURATION_ARN_WILDCARD"
         ]
       },
-      "note": "The created composition and any referenced encoder/storage configurations are runtime data."
+      "note": "The created composition and any referenced encoder/storage configurations are runtime data.",
+      "reviewed": {
+        "ivs:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "StopComposition": {
       "operation": "stopComposition",

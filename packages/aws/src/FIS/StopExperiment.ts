@@ -44,5 +44,6 @@ export const StopExperimentHttp = Layer.effect(
     tag: "AWS.FIS.StopExperiment",
     operation: fis.stopExperiment,
     actions: ["fis:StopExperiment"],
+    arns: ["arn:${Partition}:fis:${Region}:${Account}:experiment/*"],
   }),
 );

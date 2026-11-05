@@ -6,7 +6,8 @@
   "builder": "makeAccountHttpBinding",
   "builders": {
     "makeAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

@@ -47,5 +47,6 @@ export const UpdateSnapshotHttp = Layer.effect(
     tag: "AWS.FSx.UpdateSnapshot",
     operation: fsx.updateSnapshot,
     actions: ["fsx:UpdateSnapshot"],
+    arns: ["arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*"],
   }),
 );

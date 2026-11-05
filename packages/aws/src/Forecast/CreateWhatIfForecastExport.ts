@@ -60,5 +60,6 @@ export const CreateWhatIfForecastExportHttp = Layer.effect(
     iamActions: ["forecast:CreateWhatIfForecastExport"],
     operation: forecast.createWhatIfForecastExport,
     passRole: true,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast/*"],
   }),
 );

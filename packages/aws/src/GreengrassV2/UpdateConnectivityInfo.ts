@@ -55,5 +55,9 @@ export const UpdateConnectivityInfoHttp = Layer.effect(
     tag: "AWS.GreengrassV2.UpdateConnectivityInfo",
     operation: greengrassv2.updateConnectivityInfo,
     actions: ["greengrass:UpdateConnectivityInfo", "iot:GetThingShadow", "iot:UpdateThingShadow"],
+    arns: [
+      "arn:${Partition}:greengrass:${Region}:${Account}:/greengrass/things/*/connectivityInfo",
+      "arn:${Partition}:iot:${Region}:${Account}:thing/*",
+    ],
   }),
 );

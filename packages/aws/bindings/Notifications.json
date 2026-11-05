@@ -22,7 +22,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -33,7 +34,8 @@
         "interface": "GetManagedNotificationChildEventRequest",
         "omit": []
       },
-      "actions": ["notifications:GetManagedNotificationChildEvent"]
+      "actions": ["notifications:GetManagedNotificationChildEvent"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:notifications::${Account}:managed-notification-configuration/category/*/sub-category/*/event/*/child-event/*), the call was denied live in the Notifications Bindings suite; the grant stays on *."
     },
     "GetManagedNotificationConfiguration": {
       "operation": "getManagedNotificationConfiguration",
@@ -42,7 +44,10 @@
         "interface": "GetManagedNotificationConfigurationRequest",
         "omit": []
       },
-      "actions": ["notifications:GetManagedNotificationConfiguration"]
+      "actions": ["notifications:GetManagedNotificationConfiguration"],
+      "arns": [
+        "arn:${Partition}:notifications::${Account}:managed-notification-configuration/category/*/sub-category/*"
+      ]
     },
     "GetManagedNotificationEvent": {
       "operation": "getManagedNotificationEvent",
@@ -51,7 +56,10 @@
         "interface": "GetManagedNotificationEventRequest",
         "omit": []
       },
-      "actions": ["notifications:GetManagedNotificationEvent"]
+      "actions": ["notifications:GetManagedNotificationEvent"],
+      "arns": [
+        "arn:${Partition}:notifications::${Account}:managed-notification-configuration/category/*/sub-category/*/event/*"
+      ]
     },
     "GetNotificationEvent": {
       "operation": "getNotificationEvent",
@@ -60,7 +68,8 @@
         "interface": "GetNotificationEventRequest",
         "omit": []
       },
-      "actions": ["notifications:GetNotificationEvent"]
+      "actions": ["notifications:GetNotificationEvent"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:notifications:${Region}:${Account}:configuration/*/event/*), the call was denied live in the Notifications Bindings suite; the grant stays on *."
     },
     "ListChannels": {
       "operation": "listChannels",

@@ -54,5 +54,6 @@ export const GetPlaceHttp = Layer.effect(
     capability: "GetPlace",
     iamActions: ["geo-places:GetPlace"],
     operation: geoPlaces.getPlace,
+    arns: ["arn:${Partition}:geo-places:${Region}::provider/default"],
   }),
 );

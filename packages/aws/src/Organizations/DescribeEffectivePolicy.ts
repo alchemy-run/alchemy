@@ -50,5 +50,6 @@ export const DescribeEffectivePolicyHttp = Layer.effect(
     capability: "DescribeEffectivePolicy",
     iamActions: ["organizations:DescribeEffectivePolicy"],
     operation: organizations.describeEffectivePolicy,
+    arns: ["arn:${Partition}:organizations::${Account}:account/o-*/*"],
   }),
 );

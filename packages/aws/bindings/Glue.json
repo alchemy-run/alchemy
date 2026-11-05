@@ -140,7 +140,7 @@
       "with": {
         "anyResource": true
       },
-      "note": "Glue evaluates bookmark actions without a resource \u2014 an ARN-scoped grant never matches (verified live via the IAM policy simulator)."
+      "note": "Glue evaluates bookmark actions without a resource — an ARN-scoped grant never matches (verified live via the IAM policy simulator)."
     },
     "GetJobRun": {
       "operation": "getJobRun",
@@ -227,7 +227,7 @@
       "with": {
         "anyResource": true
       },
-      "note": "Glue evaluates bookmark actions without a resource \u2014 an ARN-scoped grant never matches (verified live via the IAM policy simulator)."
+      "note": "Glue evaluates bookmark actions without a resource — an ARN-scoped grant never matches (verified live via the IAM policy simulator)."
     },
     "StartCrawler": {
       "operation": "startCrawler",
@@ -247,7 +247,7 @@
         "omit": ["JobName"]
       },
       "builder": "makeGlueJobHttpBinding",
-      "actions": ["glue:StartJobRun", "glue:GetJobRun"]
+      "actions": ["glue:StartJobRun"]
     },
     "StopCrawler": {
       "operation": "stopCrawler",

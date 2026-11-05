@@ -47,5 +47,6 @@ export const ModifyBackupAttributesHttp = Layer.effect(
     tag: "AWS.CloudHSMV2.ModifyBackupAttributes",
     operation: cloudhsm.modifyBackupAttributes,
     actions: ["cloudhsm:ModifyBackupAttributes"],
+    arns: ["arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*"],
   }),
 );

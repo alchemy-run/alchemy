@@ -13,7 +13,8 @@
   "builder": "makeEMRContainersVirtualClusterHttpBinding",
   "builders": {
     "makeEMRContainersAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeEMRContainersJobTemplateHttpBinding": {
       "grants": "resource"

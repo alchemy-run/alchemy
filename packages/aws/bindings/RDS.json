@@ -12,7 +12,8 @@
   "builder": "makeRdsAccountHttpBinding",
   "builders": {
     "makeRdsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeRdsClusterHttpBinding": {
       "grants": "resource"
@@ -57,7 +58,7 @@
       "withTs": {
         "extraResources": "(arn) => [`${arn.split(\":\").slice(0, 5).join(\":\")}:cluster-snapshot:*`]"
       },
-      "note": "Snapshot creation authorizes against BOTH the source ARN and the target snapshot ARN \u2014 widen the grant to the account's `cluster-snapshot` ARN space."
+      "note": "Snapshot creation authorizes against BOTH the source ARN and the target snapshot ARN — widen the grant to the account's `cluster-snapshot` ARN space."
     },
     "CreateDBSnapshot": {
       "operation": "createDBSnapshot",
@@ -73,21 +74,23 @@
       "withTs": {
         "extraResources": "(arn) => [`${arn.split(\":\").slice(0, 5).join(\":\")}:snapshot:*`]"
       },
-      "note": "Snapshot creation authorizes against BOTH the source ARN and the target snapshot ARN \u2014 widen the grant to the account's `snapshot` ARN space."
+      "note": "Snapshot creation authorizes against BOTH the source ARN and the target snapshot ARN — widen the grant to the account's `snapshot` ARN space."
     },
     "DeleteDBClusterSnapshot": {
       "operation": "deleteDBClusterSnapshot",
       "request": {
         "mode": "required"
       },
-      "actions": ["rds:DeleteDBClusterSnapshot"]
+      "actions": ["rds:DeleteDBClusterSnapshot"],
+      "arns": ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"]
     },
     "DeleteDBSnapshot": {
       "operation": "deleteDBSnapshot",
       "request": {
         "mode": "required"
       },
-      "actions": ["rds:DeleteDBSnapshot"]
+      "actions": ["rds:DeleteDBSnapshot"],
+      "arns": ["arn:${Partition}:rds:${Region}:${Account}:snapshot:*"]
     },
     "DescribeDBClusterEndpoints": {
       "operation": "describeDBClusterEndpoints",
@@ -181,7 +184,11 @@
         "inline": true
       },
       "builder": "makeRdsInstanceHttpBinding",
-      "actions": ["rds:StopDBInstance"]
+      "actions": ["rds:StopDBInstance"],
+      "reviewed": {
+        "rds:AddTagsToResource": "Needed only when the request names a DBSnapshotIdentifier (a snapshot taken on stop).",
+        "rds:CreateDBSnapshot": "Needed only when the request names a DBSnapshotIdentifier (a snapshot taken on stop)."
+      }
     }
   }
 }

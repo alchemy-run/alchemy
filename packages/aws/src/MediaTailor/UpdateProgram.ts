@@ -46,5 +46,6 @@ export const UpdateProgramHttp = Layer.effect(
     capability: "UpdateProgram",
     iamActions: ["mediatailor:UpdateProgram"],
     operation: mediatailor.updateProgram,
+    arns: ["arn:${Partition}:mediatailor:${Region}:${Account}:program/*/*"],
   }),
 );

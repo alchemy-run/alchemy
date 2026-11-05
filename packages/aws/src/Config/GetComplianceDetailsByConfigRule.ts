@@ -64,6 +64,7 @@ export const GetComplianceDetailsByConfigRuleHttp = Layer.effect(
     operation: config.getComplianceDetailsByConfigRule,
     actions: ["config:GetComplianceDetailsByConfigRule"],
     requestKey: "ConfigRuleName",
+    arns: ["arn:${Partition}:config:${Region}:${Account}:config-rule/*"],
     identifier: (rule: ConfigRule) => rule.configRuleName,
   }),
 );

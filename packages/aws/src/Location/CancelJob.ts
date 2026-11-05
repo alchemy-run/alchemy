@@ -41,5 +41,6 @@ export const CancelJobHttp = Layer.effect(
     tag: "AWS.Location.CancelJob",
     operation: location.cancelJob,
     actions: ["geo:CancelJob"],
+    arns: ["arn:${Partition}:geo:${Region}:${Account}:job/*"],
   }),
 );

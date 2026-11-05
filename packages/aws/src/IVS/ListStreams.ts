@@ -43,5 +43,6 @@ export const ListStreamsHttp = Layer.effect(
     tag: "AWS.IVS.ListStreams",
     operation: ivs.listStreams,
     actions: ["ivs:ListStreams"],
+    arns: ["arn:${Partition}:ivs:${Region}:${Account}:channel/*"],
   }),
 );

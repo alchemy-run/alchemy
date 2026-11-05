@@ -9,7 +9,8 @@
   "builder": "makeDlmAccountHttpBinding",
   "builders": {
     "makeDlmAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeDlmPolicyHttpBinding": {
       "grants": "resource"

@@ -53,5 +53,6 @@ export const DescribeForecastExportJobHttp = Layer.effect(
     capability: "DescribeForecastExportJob",
     iamActions: ["forecast:DescribeForecastExportJob"],
     operation: forecast.describeForecastExportJob,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:forecast-export-job/*"],
   }),
 );

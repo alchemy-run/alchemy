@@ -46,5 +46,6 @@ export const CopyDBClusterSnapshotHttp = Layer.effect(
     tag: "AWS.Neptune.CopyDBClusterSnapshot",
     operation: neptune.copyDBClusterSnapshot,
     actions: ["rds:CopyDBClusterSnapshot"],
+    arns: ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"],
   }),
 );

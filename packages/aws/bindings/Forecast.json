@@ -10,7 +10,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -22,6 +23,9 @@
       "actions": ["forecast:CreateAutoPredictor"],
       "with": {
         "passRole": true
+      },
+      "reviewed": {
+        "forecast:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "CreateDatasetImportJob": {
@@ -32,6 +36,9 @@
       "actions": ["forecast:CreateDatasetImportJob"],
       "with": {
         "passRole": true
+      },
+      "reviewed": {
+        "forecast:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "CreateForecast": {
@@ -39,7 +46,11 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:CreateForecast"]
+      "actions": ["forecast:CreateForecast"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:predictor/*"],
+      "reviewed": {
+        "forecast:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateForecastExportJob": {
       "operation": "createForecastExportJob",
@@ -50,14 +61,22 @@
       "with": {
         "passRole": true
       },
-      "note": "Destination hands Forecast a role to write the export to S3."
+      "note": "Destination hands Forecast a role to write the export to S3.",
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"],
+      "reviewed": {
+        "forecast:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateWhatIfAnalysis": {
       "operation": "createWhatIfAnalysis",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:CreateWhatIfAnalysis"]
+      "actions": ["forecast:CreateWhatIfAnalysis"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"],
+      "reviewed": {
+        "forecast:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateWhatIfForecast": {
       "operation": "createWhatIfForecast",
@@ -68,7 +87,8 @@
       "with": {
         "passRole": true
       },
-      "note": "TimeSeriesReplacementsDataSource hands Forecast a role to read S3."
+      "note": "TimeSeriesReplacementsDataSource hands Forecast a role to read S3.",
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-analysis/*"]
     },
     "CreateWhatIfForecastExport": {
       "operation": "createWhatIfForecastExport",
@@ -79,70 +99,95 @@
       "with": {
         "passRole": true
       },
-      "note": "Destination hands Forecast a role to write the export to S3."
+      "note": "Destination hands Forecast a role to write the export to S3.",
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast/*"]
     },
     "DeleteResourceTree": {
       "operation": "deleteResourceTree",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:DeleteResourceTree"]
+      "actions": ["forecast:DeleteResourceTree"],
+      "arns": [
+        "arn:${Partition}:forecast:${Region}:${Account}:dataset-group/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:dataset-import-job/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:dataset/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:explainability-export/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:explainability/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:forecast-endpoint/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:forecast-export-job/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:forecast/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:monitor/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:predictor-backtest-export-job/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:predictor/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:what-if-analysis/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast-export/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast/*"
+      ]
     },
     "DescribeAutoPredictor": {
       "operation": "describeAutoPredictor",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:DescribeAutoPredictor"]
+      "actions": ["forecast:DescribeAutoPredictor"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:predictor/*"]
     },
     "DescribeDatasetImportJob": {
       "operation": "describeDatasetImportJob",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:DescribeDatasetImportJob"]
+      "actions": ["forecast:DescribeDatasetImportJob"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:dataset-import-job/*"]
     },
     "DescribeForecast": {
       "operation": "describeForecast",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:DescribeForecast"]
+      "actions": ["forecast:DescribeForecast"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"]
     },
     "DescribeForecastExportJob": {
       "operation": "describeForecastExportJob",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:DescribeForecastExportJob"]
+      "actions": ["forecast:DescribeForecastExportJob"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:forecast-export-job/*"]
     },
     "DescribeWhatIfAnalysis": {
       "operation": "describeWhatIfAnalysis",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:DescribeWhatIfAnalysis"]
+      "actions": ["forecast:DescribeWhatIfAnalysis"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-analysis/*"]
     },
     "DescribeWhatIfForecast": {
       "operation": "describeWhatIfForecast",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:DescribeWhatIfForecast"]
+      "actions": ["forecast:DescribeWhatIfForecast"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast/*"]
     },
     "DescribeWhatIfForecastExport": {
       "operation": "describeWhatIfForecastExport",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:DescribeWhatIfForecastExport"]
+      "actions": ["forecast:DescribeWhatIfForecastExport"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast-export/*"]
     },
     "GetAccuracyMetrics": {
       "operation": "getAccuracyMetrics",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:GetAccuracyMetrics"]
+      "actions": ["forecast:GetAccuracyMetrics"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:predictor/*"]
     },
     "QueryForecast": {
       "operation": "queryForecast",
@@ -150,7 +195,8 @@
         "mode": "required"
       },
       "actions": ["forecast:QueryForecast"],
-      "module": "forecastquery"
+      "module": "forecastquery",
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"]
     },
     "QueryWhatIfForecast": {
       "operation": "queryWhatIfForecast",
@@ -158,21 +204,37 @@
         "mode": "required"
       },
       "actions": ["forecast:QueryWhatIfForecast"],
-      "module": "forecastquery"
+      "module": "forecastquery",
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast/*"]
     },
     "ResumeResource": {
       "operation": "resumeResource",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:ResumeResource"]
+      "actions": ["forecast:ResumeResource"],
+      "arns": ["arn:${Partition}:forecast:${Region}:${Account}:monitor/*"]
     },
     "StopResource": {
       "operation": "stopResource",
       "request": {
         "mode": "required"
       },
-      "actions": ["forecast:StopResource"]
+      "actions": ["forecast:StopResource"],
+      "arns": [
+        "arn:${Partition}:forecast:${Region}:${Account}:dataset-import-job/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:explainability-export/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:explainability/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:forecast-endpoint/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:forecast-export-job/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:forecast/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:monitor/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:predictor-backtest-export-job/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:predictor/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:what-if-analysis/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast-export/*",
+        "arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast/*"
+      ]
     }
   }
 }

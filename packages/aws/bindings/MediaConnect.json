@@ -9,7 +9,8 @@
   "builder": "makeMediaConnectFlowHttpBinding",
   "builders": {
     "makeMediaConnectAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeMediaConnectFlowHttpBinding": {
       "grants": "resource"
@@ -52,7 +53,10 @@
       "with": {
         "extraResources": ["arn:aws:mediaconnect:*:*:entitlement:*"]
       },
-      "note": "The IAM resource types for GrantFlowEntitlements are the flow AND the entitlement; entitlement ARNs are siblings of (not derived from) the flow ARN, so they are granted by wildcard."
+      "note": "The IAM resource types for GrantFlowEntitlements are the flow AND the entitlement; entitlement ARNs are siblings of (not derived from) the flow ARN, so they are granted by wildcard.",
+      "reviewed": {
+        "mediaconnect:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "ListEntitlements": {
       "operation": "listEntitlements",

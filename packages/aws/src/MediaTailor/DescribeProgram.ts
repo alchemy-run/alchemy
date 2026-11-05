@@ -44,5 +44,6 @@ export const DescribeProgramHttp = Layer.effect(
     capability: "DescribeProgram",
     iamActions: ["mediatailor:DescribeProgram"],
     operation: mediatailor.describeProgram,
+    arns: ["arn:${Partition}:mediatailor:${Region}:${Account}:program/*/*"],
   }),
 );

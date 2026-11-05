@@ -61,5 +61,6 @@ export const ResolveComponentCandidatesHttp = Layer.effect(
     tag: "AWS.GreengrassV2.ResolveComponentCandidates",
     operation: greengrassv2.resolveComponentCandidates,
     actions: ["greengrass:ResolveComponentCandidates"],
+    arns: ["arn:${Partition}:greengrass:${Region}:${Account}:components:*:versions:*"],
   }),
 );

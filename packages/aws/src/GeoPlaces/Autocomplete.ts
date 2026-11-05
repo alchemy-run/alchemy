@@ -52,5 +52,6 @@ export const AutocompleteHttp = Layer.effect(
     capability: "Autocomplete",
     iamActions: ["geo-places:Autocomplete"],
     operation: geoPlaces.autocomplete,
+    arns: ["arn:${Partition}:geo-places:${Region}::provider/default"],
   }),
 );

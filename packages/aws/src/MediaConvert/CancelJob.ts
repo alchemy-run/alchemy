@@ -47,5 +47,6 @@ export const CancelJobHttp = Layer.effect(
     capability: "CancelJob",
     iamActions: ["mediaconvert:CancelJob"],
     operation: mediaconvert.cancelJob,
+    arns: ["arn:${Partition}:mediaconvert:${Region}:${Account}:jobs/*"],
   }),
 );

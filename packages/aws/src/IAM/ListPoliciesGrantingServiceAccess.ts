@@ -56,5 +56,10 @@ export const ListPoliciesGrantingServiceAccessHttp = Layer.effect(
     capability: "ListPoliciesGrantingServiceAccess",
     iamActions: ["iam:ListPoliciesGrantingServiceAccess"],
     operation: iam.listPoliciesGrantingServiceAccess,
+    arns: [
+      "arn:${Partition}:iam::${Account}:group/*",
+      "arn:${Partition}:iam::${Account}:role/*",
+      "arn:${Partition}:iam::${Account}:user/*",
+    ],
   }),
 );

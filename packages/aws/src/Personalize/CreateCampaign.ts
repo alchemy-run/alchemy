@@ -43,5 +43,9 @@ export const CreateCampaignHttp = Layer.effect(
     tag: "AWS.Personalize.CreateCampaign",
     operation: personalize.createCampaign,
     actions: ["personalize:CreateCampaign"],
+    arns: [
+      "arn:${Partition}:personalize:${Region}:${Account}:campaign/*",
+      "arn:${Partition}:personalize:${Region}:${Account}:solution/*",
+    ],
   }),
 );

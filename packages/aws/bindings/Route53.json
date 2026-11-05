@@ -91,7 +91,10 @@
       },
       "builder": "makeRoute53AccountHttpBinding",
       "actions": ["route53:ListHostedZonesByVPC", "ec2:DescribeVpcs"],
-      "note": "Route 53 verifies the VPC on the caller's behalf via ec2:DescribeVpcs \u2014 without that grant every call fails with AccessDeniedException (\"Failed to verify the given VPC by calling ec2:DescribeVpcs\")."
+      "note": "Route 53 verifies the VPC on the caller's behalf via ec2:DescribeVpcs — without that grant every call fails with AccessDeniedException (\"Failed to verify the given VPC by calling ec2:DescribeVpcs\").",
+      "reviewed": {
+        "ec2:DescribeVpcs": "See the note: Route 53 verifies the VPC on the caller's behalf via ec2:DescribeVpcs — without that grant every call fails with AccessDeniedException (\"Failed to verify the given VPC by calling ec2:DescribeVpcs\")."
+      }
     },
     "ListResourceRecordSets": {
       "operation": "listResourceRecordSets",

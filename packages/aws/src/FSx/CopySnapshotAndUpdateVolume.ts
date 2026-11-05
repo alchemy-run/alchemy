@@ -52,5 +52,9 @@ export const CopySnapshotAndUpdateVolumeHttp = Layer.effect(
     tag: "AWS.FSx.CopySnapshotAndUpdateVolume",
     operation: fsx.copySnapshotAndUpdateVolume,
     actions: ["fsx:CopySnapshotAndUpdateVolume"],
+    arns: [
+      "arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*",
+      "arn:${Partition}:fsx:${Region}:${Account}:volume/*/*",
+    ],
   }),
 );

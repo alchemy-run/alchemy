@@ -47,5 +47,6 @@ export const DescribeForecastHttp = Layer.effect(
     capability: "DescribeForecast",
     iamActions: ["forecast:DescribeForecast"],
     operation: forecast.describeForecast,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"],
   }),
 );

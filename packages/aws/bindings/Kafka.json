@@ -26,7 +26,10 @@
       "with": {
         "topicScoped": true
       },
-      "note": "The control-plane action authorizes against the topic ARN; the kafka-cluster analogs cover the underlying Kafka admin operation."
+      "note": "The control-plane action authorizes against the topic ARN; the kafka-cluster analogs cover the underlying Kafka admin operation.",
+      "reviewed": {
+        "kafka:CreateTopic": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
+      }
     },
     "DeleteTopic": {
       "operation": "deleteTopic",
@@ -40,6 +43,9 @@
       "actions": ["kafka:DeleteTopic", "kafka-cluster:Connect", "kafka-cluster:DeleteTopic"],
       "with": {
         "topicScoped": true
+      },
+      "reviewed": {
+        "kafka:DeleteTopic": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     },
     "DescribeTopic": {
@@ -59,6 +65,9 @@
       ],
       "with": {
         "topicScoped": true
+      },
+      "reviewed": {
+        "kafka:DescribeTopic": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     },
     "DescribeTopicPartitions": {
@@ -77,6 +86,9 @@
       ],
       "with": {
         "topicScoped": true
+      },
+      "reviewed": {
+        "kafka:DescribeTopicPartitions": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     },
     "GetBootstrapBrokers": {
@@ -100,6 +112,9 @@
       "actions": ["kafka:ListTopics", "kafka-cluster:Connect", "kafka-cluster:DescribeTopic"],
       "with": {
         "topicScoped": true
+      },
+      "reviewed": {
+        "kafka:ListTopics": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     },
     "UpdateTopic": {
@@ -119,6 +134,9 @@
       ],
       "with": {
         "topicScoped": true
+      },
+      "reviewed": {
+        "kafka:UpdateTopic": "The MSK topic API authorizes the control-plane kafka: action on the topic as well as the kafka-cluster: data-plane ones."
       }
     }
   }

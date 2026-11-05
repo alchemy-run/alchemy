@@ -5,7 +5,8 @@
   "builder": "makeChatbotAccountHttpBinding",
   "builders": {
     "makeChatbotAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

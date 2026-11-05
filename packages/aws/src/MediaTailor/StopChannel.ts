@@ -41,5 +41,6 @@ export const StopChannelHttp = Layer.effect(
     capability: "StopChannel",
     iamActions: ["mediatailor:StopChannel"],
     operation: mediatailor.stopChannel,
+    arns: ["arn:${Partition}:mediatailor:${Region}:${Account}:channel/*"],
   }),
 );

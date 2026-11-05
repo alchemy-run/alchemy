@@ -55,5 +55,6 @@ export const GetStaticMapHttp = Layer.effect(
     capability: "GetStaticMap",
     iamActions: ["geo-maps:GetStaticMap"],
     operation: geoMaps.getStaticMap,
+    arns: ["arn:${Partition}:geo-maps:${Region}::provider/default"],
   }),
 );

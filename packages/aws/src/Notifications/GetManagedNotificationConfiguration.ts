@@ -55,5 +55,8 @@ export const GetManagedNotificationConfigurationHttp = Layer.effect(
     capability: "GetManagedNotificationConfiguration",
     iamActions: ["notifications:GetManagedNotificationConfiguration"],
     operation: notifications.getManagedNotificationConfiguration,
+    arns: [
+      "arn:${Partition}:notifications::${Account}:managed-notification-configuration/category/*/sub-category/*",
+    ],
   }),
 );

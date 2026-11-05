@@ -59,7 +59,13 @@
         "iot:CreateThing",
         "iot:DescribeThing"
       ],
-      "note": "The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing."
+      "note": "The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing.",
+      "reviewed": {
+        "iotfleetwise:BatchCreateVehicle": "See the note: The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing.",
+        "iot:CreateThing": "See the note: The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing.",
+        "iot:DescribeThing": "See the note: The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing.",
+        "iotfleetwise:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "BatchUpdateVehicle": {
       "operation": "batchUpdateVehicle",
@@ -106,7 +112,7 @@
         "identifier": "(vehicle: Vehicle) => vehicle.vehicleName",
         "resources": "(vehicle: Vehicle) => [vehicle.vehicleArn, \"arn:aws:iotfleetwise:*:*:campaign/*\"]"
       },
-      "note": "GetVehicleStatus authorizes on both the vehicle and its associated campaigns \u2014 the campaign ARNs are unknowable at deploy time."
+      "note": "GetVehicleStatus authorizes on both the vehicle and its associated campaigns — the campaign ARNs are unknowable at deploy time."
     },
     "ListDecoderManifestSignals": {
       "operation": "listDecoderManifestSignals",

@@ -50,5 +50,6 @@ export const ListPendingInvitationResourcesHttp = Layer.effect(
     capability: "ListPendingInvitationResources",
     iamActions: ["ram:ListPendingInvitationResources"],
     operation: ram.listPendingInvitationResources,
+    arns: ["arn:${Partition}:ram:${Region}:${Account}:resource-share-invitation/*"],
   }),
 );

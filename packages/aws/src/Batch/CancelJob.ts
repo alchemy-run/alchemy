@@ -42,5 +42,6 @@ export const CancelJobHttp = Layer.effect(
     tag: "AWS.Batch.CancelJob",
     operation: batch.cancelJob,
     actions: ["batch:CancelJob"],
+    arns: ["arn:${Partition}:batch:${Region}:${Account}:job/*"],
   }),
 );

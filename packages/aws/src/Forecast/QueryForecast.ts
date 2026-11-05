@@ -49,5 +49,6 @@ export const QueryForecastHttp = Layer.effect(
     capability: "QueryForecast",
     iamActions: ["forecast:QueryForecast"],
     operation: forecastquery.queryForecast,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"],
   }),
 );

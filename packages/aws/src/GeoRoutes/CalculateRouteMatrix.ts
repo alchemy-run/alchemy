@@ -68,5 +68,6 @@ export const CalculateRouteMatrixHttp = Layer.effect(
     capability: "CalculateRouteMatrix",
     iamActions: ["geo-routes:CalculateRouteMatrix"],
     operation: geoRoutes.calculateRouteMatrix,
+    arns: ["arn:${Partition}:geo-routes:${Region}::provider/default"],
   }),
 );

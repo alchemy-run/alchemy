@@ -53,5 +53,6 @@ export const ReverseGeocodeHttp = Layer.effect(
     capability: "ReverseGeocode",
     iamActions: ["geo-places:ReverseGeocode"],
     operation: geoPlaces.reverseGeocode,
+    arns: ["arn:${Partition}:geo-places:${Region}::provider/default"],
   }),
 );

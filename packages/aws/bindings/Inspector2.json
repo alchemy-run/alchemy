@@ -5,7 +5,8 @@
   "builder": "makeInspector2AccountHttpBinding",
   "builders": {
     "makeInspector2AccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

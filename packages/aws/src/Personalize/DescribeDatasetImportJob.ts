@@ -48,5 +48,6 @@ export const DescribeDatasetImportJobHttp = Layer.effect(
     tag: "AWS.Personalize.DescribeDatasetImportJob",
     operation: personalize.describeDatasetImportJob,
     actions: ["personalize:DescribeDatasetImportJob"],
+    arns: ["arn:${Partition}:personalize:${Region}:${Account}:dataset-import-job/*"],
   }),
 );

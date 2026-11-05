@@ -42,5 +42,6 @@ export const RestoreBackupHttp = Layer.effect(
     tag: "AWS.CloudHSMV2.RestoreBackup",
     operation: cloudhsm.restoreBackup,
     actions: ["cloudhsm:RestoreBackup"],
+    arns: ["arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*"],
   }),
 );

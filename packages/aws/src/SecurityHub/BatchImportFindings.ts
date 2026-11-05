@@ -49,5 +49,6 @@ export const BatchImportFindingsHttp = Layer.effect(
     tag: "AWS.SecurityHub.BatchImportFindings",
     operation: securityhub.batchImportFindings,
     actions: ["securityhub:BatchImportFindings"],
+    arns: ["arn:${Partition}:securityhub:${Region}:${Account}:product/*/*"],
   }),
 );

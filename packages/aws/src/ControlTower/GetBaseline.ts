@@ -42,5 +42,6 @@ export const GetBaselineHttp = Layer.effect(
     capability: "GetBaseline",
     iamActions: ["controltower:GetBaseline"],
     operation: controltower.getBaseline,
+    arns: ["arn:${Partition}:controltower:${Region}::baseline/*"],
   }),
 );

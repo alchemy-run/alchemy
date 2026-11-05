@@ -15,7 +15,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeExportHttpBinding": {
       "options": {
@@ -55,7 +56,8 @@
         "omit": []
       },
       "builder": "makeDataExportsAccountHttpBinding",
-      "actions": ["bcm-data-exports:GetTable"]
+      "actions": ["bcm-data-exports:GetTable"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:bcm-data-exports:${Region}:${Account}:table/*), the call was denied live in the BCMDataExports Bindings suite; the grant stays on *."
     },
     "ListExecutions": {
       "operation": "listExecutions",

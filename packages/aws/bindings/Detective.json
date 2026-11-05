@@ -9,7 +9,8 @@
   "builder": "makeDetectiveGraphHttpBinding",
   "builders": {
     "makeDetectiveAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeDetectiveGraphHttpBinding": {
       "grants": "resource"

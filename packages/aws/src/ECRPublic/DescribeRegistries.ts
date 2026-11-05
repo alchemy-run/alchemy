@@ -49,5 +49,6 @@ export const DescribeRegistriesHttp = Layer.effect(
     capability: "DescribeRegistries",
     iamActions: ["ecr-public:DescribeRegistries"],
     operation: ecrpublic.describeRegistries,
+    arns: ["arn:${Partition}:ecr-public::${Account}:registry/*"],
   }),
 );

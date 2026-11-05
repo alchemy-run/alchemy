@@ -43,5 +43,6 @@ export const GetSafetyLeverHttp = Layer.effect(
     tag: "AWS.FIS.GetSafetyLever",
     operation: fis.getSafetyLever,
     actions: ["fis:GetSafetyLever"],
+    arns: ["arn:${Partition}:fis:${Region}:${Account}:safety-lever/*"],
   }),
 );

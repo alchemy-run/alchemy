@@ -5,7 +5,8 @@
   "builder": "makeTranscribeHttpBinding",
   "builders": {
     "makeTranscribeHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -14,28 +15,40 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["transcribe:CreateCallAnalyticsCategory"]
+      "actions": ["transcribe:CreateCallAnalyticsCategory"],
+      "reviewed": {
+        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateMedicalVocabulary": {
       "operation": "createMedicalVocabulary",
       "request": {
         "mode": "required"
       },
-      "actions": ["transcribe:CreateMedicalVocabulary"]
+      "actions": ["transcribe:CreateMedicalVocabulary"],
+      "reviewed": {
+        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateVocabulary": {
       "operation": "createVocabulary",
       "request": {
         "mode": "required"
       },
-      "actions": ["transcribe:CreateVocabulary"]
+      "actions": ["transcribe:CreateVocabulary"],
+      "reviewed": {
+        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateVocabularyFilter": {
       "operation": "createVocabularyFilter",
       "request": {
         "mode": "required"
       },
-      "actions": ["transcribe:CreateVocabularyFilter"]
+      "actions": ["transcribe:CreateVocabularyFilter"],
+      "reviewed": {
+        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "DeleteCallAnalyticsCategory": {
       "operation": "deleteCallAnalyticsCategory",
@@ -211,14 +224,20 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["transcribe:StartMedicalTranscriptionJob"]
+      "actions": ["transcribe:StartMedicalTranscriptionJob"],
+      "reviewed": {
+        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "StartTranscriptionJob": {
       "operation": "startTranscriptionJob",
       "request": {
         "mode": "required"
       },
-      "actions": ["transcribe:StartTranscriptionJob"]
+      "actions": ["transcribe:StartTranscriptionJob"],
+      "reviewed": {
+        "transcribe:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "TagResource": {
       "operation": "tagResource",

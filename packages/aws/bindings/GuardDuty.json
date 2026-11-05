@@ -9,7 +9,8 @@
   "builder": "makeGuardDutyDetectorHttpBinding",
   "builders": {
     "makeGuardDutyAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeGuardDutyDetectorHttpBinding": {}
   },

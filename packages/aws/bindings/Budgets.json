@@ -27,7 +27,10 @@
         "interface": "DescribeBudgetRequest",
         "omit": ["AccountId", "BudgetName"]
       },
-      "actions": ["budgets:ViewBudget"]
+      "actions": ["budgets:ViewBudget"],
+      "reviewed": {
+        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
+      }
     },
     "DescribeBudgetActionHistories": {
       "operation": "describeBudgetActionHistories",
@@ -39,7 +42,10 @@
         "omit": ["AccountId", "BudgetName", "ActionId"]
       },
       "builder": "makeBudgetActionHttpBinding",
-      "actions": ["budgets:DescribeBudgetActionHistories"]
+      "actions": ["budgets:DescribeBudgetActionHistories"],
+      "reviewed": {
+        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
+      }
     },
     "DescribeBudgetActionsForBudget": {
       "operation": "describeBudgetActionsForBudget",
@@ -49,7 +55,10 @@
         "interface": "DescribeBudgetActionsForBudgetRequest",
         "omit": ["AccountId", "BudgetName"]
       },
-      "actions": ["budgets:DescribeBudgetActionsForBudget"]
+      "actions": ["budgets:DescribeBudgetActionsForBudget"],
+      "reviewed": {
+        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
+      }
     },
     "DescribeBudgetPerformanceHistory": {
       "operation": "describeBudgetPerformanceHistory",
@@ -59,7 +68,10 @@
         "interface": "DescribeBudgetPerformanceHistoryRequest",
         "omit": ["AccountId", "BudgetName"]
       },
-      "actions": ["budgets:ViewBudget"]
+      "actions": ["budgets:ViewBudget"],
+      "reviewed": {
+        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
+      }
     },
     "DescribeNotificationsForBudget": {
       "operation": "describeNotificationsForBudget",
@@ -69,7 +81,10 @@
         "interface": "DescribeNotificationsForBudgetRequest",
         "omit": ["AccountId", "BudgetName"]
       },
-      "actions": ["budgets:ViewBudget"]
+      "actions": ["budgets:ViewBudget"],
+      "reviewed": {
+        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
+      }
     },
     "DescribeSubscribersForNotification": {
       "operation": "describeSubscribersForNotification",
@@ -79,7 +94,10 @@
         "interface": "DescribeSubscribersForNotificationRequest",
         "omit": ["AccountId", "BudgetName"]
       },
-      "actions": ["budgets:ViewBudget"]
+      "actions": ["budgets:ViewBudget"],
+      "reviewed": {
+        "aws-portal:ViewBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
+      }
     },
     "ExecuteBudgetAction": {
       "operation": "executeBudgetAction",
@@ -91,7 +109,10 @@
         "omit": ["AccountId", "BudgetName", "ActionId"]
       },
       "builder": "makeBudgetActionHttpBinding",
-      "actions": ["budgets:ExecuteBudgetAction"]
+      "actions": ["budgets:ExecuteBudgetAction"],
+      "reviewed": {
+        "aws-portal:ModifyBilling": "Legacy billing permission; AWS replaced it with service-specific actions in the 2023 billing permissions migration."
+      }
     }
   }
 }

@@ -43,5 +43,6 @@ export const DescribeCampaignHttp = Layer.effect(
     tag: "AWS.Personalize.DescribeCampaign",
     operation: personalize.describeCampaign,
     actions: ["personalize:DescribeCampaign"],
+    arns: ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"],
   }),
 );

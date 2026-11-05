@@ -10,7 +10,8 @@
   "builder": "makeAnalyzerScopedHttpBinding",
   "builders": {
     "makeAccessAnalyzerAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeAnalyzerScopedHttpBinding": {
       "grants": "resource"

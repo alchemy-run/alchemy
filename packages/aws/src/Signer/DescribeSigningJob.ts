@@ -47,5 +47,6 @@ export const DescribeSigningJobHttp = Layer.effect(
     tag: "AWS.Signer.DescribeSigningJob",
     operation: signer.describeSigningJob,
     actions: ["signer:DescribeSigningJob"],
+    arns: ["arn:${Partition}:signer:${Region}:${Account}:/signing-jobs/*"],
   }),
 );

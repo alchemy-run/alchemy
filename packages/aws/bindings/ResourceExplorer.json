@@ -6,7 +6,8 @@
   "builder": "makeResourceExplorerAccountHttpBinding",
   "builders": {
     "makeResourceExplorerAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

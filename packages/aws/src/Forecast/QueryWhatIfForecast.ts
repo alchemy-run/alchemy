@@ -53,5 +53,6 @@ export const QueryWhatIfForecastHttp = Layer.effect(
     capability: "QueryWhatIfForecast",
     iamActions: ["forecast:QueryWhatIfForecast"],
     operation: forecastquery.queryWhatIfForecast,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:what-if-forecast/*"],
   }),
 );

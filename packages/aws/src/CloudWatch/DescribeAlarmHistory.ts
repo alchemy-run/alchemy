@@ -50,5 +50,6 @@ export const DescribeAlarmHistoryHttp = Layer.effect(
     tag: "AWS.CloudWatch.DescribeAlarmHistory",
     operation: cloudwatch.describeAlarmHistory,
     actions: ["cloudwatch:DescribeAlarmHistory"],
+    arns: ["arn:${Partition}:cloudwatch:${Region}:${Account}:alarm:*"],
   }),
 );

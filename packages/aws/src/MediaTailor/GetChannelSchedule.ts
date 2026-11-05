@@ -43,5 +43,6 @@ export const GetChannelScheduleHttp = Layer.effect(
     capability: "GetChannelSchedule",
     iamActions: ["mediatailor:GetChannelSchedule"],
     operation: mediatailor.getChannelSchedule,
+    arns: ["arn:${Partition}:mediatailor:${Region}:${Account}:channel/*"],
   }),
 );

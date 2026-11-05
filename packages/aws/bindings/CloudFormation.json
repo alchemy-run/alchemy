@@ -9,7 +9,8 @@
   "builder": "makeCloudFormationStackHttpBinding",
   "builders": {
     "makeCloudFormationAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeCloudFormationStackHttpBinding": {
       "grants": "resource"

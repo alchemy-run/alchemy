@@ -9,7 +9,8 @@
   "builder": "makeFisAccountHttpBinding",
   "builders": {
     "makeFisAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeFisTemplateHttpBinding": {
       "grants": "resource"
@@ -21,14 +22,16 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["fis:GetAction"]
+      "actions": ["fis:GetAction"],
+      "arns": ["arn:${Partition}:fis:${Region}:${Account}:action/*"]
     },
     "GetExperiment": {
       "operation": "getExperiment",
       "request": {
         "mode": "required"
       },
-      "actions": ["fis:GetExperiment"]
+      "actions": ["fis:GetExperiment"],
+      "arns": ["arn:${Partition}:fis:${Region}:${Account}:experiment/*"]
     },
     "GetExperimentTargetAccountConfiguration": {
       "operation": "getExperimentTargetAccountConfiguration",
@@ -55,7 +58,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["fis:GetSafetyLever"]
+      "actions": ["fis:GetSafetyLever"],
+      "arns": ["arn:${Partition}:fis:${Region}:${Account}:safety-lever/*"]
     },
     "GetTargetResourceType": {
       "operation": "getTargetResourceType",
@@ -117,7 +121,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["fis:StopExperiment"]
+      "actions": ["fis:StopExperiment"],
+      "arns": ["arn:${Partition}:fis:${Region}:${Account}:experiment/*"]
     },
     "UpdateSafetyLeverState": {
       "operation": "updateSafetyLeverState",

@@ -10,7 +10,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -19,14 +20,16 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["ram:AcceptResourceShareInvitation"]
+      "actions": ["ram:AcceptResourceShareInvitation"],
+      "arns": ["arn:${Partition}:ram:${Region}:${Account}:resource-share-invitation/*"]
     },
     "GetPermission": {
       "operation": "getPermission",
       "request": {
         "mode": "required"
       },
-      "actions": ["ram:GetPermission"]
+      "actions": ["ram:GetPermission"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:ram:${Region}:${Account}:permission/*, arn:${Partition}:ram::${Account}:permission/*), the call was denied live in the RAM Bindings suite; the grant stays on *."
     },
     "GetResourcePolicies": {
       "operation": "getResourcePolicies",
@@ -58,7 +61,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["ram:ListPendingInvitationResources"]
+      "actions": ["ram:ListPendingInvitationResources"],
+      "arns": ["arn:${Partition}:ram:${Region}:${Account}:resource-share-invitation/*"]
     },
     "ListPermissionAssociations": {
       "operation": "listPermissionAssociations",
@@ -109,7 +113,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["ram:RejectResourceShareInvitation"]
+      "actions": ["ram:RejectResourceShareInvitation"],
+      "arns": ["arn:${Partition}:ram:${Region}:${Account}:resource-share-invitation/*"]
     }
   }
 }

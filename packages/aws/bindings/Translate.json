@@ -5,7 +5,8 @@
   "builder": "makeTranslateHttpBinding",
   "builders": {
     "makeTranslateHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

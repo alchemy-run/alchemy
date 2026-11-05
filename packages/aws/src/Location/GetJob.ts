@@ -42,5 +42,6 @@ export const GetJobHttp = Layer.effect(
     tag: "AWS.Location.GetJob",
     operation: location.getJob,
     actions: ["geo:GetJob"],
+    arns: ["arn:${Partition}:geo:${Region}:${Account}:job/*"],
   }),
 );

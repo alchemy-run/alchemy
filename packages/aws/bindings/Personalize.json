@@ -12,11 +12,13 @@
   "builder": "makePersonalizeAccountHttpBinding",
   "builders": {
     "makePersonalizeAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makePersonalizeDatasetHttpBinding": {},
     "makePersonalizeEventTrackerHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -28,6 +30,13 @@
       "actions": ["personalize:CreateBatchInferenceJob"],
       "with": {
         "passRole": true
+      },
+      "arns": [
+        "arn:${Partition}:personalize:${Region}:${Account}:batch-inference-job/*",
+        "arn:${Partition}:personalize:${Region}:${Account}:solution/*"
+      ],
+      "reviewed": {
+        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "CreateCampaign": {
@@ -35,7 +44,14 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:CreateCampaign"]
+      "actions": ["personalize:CreateCampaign"],
+      "arns": [
+        "arn:${Partition}:personalize:${Region}:${Account}:campaign/*",
+        "arn:${Partition}:personalize:${Region}:${Account}:solution/*"
+      ],
+      "reviewed": {
+        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "CreateDatasetImportJob": {
       "operation": "createDatasetImportJob",
@@ -45,6 +61,13 @@
       "actions": ["personalize:CreateDatasetImportJob"],
       "with": {
         "passRole": true
+      },
+      "arns": [
+        "arn:${Partition}:personalize:${Region}:${Account}:dataset-import-job/*",
+        "arn:${Partition}:personalize:${Region}:${Account}:dataset/*"
+      ],
+      "reviewed": {
+        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "CreateSolution": {
@@ -52,42 +75,54 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:CreateSolution"]
+      "actions": ["personalize:CreateSolution"],
+      "reviewed": {
+        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      },
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:personalize:${Region}:${Account}:dataset-group/*, arn:${Partition}:personalize:${Region}:${Account}:solution/*), the call was denied live in the Personalize Bindings suite; the grant stays on *."
     },
     "CreateSolutionVersion": {
       "operation": "createSolutionVersion",
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:CreateSolutionVersion"]
+      "actions": ["personalize:CreateSolutionVersion"],
+      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:solution/*"],
+      "reviewed": {
+        "personalize:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "DescribeBatchInferenceJob": {
       "operation": "describeBatchInferenceJob",
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:DescribeBatchInferenceJob"]
+      "actions": ["personalize:DescribeBatchInferenceJob"],
+      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:batch-inference-job/*"]
     },
     "DescribeCampaign": {
       "operation": "describeCampaign",
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:DescribeCampaign"]
+      "actions": ["personalize:DescribeCampaign"],
+      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"]
     },
     "DescribeDatasetImportJob": {
       "operation": "describeDatasetImportJob",
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:DescribeDatasetImportJob"]
+      "actions": ["personalize:DescribeDatasetImportJob"],
+      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:dataset-import-job/*"]
     },
     "DescribeSolutionVersion": {
       "operation": "describeSolutionVersion",
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:DescribeSolutionVersion"]
+      "actions": ["personalize:DescribeSolutionVersion"],
+      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:solution/*"]
     },
     "GetActionRecommendations": {
       "operation": "getActionRecommendations",
@@ -95,7 +130,8 @@
         "mode": "required"
       },
       "actions": ["personalize:GetActionRecommendations"],
-      "module": "personalize-runtime"
+      "module": "personalize-runtime",
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:personalize:${Region}:${Account}:campaign/*), the call was denied live in the Personalize Bindings suite; the grant stays on *."
     },
     "GetPersonalizedRanking": {
       "operation": "getPersonalizedRanking",
@@ -103,7 +139,8 @@
         "mode": "required"
       },
       "actions": ["personalize:GetPersonalizedRanking"],
-      "module": "personalize-runtime"
+      "module": "personalize-runtime",
+      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"]
     },
     "GetRecommendations": {
       "operation": "getRecommendations",
@@ -111,14 +148,16 @@
         "mode": "required"
       },
       "actions": ["personalize:GetRecommendations"],
-      "module": "personalize-runtime"
+      "module": "personalize-runtime",
+      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"]
     },
     "GetSolutionMetrics": {
       "operation": "getSolutionMetrics",
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:GetSolutionMetrics"]
+      "actions": ["personalize:GetSolutionMetrics"],
+      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:solution/*"]
     },
     "PutActionInteractions": {
       "operation": "putActionInteractions",
@@ -187,7 +226,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["personalize:UpdateCampaign"]
+      "actions": ["personalize:UpdateCampaign"],
+      "arns": ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"]
     }
   }
 }

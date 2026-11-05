@@ -9,7 +9,8 @@
   "builder": "makePipesHttpBinding",
   "builders": {
     "makePipesAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makePipesHttpBinding": {
       "grants": "resource"

@@ -5,7 +5,8 @@
   "builder": "makeSecurityHubHttpBinding",
   "builders": {
     "makeSecurityHubHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -35,7 +36,8 @@
     },
     "BatchImportFindings": {
       "operation": "batchImportFindings",
-      "actions": ["securityhub:BatchImportFindings"]
+      "actions": ["securityhub:BatchImportFindings"],
+      "arns": ["arn:${Partition}:securityhub:${Region}:${Account}:product/*/*"]
     },
     "BatchUpdateFindings": {
       "operation": "batchUpdateFindings",

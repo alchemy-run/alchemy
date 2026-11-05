@@ -16,7 +16,8 @@
   "builder": "makeAccountHttpBinding",
   "builders": {
     "makeAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeContactChannelHttpBinding": {
       "grants": "resource"

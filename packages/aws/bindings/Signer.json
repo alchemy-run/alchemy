@@ -9,10 +9,11 @@
   "builder": "makeSignerHttpBinding",
   "builders": {
     "makeSignerHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeSignerProfileHttpBinding": {
-      "grants": "*"
+      "grants": "resource"
     }
   },
   "bindings": {
@@ -21,14 +22,19 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["signer:DescribeSigningJob"]
+      "actions": ["signer:DescribeSigningJob"],
+      "arns": ["arn:${Partition}:signer:${Region}:${Account}:/signing-jobs/*"]
     },
     "GetRevocationStatus": {
       "operation": "getRevocationStatus",
       "request": {
         "mode": "required"
       },
-      "actions": ["signer:GetRevocationStatus"]
+      "actions": ["signer:GetRevocationStatus"],
+      "arns": [
+        "arn:${Partition}:signer:${Region}:${Account}:/signing-jobs/*",
+        "arn:${Partition}:signer:${Region}:${Account}:/signing-profiles/*"
+      ]
     },
     "GetSigningPlatform": {
       "operation": "getSigningPlatform",
@@ -50,7 +56,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["signer:RevokeSignature"]
+      "actions": ["signer:RevokeSignature"],
+      "arns": ["arn:${Partition}:signer:${Region}:${Account}:/signing-jobs/*"]
     },
     "RevokeSigningProfile": {
       "operation": "revokeSigningProfile",

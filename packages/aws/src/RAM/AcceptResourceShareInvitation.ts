@@ -51,5 +51,6 @@ export const AcceptResourceShareInvitationHttp = Layer.effect(
     capability: "AcceptResourceShareInvitation",
     iamActions: ["ram:AcceptResourceShareInvitation"],
     operation: ram.acceptResourceShareInvitation,
+    arns: ["arn:${Partition}:ram:${Region}:${Account}:resource-share-invitation/*"],
   }),
 );

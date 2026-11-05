@@ -43,5 +43,6 @@ export const RevokeSignatureHttp = Layer.effect(
     tag: "AWS.Signer.RevokeSignature",
     operation: signer.revokeSignature,
     actions: ["signer:RevokeSignature"],
+    arns: ["arn:${Partition}:signer:${Region}:${Account}:/signing-jobs/*"],
   }),
 );

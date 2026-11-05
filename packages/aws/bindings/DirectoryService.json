@@ -13,7 +13,8 @@
       "grants": "resource"
     },
     "makeDirectoryServiceAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

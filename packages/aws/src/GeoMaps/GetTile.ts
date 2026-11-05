@@ -54,5 +54,6 @@ export const GetTileHttp = Layer.effect(
     capability: "GetTile",
     iamActions: ["geo-maps:GetTile"],
     operation: geoMaps.getTile,
+    arns: ["arn:${Partition}:geo-maps:${Region}::provider/default"],
   }),
 );

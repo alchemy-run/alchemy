@@ -12,7 +12,8 @@
   "builder": "makeGreengrassAccountHttpBinding",
   "builders": {
     "makeGreengrassAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeGreengrassComponentHttpBinding": {
       "grants": "resource"
@@ -64,7 +65,10 @@
         "mode": "required"
       },
       "actions": ["greengrass:DeleteCoreDevice", "iot:DescribeJobExecution"],
-      "note": "Deleting a core device resolves the device's deployment job executions with the caller's credentials (documented dependent action)."
+      "note": "Deleting a core device resolves the device's deployment job executions with the caller's credentials (documented dependent action).",
+      "reviewed": {
+        "iot:DescribeJobExecution": "See the note: Deleting a core device resolves the device's deployment job executions with the caller's credentials (documented dependent action)."
+      }
     },
     "DescribeComponent": {
       "operation": "describeComponent",
@@ -108,7 +112,14 @@
         "mode": "required"
       },
       "actions": ["greengrass:GetConnectivityInfo", "iot:GetThingShadow"],
-      "note": "Connectivity info is stored in IoT Core; Greengrass reads it with the caller's credentials (documented dependent action)."
+      "note": "Connectivity info is stored in IoT Core; Greengrass reads it with the caller's credentials (documented dependent action).",
+      "arns": [
+        "arn:${Partition}:greengrass:${Region}:${Account}:/greengrass/things/*/connectivityInfo",
+        "arn:${Partition}:iot:${Region}:${Account}:thing/*"
+      ],
+      "reviewed": {
+        "iot:GetThingShadow": "See the note: Connectivity info is stored in IoT Core; Greengrass reads it with the caller's credentials (documented dependent action)."
+      }
     },
     "GetCoreDevice": {
       "operation": "getCoreDevice",
@@ -116,7 +127,10 @@
         "mode": "required"
       },
       "actions": ["greengrass:GetCoreDevice", "iot:DescribeThing"],
-      "note": "Core devices are IoT things; Greengrass authorizes the IoT-side lookup with the caller's credentials before resolving the device (observed \"not authorized to call Iot Core services for thing\" without it)."
+      "note": "Core devices are IoT things; Greengrass authorizes the IoT-side lookup with the caller's credentials before resolving the device (observed \"not authorized to call Iot Core services for thing\" without it).",
+      "reviewed": {
+        "iot:DescribeThing": "See the note: Core devices are IoT things; Greengrass authorizes the IoT-side lookup with the caller's credentials before resolving the device (observed \"not authorized to call Iot Core services for thing\" without it)."
+      }
     },
     "GetDeployment": {
       "operation": "getDeployment",
@@ -150,7 +164,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["greengrass:ListComponentVersions"]
+      "actions": ["greengrass:ListComponentVersions"],
+      "arns": ["arn:${Partition}:greengrass:${Region}:${Account}:components:*"]
     },
     "ListComponents": {
       "operation": "listComponents",
@@ -169,7 +184,13 @@
         "iot:DescribeThingGroup",
         "iot:GetThingShadow"
       ],
-      "note": "Enumerating deployments resolves each deployment's backing IoT Job and thing/thing-group target with the caller's credentials."
+      "note": "Enumerating deployments resolves each deployment's backing IoT Job and thing/thing-group target with the caller's credentials.",
+      "reviewed": {
+        "iot:DescribeJob": "See the note: Enumerating deployments resolves each deployment's backing IoT Job and thing/thing-group target with the caller's credentials.",
+        "iot:DescribeThing": "See the note: Enumerating deployments resolves each deployment's backing IoT Job and thing/thing-group target with the caller's credentials.",
+        "iot:DescribeThingGroup": "See the note: Enumerating deployments resolves each deployment's backing IoT Job and thing/thing-group target with the caller's credentials.",
+        "iot:GetThingShadow": "See the note: Enumerating deployments resolves each deployment's backing IoT Job and thing/thing-group target with the caller's credentials."
+      }
     },
     "ListEffectiveDeployments": {
       "operation": "listEffectiveDeployments",
@@ -184,7 +205,14 @@
         "iot:DescribeThingGroup",
         "iot:GetThingShadow"
       ],
-      "note": "Effective deployments are backed by IoT Jobs; enumerating them resolves each job, its execution on the device, and the thing/thing-group target with the caller's credentials (documented dependent actions)."
+      "note": "Effective deployments are backed by IoT Jobs; enumerating them resolves each job, its execution on the device, and the thing/thing-group target with the caller's credentials (documented dependent actions).",
+      "reviewed": {
+        "iot:DescribeJob": "See the note: Effective deployments are backed by IoT Jobs; enumerating them resolves each job, its execution on the device, and the thing/thing-group target with the caller's credentials (documented dependent actions).",
+        "iot:DescribeJobExecution": "See the note: Effective deployments are backed by IoT Jobs; enumerating them resolves each job, its execution on the device, and the thing/thing-group target with the caller's credentials (documented dependent actions).",
+        "iot:DescribeThing": "See the note: Effective deployments are backed by IoT Jobs; enumerating them resolves each job, its execution on the device, and the thing/thing-group target with the caller's credentials (documented dependent actions).",
+        "iot:DescribeThingGroup": "See the note: Effective deployments are backed by IoT Jobs; enumerating them resolves each job, its execution on the device, and the thing/thing-group target with the caller's credentials (documented dependent actions).",
+        "iot:GetThingShadow": "See the note: Effective deployments are backed by IoT Jobs; enumerating them resolves each job, its execution on the device, and the thing/thing-group target with the caller's credentials (documented dependent actions)."
+      }
     },
     "ListInstalledComponents": {
       "operation": "listInstalledComponents",
@@ -195,7 +223,8 @@
     },
     "ResolveComponentCandidates": {
       "operation": "resolveComponentCandidates",
-      "actions": ["greengrass:ResolveComponentCandidates"]
+      "actions": ["greengrass:ResolveComponentCandidates"],
+      "arns": ["arn:${Partition}:greengrass:${Region}:${Account}:components:*:versions:*"]
     },
     "UpdateConnectivityInfo": {
       "operation": "updateConnectivityInfo",
@@ -207,7 +236,15 @@
         "iot:GetThingShadow",
         "iot:UpdateThingShadow"
       ],
-      "note": "Connectivity info is stored in IoT Core; Greengrass writes it with the caller's credentials (documented dependent action)."
+      "note": "Connectivity info is stored in IoT Core; Greengrass writes it with the caller's credentials (documented dependent action).",
+      "arns": [
+        "arn:${Partition}:greengrass:${Region}:${Account}:/greengrass/things/*/connectivityInfo",
+        "arn:${Partition}:iot:${Region}:${Account}:thing/*"
+      ],
+      "reviewed": {
+        "iot:GetThingShadow": "See the note: Connectivity info is stored in IoT Core; Greengrass writes it with the caller's credentials (documented dependent action).",
+        "iot:UpdateThingShadow": "See the note: Connectivity info is stored in IoT Core; Greengrass writes it with the caller's credentials (documented dependent action)."
+      }
     }
   }
 }

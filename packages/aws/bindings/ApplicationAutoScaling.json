@@ -13,10 +13,12 @@
   "builder": "makeTargetScopedHttpBinding",
   "builders": {
     "makePolicyScopedHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeTargetScopedHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {

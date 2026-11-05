@@ -16,7 +16,8 @@
       "grants": "resource"
     },
     "makeKinesisAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeStreamHttpBinding": {
       "grants": "resource"

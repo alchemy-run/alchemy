@@ -49,5 +49,6 @@ export const CreateSolutionVersionHttp = Layer.effect(
     tag: "AWS.Personalize.CreateSolutionVersion",
     operation: personalize.createSolutionVersion,
     actions: ["personalize:CreateSolutionVersion"],
+    arns: ["arn:${Partition}:personalize:${Region}:${Account}:solution/*"],
   }),
 );

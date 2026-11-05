@@ -50,5 +50,6 @@ export const ClassifyDocumentHttp = Layer.effect(
     tag: "AWS.Comprehend.ClassifyDocument",
     operation: comprehend.classifyDocument,
     actions: ["comprehend:ClassifyDocument"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:document-classifier-endpoint/*"],
   }),
 );

@@ -68,15 +68,18 @@ export const SendMessageHttp = Layer.effect(
 | Target resource | the method's `name` pattern matched against `resources.*.pattern` | the request member carrying the resource's identity (`QueueUrl`, `TableName`, `Bucket`) mapped to the resource attribute that fills it (`queue.queueUrl`) | path parameters (`account_id`, `zone_id`, `bucket_name`) mapped to resource attributes |
 | Permission | `<service>.<collection>.<verb>`, overrides in `permissions` | IAM action `<prefix>:<Operation>` (prefix from the sigv4 signing name, as `scripts/generate-iam-actions.ts` derives it), on the resource ARN attribute | the API token permission group for the operation |
 | Grant | smallest role from `roles.json` on the resource's IAM policy | a policy statement on the bound resource's ARN | a scoped `AccountApiToken` (the existing `*Http.ts` scaffolding) |
-| Existing bindings | all generated | ~3,000 hand-written `*Http.ts`, already one `make…HttpBinding` call each | hand-written; native Worker bindings (`*Binding`) stay hand-written |
-| Classifier to start from | built in | `scripts/audit-service.ts` | none yet |
+| Existing bindings | all generated | 2,091 generated (`scripts/generate-aws-bindings.ts`); the rest hand-written | hand-written; native Worker bindings (`*Binding`) stay hand-written |
+| Least-privilege data | `roles.json` from `gcloud iam roles list` | `actions.json` from AWS's Service Authorization Reference | none yet |
 
-The config keys follow from the table. AWS, for example, needs per
-resource the identity member and the attribute that fills it, the ARN
-attribute grants go on, and overrides where an operation's IAM actions
-aren't just `<prefix>:<Operation>` (`secretsmanager:PutSecretValue` also
-grants `secretsmanager:DescribeSecret`; a snapshot create also grants
-`TagResource`).
+The config keys follow from the table. AWS's (`packages/aws/bindings/<Service>.json`)
+keep each service's hand-written builders in `BindingHttp.ts` as the
+protocol: a binding names its `operation`, bound `resource`, `request`
+shape (`mode`, `omit`, `interface`), `builder`, IAM `actions`, and builder
+options (`with` for literals, `withTs` plus `imports` for expressions).
+Builders declare where they grant (`grants: "resource" | "*"`) and whether
+they take `arns`; bindings record least-privilege decisions in `arns`,
+`unscoped`, and `reviewed`. Docs live in `<Service>.md`, one
+`## <Binding>` section each.
 
 ## Porting a provider with hand-written bindings
 
@@ -87,7 +90,10 @@ grants `secretsmanager:DescribeSecret`; a snapshot create also grants
    value from a merged contract: move the value into a `<X>Types.ts`).
    Type-check and run the service suites before going on.
 2. Write the generator and configs so they **reproduce** the existing
-   bindings. Run it on a service, and read `git diff`: every difference
+   bindings (AWS's configs were derived from the code by a one-time
+   extraction, then checked by comparing every regenerated file with the
+   hand-written one after normalizing whitespace, comments, and import
+   style: 2,091 identical). Run it on a service, and read `git diff`: every difference
    is either a config gap (fix the config) or a hand-written improvement
    the generator can't express (leave that binding hand-written; it
    becomes `covered`). Delete a hand-written binding only when the

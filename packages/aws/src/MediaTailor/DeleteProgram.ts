@@ -44,5 +44,6 @@ export const DeleteProgramHttp = Layer.effect(
     capability: "DeleteProgram",
     iamActions: ["mediatailor:DeleteProgram"],
     operation: mediatailor.deleteProgram,
+    arns: ["arn:${Partition}:mediatailor:${Region}:${Account}:program/*/*"],
   }),
 );

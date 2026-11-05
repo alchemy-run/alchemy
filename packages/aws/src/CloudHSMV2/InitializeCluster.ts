@@ -49,5 +49,6 @@ export const InitializeClusterHttp = Layer.effect(
     tag: "AWS.CloudHSMV2.InitializeCluster",
     operation: cloudhsm.initializeCluster,
     actions: ["cloudhsm:InitializeCluster"],
+    arns: ["arn:${Partition}:cloudhsm:${Region}:${Account}:cluster/*"],
   }),
 );

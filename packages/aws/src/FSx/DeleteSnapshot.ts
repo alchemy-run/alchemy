@@ -44,5 +44,6 @@ export const DeleteSnapshotHttp = Layer.effect(
     tag: "AWS.FSx.DeleteSnapshot",
     operation: fsx.deleteSnapshot,
     actions: ["fsx:DeleteSnapshot"],
+    arns: ["arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*"],
   }),
 );

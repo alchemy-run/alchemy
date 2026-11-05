@@ -45,5 +45,6 @@ export const GetExperimentHttp = Layer.effect(
     tag: "AWS.FIS.GetExperiment",
     operation: fis.getExperiment,
     actions: ["fis:GetExperiment"],
+    arns: ["arn:${Partition}:fis:${Region}:${Account}:experiment/*"],
   }),
 );

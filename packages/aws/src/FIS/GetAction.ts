@@ -41,5 +41,6 @@ export const GetActionHttp = Layer.effect(
     tag: "AWS.FIS.GetAction",
     operation: fis.getAction,
     actions: ["fis:GetAction"],
+    arns: ["arn:${Partition}:fis:${Region}:${Account}:action/*"],
   }),
 );

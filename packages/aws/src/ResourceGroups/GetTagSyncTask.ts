@@ -47,5 +47,6 @@ export const GetTagSyncTaskHttp = Layer.effect(
     tag: "AWS.ResourceGroups.GetTagSyncTask",
     operation: resourcegroups.getTagSyncTask,
     actions: ["resource-groups:GetTagSyncTask"],
+    arns: ["arn:${Partition}:resource-groups:${Region}:${Account}:group/*"],
   }),
 );

@@ -46,5 +46,6 @@ export const StartReplicationHttp = Layer.effect(
     tag: "AWS.DMS.StartReplication",
     operation: dms.startReplication,
     actions: ["dms:StartReplication"],
+    arns: ["arn:${Partition}:dms:${Region}:${Account}:replication-config:*"],
   }),
 );

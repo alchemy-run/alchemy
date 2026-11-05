@@ -10,7 +10,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -19,21 +20,27 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["organizations:AcceptHandshake"]
+      "actions": ["organizations:AcceptHandshake"],
+      "reviewed": {
+        "organizations:LeaveOrganization": "AWS lists it because accepting an invitation can move an account out of its current organization; not granted to a runtime."
+      },
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:organizations::${Account}:handshake/o-*/*/h-*), the call was denied live in the Organizations Bindings suite; the grant stays on *."
     },
     "CancelHandshake": {
       "operation": "cancelHandshake",
       "request": {
         "mode": "required"
       },
-      "actions": ["organizations:CancelHandshake"]
+      "actions": ["organizations:CancelHandshake"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:organizations::${Account}:handshake/o-*/*/h-*), the call was denied live in the Organizations Bindings suite; the grant stays on *."
     },
     "DeclineHandshake": {
       "operation": "declineHandshake",
       "request": {
         "mode": "required"
       },
-      "actions": ["organizations:DeclineHandshake"]
+      "actions": ["organizations:DeclineHandshake"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:organizations::${Account}:handshake/o-*/*/h-*), the call was denied live in the Organizations Bindings suite; the grant stays on *."
     },
     "DescribeCreateAccountStatus": {
       "operation": "describeCreateAccountStatus",
@@ -47,14 +54,16 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["organizations:DescribeEffectivePolicy"]
+      "actions": ["organizations:DescribeEffectivePolicy"],
+      "arns": ["arn:${Partition}:organizations::${Account}:account/o-*/*"]
     },
     "DescribeHandshake": {
       "operation": "describeHandshake",
       "request": {
         "mode": "required"
       },
-      "actions": ["organizations:DescribeHandshake"]
+      "actions": ["organizations:DescribeHandshake"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:organizations::${Account}:handshake/o-*/*/h-*), the call was denied live in the Organizations Bindings suite; the grant stays on *."
     },
     "DescribeOrganization": {
       "operation": "describeOrganization",
@@ -65,7 +74,10 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["organizations:InviteAccountToOrganization"]
+      "actions": ["organizations:InviteAccountToOrganization"],
+      "reviewed": {
+        "organizations:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     },
     "ListAWSServiceAccessForOrganization": {
       "operation": "listAWSServiceAccessForOrganization",
@@ -109,14 +121,16 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["organizations:ListDelegatedServicesForAccount"]
+      "actions": ["organizations:ListDelegatedServicesForAccount"],
+      "arns": ["arn:${Partition}:organizations::${Account}:account/o-*/*"]
     },
     "ListEffectivePolicyValidationErrors": {
       "operation": "listEffectivePolicyValidationErrors",
       "request": {
         "mode": "required"
       },
-      "actions": ["organizations:ListEffectivePolicyValidationErrors"]
+      "actions": ["organizations:ListEffectivePolicyValidationErrors"],
+      "arns": ["arn:${Partition}:organizations::${Account}:account/o-*/*"]
     },
     "ListHandshakesForAccount": {
       "operation": "listHandshakesForAccount",
@@ -170,7 +184,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["organizations:ListTargetsForPolicy"]
+      "actions": ["organizations:ListTargetsForPolicy"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:organizations::${Account}:policy/o-*/*/p-*), the call was denied live in the Organizations Bindings suite; the grant stays on *."
     }
   }
 }

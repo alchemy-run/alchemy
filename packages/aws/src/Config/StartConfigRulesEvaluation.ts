@@ -52,6 +52,7 @@ export const StartConfigRulesEvaluationHttp = Layer.effect(
     actions: ["config:StartConfigRulesEvaluation"],
     requestKey: "ConfigRuleNames",
     asList: true,
+    arns: ["arn:${Partition}:config:${Region}:${Account}:config-rule/*"],
     identifier: (rule: ConfigRule) => rule.configRuleName,
   }),
 );

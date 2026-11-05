@@ -44,5 +44,6 @@ export const GetSolutionMetricsHttp = Layer.effect(
     tag: "AWS.Personalize.GetSolutionMetrics",
     operation: personalize.getSolutionMetrics,
     actions: ["personalize:GetSolutionMetrics"],
+    arns: ["arn:${Partition}:personalize:${Region}:${Account}:solution/*"],
   }),
 );

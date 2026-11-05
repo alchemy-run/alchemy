@@ -9,7 +9,8 @@
   "builder": "makeDaxClusterHttpBinding",
   "builders": {
     "makeDaxAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeDaxClusterHttpBinding": {
       "grants": "resource"

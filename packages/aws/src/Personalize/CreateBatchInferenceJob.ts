@@ -55,5 +55,9 @@ export const CreateBatchInferenceJobHttp = Layer.effect(
     operation: personalize.createBatchInferenceJob,
     actions: ["personalize:CreateBatchInferenceJob"],
     passRole: true,
+    arns: [
+      "arn:${Partition}:personalize:${Region}:${Account}:batch-inference-job/*",
+      "arn:${Partition}:personalize:${Region}:${Account}:solution/*",
+    ],
   }),
 );

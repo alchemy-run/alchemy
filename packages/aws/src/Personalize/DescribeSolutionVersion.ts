@@ -48,5 +48,6 @@ export const DescribeSolutionVersionHttp = Layer.effect(
     tag: "AWS.Personalize.DescribeSolutionVersion",
     operation: personalize.describeSolutionVersion,
     actions: ["personalize:DescribeSolutionVersion"],
+    arns: ["arn:${Partition}:personalize:${Region}:${Account}:solution/*"],
   }),
 );

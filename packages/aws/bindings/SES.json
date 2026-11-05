@@ -5,7 +5,8 @@
   "builder": "makeSESHttpBinding",
   "builders": {
     "makeSESHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -39,7 +40,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["ses:GetDomainStatisticsReport"]
+      "actions": ["ses:GetDomainStatisticsReport"],
+      "arns": ["arn:${Partition}:ses:${Region}:${Account}:identity/*"]
     },
     "GetMessageInsights": {
       "operation": "getMessageInsights",

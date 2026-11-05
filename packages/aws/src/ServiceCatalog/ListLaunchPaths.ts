@@ -48,5 +48,6 @@ export const ListLaunchPathsHttp = Layer.effect(
     capability: "ListLaunchPaths",
     iamActions: ["servicecatalog:ListLaunchPaths"],
     operation: servicecatalog.listLaunchPaths,
+    arns: ["arn:${Partition}:catalog:${Region}:${Account}:product/*"],
   }),
 );

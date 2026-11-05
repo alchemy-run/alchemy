@@ -56,5 +56,6 @@ export const SnapToRoadsHttp = Layer.effect(
     capability: "SnapToRoads",
     iamActions: ["geo-routes:SnapToRoads"],
     operation: geoRoutes.snapToRoads,
+    arns: ["arn:${Partition}:geo-routes:${Region}::provider/default"],
   }),
 );

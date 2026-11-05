@@ -47,5 +47,6 @@ export const CancelDataRepositoryTaskHttp = Layer.effect(
     tag: "AWS.FSx.CancelDataRepositoryTask",
     operation: fsx.cancelDataRepositoryTask,
     actions: ["fsx:CancelDataRepositoryTask"],
+    arns: ["arn:${Partition}:fsx:${Region}:${Account}:task/*"],
   }),
 );

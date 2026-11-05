@@ -9,7 +9,8 @@
   "builder": "makeImageBuilderAccountHttpBinding",
   "builders": {
     "makeImageBuilderAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeImageBuilderPipelineHttpBinding": {
       "grants": "resource"
@@ -30,14 +31,16 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["imagebuilder:DeleteImage"]
+      "actions": ["imagebuilder:DeleteImage"],
+      "arns": ["arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*"]
     },
     "GetImage": {
       "operation": "getImage",
       "request": {
         "mode": "required"
       },
-      "actions": ["imagebuilder:GetImage"]
+      "actions": ["imagebuilder:GetImage"],
+      "arns": ["arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*"]
     },
     "GetImagePipeline": {
       "operation": "getImagePipeline",
@@ -95,12 +98,18 @@
         "imagebuilder:ListImageScanFindingAggregations",
         "inspector2:ListFindingAggregations"
       ],
-      "note": "Image Builder serves scan aggregations from Amazon Inspector, so the API authorizes the dependent inspector2 action too \u2014 without it the call fails with AccessDeniedException even when the imagebuilder action is granted."
+      "note": "Image Builder serves scan aggregations from Amazon Inspector, so the API authorizes the dependent inspector2 action too — without it the call fails with AccessDeniedException even when the imagebuilder action is granted.",
+      "reviewed": {
+        "inspector2:ListFindingAggregations": "See the note: Image Builder serves scan aggregations from Amazon Inspector, so the API authorizes the dependent inspector2 action too — without it the call fails with AccessDeniedException even when the imagebuilder action is granted."
+      }
     },
     "ListImageScanFindings": {
       "operation": "listImageScanFindings",
       "actions": ["imagebuilder:ListImageScanFindings", "inspector2:ListFindings"],
-      "note": "Image Builder serves scan findings from Amazon Inspector, so the API authorizes the dependent inspector2 action too \u2014 without it the call fails with AccessDeniedException even when the imagebuilder action is granted."
+      "note": "Image Builder serves scan findings from Amazon Inspector, so the API authorizes the dependent inspector2 action too — without it the call fails with AccessDeniedException even when the imagebuilder action is granted.",
+      "reviewed": {
+        "inspector2:ListFindings": "See the note: Image Builder serves scan findings from Amazon Inspector, so the API authorizes the dependent inspector2 action too — without it the call fails with AccessDeniedException even when the imagebuilder action is granted."
+      }
     },
     "ListImages": {
       "operation": "listImages",
@@ -115,7 +124,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["imagebuilder:ListWorkflowExecutions"]
+      "actions": ["imagebuilder:ListWorkflowExecutions"],
+      "arns": ["arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*"]
     },
     "ListWorkflowStepExecutions": {
       "operation": "listWorkflowStepExecutions",
@@ -152,7 +162,10 @@
         "inline": true
       },
       "builder": "makeImageBuilderPipelineHttpBinding",
-      "actions": ["imagebuilder:StartImagePipelineExecution"]
+      "actions": ["imagebuilder:StartImagePipelineExecution"],
+      "reviewed": {
+        "imagebuilder:TagResource": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
+      }
     }
   }
 }

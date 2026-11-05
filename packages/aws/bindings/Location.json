@@ -18,7 +18,8 @@
   "builder": "makeLocationTrackerHttpBinding",
   "builders": {
     "makeLocationAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeLocationCalculatorHttpBinding": {
       "grants": "resource"
@@ -130,7 +131,8 @@
         "mode": "required"
       },
       "builder": "makeLocationAccountHttpBinding",
-      "actions": ["geo:CancelJob"]
+      "actions": ["geo:CancelJob"],
+      "arns": ["arn:${Partition}:geo:${Region}:${Account}:job/*"]
     },
     "ForecastGeofenceEvents": {
       "operation": "forecastGeofenceEvents",
@@ -182,7 +184,8 @@
         "mode": "required"
       },
       "builder": "makeLocationAccountHttpBinding",
-      "actions": ["geo:GetJob"]
+      "actions": ["geo:GetJob"],
+      "arns": ["arn:${Partition}:geo:${Region}:${Account}:job/*"]
     },
     "GetPlace": {
       "operation": "getPlace",
@@ -221,7 +224,8 @@
     "ListJobs": {
       "operation": "listJobs",
       "builder": "makeLocationAccountHttpBinding",
-      "actions": ["geo:ListJobs"]
+      "actions": ["geo:ListJobs"],
+      "arns": ["arn:${Partition}:geo:${Region}:${Account}:job/*"]
     },
     "PutGeofence": {
       "operation": "putGeofence",

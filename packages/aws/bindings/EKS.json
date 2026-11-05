@@ -9,7 +9,8 @@
   "builder": "makeEKSClusterHttpBinding",
   "builders": {
     "makeEKSAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeEKSClusterHttpBinding": {
       "grants": "resource"

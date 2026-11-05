@@ -46,5 +46,6 @@ export const ReloadTablesHttp = Layer.effect(
     tag: "AWS.DMS.ReloadTables",
     operation: dms.reloadTables,
     actions: ["dms:ReloadTables"],
+    arns: ["arn:${Partition}:dms:${Region}:${Account}:task:*"],
   }),
 );

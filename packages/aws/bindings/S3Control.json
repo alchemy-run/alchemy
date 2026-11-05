@@ -15,7 +15,8 @@
       "grants": "resource"
     },
     "makeS3ControlAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeS3ControlMrapHttpBinding": {
       "grants": "resource"

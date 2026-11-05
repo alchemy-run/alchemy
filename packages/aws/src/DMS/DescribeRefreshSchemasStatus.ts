@@ -51,5 +51,6 @@ export const DescribeRefreshSchemasStatusHttp = Layer.effect(
     tag: "AWS.DMS.DescribeRefreshSchemasStatus",
     operation: dms.describeRefreshSchemasStatus,
     actions: ["dms:DescribeRefreshSchemasStatus"],
+    arns: ["arn:${Partition}:dms:${Region}:${Account}:endpoint:*"],
   }),
 );

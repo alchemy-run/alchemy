@@ -49,5 +49,6 @@ export const DescribeSentimentDetectionJobHttp = Layer.effect(
     tag: "AWS.Comprehend.DescribeSentimentDetectionJob",
     operation: comprehend.describeSentimentDetectionJob,
     actions: ["comprehend:DescribeSentimentDetectionJob"],
+    arns: ["arn:${Partition}:comprehend:${Region}:${Account}:sentiment-detection-job/*"],
   }),
 );

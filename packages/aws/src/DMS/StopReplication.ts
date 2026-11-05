@@ -45,5 +45,6 @@ export const StopReplicationHttp = Layer.effect(
     tag: "AWS.DMS.StopReplication",
     operation: dms.stopReplication,
     actions: ["dms:StopReplication"],
+    arns: ["arn:${Partition}:dms:${Region}:${Account}:replication-config:*"],
   }),
 );

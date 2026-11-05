@@ -40,5 +40,6 @@ export const UpdateCampaignHttp = Layer.effect(
     tag: "AWS.Personalize.UpdateCampaign",
     operation: personalize.updateCampaign,
     actions: ["personalize:UpdateCampaign"],
+    arns: ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"],
   }),
 );

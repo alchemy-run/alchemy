@@ -52,5 +52,6 @@ export const GetDomainStatisticsReportHttp = Layer.effect(
     tag: "AWS.SES.GetDomainStatisticsReport",
     operation: sesv2.getDomainStatisticsReport,
     actions: ["ses:GetDomainStatisticsReport"],
+    arns: ["arn:${Partition}:ses:${Region}:${Account}:identity/*"],
   }),
 );

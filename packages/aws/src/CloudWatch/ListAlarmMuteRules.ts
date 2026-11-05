@@ -46,5 +46,6 @@ export const ListAlarmMuteRulesHttp = Layer.effect(
     tag: "AWS.CloudWatch.ListAlarmMuteRules",
     operation: cloudwatch.listAlarmMuteRules,
     actions: ["cloudwatch:ListAlarmMuteRules"],
+    arns: ["arn:${Partition}:cloudwatch:${Region}:${Account}:alarm-mute-rule:*"],
   }),
 );

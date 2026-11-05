@@ -54,5 +54,6 @@ export const CalculateRoutesHttp = Layer.effect(
     capability: "CalculateRoutes",
     iamActions: ["geo-routes:CalculateRoutes"],
     operation: geoRoutes.calculateRoutes,
+    arns: ["arn:${Partition}:geo-routes:${Region}::provider/default"],
   }),
 );

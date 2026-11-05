@@ -51,5 +51,6 @@ export const RejectResourceShareInvitationHttp = Layer.effect(
     capability: "RejectResourceShareInvitation",
     iamActions: ["ram:RejectResourceShareInvitation"],
     operation: ram.rejectResourceShareInvitation,
+    arns: ["arn:${Partition}:ram:${Region}:${Account}:resource-share-invitation/*"],
   }),
 );

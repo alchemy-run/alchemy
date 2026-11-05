@@ -9,7 +9,8 @@
   "builder": "makeAIOpsGroupHttpBinding",
   "builders": {
     "makeAIOpsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeAIOpsGroupHttpBinding": {
       "grants": "resource"

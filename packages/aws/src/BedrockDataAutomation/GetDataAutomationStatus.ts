@@ -48,5 +48,6 @@ export const GetDataAutomationStatusHttp = Layer.effect(
     tag: "AWS.BedrockDataAutomation.GetDataAutomationStatus",
     operation: bdar.getDataAutomationStatus,
     actions: ["bedrock:GetDataAutomationStatus"],
+    arns: ["arn:${Partition}:bedrock:${Region}:${Account}:data-automation-invocation/*"],
   }),
 );

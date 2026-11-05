@@ -9,7 +9,8 @@
   "builder": "makeRedshiftAccountHttpBinding",
   "builders": {
     "makeRedshiftAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeRedshiftClusterHttpBinding": {
       "grants": "resource"
@@ -38,6 +39,9 @@
       },
       "imports": {
         "./BindingHttp.ts": ["clusterSnapshotArnPattern"]
+      },
+      "reviewed": {
+        "redshift:CreateTags": "Needed only when the request sets tags; not granted, since tagging can change tag-based access."
       }
     },
     "DeleteClusterSnapshot": {

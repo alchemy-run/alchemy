@@ -41,5 +41,6 @@ export const StartChannelHttp = Layer.effect(
     capability: "StartChannel",
     iamActions: ["mediatailor:StartChannel"],
     operation: mediatailor.startChannel,
+    arns: ["arn:${Partition}:mediatailor:${Region}:${Account}:channel/*"],
   }),
 );

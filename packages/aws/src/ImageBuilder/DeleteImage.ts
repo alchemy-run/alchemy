@@ -43,5 +43,6 @@ export const DeleteImageHttp = Layer.effect(
     tag: "AWS.ImageBuilder.DeleteImage",
     operation: imagebuilder.deleteImage,
     actions: ["imagebuilder:DeleteImage"],
+    arns: ["arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*"],
   }),
 );

@@ -46,5 +46,6 @@ export const DeleteAccessPointHttp = Layer.effect(
     tag: "AWS.EFS.DeleteAccessPoint",
     operation: efs.deleteAccessPoint,
     actions: ["elasticfilesystem:DeleteAccessPoint"],
+    arns: ["arn:${Partition}:elasticfilesystem:${Region}:${Account}:access-point/*"],
   }),
 );

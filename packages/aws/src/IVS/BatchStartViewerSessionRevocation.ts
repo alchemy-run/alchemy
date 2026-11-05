@@ -57,5 +57,6 @@ export const BatchStartViewerSessionRevocationHttp = Layer.effect(
     tag: "AWS.IVS.BatchStartViewerSessionRevocation",
     operation: ivs.batchStartViewerSessionRevocation,
     actions: ["ivs:BatchStartViewerSessionRevocation"],
+    arns: ["arn:${Partition}:ivs:${Region}:${Account}:channel/*"],
   }),
 );

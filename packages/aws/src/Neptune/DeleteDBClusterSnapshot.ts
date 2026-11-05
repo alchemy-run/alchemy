@@ -44,5 +44,6 @@ export const DeleteDBClusterSnapshotHttp = Layer.effect(
     tag: "AWS.Neptune.DeleteDBClusterSnapshot",
     operation: neptune.deleteDBClusterSnapshot,
     actions: ["rds:DeleteDBClusterSnapshot"],
+    arns: ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"],
   }),
 );

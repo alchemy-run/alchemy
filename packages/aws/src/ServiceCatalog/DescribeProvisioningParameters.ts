@@ -53,5 +53,6 @@ export const DescribeProvisioningParametersHttp = Layer.effect(
     capability: "DescribeProvisioningParameters",
     iamActions: ["servicecatalog:DescribeProvisioningParameters"],
     operation: servicecatalog.describeProvisioningParameters,
+    arns: ["arn:${Partition}:catalog:${Region}:${Account}:product/*"],
   }),
 );

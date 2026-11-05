@@ -9,7 +9,8 @@
   "builder": "makeOsisPipelineHttpBinding",
   "builders": {
     "makeOsisAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeOsisPipelineHttpBinding": {
       "grants": "resource"
@@ -36,7 +37,8 @@
         "mode": "required"
       },
       "builder": "makeOsisAccountHttpBinding",
-      "actions": ["osis:GetPipelineBlueprint"]
+      "actions": ["osis:GetPipelineBlueprint"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:osis:${Region}:${Account}:blueprint/*), the call was denied live in the OSIS Bindings suite; the grant stays on *."
     },
     "GetPipelineChangeProgress": {
       "operation": "getPipelineChangeProgress",

@@ -54,5 +54,9 @@ export const GetRevocationStatusHttp = Layer.effect(
     tag: "AWS.Signer.GetRevocationStatus",
     operation: signer.getRevocationStatus,
     actions: ["signer:GetRevocationStatus"],
+    arns: [
+      "arn:${Partition}:signer:${Region}:${Account}:/signing-jobs/*",
+      "arn:${Partition}:signer:${Region}:${Account}:/signing-profiles/*",
+    ],
   }),
 );

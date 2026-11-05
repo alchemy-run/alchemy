@@ -47,5 +47,6 @@ export const CreateForecastHttp = Layer.effect(
     capability: "CreateForecast",
     iamActions: ["forecast:CreateForecast"],
     operation: forecast.createForecast,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:predictor/*"],
   }),
 );

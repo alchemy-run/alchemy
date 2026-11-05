@@ -47,6 +47,6 @@ export const RotateSecretHttp = Layer.effect(
   makeSecretHttpBinding({
     tag: "AWS.SecretsManager.RotateSecret",
     operation: secretsmanager.rotateSecret,
-    actions: ["secretsmanager:RotateSecret", "secretsmanager:DescribeSecret"],
+    actions: ["secretsmanager:RotateSecret"],
   }),
 );

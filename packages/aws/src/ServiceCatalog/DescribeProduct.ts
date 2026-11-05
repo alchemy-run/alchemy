@@ -47,5 +47,6 @@ export const DescribeProductHttp = Layer.effect(
     capability: "DescribeProduct",
     iamActions: ["servicecatalog:DescribeProduct"],
     operation: servicecatalog.describeProduct,
+    arns: ["arn:${Partition}:catalog:${Region}:${Account}:product/*"],
   }),
 );

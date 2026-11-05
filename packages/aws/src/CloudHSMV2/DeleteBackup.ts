@@ -42,5 +42,6 @@ export const DeleteBackupHttp = Layer.effect(
     tag: "AWS.CloudHSMV2.DeleteBackup",
     operation: cloudhsm.deleteBackup,
     actions: ["cloudhsm:DeleteBackup"],
+    arns: ["arn:${Partition}:cloudhsm:${Region}:${Account}:backup/*"],
   }),
 );

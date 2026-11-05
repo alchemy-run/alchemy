@@ -11,7 +11,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -34,7 +35,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-maps:GetStaticMap"]
+      "actions": ["geo-maps:GetStaticMap"],
+      "arns": ["arn:${Partition}:geo-maps:${Region}::provider/default"]
     },
     "GetStyleDescriptor": {
       "operation": "getStyleDescriptor",
@@ -48,7 +50,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-maps:GetTile"]
+      "actions": ["geo-maps:GetTile"],
+      "arns": ["arn:${Partition}:geo-maps:${Region}::provider/default"]
     }
   }
 }

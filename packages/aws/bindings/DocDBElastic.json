@@ -101,7 +101,20 @@
         "ec2:DescribeSecurityGroups",
         "ec2:CreateTags"
       ],
-      "note": "Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action). Restoring provisions a new cluster, which attaches to the VPC via a service-managed VPC endpoint using the caller's EC2 permissions."
+      "note": "Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action). Restoring provisions a new cluster, which attaches to the VPC via a service-managed VPC endpoint using the caller's EC2 permissions.",
+      "reviewed": {
+        "ec2:CreateVpcEndpoint": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:DescribeVpcEndpoints": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:DeleteVpcEndpoints": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:ModifyVpcEndpoint": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:DescribeVpcAttribute": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:DescribeSubnets": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:DescribeVpcs": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:DescribeAvailabilityZones": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:DescribeAccountAttributes": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:DescribeSecurityGroups": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action).",
+        "ec2:CreateTags": "See the note: Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action)."
+      }
     },
     "StartCluster": {
       "operation": "startCluster",

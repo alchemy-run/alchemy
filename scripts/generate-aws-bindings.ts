@@ -8,6 +8,7 @@
  *   node scripts/generate-aws-bindings.ts --changes        # regenerate, then list what changed
  *   node scripts/generate-aws-bindings.ts --check          # fail if any generated file is stale
  *   node scripts/generate-aws-bindings.ts --refresh-actions  # re-snapshot actions.json
+ *   node scripts/generate-aws-bindings.ts --scope SQS      # propose `arns` for `*` grants
  *
  * Inputs, in `packages/aws/bindings/`:
  *
@@ -34,6 +35,14 @@
  * denied), `extra` (granted more), and, for a builder that grants on `*`,
  * `scopable` (the actions accept a resource ARN, so `*` is broader than
  * needed). Builders declare where they grant (`grants`) in the config.
+ *
+ * `--scope` writes `arns` (the actions' ARN formats in the deploying account
+ * and region) onto bindings whose builder grants `*`, where AWS marks every
+ * action's resource types as required. AWS's reference is a proposal, not
+ * proof: one narrowed grant in eight was denied live (list calls evaluated
+ * against `*`, services whose ARNs name another region, probes with foreign
+ * ARNs). Keep an `arns` only after the service's Bindings suite passes with
+ * it; for one that is denied, drop it and record why in `unscoped`.
  */
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -65,6 +74,8 @@ interface BuilderConfig {
    * resource's ARN, or ARNs derived from it) or `"*"`. Read by the audit.
    */
   grants?: "resource" | "*";
+  /** The builder takes `arns`, granting on them instead of `*`. */
+  arns?: boolean;
 }
 
 interface RequestConfig {
@@ -106,8 +117,28 @@ interface BindingConfig {
    * for a namespace (`{ "alchemy/Output": "* as Output" }`).
    */
   imports?: Record<string, string[] | string>;
+  /**
+   * ARN formats the actions are granted on, for a builder that otherwise
+   * grants `*` (`arn:${Partition}:batch:${Region}:${Account}:job/*`; see
+   * `AWSBindings.accountArn`). Written by `--scope` where AWS says every
+   * action needs a resource of a known type.
+   */
+  arns?: string[];
+  /**
+   * Why a builder that grants `*` keeps `*` for this binding although AWS
+   * lists resource types for its actions (narrowing was denied live, say).
+   * The audit stops proposing `arns`.
+   */
+  unscoped?: string;
   /** Why the grant looks the way it does; emitted as a comment on the layer. */
   note?: string;
+  /**
+   * Least-privilege review: action → why it is granted although AWS doesn't
+   * list it for the operation, or not granted although AWS does (legacy,
+   * conditional on a request field, verified live without it). The audit
+   * reports neither again.
+   */
+  reviewed?: Record<string, string>;
   /** The distilled response or error type, when it isn't the operation's. */
   response?: string;
   error?: string;
@@ -326,6 +357,7 @@ const emitBinding = (
   for (const [key, value] of Object.entries(binding.with ?? {})) {
     options.push(`    ${key}: ${literal(value)},`);
   }
+  if (binding.arns?.length) options.push(`    arns: ${literal(binding.arns)},`);
   for (const [key, value] of Object.entries(binding.withTs ?? {})) {
     options.push(`    ${key}: ${value},`);
   }
@@ -373,12 +405,51 @@ const handWrittenCalls = (serviceDir: string, generated: Set<string>) => {
 
 interface ActionsTable {
   [prefix: string]: {
-    /** Action → resource types it can be scoped to (empty: only `*`). */
+    /**
+     * Action → the resource types it can be scoped to, `*`-suffixed when
+     * required (`["queue*"]`), as in AWS's reference. Empty: only `*`.
+     */
     actions: Record<string, string[]>;
+    /** Resource type → its ARN formats. */
+    resources: Record<string, string[]>;
     /** API operation → the actions it authorizes (`service:Action`). */
     operations: Record<string, string[]>;
   };
 }
+
+const lookupAction = (table: ActionsTable, action: string) => {
+  const [prefix, name] = action.split(":") as [string, string];
+  const entry = table[prefix];
+  if (!entry) return undefined;
+  const key = Object.keys(entry.actions).find((k) => k.toLowerCase() === name.toLowerCase());
+  return key === undefined
+    ? undefined
+    : { prefix, types: entry.actions[key]!, resources: entry.resources };
+};
+
+/**
+ * The ARN formats to grant `actions` on instead of `*`, when AWS says each
+ * action requires a resource of one of its types (and accepts no optional
+ * ones, which a call may leave out); `undefined` when `*` must stay.
+ * Placeholders other than partition, region, and account become `*`.
+ */
+const scopedArns = (table: ActionsTable, actions: string[]): string[] | undefined => {
+  if (actions.length === 0) return undefined;
+  const arns = new Set<string>();
+  for (const action of actions) {
+    const found = lookupAction(table, action);
+    if (!found || found.types.length === 0) return undefined;
+    if (found.types.some((t) => !t.endsWith("*"))) return undefined;
+    for (const t of found.types) {
+      const formats = found.resources[t.slice(0, -1)];
+      if (!formats?.length) return undefined;
+      for (const f of formats) {
+        arns.add(f.replace(/\$\{(?!Partition\}|Region\}|Account\})[^}]+\}/g, "*"));
+      }
+    }
+  }
+  return [...arns].sort();
+};
 
 interface Finding {
   name: string;
@@ -410,21 +481,23 @@ const audit = (config: ServiceConfig, actionsTable: ActionsTable): Finding[] => 
     const lower = (xs: string[]) => new Set(xs.map((x) => x.toLowerCase()));
     const g = lower(granted);
     const n = lower(needed);
-    const missing = needed.filter((a) => !g.has(a.toLowerCase()));
-    const extra = granted.filter((a) => !n.has(a.toLowerCase()));
+    const reviewed = lower(Object.keys(binding.reviewed ?? {}));
+    const missing = needed.filter((a) => !g.has(a.toLowerCase()) && !reviewed.has(a.toLowerCase()));
+    const extra = granted.filter((a) => !n.has(a.toLowerCase()) && !reviewed.has(a.toLowerCase()));
     if (missing.length) findings.push({ name, kind: "missing", detail: missing.join(", ") });
     if (extra.length) findings.push({ name, kind: "extra", detail: extra.join(", ") });
     const builder = config.builders[binding.builder ?? config.builder];
-    if (builder?.grants === "*") {
-      const scopable = granted.filter((a) => {
-        const [prefix, action] = a.split(":") as [string, string];
-        const entry = actionsTable[prefix]?.actions;
-        const key =
-          entry && Object.keys(entry).find((k) => k.toLowerCase() === action.toLowerCase());
-        return key !== undefined && entry![key]!.length > 0;
-      });
+    if (builder?.grants === "*" && !binding.arns?.length && binding.unscoped === undefined) {
+      const scopable = granted.filter(
+        (a) => (lookupAction(actionsTable, a)?.types.length ?? 0) > 0,
+      );
       if (scopable.length) {
-        findings.push({ name, kind: "scopable", detail: `${scopable.join(", ")} on * ` });
+        const arns = scopedArns(actionsTable, granted);
+        findings.push({
+          name,
+          kind: "scopable",
+          detail: `${scopable.join(", ")} on *${arns ? ` (--scope: ${arns.join(", ")})` : " (an optional resource type: review)"}`,
+        });
       }
     }
   }
@@ -449,16 +522,73 @@ const refreshActions = () => {
     for (const b of Object.values(config.bindings))
       for (const a of b.actions ?? []) used.add(a.split(":")[0]!);
   }
+  // Which resource types each action requires: only the HTML reference marks
+  // them (`queue*`); the JSON lists the types alone.
+  const requiredTypes = new Map<string, Map<string, Set<string>>>();
+  const base = "https://docs.aws.amazon.com/service-authorization/latest/reference/";
+  const toc = curl(`${base}reference_policies_actions-resources-contextkeys.html`);
+  const pages = [
+    ...new Set([...toc.matchAll(/href="\.\/(list_[a-z0-9-]+\.html)"/g)].map((m) => m[1]!)),
+  ];
+  const dir = fs.mkdtempSync(path.join(root, ".aws-reference-"));
+  try {
+    execFileSync(
+      "curl",
+      [
+        "-sfL",
+        "-Z",
+        "--parallel-max",
+        "16",
+        ...pages.flatMap((p) => ["-o", path.join(dir, p), `${base}${p}`]),
+      ],
+      { stdio: "ignore", maxBuffer: 64 * 1024 * 1024 },
+    );
+    for (const page of pages) {
+      const file = path.join(dir, page);
+      if (!fs.existsSync(file)) continue;
+      const html = fs.readFileSync(file, "utf8");
+      const prefix = /service prefix: <code[^>]*>([^<]+)<\/code>/.exec(html)?.[1]?.trim();
+      if (!prefix || !used.has(prefix)) continue;
+      const id = page.slice(0, -5);
+      const actionRow = new RegExp(`id="${id}-action-(\\w+)"`);
+      const resourceLink = new RegExp(`href="#${id}-resource-[^"]*">([^<]+)</a>`, "g");
+      const actions = new Map<string, Set<string>>();
+      let current: Set<string> | undefined;
+      for (const row of html.matchAll(/<tr>([\s\S]*?)<\/tr>/g)) {
+        const action = actionRow.exec(row[1]!)?.[1];
+        if (action) {
+          current = new Set();
+          actions.set(action, current);
+        }
+        if (!current) continue;
+        for (const r of row[1]!.matchAll(resourceLink)) {
+          const t = r[1]!.trim();
+          if (t.endsWith("*")) current.add(t.slice(0, -1));
+        }
+      }
+      requiredTypes.set(prefix, actions);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
   const table: ActionsTable = {};
   for (const entry of index.filter((e) => used.has(e.service))) {
     const doc = JSON.parse(curl(entry.url)) as {
       Actions?: { Name: string; Resources?: { Name: string }[] }[];
+      Resources?: { Name: string; ARNFormats?: string[] }[];
       Operations?: { Name: string; AuthorizedActions?: { Name: string; Service: string }[] }[];
     };
+    const required = requiredTypes.get(entry.service) ?? new Map<string, Set<string>>();
     table[entry.service] = {
       actions: Object.fromEntries(
-        (doc.Actions ?? []).map((a) => [a.Name, (a.Resources ?? []).map((r) => r.Name)]),
+        (doc.Actions ?? []).map((a) => [
+          a.Name,
+          (a.Resources ?? []).map((r) =>
+            required.get(a.Name)?.has(r.Name) ? `${r.Name}*` : r.Name,
+          ),
+        ]),
       ),
+      resources: Object.fromEntries((doc.Resources ?? []).map((r) => [r.Name, r.ARNFormats ?? []])),
       operations: Object.fromEntries(
         (doc.Operations ?? []).map((o) => [
           o.Name,
@@ -664,6 +794,30 @@ const actionsTable = fs.existsSync(actionsPath)
   ? (JSON.parse(fs.readFileSync(actionsPath, "utf8")) as ActionsTable)
   : undefined;
 const report = flags.has("--report");
+if (flags.has("--scope")) {
+  if (!actionsTable) throw new Error("--scope needs actions.json; run --refresh-actions");
+  let scoped = 0;
+  for (const service of named.length ? named : all) {
+    const file = path.join(bindingsDir, `${service}.json`);
+    const config = readConfig(service);
+    let changed = false;
+    for (const binding of Object.values(config.bindings)) {
+      const builder = config.builders[binding.builder ?? config.builder];
+      if (builder?.grants !== "*" || builder.arns !== true || binding.arns?.length) continue;
+      if (binding.unscoped !== undefined) continue;
+      const arns = scopedArns(actionsTable, binding.actions ?? []);
+      if (!arns) continue;
+      binding.arns = arns;
+      changed = true;
+      scoped++;
+    }
+    if (changed) {
+      fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
+      execFileSync("pnpm", ["exec", "oxfmt", file], { cwd: root, stdio: "ignore" });
+    }
+  }
+  console.log(`scoped ${scoped} bindings`);
+}
 const totals: Record<string, number> = {};
 for (const service of named.length ? named : all) {
   for (const f of generateService(service, report, actionsTable))

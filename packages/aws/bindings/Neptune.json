@@ -12,7 +12,8 @@
   "builder": "makeNeptuneAccountHttpBinding",
   "builders": {
     "makeNeptuneAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeNeptuneClusterHttpBinding": {
       "grants": "resource"
@@ -28,7 +29,11 @@
     },
     "CopyDBClusterSnapshot": {
       "operation": "copyDBClusterSnapshot",
-      "actions": ["rds:CopyDBClusterSnapshot"]
+      "actions": ["rds:CopyDBClusterSnapshot"],
+      "arns": ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"],
+      "reviewed": {
+        "rds:AddTagsToResource": "Needed only when the request sets tags or CopyTags."
+      }
     },
     "CreateDBClusterSnapshot": {
       "operation": "createDBClusterSnapshot",
@@ -44,11 +49,12 @@
       "withTs": {
         "extraResources": "(clusterArn) => [`${clusterArn.split(\":\").slice(0, 5).join(\":\")}:cluster-snapshot:*`]"
       },
-      "note": "Snapshot creation authorizes against BOTH the source cluster ARN and the target snapshot ARN \u2014 widen the grant to the account's Neptune cluster-snapshot space (`arn:\u2026:rds:{region}:{account}:cluster-snapshot:*`)."
+      "note": "Snapshot creation authorizes against BOTH the source cluster ARN and the target snapshot ARN — widen the grant to the account's Neptune cluster-snapshot space (`arn:…:rds:{region}:{account}:cluster-snapshot:*`)."
     },
     "DeleteDBClusterSnapshot": {
       "operation": "deleteDBClusterSnapshot",
-      "actions": ["rds:DeleteDBClusterSnapshot"]
+      "actions": ["rds:DeleteDBClusterSnapshot"],
+      "arns": ["arn:${Partition}:rds:${Region}:${Account}:cluster-snapshot:*"]
     },
     "DescribeDBClusterEndpoints": {
       "operation": "describeDBClusterEndpoints",

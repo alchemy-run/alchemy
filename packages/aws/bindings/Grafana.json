@@ -9,7 +9,8 @@
   "builder": "makeGrafanaWorkspaceHttpBinding",
   "builders": {
     "makeGrafanaAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeGrafanaWorkspaceHttpBinding": {
       "grants": "resource"

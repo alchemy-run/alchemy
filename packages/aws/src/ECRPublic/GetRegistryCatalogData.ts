@@ -46,5 +46,6 @@ export const GetRegistryCatalogDataHttp = Layer.effect(
     capability: "GetRegistryCatalogData",
     iamActions: ["ecr-public:GetRegistryCatalogData"],
     operation: ecrpublic.getRegistryCatalogData,
+    arns: ["arn:${Partition}:ecr-public::${Account}:registry/*"],
   }),
 );

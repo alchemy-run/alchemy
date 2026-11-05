@@ -14,7 +14,8 @@
     "makeActivityArnHttpBinding": {},
     "makeExecutionScopedHttpBinding": {},
     "makeSfnServiceHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeStateMachineArnHttpBinding": {}
   },

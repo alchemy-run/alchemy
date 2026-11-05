@@ -15,13 +15,16 @@
   "builder": "makeSnsAccountHttpBinding",
   "builders": {
     "makeSnsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeSnsEndpointHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeSnsPlatformHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeSnsSubscriptionHttpBinding": {
       "grants": "resource"
@@ -53,7 +56,10 @@
         "omit": []
       },
       "actions": ["sns:CheckIfPhoneNumberIsOptedOut", "sms-voice:DescribeOptedOutNumbers"],
-      "note": "Opt-out reads are backed by `sms-voice:DescribeOptedOutNumbers` (probe-verified)."
+      "note": "Opt-out reads are backed by `sms-voice:DescribeOptedOutNumbers` (probe-verified).",
+      "reviewed": {
+        "sms-voice:DescribeOptedOutNumbers": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "ConfirmSubscription": {
       "operation": "confirmSubscription",
@@ -94,7 +100,12 @@
         "sms-voice:SendDestinationNumberVerificationCode",
         "sms-voice:SendTextMessage"
       ],
-      "note": "Registering a sandbox number creates a verified destination number and sends the OTP text via End User Messaging (probe-verified)."
+      "note": "Registering a sandbox number creates a verified destination number and sends the OTP text via End User Messaging (probe-verified).",
+      "reviewed": {
+        "sms-voice:CreateVerifiedDestinationNumber": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials.",
+        "sms-voice:SendDestinationNumberVerificationCode": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials.",
+        "sms-voice:SendTextMessage": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "DeleteEndpoint": {
       "operation": "deleteEndpoint",
@@ -115,7 +126,10 @@
         "interface": "DeleteSMSSandboxPhoneNumberRequest",
         "omit": []
       },
-      "actions": ["sns:DeleteSMSSandboxPhoneNumber", "sms-voice:DeleteVerifiedDestinationNumber"]
+      "actions": ["sns:DeleteSMSSandboxPhoneNumber", "sms-voice:DeleteVerifiedDestinationNumber"],
+      "reviewed": {
+        "sms-voice:DeleteVerifiedDestinationNumber": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "GetDataProtectionPolicy": {
       "operation": "getDataProtectionPolicy",
@@ -151,7 +165,10 @@
         "omit": []
       },
       "actions": ["sns:GetSMSAttributes", "sms-voice:DescribeSpendLimits"],
-      "note": "SNS SMS preferences are backed by AWS End User Messaging \u2014 the read fans out to `sms-voice:DescribeSpendLimits` (probe-verified)."
+      "note": "SNS SMS preferences are backed by AWS End User Messaging — the read fans out to `sms-voice:DescribeSpendLimits` (probe-verified).",
+      "reviewed": {
+        "sms-voice:DescribeSpendLimits": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "GetSMSSandboxAccountStatus": {
       "operation": "getSMSSandboxAccountStatus",
@@ -160,7 +177,10 @@
         "interface": "GetSMSSandboxAccountStatusRequest",
         "omit": []
       },
-      "actions": ["sns:GetSMSSandboxAccountStatus", "sms-voice:DescribeAccountAttributes"]
+      "actions": ["sns:GetSMSSandboxAccountStatus", "sms-voice:DescribeAccountAttributes"],
+      "reviewed": {
+        "sms-voice:DescribeAccountAttributes": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "GetSubscriptionAttributes": {
       "operation": "getSubscriptionAttributes",
@@ -209,7 +229,10 @@
         "interface": "ListOriginationNumbersRequest",
         "omit": []
       },
-      "actions": ["sns:ListOriginationNumbers", "sms-voice:DescribePhoneNumbers"]
+      "actions": ["sns:ListOriginationNumbers", "sms-voice:DescribePhoneNumbers"],
+      "reviewed": {
+        "sms-voice:DescribePhoneNumbers": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "ListPhoneNumbersOptedOut": {
       "operation": "listPhoneNumbersOptedOut",
@@ -218,7 +241,10 @@
         "interface": "ListPhoneNumbersOptedOutRequest",
         "omit": []
       },
-      "actions": ["sns:ListPhoneNumbersOptedOut", "sms-voice:DescribeOptedOutNumbers"]
+      "actions": ["sns:ListPhoneNumbersOptedOut", "sms-voice:DescribeOptedOutNumbers"],
+      "reviewed": {
+        "sms-voice:DescribeOptedOutNumbers": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "ListPlatformApplications": {
       "operation": "listPlatformApplications",
@@ -236,7 +262,10 @@
         "interface": "ListSMSSandboxPhoneNumbersRequest",
         "omit": []
       },
-      "actions": ["sns:ListSMSSandboxPhoneNumbers", "sms-voice:DescribeVerifiedDestinationNumbers"]
+      "actions": ["sns:ListSMSSandboxPhoneNumbers", "sms-voice:DescribeVerifiedDestinationNumbers"],
+      "reviewed": {
+        "sms-voice:DescribeVerifiedDestinationNumbers": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "ListSubscriptions": {
       "operation": "listSubscriptions",
@@ -292,7 +321,10 @@
         "omit": []
       },
       "actions": ["sns:OptInPhoneNumber", "sms-voice:DeleteOptedOutNumber"],
-      "note": "Opting a number back in deletes it from the End User Messaging opted-out list (probe-verified)."
+      "note": "Opting a number back in deletes it from the End User Messaging opted-out list (probe-verified).",
+      "reviewed": {
+        "sms-voice:DeleteOptedOutNumber": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "Publish": {
       "operation": "publish",
@@ -330,7 +362,10 @@
         "omit": ["TopicArn", "TargetArn"]
       },
       "actions": ["sns:Publish", "sms-voice:SendTextMessage"],
-      "note": "Direct SMS delivery is backed by `sms-voice:SendTextMessage` (probe-verified)."
+      "note": "Direct SMS delivery is backed by `sms-voice:SendTextMessage` (probe-verified).",
+      "reviewed": {
+        "sms-voice:SendTextMessage": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "PublishToEndpoint": {
       "operation": "publish",
@@ -396,7 +431,11 @@
         "sms-voice:DescribeSpendLimits",
         "sms-voice:SetTextMessageSpendLimitOverride"
       ],
-      "note": "Spend-limit updates fan out to AWS End User Messaging."
+      "note": "Spend-limit updates fan out to AWS End User Messaging.",
+      "reviewed": {
+        "sms-voice:DescribeSpendLimits": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials.",
+        "sms-voice:SetTextMessageSpendLimitOverride": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     },
     "SetSubscriptionAttributes": {
       "operation": "setSubscriptionAttributes",
@@ -484,7 +523,10 @@
         "interface": "VerifySMSSandboxPhoneNumberRequest",
         "omit": []
       },
-      "actions": ["sns:VerifySMSSandboxPhoneNumber", "sms-voice:VerifyDestinationNumber"]
+      "actions": ["sns:VerifySMSSandboxPhoneNumber", "sms-voice:VerifyDestinationNumber"],
+      "reviewed": {
+        "sms-voice:VerifyDestinationNumber": "SNS's SMS calls run on AWS End User Messaging, which authorizes its sms-voice action with the caller's credentials."
+      }
     }
   }
 }

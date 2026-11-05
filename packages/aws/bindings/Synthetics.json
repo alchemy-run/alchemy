@@ -9,7 +9,8 @@
   "builder": "makeSyntheticsCanaryHttpBinding",
   "builders": {
     "makeSyntheticsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeSyntheticsCanaryHttpBinding": {
       "grants": "resource"

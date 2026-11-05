@@ -52,5 +52,6 @@ export const SearchTextHttp = Layer.effect(
     capability: "SearchText",
     iamActions: ["geo-places:SearchText"],
     operation: geoPlaces.searchText,
+    arns: ["arn:${Partition}:geo-places:${Region}::provider/default"],
   }),
 );

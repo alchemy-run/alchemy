@@ -54,5 +54,6 @@ export const SearchNearbyHttp = Layer.effect(
     capability: "SearchNearby",
     iamActions: ["geo-places:SearchNearby"],
     operation: geoPlaces.searchNearby,
+    arns: ["arn:${Partition}:geo-places:${Region}::provider/default"],
   }),
 );

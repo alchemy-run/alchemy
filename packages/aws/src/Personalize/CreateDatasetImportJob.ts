@@ -54,5 +54,9 @@ export const CreateDatasetImportJobHttp = Layer.effect(
     operation: personalize.createDatasetImportJob,
     actions: ["personalize:CreateDatasetImportJob"],
     passRole: true,
+    arns: [
+      "arn:${Partition}:personalize:${Region}:${Account}:dataset-import-job/*",
+      "arn:${Partition}:personalize:${Region}:${Account}:dataset/*",
+    ],
   }),
 );

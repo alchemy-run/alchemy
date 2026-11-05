@@ -64,6 +64,7 @@ export const PutExternalEvaluationHttp = Layer.effect(
     operation: config.putExternalEvaluation,
     actions: ["config:PutExternalEvaluation"],
     requestKey: "ConfigRuleName",
+    arns: ["arn:${Partition}:config:${Region}:${Account}:config-rule/*"],
     identifier: (rule: ConfigRule) => rule.configRuleName,
   }),
 );

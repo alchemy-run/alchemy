@@ -48,5 +48,6 @@ export const GetAccuracyMetricsHttp = Layer.effect(
     capability: "GetAccuracyMetrics",
     iamActions: ["forecast:GetAccuracyMetrics"],
     operation: forecast.getAccuracyMetrics,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:predictor/*"],
   }),
 );

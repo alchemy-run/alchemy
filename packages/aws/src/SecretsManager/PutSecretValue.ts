@@ -58,6 +58,6 @@ export const PutSecretValueHttp = Layer.effect(
   makeSecretHttpBinding({
     tag: "AWS.SecretsManager.PutSecretValue",
     operation: secretsmanager.putSecretValue,
-    actions: ["secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret"],
+    actions: ["secretsmanager:PutSecretValue"],
   }),
 );

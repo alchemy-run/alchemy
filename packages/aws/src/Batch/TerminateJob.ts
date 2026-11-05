@@ -41,5 +41,6 @@ export const TerminateJobHttp = Layer.effect(
     tag: "AWS.Batch.TerminateJob",
     operation: batch.terminateJob,
     actions: ["batch:TerminateJob"],
+    arns: ["arn:${Partition}:batch:${Region}:${Account}:job/*"],
   }),
 );

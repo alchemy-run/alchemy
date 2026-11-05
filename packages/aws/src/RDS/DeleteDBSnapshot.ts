@@ -40,5 +40,6 @@ export const DeleteDBSnapshotHttp = Layer.effect(
     tag: "AWS.RDS.DeleteDBSnapshot",
     operation: rds.deleteDBSnapshot,
     actions: ["rds:DeleteDBSnapshot"],
+    arns: ["arn:${Partition}:rds:${Region}:${Account}:snapshot:*"],
   }),
 );

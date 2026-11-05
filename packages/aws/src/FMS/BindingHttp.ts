@@ -40,6 +40,11 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
    * {@link AdminAccount} resource APIs.
    */
   pinToAdminRegion?: boolean;
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -54,7 +59,7 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
             {
               Effect: "Allow",
               Action: [...options.iamActions],
-              Resource: ["*"],
+              Resource: AWSBindings.grantResources(options.arns),
             },
           ],
         });

@@ -10,7 +10,8 @@
   "builder": "makeServerlessAccountHttpBinding",
   "builders": {
     "makeServerlessAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeServerlessNamespaceHttpBinding": {
       "grants": "resource"

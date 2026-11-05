@@ -43,5 +43,6 @@ export const ResumeResourceHttp = Layer.effect(
     capability: "ResumeResource",
     iamActions: ["forecast:ResumeResource"],
     operation: forecast.resumeResource,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:monitor/*"],
   }),
 );

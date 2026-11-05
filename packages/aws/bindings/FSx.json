@@ -9,7 +9,8 @@
   "builder": "makeFSxAccountHttpBinding",
   "builders": {
     "makeFSxAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeFSxFileSystemHttpBinding": {
       "grants": "resource"
@@ -21,7 +22,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["fsx:CancelDataRepositoryTask"]
+      "actions": ["fsx:CancelDataRepositoryTask"],
+      "arns": ["arn:${Partition}:fsx:${Region}:${Account}:task/*"]
     },
     "CopyBackup": {
       "operation": "copyBackup",
@@ -36,7 +38,11 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["fsx:CopySnapshotAndUpdateVolume"]
+      "actions": ["fsx:CopySnapshotAndUpdateVolume"],
+      "arns": [
+        "arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*",
+        "arn:${Partition}:fsx:${Region}:${Account}:volume/*/*"
+      ]
     },
     "CreateBackup": {
       "operation": "createBackup",
@@ -80,14 +86,16 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["fsx:DeleteBackup"]
+      "actions": ["fsx:DeleteBackup"],
+      "arns": ["arn:${Partition}:fsx:${Region}:${Account}:backup/*"]
     },
     "DeleteSnapshot": {
       "operation": "deleteSnapshot",
       "request": {
         "mode": "required"
       },
-      "actions": ["fsx:DeleteSnapshot"]
+      "actions": ["fsx:DeleteSnapshot"],
+      "arns": ["arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*"]
     },
     "DescribeBackups": {
       "operation": "describeBackups",
@@ -141,14 +149,16 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["fsx:RestoreVolumeFromSnapshot"]
+      "actions": ["fsx:RestoreVolumeFromSnapshot"],
+      "unscoped": "Narrowed to AWS's ARN formats (arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*, arn:${Partition}:fsx:${Region}:${Account}:volume/*/*), the call was denied live in the FSx Bindings suite; the grant stays on *."
     },
     "UpdateSnapshot": {
       "operation": "updateSnapshot",
       "request": {
         "mode": "required"
       },
-      "actions": ["fsx:UpdateSnapshot"]
+      "actions": ["fsx:UpdateSnapshot"],
+      "arns": ["arn:${Partition}:fsx:${Region}:${Account}:snapshot/*/*"]
     }
   }
 }

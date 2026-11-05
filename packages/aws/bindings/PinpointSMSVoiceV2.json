@@ -13,7 +13,8 @@
   "builder": "makeSmsVoicePhoneNumberHttpBinding",
   "builders": {
     "makeSmsVoiceAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeSmsVoiceOptOutListHttpBinding": {
       "grants": "resource"

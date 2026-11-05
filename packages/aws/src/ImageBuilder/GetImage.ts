@@ -46,5 +46,6 @@ export const GetImageHttp = Layer.effect(
     tag: "AWS.ImageBuilder.GetImage",
     operation: imagebuilder.getImage,
     actions: ["imagebuilder:GetImage"],
+    arns: ["arn:${Partition}:imagebuilder:${Region}:${Account}:image/*/*/*"],
   }),
 );

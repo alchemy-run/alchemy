@@ -10,7 +10,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -70,7 +71,12 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["iam:ListPoliciesGrantingServiceAccess"]
+      "actions": ["iam:ListPoliciesGrantingServiceAccess"],
+      "arns": [
+        "arn:${Partition}:iam::${Account}:group/*",
+        "arn:${Partition}:iam::${Account}:role/*",
+        "arn:${Partition}:iam::${Account}:user/*"
+      ]
     },
     "SimulateCustomPolicy": {
       "operation": "simulateCustomPolicy",

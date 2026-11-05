@@ -51,5 +51,6 @@ export const GetRecommendationsHttp = Layer.effect(
     tag: "AWS.Personalize.GetRecommendations",
     operation: personalizeruntime.getRecommendations,
     actions: ["personalize:GetRecommendations"],
+    arns: ["arn:${Partition}:personalize:${Region}:${Account}:campaign/*"],
   }),
 );

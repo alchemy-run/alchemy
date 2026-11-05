@@ -53,5 +53,6 @@ export const SendWorkflowStepStateHttp = Layer.effect(
     tag: "AWS.Transfer.SendWorkflowStepState",
     operation: transfer.sendWorkflowStepState,
     actions: ["transfer:SendWorkflowStepState"],
+    arns: ["arn:${Partition}:transfer:${Region}:${Account}:workflow/*"],
   }),
 );

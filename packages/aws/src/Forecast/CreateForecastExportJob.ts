@@ -59,5 +59,6 @@ export const CreateForecastExportJobHttp = Layer.effect(
     iamActions: ["forecast:CreateForecastExportJob"],
     operation: forecast.createForecastExportJob,
     passRole: true,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:forecast/*"],
   }),
 );

@@ -49,5 +49,6 @@ export const DescribeAutoPredictorHttp = Layer.effect(
     capability: "DescribeAutoPredictor",
     iamActions: ["forecast:DescribeAutoPredictor"],
     operation: forecast.describeAutoPredictor,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:predictor/*"],
   }),
 );

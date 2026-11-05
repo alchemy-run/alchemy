@@ -11,7 +11,8 @@
         "iamActions": "actions",
         "operation": "operation"
       },
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -20,49 +21,56 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-places:Autocomplete"]
+      "actions": ["geo-places:Autocomplete"],
+      "arns": ["arn:${Partition}:geo-places:${Region}::provider/default"]
     },
     "Geocode": {
       "operation": "geocode",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-places:Geocode"]
+      "actions": ["geo-places:Geocode"],
+      "arns": ["arn:${Partition}:geo-places:${Region}::provider/default"]
     },
     "GetPlace": {
       "operation": "getPlace",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-places:GetPlace"]
+      "actions": ["geo-places:GetPlace"],
+      "arns": ["arn:${Partition}:geo-places:${Region}::provider/default"]
     },
     "ReverseGeocode": {
       "operation": "reverseGeocode",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-places:ReverseGeocode"]
+      "actions": ["geo-places:ReverseGeocode"],
+      "arns": ["arn:${Partition}:geo-places:${Region}::provider/default"]
     },
     "SearchNearby": {
       "operation": "searchNearby",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-places:SearchNearby"]
+      "actions": ["geo-places:SearchNearby"],
+      "arns": ["arn:${Partition}:geo-places:${Region}::provider/default"]
     },
     "SearchText": {
       "operation": "searchText",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-places:SearchText"]
+      "actions": ["geo-places:SearchText"],
+      "arns": ["arn:${Partition}:geo-places:${Region}::provider/default"]
     },
     "Suggest": {
       "operation": "suggest",
       "request": {
         "mode": "required"
       },
-      "actions": ["geo-places:Suggest"]
+      "actions": ["geo-places:Suggest"],
+      "arns": ["arn:${Partition}:geo-places:${Region}::provider/default"]
     }
   }
 }

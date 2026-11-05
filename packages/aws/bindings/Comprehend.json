@@ -5,7 +5,8 @@
   "builder": "makeComprehendHttpBinding",
   "builders": {
     "makeComprehendHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     }
   },
   "bindings": {
@@ -56,7 +57,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["comprehend:ClassifyDocument"]
+      "actions": ["comprehend:ClassifyDocument"],
+      "arns": ["arn:${Partition}:comprehend:${Region}:${Account}:document-classifier-endpoint/*"]
     },
     "ContainsPiiEntities": {
       "operation": "containsPiiEntities",
@@ -112,7 +114,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["comprehend:DescribeSentimentDetectionJob"]
+      "actions": ["comprehend:DescribeSentimentDetectionJob"],
+      "arns": ["arn:${Partition}:comprehend:${Region}:${Account}:sentiment-detection-job/*"]
     },
     "DescribeTargetedSentimentDetectionJob": {
       "operation": "describeTargetedSentimentDetectionJob",
@@ -260,7 +263,8 @@
       "request": {
         "mode": "required"
       },
-      "actions": ["comprehend:StopSentimentDetectionJob"]
+      "actions": ["comprehend:StopSentimentDetectionJob"],
+      "arns": ["arn:${Partition}:comprehend:${Region}:${Account}:sentiment-detection-job/*"]
     },
     "StopTargetedSentimentDetectionJob": {
       "operation": "stopTargetedSentimentDetectionJob",

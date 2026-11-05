@@ -47,5 +47,6 @@ export const CancelTagSyncTaskHttp = Layer.effect(
     tag: "AWS.ResourceGroups.CancelTagSyncTask",
     operation: resourcegroups.cancelTagSyncTask,
     actions: ["resource-groups:CancelTagSyncTask"],
+    arns: ["arn:${Partition}:resource-groups:${Region}:${Account}:group/*"],
   }),
 );

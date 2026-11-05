@@ -29,9 +29,11 @@ so they are produced in two halves:
 ```
 
 GCP is the reference: 199 services, every one generated
-(`scripts/generate-gcp-bindings.ts`). AWS and Cloudflare bindings are
-still hand-written; [porting.md](porting.md) is the contract for giving
-them, or any provider, a generator.
+(`scripts/generate-gcp-bindings.ts`). AWS generates 2,091 bindings across
+159 services (`scripts/generate-aws-bindings.ts`, configs in
+`packages/aws/bindings/`); about 730 with shapes a config can't hold stay
+hand-written. Cloudflare's are hand-written. [porting.md](porting.md) is
+the contract for giving any provider a generator.
 
 ## Rules
 
@@ -153,6 +155,26 @@ write it by hand next to the generated ones (`AGENTS.md`, Read/Write/ReadWrite
 binding convention). The generator then marks its operations `covered`.
 When the same fix recurs across two services, add a config key to the
 generator instead of repeating hand-written code.
+
+## Loop D: least privilege (AWS)
+
+`node scripts/generate-aws-bindings.ts --report` audits every generated
+binding against `packages/aws/bindings/actions.json`, a snapshot of AWS's
+Service Authorization Reference (`--refresh-actions`):
+
+| Finding | Meaning | What to do |
+| --- | --- | --- |
+| `missing` | AWS lists an action for the operation the binding doesn't grant | grant it if the call needs it; otherwise `reviewed` with why (legacy `aws-portal:`, only when the request sets tags, …) |
+| `extra` | the binding grants an action AWS doesn't list | drop it, or `reviewed` with why (a service acting with the caller's credentials, verified live) |
+| `scopable` | a builder grants `*` though the actions accept an ARN | `--scope` proposes `arns`; keep them only once the service's Bindings suite passes, else `unscoped` with why |
+| `unknown` | AWS publishes no actions for the operation | review by hand against the API docs |
+
+The reference is a proposal, not proof. It lists actions an operation may
+authorize under some request fields, misses actions that exist, and its
+ARN formats don't fit every call: narrowing to them was denied live for
+one binding in eight (list calls are evaluated against `*`, some services'
+ARNs name another region, probes pass foreign ARNs). Every grant change
+gets the service's `Bindings.test.ts` run before it ships.
 
 ## Loop C: upgrade distilled
 

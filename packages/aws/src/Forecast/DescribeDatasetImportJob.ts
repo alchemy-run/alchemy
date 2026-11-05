@@ -55,5 +55,6 @@ export const DescribeDatasetImportJobHttp = Layer.effect(
     capability: "DescribeDatasetImportJob",
     iamActions: ["forecast:DescribeDatasetImportJob"],
     operation: forecast.describeDatasetImportJob,
+    arns: ["arn:${Partition}:forecast:${Region}:${Account}:dataset-import-job/*"],
   }),
 );

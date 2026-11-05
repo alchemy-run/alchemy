@@ -56,5 +56,6 @@ export const CalculateIsolinesHttp = Layer.effect(
     capability: "CalculateIsolines",
     iamActions: ["geo-routes:CalculateIsolines"],
     operation: geoRoutes.calculateIsolines,
+    arns: ["arn:${Partition}:geo-routes:${Region}::provider/default"],
   }),
 );

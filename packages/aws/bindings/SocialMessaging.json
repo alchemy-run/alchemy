@@ -9,7 +9,8 @@
   "builder": "makeWabaScopedHttpBinding",
   "builders": {
     "makeWabaPhonePlaneHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeWabaScopedHttpBinding": {
       "grants": "resource"

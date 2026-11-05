@@ -9,7 +9,8 @@
   "builder": "makeIvsChannelHttpBinding",
   "builders": {
     "makeIvsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeIvsChannelHttpBinding": {
       "grants": "resource"
@@ -22,7 +23,8 @@
         "mode": "required"
       },
       "builder": "makeIvsAccountHttpBinding",
-      "actions": ["ivs:BatchStartViewerSessionRevocation"]
+      "actions": ["ivs:BatchStartViewerSessionRevocation"],
+      "arns": ["arn:${Partition}:ivs:${Region}:${Account}:channel/*"]
     },
     "GetStream": {
       "operation": "getStream",
@@ -65,7 +67,8 @@
     "ListStreams": {
       "operation": "listStreams",
       "builder": "makeIvsAccountHttpBinding",
-      "actions": ["ivs:ListStreams"]
+      "actions": ["ivs:ListStreams"],
+      "arns": ["arn:${Partition}:ivs:${Region}:${Account}:channel/*"]
     },
     "PutMetadata": {
       "operation": "putMetadata",

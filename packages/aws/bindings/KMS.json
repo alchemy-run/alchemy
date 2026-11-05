@@ -12,7 +12,8 @@
   "builder": "makeKmsKeyHttpBinding",
   "builders": {
     "makeKmsAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeKmsKeyHttpBinding": {}
   },

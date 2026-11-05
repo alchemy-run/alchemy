@@ -9,7 +9,8 @@
   "builder": "makeBackupAccountHttpBinding",
   "builders": {
     "makeBackupAccountHttpBinding": {
-      "grants": "*"
+      "grants": "*",
+      "arns": true
     },
     "makeBackupVaultHttpBinding": {}
   },
