@@ -1,6 +1,11 @@
 import * as AWS from "@alchemy.run/aws";
+import * as Fly from "@alchemy.run/fly";
 import * as GCP from "@alchemy.run/gcp";
-import { runsAsAwsRole, runsAsServiceAccount } from "@alchemy.run/gcp/GCPBindings";
+import {
+  runsAsAwsRole,
+  runsAsServiceAccount,
+  runsOnFlyMachines,
+} from "@alchemy.run/gcp/GCPBindings";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as lambda from "@distilled.cloud/aws/lambda";
@@ -13,7 +18,9 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { flyApi } from "../Fly/limit.ts";
 import FederatedLambdaLive, { Events, FederatedLambda } from "./fixtures/aws-host.ts";
+import FlyFederatedService, { FlyEvents } from "./fixtures/fly-host.ts";
 
 const host = (Type: string, Props?: object) =>
   ({ Type, LogicalId: "Host", FQN: "Host", Props }) as ResourceLike;
@@ -93,6 +100,17 @@ describe("GCPBindings.runsAsAwsRole", { tags: ["unit", "provider:gcp", "local"] 
   it("rejects hosts outside AWS", () => {
     expect(runsAsAwsRole(host("Cloudflare.Worker"))).toBe(false);
     expect(runsAsAwsRole(host("GCP.Run.Service"))).toBe(false);
+  });
+});
+
+describe("GCPBindings.runsOnFlyMachines", { tags: ["unit", "provider:gcp", "local"] }, () => {
+  it("accepts a Fly Service", () => {
+    expect(runsOnFlyMachines(host("Fly.Service"))).toBe(true);
+  });
+
+  it("rejects Fly Sprites and other hosts", () => {
+    expect(runsOnFlyMachines(host("Fly.Sprite"))).toBe(false);
+    expect(runsOnFlyMachines(host("Cloudflare.Worker"))).toBe(false);
   });
 });
 
@@ -212,6 +230,107 @@ describe(
               Effect.catchTag("NotFound", () => Effect.succeed(true)),
             );
           expect(gone).toBe(true);
+        }),
+      { timeout: 900_000 },
+    );
+  },
+);
+
+const { test: flyTest } = Test.make({
+  limit: flyApi,
+  providers: Layer.mergeAll(Fly.providers(), GCP.providers()),
+});
+
+describe(
+  "GCP bindings on a Fly Service",
+  { tags: ["provider:fly", "provider:gcp", "live"] },
+  () => {
+    flyTest.provider(
+      "a Fly Service reaches Pub/Sub with its Machine's OIDC token",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const out = yield* stack.deploy(
+            Effect.gen(function* () {
+              const service = yield* FlyFederatedService;
+              const events = yield* FlyEvents;
+              const inbox = yield* GCP.PubSub.Subscription("FlyFederatedInbox", {
+                topic: events.name,
+              });
+              return {
+                url: service.url.as<string>(),
+                appName: service.appName,
+                subscription: inbox.name,
+              };
+            }),
+          );
+
+          const identity = yield* HttpClient.get(`${out.url}/identity`).pipe(
+            Effect.flatMap((response) => response.json),
+            Effect.map((body) => body as { audience?: string; email?: string; hasKey: boolean }),
+            Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }),
+          );
+          expect(identity.hasKey).toBe(false);
+          expect(identity.audience).toMatch(
+            /^\/\/iam\.googleapis\.com\/projects\/\d+\/locations\/global\/workloadIdentityPools\/[^/]+\/providers\/alchemy-fly$/,
+          );
+          const email = identity.email!;
+          const keys = yield* iam.listProjectsServiceAccountsKeys({
+            name: `projects/-/serviceAccounts/${email}`,
+            keyTypes: ["USER_MANAGED"],
+          });
+          expect(keys.keys ?? []).toEqual([]);
+
+          // Only the App's Machines may impersonate the account.
+          const pool = identity
+            .audience!.replace("//iam.googleapis.com/", "")
+            .split("/providers/")[0];
+          const policy = yield* iam.getIamPolicyProjectsServiceAccounts({
+            resource: `projects/-/serviceAccounts/${email}`,
+          });
+          expect(
+            (policy.bindings ?? []).find(
+              (binding) => binding.role === "roles/iam.workloadIdentityUser",
+            )?.members,
+          ).toEqual([`principalSet://iam.googleapis.com/${pool}/attribute.fly_app/${out.appName}`]);
+
+          // A grant to a federated principal takes minutes to propagate.
+          const published = yield* HttpClient.get(out.url).pipe(
+            Effect.flatMap((response) =>
+              response.text.pipe(
+                Effect.flatMap((body) =>
+                  response.status === 200
+                    ? Effect.succeed(JSON.parse(body) as { messageIds?: string[] })
+                    : Effect.fail(new PublishNotReady({ reason: `${response.status} ${body}` })),
+                ),
+              ),
+            ),
+            Effect.mapError((error) =>
+              error._tag === "PublishNotReady"
+                ? error
+                : new PublishNotReady({ reason: String(error) }),
+            ),
+            Effect.tapError((error) => Effect.logInfo(`publish not ready: ${error.reason}`)),
+            Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 42 }),
+          );
+          expect(published.messageIds?.length).toBe(1);
+
+          const pulled = yield* pubsub
+            .pullProjectsSubscriptions({
+              subscription: out.subscription,
+              body: { maxMessages: 1 },
+            })
+            .pipe(
+              Effect.repeat({
+                until: (response) => (response.receivedMessages ?? []).length > 0,
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
+            );
+          expect(atob(pulled.receivedMessages?.[0]?.message?.data ?? "")).toBe("hello from fly");
+
+          yield* stack.destroy();
         }),
       { timeout: 900_000 },
     );

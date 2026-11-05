@@ -1,6 +1,6 @@
 ---
 title: Federated identity
-description: How a Lambda reaches GCP, and a Cloud Run service reaches AWS, through workload identity federation instead of long-lived keys.
+description: How a Lambda or Fly Service reaches GCP, and a Cloud Run service reaches AWS, through workload identity federation instead of long-lived keys.
 ---
 import Sequence from "../../../../components/diagrams/Sequence.astro";
 
@@ -81,6 +81,48 @@ request against AWS to learn which role is calling, and returns a
 federated token. The Lambda trades that for the service account's token,
 which lasts an hour and is exchanged again before it expires.
 
+## Call GCP from a Fly Service
+
+A Fly Service runs on Fly Machines, and every Machine can mint an OIDC
+token signed by `https://oidc.fly.io/<org>`. Bind the topic the same way:
+
+```typescript
+// src/api.ts
+import * as Fly from "@alchemy.run/fly";
+import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Events = GCP.PubSub.Topic("Events", {});
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const publish = yield* GCP.PubSub.Publish(yield* Events);
+    return {
+      fetch: publish({ body: { messages: [{ data: btoa("hello") }] } }).pipe(
+        Effect.as(HttpServerResponse.text("published")),
+        Effect.orDie,
+      ),
+    };
+  }).pipe(Effect.provide(GCP.PubSub.PublishHttp)),
+) {}
+```
+
+The stack gets a second pool, whose provider trusts Fly's issuer for
+your organization. The provider maps each token to its App, and the
+account grants `roles/iam.workloadIdentityUser` to that one App:
+
+```
+principalSet://iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/<pool>/attribute.fly_app/<app>
+```
+
+At runtime the Machine asks its `/.fly/api` socket for a token addressed
+to the provider and sends it to Google STS, then trades the federated
+token for the service account's token. The socket answers only root,
+the default user in the images Alchemy builds.
+
 ## Call AWS from Cloud Run
 
 A Cloud Run service runs as a Google service account. Bind an SQS queue
@@ -120,13 +162,13 @@ shortly before they expire.
 ## Which runtimes federate
 
 Lambda functions, ECS tasks and services, EC2 instances and launch
-templates, and App Runner services reach GCP this way. Cloud Run
-services, jobs, and worker pools and Cloud Functions reach AWS this
-way.
+templates, App Runner services, and Fly Services reach GCP this way.
+Cloud Run services, jobs, and worker pools, Cloud Functions, and Fly
+Services reach AWS this way.
 
 Runtimes without an identity the other cloud can trust still get a key:
-a Cloudflare Worker, an EKS or GKE pod, and an AWS Batch job. The
-binding code is the same either way.
+a Cloudflare Worker, a Fly Sprite, an EKS or GKE pod, and an AWS Batch
+job. The binding code is the same either way.
 
 ## New grants take a few minutes
 
