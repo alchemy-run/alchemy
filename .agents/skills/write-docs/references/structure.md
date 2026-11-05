@@ -69,8 +69,11 @@ starts at its first used `col` and `row`, so number them from 0.
 **Every diagram uses its panel.** The SVG's viewBox wraps what's drawn with an
 even margin, never room kept for something absent (a back-edge gutter on both
 sides, a zone border before a column with no zone, padding for a self-loop no
-state has). Check after a change: measure each figure's `getBBox()` against its
-viewBox across every page with a diagram, and fix the component, not the page.
+state has). After a change, build the site and run
+`node .agents/skills/write-docs/scripts/diagram-audit.mjs`: it lists every
+figure whose caption sits in the panel, whose SVG keeps more than 30 units of
+blank margin, that fills under 0.8 of the panel, or that draws below 0.7x
+(text too small; lay it out top to bottom). Fix the component, not the page.
 
 | The section answers | Component | Good example |
 | --- | --- | --- |

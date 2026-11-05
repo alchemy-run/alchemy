@@ -120,3 +120,5 @@ change both.
 ## Long pages on a contact sheet
 
 `diagram-sheet.py` captures the first 4000 CSS pixels of each page at 2x. A diagram further down comes out cut off or missing. Run it with `SHEET_SCALE=1` to capture 15000 pixels at 1x.
+
+Run `node .agents/skills/write-docs/scripts/diagram-audit.mjs` after `pnpm --filter website build` to check every diagram's caption, margins, fill and scale at once.
