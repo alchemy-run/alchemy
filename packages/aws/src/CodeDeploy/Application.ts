@@ -164,7 +164,7 @@ export const ApplicationProvider = () =>
           const arn = applicationArn(region, accountId, name);
 
           const attrs = {
-            applicationName: application.applicationName ?? applicationName,
+            applicationName: application.applicationName ?? name,
 
             applicationId: application.applicationId,
 
