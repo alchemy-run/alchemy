@@ -8,7 +8,6 @@ import * as Array from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "./Providers.ts";
@@ -139,17 +138,17 @@ export const ServiceTokenProvider = () =>
         return live ? { ...output, name: live.name ?? output.name } : undefined;
       }
       // An interrupted create leaves a token whose attributes were never
-      // saved. Its physical name holds this instance's ID, so it is this
-      // resource's own: report it, with an empty placeholder for the secret
-      // that was lost, so destroy can revoke it.
+      // saved. Its physical name ends with this instance's suffix, whatever
+      // prefix it was made with, so it is this resource's own: report it,
+      // with an empty placeholder for the secret that was lost, so destroy
+      // can revoke it.
       if (!olds) return undefined;
       const organization = olds.organization ?? (yield* yield* Credentials).organization;
-      const name = yield* tokenName(id, instanceId, olds.name);
-      const live = yield* findToken(organization, name);
+      const [live] = yield* instanceTokens(organization, id, instanceId);
       return live
         ? {
             id: live.id,
-            name,
+            name: live.name,
             organization,
             database: olds.database,
             accesses: ordered(olds.accesses),
@@ -205,8 +204,9 @@ export const ServiceTokenProvider = () =>
         yield* deleteToken(output.organization, output.id);
         observed = undefined;
       } else if (!observed) {
-        const orphan = yield* findToken(organization, name);
-        if (orphan) yield* deleteToken(organization, orphan.id);
+        for (const orphan of yield* instanceTokens(organization, id, instanceId)) {
+          yield* deleteToken(organization, orphan.id);
+        }
       }
 
       return yield* Effect.acquireUseRelease(
@@ -252,12 +252,26 @@ const getToken = (organization: string, id: string) =>
     .getServiceToken({ organization, id })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const findToken = (organization: string, name: string) =>
-  planetscale.listServiceTokens.items({ organization }).pipe(
-    Stream.filter((token) => token.name === name),
-    Stream.runHead,
-    Effect.map(Option.getOrUndefined),
+/**
+ * The organization's tokens made by this resource instance: their names end
+ * with its 80-bit instance suffix, whatever prefix each was made with (a
+ * truncated name keeps the suffix last, after a hash, with no delimiter).
+ */
+const instanceTokens = Effect.fnUntraced(function* (
+  organization: string,
+  id: string,
+  instanceId: string,
+) {
+  const suffix = yield* createPhysicalName({ id, instanceId, prefix: "" });
+  return yield* planetscale.listServiceTokens.items({ organization }).pipe(
+    Stream.runCollect,
+    Effect.map((tokens) =>
+      Array.fromIterable(tokens).flatMap(({ id, name }) =>
+        name?.endsWith(suffix) ? [{ id, name }] : [],
+      ),
+    ),
   );
+});
 
 const deleteToken = (organization: string, id: string) =>
   planetscale

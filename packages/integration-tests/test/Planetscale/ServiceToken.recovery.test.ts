@@ -194,3 +194,33 @@ redeployCase.test.provider(
     }),
   options,
 );
+
+const named = (name: string) =>
+  Planetscale.ServiceToken("Token", {
+    name,
+    database: "main",
+    accesses: ["read_database", "write_database"],
+  });
+
+const renamedCase = harness();
+renamedCase.test.provider(
+  "revokes a replacement whose creation response was lost, after another rename",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { world } = renamedCase;
+      const first = yield* stack.deploy(named("first"));
+      world.loseCreateResponse = true;
+      const failed = yield* Effect.exit(stack.deploy(named("second")));
+      expect(Exit.isFailure(failed)).toBe(true);
+      expect(world.tokens.size).toBe(2);
+      const stranded = [...world.tokens.keys()].find((id) => id !== first.id);
+      const third = yield* stack.deploy(named("third"));
+      expect([...world.tokens.keys()]).toEqual([third.id]);
+      expect(world.tokens.has(stranded!)).toBe(false);
+      expect(Redacted.value(third.token)).toBe(world.tokens.get(third.id)?.secret);
+      yield* stack.destroy();
+      expect(world.tokens.size).toBe(0);
+    }),
+  options,
+);
