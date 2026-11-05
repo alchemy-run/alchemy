@@ -1,8 +1,11 @@
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Effect from "effect/Effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import type { Credentials } from "../Credentials.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
+import type { Bucket } from "./Bucket.ts";
 import {
   baseObject,
   makeHttpBucketBinding,
@@ -12,6 +15,7 @@ import {
   type R2Auth,
 } from "./BucketHttp.ts";
 import { R2Error, type GetOptions, type ListOptions, type Objects } from "./BucketTypes.ts";
+import { inJurisdiction } from "./internal/Jurisdiction.ts";
 import { ReadBucket, type ReadBucketClient } from "./ReadBucket.ts";
 
 /**
@@ -39,7 +43,11 @@ export const makeReadR2HttpClient = (
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
 ): ReadBucketClient => {
-  const authorize = auth.authorize;
+  // Each call goes to the bucket's jurisdiction.
+  const authorize = <A, E>(
+    jurisdiction: Bucket.Jurisdiction | undefined,
+    eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+  ) => auth.authorize(inJurisdiction(jurisdiction)(eff));
   const scope = makeR2HttpScope(auth.accountId, bucketName, jurisdiction);
 
   return {
@@ -52,13 +60,13 @@ export const makeReadR2HttpClient = (
     ),
     head: (key: string) =>
       scope.pipe(
-        Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
+        Effect.flatMap(({ accountId, bucketName, jurisdiction }) =>
           authorize(
+            jurisdiction,
             r2.getObject({
               accountId,
               bucketName,
               objectName: key,
-              cfR2Jurisdiction,
             }),
           ),
         ),
@@ -78,13 +86,13 @@ export const makeReadR2HttpClient = (
       ),
     get: ((key: string, _options?: GetOptions) =>
       scope.pipe(
-        Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
+        Effect.flatMap(({ accountId, bucketName, jurisdiction }) =>
           authorize(
+            jurisdiction,
             r2.getObject({
               accountId,
               bucketName,
               objectName: key,
-              cfR2Jurisdiction,
             }),
           ),
         ),
@@ -95,12 +103,12 @@ export const makeReadR2HttpClient = (
       )) as any,
     list: (options?: ListOptions) =>
       scope.pipe(
-        Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
+        Effect.flatMap(({ accountId, bucketName, jurisdiction }) =>
           authorize(
+            jurisdiction,
             r2.listObjects({
               accountId,
               bucketName,
-              cfR2Jurisdiction,
               prefix: options?.prefix,
               delimiter: options?.delimiter,
               cursor: options?.cursor,

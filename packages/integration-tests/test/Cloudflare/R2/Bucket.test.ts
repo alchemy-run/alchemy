@@ -2,6 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Jurisdiction from "@distilled.cloud/cloudflare/Jurisdiction";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Drift from "alchemy/Drift";
 import * as Nuke from "alchemy/Nuke";
@@ -1165,8 +1166,8 @@ test.provider(
 
       // Refused before create: no EU bucket was left behind.
       const missing = yield* r2
-        .getBucket({ accountId, bucketName: name, jurisdiction: "eu" })
-        .pipe(Effect.flip);
+        .getBucket({ accountId, bucketName: name })
+        .pipe(Effect.flip, Effect.provide(Jurisdiction.of("eu")));
       expect(missing._tag).toEqual("NoSuchBucket");
 
       yield* stack.destroy();
@@ -1405,7 +1406,7 @@ const getBucketWhenReady = Effect.fn(function* (
   accountId: string,
   jurisdiction?: Cloudflare.R2.Bucket.Jurisdiction,
 ) {
-  return yield* r2.getBucket({ accountId, bucketName, jurisdiction }).pipe(
+  return yield* r2.getBucket({ accountId, bucketName }).pipe(
     Effect.retry({
       while: (e) => e._tag === "NoSuchBucket",
       // Cap the backoff at 2s so we keep sampling instead of sleeping
@@ -1415,6 +1416,7 @@ const getBucketWhenReady = Effect.fn(function* (
         Schedule.recurs(20),
       ]),
     }),
+    Effect.provide(Jurisdiction.of(jurisdiction ?? "default")),
   );
 });
 
@@ -1423,7 +1425,8 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
   accountId: string,
   jurisdiction?: Cloudflare.R2.Bucket.Jurisdiction,
 ) {
-  yield* r2.getBucket({ accountId, bucketName, jurisdiction }).pipe(
+  yield* r2.getBucket({ accountId, bucketName }).pipe(
+    Effect.provide(Jurisdiction.of(jurisdiction ?? "default")),
     Effect.flatMap(() => Effect.fail(new BucketStillExists())),
     Effect.retry({
       while: (e) => e._tag === "BucketStillExists",
