@@ -8,7 +8,8 @@ import * as Array from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import type * as Redacted from "effect/Redacted";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "./Providers.ts";
 
@@ -98,6 +99,15 @@ export type ServiceToken = Resource<
  * state; use a state backend that protects secrets. Existing tokens cannot be
  * adopted because their secret cannot be recovered.
  *
+ * Service tokens carry no labels or tags, so a token's physical name, which
+ * holds this resource's instance ID, is its only ownership marker. If a
+ * create is interrupted before Alchemy saves the token, the next destroy
+ * finds it by that name and revokes it, and the next deploy revokes it and
+ * mints a replacement, since its secret was never saved. `list` returns
+ * nothing: a name alone can't prove which stack made a token, and listing
+ * every token would offer an organization's other tokens to account-wide
+ * cleanup.
+ *
  * Changing the name prefix, organization, or database creates a replacement.
  * Resources that consume the token's outputs are updated before Alchemy deletes
  * the previous token. Changes to `accesses` are reconciled in place.
@@ -123,10 +133,29 @@ export class ServiceTokenError extends Data.TaggedError("ServiceTokenError")<{
 export const ServiceTokenProvider = () =>
   Provider.succeed(ServiceToken, {
     list: () => Effect.succeed([]),
-    read: Effect.fn(function* ({ output }) {
-      if (!output) return undefined;
-      const live = yield* getToken(output.organization, output.id);
-      return live ? { ...output, name: live.name ?? output.name } : undefined;
+    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+      if (output) {
+        const live = yield* getToken(output.organization, output.id);
+        return live ? { ...output, name: live.name ?? output.name } : undefined;
+      }
+      // An interrupted create leaves a token whose attributes were never
+      // saved. Its physical name holds this instance's ID, so it is this
+      // resource's own: report it, with an empty placeholder for the secret
+      // that was lost, so destroy can revoke it.
+      if (!olds) return undefined;
+      const organization = olds.organization ?? (yield* yield* Credentials).organization;
+      const name = yield* tokenName(id, instanceId, olds.name);
+      const live = yield* findToken(organization, name);
+      return live
+        ? {
+            id: live.id,
+            name,
+            organization,
+            database: olds.database,
+            accesses: ordered(olds.accesses),
+            token: Redacted.make(""),
+          }
+        : undefined;
     }),
     diff: Effect.fn(function* ({ id, instanceId, olds, news, output }) {
       if (!output) return undefined;
@@ -168,17 +197,16 @@ export const ServiceTokenProvider = () =>
     reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const organization = news.organization ?? (yield* yield* Credentials).organization;
       const name = yield* tokenName(id, instanceId, news.name);
-      const observed = output ? yield* getToken(output.organization, output.id) : undefined;
+      let observed = output ? yield* getToken(output.organization, output.id) : undefined;
 
-      if (!observed) {
-        const existing = yield* planetscale.listServiceTokens
-          .items({ organization })
-          .pipe(Stream.runCollect);
-        if (existing.some((token) => token.name === name)) {
-          return yield* new ServiceTokenError({
-            message: `Service token ${name} exists without its creation-only secret in this stack's state. Recover that state or revoke the token before retrying.`,
-          });
-        }
+      // A live token whose secret was never saved can't reach its consumers,
+      // who never received it either: revoke it and mint a replacement.
+      if (observed && output && Redacted.value(output.token) === "") {
+        yield* deleteToken(output.organization, output.id);
+        observed = undefined;
+      } else if (!observed) {
+        const orphan = yield* findToken(organization, name);
+        if (orphan) yield* deleteToken(organization, orphan.id);
       }
 
       return yield* Effect.acquireUseRelease(
@@ -223,6 +251,13 @@ const getToken = (organization: string, id: string) =>
   planetscale
     .getServiceToken({ organization, id })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+
+const findToken = (organization: string, name: string) =>
+  planetscale.listServiceTokens.items({ organization }).pipe(
+    Stream.filter((token) => token.name === name),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
 
 const deleteToken = (organization: string, id: string) =>
   planetscale
