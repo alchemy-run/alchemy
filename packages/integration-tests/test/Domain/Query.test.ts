@@ -206,11 +206,31 @@ const TotalLive = Total.toLayer(
   }),
 );
 
+/** What several wallets hold together: a read across keys, after writes to each. */
+class Combined extends Domain.Query("Combined", {
+  input: { wallets: Schema.Array(Schema.String) },
+  success: Schema.Struct({ total: Schema.Number }),
+  waitsFor: [Ledger],
+}) {}
+const CombinedLive = Combined.toLayer(
+  Effect.gen(function* () {
+    const movements = yield* Movements;
+    return ({ wallets }) =>
+      movements
+        .page((row) => wallets.includes(row.wallet), { after: undefined, take: 1_000 })
+        .pipe(
+          Effect.map(({ entries }) => ({
+            total: entries.reduce((sum, row) => sum + row.amount, 0),
+          })),
+        );
+  }),
+);
+
 class Wallets extends Domain.Model("QueryWallets", {
   aggregates: [Wallet],
   views: [WalletOwner],
   projections: [Ledger],
-  queries: [WalletMovements, LargeMovements, Total],
+  queries: [WalletMovements, LargeMovements, Total, Combined],
 }) {}
 
 class WalletApi extends Domain.Api("QueryWalletApi", {
@@ -219,11 +239,17 @@ class WalletApi extends Domain.Api("QueryWalletApi", {
   views: [],
   streams: [],
   aggregates: [],
-  queries: ["WalletMovements", "LargeMovements", "Total"],
+  queries: ["WalletMovements", "LargeMovements", "Total", "Combined"],
 }) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
-  Layer.mergeAll(ledgerLayer(options), WalletMovementsLive, LargeMovementsLive, TotalLive);
+  Layer.mergeAll(
+    ledgerLayer(options),
+    WalletMovementsLive,
+    LargeMovementsLive,
+    TotalLive,
+    CombinedLive,
+  );
 
 const story = Story.make(Wallets, { layer: handlers() });
 const sam = Wallet.ref("sam-1");
@@ -386,6 +412,27 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
       expect(refused).toEqual(new NotYours({ wallet: "sam-1" }));
       const anonymous = yield* api.WalletMovements({ wallet: "sam-1" }).pipe(Effect.flip);
       expect(anonymous._tag).toBe("Unauthenticated");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Wallets.layer(handlers({ batch: { size: 100, wait: "200 millis" } })).pipe(
+          Layer.provideMerge(Layer.mergeAll(InMemory, Movements.memory, ViewerSessionLive)),
+        ),
+      ),
+    ),
+  );
+
+  it.live("waits for every receipt it is given: one per command, on different keys", () =>
+    Effect.gen(function* () {
+      const api = yield* WalletApi.clientInProcess;
+      const first = yield* api.Deposit("sam-1", { amounts: [10, 20] });
+      const second = yield* api.Deposit("kim-1", { amounts: [12] });
+      // The projection batches for 200ms, so without the receipts this reads 0.
+      const combined = yield* api.Combined(
+        { wallets: ["sam-1", "kim-1"] },
+        { atLeast: [first, second] },
+      );
+      expect(combined).toEqual({ total: 42 });
     }).pipe(
       Effect.scoped,
       Effect.provide(
