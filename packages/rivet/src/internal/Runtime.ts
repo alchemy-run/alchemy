@@ -150,10 +150,12 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           instance = makeDurableObjectInstance({
             build: () => Promise.resolve(build),
             // RivetKit runs an actor's calls concurrently over async
-            // storage: the instance's own input gate keeps one call's
-            // storage from interleaving with another's.
-            services: Effect.runSyncWith(context)(
-              InputGateLive.pipe(Layer.build, Effect.scoped),
+            // storage. A class given `Rivet.InputGate` gets a gate per
+            // instance, so one call's storage doesn't interleave with
+            // another's; without it, calls run fully in parallel.
+            services: (hosted.inputGate
+              ? Effect.runSyncWith(context)(InputGateLive.pipe(Layer.build, Effect.scoped))
+              : Context.empty()
             ).pipe(
               Context.add(DurableObjectState, makeDurableObjectState(c, activation)),
               // Construction runs under the activation's construction

@@ -4,6 +4,7 @@
  */
 export * from "./Cluster.ts";
 export * from "./DurableObject.ts";
+export * from "./InputGate.ts";
 export { DurableObjectState, SqlRowCountMismatch } from "./DurableObjectState.ts";
 export type {
   DurableObjectStateShape,

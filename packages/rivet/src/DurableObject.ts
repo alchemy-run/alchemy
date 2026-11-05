@@ -203,6 +203,8 @@ export interface HostedDurableObject {
   readonly instance: Effect.Effect<DurableObjectShape & Record<string, unknown>, never, any>;
   readonly context: Context.Context<never>;
   readonly runtime: DurableObjectRuntimeContext;
+  /** Whether its instances run their storage through an input gate. */
+  readonly inputGate: boolean;
 }
 
 /** Declares the pool resources for one Durable Object, given its collected env. @internal */
@@ -217,6 +219,12 @@ export interface DurableObjectRuntimeContext extends HostRuntimeContext {
    * @internal
    */
   readonly registerPool: (deploy: DeployToPool) => Effect.Effect<void>;
+  /**
+   * Called by the `Rivet.InputGate` Layer while the class phase runs: each
+   * instance gets an input gate.
+   * @internal
+   */
+  readonly useInputGate: () => Effect.Effect<void>;
   /** At runtime, the built class, once its class phase has run. @internal */
   readonly hosted: () => HostedDurableObject | undefined;
 }
@@ -225,6 +233,7 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
   const base = createHostRuntimeContext(DurableObjectTypeId)(id);
   let deploy: DeployToPool | undefined;
   let hosted: HostedDurableObject | undefined;
+  let inputGate = false;
 
   const ctx: DurableObjectRuntimeContext = {
     ...base,
@@ -236,13 +245,23 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
       Effect.sync(() => {
         deploy = next;
       }),
+    useInputGate: () =>
+      Effect.sync(() => {
+        inputGate = true;
+      }),
     hosted: () => hosted,
     serve: (_handler, options) =>
       Effect.gen(function* () {
         // `shape` is what the class phase returned: the instance constructor.
         const instance = options?.shape as unknown as HostedDurableObject["instance"];
         if (globalThis.__ALCHEMY_RUNTIME__) {
-          hosted = { name: id, instance, context: yield* Effect.context<never>(), runtime: ctx };
+          hosted = {
+            name: id,
+            instance,
+            context: yield* Effect.context<never>(),
+            runtime: ctx,
+            inputGate,
+          };
           return;
         }
         // The class phase has run, so every Config value it read is in `env`.
@@ -286,6 +305,11 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * `@rivetkit/effect`, that its pool bundles and runs as it is. It needs a
  * pool of its own, and has no bindings or `yield*` calls.
  *
+ * An instance's calls run in parallel, storage included: unlike Cloudflare,
+ * there is no input gate. Make a read-then-write atomic with
+ * `state.storage.transaction(...)`, or provide `Rivet.InputGate` to run
+ * code written for Cloudflare's gate unchanged.
+ *
  * ### Declaring a Durable Object
  * **Example:** A counter on a local pool
  * ```typescript
@@ -299,12 +323,16 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  *     return Effect.gen(function* () {
  *       const state = yield* Rivet.DurableObjectState;
  *       return {
+ *         // Calls run in parallel: the transaction keeps the read and
+ *         // the write together.
  *         increment: () =>
- *           Effect.gen(function* () {
- *             const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
- *             yield* state.storage.put("count", count);
- *             return count;
- *           }),
+ *           state.storage.transaction(
+ *             Effect.gen(function* () {
+ *               const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+ *               yield* state.storage.put("count", count);
+ *               return count;
+ *             }),
+ *           ),
  *       };
  *     });
  *   }).pipe(Effect.provide(Default)),

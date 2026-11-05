@@ -23,8 +23,9 @@
  *
  * It's opt-in: the Durable Object bridge runs a call through the gate only
  * when the engine provides {@link InputGate}, and storage only when the
- * engine wraps its operations in {@link gateStorage}. Cloudflare has its own
- * gate and provides neither.
+ * engine wraps its operations in {@link gateStorage}. Rivet provides it to
+ * the classes given its `Rivet.InputGate` Layer; Cloudflare has its own gate
+ * and provides neither.
  *
  * @module
  */
