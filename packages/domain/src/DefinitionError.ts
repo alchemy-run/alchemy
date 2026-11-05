@@ -212,15 +212,6 @@ export class UnknownRequestContext extends Data.TaggedError("UnknownRequestConte
   }
 }
 
-/** An Api exposes an aggregate that declares no `read` contract. */
-export class Unreadable extends Data.TaggedError("Unreadable")<{
-  readonly aggregate: string;
-}> {
-  override get message() {
-    return `${this.aggregate} has no \`read\` contract, so an Api cannot expose it`;
-  }
-}
-
 /** An external system declares an operation named after a static of its class. */
 export class ReservedOperation extends Data.TaggedError("ReservedOperation")<{
   readonly system: string;
@@ -403,7 +394,6 @@ export type Reason =
   | UndeclaredEmit
   | UnknownEvent
   | UnknownRequestContext
-  | Unreadable
   | ReservedOperation
   | MissingWorkflowEngine
   | ForeignAppend

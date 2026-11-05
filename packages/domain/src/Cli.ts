@@ -97,7 +97,7 @@ export type Failure<E = never> = CallRejected | CliError.UserError | E;
 // ---------------------------------------------------------------- naming
 
 /**
- * The command-line name of a command, view, stream, aggregate, operation or field: kebab-case
+ * The command-line name of a command, view, stream, operation or field: kebab-case
  * (`AccountSummary` → `account-summary`, `commandId` → `command-id`).
  */
 export const kebab = (name: string): string =>
@@ -435,9 +435,9 @@ const commandOf = <E, R>(
  * request/response calls `options.expose` lists. Nothing is exposed by
  * default. The tree is read from those calls:
  *
- * - each command, query, view, stream and aggregate is a subcommand named in kebab-case (`AccountSummary` →
- *   `account-summary`). A command or a query runs as that subcommand; a view, an
- *   aggregate or a stream has one subcommand per call (`get`, `list`,
+ * - each command, query, view and stream is a subcommand named in kebab-case (`AccountSummary` →
+ *   `account-summary`). A command or a query runs as that subcommand; a view
+ *   or a stream has one subcommand per call (`get`, `list`,
  *   `snapshot`, `peek`). Live reads (`watch`, `events`) are left out.
  * - each payload field is a flag in kebab-case (`--target`, `--command-id`,
  *   `--key`), and a command's or a query's input fields are flags of their

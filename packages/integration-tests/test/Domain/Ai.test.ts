@@ -211,19 +211,14 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
       },
       { description: "Take money out of a wallet. The amount is in cents." },
     ) {}
-    class Purse extends Domain.Aggregate(
-      "Purse",
-      {
-        id: WalletId,
-        state: Schema.Struct({ balance: Schema.Int }),
-        initial: { balance: 0 },
-        commands: [Withdraw],
-        decide: { Withdraw: () => [] },
-        evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
-        read: {},
-      },
-      { description: "A purse, which keeps its own balance." },
-    ) {}
+    class Purse extends Domain.Aggregate("Purse", {
+      id: WalletId,
+      state: Schema.Struct({ balance: Schema.Int }),
+      initial: { balance: 0 },
+      commands: [Withdraw],
+      decide: { Withdraw: () => [] },
+      evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+    }) {}
     class Total extends Domain.View(
       "Total",
       {
@@ -236,17 +231,14 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
       { description: "The current balance of one purse." },
     ) {}
     class Purses extends Domain.Model("Purses", { aggregates: [Purse], views: [Total] }) {}
-    class PurseApi extends Domain.Api("PurseApi", { model: Purses, aggregates: ["Purse"] }) {}
+    class PurseApi extends Domain.Api("PurseApi", { model: Purses }) {}
     const { toolkit } = DomainAi.toToolkit(PurseApi, {
-      expose: ["Withdraw", "Purse.get", "Total.get", "Total.list"],
+      expose: ["Withdraw", "Total.get", "Total.list"],
     });
     const description = (name: string) => Tool.getDescription(toolkit.tools[name]!);
     // A command's description replaces the sentence; a read's follows it.
     expect(description("PurseApi_Withdraw_send")).toBe(
       "Take money out of a wallet. The amount is in cents.",
-    );
-    expect(description("PurseApi_Purse_get")).toBe(
-      "Get the current Purse of a key. A purse, which keeps its own balance.",
     );
     expect(description("PurseApi_Total_get")).toBe(
       "Get the current Total of a key. The current balance of one purse.",

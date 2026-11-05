@@ -238,7 +238,6 @@ class WalletApi extends Domain.Api("QueryWalletApi", {
   commands: ["Deposit"],
   views: [],
   streams: [],
-  aggregates: [],
   queries: ["WalletMovements", "LargeMovements", "Total", "Combined"],
 }) {}
 

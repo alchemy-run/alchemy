@@ -451,12 +451,7 @@ const build = <A, E, R>(
       aggregateStores.set(
         aggregate.aggregateName,
         // Assigned, not spread: a kit's `targets` is read when used, once versions are set.
-        yield* platform.aggregate(
-          aggregate,
-          Object.assign(kernel.aggregateKit(aggregate, deliver), {
-            push: Watch.aggregatePush(kernel, aggregate),
-          }),
-        ),
+        yield* platform.aggregate(aggregate, kernel.aggregateKit(aggregate, deliver)),
       );
     }
     const viewTarget = (name: string) => kernel.targetIdOf("view", name);

@@ -7,7 +7,6 @@ import type { Actor } from "../Actor.ts";
 import { CurrentActor } from "../CurrentActor.context.ts";
 import { CustomerId } from "../Customer/Customer.id.ts";
 import { Cents } from "../Money.ts";
-import { Session } from "../Session.middleware.ts";
 import { AccountId } from "./Account.id.ts";
 import { ChangeOwner, NotPermitted, OwnerChanged } from "./ChangeOwner.command.ts";
 import { AccountClosed, BalanceNotZero, CloseAccount } from "./CloseAccount.command.ts";
@@ -17,7 +16,6 @@ import { DepositMoney, MoneyDeposited } from "./DepositMoney.command.ts";
 import { AccountFrozen, FreezeAccount } from "./FreezeAccount.command.ts";
 import { Frozen } from "./Frozen.rejection.ts";
 import { InsufficientFunds } from "./InsufficientFunds.rejection.ts";
-import { mustOwn } from "./mustOwn.ts";
 import { NotOpen } from "./NotOpen.rejection.ts";
 import { NotOwner } from "./NotOwner.rejection.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.ts";
@@ -216,14 +214,5 @@ export class Account extends Domain.Aggregate("Account", {
   reply: {
     DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
     WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
-  },
-  // Clients may read and watch the account itself (its state and committed
-  // events) through an Api, judged like a view against its current state.
-  read: {
-    middleware: [Session],
-    rejects: [NotOwner],
-    validate: Effect.fn(function* (_request, s) {
-      yield* mustOwn(s._tag === "Open" ? s.customerId : null);
-    }),
   },
 }) {}

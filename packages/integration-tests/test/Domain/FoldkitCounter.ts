@@ -31,7 +31,6 @@ export class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Increment, Reset],
-  read: {},
   decide: {
     Increment: (_, { amount }) =>
       amount > 10 ? new Limit({ amount }) : [Incremented.make({ amount })],
@@ -62,7 +61,6 @@ export class CounterApi extends Domain.Api("CounterApi", {
   commands: ["Increment", "Reset"],
   views: ["Total"],
   streams: ["Outputs"],
-  aggregates: ["Counter"],
 }) {}
 export const Hosted = Counters.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory));
 export const Client = CounterApi.layerClientInProcess.pipe(

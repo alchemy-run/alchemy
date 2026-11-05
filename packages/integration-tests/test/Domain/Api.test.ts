@@ -59,7 +59,6 @@ class Account extends Domain.Aggregate("Account", {
     Withdrawn: (s, e) => ({ ...s, balance: s.balance - e.amount }),
     Closed: (s) => ({ ...s, closed: true }),
   },
-  read: {},
 }) {}
 
 class Bank extends Domain.Model("Bank", { aggregates: [Account] }) {}
@@ -67,12 +66,10 @@ class Bank extends Domain.Model("Bank", { aggregates: [Account] }) {}
 class BankApi extends Domain.Api("BankApi", {
   model: Bank,
   commands: ["Deposit", "Withdraw"],
-  aggregates: ["Account"],
 }) {}
 class CloseApi extends Domain.Api("CloseApi", {
   model: Bank,
   commands: ["Close"],
-  aggregates: ["Account"],
 }) {}
 
 /** A helper written once for every Api: the tags of its commands. */
@@ -151,36 +148,23 @@ describe("Domain Api", { tags: ["unit", "local"] }, () => {
       class Everything extends Domain.Api("Everything", { model: Bank }) {}
       expect(Bank.commands).toEqual([Deposit, Withdraw, Close]);
       expect(Everything.commands).toEqual([Deposit, Withdraw, Close]);
-      expect(Everything.serves).toEqual([Deposit, Withdraw, Close, Account]);
+      // An aggregate's state is never served: a view projects what clients see of it.
+      expect(Everything.serves).toEqual([Deposit, Withdraw, Close]);
     }),
   );
 
-  it.effect("by default an Api serves only the aggregates that declare read", () =>
+  it.effect("an Api takes no aggregates to read", () =>
     Effect.sync(() => {
-      // Vault declares no `read`, so the Api serves its commands and not its state.
-      class VaultsApi extends Domain.Api("VaultsApi", { model: Vaults }) {}
-      expect(VaultsApi.serves).toEqual([Store]);
-    }),
-  );
-
-  it.effect("naming an aggregate without read is a type error", () =>
-    Effect.sync(() => {
-      // @ts-expect-error Vault declares no `read`, so it is not a name `aggregates` takes.
-      Domain.Api("VaultReads", { model: Vaults, aggregates: ["Vault"] });
-      // Account declares one.
+      // @ts-expect-error an Api serves commands, views, streams and queries; never an aggregate's state
       Domain.Api("AccountReads", { model: Bank, aggregates: ["Account"] });
     }),
   );
 
   it.effect("an Api serves none of a kind it lists as empty", () =>
     Effect.sync(() => {
-      class Reads extends Domain.Api("Reads", {
-        model: Bank,
-        commands: [],
-        aggregates: ["Account"],
-      }) {}
+      class Reads extends Domain.Api("Reads", { model: Bank, commands: [] }) {}
       expect(Reads.commands).toEqual([]);
-      expect(Reads.serves).toEqual([Account]);
+      expect(Reads.serves).toEqual([]);
     }),
   );
 
@@ -248,10 +232,6 @@ class Vault extends Domain.Aggregate("Vault", {
 }) {}
 class Vaults extends Domain.Model("Vaults", { aggregates: [Vault] }) {}
 class VaultApi extends Domain.Api("VaultApi", { model: Vaults, commands: ["Store"] }) {}
-// Vault declares no `read`, so its state is not for clients: naming it is a
-// type error, and serving it anyway dies.
-// @ts-expect-error Vault declares no `read`, so it is not a name `aggregates` takes.
-class VaultStateApi extends Domain.Api("VaultStateApi", { model: Vaults, aggregates: ["Vault"] }) {}
 
 describe("Domain Rejection", { tags: ["unit", "local"] }, () => {
   it.live("a command rejects with any tagged error class, and the client gets it typed", () =>
@@ -338,20 +318,26 @@ class Note extends Domain.Aggregate("Note", {
   },
   evolve: { Written: (_, e) => ({ text: e.text, by: e.by }) },
   reply: { Write: (s) => ({ by: s.by ?? "" }) },
-  read: {
-    middleware: [AuthorSession],
-    rejects: [NotYours],
-    validate: Effect.fn(function* (_request, s) {
-      if (s.by !== null && s.by !== (yield* Author)) return yield* new NotYours();
-    }),
-  },
+}) {}
+/** What a client reads of a note: only its author may. */
+class NoteView extends Domain.View("NoteView", {
+  from: [Note],
+  key: Note,
+  middleware: [AuthorSession],
+  rejects: [NotYours],
+  state: Schema.Struct({ text: Schema.String, by: Schema.NullOr(Schema.String) }),
+  initial: { text: "", by: null },
+  evolve: { Written: (_, e) => ({ text: e.text, by: e.by }) },
+  validate: Effect.fn(function* (_request, s) {
+    if (s !== null && s.by !== null && s.by !== (yield* Author)) return yield* new NotYours();
+  }),
 }) {}
 
-class Notes extends Domain.Model("Notes", { aggregates: [Note] }) {}
+class Notes extends Domain.Model("Notes", { aggregates: [Note], views: [NoteView] }) {}
 class NotesApi extends Domain.Api("NotesApi", {
   model: Notes,
   commands: ["Write"],
-  aggregates: ["Note"],
+  views: ["NoteView"],
 }) {}
 
 const World = Notes.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
@@ -365,13 +351,17 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
       const refused = yield* notes.Write("n-1", { text: "hi" }).pipe(Effect.flip);
       expect(refused._tag).toBe("Unauthenticated");
 
-      const { reply } = yield* notes.Write("n-1", { text: "hi" }, asSam);
-      expect(reply).toEqual({ by: "sam" });
-      expect(yield* notes.Note.get("n-1", asSam)).toEqual({ text: "hi", by: "sam" });
+      const receipt = yield* notes.Write("n-1", { text: "hi" }, asSam);
+      expect(receipt.reply).toEqual({ by: "sam" });
+      expect(yield* notes.NoteView.get("n-1", { ...asSam, atLeast: receipt })).toEqual({
+        text: "hi",
+        by: "sam",
+      });
 
-      const notYours = yield* notes.Note.get("n-1", { headers: { "x-author": "kim" } }).pipe(
-        Effect.flip,
-      );
+      const notYours = yield* notes.NoteView.get("n-1", {
+        headers: { "x-author": "kim" },
+        atLeast: receipt,
+      }).pipe(Effect.flip);
       expect(notYours._tag).toBe("NotYours");
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(World, AuthorSessionLive))),
   );
@@ -384,7 +374,7 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
       expect(reply).toEqual({ by: "kim" });
 
       const anonymous = yield* NotesApi.clientInProcess;
-      const refused = yield* anonymous.Note.get("n-2").pipe(Effect.flip);
+      const refused = yield* anonymous.NoteView.get("n-2").pipe(Effect.flip);
       expect(refused._tag).toBe("Unauthenticated");
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(World, AuthorSessionLive))),
   );
@@ -413,9 +403,12 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const notes = yield* NotesApi.client;
       const asSam = { headers: { "x-author": "sam" } };
-      const { reply } = yield* notes.Write("n-4", { text: "over a protocol" }, asSam);
-      expect(reply).toEqual({ by: "sam" });
-      expect(yield* notes.Note.get("n-4", asSam)).toEqual({ text: "over a protocol", by: "sam" });
+      const receipt = yield* notes.Write("n-4", { text: "over a protocol" }, asSam);
+      expect(receipt.reply).toEqual({ by: "sam" });
+      expect(yield* notes.NoteView.get("n-4", { ...asSam, atLeast: receipt })).toEqual({
+        text: "over a protocol",
+        by: "sam",
+      });
     }).pipe(
       Effect.scoped,
       Effect.provide(
@@ -423,21 +416,6 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
           Layer.provideMerge(Layer.mergeAll(World, AuthorSessionLive)),
         ),
       ),
-    ),
-  );
-});
-
-describe("Domain Api exposing an aggregate", { tags: ["unit", "local"] }, () => {
-  it.live("an aggregate without a read contract is never served", () =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.exit(VaultStateApi.clientInProcess);
-      expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
-        _tag: "DefinitionError",
-        reason: { _tag: "Unreadable", aggregate: "Vault" },
-      });
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(Vaults.layer(Layer.empty).pipe(Layer.provideMerge(InMemory))),
     ),
   );
 });

@@ -81,7 +81,7 @@ interface Item {
  * values, then, if `validate` rejected an item, the `Exit` that ends the read.
  */
 const encode = (
-  entry: View.Any | Aggregate.Any | DomainStream.Any,
+  entry: View.Any | DomainStream.Any,
   subscription: Subscription,
   ref: unknown,
   items: ReadonlyArray<Item>,
@@ -186,43 +186,6 @@ export const viewPush =
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
       const marked = markCaughtUp(subscription, items, cursor);
       return yield* encode(view, marked.subscription, ref, marked.items, cursor);
-    });
-
-/** What an aggregate instance's subscriber receives after a commit (or when it connects). */
-export const aggregatePush =
-  (kernel: Kernel, aggregate: Aggregate.Any) =>
-  (
-    id: string,
-    subscription: Subscription,
-    current: { readonly state: Json; readonly version: number },
-    events: ReadonlyArray<StoredEvent>,
-  ): Effect.Effect<Push> =>
-    Effect.gen(function* () {
-      const ref = { aggregate: nameOf(aggregate), id } as Aggregate.Ref;
-      const state = kernel.decodeState(aggregate, current.state);
-      if (subscription.mode === "watch") {
-        if (current.version <= subscription.cursor) {
-          return { messages: [], subscription, done: false };
-        }
-        return yield* encode(
-          aggregate,
-          subscription,
-          ref,
-          [{ state, value: Option.some({ state, cursor: current.version }) }],
-          current.version,
-        );
-      }
-      const fresh = events.filter((stored) => stored.envelope.seq > subscription.cursor);
-      // Judged against the instance's state now, since events carry no state.
-      const items = yield* Effect.forEach(fresh, (stored) =>
-        Effect.map(kernel.decodeEvent(stored.event), (event): Item => ({
-          state,
-          value: Option.some({ event, envelope: decodeEnvelope(stored.envelope) }),
-        })),
-      );
-      const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.envelope.seq : subscription.cursor;
-      const marked = markCaughtUp(subscription, items, cursor);
-      return yield* encode(aggregate, marked.subscription, ref, marked.items, cursor);
     });
 
 /** What a stream key's subscriber receives after an append (or when it connects). */

@@ -320,7 +320,7 @@ const endpointOf = (
                   : `/${operation.name}/:key`,
                 {
                   params: { key: fields.key! },
-                  // A view's reads and a stream's `peek` can wait for a write; an aggregate reads its state.
+                  // A view's reads and a stream's `peek` can wait for a write.
                   ...(fields.atLeast ? { query: AtLeastQuery } : {}),
                   success: rpc.successSchema,
                   error,
