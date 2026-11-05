@@ -202,11 +202,6 @@ export interface Definition<
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 > extends Read.Contract<Key.RefOf<Key>, StateType<S> | null, Ms, Rejects> {
-  /**
-   * Data for what is built on the model, such as its `description`. Add your
-   * own keys by augmenting {@link Annotations}.
-   */
-  readonly annotations?: Annotations;
   /** The aggregates and views this view consumes. */
   readonly from: From;
   /**
@@ -482,6 +477,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<From, Key, S, Events, Computed, Ms, Rejects>,
+  annotations: Annotations = {},
 ): ViewClass<
   Name,
   Definition<From, Key, S, Events, Computed, Ms, Rejects>,
@@ -496,7 +492,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "View" as const;
-    static readonly annotations: Annotations = definition.annotations ?? {};
+    static readonly annotations: Annotations = annotations;
     static readonly viewName: Name = name;
     static readonly definition: Definition<From, Key, S, Events, Computed, Ms, Rejects> =
       definition;

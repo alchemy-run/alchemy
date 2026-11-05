@@ -16,95 +16,120 @@ const WalletId = Schema.String.pipe(Schema.brand("WalletId"));
 class Deposited extends Domain.Event(
   "Deposited",
   { amount: Schema.Int, balance: Schema.Int },
-  { annotations: { description: "Money arrived in a wallet." } },
+  { description: "Money arrived in a wallet." },
 ) {}
 
-class Deposit extends Domain.Command("Deposit", {
-  target: WalletId,
-  input: { amount: Schema.Int },
-  events: [Deposited],
-  annotations: {
+class Deposit extends Domain.Command(
+  "Deposit",
+  {
+    target: WalletId,
+    input: { amount: Schema.Int },
+    events: [Deposited],
+  },
+  {
     description: "Put money into a wallet. The amount is in cents.",
     annotationsTestOwner: "payments",
   },
-}) {}
+) {}
 
 class Close extends Domain.Command("Close", { target: WalletId }) {}
 
-class Wallet extends Domain.Aggregate("Wallet", {
-  id: WalletId,
-  state: Schema.Struct({ balance: Schema.Int }),
-  initial: { balance: 0 },
-  commands: [Deposit, Close],
-  decide: {
-    Deposit: (s, cmd) => [new Deposited({ amount: cmd.amount, balance: s.balance + cmd.amount })],
-    Close: () => [],
+class Wallet extends Domain.Aggregate(
+  "Wallet",
+  {
+    id: WalletId,
+    state: Schema.Struct({ balance: Schema.Int }),
+    initial: { balance: 0 },
+    commands: [Deposit, Close],
+    decide: {
+      Deposit: (s, cmd) => [new Deposited({ amount: cmd.amount, balance: s.balance + cmd.amount })],
+      Close: () => [],
+    },
+    evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
   },
-  evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
-  annotations: { description: "A wallet, which keeps its own balance." },
-}) {}
+  { description: "A wallet, which keeps its own balance." },
+) {}
 
-class Balance extends Domain.View("Balance", {
-  from: [Wallet],
-  key: Wallet,
-  state: Schema.Struct({ balance: Schema.Int }),
-  initial: { balance: 0 },
-  evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
-  annotations: { description: "The current balance of one wallet." },
-}) {}
+class Balance extends Domain.View(
+  "Balance",
+  {
+    from: [Wallet],
+    key: Wallet,
+    state: Schema.Struct({ balance: Schema.Int }),
+    initial: { balance: 0 },
+    evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+  },
+  { description: "The current balance of one wallet." },
+) {}
 
 class BalanceChanged extends Domain.Event("BalanceChanged", { balance: Schema.Int }) {}
 
-class BalanceLog extends Domain.Stream("BalanceLog", {
-  key: Wallet,
-  entries: [BalanceChanged],
-  annotations: { description: "Every balance a wallet had, oldest first." },
-}) {}
+class BalanceLog extends Domain.Stream(
+  "BalanceLog",
+  {
+    key: Wallet,
+    entries: [BalanceChanged],
+  },
+  { description: "Every balance a wallet had, oldest first." },
+) {}
 
-class LogBalances extends Domain.Projection("LogBalances", {
-  from: [Wallet],
-  key: Wallet,
-  on: [Deposited],
-  writes: [BalanceLog],
-  annotations: { description: "Logs each new balance." },
-}) {}
+class LogBalances extends Domain.Projection(
+  "LogBalances",
+  {
+    from: [Wallet],
+    key: Wallet,
+    on: [Deposited],
+    writes: [BalanceLog],
+  },
+  { description: "Logs each new balance." },
+) {}
 
-class Notify extends Domain.Policy("Notify", {
-  from: Wallet,
-  on: [Deposited],
-  annotations: { description: "Tells the owner about a deposit." },
-}) {}
+class Notify extends Domain.Policy(
+  "Notify",
+  {
+    from: Wallet,
+    on: [Deposited],
+  },
+  { description: "Tells the owner about a deposit." },
+) {}
 
-class Refund extends Domain.Saga("Refund", {
-  key: Schema.String,
-  input: { wallet: Schema.String },
-  annotations: { description: "Gives a deposit back." },
-}) {}
+class Refund extends Domain.Saga(
+  "Refund",
+  {
+    key: Schema.String,
+    input: { wallet: Schema.String },
+  },
+  { description: "Gives a deposit back." },
+) {}
 
 class NoFunds extends Domain.Rejection(
   "NoFunds",
   {},
-  {
-    annotations: { httpApiStatus: 402, description: "The wallet can't cover it." },
-  },
+  { httpApiStatus: 402, description: "The wallet can't cover it." },
 ) {}
 
 class Bank extends Domain.ExternalSystem(
   "Bank",
   { payout: { args: { amount: Schema.Int }, success: { reference: Schema.String } } },
-  { annotations: { description: "The bank that pays money out." } },
+  { description: "The bank that pays money out." },
 ) {}
 
-class Wallets extends Domain.Model("Wallets", {
-  aggregates: [Wallet],
-  views: [Balance],
-  annotations: { description: "Wallets and their balances." },
-}) {}
+class Wallets extends Domain.Model(
+  "Wallets",
+  {
+    aggregates: [Wallet],
+    views: [Balance],
+  },
+  { description: "Wallets and their balances." },
+) {}
 
-class WalletApi extends Domain.Api("WalletApi", {
-  model: Wallets,
-  annotations: { description: "What a wallet app reaches." },
-}) {}
+class WalletApi extends Domain.Api(
+  "WalletApi",
+  {
+    model: Wallets,
+  },
+  { description: "What a wallet app reaches." },
+) {}
 
 describe("Domain annotations", { tags: ["unit"] }, () => {
   it("every declaration carries the annotations it declares", () => {
@@ -125,7 +150,8 @@ describe("Domain annotations", { tags: ["unit"] }, () => {
     expect(WalletApi.annotations.description).toBe("What a wallet app reaches.");
   });
 
-  it("a rejection's annotations are its Schema's too", () => {
+  it("an event's and a rejection's annotations are their Schema's too", () => {
+    expect(SchemaAST.resolveDescription(Deposited.ast)).toBe("Money arrived in a wallet.");
     expect(SchemaAST.resolveDescription(NoFunds.ast)).toBe("The wallet can't cover it.");
     expect(SchemaAST.resolveAt<number>("httpApiStatus")(NoFunds.ast)).toBe(402);
   });
@@ -137,11 +163,12 @@ describe("Domain annotations", { tags: ["unit"] }, () => {
 
   it.effect("a key nobody declared is a type error; an augmented one is typed", () =>
     Effect.sync(() => {
-      class Typo extends Domain.Command("Typo", {
-        target: WalletId,
+      class Typo extends Domain.Command(
+        "Typo",
+        { target: WalletId },
         // @ts-expect-error `descripton` is not a key of Domain.Annotations
-        annotations: { descripton: "misspelled" },
-      }) {}
+        { descripton: "misspelled" },
+      ) {}
       const owner: string | undefined = Deposit.annotations.annotationsTestOwner;
       expect([Typo.tag, owner]).toEqual(["Typo", "payments"]);
     }),

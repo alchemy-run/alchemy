@@ -129,11 +129,6 @@ export interface Definition<
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
   E extends Event.Any = EventsOf<C>,
 > {
-  /**
-   * Data for what is built on the model, such as its `description`. Add your
-   * own keys by augmenting {@link Annotations}.
-   */
-  readonly annotations?: Annotations;
   /** Schema of the aggregate id (a string or branded string). */
   readonly id: Id;
   /** Schema of the aggregate's state. Used to persist snapshots. */
@@ -718,6 +713,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C> & { readonly read?: R },
+  annotations: Annotations = {},
 ): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>> => {
   const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>>()(
     `alchemy/Domain/Aggregate/${name}`,
@@ -728,7 +724,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
-    static readonly annotations: Annotations = definition.annotations ?? {};
+    static readonly annotations: Annotations = annotations;
     static readonly aggregateName: Name = name;
     static readonly definition: Resolved<Id, S, C, Ms, Rejects, ReadOf<R>> = {
       ...definition,

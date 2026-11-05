@@ -57,11 +57,6 @@ export interface Definition<
   Rejects
 > {
   /**
-   * Data for what is built on the model, such as its `description`. Add your
-   * own keys by augmenting {@link Annotations}.
-   */
-  readonly annotations?: Annotations;
-  /**
    * What keys this stream, one ordered log per key: an aggregate, whose refs
    * are its keys, or a string Schema, whose values are.
    */
@@ -195,6 +190,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<Key, Entries, Ms, Rejects>,
+  annotations: Annotations = {},
 ): StreamClass<
   Name,
   Definition<Key, Entries, Ms, Rejects>,
@@ -206,7 +202,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Stream" as const;
-    static readonly annotations: Annotations = definition.annotations ?? {};
+    static readonly annotations: Annotations = annotations;
     static readonly streamName: Name = name;
     static readonly definition = definition;
   } as unknown as StreamClass<

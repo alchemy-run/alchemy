@@ -108,10 +108,9 @@ interface Options {
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly reply?: Fields;
   readonly attributes?: Telemetry.Attributes<any>;
-  readonly annotations?: Annotations;
 }
 
-const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
+const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotations): unknown => {
   // The base type is conditional on `Self`, so it is not a constructor until `make` returns.
   const Base = Schema.TaggedClass<{ readonly _tag: string }>(tag)(
     tag,
@@ -119,7 +118,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
   ) as unknown as new (input: object) => object;
   return class extends Base {
     static readonly kind = "Command" as const;
-    static readonly annotations: Annotations = options.annotations ?? {};
+    static readonly annotations: Annotations = annotations;
     static readonly tag = tag;
     static readonly target = options.target;
     static readonly events = options.events ?? [];
@@ -227,12 +226,8 @@ export const make = <
      * here, and a `Redacted` value is recorded as `<redacted>`.
      */
     readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
-    /**
-     * Data for what is built on the model, such as its `description`. Add your
-     * own keys by augmenting {@link Annotations}.
-     */
-    readonly annotations?: Annotations;
   },
+  annotations: Annotations = {},
 ): CommandClass<
   Tag,
   Target,
@@ -257,7 +252,12 @@ export const make = <
     }),
     error: rejects.length === 0 ? Schema.Never : Schema.Union(rejects),
   });
-  return build(tag, options, Middleware.apply(rpc, options.middleware ?? [])) as CommandClass<
+  return build(
+    tag,
+    options,
+    Middleware.apply(rpc, options.middleware ?? []),
+    annotations,
+  ) as CommandClass<
     Tag,
     Target,
     F,

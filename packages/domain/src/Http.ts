@@ -308,7 +308,7 @@ const endpointOf = (
  * A command answers with its receipt; a read with what the Api's own client
  * gets (`null` for an empty key). A typed failure answers with its `_tag`
  * and data, at the status its schema's `httpApiStatus` annotation gives it
- * (`Domain.Rejection("NotOwner", {}, { annotations: { httpApiStatus: 403 } })`), and 422 if it
+ * (`Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 })`), and 422 if it
  * has none: a rejection is a refused request, not a server fault. Input its
  * schema refuses is a 400.
  *

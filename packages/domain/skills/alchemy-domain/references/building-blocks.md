@@ -48,7 +48,7 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 
 A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Events and rejections take `attributes` as a third argument: `Domain.Event("MoneyWithdrawn", { ... }, { attributes: (e) => ({ ... }) })`. Nothing from a payload is traced unless `attributes` returns it, and `Redacted` values record as `<redacted>`.
 
-`Domain.Rejection(tag, fields, { annotations, attributes })` is `Schema.TaggedError` with its type filled in: its `annotations` are the Schema's too, so they take `httpApiStatus`, `description`, .... `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
+`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...) plus `attributes`. `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
 
 More: [Command: Annotate a rejection](https://alchemy.run/domain/command#annotate-a-rejection).
 
@@ -342,7 +342,7 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
 
 Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself, through its own middleware and `validate`.
 
-Give every declaration `annotations: { description }`, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
+Give every declaration a `{ description }` as its last argument, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
 
 More: [Api](https://alchemy.run/domain/api), [Describe what it serves](https://alchemy.run/domain/api#describe-what-it-serves).
 

@@ -170,30 +170,39 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
   });
 
   it("describes each tool with its entry's description annotation", () => {
-    class Withdraw extends Domain.Command("Withdraw", {
-      target: WalletId,
-      input: { amount: Schema.Int },
-      events: [Deposited],
-      annotations: { description: "Take money out of a wallet. The amount is in cents." },
-    }) {}
-    class Purse extends Domain.Aggregate("Purse", {
-      id: WalletId,
-      state: Schema.Struct({ balance: Schema.Int }),
-      initial: { balance: 0 },
-      commands: [Withdraw],
-      decide: { Withdraw: () => [] },
-      evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
-      read: {},
-      annotations: { description: "A purse, which keeps its own balance." },
-    }) {}
-    class Total extends Domain.View("Total", {
-      from: [Purse],
-      key: Purse,
-      state: Schema.Struct({ balance: Schema.Int }),
-      initial: { balance: 0 },
-      evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
-      annotations: { description: "The current balance of one purse." },
-    }) {}
+    class Withdraw extends Domain.Command(
+      "Withdraw",
+      {
+        target: WalletId,
+        input: { amount: Schema.Int },
+        events: [Deposited],
+      },
+      { description: "Take money out of a wallet. The amount is in cents." },
+    ) {}
+    class Purse extends Domain.Aggregate(
+      "Purse",
+      {
+        id: WalletId,
+        state: Schema.Struct({ balance: Schema.Int }),
+        initial: { balance: 0 },
+        commands: [Withdraw],
+        decide: { Withdraw: () => [] },
+        evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+        read: {},
+      },
+      { description: "A purse, which keeps its own balance." },
+    ) {}
+    class Total extends Domain.View(
+      "Total",
+      {
+        from: [Purse],
+        key: Purse,
+        state: Schema.Struct({ balance: Schema.Int }),
+        initial: { balance: 0 },
+        evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+      },
+      { description: "The current balance of one purse." },
+    ) {}
     class Purses extends Domain.Model("Purses", { aggregates: [Purse], views: [Total] }) {}
     class PurseApi extends Domain.Api("PurseApi", { model: Purses, aggregates: ["Purse"] }) {}
     const { toolkit } = DomainAi.toToolkit(PurseApi, {

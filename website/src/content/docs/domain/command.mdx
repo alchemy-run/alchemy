@@ -135,12 +135,14 @@ Name a rejection after the business reason, the way you'd explain it to the cust
 
 ## Annotate a rejection
 
-`Domain.Rejection` is `Schema.TaggedError` with its own type filled in, so its `annotations` are the Schema's too and take the same keys. An HTTP API reads `httpApiStatus` from them, as it does for any Effect error:
+`Domain.Rejection` is `Schema.TaggedError` with its own type filled in, so its third argument takes the same annotations. An HTTP API reads `httpApiStatus` from it, as it does for any Effect error:
 
 ```typescript title="src/NotOwner.rejection.ts"
-export class NotOwner extends Domain.Rejection("NotOwner", {}, {
-  annotations: { httpApiStatus: 403, description: "Only the account's owner may do this." },
-}) {}
+export class NotOwner extends Domain.Rejection(
+  "NotOwner",
+  {},
+  { httpApiStatus: 403, description: "Only the account's owner may do this." },
+) {}
 ```
 
 `rejects` takes any tagged error class, so a `Schema.TaggedError` of your own, or one of Effect's `HttpApiError` classes, works as a rejection too:

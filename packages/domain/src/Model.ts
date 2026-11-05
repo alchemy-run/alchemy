@@ -87,11 +87,6 @@ export interface Members<
   readonly projections?: J;
   readonly streams?: S;
   readonly sagas?: G;
-  /**
-   * Data for what is built on the model, such as its `description`. Add your
-   * own keys by augmenting {@link Annotations}.
-   */
-  readonly annotations?: Annotations;
 }
 
 /**
@@ -254,6 +249,7 @@ export const make = <
 >(
   name: Name,
   members: Members<A, V, P, J, S, G>,
+  annotations: Annotations = {},
 ): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>, ServableBy<A, V, S>> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
@@ -264,7 +260,7 @@ export const make = <
   };
   return class {
     static readonly kind = "Model" as const;
-    static readonly annotations: Annotations = members.annotations ?? {};
+    static readonly annotations: Annotations = annotations;
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];

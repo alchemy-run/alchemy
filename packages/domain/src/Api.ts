@@ -95,11 +95,6 @@ export interface Options<
   readonly streams?: S;
   /** The aggregates a client may read directly, through their `read` contract. Every one that declares `read` by default. */
   readonly aggregates?: A;
-  /**
-   * Data for what is built on the model, such as its `description`. Add your
-   * own keys by augmenting {@link Annotations}.
-   */
-  readonly annotations?: Annotations;
 }
 
 /** What an Api over `M` serves, from the names it lists. */
@@ -1214,6 +1209,7 @@ export const make = <
 >(
   name: Name,
   options: Options<M, C, V, S, A>,
+  annotations: Annotations = {},
 ): ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, A>>> => {
   const { model } = options;
   // What the Api lists but cannot serve, as the message it dies with when served.
@@ -1250,7 +1246,7 @@ export const make = <
     serves,
     unresolved,
     RpcGroup.make(...serves.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
-    options.annotations ?? {},
+    annotations,
   ) as ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, A>>>;
 };
 

@@ -104,7 +104,7 @@ The response starts once the read has its first value, so a read the middleware 
 A typed failure answers with its JSON (its `_tag` and data), at the status its schema's `httpApiStatus` annotation gives it, as for any Effect HttpApi error. Declare it on the rejection:
 
 ```typescript
-export class NotOwner extends Domain.Rejection("NotOwner", {}, { annotations: { httpApiStatus: 403 } }) {}
+export class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 }) {}
 ```
 
 A middleware error takes it where you declare it: `error: Unauthenticated.pipe(HttpApiSchema.status(401))`. A failure without one answers with 422: a rejection is a refused request, not a server fault.

@@ -145,11 +145,6 @@ export interface Definition<
   On extends ReadonlyArray<Event.Any>,
   Writes extends ReadonlyArray<DomainStream.Any>,
 > {
-  /**
-   * Data for what is built on the model, such as its `description`. Add your
-   * own keys by augmenting {@link Annotations}.
-   */
-  readonly annotations?: Annotations;
   /** The aggregates and views whose events it consumes. */
   readonly from: From;
   /**
@@ -233,6 +228,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<From, Key, On, Writes>,
+  annotations: Annotations = {},
 ): ProjectionClass<Name, From, Key, On, Writes> => {
   type I = Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>;
   const Tag = Context.Service<ProjectionKey<Name>, Implementation<I>>()(
@@ -243,7 +239,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Projection" as const;
-    static readonly annotations: Annotations = definition.annotations ?? {};
+    static readonly annotations: Annotations = annotations;
     static readonly projectionName: Name = name;
     static readonly definition = definition;
     static readonly Progress = Progress;

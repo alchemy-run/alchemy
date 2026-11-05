@@ -89,11 +89,6 @@ export interface Definition<
   Rejects extends ReadonlyArray<Rejection.Any>,
 > {
   /**
-   * Data for what is built on the model, such as its `description`. Add your
-   * own keys by augmenting {@link Annotations}.
-   */
-  readonly annotations?: Annotations;
-  /**
    * What identifies one run, usually the id of the aggregate the saga is
    * about. Starting a saga again with the same key returns the same run.
    */
@@ -263,6 +258,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<K, I, R, Rejects>,
+  annotations: Annotations = {},
 ): SagaClass<Name, K, I, R, Rejects> => {
   const rejects = definition.rejects ?? [];
   const workflow = Workflow.make(name, {
@@ -284,7 +280,7 @@ export const make = <
   );
   return class extends Tag {
     static readonly kind = "Saga" as const;
-    static readonly annotations: Annotations = definition.annotations ?? {};
+    static readonly annotations: Annotations = annotations;
     static readonly sagaName: Name = name;
     static readonly definition = definition;
     static readonly workflow = workflow;

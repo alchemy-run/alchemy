@@ -312,20 +312,14 @@ export const make = <const Name extends string, const Ops extends Record<string,
   name: Name,
   // An operation named after a static of the class would replace it.
   ops: Ops & { readonly [K in Extract<keyof Ops, Reserved>]: never },
-  options: {
-    /**
-     * Data for what is built on the model, such as its `description`. Add your
-     * own keys by augmenting {@link Annotations}.
-     */
-    readonly annotations?: Annotations;
-  } = {},
+  annotations: Annotations = {},
 ): ExternalSystemClass<Name, Ops> => {
   const Tag = Context.Service<ExternalSystemKey<Name>, Shape<Ops>>()(
     `alchemy/Domain/ExternalSystem/${name}`,
   );
   const cls = class extends Tag {
     static readonly kind = "ExternalSystem" as const;
-    static readonly annotations: Annotations = options.annotations ?? {};
+    static readonly annotations: Annotations = annotations;
     static readonly systemName: Name = name;
     static readonly ops: Ops = ops;
     /** Implement the external system with an Effect that builds its service. */

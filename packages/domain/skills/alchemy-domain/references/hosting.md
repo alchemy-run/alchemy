@@ -191,7 +191,7 @@ summary.onmessage = (event) => render(JSON.parse(event.data));
 Every call runs through the Api's own handlers with the request's headers, so a rejection answers with the status its schema declares (422 if none):
 
 ```ts
-export class NotOwner extends Domain.Rejection("NotOwner", {}, { annotations: { httpApiStatus: 403 } }) {}
+export class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 }) {}
 // GET /AccountSummary/a-2 as someone else -> 403 { "_tag": "NotOwner" }
 ```
 

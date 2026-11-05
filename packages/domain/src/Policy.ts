@@ -92,11 +92,6 @@ export interface Definition<
   On extends ReadonlyArray<Event.Any>,
   Key extends Key.Any | undefined,
 > {
-  /**
-   * Data for what is built on the model, such as its `description`. Add your
-   * own keys by augmenting {@link Annotations}.
-   */
-  readonly annotations?: Annotations;
   /** The aggregate or view, or several, whose events it reacts to. */
   readonly from: F;
   /**
@@ -194,11 +189,12 @@ export const make = <
 >(
   name: Name,
   definition: Definition<F, On, Key>,
+  annotations: Annotations = {},
 ): PolicyClass<Name, F, On, Key extends Key.Any ? Key : View.SourceKey<SourcesOf<F>>> => {
   const Tag = Context.Service<PolicyKey<Name>, Handler<unknown>>()(`alchemy/Domain/Policy/${name}`);
   return class extends Tag {
     static readonly kind = "Policy" as const;
-    static readonly annotations: Annotations = definition.annotations ?? {};
+    static readonly annotations: Annotations = annotations;
     static readonly policyName: Name = name;
     static readonly definition = definition;
     static toLayer<Self extends Any, E, R>(
