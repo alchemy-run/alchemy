@@ -12,7 +12,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
@@ -534,12 +534,12 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * @resource
  */
-export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
-  Platform("AWS.AppRunner.Service", {
-    createRuntimeContext: createHostRuntimeContext("AWS.AppRunner.Service") as (
-      id: string,
-    ) => ServiceRuntimeContext,
-  });
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
+  LookupMethod<Service> = Platform("AWS.AppRunner.Service", {
+  createRuntimeContext: createHostRuntimeContext("AWS.AppRunner.Service") as (
+    id: string,
+  ) => ServiceRuntimeContext,
+});
 
 class AppRunnerServiceNotSettled extends Data.TaggedError("AppRunnerServiceNotSettled")<{
   readonly serviceArn: string;

@@ -3,7 +3,10 @@ import { expect } from "@alchemy.run/test";
 import type { ScratchStack } from "@alchemy.run/test/Alchemy";
 import * as ssm from "@distilled.cloud/aws/ssm";
 import type { Input } from "alchemy/Input";
+import * as Output from "alchemy/Output";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 
 /**
@@ -46,5 +49,28 @@ export const expectLookupConsumers = Effect.fn(function* (
     expect({ [key]: plan.resources[`lookup-${key}`]?.action }).toEqual({ [key]: "noop" });
   }
 
+  yield* stack.destroy();
+});
+
+/**
+ * Deploy one SSM parameter per lookup of a resource that doesn't exist, and
+ * check every deploy fails with `LookupNotFoundError`. Every lookup is tried,
+ * and the assertion names each one that failed some other way.
+ */
+export const expectAllMissing = Effect.fn(function* (
+  stack: ScratchStack,
+  lookups: Record<string, Output.Output<unknown>>,
+) {
+  const mismatches: Record<string, string> = {};
+  for (const [id, value] of Object.entries(lookups)) {
+    const exit = yield* Effect.exit(
+      stack.deploy(AWS.SSM.Parameter(id, { value: Output.interpolate`${value}` })),
+    );
+    const pretty = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "deploy succeeded";
+    if (!pretty.includes("LookupNotFoundError")) {
+      mismatches[id] = pretty.split("\n")[0]!.slice(0, 300);
+    }
+  }
+  expect(mismatches).toEqual({});
   yield* stack.destroy();
 });

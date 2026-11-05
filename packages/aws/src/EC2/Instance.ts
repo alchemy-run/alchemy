@@ -7,7 +7,7 @@ import type { Input } from "alchemy/Input";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
-import { Resource } from "alchemy/Resource";
+import { type LookupMethod, Resource } from "alchemy/Resource";
 import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
@@ -396,10 +396,10 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *
  * @resource
  */
-export const Instance: Platform<Instance, InstanceServices, InstanceShape, InstanceRuntimeContext> =
-  Platform("AWS.EC2.Instance", {
-    createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
-  });
+export const Instance: Platform<Instance, InstanceServices, InstanceShape, InstanceRuntimeContext> &
+  LookupMethod<Instance> = Platform("AWS.EC2.Instance", {
+  createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
+});
 
 export const InstanceProvider = () =>
   Provider.effect(

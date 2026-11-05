@@ -10,7 +10,7 @@ import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { type LookupMethod, Resource } from "alchemy/Resource";
 import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, diffTags } from "alchemy/Tags";
@@ -1357,26 +1357,26 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * @resource
  */
-export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
-  Platform("AWS.ECS.Service", {
-    createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
-      id: string,
-    ) => ServiceRuntimeContext,
-    // Compose the managed load balancer (owned ALB/listeners or shared-listener
-    // rules + target groups) as REAL namespaced child resources before the core
-    // service resource is declared.
-    transformProps: (id, props) => transformServiceProps(id, props),
-    // Autoscaling references the service's own Output attributes (cluster/name/
-    // target-group ARNs), so it composes AFTER the resource exists.
-    onCreate: (resource, props) =>
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
-      composeServiceScaling(
-        resource as Service,
-        props as ServiceProps,
-        // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
-        // surface through the deploy like any resource-construction error.
-      ) as Effect.Effect<void, never, any>,
-  });
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
+  LookupMethod<Service> = Platform("AWS.ECS.Service", {
+  createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
+    id: string,
+  ) => ServiceRuntimeContext,
+  // Compose the managed load balancer (owned ALB/listeners or shared-listener
+  // rules + target groups) as REAL namespaced child resources before the core
+  // service resource is declared.
+  transformProps: (id, props) => transformServiceProps(id, props),
+  // Autoscaling references the service's own Output attributes (cluster/name/
+  // target-group ARNs), so it composes AFTER the resource exists.
+  onCreate: (resource, props) =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
+    composeServiceScaling(
+      resource as Service,
+      props as ServiceProps,
+      // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
+      // surface through the deploy like any resource-construction error.
+    ) as Effect.Effect<void, never, any>,
+});
 
 /** The BYO task reference, when the props use the `task:` form. */
 /**
